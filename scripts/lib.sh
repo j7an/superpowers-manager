@@ -222,14 +222,26 @@ spw_manifest_short_sha_or_empty() {
   esac
 }
 
+# Codex installs a plugin into a versioned cache directory:
+#   ~/.codex/plugins/cache/<marketplace>/superpowers/<version>/...
+# so the metadata/manifest live one directory below the plugin name, not
+# directly inside it (confirmed by the Task 1 behavior probe against the live
+# install). Match both the versioned layout and a flat layout (no intervening
+# version directory) so staging copies and any future flat cache still resolve.
 spw_find_installed_metadata() {
   search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
-  find "$search_root" -path "*/superpowers/.superpowers-upstream.json" -type f 2>/dev/null | head -n 1
+  find "$search_root" \
+    \( -path "*/superpowers/.superpowers-upstream.json" \
+       -o -path "*/superpowers/*/.superpowers-upstream.json" \) \
+    -type f 2>/dev/null | head -n 1
 }
 
 spw_find_installed_manifest() {
   search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
-  find "$search_root" -path "*/superpowers/.codex-plugin/plugin.json" -type f 2>/dev/null | head -n 1
+  find "$search_root" \
+    \( -path "*/superpowers/.codex-plugin/plugin.json" \
+       -o -path "*/superpowers/*/.codex-plugin/plugin.json" \) \
+    -type f 2>/dev/null | head -n 1
 }
 
 # Decide, after an install, whether the wrapper refreshed. Given the re-probe
