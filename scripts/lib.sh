@@ -330,3 +330,30 @@ spw_post_install_status() {
     printf '%s\n' "error"
   fi
 }
+
+# Given a JSON document as the FIRST ARGUMENT (a string), print "present" if any
+# element of the top-level array <array_key> is an object whose <field> equals
+# <value>, else print "absent" (exit 0). On unparseable JSON, print nothing and
+# exit 2 so callers can fail closed rather than treat a parse error as "absent".
+# The JSON is passed as an argument (exactly as spw_json_get takes a file path),
+# NOT on stdin: the here-doc below is Python's stdin (its program source), so a
+# json.load(sys.stdin) here would read the program, not the caller's JSON.
+spw_json_array_has() {
+  json="$1"
+  array_key="$2"
+  field="$3"
+  value="$4"
+  python3 - "$json" "$array_key" "$field" "$value" <<'PY'
+import json, sys
+raw, array_key, field, value = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(2)
+items = data.get(array_key)
+if not isinstance(items, list):
+    items = []
+found = any(isinstance(i, dict) and i.get(field) == value for i in items)
+print("present" if found else "absent")
+PY
+}
