@@ -24,7 +24,7 @@ is vendored into Git — you generate the runtime tree locally from a pinned ref
 ## Requirements
 
 - `git`, `python3`, and a POSIX `sh`.
-- The `codex` CLI (only for `install`/`update`; `prepare`/`probe` don't need it).
+- The `codex` CLI (only for `install`/`update`/`uninstall`; `prepare`/`probe` don't need it).
 
 ## Quick start
 
@@ -60,6 +60,7 @@ out of scope (Codex did not auto-run them in testing).
 | `scripts/probe` | None (read-only) | Report `requested_ref`, `resolved_ref`, desired/generated/installed commit, and `status` |
 | `scripts/install` | Codex marketplace + plugin state | Register the marketplace and add/refresh the plugin |
 | `scripts/update` | Runs prepare/install as needed | Probe, then prepare and/or install to reach `current`, and verify the refresh actually took |
+| `scripts/uninstall` | Codex marketplace + plugin state | Remove the wrapper's plugin and marketplace from Codex (idempotent; verifies removal) |
 
 ### `scripts/probe`
 
@@ -85,6 +86,27 @@ scripts/update
 
 If a refresh ever fails to take, it exits non-zero and suggests the `remove-add`
 refresh mode (see below).
+
+### `scripts/uninstall`
+
+Removes exactly the Codex-side state `install` created — the plugin and the
+local marketplace — and nothing else:
+
+```sh
+scripts/uninstall
+```
+
+It is idempotent: removing something already absent prints a `skipping` note and
+still succeeds. It reads Codex's plugin and marketplace listings first and fails
+closed if either cannot be read or parsed, so a listing error never triggers a
+partial removal. Removal order is plugin-first, then marketplace. After removing,
+it re-queries Codex and refuses to report success while the plugin or marketplace
+is still present. It only ever removes `superpowers@superpowers-wrapper` and the
+`superpowers-wrapper` marketplace — `openai-curated` and any other
+plugin/marketplace are never touched.
+
+Local generated artifacts under `plugins/superpowers/` and `.cache/upstream/`
+are left in place; delete them manually or regenerate with `scripts/prepare`.
 
 ## Choosing the upstream version
 
