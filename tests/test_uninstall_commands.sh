@@ -68,6 +68,28 @@ assert_no_removes() {
   fi
 }
 
+# --- Scenario 0: missing python3 -> clear requirement error, no Codex calls ---
+reset
+printf '%s\n' "$plugin_present" > "$state/plugin_list.json"
+printf '%s\n' "$marketplace_present" > "$state/marketplace_list.json"
+mkdir -p "$state/no_python_path"
+ln -sf /usr/bin/dirname "$state/no_python_path/dirname"
+if PATH="$state/no_python_path" SUPERPOWERS_CODEX="$fake_codex" /bin/sh "$root/scripts/uninstall" >"$state/out" 2>&1; then
+  echo "expected uninstall to fail when python3 is missing" >&2
+  cat "$state/out" >&2
+  exit 1
+fi
+if ! grep -Fq "required command not found: python3" "$state/out"; then
+  echo "expected a clear python3 requirement error; output was:" >&2
+  cat "$state/out" >&2
+  exit 1
+fi
+if [ -s "$log" ]; then
+  echo "expected no Codex calls when python3 is missing; log was:" >&2
+  cat "$log" >&2
+  exit 1
+fi
+
 # --- Scenario 1: both present -> both removed, plugin before marketplace,
 #     openai-curated never named ---
 reset
