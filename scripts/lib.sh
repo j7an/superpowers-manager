@@ -333,8 +333,9 @@ spw_post_install_status() {
 
 # Given a JSON document as the FIRST ARGUMENT (a string), print "present" if any
 # element of the top-level array <array_key> is an object whose <field> equals
-# <value>, else print "absent" (exit 0). On unparseable JSON, print nothing and
-# exit 2 so callers can fail closed rather than treat a parse error as "absent".
+# <value>, else print "absent" (exit 0). On unparseable JSON or invalid schema,
+# print nothing and exit 2 so callers can fail closed rather than treat an
+# unreadable listing as "absent".
 # The JSON is passed as an argument (exactly as spw_json_get takes a file path),
 # NOT on stdin: the here-doc below is Python's stdin (its program source), so a
 # json.load(sys.stdin) here would read the program, not the caller's JSON.
@@ -350,9 +351,11 @@ try:
     data = json.loads(raw)
 except Exception:
     sys.exit(2)
+if not isinstance(data, dict):
+    sys.exit(2)
 items = data.get(array_key)
 if not isinstance(items, list):
-    items = []
+    sys.exit(2)
 found = any(isinstance(i, dict) and i.get(field) == value for i in items)
 print("present" if found else "absent")
 PY

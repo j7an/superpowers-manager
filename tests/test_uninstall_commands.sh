@@ -27,7 +27,13 @@ if [ "$1" = plugin ] && [ "$2" = marketplace ] && [ "$3" = list ]; then
   exit "$rc"
 fi
 if [ "$1" = plugin ] && [ "$2" = remove ]; then
-  [ -f "$state/remove_noop" ] || printf '%s\n' '{"installed":[],"available":[]}' > "$state/plugin_list.json"
+  if [ -f "$state/remove_noop" ]; then
+    :
+  elif [ -f "$state/remove_plugin_missing_installed" ]; then
+    printf '%s\n' '{"available":[]}' > "$state/plugin_list.json"
+  else
+    printf '%s\n' '{"installed":[],"available":[]}' > "$state/plugin_list.json"
+  fi
   exit 0
 fi
 if [ "$1" = plugin ] && [ "$2" = marketplace ] && [ "$3" = remove ]; then
@@ -44,7 +50,7 @@ marketplace_present='{"marketplaces":[{"name":"openai-curated","root":"/x"},{"na
 marketplace_absent='{"marketplaces":[{"name":"openai-curated","root":"/x"}]}'
 
 reset() {
-  rm -f "$state/plugin_list.rc" "$state/marketplace_list.rc" "$state/remove_noop"
+  rm -f "$state/plugin_list.rc" "$state/marketplace_list.rc" "$state/remove_noop" "$state/remove_plugin_missing_installed"
   : > "$log"
 }
 
@@ -55,6 +61,14 @@ run_uninstall() {
 expect_fail() {
   if SUPERPOWERS_CODEX="$fake_codex" sh "$root/scripts/uninstall" >"$state/out" 2>&1; then
     echo "expected uninstall to fail but it succeeded" >&2
+    cat "$state/out" >&2
+    exit 1
+  fi
+}
+
+assert_output_contains() {
+  if ! grep -Fq "$1" "$state/out"; then
+    echo "expected output to contain: $1" >&2
     cat "$state/out" >&2
     exit 1
   fi
@@ -170,5 +184,21 @@ expect_fail
 # the removal was attempted...
 grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"
 # ...but the plugin is still present on re-query, so uninstall must NOT succeed
+assert_output_contains "still installed"
+
+# --- Scenario 9: verify-after schema drift -> fail closed instead of reporting
+#     success when the target array is missing from otherwise valid JSON ---
+reset
+printf '%s\n' "$plugin_present" > "$state/plugin_list.json"
+printf '%s\n' "$marketplace_present" > "$state/marketplace_list.json"
+: > "$state/remove_plugin_missing_installed"
+expect_fail
+grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"
+assert_output_contains "cannot parse output of"
+if grep -Fq "uninstall complete" "$state/out"; then
+  echo "must not report success when verify-after sees schema drift" >&2
+  cat "$state/out" >&2
+  exit 1
+fi
 
 echo "test_uninstall_commands: OK"
