@@ -178,6 +178,7 @@ sh tests/manual/codex-behavior-probe.sh  # live probe of Codex marketplace behav
 The automated suite is fully hermetic: it uses a fake local upstream repo and a
 fake `codex`. The manual probe is opt-in and exercises real Codex CLI behavior
 (it only ever touches a throwaway `wrapper-probe@superpowers-wrapper-probe`).
+GitHub Actions runs the hermetic suite on pull requests and pushes to `main`.
 
 ## Repository layout
 
