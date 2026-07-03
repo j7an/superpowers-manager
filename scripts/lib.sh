@@ -223,16 +223,30 @@ with open(path, "w", encoding="utf-8") as f:
 PY
 }
 
-spw_update_manifest_version() {
+spw_apply_manifest_overlay() {
   manifest="$1"
   version="$2"
   python3 - "$manifest" "$version" <<'PY'
-import json, sys
+import json
+import sys
+
 path, version = sys.argv[1:]
-with open(path, "r", encoding="utf-8") as f:
-    data = json.load(f)
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except json.JSONDecodeError as exc:
+    sys.exit(
+        f"invalid manifest JSON in {path}: "
+        f"line {exc.lineno} column {exc.colno}: {exc.msg}"
+    )
+
+if not isinstance(data, dict):
+    sys.exit(f"manifest must be a JSON object: {path}")
+
 data["version"] = version
+data["skills"] = "./skills/"
 data.pop("hooks", None)
+
 with open(path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")

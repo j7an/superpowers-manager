@@ -16,7 +16,7 @@ requested_ref=$(spw_config_ref "$root")
 
 spw_require_command git
 spw_require_command python3
-[ -f "$manifest_template" ] || spw_die "missing wrapper manifest template: $manifest_template"
+[ -f "$manifest_template" ] || spw_die "missing fallback manifest template: $manifest_template"
 
 resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
 resolution_kind=$(printf '%s\n' "$resolved_record" | awk '{ print $1 }')
@@ -44,7 +44,12 @@ spw_require_upstream_path "$cache/CODE_OF_CONDUCT.md" "CODE_OF_CONDUCT.md"
 
 rm -rf "$tmp_plugin"
 mkdir -p "$tmp_plugin/.codex-plugin"
-cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.json"
+upstream_manifest="$cache/.codex-plugin/plugin.json"
+if [ -f "$upstream_manifest" ]; then
+  cp "$upstream_manifest" "$tmp_plugin/.codex-plugin/plugin.json"
+else
+  cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.json"
+fi
 
 spw_copy_path_if_present "$cache/skills" "$tmp_plugin/skills"
 spw_copy_path_if_present "$cache/assets" "$tmp_plugin/assets"
@@ -65,7 +70,7 @@ spw_write_metadata_json \
   "$commit" \
   "$upstream_manifest_version"
 
-spw_update_manifest_version \
+spw_apply_manifest_overlay \
   "$tmp_plugin/.codex-plugin/plugin.json" \
   "$(spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit")"
 

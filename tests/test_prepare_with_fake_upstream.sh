@@ -12,7 +12,7 @@ validator_log="$tmpdir/validator.log"
 template="$root/plugins/superpowers/.codex-plugin/plugin.template.json"
 template_before=$(cksum "$template")
 
-mkdir -p "$upstream/skills/brainstorming" "$upstream/assets" "$upstream/hooks" "$upstream/.codex-plugin"
+mkdir -p "$upstream/skills/brainstorming" "$upstream/assets" "$upstream/hooks"
 mkdir -p "$home/.codex/skills/.system/plugin-creator/scripts"
 cat > "$home/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py" <<'PY'
 import os
@@ -41,15 +41,27 @@ printf '#!/bin/sh\n' > "$upstream/hooks/session-start-codex"
 printf 'license\n' > "$upstream/LICENSE"
 printf 'readme\n' > "$upstream/README.md"
 printf 'code\n' > "$upstream/CODE_OF_CONDUCT.md"
+git -C "$upstream" add .
+git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream without manifest" >/dev/null
+git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c tag.gpgsign=false tag -a v5.0.0 -m "fake legacy release"
+legacy_commit=$(git -C "$upstream" rev-list -n1 v5.0.0)
+
+mkdir -p "$upstream/.codex-plugin"
 cat > "$upstream/.codex-plugin/plugin.json" <<'JSON'
 {
   "name": "superpowers",
   "version": "6.0.3",
-  "hooks": "./hooks/hooks-codex.json"
+  "description": "Upstream manifest description",
+  "skills": "./wrong-skills/",
+  "hooks": "./hooks/hooks-codex.json",
+  "x_future_manifest": {
+    "preserved": true,
+    "items": [1, "two"]
+  }
 }
 JSON
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream" >/dev/null
+git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream with manifest" >/dev/null
 git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c tag.gpgsign=false tag -a v6.0.3 -m "fake release"
 
 release_commit=$(git -C "$upstream" rev-list -n1 v6.0.3)
@@ -81,6 +93,48 @@ read_json_key() {
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:
     print(json.load(f)[sys.argv[2]])
+PY
+}
+
+read_json_path() {
+  file="$1"
+  path="$2"
+  python3 - "$file" "$path" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    value = json.load(f)
+for part in sys.argv[2].split("."):
+    value = value[part]
+if isinstance(value, (dict, list)):
+    print(json.dumps(value, sort_keys=True, separators=(",", ":")))
+else:
+    print(value)
+PY
+}
+
+assert_manifest_path() {
+  destination="$1"
+  path="$2"
+  expected="$3"
+  manifest="$tmpdir/$destination/.codex-plugin/plugin.json"
+  actual=$(read_json_path "$manifest" "$path")
+  if [ "$actual" != "$expected" ]; then
+    echo "manifest $path mismatch for $destination: $actual != $expected" >&2
+    exit 1
+  fi
+}
+
+assert_manifest_lacks_key() {
+  destination="$1"
+  key="$2"
+  manifest="$tmpdir/$destination/.codex-plugin/plugin.json"
+  python3 - "$manifest" "$key" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+if sys.argv[2] in data:
+    print(f"manifest must not contain key: {sys.argv[2]}", file=sys.stderr)
+    sys.exit(1)
 PY
 }
 
@@ -134,6 +188,9 @@ run_prepare_for_ref "latest-release" "out-latest"
 expected_short=$(printf '%s' "$release_commit" | cut -c 1-7)
 assert_prepare_commit "out-latest" "$release_commit"
 assert_prepare_version "out-latest" "6.0.3+wrapper.$expected_short"
+assert_manifest_path "out-latest" "description" "Upstream manifest description"
+assert_manifest_path "out-latest" "skills" "./skills/"
+assert_manifest_path "out-latest" "x_future_manifest" '{"items":[1,"two"],"preserved":true}'
 
 run_prepare_for_ref "v6.1.0-beta.1" "out-prerelease"
 prerelease_short=$(printf '%s' "$main_commit" | cut -c 1-7)
@@ -155,6 +212,14 @@ run_prepare_for_ref "042" "out-leading-zero"
 leading_zero_short=$(printf '%s' "$leading_zero_commit" | cut -c 1-7)
 assert_prepare_commit "out-leading-zero" "$leading_zero_commit"
 assert_prepare_version "out-leading-zero" "0.0.0-ref-042+wrapper.$leading_zero_short"
+
+run_prepare_for_ref "v5.0.0" "out-legacy"
+legacy_short=$(printf '%s' "$legacy_commit" | cut -c 1-7)
+assert_prepare_commit "out-legacy" "$legacy_commit"
+assert_prepare_version "out-legacy" "5.0.0+wrapper.$legacy_short"
+assert_prepare_upstream_manifest_version "out-legacy" ""
+assert_manifest_path "out-legacy" "skills" "./skills/"
+assert_manifest_lacks_key "out-legacy" "hooks"
 
 run_prepare_for_ref "$feature_commit" "out-raw"
 assert_prepare_commit "out-raw" "$feature_commit"
@@ -182,17 +247,7 @@ test -f "$output/CODE_OF_CONDUCT.md"
 # in the plugin root); otherwise a real prepare would delete it.
 test -f "$output/.codex-plugin/plugin.template.json"
 
-python3 - "$manifest" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as f:
-    data = json.load(f)
-
-if "hooks" in data:
-    print("manifest must not contain a hooks key", file=sys.stderr)
-    sys.exit(1)
-PY
+assert_manifest_lacks_key "out-latest" "hooks"
 
 if [ ! -s "$validator_log" ]; then
   echo "prepare did not use the default validator from HOME/.codex" >&2
