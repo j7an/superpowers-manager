@@ -166,7 +166,14 @@ manifest="$output/.codex-plugin/plugin.json"
 
 test -f "$output/skills/brainstorming/SKILL.md"
 test -f "$output/assets/superpowers-small.svg"
-test -f "$output/hooks/session-start-codex"
+# The fake upstream ships hooks/ (see fixture above), but the generated Codex
+# plugin must exclude it entirely: Codex's plugin validator rejects a hooks
+# manifest field, and shipping no hooks/ directory means Codex's hooks.json
+# auto-discovery has nothing to register.
+if [ -e "$output/hooks" ]; then
+  echo "generated plugin must not contain a hooks/ directory" >&2
+  exit 1
+fi
 test -f "$output/LICENSE"
 test -f "$output/README.md"
 test -f "$output/CODE_OF_CONDUCT.md"
@@ -182,8 +189,8 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)
 
-if data.get("hooks") != {}:
-    print("manifest must contain an explicit empty hooks object", file=sys.stderr)
+if "hooks" in data:
+    print("manifest must not contain a hooks key", file=sys.stderr)
     sys.exit(1)
 PY
 

@@ -48,7 +48,6 @@ cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.json"
 
 spw_copy_path_if_present "$cache/skills" "$tmp_plugin/skills"
 spw_copy_path_if_present "$cache/assets" "$tmp_plugin/assets"
-spw_copy_path_if_present "$cache/hooks" "$tmp_plugin/hooks"
 spw_copy_path_if_present "$cache/LICENSE" "$tmp_plugin/LICENSE"
 spw_copy_path_if_present "$cache/README.md" "$tmp_plugin/README.md"
 spw_copy_path_if_present "$cache/CODE_OF_CONDUCT.md" "$tmp_plugin/CODE_OF_CONDUCT.md"

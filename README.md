@@ -13,7 +13,8 @@ is vendored into Git — you generate the runtime tree locally from a pinned ref
 
 - Resolves an upstream ref (default: latest `vX.Y.Z` release tag).
 - Clones/fetches upstream at that commit and assembles a Codex plugin tree under
-  `plugins/superpowers/` (skills, assets, hooks, license/readme, manifest).
+  `plugins/superpowers/` (skills, assets, license/readme, manifest — upstream's
+  `hooks/` directory is deliberately excluded).
 - Stamps the generated manifest with a ref-aware wrapper version ending in
   `+wrapper.<short-sha>` and writes the upstream provenance to
   `.superpowers-upstream.json`.
@@ -48,9 +49,11 @@ scripts/install
 > codex plugin remove superpowers@openai-curated   # only if you want the wrapper to take over
 > ```
 
-After installation, the wrapper delivers upstream **skills**. Copied `hooks/`
-are carried as runtime files only — automatic session-start hook activation is
-out of scope (Codex did not auto-run them in testing).
+After installation, the wrapper delivers upstream **skills**. Upstream's
+`hooks/` directory is not copied into the generated plugin: Codex's plugin
+validator rejects a `hooks` field in the manifest, and shipping no
+`hooks/hooks.json` means Codex's hook auto-discovery has nothing to register —
+so upstream's session-start auto-registration concern doesn't apply here.
 
 ## Scripts
 
@@ -131,8 +134,9 @@ SUPERPOWERS_REF=latest-release scripts/probe
 - **`plugins/superpowers/.codex-plugin/plugin.template.json`** is committed and
   carries the placeholder version `0.0.0+wrapper.template`.
 - **`prepare`** generates `plugin.json` from that template, replacing the version
-  with a ref-aware wrapper version and preserving an explicit empty `hooks`
-  object so copied upstream hook files are not auto-registered by Codex.
+  with a ref-aware wrapper version and dropping manifest fields Codex's plugin
+  validator rejects (e.g. `hooks` — safe because no hook files are shipped, so
+  Codex has nothing to auto-register).
 - Stable tags generate release-looking versions such as
   `6.0.3+wrapper.896224c`; explicit prerelease tags generate versions such as
   `6.1.0-beta.1+wrapper.abc1234`.
@@ -178,7 +182,7 @@ config/upstream-ref                        # which upstream ref to track (tracke
 plugins/superpowers/
   .codex-plugin/plugin.template.json       # committed manifest template (tracked)
   .codex-plugin/plugin.json                # generated manifest          (gitignored)
-  skills/ assets/ hooks/ LICENSE ...       # generated from upstream      (gitignored)
+  skills/ assets/ LICENSE ...              # generated from upstream      (gitignored)
   .superpowers-upstream.json               # generated provenance         (gitignored)
 scripts/                                   # prepare / probe / install / update + lib.sh
 tests/                                     # hermetic suite + manual Codex probe
