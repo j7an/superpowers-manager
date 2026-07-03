@@ -1,0 +1,25 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  security:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: j7an/shared-workflows/.github/workflows/security-scan.yml@5997f2092ef3fea11a5bcdca8ec81382bcc30eba # v4.1.0
+    with:
+      run_codeql: false
