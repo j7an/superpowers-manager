@@ -9,6 +9,7 @@
   "license": "MIT",
   "keywords": ["superpowers", "skills", "codex"],
   "skills": "./skills/",
+  "hooks": {},
   "interface": {
     "displayName": "Superpowers",
     "shortDescription": "Upstream Superpowers skills from a local wrapper.",
