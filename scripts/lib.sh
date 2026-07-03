@@ -232,7 +232,7 @@ path, version = sys.argv[1:]
 with open(path, "r", encoding="utf-8") as f:
     data = json.load(f)
 data["version"] = version
-data.pop("hooks", None)
+data["hooks"] = {}
 with open(path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")

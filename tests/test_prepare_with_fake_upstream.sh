@@ -175,10 +175,17 @@ test -f "$output/CODE_OF_CONDUCT.md"
 # in the plugin root); otherwise a real prepare would delete it.
 test -f "$output/.codex-plugin/plugin.template.json"
 
-if grep -Fq '"hooks"' "$manifest"; then
-  echo "manifest must not contain unsupported hooks field" >&2
-  exit 1
-fi
+python3 - "$manifest" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+
+if data.get("hooks") != {}:
+    print("manifest must contain an explicit empty hooks object", file=sys.stderr)
+    sys.exit(1)
+PY
 
 if [ ! -s "$validator_log" ]; then
   echo "prepare did not use the default validator from HOME/.codex" >&2

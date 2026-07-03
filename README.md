@@ -131,8 +131,8 @@ SUPERPOWERS_REF=latest-release scripts/probe
 - **`plugins/superpowers/.codex-plugin/plugin.template.json`** is committed and
   carries the placeholder version `0.0.0+wrapper.template`.
 - **`prepare`** generates `plugin.json` from that template, replacing the version
-  with a ref-aware wrapper version and dropping manifest fields Codex doesn't
-  support (e.g. `hooks`).
+  with a ref-aware wrapper version and preserving an explicit empty `hooks`
+  object so copied upstream hook files are not auto-registered by Codex.
 - Stable tags generate release-looking versions such as
   `6.0.3+wrapper.896224c`; explicit prerelease tags generate versions such as
   `6.1.0-beta.1+wrapper.abc1234`.
