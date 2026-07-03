@@ -86,6 +86,12 @@ git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.nam
 leading_zero_commit=$(git -C "$upstream" rev-parse HEAD)
 git -C "$upstream" checkout main >/dev/null
 
+git -C "$upstream" checkout -b bad-manifest >/dev/null
+printf '{ "name": "superpowers", "version": ' > "$upstream/.codex-plugin/plugin.json"
+git -C "$upstream" add .codex-plugin/plugin.json
+git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "bad upstream manifest" >/dev/null
+git -C "$upstream" checkout main >/dev/null
+
 read_json_key() {
   file="$1"
   key="$2"
@@ -149,6 +155,32 @@ run_prepare_for_ref() {
   SUPERPOWERS_FAKE_VALIDATOR_LOG="$validator_log" \
   HOME="$home" \
   sh "$root/scripts/prepare" >/dev/null
+}
+
+assert_bad_manifest_error() {
+  destination="$1"
+  err="$tmpdir/$destination.err"
+  if SUPERPOWERS_REF="bad-manifest" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
+    SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
+    SUPERPOWERS_VALIDATOR= \
+    SUPERPOWERS_FAKE_VALIDATOR_LOG="$validator_log" \
+    HOME="$home" \
+    sh "$root/scripts/prepare" >"$tmpdir/$destination.out" 2>"$err"; then
+    echo "prepare unexpectedly accepted a malformed upstream manifest" >&2
+    exit 1
+  fi
+  if ! grep -Eq 'invalid JSON in .*/\.codex-plugin/plugin\.json: line [0-9]+ column [0-9]+' "$err"; then
+    echo "bad manifest error did not mention invalid JSON with location" >&2
+    cat "$err" >&2
+    exit 1
+  fi
+  if grep -q 'Traceback' "$err"; then
+    echo "bad manifest error must not include a Python traceback" >&2
+    cat "$err" >&2
+    exit 1
+  fi
 }
 
 assert_prepare_version() {
@@ -220,10 +252,16 @@ assert_prepare_version "out-legacy" "5.0.0+wrapper.$legacy_short"
 assert_prepare_upstream_manifest_version "out-legacy" ""
 assert_manifest_path "out-legacy" "skills" "./skills/"
 assert_manifest_lacks_key "out-legacy" "hooks"
+if [ -e "$tmpdir/out-legacy/hooks" ]; then
+  echo "legacy fallback plugin must not contain a hooks/ directory" >&2
+  exit 1
+fi
 
 run_prepare_for_ref "$feature_commit" "out-raw"
 assert_prepare_commit "out-raw" "$feature_commit"
 assert_prepare_version "out-raw" "0.0.0+wrapper.$feature_short"
+
+assert_bad_manifest_error "out-bad-manifest"
 
 output="$tmpdir/out-latest"
 metadata="$output/.superpowers-upstream.json"

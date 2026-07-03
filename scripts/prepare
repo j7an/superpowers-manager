@@ -58,8 +58,8 @@ spw_copy_path_if_present "$cache/README.md" "$tmp_plugin/README.md"
 spw_copy_path_if_present "$cache/CODE_OF_CONDUCT.md" "$tmp_plugin/CODE_OF_CONDUCT.md"
 
 upstream_manifest_version=""
-if [ -f "$cache/.codex-plugin/plugin.json" ]; then
-  upstream_manifest_version=$(spw_json_get "$cache/.codex-plugin/plugin.json" "version")
+if [ -f "$upstream_manifest" ]; then
+  upstream_manifest_version=$(spw_json_get "$upstream_manifest" "version")
 fi
 
 spw_write_metadata_json \

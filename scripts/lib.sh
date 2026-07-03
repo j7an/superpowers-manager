@@ -172,15 +172,36 @@ spw_resolve_ref() {
 spw_json_get() {
   file="$1"
   key="$2"
-  python3 - "$file" "$key" <<'PY'
-import json, sys
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    data = json.load(f)
+  if ! value=$(
+    python3 - "$file" "$key" 2>&1 <<'PY'
+import json
+import sys
+
+path, dotted_key = sys.argv[1:]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except json.JSONDecodeError as exc:
+    sys.exit(
+        f"invalid JSON in {path}: "
+        f"line {exc.lineno} column {exc.colno}: {exc.msg}"
+    )
+
+if not isinstance(data, dict):
+    sys.exit(f"JSON value must be an object in {path}")
+
 value = data
-for part in sys.argv[2].split("."):
+for part in dotted_key.split("."):
+    if not isinstance(value, dict):
+        value = ""
+        break
     value = value.get(part, "")
 print(value if value is not None else "")
 PY
+  ); then
+    spw_die "$value"
+  fi
+  printf '%s\n' "$value"
 }
 
 spw_copy_path_if_present() {
