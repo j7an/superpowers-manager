@@ -42,6 +42,18 @@ run_bin() {
 run_bin probe --porcelain >/dev/null
 grep -Fqx "probe --porcelain ref=" "$log"
 
+: > "$log"
+run_bin prepare --ref test >/dev/null
+grep -Fqx "prepare --ref test ref=" "$log"
+
+: > "$log"
+run_bin install --dry-run >/dev/null
+grep -Fqx "install --dry-run ref=" "$log"
+
+: > "$log"
+run_bin uninstall --purge >/dev/null
+grep -Fqx "uninstall --purge ref=" "$log"
+
 # --- Bare invocation runs update ---
 : > "$log"
 run_bin >/dev/null
@@ -60,13 +72,17 @@ grep -Fq "usage:" "$tmpdir/err"
 
 # --- A stray flag must not fall through to update ---
 : > "$log"
-if run_bin --porcelain >/dev/null 2>&1; then
-  echo "stray flag must fail" >&2; exit 1
-fi
+rc=0; run_bin --porcelain >"$tmpdir/out" 2>"$tmpdir/err" || rc=$?
+[ "$rc" -eq 2 ] || { echo "expected exit 2 for stray flag, got $rc" >&2; exit 1; }
+grep -Fq "unknown subcommand: --porcelain" "$tmpdir/err"
+grep -Fq "usage:" "$tmpdir/err"
 [ ! -s "$log" ]
 
 # --- --help and --version ---
-run_bin --help | grep -Fq "usage:"
+rc=0; run_bin --help >"$tmpdir/help" 2>"$tmpdir/help-err" || rc=$?
+[ "$rc" -eq 0 ] || { echo "expected exit 0 for --help, got $rc" >&2; exit 1; }
+grep -Fq "usage:" "$tmpdir/help"
+[ ! -s "$tmpdir/help-err" ]
 version_out=$(run_bin --version)
 [ "$version_out" = "9.9.9-test" ] || { echo "unexpected --version output: $version_out" >&2; exit 1; }
 
@@ -104,9 +120,11 @@ EOF
 chmod +x "$pkg/scripts/probe"
 run_bin probe >/dev/null
 grep -Fq "probe ran" "$log"
+: > "$log"
 rc=0; run_bin install >/dev/null 2>"$tmpdir/err" || rc=$?
 [ "$rc" -eq 1 ]
 grep -Fq "required command not found: codex" "$tmpdir/err"
+[ ! -s "$log" ] || { echo "missing codex must not dispatch" >&2; exit 1; }
 printf '#!/bin/sh\nexit 0\n' > "$fakebin/codex" && chmod +x "$fakebin/codex"
 
 # --- Missing script file: diagnostic, non-zero ---
