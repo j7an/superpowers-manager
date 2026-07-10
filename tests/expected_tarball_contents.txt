@@ -1,0 +1,16 @@
+# Expected npm tarball contents: the package.json `files` allowlist plus
+# npm's automatic inclusions (package.json, README.md, LICENSE, the bin
+# entry). Paths are as reported by `npm pack --json` (no `package/` prefix).
+.agents/plugins/marketplace.json
+LICENSE
+README.md
+bin/superpowers-wrapper.js
+config/upstream-ref
+package.json
+plugins/superpowers/.codex-plugin/plugin.template.json
+scripts/install
+scripts/lib.sh
+scripts/prepare
+scripts/probe
+scripts/uninstall
+scripts/update

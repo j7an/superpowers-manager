@@ -8,3 +8,5 @@ plugins/superpowers/README.md
 plugins/superpowers/CODE_OF_CONDUCT.md
 plugins/superpowers/.superpowers-upstream.json
 docs/superpowers/
+*.tgz
+node_modules/
