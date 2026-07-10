@@ -9,6 +9,37 @@ records the exact upstream commit it was built from, separately from a generated
 wrapper manifest version that includes `+wrapper.<short-sha>`. Nothing upstream
 is vendored into Git — you generate the runtime tree locally from a pinned ref.
 
+## Install via npx (no clone)
+
+```sh
+npx superpowers-wrapper            # bare = update: probe, then prepare/install only if needed
+npx superpowers-wrapper install    # register this package as a Codex marketplace and install the plugin
+npx superpowers-wrapper probe      # report upstream / generated / installed status
+npx superpowers-wrapper uninstall  # remove the wrapper plugin and marketplace from Codex
+```
+
+Requires `git`, `python3`, a POSIX shell, and (for install/update/uninstall)
+the Codex CLI. Node ≥ 24.
+
+The package is stateless: each run treats the npx-materialized package
+directory as the marketplace source, and Codex's own marketplace and
+installed-plugin state is the only persistent state. If npm prunes its cache
+between runs, the installed plugin keeps working (Codex copies plugins into
+its own cache) and the marketplace pointer is reconciled on the next run.
+Each package version re-clones upstream on first prepare; set
+`SUPERPOWERS_CACHE_DIR` to a persistent directory if you want to keep the
+upstream clone between runs.
+
+### Windows
+
+Tested platforms are macOS and Linux; the supported Windows path is WSL2.
+Native Windows is unblocked but untested: if the preflight finds Git Bash
+(standard Git for Windows locations, then `bash` on `PATH`), `git`, and
+`python3`, the scripts run — but path handling between the wrapper and Codex
+(MSYS vs. Windows path forms in marketplace-root comparison) has known risk
+areas. The fail-closed checks bound the damage: a failed run exits non-zero
+and never falsely reports success.
+
 ## What it does
 
 - Resolves an upstream ref (default: latest `vX.Y.Z` release tag).
