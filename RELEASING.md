@@ -48,10 +48,12 @@ one-time bootstrap below.
 
 ## First-publish bootstrap (one time)
 
-npm trusted-publisher configuration lives in an existing package's settings,
-so claim the unscoped package with the intended first version before creating
-the first release tag. Do **not** dispatch **Tag Release** until the manual
-publish and trusted-publisher configuration below are complete.
+npm trusted-publisher configuration lives in an existing package's settings
+(verified 2026-07-11; re-check https://docs.npmjs.com/trusted-publishers before
+publishing in case npm adds a pending-publisher flow). Therefore, claim the
+unscoped package with the intended first version before creating the first
+release tag. Do **not** dispatch **Tag Release** until the manual publish and
+trusted-publisher configuration below are complete.
 
 1. Create a temporary clean checkout of merged `main`. In that checkout only,
    stage the version that `bump=minor` will create, without committing or
@@ -96,6 +98,11 @@ publish and trusted-publisher configuration below are complete.
    test "$(npm view superpowers-wrapper@0.1.0 version)" = "0.1.0"
    test "$(npx --yes superpowers-wrapper@0.1.0 --version)" = "0.1.0"
    ```
+
+   Registry propagation can lag behind a successful publish. If either check
+   fails immediately afterward, retry both checks for up to 10 minutes before
+   treating the publish as failed; the reusable workflow similarly retries
+   registry visibility for about 7.5 minutes.
 
 4. In the package's npmjs.com settings, configure the trusted publisher:
    - Repository: `j7an/superpowers-wrapper`
