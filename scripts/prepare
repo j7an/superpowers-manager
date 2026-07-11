@@ -9,7 +9,8 @@ cache_parent="${SUPERPOWERS_CACHE_DIR:-$root/.cache/upstream}"
 cache="$cache_parent/superpowers"
 plugin_root="${SUPERPOWERS_PLUGIN_ROOT:-$root/plugins/superpowers}"
 manifest_template="${SUPERPOWERS_MANIFEST_TEMPLATE:-$root/plugins/superpowers/.codex-plugin/plugin.template.json}"
-validator="${SUPERPOWERS_VALIDATOR:-$HOME/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py}"
+builtin_validator="$root/scripts/validate-generated-plugin.py"
+additional_validator="${SUPERPOWERS_VALIDATOR:-}"
 tmp_parent=$(dirname "$plugin_root")
 tmp_plugin="$tmp_parent/.superpowers.tmp.$$"
 requested_ref=$(spw_config_ref "$root")
@@ -17,6 +18,7 @@ requested_ref=$(spw_config_ref "$root")
 spw_require_command git
 spw_require_command python3
 [ -f "$manifest_template" ] || spw_die "missing fallback manifest template: $manifest_template"
+[ -f "$builtin_validator" ] || spw_die "missing built-in plugin validator: $builtin_validator"
 
 resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
 resolution_kind=$(printf '%s\n' "$resolved_record" | awk '{ print $1 }')
@@ -70,22 +72,34 @@ spw_write_metadata_json \
   "$commit" \
   "$upstream_manifest_version"
 
+wrapper_version=$(
+  spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit"
+)
 spw_apply_manifest_overlay \
   "$tmp_plugin/.codex-plugin/plugin.json" \
-  "$(spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit")"
+  "$wrapper_version"
 
-if [ -f "$validator" ]; then
-  if ! python3 "$validator" "$tmp_plugin"; then
-    spw_die "plugin validation failed for generated Superpowers plugin"
-  fi
-else
-  spw_die "plugin validator not found: $validator"
+# The validator must inspect the exact complete tree that will be swapped.
+cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.template.json"
+
+if ! python3 -S "$builtin_validator" \
+  --plugin-root "$tmp_plugin" \
+  --source "$upstream_url" \
+  --requested-ref "$requested_ref" \
+  --resolved-ref "$resolved_ref" \
+  --commit "$commit" \
+  --manifest-version "$wrapper_version" \
+  --upstream-manifest-version "$upstream_manifest_version"; then
+  spw_die "built-in generated plugin validation failed"
 fi
 
-# Include the committed manifest template in the staged tree so the swap is
-# complete: plugin.template.json is tracked and lives in the plugin root, so
-# the replacement tree must carry it too.
-cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.template.json"
+if [ -n "$additional_validator" ]; then
+  [ -f "$additional_validator" ] || \
+    spw_die "additional plugin validator not found: $additional_validator"
+  if ! python3 "$additional_validator" "$tmp_plugin"; then
+    spw_die "additional plugin validation failed"
+  fi
+fi
 
 # Replace the live tree with a single atomic rename, keeping a backup so a
 # failed swap restores the previous working generated tree (the spec requires
