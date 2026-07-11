@@ -18,6 +18,9 @@ for cmd in prepare probe install update uninstall; do
   cat > "$pkg/scripts/$cmd" <<EOF
 #!/bin/sh
 printf '%s\n' "$cmd \$* ref=\${SUPERPOWERS_REF:-}" >> "$log"
+if [ -n "\${SUPERPOWERS_VALIDATOR:-}" ]; then
+  printf '%s\n' "$cmd validator=\${SUPERPOWERS_VALIDATOR}" >> "$log"
+fi
 exit 0
 EOF
   chmod +x "$pkg/scripts/$cmd"
@@ -97,8 +100,12 @@ rc=0; run_bin probe >/dev/null 2>&1 || rc=$?
 
 # --- Env passthrough: SUPERPOWERS_* reaches the script ---
 : > "$log"
-PATH="$fakebin" SUPERPOWERS_REF=abc123 "$fakebin/node" "$pkg/bin/superpowers-wrapper.js" update >/dev/null
+PATH="$fakebin" \
+SUPERPOWERS_REF=abc123 \
+SUPERPOWERS_VALIDATOR=/tmp/custom-validator.py \
+"$fakebin/node" "$pkg/bin/superpowers-wrapper.js" update >/dev/null
 grep -Fqx "update  ref=abc123" "$log"
+grep -Fqx "update validator=/tmp/custom-validator.py" "$log"
 
 # --- Preflight: missing git fails before any dispatch, names the tool ---
 rm "$fakebin/git"

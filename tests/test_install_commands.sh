@@ -7,8 +7,9 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
 # ---------------------------------------------------------------------------
 # Harness: a fake upstream git repo, a copied package root (running install
-# from the real repo root would dirty the working tree), a fake validator,
-# and a fake codex whose marketplace/plugin state lives in $state.
+# from the real repo root would dirty the working tree), the shipped built-in
+# validator plus a fake failing additional validator, and a fake codex whose
+# marketplace/plugin state lives in $state.
 # ---------------------------------------------------------------------------
 
 # --- Fake upstream with one stable release tag ---
@@ -37,14 +38,7 @@ cp -R "$root/config" "$pkg/config"
 cp "$root/plugins/superpowers/.codex-plugin/plugin.template.json" "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json"
 test -x "$pkg/scripts/install" || { echo "install must remain executable in the packaged root" >&2; exit 1; }
 
-# --- Validators ---
-validator="$tmpdir/validator.py"
-cat > "$validator" <<'PY'
-import os, sys
-plugin_root = sys.argv[1]
-if not os.path.isfile(os.path.join(plugin_root, ".codex-plugin", "plugin.json")):
-    sys.exit(1)
-PY
+# --- Additional validator failure fixture ---
 failing_validator="$tmpdir/failing_validator.py"
 cat > "$failing_validator" <<'PY'
 import sys
@@ -133,7 +127,6 @@ run_install() {
   env \
     SUPERPOWERS_CODEX="$fake_codex" \
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
-    SUPERPOWERS_VALIDATOR="$validator" \
     SUPERPOWERS_INSTALLED_SEARCH_ROOT="$state/codex-home" \
     SPW_TEST_PKG_ROOT="$pkg" \
     "$@" \
@@ -153,28 +146,48 @@ line_of() {
 }
 
 # ---------------------------------------------------------------------------
-# Scenario V: validation failure leaves Codex completely untouched.
-# Run FIRST, while the package root has no generated tree, so install must
-# take the prepare path and hit the failing validator before any codex call.
+# Scenario V1: built-in validation failure leaves Codex untouched.
 # ---------------------------------------------------------------------------
 reset
 printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
-if env \
-    SUPERPOWERS_CODEX="$fake_codex" \
-    SUPERPOWERS_UPSTREAM_URL="$upstream" \
-    SUPERPOWERS_VALIDATOR="$failing_validator" \
-    SUPERPOWERS_INSTALLED_SEARCH_ROOT="$state/codex-home" \
-    SPW_TEST_PKG_ROOT="$pkg" \
-    sh "$pkg/scripts/install" >"$state/out" 2>&1; then
-  echo "expected install to fail on validation" >&2
+python3 - "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    manifest = json.load(handle)
+manifest["name"] = "wrong-name"
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(manifest, handle, indent=2)
+    handle.write("\n")
+PY
+if run_install >"$state/out" 2>&1; then
+  echo "expected install to fail on built-in validation" >&2
   cat "$state/out" >&2
   exit 1
 fi
-if [ -s "$log" ]; then
-  echo "validation failure must leave Codex untouched; log was:" >&2
+grep -Fq "field \`name\` must equal \`superpowers\`" "$state/out"
+[ ! -s "$log" ] || {
+  echo "built-in validation failure must leave Codex untouched" >&2
   cat "$log" >&2
   exit 1
+}
+cp "$root/plugins/superpowers/.codex-plugin/plugin.template.json" \
+  "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json"
+
+# Scenario V2: explicit additional-validator failure also leaves Codex untouched.
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+if run_install SUPERPOWERS_VALIDATOR="$failing_validator" >"$state/out" 2>&1; then
+  echo "expected install to fail on additional validation" >&2
+  cat "$state/out" >&2
+  exit 1
 fi
+grep -Fq "additional plugin validation failed" "$state/out"
+[ ! -s "$log" ] || {
+  echo "additional validation failure must leave Codex untouched" >&2
+  cat "$log" >&2
+  exit 1
+}
 
 # ---------------------------------------------------------------------------
 # Scenario 1: fresh install — prepare runs, marketplace listed before added,
