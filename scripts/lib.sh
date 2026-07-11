@@ -402,10 +402,12 @@ spw_marketplace_is_registered() {
 
 # Print the registered root of <marketplace_name> from a marketplace-list JSON
 # document (as a string argument, like spw_json_array_has), or nothing if the
-# marketplace is absent. Exit 2 on unparseable JSON, schema drift, or a
-# missing/empty root field, so callers fail closed instead of treating an
-# unreadable listing as "absent". Empty output is unambiguous: a valid
-# registered root is always a non-empty path.
+# marketplace is absent. Exit 2 on unparseable JSON, a non-object item, or an
+# item without a non-empty string name: such an item cannot be proven unrelated
+# and must not be mistaken for an absent wrapper marketplace. Validate root only
+# on the matching item; unrelated marketplace roots are never read. A matching
+# item without a non-empty string root also exits 2. Empty output is unambiguous:
+# a valid registered root is always a non-empty path.
 spw_marketplace_root_from_json() {
   json="$1"
   marketplace_name="$2"
@@ -425,14 +427,14 @@ for item in items:
     if not isinstance(item, dict):
         sys.exit(2)
     item_name = item.get("name")
-    item_root = item.get("root")
     if not isinstance(item_name, str) or not item_name:
-        sys.exit(2)
-    if not isinstance(item_root, str) or not item_root:
         sys.exit(2)
 for item in items:
     if item["name"] == name:
-        print(item["root"])
+        item_root = item.get("root")
+        if not isinstance(item_root, str) or not item_root:
+            sys.exit(2)
+        print(item_root)
         sys.exit(0)
 PY
 }
