@@ -72,4 +72,25 @@ run_adapter crash build ""
 grep -Fxq 'adapter crashed' "$RUN_STDERR"
 grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"
 
+RUN_RESULT="$tmpdir/real-inspect-invalid.result.json"
+RUN_STDOUT="$tmpdir/real-inspect-invalid.stdout"
+RUN_STDERR="$tmpdir/real-inspect-invalid.stderr"
+rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
+mkdir -p "$tmpdir/empty-codex"
+RUN_RC=0
+SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/empty-codex" \
+spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view nope \
+  >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "operation")" = "inspect" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "ok")" = "False" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = "invalid-arguments" ]
+grep -Fxq 'error: unsupported inspect view: nope' "$RUN_STDERR"
+if grep -Fq 'response operation does not match invocation' "$RUN_STDERR"; then
+  echo "invalid inspect view must be a controlled inspect failure, not an operation mismatch" >&2
+  exit 1
+fi
+
 echo "test_adapter_protocol: OK"

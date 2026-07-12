@@ -6,15 +6,18 @@ root=$(CDPATH= cd -- "$(dirname "$0")/../../.." && pwd)
 . "$root/scripts/adapters/codex/lib.sh"
 
 spw_codex_argument_error() {
-  spw_codex_failure build "invalid-arguments" "$1" "" ""
+  operation="$1"
+  message="$2"
+  spw_codex_failure "$operation" "invalid-arguments" "$message" "" ""
 }
 
 spw_codex_require_absolute_path() {
-  value="$1"
-  flag="$2"
+  operation="$1"
+  value="$2"
+  flag="$3"
   case "$value" in
     /*) ;;
-    *) spw_codex_argument_error "$flag must be an absolute path" ;;
+    *) spw_codex_argument_error "$operation" "$flag must be an absolute path" ;;
   esac
 }
 
@@ -62,81 +65,81 @@ spw_codex_build() {
     shift
     case "$flag" in
       --upstream-root)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --upstream-root"
-        [ "$seen_upstream_root" -eq 0 ] || spw_codex_argument_error "duplicate flag: --upstream-root"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --upstream-root"
+        [ "$seen_upstream_root" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --upstream-root"
         upstream_root="$1"
         seen_upstream_root=1
         shift
         ;;
       --candidate-root)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --candidate-root"
-        [ "$seen_candidate_root" -eq 0 ] || spw_codex_argument_error "duplicate flag: --candidate-root"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --candidate-root"
+        [ "$seen_candidate_root" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --candidate-root"
         candidate_root="$1"
         seen_candidate_root=1
         shift
         ;;
       --requested-ref)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --requested-ref"
-        [ "$seen_requested_ref" -eq 0 ] || spw_codex_argument_error "duplicate flag: --requested-ref"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --requested-ref"
+        [ "$seen_requested_ref" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --requested-ref"
         requested_ref="$1"
         seen_requested_ref=1
         shift
         ;;
       --resolved-ref)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --resolved-ref"
-        [ "$seen_resolved_ref" -eq 0 ] || spw_codex_argument_error "duplicate flag: --resolved-ref"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --resolved-ref"
+        [ "$seen_resolved_ref" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --resolved-ref"
         resolved_ref="$1"
         seen_resolved_ref=1
         shift
         ;;
       --commit)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --commit"
-        [ "$seen_commit" -eq 0 ] || spw_codex_argument_error "duplicate flag: --commit"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --commit"
+        [ "$seen_commit" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --commit"
         commit="$1"
         seen_commit=1
         shift
         ;;
       --wrapper-version)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --wrapper-version"
-        [ "$seen_wrapper_version" -eq 0 ] || spw_codex_argument_error "duplicate flag: --wrapper-version"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --wrapper-version"
+        [ "$seen_wrapper_version" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --wrapper-version"
         wrapper_version="$1"
         seen_wrapper_version=1
         shift
         ;;
       --upstream-manifest-version)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --upstream-manifest-version"
-        [ "$seen_upstream_manifest_version" -eq 0 ] || spw_codex_argument_error "duplicate flag: --upstream-manifest-version"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --upstream-manifest-version"
+        [ "$seen_upstream_manifest_version" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --upstream-manifest-version"
         upstream_manifest_version="$1"
         seen_upstream_manifest_version=1
         shift
         ;;
       --fallback-manifest)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --fallback-manifest"
-        [ "$seen_fallback_manifest" -eq 0 ] || spw_codex_argument_error "duplicate flag: --fallback-manifest"
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --fallback-manifest"
+        [ "$seen_fallback_manifest" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --fallback-manifest"
         fallback_manifest="$1"
         seen_fallback_manifest=1
         shift
         ;;
       *)
-        spw_codex_argument_error "unknown flag: $flag"
+        spw_codex_argument_error build "unknown flag: $flag"
         ;;
     esac
   done
 
-  [ "$seen_upstream_root" -eq 1 ] || spw_codex_argument_error "missing required flag: --upstream-root"
-  [ "$seen_candidate_root" -eq 1 ] || spw_codex_argument_error "missing required flag: --candidate-root"
-  [ "$seen_requested_ref" -eq 1 ] || spw_codex_argument_error "missing required flag: --requested-ref"
-  [ "$seen_resolved_ref" -eq 1 ] || spw_codex_argument_error "missing required flag: --resolved-ref"
-  [ "$seen_commit" -eq 1 ] || spw_codex_argument_error "missing required flag: --commit"
-  [ "$seen_wrapper_version" -eq 1 ] || spw_codex_argument_error "missing required flag: --wrapper-version"
-  [ "$seen_upstream_manifest_version" -eq 1 ] || spw_codex_argument_error "missing required flag: --upstream-manifest-version"
-  [ "$seen_fallback_manifest" -eq 1 ] || spw_codex_argument_error "missing required flag: --fallback-manifest"
+  [ "$seen_upstream_root" -eq 1 ] || spw_codex_argument_error build "missing required flag: --upstream-root"
+  [ "$seen_candidate_root" -eq 1 ] || spw_codex_argument_error build "missing required flag: --candidate-root"
+  [ "$seen_requested_ref" -eq 1 ] || spw_codex_argument_error build "missing required flag: --requested-ref"
+  [ "$seen_resolved_ref" -eq 1 ] || spw_codex_argument_error build "missing required flag: --resolved-ref"
+  [ "$seen_commit" -eq 1 ] || spw_codex_argument_error build "missing required flag: --commit"
+  [ "$seen_wrapper_version" -eq 1 ] || spw_codex_argument_error build "missing required flag: --wrapper-version"
+  [ "$seen_upstream_manifest_version" -eq 1 ] || spw_codex_argument_error build "missing required flag: --upstream-manifest-version"
+  [ "$seen_fallback_manifest" -eq 1 ] || spw_codex_argument_error build "missing required flag: --fallback-manifest"
 
-  spw_codex_require_absolute_path "$upstream_root" "--upstream-root"
-  spw_codex_require_absolute_path "$candidate_root" "--candidate-root"
-  [ -d "$upstream_root" ] || spw_codex_argument_error "upstream root not found: $upstream_root"
-  [ -d "$candidate_root" ] || spw_codex_argument_error "candidate root not found: $candidate_root"
-  [ -f "$fallback_manifest" ] || spw_codex_argument_error "fallback manifest not found: $fallback_manifest"
+  spw_codex_require_absolute_path build "$upstream_root" "--upstream-root"
+  spw_codex_require_absolute_path build "$candidate_root" "--candidate-root"
+  [ -d "$upstream_root" ] || spw_codex_argument_error build "upstream root not found: $upstream_root"
+  [ -d "$candidate_root" ] || spw_codex_argument_error build "candidate root not found: $candidate_root"
+  [ -f "$fallback_manifest" ] || spw_codex_argument_error build "fallback manifest not found: $fallback_manifest"
 
   validator="$root/scripts/adapters/codex/validate-generated-plugin.py"
   [ -f "$validator" ] || spw_codex_failure build "build-failed" "missing built-in plugin validator: $validator" "" ""
@@ -212,20 +215,20 @@ spw_codex_inspect_fingerprint() {
     shift
     case "$flag" in
       --view)
-        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --view"
-        [ "$seen_view" -eq 0 ] || spw_codex_argument_error "duplicate flag: --view"
+        [ "$#" -gt 0 ] || spw_codex_argument_error inspect "missing value for --view"
+        [ "$seen_view" -eq 0 ] || spw_codex_argument_error inspect "duplicate flag: --view"
         view="$1"
         seen_view=1
         shift
         ;;
       *)
-        spw_codex_argument_error "unknown flag: $flag"
+        spw_codex_argument_error inspect "unknown flag: $flag"
         ;;
     esac
   done
 
-  [ "$seen_view" -eq 1 ] || spw_codex_argument_error "missing required flag: --view"
-  [ "$view" = "fingerprint" ] || spw_codex_argument_error "unsupported inspect view: $view"
+  [ "$seen_view" -eq 1 ] || spw_codex_argument_error inspect "missing required flag: --view"
+  [ "$view" = "fingerprint" ] || spw_codex_argument_error inspect "unsupported inspect view: $view"
 
   fingerprint=$(spw_installed_commit_or_empty || true)
   if [ -n "$fingerprint" ]; then
