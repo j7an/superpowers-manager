@@ -1,4 +1,5 @@
 'use strict';
+// @ts-check
 // Unit tests for the bin's pure functions. Platform and env are injected so
 // the Windows dispatch path is testable without Windows.
 const assert = require('assert');
