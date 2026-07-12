@@ -52,6 +52,8 @@ PY
 #     the post-install verifier can find it. Behavior flags are marker files. ---
 state="$tmpdir/state"
 mkdir -p "$state"
+install_tmp="$tmpdir/install-tmp"
+mkdir -p "$install_tmp"
 fake_codex="$tmpdir/codex"
 fake_adapter="$tmpdir/adapter"
 log="$state/codex.log"
@@ -358,6 +360,7 @@ reset() {
 
 run_install() {
   env \
+    TMPDIR="$install_tmp" \
     SPW_ADAPTER="$fake_adapter" \
     SUPERPOWERS_CODEX="$fake_codex" \
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
@@ -369,6 +372,7 @@ run_install() {
 
 run_update() {
   env \
+    TMPDIR="$install_tmp" \
     SPW_ADAPTER="$fake_adapter" \
     SUPERPOWERS_CODEX="$fake_codex" \
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
@@ -382,6 +386,14 @@ expect_fail() {
   if run_install "$@" >"$state/out" 2>&1; then
     echo "expected install to fail but it succeeded" >&2
     cat "$state/out" >&2
+    exit 1
+  fi
+}
+
+assert_install_tmp_empty() {
+  if find "$install_tmp" -mindepth 1 -print | grep -q .; then
+    echo "install leaked its invocation workspace or adapter sidecars:" >&2
+    find "$install_tmp" -mindepth 1 -print >&2
     exit 1
   fi
 }
@@ -452,6 +464,7 @@ pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
 { [ "$list_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
   echo "order must be: marketplace list, marketplace add, plugin add" >&2; cat "$log" >&2; exit 1; }
 grep -Fq "wrapper updated" "$state/out"
+assert_install_tmp_empty
 if grep -Fq "marketplace remove" "$log"; then
   echo "fresh install must not remove any marketplace" >&2; exit 1
 fi
@@ -588,6 +601,7 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 : > "$state/plugin_add_noop"
 expect_fail
 grep -Fq "fingerprint is not detectable" "$state/out"
+assert_install_tmp_empty
 if grep -Fq "wrapper updated" "$state/out"; then
   echo "must not print success when the installed wrapper is undetectable" >&2; exit 1
 fi
@@ -659,5 +673,40 @@ expect_fail SUPERPOWERS_INSTALL_REFRESH_MODE=bogus
 if [ -s "$log" ]; then
   echo "invalid refresh mode must fail before any codex call" >&2; exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Scenario 11: malformed generated provenance is remediated by install. Probe
+# reports needs prepare, prepare replaces the bad tree, and mutation happens
+# only after the regenerated candidate validates.
+# ---------------------------------------------------------------------------
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
+run_install > "$state/out"
+grep -Fq "prepared v1.0.0" "$state/out"
+grep -Fq "wrapper updated" "$state/out"
+grep -Fq "install --package-root $pkg" "$state/adapter.log"
+python3 - "$pkg/plugins/superpowers/.superpowers-upstream.json" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    commit = json.load(handle)["commit"]
+if not isinstance(commit, str) or re.fullmatch(r"[0-9a-fA-F]{40}", commit) is None:
+    raise SystemExit("install did not replace malformed generated provenance")
+PY
+
+# ---------------------------------------------------------------------------
+# Scenario 12: update follows the same malformed-provenance remediation path
+# instead of aborting or incorrectly taking the current-state skip.
+# ---------------------------------------------------------------------------
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
+run_update > "$state/out"
+grep -Fq "prepared v1.0.0" "$state/out"
+grep -Fq "wrapper updated" "$state/out"
+grep -Fq "install --package-root $pkg" "$state/adapter.log"
 
 echo "test_install_commands: OK"

@@ -12,6 +12,11 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 SPW_ADAPTER="$root/tests/fixtures/fake-adapter"
 [ "$SPW_ADAPTER_RESPONSE_VALIDATOR" = "$root/scripts/core/validate-adapter-response.py" ]
 
+system_python=/usr/bin/python3
+if [ -x "$system_python" ]; then
+  "$system_python" -S "$SPW_ADAPTER_RESPONSE_VALIDATOR" --help >/dev/null
+fi
+
 run_adapter() {
   scenario="$1"
   operation="$2"
@@ -167,5 +172,76 @@ if grep -Fq 'response operation does not match invocation' "$RUN_STDERR"; then
   echo "invalid inspect view must be a controlled inspect failure, not an operation mismatch" >&2
   exit 1
 fi
+
+missing_codex="$tmpdir/missing-codex"
+RUN_RESULT="$tmpdir/missing-codex-install.result.json"
+RUN_STDOUT="$tmpdir/missing-codex-install.stdout"
+RUN_STDERR="$tmpdir/missing-codex-install.stderr"
+rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
+RUN_RC=0
+SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SUPERPOWERS_CODEX="$missing_codex" \
+spw_invoke_adapter install "$RUN_RESULT" "" -- --package-root "$real_pkg" \
+  >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "operation")" = "install" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "ok")" = "False" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = "command-not-found" ]
+grep -Fxq "error: required Codex command not found: $missing_codex" "$RUN_STDERR"
+if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
+  echo "missing Codex must be a controlled install failure" >&2
+  exit 1
+fi
+
+RUN_RESULT="$tmpdir/missing-codex-fingerprint.result.json"
+RUN_STDOUT="$tmpdir/missing-codex-fingerprint.stdout"
+RUN_STDERR="$tmpdir/missing-codex-fingerprint.stderr"
+rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
+RUN_RC=0
+SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SUPERPOWERS_CODEX="$missing_codex" \
+SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/empty-codex" \
+spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint \
+  >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+[ "$RUN_RC" -eq 0 ]
+[ "$(spw_adapter_result_get "$RUN_RESULT" "fingerprint")" = "" ]
+[ ! -s "$RUN_STDOUT" ]
+[ ! -s "$RUN_STDERR" ]
+
+for missing_case in ownership uninstall; do
+  RUN_RESULT="$tmpdir/missing-codex-$missing_case.result.json"
+  RUN_STDOUT="$tmpdir/missing-codex-$missing_case.stdout"
+  RUN_STDERR="$tmpdir/missing-codex-$missing_case.stderr"
+  rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
+  RUN_RC=0
+  case "$missing_case" in
+    ownership)
+      SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+      SUPERPOWERS_CODEX="$missing_codex" \
+      spw_invoke_adapter inspect "$RUN_RESULT" ownership -- --view ownership \
+        >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+      expected_operation=inspect
+      ;;
+    uninstall)
+      SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+      SUPERPOWERS_CODEX="$missing_codex" \
+      spw_invoke_adapter uninstall "$RUN_RESULT" "" -- \
+        --plugin-present true --marketplace-present true \
+        >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+      expected_operation=uninstall
+      ;;
+  esac
+  [ "$RUN_RC" -eq 1 ]
+  [ ! -f "$RUN_RESULT" ]
+  [ "$(spw_json_get "$RUN_RESULT.response" "operation")" = "$expected_operation" ]
+  [ "$(spw_json_get "$RUN_RESULT.response" "ok")" = "False" ]
+  [ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = "command-not-found" ]
+  grep -Fxq "error: required Codex command not found: $missing_codex" "$RUN_STDERR"
+  if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
+    echo "missing Codex must be a controlled $expected_operation failure" >&2
+    exit 1
+  fi
+done
 
 echo "test_adapter_protocol: OK"

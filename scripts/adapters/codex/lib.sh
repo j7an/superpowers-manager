@@ -236,7 +236,16 @@ PY
 
 spw_codex_metadata_commit_or_empty() {
   file="$1"
-  spw_codex_json_get_or_empty "$file" "commit"
+  if ! commit=$(spw_codex_json_get_or_empty "$file" "commit"); then
+    return 1
+  fi
+  case "$commit" in
+    ""|*[!0-9a-fA-F]*) return 1 ;;
+  esac
+  case "${#commit}" in
+    7|40) printf '%s\n' "$commit" ;;
+    *) return 1 ;;
+  esac
 }
 
 spw_apply_manifest_overlay() {

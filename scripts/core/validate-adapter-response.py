@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -139,7 +141,7 @@ def validate_envelope(
     envelope = require_object(raw, "response")
     require_exact_keys(envelope, ENVELOPE_KEYS, "response")
     protocol = envelope.get("protocol")
-    if isinstance(protocol, bool) or protocol != 1:
+    if type(protocol) is not int or protocol != 1:
         raise ProtocolError("protocol must equal integer 1")
     if envelope.get("operation") != operation:
         raise ProtocolError("response operation does not match invocation")
@@ -194,7 +196,7 @@ def main() -> int:
             json.dump(result, handle, allow_nan=False, separators=(",", ":"))
             handle.write("\n")
         return 0
-    except (OSError, UnicodeError, json.JSONDecodeError, ProtocolError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError, ProtocolError, RecursionError) as exc:
         print(f"error: invalid adapter response: {exc}", file=sys.stderr)
         return 2
 

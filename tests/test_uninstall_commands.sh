@@ -5,6 +5,15 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
+if grep -Fq 'scripts/adapters/codex/lib.sh' "$root/scripts/uninstall"; then
+  echo "public uninstall must not source the Codex adapter library" >&2
+  exit 1
+fi
+if grep -Eq 'SPW_PLUGIN_ID|SPW_MARKETPLACE_NAME' "$root/scripts/core/lifecycle.sh"; then
+  echo "shared lifecycle code must not reference Codex-owned identifiers" >&2
+  exit 1
+fi
+
 state="$tmpdir/state"
 mkdir -p "$state"
 fake_codex="$tmpdir/codex"
@@ -121,6 +130,26 @@ fi
 if [ -s "$log" ]; then
   echo "expected no Codex calls when python3 is missing; log was:" >&2
   cat "$log" >&2
+  exit 1
+fi
+
+# --- Scenario 0b: missing Codex is reported by the invoked ownership adapter
+# as a controlled inspect failure, not short-circuited by public core code. ---
+reset
+printf '%s\n' "$plugin_present" > "$state/plugin_list.json"
+printf '%s\n' "$marketplace_present" > "$state/marketplace_list.json"
+missing_codex="$tmpdir/missing-codex"
+if SPW_ADAPTER="$recording_adapter" SUPERPOWERS_CODEX="$missing_codex" \
+  sh "$root/scripts/uninstall" >"$state/out" 2>&1; then
+  echo "expected uninstall to fail when Codex is missing" >&2
+  cat "$state/out" >&2
+  exit 1
+fi
+grep -Fxq "inspect --view ownership" "$adapter_log"
+grep -Fxq "error: required Codex command not found: $missing_codex" "$state/out"
+if grep -Fq "error: invalid adapter response:" "$state/out"; then
+  echo "missing Codex must remain a controlled ownership-inspect failure" >&2
+  cat "$state/out" >&2
   exit 1
 fi
 

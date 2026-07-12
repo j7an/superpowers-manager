@@ -226,21 +226,22 @@ cat > "$installed_root/.superpowers-upstream.json" <<EOF
 {"commit":"$desired"}
 EOF
 install_result="$tmpdir/install-result.json"
+inspect_result="$tmpdir/inspect-result.json"
 cat > "$install_result" <<'EOF'
 {"verification_hints":{"mismatch":"adapter mismatch hint","missing":"adapter missing hint"}}
 EOF
-out=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "$desired" "$install_result")
+out=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "$desired" "$install_result" "$inspect_result")
 printf '%s\n' "$out" | grep -Fq "wrapper updated"
 printf '%s\n' "$out" | grep -Fq "installed_commit=$desired"
 
-if (SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "1111111111111111111111111111111111111111" "$install_result") >"$tmpdir/stale.out" 2>&1; then
+if (SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "1111111111111111111111111111111111111111" "$install_result" "$inspect_result") >"$tmpdir/stale.out" 2>&1; then
   echo "stale installed metadata must fail" >&2; exit 1
 fi
 grep -Fq "does not match the prepared plugin" "$tmpdir/stale.out"
 grep -Fq "adapter mismatch hint" "$tmpdir/stale.out"
 
 rm -rf "$tmpdir/codex"
-if (SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "$desired" "$install_result") >"$tmpdir/undetectable.out" 2>&1; then
+if (SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "$desired" "$install_result" "$inspect_result") >"$tmpdir/undetectable.out" 2>&1; then
   echo "undetectable installed metadata must fail" >&2; exit 1
 fi
 grep -Fq "fingerprint is not detectable" "$tmpdir/undetectable.out"

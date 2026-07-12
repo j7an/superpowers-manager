@@ -257,10 +257,24 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
             fragment="response keys must be",
         )
 
+    def test_rejects_deeply_nested_raw_json_without_traceback(self) -> None:
+        result = validate_raw("[" * 2000 + "]" * 2000, "build")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("error: invalid adapter response:", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIsNone(result.validated_result)
+
     def test_rejects_wrong_protocol_operation_types_and_views(self) -> None:
         invalid_cases = (
             (
                 {"protocol": True},
+                "build",
+                None,
+                "protocol must equal integer 1",
+            ),
+            (
+                {"protocol": 1.0},
                 "build",
                 None,
                 "protocol must equal integer 1",

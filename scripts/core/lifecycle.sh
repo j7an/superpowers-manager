@@ -33,26 +33,19 @@ spw_generated_metadata_path() {
 spw_generated_commit_or_empty() {
   root="$1"
   metadata=$(spw_generated_metadata_path "$root")
-  spw_metadata_commit_or_empty "$metadata" || true
+  spw_metadata_commit_lenient_or_empty "$metadata"
 }
 
 spw_verify_installed_fingerprint() {
   desired_commit="$1"
   install_result="$2"
-  tmp_parent="${TMPDIR:-/tmp}"
-  inspect_result="$tmp_parent/.superpowers.inspect.$$.json"
-  cleanup() {
-    rm -f "$inspect_result" "$inspect_result.response"
-  }
-  trap cleanup EXIT HUP INT TERM
+  inspect_result="$3"
   spw_inspect_fingerprint "$inspect_result"
   installed_commit=$(spw_adapter_result_get "$inspect_result" "fingerprint")
   printf 'desired_commit=%s\n' "$desired_commit"
   printf 'installed_commit=%s\n' "$installed_commit"
   if [ -n "$installed_commit" ] && spw_commit_matches "$desired_commit" "$installed_commit"; then
     echo "wrapper updated"
-    trap - EXIT HUP INT TERM
-    cleanup
     return 0
   fi
 
@@ -73,18 +66,16 @@ spw_verify_installed_fingerprint() {
   if [ -n "$hint" ]; then
     echo "hint: $hint" >&2
   fi
-  trap - EXIT HUP INT TERM
-  cleanup
-  exit 1
+  return 1
 }
 
 spw_verify_uninstalled_resources() {
   inspect_result="$1"
 
   if [ "$(spw_adapter_result_boolean "$inspect_result" "resources.plugin")" = true ]; then
-    spw_die "plugin $SPW_PLUGIN_ID is still installed after removal"
+    spw_die "owned plugin resource is still installed after removal"
   fi
   if [ "$(spw_adapter_result_boolean "$inspect_result" "resources.marketplace")" = true ]; then
-    spw_die "marketplace $SPW_MARKETPLACE_NAME is still registered after removal"
+    spw_die "owned marketplace resource is still registered after removal"
   fi
 }

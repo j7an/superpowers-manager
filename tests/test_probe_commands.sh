@@ -96,10 +96,26 @@ output=$(run_probe)
 assert_probe_porcelain "$desired_short" "current" "$output"
 grep -Fxq "inspect --view fingerprint" "$adapter_log"
 
-# Scenario 2: malformed metadata plus malformed manifest -> null fingerprint and
-# needs install when generated is current.
-printf '%s\n' '{' > "$installed_root/.superpowers-upstream.json"
+# Scenario 1b: semantically invalid metadata falls through to a valid manifest
+# fingerprint instead of poisoning the protocol response.
+printf '%s\n' '{"commit":"not-a-fingerprint"}' > "$installed_root/.superpowers-upstream.json"
+write_installed_manifest "0.0.0+wrapper.$desired_short"
+: > "$adapter_log"
+output=$(run_probe)
+assert_probe_porcelain "$desired_short" "current" "$output"
+grep -Fxq "inspect --view fingerprint" "$adapter_log"
+
+# Scenario 2: semantically invalid metadata plus malformed manifest -> null
+# fingerprint and needs install when generated is current.
+printf '%s\n' '{"commit":"not-a-fingerprint"}' > "$installed_root/.superpowers-upstream.json"
 printf '%s\n' '{' > "$installed_root/.codex-plugin/plugin.json"
+: > "$adapter_log"
+output=$(run_probe)
+assert_probe_porcelain "" "needs install" "$output"
+grep -Fxq "inspect --view fingerprint" "$adapter_log"
+
+# Scenario 2b: semantically invalid metadata with no manifest also yields null.
+rm -f "$installed_root/.codex-plugin/plugin.json"
 : > "$adapter_log"
 output=$(run_probe)
 assert_probe_porcelain "" "needs install" "$output"
@@ -111,6 +127,17 @@ write_generated_metadata "0000000000000000000000000000000000000000"
 : > "$adapter_log"
 output=$(run_probe)
 assert_probe_porcelain "" "needs prepare" "$output"
+grep -Fxq "inspect --view fingerprint" "$adapter_log"
+
+# Scenario 4: malformed generated provenance is treated as absent so probe can
+# report needs prepare instead of aborting the remediation path.
+printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
+: > "$adapter_log"
+output=$(run_probe)
+printf '%s\n' "$output" | grep -Fxq "desired_commit=$desired_commit"
+printf '%s\n' "$output" | grep -Fxq "generated_commit="
+printf '%s\n' "$output" | grep -Fxq "installed_commit="
+printf '%s\n' "$output" | grep -Fxq "status=needs prepare"
 grep -Fxq "inspect --view fingerprint" "$adapter_log"
 
 echo "test_probe_commands: OK"

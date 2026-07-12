@@ -232,6 +232,7 @@ run_prepare_for_ref_with_env() {
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
     SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
     SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
+    SUPERPOWERS_CODEX="$tmpdir/missing-codex" \
     SUPERPOWERS_VALIDATOR= \
     HOME="$home" \
     "$@" \

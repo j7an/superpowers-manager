@@ -5,6 +5,7 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/provenance.sh"
 . "$root/scripts/core/status.sh"
+. "$root/scripts/core/lifecycle.sh"
 
 desired="896224c4b1879920ab573417e68fd51d2ccc9072"
 
@@ -52,5 +53,27 @@ assert_manifest_short "0.0.0+wrapper.896224c" "896224c"
 # The template's placeholder version is not a real fingerprint -> empty.
 assert_manifest_short "0.0.0+wrapper.template" ""
 assert_manifest_short "6.0.3+wrapper.abcxyz1" ""
+
+generated_root="$tmpdir/generated-root"
+generated_metadata="$generated_root/plugins/superpowers/.superpowers-upstream.json"
+mkdir -p "$(dirname "$generated_metadata")"
+
+printf '%s\n' '{' > "$generated_metadata"
+test "$(spw_generated_commit_or_empty "$generated_root")" = ""
+
+printf '%s\n' '{"commit": 7}' > "$generated_metadata"
+test "$(spw_generated_commit_or_empty "$generated_root")" = ""
+
+printf '%s\n' '{"commit": "not-a-commit"}' > "$generated_metadata"
+test "$(spw_generated_commit_or_empty "$generated_root")" = ""
+
+printf '%s\n' '{"commit": "0123456789abcdef0123456789abcdef01234567"}' > "$generated_metadata"
+test "$(spw_generated_commit_or_empty "$generated_root")" = "0123456789abcdef0123456789abcdef01234567"
+
+chmod 000 "$generated_metadata"
+if [ ! -r "$generated_metadata" ]; then
+  test "$(spw_generated_commit_or_empty "$generated_root")" = ""
+fi
+chmod 600 "$generated_metadata"
 
 echo "test_probe_status: OK"

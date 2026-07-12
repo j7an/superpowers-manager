@@ -103,3 +103,33 @@ spw_metadata_commit_or_empty() {
     spw_json_get "$file" "commit"
   fi
 }
+
+spw_metadata_commit_lenient_or_empty() {
+  file="$1"
+  [ -f "$file" ] || return 0
+
+  if value=$(
+    python3 -S - "$file" 2>/dev/null <<'PY'
+import json
+import re
+import sys
+
+path = sys.argv[1]
+
+def reject_constant(constant):
+    raise ValueError(f"non-standard numeric constant: {constant}")
+
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle, parse_constant=reject_constant)
+except (OSError, UnicodeError, ValueError, RecursionError):
+    raise SystemExit(1)
+
+commit = data.get("commit") if isinstance(data, dict) else None
+if isinstance(commit, str) and re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+    print(commit)
+PY
+  ); then
+    printf '%s\n' "$value"
+  fi
+}

@@ -11,6 +11,15 @@ spw_codex_argument_error() {
   spw_codex_failure "$operation" "invalid-arguments" "$message" "" ""
 }
 
+spw_codex_require_command() {
+  operation="$1"
+  command_name="$2"
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    spw_codex_failure "$operation" "command-not-found" \
+      "required Codex command not found: $command_name" "" ""
+  fi
+}
+
 spw_codex_require_absolute_path() {
   operation="$1"
   value="$2"
@@ -275,8 +284,8 @@ spw_codex_install() {
 
   codex_bin="${SUPERPOWERS_CODEX:-codex}"
   refresh_mode="${SUPERPOWERS_INSTALL_REFRESH_MODE:-add-only}"
-  spw_require_command "$codex_bin"
   spw_require_command python3
+  spw_codex_require_command install "$codex_bin"
   case "$refresh_mode" in
     add-only|remove-add) ;;
     *) spw_codex_failure install "invalid-arguments" "unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: $refresh_mode" "" "" ;;
@@ -390,7 +399,8 @@ spw_codex_uninstall() {
   esac
 
   codex_bin="${SUPERPOWERS_CODEX:-codex}"
-  spw_require_command "$codex_bin"
+  spw_require_command python3
+  spw_codex_require_command uninstall "$codex_bin"
 
   scratch="${TMPDIR:-/tmp}/.superpowers.adapter-uninstall.$$"
   stdout_file="$scratch/stdout"
@@ -465,8 +475,8 @@ spw_codex_inspect() {
       ;;
     ownership)
       codex_bin="${SUPERPOWERS_CODEX:-codex}"
-      spw_require_command "$codex_bin"
       spw_require_command python3
+      spw_codex_require_command inspect "$codex_bin"
 
       scratch="${TMPDIR:-/tmp}/.superpowers.adapter-inspect.$$"
       stderr_file="$scratch/stderr"
