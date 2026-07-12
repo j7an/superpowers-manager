@@ -6,17 +6,25 @@ dockerfile="$root/tests/container/Dockerfile"
 runner="$root/tests/container.sh"
 tools="$root/tests/container/package.json"
 probe="$root/tests/container/codex-offline-probe.sh"
+tsconfig="$root/tests/tsconfig.json"
 
 test -f "$dockerfile"
 test -x "$runner"
 test -f "$tools"
 test -x "$probe"
+test -f "$tsconfig"
 test -f "$root/.dockerignore"
 
 grep -Fxq 'FROM node:24-bookworm-slim' "$dockerfile"
 grep -Fq '"@openai/codex": "0.144.1"' "$tools"
 grep -Fq '"typescript": "7.0.2"' "$tools"
 grep -Fq '"@types/node": "24.13.3"' "$tools"
+grep -Fq '"module": "NodeNext"' "$tsconfig"
+grep -Fq '"moduleResolution": "NodeNext"' "$tsconfig"
+if grep -Fq '"Node16"' "$tsconfig"; then
+  echo "tsconfig must model the declared Node 24+ runtime with NodeNext" >&2
+  exit 1
+fi
 grep -Fq -- '--network none' "$runner"
 grep -Fq -- '--read-only' "$runner"
 grep -Fq 'docker build --pull ' "$runner"

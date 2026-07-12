@@ -37,6 +37,7 @@ assert_file "scripts/adapters/codex/adapter"
 assert_file "scripts/adapters/codex/validate-generated-plugin.py"
 assert_file "scripts/core/validate-adapter-response.py"
 
+assert_contains "package.json" '"type": "module"'
 assert_contains "config/upstream-ref" "latest-release"
 assert_contains ".agents/plugins/marketplace.json" '"name": "superpowers-wrapper"'
 assert_contains ".agents/plugins/marketplace.json" '"products": ["CODEX"]'

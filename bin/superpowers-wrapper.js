@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-'use strict';
 // @ts-check
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 /**
  * @typedef {'prepare' | 'probe' | 'install' | 'update' | 'uninstall'} Subcommand
@@ -196,7 +195,7 @@ function main() {
     console.log(usage());
     process.exit(0);
   }
-  const root = resolvePackageRoot(__filename);
+  const root = resolvePackageRoot(import.meta.filename);
   if (!root) {
     console.error('error: cannot resolve the superpowers-wrapper package root');
     process.exit(1);
@@ -230,6 +229,6 @@ function main() {
   process.exit(res.status === null ? 1 : res.status);
 }
 
-module.exports = { resolvePackageRoot, parseArgs, findTool, discoverShell, preflight, buildSpawn, usage };
+export { resolvePackageRoot, parseArgs, findTool, discoverShell, preflight, buildSpawn, usage };
 
-if (require.main === module) main();
+if (import.meta.main) main();

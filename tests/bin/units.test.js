@@ -1,10 +1,9 @@
-'use strict';
 // @ts-check
 // Unit tests for the bin's pure functions. Platform and env are injected so
 // the Windows dispatch path is testable without Windows.
-const assert = require('assert');
-const path = require('path');
-const bin = require('../../bin/superpowers-wrapper.js');
+import * as assert from 'node:assert';
+import * as path from 'node:path';
+import * as bin from '../../bin/superpowers-wrapper.js';
 
 // --- parseArgs ---
 assert.deepStrictEqual(bin.parseArgs([]), { kind: 'run', cmd: 'update', args: [] });
@@ -36,8 +35,8 @@ assert.strictEqual(win.file, gitBash);
 assert.deepStrictEqual(win.argv, [path.join('C:\\pkg', 'scripts', 'update'), '-x']);
 
 // --- resolvePackageRoot walks up to package.json from the bin's real path ---
-const root = bin.resolvePackageRoot(path.join(__dirname, '..', '..', 'bin', 'superpowers-wrapper.js'));
-assert.strictEqual(root, path.resolve(__dirname, '..', '..'));
+const root = bin.resolvePackageRoot(path.join(import.meta.dirname, '..', '..', 'bin', 'superpowers-wrapper.js'));
+assert.strictEqual(root, path.resolve(import.meta.dirname, '..', '..'));
 
 // --- preflight: codex required only for install/update/uninstall ---
 const emptyEnv = { PATH: '/nonexistent-dir-for-test' };
