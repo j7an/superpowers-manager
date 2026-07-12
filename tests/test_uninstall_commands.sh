@@ -39,6 +39,10 @@ if [ "$1" = plugin ] && [ "$2" = remove ]; then
   exit 0
 fi
 if [ "$1" = plugin ] && [ "$2" = marketplace ] && [ "$3" = remove ]; then
+  if [ -f "$state/remove_marketplace_fail" ]; then
+    printf '%s\n' 'marketplace remove exploded' >&2
+    exit 1
+  fi
   [ -f "$state/remove_noop" ] || printf '%s\n' '{"marketplaces":[{"name":"openai-curated","root":"/x"}]}' > "$state/marketplace_list.json"
   exit 0
 fi
@@ -60,7 +64,8 @@ marketplace_present='{"marketplaces":[{"name":"openai-curated","root":"/x"},{"na
 marketplace_absent='{"marketplaces":[{"name":"openai-curated","root":"/x"}]}'
 
 reset() {
-  rm -f "$state/plugin_list.rc" "$state/marketplace_list.rc" "$state/remove_noop" "$state/remove_plugin_missing_installed"
+  rm -f "$state/plugin_list.rc" "$state/marketplace_list.rc" "$state/remove_noop" \
+    "$state/remove_plugin_missing_installed" "$state/remove_marketplace_fail"
   : > "$log"
   : > "$adapter_log"
 }
@@ -196,6 +201,19 @@ if grep -Fq "uninstall --" "$adapter_log"; then
 fi
 assert_no_removes
 
+# --- Scenario 6b: malformed individual plugin entry -> abort, no removes ---
+reset
+printf '%s\n' '{"installed":[{}],"available":[]}' > "$state/plugin_list.json"
+printf '%s\n' "$marketplace_present" > "$state/marketplace_list.json"
+expect_fail
+if grep -Fq "uninstall --" "$adapter_log"; then
+  echo "adapter uninstall must not run on malformed individual plugin entries" >&2
+  cat "$adapter_log" >&2
+  exit 1
+fi
+assert_no_removes
+assert_output_contains "cannot parse output of"
+
 # --- Scenario 7: plugin PRESENT but marketplace list fails -> preflight must
 #     abort before ANY remove (the plugin must NOT be removed) ---
 reset
@@ -209,6 +227,19 @@ if grep -Fq "uninstall --" "$adapter_log"; then
   exit 1
 fi
 assert_no_removes
+
+# --- Scenario 8b: malformed individual marketplace entry -> abort, no removes ---
+reset
+printf '%s\n' "$plugin_present" > "$state/plugin_list.json"
+printf '%s\n' '{"marketplaces":[{}]}' > "$state/marketplace_list.json"
+expect_fail
+if grep -Fq "uninstall --" "$adapter_log"; then
+  echo "adapter uninstall must not run on malformed individual marketplace entries" >&2
+  cat "$adapter_log" >&2
+  exit 1
+fi
+assert_no_removes
+assert_output_contains "cannot parse output of"
 
 # --- Scenario 8: plugin PRESENT but marketplace list is MALFORMED -> preflight
 #     must abort before ANY remove. Same fail-closed guarantee as Scenario 7,
@@ -255,6 +286,35 @@ assert_output_contains "cannot parse output of"
 if grep -Fq "uninstall complete" "$state/out"; then
   echo "must not report success when verify-after sees schema drift" >&2
   cat "$state/out" >&2
+  exit 1
+fi
+
+# --- Scenario 10: plugin remove succeeds, marketplace remove fails -> adapter
+#     must surface one controlled failure, replay the stderr, skip final core
+#     success, and avoid unrelated mutation ---
+reset
+printf '%s\n' "$plugin_present" > "$state/plugin_list.json"
+printf '%s\n' "$marketplace_present" > "$state/marketplace_list.json"
+: > "$state/remove_marketplace_fail"
+expect_fail
+grep -Fxq "uninstall --plugin-present true --marketplace-present true" "$adapter_log"
+grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"
+grep -Fq "plugin marketplace remove superpowers-wrapper" "$log"
+if grep -Fq "uninstall complete" "$state/out"; then
+  echo "core must not print final success when marketplace removal fails" >&2
+  cat "$state/out" >&2
+  exit 1
+fi
+if grep -Fq "error: invalid adapter response:" "$state/out"; then
+  echo "marketplace removal failure must be reported as one controlled adapter failure" >&2
+  cat "$state/out" >&2
+  exit 1
+fi
+grep -Fq "marketplace remove exploded" "$state/out"
+grep -Fq "error: codex plugin marketplace remove failed for superpowers-wrapper" "$state/out"
+if grep -Fq "openai-curated" "$log"; then
+  echo "marketplace failure must not mutate unrelated providers" >&2
+  cat "$log" >&2
   exit 1
 fi
 

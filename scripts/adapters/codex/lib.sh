@@ -8,7 +8,9 @@ SPW_MARKETPLACE_NAME="superpowers-wrapper"
 # element of the top-level array <array_key> is an object whose <field> equals
 # <value>, else print "absent" (exit 0). On unparseable JSON or invalid schema,
 # print nothing and exit 2 so callers can fail closed rather than treat an
-# unreadable listing as "absent".
+# unreadable listing as "absent". Every item in the inspected array must be an
+# object with a non-empty string <field>; otherwise ownership is unprovable and
+# the helper exits 2 instead of treating the malformed entry as unrelated.
 # The JSON is passed as an argument (exactly as spw_json_get takes a file path),
 # NOT on stdin: the here-doc below is Python's stdin (its program source), so a
 # json.load(sys.stdin) here would read the program, not the caller's JSON.
@@ -29,7 +31,13 @@ if not isinstance(data, dict):
 items = data.get(array_key)
 if not isinstance(items, list):
     sys.exit(2)
-found = any(isinstance(i, dict) and i.get(field) == value for i in items)
+for item in items:
+    if not isinstance(item, dict):
+        sys.exit(2)
+    field_value = item.get(field)
+    if not isinstance(field_value, str) or not field_value:
+        sys.exit(2)
+found = any(item[field] == value for item in items)
 print("present" if found else "absent")
 PY
 }

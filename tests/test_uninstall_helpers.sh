@@ -34,6 +34,12 @@ test "$(spw_json_array_has "$markets" marketplaces name "missing")" = absent
 # malformed schema -> non-zero exit (fail closed), no "present"/"absent" output
 assert_fails '{}' installed pluginId "superpowers@superpowers-wrapper"
 assert_fails '{"installed":{}}' installed pluginId "superpowers@superpowers-wrapper"
+assert_fails '{"installed":[{}]}' installed pluginId "superpowers@superpowers-wrapper"
+assert_fails '{"installed":[{"pluginId":42}]}' installed pluginId "superpowers@superpowers-wrapper"
+assert_fails '{"installed":[null]}' installed pluginId "superpowers@superpowers-wrapper"
+assert_fails '{"marketplaces":[{}]}' marketplaces name "superpowers-wrapper"
+assert_fails '{"marketplaces":[{"name":42}]}' marketplaces name "superpowers-wrapper"
+assert_fails '{"marketplaces":[null]}' marketplaces name "superpowers-wrapper"
 
 # absent: empty array
 test "$(spw_json_array_has '{"installed":[]}' installed pluginId "x")" = absent
