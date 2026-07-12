@@ -64,7 +64,29 @@ harden_uses = "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf
 checkout_uses = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 harden_index = unique_step_index(steps, "uses", harden_uses)
 checkout_index = unique_step_index(steps, "uses", checkout_uses)
-acceptance_index = unique_step_index(steps, "run", "sh tests/container.sh")
+
+container_invocations = []
+steps.each_with_index do |step, index|
+  next unless step.is_a?(Hash) && step["run"].is_a?(String)
+
+  step.fetch("run").each_line do |line|
+    words = line.strip.split
+    next unless words.fetch(0, nil) == "sh" && words.fetch(1, nil) == "tests/container.sh"
+
+    container_invocations << { index: index, command: words.join(" ") }
+  end
+end
+
+if container_invocations.any? { |invocation| invocation.fetch(:command) == "sh tests/container.sh codex-spike" }
+  raise "retired codex-spike container invocation is forbidden"
+end
+unless container_invocations.length == 1
+  raise "expected exactly one tests/container.sh invocation, found #{container_invocations.length}"
+end
+
+acceptance_invocation = container_invocations.fetch(0)
+expect_equal(acceptance_invocation.fetch(:command), "sh tests/container.sh", "container acceptance command")
+acceptance_index = acceptance_invocation.fetch(:index)
 
 unless harden_index < checkout_index && checkout_index < acceptance_index
   raise "expected harden runner, checkout, and container acceptance steps in that order"
