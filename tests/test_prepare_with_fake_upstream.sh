@@ -8,8 +8,29 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 upstream="$tmpdir/upstream"
 output="$tmpdir/out"
 home="$tmpdir/home"
+pkg="$root"
 template="$root/plugins/superpowers/.codex-plugin/plugin.template.json"
 template_before=$(cksum "$template")
+adapter_log="$tmpdir/adapter.log"
+recording_adapter="$tmpdir/recording-adapter"
+python3_log="$tmpdir/python3.log"
+real_python3=$(command -v python3)
+
+cat > "$recording_adapter" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SPW_TEST_ADAPTER_LOG"
+exec "$SPW_TEST_REAL_ADAPTER" "$@"
+EOF
+chmod +x "$recording_adapter"
+
+cat > "$tmpdir/python3" <<'EOF'
+#!/bin/sh
+for arg in "$@"; do
+  printf '%s\n' "$arg" >> "$SPW_TEST_PYTHON3_LOG"
+done
+exec "$SPW_TEST_REAL_PYTHON3" "$@"
+EOF
+chmod +x "$tmpdir/python3"
 
 mkdir -p "$upstream/skills/brainstorming" "$upstream/assets" "$upstream/hooks"
 mkdir -p "$home"
@@ -202,21 +223,30 @@ if sys.argv[2] in data:
 PY
 }
 
-run_prepare_for_ref() {
+run_prepare_for_ref_with_env() {
   ref="$1"
   destination="$2"
-  SUPERPOWERS_REF="$ref" \
-  SUPERPOWERS_UPSTREAM_URL="$upstream" \
-  SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
-  SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
-  SUPERPOWERS_VALIDATOR= \
-  HOME="$home" \
-  sh "$root/scripts/prepare" >/dev/null
+  shift 2
+  env \
+    SUPERPOWERS_REF="$ref" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
+    SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
+    SUPERPOWERS_VALIDATOR= \
+    HOME="$home" \
+    "$@" \
+    sh "$root/scripts/prepare" >/dev/null
+}
+
+run_prepare_for_ref() {
+  run_prepare_for_ref_with_env "$1" "$2"
 }
 
 assert_bad_manifest_error() {
   destination="$1"
   err="$tmpdir/$destination.err"
+  mkdir -p "$tmpdir/$destination"
+  printf 'preserve me\n' > "$tmpdir/$destination/preexisting-sentinel"
   if SUPERPOWERS_REF="bad-manifest" \
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
     SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
@@ -237,6 +267,10 @@ assert_bad_manifest_error() {
     cat "$err" >&2
     exit 1
   fi
+  [ -f "$tmpdir/$destination/preexisting-sentinel" ] || {
+    echo "malformed upstream manifest must fail before swapping the live tree" >&2
+    exit 1
+  }
 }
 
 assert_rejected_manifest_input() {
@@ -299,7 +333,28 @@ assert_prepare_upstream_manifest_version() {
   fi
 }
 
-run_prepare_for_ref "latest-release" "out-latest"
+: > "$adapter_log"
+run_prepare_for_ref_with_env "latest-release" "out-recorded" \
+  SPW_ADAPTER="$recording_adapter" \
+  SPW_TEST_ADAPTER_LOG="$adapter_log" \
+  SPW_TEST_REAL_ADAPTER="$root/scripts/adapters/codex/adapter"
+recorded_upstream_root="$tmpdir/cache-out-recorded/superpowers"
+grep -Fq "build --upstream-root $recorded_upstream_root" "$adapter_log"
+grep -Fq -- "--upstream-manifest-version 6.0.3" "$adapter_log"
+grep -Fq -- "--fallback-manifest $pkg/plugins/superpowers/.codex-plugin/plugin.template.json" "$adapter_log"
+
+: > "$python3_log"
+run_prepare_for_ref_with_env "latest-release" "out-latest" \
+  PATH="$tmpdir:$PATH" \
+  SPW_TEST_PYTHON3_LOG="$python3_log" \
+  SPW_TEST_REAL_PYTHON3="$real_python3"
+latest_upstream_root="$tmpdir/cache-out-latest/superpowers"
+manifest_read_count=$(grep -Fxc "$latest_upstream_root/.codex-plugin/plugin.json" "$python3_log" || true)
+[ "$manifest_read_count" -eq 1 ] || {
+  echo "core must read $latest_upstream_root/.codex-plugin/plugin.json exactly once" >&2
+  cat "$python3_log" >&2
+  exit 1
+}
 expected_short=$(printf '%s' "$release_commit" | cut -c 1-7)
 assert_prepare_commit "out-latest" "$release_commit"
 assert_prepare_version "out-latest" "6.0.3+wrapper.$expected_short"

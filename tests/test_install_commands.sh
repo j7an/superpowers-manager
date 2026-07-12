@@ -37,6 +37,8 @@ cp -R "$root/scripts" "$pkg/scripts"
 cp -R "$root/config" "$pkg/config"
 cp "$root/plugins/superpowers/.codex-plugin/plugin.template.json" "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json"
 test -x "$pkg/scripts/install" || { echo "install must remain executable in the packaged root" >&2; exit 1; }
+test -x "$pkg/scripts/adapters/codex/adapter" || { echo "codex adapter must remain executable in the packaged root" >&2; exit 1; }
+test -f "$pkg/scripts/adapters/codex/validate-generated-plugin.py" || { echo "codex validator must remain packaged" >&2; exit 1; }
 
 # --- Additional validator failure fixture ---
 failing_validator="$tmpdir/failing_validator.py"

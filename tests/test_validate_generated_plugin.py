@@ -15,7 +15,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VALIDATOR = ROOT / "scripts" / "validate-generated-plugin.py"
+VALIDATOR = ROOT / "scripts/adapters/codex/validate-generated-plugin.py"
 COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99"
 SOURCE = "https://example.invalid/superpowers.git"
 

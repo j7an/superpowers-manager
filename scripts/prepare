@@ -9,15 +9,16 @@ cache_parent="${SUPERPOWERS_CACHE_DIR:-$root/.cache/upstream}"
 cache="$cache_parent/superpowers"
 plugin_root="${SUPERPOWERS_PLUGIN_ROOT:-$root/plugins/superpowers}"
 manifest_template="${SUPERPOWERS_MANIFEST_TEMPLATE:-$root/plugins/superpowers/.codex-plugin/plugin.template.json}"
-builtin_validator="$root/scripts/validate-generated-plugin.py"
 additional_validator="${SUPERPOWERS_VALIDATOR:-}"
 tmp_parent=$(dirname "$plugin_root")
 tmp_plugin="$tmp_parent/.superpowers.tmp.$$"
+adapter_result="$tmp_parent/.superpowers.adapter-build.$$.json"
 
 cleanup_tmp_plugin() {
   status=$?
   trap - 0 HUP INT TERM
   rm -rf "$tmp_plugin" || :
+  rm -f "$adapter_result" "$adapter_result.response" || :
   exit "$status"
 }
 
@@ -30,8 +31,8 @@ requested_ref=$(spw_config_ref "$root")
 
 spw_require_command git
 spw_require_command python3
+spw_require_command "$SPW_ADAPTER"
 [ -f "$manifest_template" ] || spw_die "missing fallback manifest template: $manifest_template"
-[ -f "$builtin_validator" ] || spw_die "missing built-in plugin validator: $builtin_validator"
 
 resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
 resolution_kind=$(printf '%s\n' "$resolved_record" | awk '{ print $1 }')
@@ -60,11 +61,6 @@ spw_require_upstream_path "$cache/CODE_OF_CONDUCT.md" "CODE_OF_CONDUCT.md"
 rm -rf "$tmp_plugin"
 mkdir -p "$tmp_plugin/.codex-plugin"
 upstream_manifest="$cache/.codex-plugin/plugin.json"
-if [ -f "$upstream_manifest" ]; then
-  cp "$upstream_manifest" "$tmp_plugin/.codex-plugin/plugin.json"
-else
-  cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.json"
-fi
 
 spw_copy_path_if_present "$cache/skills" "$tmp_plugin/skills"
 spw_copy_path_if_present "$cache/assets" "$tmp_plugin/assets"
@@ -88,23 +84,15 @@ spw_write_metadata_json \
 wrapper_version=$(
   spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit"
 )
-spw_apply_manifest_overlay \
-  "$tmp_plugin/.codex-plugin/plugin.json" \
-  "$wrapper_version"
-
-# The validator must inspect the exact complete tree that will be swapped.
-cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.template.json"
-
-if ! python3 -S "$builtin_validator" \
-  --plugin-root "$tmp_plugin" \
-  --source "$upstream_url" \
+spw_invoke_adapter build "$adapter_result" "" -- \
+  --upstream-root "$cache" \
+  --candidate-root "$tmp_plugin" \
   --requested-ref "$requested_ref" \
   --resolved-ref "$resolved_ref" \
   --commit "$commit" \
-  --manifest-version "$wrapper_version" \
-  --upstream-manifest-version "$upstream_manifest_version"; then
-  spw_die "built-in generated plugin validation failed"
-fi
+  --wrapper-version "$wrapper_version" \
+  --upstream-manifest-version "$upstream_manifest_version" \
+  --fallback-manifest "$manifest_template"
 
 if [ -n "$additional_validator" ]; then
   [ -f "$additional_validator" ] || \
@@ -114,23 +102,6 @@ if [ -n "$additional_validator" ]; then
   fi
 fi
 
-# Replace the live tree with a single atomic rename, keeping a backup so a
-# failed swap restores the previous working generated tree (the spec requires
-# that a failed prepare never destroy it). tmp_plugin is a same-filesystem
-# sibling of plugin_root, so the renames cannot fail mid-copy.
-backup="$tmp_parent/.superpowers.bak.$$"
-rm -rf "$backup"
-if [ -e "$plugin_root" ]; then
-  mv "$plugin_root" "$backup"
-fi
-if mv "$tmp_plugin" "$plugin_root"; then
-  rm -rf "$backup"
-else
-  if [ -e "$backup" ]; then
-    mv "$backup" "$plugin_root"
-  fi
-  rm -rf "$tmp_plugin"
-  spw_die "failed to install generated tree into $plugin_root; previous tree restored"
-fi
+spw_replace_generated_tree "$tmp_plugin" "$plugin_root"
 
 echo "prepared $resolved_ref at $commit"

@@ -5,94 +5,9 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/upstream.sh"
 . "$root/scripts/core/provenance.sh"
 . "$root/scripts/core/status.sh"
-
-SPW_PLUGIN_ID="superpowers@superpowers-wrapper"
-SPW_MARKETPLACE_NAME="superpowers-wrapper"
-
-spw_apply_manifest_overlay() {
-  manifest="$1"
-  version="$2"
-  python3 - "$manifest" "$version" <<'PY'
-import json
-import sys
-
-path, version = sys.argv[1:]
-MAX_JSON_NESTING = 256
-
-def reject_constant(constant):
-    raise ValueError(f"non-standard numeric constant: {constant}")
-
-def nesting_exceeds_limit(value):
-    stack = [(value, 0)]
-    while stack:
-        current, depth = stack.pop()
-        if isinstance(current, dict):
-            next_depth = depth + 1
-            if next_depth > MAX_JSON_NESTING:
-                return True
-            stack.extend((child, next_depth) for child in current.values())
-        elif isinstance(current, list):
-            next_depth = depth + 1
-            if next_depth > MAX_JSON_NESTING:
-                return True
-            stack.extend((child, next_depth) for child in current)
-    return False
-
-try:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f, parse_constant=reject_constant)
-except RecursionError:
-    sys.exit(f"JSON nesting exceeds limit in {path}")
-except json.JSONDecodeError as exc:
-    sys.exit(
-        f"invalid manifest JSON in {path}: "
-        f"line {exc.lineno} column {exc.colno}: {exc.msg}"
-    )
-except (OSError, UnicodeError) as exc:
-    sys.exit(f"cannot read manifest JSON in {path}: {exc}")
-except ValueError as exc:
-    sys.exit(f"invalid manifest JSON in {path}: {exc}")
-
-if nesting_exceeds_limit(data):
-    sys.exit(f"JSON nesting exceeds limit in {path}")
-
-if not isinstance(data, dict):
-    sys.exit(f"manifest must be a JSON object: {path}")
-
-data["version"] = version
-data["skills"] = "./skills/"
-data.pop("hooks", None)
-
-try:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, allow_nan=False)
-        f.write("\n")
-except RecursionError as exc:
-    sys.exit(f"manifest JSON nesting exceeds limit while writing {path}: {exc}")
-except (OSError, UnicodeError, ValueError) as exc:
-    sys.exit(f"cannot write manifest JSON in {path}: {exc}")
-PY
-}
-
-spw_manifest_short_sha_or_empty() {
-  file="$1"
-  if [ ! -f "$file" ]; then
-    return 0
-  fi
-  version=$(spw_json_get "$file" "version")
-  case "$version" in
-    *+wrapper.*)
-      short="${version##*.}"
-      case "$short" in
-        ""|*[!0-9a-fA-F]*)
-          ;;
-        *)
-          printf '%s\n' "$short"
-          ;;
-      esac
-      ;;
-  esac
-}
+. "$root/scripts/core/lifecycle.sh"
+. "$root/scripts/core/adapter.sh"
+. "$root/scripts/adapters/codex/lib.sh"
 
 # Codex installs a plugin into a versioned cache directory:
 #   ~/.codex/plugins/cache/<marketplace>/superpowers/<version>/...

@@ -1,0 +1,218 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname "$0")/../../.." && pwd)
+. "$root/scripts/core/common.sh"
+. "$root/scripts/adapters/codex/lib.sh"
+
+spw_codex_argument_error() {
+  spw_codex_failure build "invalid-arguments" "$1" "" ""
+}
+
+spw_codex_require_absolute_path() {
+  value="$1"
+  flag="$2"
+  case "$value" in
+    /*) ;;
+    *) spw_codex_argument_error "$flag must be an absolute path" ;;
+  esac
+}
+
+spw_codex_read_source_from_provenance() {
+  provenance_path="$1"
+  python3 - "$provenance_path" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(1)
+source = data.get("source")
+if not isinstance(source, str) or not source:
+    sys.exit(1)
+print(source)
+PY
+}
+
+spw_codex_build() {
+  upstream_root=
+  candidate_root=
+  requested_ref=
+  resolved_ref=
+  commit=
+  wrapper_version=
+  upstream_manifest_version=
+  fallback_manifest=
+  seen_upstream_root=0
+  seen_candidate_root=0
+  seen_requested_ref=0
+  seen_resolved_ref=0
+  seen_commit=0
+  seen_wrapper_version=0
+  seen_upstream_manifest_version=0
+  seen_fallback_manifest=0
+
+  while [ "$#" -gt 0 ]; do
+    flag="$1"
+    shift
+    case "$flag" in
+      --upstream-root)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --upstream-root"
+        [ "$seen_upstream_root" -eq 0 ] || spw_codex_argument_error "duplicate flag: --upstream-root"
+        upstream_root="$1"
+        seen_upstream_root=1
+        shift
+        ;;
+      --candidate-root)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --candidate-root"
+        [ "$seen_candidate_root" -eq 0 ] || spw_codex_argument_error "duplicate flag: --candidate-root"
+        candidate_root="$1"
+        seen_candidate_root=1
+        shift
+        ;;
+      --requested-ref)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --requested-ref"
+        [ "$seen_requested_ref" -eq 0 ] || spw_codex_argument_error "duplicate flag: --requested-ref"
+        requested_ref="$1"
+        seen_requested_ref=1
+        shift
+        ;;
+      --resolved-ref)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --resolved-ref"
+        [ "$seen_resolved_ref" -eq 0 ] || spw_codex_argument_error "duplicate flag: --resolved-ref"
+        resolved_ref="$1"
+        seen_resolved_ref=1
+        shift
+        ;;
+      --commit)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --commit"
+        [ "$seen_commit" -eq 0 ] || spw_codex_argument_error "duplicate flag: --commit"
+        commit="$1"
+        seen_commit=1
+        shift
+        ;;
+      --wrapper-version)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --wrapper-version"
+        [ "$seen_wrapper_version" -eq 0 ] || spw_codex_argument_error "duplicate flag: --wrapper-version"
+        wrapper_version="$1"
+        seen_wrapper_version=1
+        shift
+        ;;
+      --upstream-manifest-version)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --upstream-manifest-version"
+        [ "$seen_upstream_manifest_version" -eq 0 ] || spw_codex_argument_error "duplicate flag: --upstream-manifest-version"
+        upstream_manifest_version="$1"
+        seen_upstream_manifest_version=1
+        shift
+        ;;
+      --fallback-manifest)
+        [ "$#" -gt 0 ] || spw_codex_argument_error "missing value for --fallback-manifest"
+        [ "$seen_fallback_manifest" -eq 0 ] || spw_codex_argument_error "duplicate flag: --fallback-manifest"
+        fallback_manifest="$1"
+        seen_fallback_manifest=1
+        shift
+        ;;
+      *)
+        spw_codex_argument_error "unknown flag: $flag"
+        ;;
+    esac
+  done
+
+  [ "$seen_upstream_root" -eq 1 ] || spw_codex_argument_error "missing required flag: --upstream-root"
+  [ "$seen_candidate_root" -eq 1 ] || spw_codex_argument_error "missing required flag: --candidate-root"
+  [ "$seen_requested_ref" -eq 1 ] || spw_codex_argument_error "missing required flag: --requested-ref"
+  [ "$seen_resolved_ref" -eq 1 ] || spw_codex_argument_error "missing required flag: --resolved-ref"
+  [ "$seen_commit" -eq 1 ] || spw_codex_argument_error "missing required flag: --commit"
+  [ "$seen_wrapper_version" -eq 1 ] || spw_codex_argument_error "missing required flag: --wrapper-version"
+  [ "$seen_upstream_manifest_version" -eq 1 ] || spw_codex_argument_error "missing required flag: --upstream-manifest-version"
+  [ "$seen_fallback_manifest" -eq 1 ] || spw_codex_argument_error "missing required flag: --fallback-manifest"
+
+  spw_codex_require_absolute_path "$upstream_root" "--upstream-root"
+  spw_codex_require_absolute_path "$candidate_root" "--candidate-root"
+  [ -d "$upstream_root" ] || spw_codex_argument_error "upstream root not found: $upstream_root"
+  [ -d "$candidate_root" ] || spw_codex_argument_error "candidate root not found: $candidate_root"
+  [ -f "$fallback_manifest" ] || spw_codex_argument_error "fallback manifest not found: $fallback_manifest"
+
+  validator="$root/scripts/adapters/codex/validate-generated-plugin.py"
+  [ -f "$validator" ] || spw_codex_failure build "build-failed" "missing built-in plugin validator: $validator" "" ""
+
+  scratch="$candidate_root/.codex-plugin/.adapter-build.$$"
+  stdout_file="$scratch/stdout"
+  stderr_file="$scratch/stderr"
+  messages_file="$scratch/messages"
+  candidate_manifest="$candidate_root/.codex-plugin/plugin.json"
+  provenance_path="$candidate_root/.superpowers-upstream.json"
+  cleanup() {
+    status=$?
+    trap - 0 HUP INT TERM
+    rm -rf "$scratch" || :
+    exit "$status"
+  }
+  trap cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  mkdir -p "$scratch" "$candidate_root/.codex-plugin"
+  : > "$messages_file"
+
+  upstream_manifest="$upstream_root/.codex-plugin/plugin.json"
+  if [ -f "$upstream_manifest" ]; then
+    if ! cp "$upstream_manifest" "$candidate_manifest"; then
+      spw_codex_failure build "build-failed" "cannot copy upstream manifest into candidate" "" "$messages_file"
+    fi
+  else
+    if ! cp "$fallback_manifest" "$candidate_manifest"; then
+      spw_codex_failure build "build-failed" "cannot copy fallback manifest into candidate" "" "$messages_file"
+    fi
+  fi
+
+  if ! spw_apply_manifest_overlay "$candidate_manifest" "$wrapper_version"; then
+    spw_codex_failure build "build-failed" "failed to apply wrapper manifest overlay" "" "$messages_file"
+  fi
+
+  if ! cp "$fallback_manifest" "$candidate_root/.codex-plugin/plugin.template.json"; then
+    spw_codex_failure build "build-failed" "cannot copy fallback manifest template into candidate" "" "$messages_file"
+  fi
+
+  if ! upstream_source=$(spw_codex_read_source_from_provenance "$provenance_path"); then
+    spw_codex_failure build "invalid-provenance" "candidate provenance is missing or invalid" "" "$messages_file"
+  fi
+
+  if python3 -S "$validator" \
+    --plugin-root "$candidate_root" \
+    --source "$upstream_source" \
+    --requested-ref "$requested_ref" \
+    --resolved-ref "$resolved_ref" \
+    --commit "$commit" \
+    --manifest-version "$wrapper_version" \
+    --upstream-manifest-version "$upstream_manifest_version" \
+    >"$stdout_file" 2>"$stderr_file"; then
+    spw_codex_append_messages "$messages_file" stdout "$stdout_file"
+    spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+    spw_codex_success build '{}' "$messages_file"
+  else
+    spw_codex_append_messages "$messages_file" stdout "$stdout_file"
+    spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+    spw_codex_failure build "generated-plugin-validation-failed" "built-in generated plugin validation failed" "" "$messages_file"
+  fi
+}
+
+operation="${1:-}"
+[ -n "$operation" ] || spw_codex_failure build "invalid-arguments" "missing adapter operation" "" ""
+shift
+
+case "$operation" in
+  build)
+    spw_codex_build "$@"
+    ;;
+  *)
+    spw_codex_emit "$operation" false '{}' "unsupported-operation" "unsupported adapter operation: $operation" "" ""
+    exit 1
+    ;;
+esac

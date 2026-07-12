@@ -12,7 +12,7 @@ spw_adapter_package_root() {
 }
 
 SPW_ADAPTER_ROOT=$(spw_adapter_package_root)
-SPW_ADAPTER="${SPW_ADAPTER:-$SPW_ADAPTER_ROOT/scripts/adapter}"
+SPW_ADAPTER="${SPW_ADAPTER:-$SPW_ADAPTER_ROOT/scripts/adapters/codex/adapter}"
 SPW_ADAPTER_RESPONSE_VALIDATOR="${SPW_ADAPTER_RESPONSE_VALIDATOR:-$SPW_ADAPTER_ROOT/scripts/core/validate-adapter-response.py}"
 
 spw_invoke_adapter() {
