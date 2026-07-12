@@ -1,6 +1,13 @@
 #!/bin/sh
 set -eu
 
+# Optional native-only Codex compatibility probe.
+# This script is intentional compatibility residue for path/cache behavior that
+# still benefits from a real developer-managed Codex install. It is not part of
+# the acceptance contract: `sh tests/container.sh` is the blocking automated
+# gate, and that isolated container path is the only automated flow allowed to
+# mutate Codex state.
+
 marketplace_name="superpowers-wrapper-probe"
 plugin_name="wrapper-probe"
 plugin_id="${plugin_name}@${marketplace_name}"

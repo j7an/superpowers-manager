@@ -54,6 +54,17 @@ and never falsely reports success.
   a previously generated tree).
 - Registers the local marketplace and installs/refreshes the plugin in Codex.
 
+## Runtime architecture
+
+- `scripts/core/` owns the shared lifecycle, provenance, validation, and
+  reconcile logic.
+- `scripts/adapters/codex/` owns the current Codex-specific adapter entrypoint,
+  install-state inspection, and response validation helpers.
+- The public CLI remains plugin-first (`prepare`, `probe`, `install`, `update`,
+  `uninstall`); there is no public harness selector or adapter-selection flag.
+- A future non-Codex adapter would need its own design plus native/container
+  compatibility spike before it becomes part of the supported surface.
+
 ## Requirements
 
 - `git`, `python3`, and a POSIX `sh`.
@@ -213,14 +224,27 @@ SUPERPOWERS_REF=latest-release scripts/probe
 ## Tests
 
 ```sh
-sh tests/run.sh                          # full hermetic suite (no network, no Codex)
-sh tests/manual/codex-behavior-probe.sh  # live probe of Codex marketplace behavior
+sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
+sh tests/container.sh                    # Layer 4: blocking Docker acceptance command
+sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
 ```
 
-The automated suite is fully hermetic: it uses a fake local upstream repo and a
-fake `codex`. The manual probe is opt-in and exercises real Codex CLI behavior
-(it only ever touches a throwaway `wrapper-probe@superpowers-wrapper-probe`).
-GitHub Actions runs the hermetic suite on pull requests and pushes to `main`.
+Layers 1-3 stay offline and hermetic: they use a fake local upstream repo plus
+host-side fixtures, and they perform no mutation of the developer's or runner's
+real Codex state.
+
+Layer 4 is the Docker acceptance path. It is the required completion command
+because Task 1's isolated-container Codex probe graduated from a temporary
+nonblocking spike to a blocking acceptance gate. `sh tests/container.sh` runs
+the inner `sh tests/run.sh` suite and then the real Codex offline probe inside
+an isolated container home with networking disabled. That container run may
+mutate the throwaway container-local Codex state, but it still performs no
+mutation of the developer's or runner's real Codex state.
+
+The manual probe is opt-in and covers native-only compatibility residue such as
+path/cache behavior against an intentionally real local Codex install. It is
+not part of acceptance. GitHub Actions runs the blocking container acceptance
+command on pull requests and pushes to `main`.
 
 ## Repository layout
 

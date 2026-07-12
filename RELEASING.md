@@ -10,7 +10,7 @@ one-time bootstrap below.
 
 ## Normal release
 
-1. Ensure `main` is green (`sh tests/run.sh`) and review every commit since
+1. Ensure `main` is green (`sh tests/container.sh`) and review every commit since
    the last tag for a Conventional Commits prefix matching its user-visible
    intent. This repo's feature-commit hygiene keeps `bump=auto` inference
    reliable; it is not a claim that the reusable workflow enforces every
@@ -23,9 +23,9 @@ one-time bootstrap below.
    creates a lightweight `vX.Y.Z` tag pointing at the verified release-bot
    bump commit.
 4. The publish workflow gates (tag is ancestor of main; tag tail ==
-   package.json version), runs the test suite, packs once, asserts tarball
-   contents, publishes the verified tarball, polls the registry, runs an
-   `npx superpowers-wrapper@X.Y.Z --version` install check, and creates the
+   package.json version), runs `sh tests/container.sh`, packs once, asserts
+   tarball contents, publishes the verified tarball, polls the registry, runs
+   an `npx superpowers-wrapper@X.Y.Z --version` install check, and creates the
    GitHub release with the verified `*.tgz` tarball attached.
 
 ## Manual gates before the FIRST publish (release blockers, not optional)
@@ -80,11 +80,12 @@ trusted-publisher configuration below are complete.
    remains at `0.0.0` throughout this manual bootstrap. Treat
    `$bootstrap_commit` as a freeze point: do not merge to `main` until the
    initial `Tag Release` run succeeds.
-2. Test, pack, assert the exact tarball contents, and publish the staged
+2. Run the same blocking acceptance command used by CI, then pack, assert the
+   exact tarball contents, and publish the staged
    `0.1.0` artifact with the 2FA-protected npm account:
 
    ```sh
-   sh tests/run.sh
+   sh tests/container.sh
    npm pack --json > pack.json
    sh tests/assert_pack_contents.sh pack.json
    test "$(node -p 'require("./pack.json")[0].filename')" = \
