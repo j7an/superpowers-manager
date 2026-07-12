@@ -3,8 +3,10 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 wf="$root/.github/workflows/ci.yml"
+compatibility_wf="$root/.github/workflows/codex-compatibility.yml"
 
 [ -f "$wf" ] || { echo "missing $wf" >&2; exit 1; }
+[ ! -e "$compatibility_wf" ] || { echo "blocking mode must not create $compatibility_wf" >&2; exit 1; }
 
 ruby - "$wf" <<'RUBY'
 require "yaml"
@@ -30,6 +32,16 @@ def expect_equal(actual, expected, path)
   raise "unexpected #{path}: #{actual.inspect} (expected #{expected.inspect})"
 end
 
+def unique_step_index(steps, key, value)
+  matches = steps.each_index.select do |index|
+    step = steps.fetch(index)
+    step.is_a?(Hash) && step[key] == value
+  end
+  raise "expected exactly one step with #{key}=#{value.inspect}, found #{matches.length}" unless matches.length == 1
+
+  matches.fetch(0)
+end
+
 workflow = expect_hash(workflow, "workflow")
 expect_equal(fetch(workflow, "permissions", "permissions"), {}, "permissions")
 
@@ -47,38 +59,33 @@ expect_equal(
 
 steps = fetch(test_job, "steps", "jobs.test.steps")
 raise "expected jobs.test.steps to be an array" unless steps.is_a?(Array)
-expect_equal(steps.length, 3, "jobs.test.steps length")
 
-harden = expect_hash(steps.fetch(0), "jobs.test.steps[0]")
-expect_equal(fetch(harden, "name", "jobs.test.steps[0].name"), "Harden runner", "jobs.test.steps[0].name")
+harden_uses = "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411"
+checkout_uses = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+harden_index = unique_step_index(steps, "uses", harden_uses)
+checkout_index = unique_step_index(steps, "uses", checkout_uses)
+acceptance_index = unique_step_index(steps, "run", "sh tests/container.sh")
+
+unless harden_index < checkout_index && checkout_index < acceptance_index
+  raise "expected harden runner, checkout, and container acceptance steps in that order"
+end
+
+harden = expect_hash(steps.fetch(harden_index), "harden runner step")
 expect_equal(
-  fetch(harden, "uses", "jobs.test.steps[0].uses"),
-  "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411",
-  "jobs.test.steps[0].uses",
-)
-expect_equal(
-  fetch(expect_hash(fetch(harden, "with", "jobs.test.steps[0].with"), "jobs.test.steps[0].with"), "egress-policy", "jobs.test.steps[0].with.egress-policy"),
+  fetch(expect_hash(fetch(harden, "with", "harden runner step.with"), "harden runner step.with"), "egress-policy", "harden runner step.with.egress-policy"),
   "audit",
-  "jobs.test.steps[0].with.egress-policy",
+  "harden runner step.with.egress-policy",
 )
 
-checkout = expect_hash(steps.fetch(1), "jobs.test.steps[1]")
-expect_equal(fetch(checkout, "name", "jobs.test.steps[1].name"), "Checkout repository", "jobs.test.steps[1].name")
+checkout = expect_hash(steps.fetch(checkout_index), "checkout step")
 expect_equal(
-  fetch(checkout, "uses", "jobs.test.steps[1].uses"),
-  "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-  "jobs.test.steps[1].uses",
-)
-expect_equal(
-  fetch(expect_hash(fetch(checkout, "with", "jobs.test.steps[1].with"), "jobs.test.steps[1].with"), "persist-credentials", "jobs.test.steps[1].with.persist-credentials"),
+  fetch(expect_hash(fetch(checkout, "with", "checkout step.with"), "checkout step.with"), "persist-credentials", "checkout step.with.persist-credentials"),
   false,
-  "jobs.test.steps[1].with.persist-credentials",
+  "checkout step.with.persist-credentials",
 )
 
-acceptance = expect_hash(steps.fetch(2), "jobs.test.steps[2]")
-expect_equal(fetch(acceptance, "name", "jobs.test.steps[2].name"), "Run container acceptance suite", "jobs.test.steps[2].name")
-expect_equal(fetch(acceptance, "run", "jobs.test.steps[2].run"), "sh tests/container.sh", "jobs.test.steps[2].run")
-raise "jobs.test.steps[2] must not use continue-on-error" if acceptance.key?("continue-on-error")
+acceptance = expect_hash(steps.fetch(acceptance_index), "container acceptance step")
+raise "container acceptance step must not use continue-on-error" if acceptance.key?("continue-on-error")
 RUBY
 
 echo "test_ci_workflow: OK"
