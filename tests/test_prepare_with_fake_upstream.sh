@@ -343,6 +343,31 @@ grep -Fq "build --upstream-root $recorded_upstream_root" "$adapter_log"
 grep -Fq -- "--upstream-manifest-version 6.0.3" "$adapter_log"
 grep -Fq -- "--fallback-manifest $pkg/plugins/superpowers/.codex-plugin/plugin.template.json" "$adapter_log"
 
+relative_workdir="$tmpdir/relative-workdir"
+relative_adapter_log="$tmpdir/relative-adapter.log"
+mkdir -p "$relative_workdir"
+relative_workdir_physical=$(CDPATH= cd -- "$relative_workdir" && pwd -P)
+: > "$relative_adapter_log"
+(
+  cd "$relative_workdir"
+  env \
+    SUPERPOWERS_REF="latest-release" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_CACHE_DIR="cache-relative" \
+    SUPERPOWERS_PLUGIN_ROOT="out-relative" \
+    SUPERPOWERS_VALIDATOR= \
+    HOME="$home" \
+    SPW_ADAPTER="$recording_adapter" \
+    SPW_TEST_ADAPTER_LOG="$relative_adapter_log" \
+    SPW_TEST_REAL_ADAPTER="$root/scripts/adapters/codex/adapter" \
+    sh "$root/scripts/prepare" >/dev/null
+)
+grep -Fq \
+  "build --upstream-root $relative_workdir_physical/cache-relative/superpowers --candidate-root $relative_workdir_physical/.superpowers.tmp." \
+  "$relative_adapter_log"
+test -f "$relative_workdir/out-relative/.codex-plugin/plugin.json"
+test -f "$relative_workdir/out-relative/.superpowers-upstream.json"
+
 : > "$python3_log"
 run_prepare_for_ref_with_env "latest-release" "out-latest" \
   PATH="$tmpdir:$PATH" \

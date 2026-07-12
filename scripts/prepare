@@ -6,10 +6,19 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 
 upstream_url="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
 cache_parent="${SUPERPOWERS_CACHE_DIR:-$root/.cache/upstream}"
-cache="$cache_parent/superpowers"
 plugin_root="${SUPERPOWERS_PLUGIN_ROOT:-$root/plugins/superpowers}"
 manifest_template="${SUPERPOWERS_MANIFEST_TEMPLATE:-$root/plugins/superpowers/.codex-plugin/plugin.template.json}"
 additional_validator="${SUPERPOWERS_VALIDATOR:-}"
+invocation_root=$(pwd -P)
+case "$cache_parent" in
+  /*) ;;
+  *) cache_parent="$invocation_root/$cache_parent" ;;
+esac
+case "$plugin_root" in
+  /*) ;;
+  *) plugin_root="$invocation_root/$plugin_root" ;;
+esac
+cache="$cache_parent/superpowers"
 tmp_parent=$(dirname "$plugin_root")
 tmp_plugin="$tmp_parent/.superpowers.tmp.$$"
 adapter_result="$tmp_parent/.superpowers.adapter-build.$$.json"
