@@ -42,35 +42,6 @@ print("present" if found else "absent")
 PY
 }
 
-# Return 0 if <plugin_id> is installed, 1 if genuinely not installed. Fail
-# closed: spw_die (exit) if the listing cannot be queried or parsed, so a
-# read/parse error is never mistaken for "absent".
-spw_plugin_is_installed() {
-  codex_bin="$1"
-  plugin_id="$2"
-  if ! out=$("$codex_bin" plugin list --json 2>/dev/null); then
-    spw_die "cannot list Codex plugins via '$codex_bin plugin list --json'"
-  fi
-  if ! result=$(spw_json_array_has "$out" "installed" "pluginId" "$plugin_id"); then
-    spw_die "cannot parse output of '$codex_bin plugin list --json'"
-  fi
-  [ "$result" = present ]
-}
-
-# Return 0 if <marketplace_name> is registered, 1 if genuinely not registered.
-# Fail closed exactly like spw_plugin_is_installed.
-spw_marketplace_is_registered() {
-  codex_bin="$1"
-  marketplace_name="$2"
-  if ! out=$("$codex_bin" plugin marketplace list --json 2>/dev/null); then
-    spw_die "cannot list Codex marketplaces via '$codex_bin plugin marketplace list --json'"
-  fi
-  if ! result=$(spw_json_array_has "$out" "marketplaces" "name" "$marketplace_name"); then
-    spw_die "cannot parse output of '$codex_bin plugin marketplace list --json'"
-  fi
-  [ "$result" = present ]
-}
-
 # Print the registered root of <marketplace_name> from a marketplace-list JSON
 # document (as a string argument, like spw_json_array_has), or nothing if the
 # marketplace is absent. Exit 2 on unparseable JSON, a non-object item, or an

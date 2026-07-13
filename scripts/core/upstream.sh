@@ -4,12 +4,12 @@
 SPW_UPSTREAM_URL_DEFAULT="https://github.com/obra/superpowers"
 
 spw_config_ref() {
-  root="$1"
+  config_root="$1"
   if [ -n "${SUPERPOWERS_REF:-}" ]; then
     printf '%s\n' "$SUPERPOWERS_REF"
     return
   fi
-  sed -n '1{s/[[:space:]]*$//;p;}' "$root/config/upstream-ref"
+  sed -n '1{s/[[:space:]]*$//;p;}' "$config_root/config/upstream-ref"
 }
 
 spw_short_commit() {

@@ -5,6 +5,12 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/common.sh"
 . "$root/scripts/adapters/codex/lib.sh"
 
+if grep -Eq '^spw_(plugin_is_installed|marketplace_is_registered)\(\)' \
+  "$root/scripts/adapters/codex/lib.sh"; then
+  echo "dead Codex ownership adapter helpers must remain removed" >&2
+  exit 1
+fi
+
 plugins='{"installed":[{"pluginId":"superpowers@superpowers-wrapper"},{"pluginId":"other@x"}],"available":[]}'
 markets='{"marketplaces":[{"name":"openai-curated"},{"name":"superpowers-wrapper"}]}'
 

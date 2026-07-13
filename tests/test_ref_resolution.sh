@@ -8,6 +8,14 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
+config_root="$tmpdir/config-root"
+mkdir -p "$config_root/config"
+printf '%s\n' 'v6.0.3' > "$config_root/config/upstream-ref"
+caller_root="$root"
+spw_config_ref "$config_root" > "$tmpdir/config-ref.out"
+test "$root" = "$caller_root"
+test "$(cat "$tmpdir/config-ref.out")" = "v6.0.3"
+
 cat > "$tmpdir/ls-remote-tags.txt" <<'EOF'
 1111111111111111111111111111111111111111	refs/tags/v6.0.2
 2222222222222222222222222222222222222222	refs/tags/v6.0.2^{}

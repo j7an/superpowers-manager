@@ -70,6 +70,15 @@ test "$(spw_generated_commit_or_empty "$generated_root")" = ""
 printf '%s\n' '{"commit": "0123456789abcdef0123456789abcdef01234567"}' > "$generated_metadata"
 test "$(spw_generated_commit_or_empty "$generated_root")" = "0123456789abcdef0123456789abcdef01234567"
 
+caller_root="$root"
+spw_generated_metadata_path "$generated_root" > "$tmpdir/generated-metadata-path.out"
+test "$root" = "$caller_root"
+test "$(cat "$tmpdir/generated-metadata-path.out")" = "$generated_metadata"
+
+spw_generated_commit_or_empty "$generated_root" > "$tmpdir/generated-commit.out"
+test "$root" = "$caller_root"
+test "$(cat "$tmpdir/generated-commit.out")" = "0123456789abcdef0123456789abcdef01234567"
+
 chmod 000 "$generated_metadata"
 if [ ! -r "$generated_metadata" ]; then
   test "$(spw_generated_commit_or_empty "$generated_root")" = ""

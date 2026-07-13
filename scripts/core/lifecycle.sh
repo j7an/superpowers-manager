@@ -26,14 +26,14 @@ spw_replace_generated_tree() {
 }
 
 spw_generated_metadata_path() {
-  root="$1"
-  printf '%s\n' "$root/plugins/superpowers/.superpowers-upstream.json"
+  generated_root="$1"
+  printf '%s\n' "$generated_root/plugins/superpowers/.superpowers-upstream.json"
 }
 
 spw_generated_commit_or_empty() {
-  root="$1"
-  metadata=$(spw_generated_metadata_path "$root")
-  spw_metadata_commit_lenient_or_empty "$metadata"
+  generated_root="$1"
+  generated_metadata=$(spw_generated_metadata_path "$generated_root")
+  spw_metadata_commit_lenient_or_empty "$generated_metadata"
 }
 
 spw_verify_installed_fingerprint() {
