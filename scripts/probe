@@ -2,7 +2,12 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-. "$root/scripts/lib.sh"
+. "$root/scripts/core/common.sh"
+. "$root/scripts/core/upstream.sh"
+. "$root/scripts/core/provenance.sh"
+. "$root/scripts/core/status.sh"
+. "$root/scripts/core/lifecycle.sh"
+. "$root/scripts/core/adapter.sh"
 
 upstream_url="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
 requested_ref=$(spw_config_ref "$root")
@@ -10,18 +15,27 @@ resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
 resolved_ref=$(printf '%s\n' "$resolved_record" | awk '{ print $2 }')
 desired_commit=$(printf '%s\n' "$resolved_record" | awk '{ print $3 }')
 
-generated_metadata="$root/plugins/superpowers/.superpowers-upstream.json"
-generated_commit=$(spw_metadata_commit_or_empty "$generated_metadata" || true)
+generated_commit=$(spw_generated_commit_or_empty "$root")
+tmp_parent="${TMPDIR:-/tmp}"
+if ! probe_workspace=$(mktemp -d "$tmp_parent/superpowers-wrapper.probe.XXXXXX"); then
+  spw_die "cannot create probe workspace under $tmp_parent"
+fi
+inspect_result="$probe_workspace/inspect.json"
+cleanup() {
+  status=$?
+  trap - 0 HUP INT TERM
+  rm -rf "$probe_workspace" || :
+  exit "$status"
+}
+trap cleanup 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-installed_metadata=$(spw_find_installed_metadata || true)
-installed_manifest=$(spw_find_installed_manifest || true)
-installed_commit=""
-if [ -n "$installed_metadata" ]; then
-  installed_commit=$(spw_metadata_commit_or_empty "$installed_metadata" || true)
-fi
-if [ -z "$installed_commit" ] && [ -n "$installed_manifest" ]; then
-  installed_commit=$(spw_manifest_short_sha_or_empty "$installed_manifest" || true)
-fi
+TMPDIR="$probe_workspace"
+export TMPDIR
+spw_inspect_fingerprint "$inspect_result"
+installed_commit=$(spw_adapter_result_get "$inspect_result" "fingerprint")
 
 status=$(spw_status_for_commits "$desired_commit" "$generated_commit" "$installed_commit")
 

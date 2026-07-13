@@ -1,0 +1,576 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname "$0")/../../.." && pwd)
+. "$root/scripts/core/common.sh"
+. "$root/scripts/adapters/codex/lib.sh"
+
+spw_codex_argument_error() {
+  operation="$1"
+  message="$2"
+  spw_codex_failure "$operation" "invalid-arguments" "$message" "" ""
+}
+
+spw_codex_require_command() {
+  operation="$1"
+  command_name="$2"
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    spw_codex_failure "$operation" "command-not-found" \
+      "required Codex command not found: $command_name" "" ""
+  fi
+}
+
+spw_codex_require_absolute_path() {
+  operation="$1"
+  value="$2"
+  flag="$3"
+  case "$value" in
+    /*) ;;
+    *) spw_codex_argument_error "$operation" "$flag must be an absolute path" ;;
+  esac
+}
+
+spw_codex_read_source_from_provenance() {
+  provenance_path="$1"
+  python3 - "$provenance_path" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
+    sys.exit(1)
+if not isinstance(data, dict):
+    sys.exit(1)
+source = data.get("source")
+if not isinstance(source, str) or not source:
+    sys.exit(1)
+print(source)
+PY
+}
+
+spw_codex_capture_command() {
+  messages_file="$1"
+  stdout_file="$2"
+  stderr_file="$3"
+  shift 3
+  : > "$stdout_file"
+  : > "$stderr_file"
+  if "$@" >"$stdout_file" 2>"$stderr_file"; then
+    spw_codex_append_messages "$messages_file" stderr "$stdout_file"
+    spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+    return 0
+  fi
+  spw_codex_append_messages "$messages_file" stderr "$stdout_file"
+  spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+  return 1
+}
+
+spw_codex_install_result_json() {
+  mismatch_hint="$1"
+  missing_hint="$2"
+  python3 - "$mismatch_hint" "$missing_hint" <<'PY'
+import json
+import sys
+
+mismatch_hint, missing_hint = sys.argv[1:]
+hints = {}
+if mismatch_hint:
+    hints["mismatch"] = mismatch_hint
+if missing_hint:
+    hints["missing"] = missing_hint
+json.dump({"verification_hints": hints}, sys.stdout, allow_nan=False, separators=(",", ":"))
+sys.stdout.write("\n")
+PY
+}
+
+spw_codex_append_message_text() {
+  messages_file="$1"
+  channel="$2"
+  text="$3"
+  python3 - "$messages_file" "$channel" "$text" <<'PY'
+import sys
+
+path, channel, text = sys.argv[1:]
+escaped = text.encode("unicode_escape").decode("ascii")
+with open(path, "a", encoding="utf-8") as handle:
+    handle.write(f"{channel}\t{escaped}\n")
+PY
+}
+
+spw_codex_build() {
+  upstream_root=
+  candidate_root=
+  requested_ref=
+  resolved_ref=
+  commit=
+  wrapper_version=
+  upstream_manifest_version=
+  fallback_manifest=
+  seen_upstream_root=0
+  seen_candidate_root=0
+  seen_requested_ref=0
+  seen_resolved_ref=0
+  seen_commit=0
+  seen_wrapper_version=0
+  seen_upstream_manifest_version=0
+  seen_fallback_manifest=0
+
+  while [ "$#" -gt 0 ]; do
+    flag="$1"
+    shift
+    case "$flag" in
+      --upstream-root)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --upstream-root"
+        [ "$seen_upstream_root" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --upstream-root"
+        upstream_root="$1"
+        seen_upstream_root=1
+        shift
+        ;;
+      --candidate-root)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --candidate-root"
+        [ "$seen_candidate_root" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --candidate-root"
+        candidate_root="$1"
+        seen_candidate_root=1
+        shift
+        ;;
+      --requested-ref)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --requested-ref"
+        [ "$seen_requested_ref" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --requested-ref"
+        requested_ref="$1"
+        seen_requested_ref=1
+        shift
+        ;;
+      --resolved-ref)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --resolved-ref"
+        [ "$seen_resolved_ref" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --resolved-ref"
+        resolved_ref="$1"
+        seen_resolved_ref=1
+        shift
+        ;;
+      --commit)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --commit"
+        [ "$seen_commit" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --commit"
+        commit="$1"
+        seen_commit=1
+        shift
+        ;;
+      --wrapper-version)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --wrapper-version"
+        [ "$seen_wrapper_version" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --wrapper-version"
+        wrapper_version="$1"
+        seen_wrapper_version=1
+        shift
+        ;;
+      --upstream-manifest-version)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --upstream-manifest-version"
+        [ "$seen_upstream_manifest_version" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --upstream-manifest-version"
+        upstream_manifest_version="$1"
+        seen_upstream_manifest_version=1
+        shift
+        ;;
+      --fallback-manifest)
+        [ "$#" -gt 0 ] || spw_codex_argument_error build "missing value for --fallback-manifest"
+        [ "$seen_fallback_manifest" -eq 0 ] || spw_codex_argument_error build "duplicate flag: --fallback-manifest"
+        fallback_manifest="$1"
+        seen_fallback_manifest=1
+        shift
+        ;;
+      *)
+        spw_codex_argument_error build "unknown flag: $flag"
+        ;;
+    esac
+  done
+
+  [ "$seen_upstream_root" -eq 1 ] || spw_codex_argument_error build "missing required flag: --upstream-root"
+  [ "$seen_candidate_root" -eq 1 ] || spw_codex_argument_error build "missing required flag: --candidate-root"
+  [ "$seen_requested_ref" -eq 1 ] || spw_codex_argument_error build "missing required flag: --requested-ref"
+  [ "$seen_resolved_ref" -eq 1 ] || spw_codex_argument_error build "missing required flag: --resolved-ref"
+  [ "$seen_commit" -eq 1 ] || spw_codex_argument_error build "missing required flag: --commit"
+  [ "$seen_wrapper_version" -eq 1 ] || spw_codex_argument_error build "missing required flag: --wrapper-version"
+  [ "$seen_upstream_manifest_version" -eq 1 ] || spw_codex_argument_error build "missing required flag: --upstream-manifest-version"
+  [ "$seen_fallback_manifest" -eq 1 ] || spw_codex_argument_error build "missing required flag: --fallback-manifest"
+
+  spw_codex_require_absolute_path build "$upstream_root" "--upstream-root"
+  spw_codex_require_absolute_path build "$candidate_root" "--candidate-root"
+  [ -d "$upstream_root" ] || spw_codex_argument_error build "upstream root not found: $upstream_root"
+  [ -d "$candidate_root" ] || spw_codex_argument_error build "candidate root not found: $candidate_root"
+  [ -f "$fallback_manifest" ] || spw_codex_argument_error build "fallback manifest not found: $fallback_manifest"
+
+  validator="$root/scripts/adapters/codex/validate-generated-plugin.py"
+  [ -f "$validator" ] || spw_codex_failure build "build-failed" "missing built-in plugin validator: $validator" "" ""
+
+  tmp_parent="${TMPDIR:-/tmp}"
+  if ! scratch=$(mktemp -d "$tmp_parent/superpowers-wrapper.adapter-build.XXXXXX"); then
+    spw_codex_failure build "build-failed" "cannot create adapter build workspace under $tmp_parent" "" ""
+  fi
+  stdout_file="$scratch/stdout"
+  stderr_file="$scratch/stderr"
+  messages_file="$scratch/messages"
+  candidate_manifest="$candidate_root/.codex-plugin/plugin.json"
+  provenance_path="$candidate_root/.superpowers-upstream.json"
+  cleanup() {
+    status=$?
+    trap - 0 HUP INT TERM
+    rm -rf "$scratch" || :
+    exit "$status"
+  }
+  trap cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  mkdir -p "$candidate_root/.codex-plugin"
+  : > "$messages_file"
+
+  upstream_manifest="$upstream_root/.codex-plugin/plugin.json"
+  if [ -f "$upstream_manifest" ]; then
+    if ! cp "$upstream_manifest" "$candidate_manifest"; then
+      spw_codex_failure build "build-failed" "cannot copy upstream manifest into candidate" "" "$messages_file"
+    fi
+  else
+    if ! cp "$fallback_manifest" "$candidate_manifest"; then
+      spw_codex_failure build "build-failed" "cannot copy fallback manifest into candidate" "" "$messages_file"
+    fi
+  fi
+
+  if ! spw_apply_manifest_overlay "$candidate_manifest" "$wrapper_version"; then
+    spw_codex_failure build "build-failed" "failed to apply wrapper manifest overlay" "" "$messages_file"
+  fi
+
+  if ! cp "$fallback_manifest" "$candidate_root/.codex-plugin/plugin.template.json"; then
+    spw_codex_failure build "build-failed" "cannot copy fallback manifest template into candidate" "" "$messages_file"
+  fi
+
+  if ! upstream_source=$(spw_codex_read_source_from_provenance "$provenance_path"); then
+    spw_codex_failure build "invalid-provenance" "candidate provenance is missing or invalid" "" "$messages_file"
+  fi
+
+  if python3 -S "$validator" \
+    --plugin-root "$candidate_root" \
+    --source "$upstream_source" \
+    --requested-ref "$requested_ref" \
+    --resolved-ref "$resolved_ref" \
+    --commit "$commit" \
+    --manifest-version "$wrapper_version" \
+    --upstream-manifest-version "$upstream_manifest_version" \
+    >"$stdout_file" 2>"$stderr_file"; then
+    spw_codex_append_messages "$messages_file" stdout "$stdout_file"
+    spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+    spw_codex_success build '{}' "$messages_file"
+  else
+    spw_codex_append_messages "$messages_file" stdout "$stdout_file"
+    spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+    spw_codex_failure build "generated-plugin-validation-failed" "built-in generated plugin validation failed" "" "$messages_file"
+  fi
+}
+
+spw_codex_install() {
+  package_root=
+  seen_package_root=0
+
+  while [ "$#" -gt 0 ]; do
+    flag="$1"
+    shift
+    case "$flag" in
+      --package-root)
+        [ "$#" -gt 0 ] || spw_codex_argument_error install "missing value for --package-root"
+        [ "$seen_package_root" -eq 0 ] || spw_codex_argument_error install "duplicate flag: --package-root"
+        package_root="$1"
+        seen_package_root=1
+        shift
+        ;;
+      *)
+        spw_codex_argument_error install "unknown flag: $flag"
+        ;;
+    esac
+  done
+
+  [ "$seen_package_root" -eq 1 ] || spw_codex_argument_error install "missing required flag: --package-root"
+  spw_codex_require_absolute_path install "$package_root" "--package-root"
+  [ -d "$package_root" ] || spw_codex_argument_error install "package root not found: $package_root"
+
+  codex_bin="${SUPERPOWERS_CODEX:-codex}"
+  refresh_mode="${SUPERPOWERS_INSTALL_REFRESH_MODE:-add-only}"
+  spw_require_command python3
+  spw_codex_require_command install "$codex_bin"
+  case "$refresh_mode" in
+    add-only|remove-add) ;;
+    *) spw_codex_failure install "invalid-arguments" "unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: $refresh_mode" "" "" ;;
+  esac
+
+  tmp_parent="${TMPDIR:-/tmp}"
+  if ! scratch=$(mktemp -d "$tmp_parent/superpowers-wrapper.adapter-install.XXXXXX"); then
+    spw_codex_failure install "install-failed" "cannot create adapter install workspace under $tmp_parent" "" ""
+  fi
+  stdout_file="$scratch/stdout"
+  stderr_file="$scratch/stderr"
+  messages_file="$scratch/messages"
+  hints_file="$scratch/hints"
+  cleanup() {
+    status=$?
+    trap - 0 HUP INT TERM
+    rm -rf "$scratch" || :
+    exit "$status"
+  }
+  trap cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  : > "$messages_file"
+  : > "$hints_file"
+
+  : > "$stderr_file"
+  if ! listing=$("$codex_bin" plugin marketplace list --json 2>"$stderr_file"); then
+    spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+    spw_codex_failure install "install-failed" "cannot list Codex marketplaces via '$codex_bin plugin marketplace list --json'" "$hints_file" "$messages_file"
+  fi
+  spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+  if ! registered_root=$(spw_marketplace_root_from_json "$listing" "$SPW_MARKETPLACE_NAME"); then
+    spw_codex_failure install "install-failed" "cannot parse output of '$codex_bin plugin marketplace list --json'" "$hints_file" "$messages_file"
+  fi
+
+  if [ -z "$registered_root" ]; then
+    if ! spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin marketplace add "$package_root"; then
+      spw_codex_failure install "install-failed" "codex marketplace add failed for $package_root" "$hints_file" "$messages_file"
+    fi
+  else
+    if ! path_relation=$(spw_paths_equal "$package_root" "$registered_root"); then
+      spw_codex_failure install "install-failed" "cannot compare registered and requested marketplace roots" "$hints_file" "$messages_file"
+    fi
+    case "$path_relation" in
+      same) ;;
+      different)
+    spw_codex_append_message_text "$messages_file" stdout \
+      "marketplace $SPW_MARKETPLACE_NAME registered at $registered_root; re-registering at $package_root"
+    if ! spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin marketplace remove "$SPW_MARKETPLACE_NAME"; then
+      spw_codex_failure install "install-failed" "codex marketplace remove failed for $SPW_MARKETPLACE_NAME (registered at $registered_root)" "$hints_file" "$messages_file"
+    fi
+    if ! spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin marketplace add "$package_root"; then
+      printf 'recover with: %s plugin marketplace add %s\n' "$codex_bin" "$package_root" >> "$hints_file"
+      printf 'previous root (last known good): %s\n' "$registered_root" >> "$hints_file"
+      spw_codex_failure install "install-failed" "marketplace $SPW_MARKETPLACE_NAME was removed but re-adding failed." "$hints_file" "$messages_file"
+    fi
+        ;;
+      *)
+        spw_codex_failure install "install-failed" "invalid marketplace path comparison result" "$hints_file" "$messages_file"
+        ;;
+    esac
+  fi
+
+  if [ "$refresh_mode" = remove-add ]; then
+    spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin remove "$SPW_PLUGIN_ID" || true
+  fi
+
+  if ! spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin add "$SPW_PLUGIN_ID"; then
+    spw_codex_failure install "install-failed" "codex plugin add failed for $SPW_PLUGIN_ID" "$hints_file" "$messages_file"
+  fi
+
+  mismatch_hint=
+  case "$refresh_mode" in
+    add-only)
+      mismatch_hint="retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"
+      ;;
+  esac
+  missing_hint="verify with 'codex plugin list --json'."
+  result_json=$(spw_codex_install_result_json "$mismatch_hint" "$missing_hint")
+  spw_codex_success install "$result_json" "$messages_file"
+}
+
+spw_codex_uninstall() {
+  plugin_present=
+  marketplace_present=
+  seen_plugin_present=0
+  seen_marketplace_present=0
+
+  while [ "$#" -gt 0 ]; do
+    flag="$1"
+    shift
+    case "$flag" in
+      --plugin-present)
+        [ "$#" -gt 0 ] || spw_codex_argument_error uninstall "missing value for --plugin-present"
+        [ "$seen_plugin_present" -eq 0 ] || spw_codex_argument_error uninstall "duplicate flag: --plugin-present"
+        plugin_present="$1"
+        seen_plugin_present=1
+        shift
+        ;;
+      --marketplace-present)
+        [ "$#" -gt 0 ] || spw_codex_argument_error uninstall "missing value for --marketplace-present"
+        [ "$seen_marketplace_present" -eq 0 ] || spw_codex_argument_error uninstall "duplicate flag: --marketplace-present"
+        marketplace_present="$1"
+        seen_marketplace_present=1
+        shift
+        ;;
+      *)
+        spw_codex_argument_error uninstall "unknown flag: $flag"
+        ;;
+    esac
+  done
+
+  [ "$seen_plugin_present" -eq 1 ] || spw_codex_argument_error uninstall "missing required flag: --plugin-present"
+  [ "$seen_marketplace_present" -eq 1 ] || spw_codex_argument_error uninstall "missing required flag: --marketplace-present"
+  case "$plugin_present" in
+    true|false) ;;
+    *) spw_codex_argument_error uninstall "--plugin-present must be true or false" ;;
+  esac
+  case "$marketplace_present" in
+    true|false) ;;
+    *) spw_codex_argument_error uninstall "--marketplace-present must be true or false" ;;
+  esac
+
+  codex_bin="${SUPERPOWERS_CODEX:-codex}"
+  spw_require_command python3
+  spw_codex_require_command uninstall "$codex_bin"
+
+  tmp_parent="${TMPDIR:-/tmp}"
+  if ! scratch=$(mktemp -d "$tmp_parent/superpowers-wrapper.adapter-uninstall.XXXXXX"); then
+    spw_codex_failure uninstall "uninstall-failed" "cannot create adapter uninstall workspace under $tmp_parent" "" ""
+  fi
+  stdout_file="$scratch/stdout"
+  stderr_file="$scratch/stderr"
+  messages_file="$scratch/messages"
+  cleanup() {
+    status=$?
+    trap - 0 HUP INT TERM
+    rm -rf "$scratch" || :
+    exit "$status"
+  }
+  trap cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  : > "$messages_file"
+
+  if [ "$plugin_present" = true ]; then
+    if ! spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin remove "$SPW_PLUGIN_ID"; then
+      spw_codex_failure uninstall "uninstall-failed" "codex plugin remove failed for $SPW_PLUGIN_ID" "" "$messages_file"
+    fi
+    spw_codex_append_message_text "$messages_file" stdout "removed plugin $SPW_PLUGIN_ID"
+  else
+    spw_codex_append_message_text "$messages_file" stdout "plugin not installed; skipping"
+  fi
+
+  if [ "$marketplace_present" = true ]; then
+    if ! spw_codex_capture_command "$messages_file" "$stdout_file" "$stderr_file" "$codex_bin" plugin marketplace remove "$SPW_MARKETPLACE_NAME"; then
+      spw_codex_failure uninstall "uninstall-failed" "codex plugin marketplace remove failed for $SPW_MARKETPLACE_NAME" "" "$messages_file"
+    fi
+    spw_codex_append_message_text "$messages_file" stdout "removed marketplace $SPW_MARKETPLACE_NAME"
+  else
+    spw_codex_append_message_text "$messages_file" stdout "marketplace not registered; skipping"
+  fi
+
+  spw_codex_success uninstall '{}' "$messages_file"
+}
+
+spw_codex_inspect() {
+  view=
+  seen_view=0
+
+  while [ "$#" -gt 0 ]; do
+    flag="$1"
+    shift
+    case "$flag" in
+      --view)
+        [ "$#" -gt 0 ] || spw_codex_argument_error inspect "missing value for --view"
+        [ "$seen_view" -eq 0 ] || spw_codex_argument_error inspect "duplicate flag: --view"
+        view="$1"
+        seen_view=1
+        shift
+        ;;
+      *)
+        spw_codex_argument_error inspect "unknown flag: $flag"
+        ;;
+    esac
+  done
+
+  [ "$seen_view" -eq 1 ] || spw_codex_argument_error inspect "missing required flag: --view"
+
+  case "$view" in
+    fingerprint)
+      fingerprint=$(spw_installed_commit_or_empty || true)
+      if [ -n "$fingerprint" ]; then
+        spw_codex_success inspect "{\"view\":\"fingerprint\",\"fingerprint\":\"$fingerprint\"}" ""
+      else
+        spw_codex_success inspect '{"view":"fingerprint","fingerprint":null}' ""
+      fi
+      ;;
+    ownership)
+      codex_bin="${SUPERPOWERS_CODEX:-codex}"
+      spw_require_command python3
+      spw_codex_require_command inspect "$codex_bin"
+
+      tmp_parent="${TMPDIR:-/tmp}"
+      if ! scratch=$(mktemp -d "$tmp_parent/superpowers-wrapper.adapter-inspect.XXXXXX"); then
+        spw_codex_failure inspect "inspect-failed" "cannot create adapter inspect workspace under $tmp_parent" "" ""
+      fi
+      stderr_file="$scratch/stderr"
+      messages_file="$scratch/messages"
+      cleanup() {
+        status=$?
+        trap - 0 HUP INT TERM
+        rm -rf "$scratch" || :
+        exit "$status"
+      }
+      trap cleanup 0
+      trap 'exit 129' HUP
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+
+      : > "$messages_file"
+
+      : > "$stderr_file"
+      if ! plugin_listing=$("$codex_bin" plugin list --json 2>"$stderr_file"); then
+        spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+        spw_codex_failure inspect "inspect-failed" "cannot list Codex plugins via '$codex_bin plugin list --json'" "" "$messages_file"
+      fi
+      spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+      if ! plugin_result=$(spw_json_array_has "$plugin_listing" "installed" "pluginId" "$SPW_PLUGIN_ID"); then
+        spw_codex_failure inspect "inspect-failed" "cannot parse output of '$codex_bin plugin list --json'" "" "$messages_file"
+      fi
+
+      : > "$stderr_file"
+      if ! marketplace_listing=$("$codex_bin" plugin marketplace list --json 2>"$stderr_file"); then
+        spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+        spw_codex_failure inspect "inspect-failed" "cannot list Codex marketplaces via '$codex_bin plugin marketplace list --json'" "" "$messages_file"
+      fi
+      spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+      if ! marketplace_result=$(spw_json_array_has "$marketplace_listing" "marketplaces" "name" "$SPW_MARKETPLACE_NAME"); then
+        spw_codex_failure inspect "inspect-failed" "cannot parse output of '$codex_bin plugin marketplace list --json'" "" "$messages_file"
+      fi
+
+      spw_codex_success inspect \
+        "{\"view\":\"ownership\",\"resources\":{\"plugin\":$([ "$plugin_result" = present ] && printf true || printf false),\"marketplace\":$([ "$marketplace_result" = present ] && printf true || printf false)}}" \
+        "$messages_file"
+      ;;
+    *)
+      spw_codex_argument_error inspect "unsupported inspect view: $view"
+      ;;
+  esac
+}
+
+operation="${1:-}"
+[ -n "$operation" ] || spw_codex_failure adapter "invalid-arguments" "missing adapter operation" "" ""
+shift
+
+case "$operation" in
+  build)
+    spw_codex_build "$@"
+    ;;
+  install)
+    spw_codex_install "$@"
+    ;;
+  inspect)
+    spw_codex_inspect "$@"
+    ;;
+  uninstall)
+    spw_codex_uninstall "$@"
+    ;;
+  *)
+    spw_codex_emit "$operation" false '{}' "unsupported-operation" "unsupported adapter operation: $operation" "" ""
+    exit 1
+    ;;
+esac

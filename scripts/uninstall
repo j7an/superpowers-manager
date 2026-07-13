@@ -2,55 +2,41 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-. "$root/scripts/lib.sh"
+. "$root/scripts/core/common.sh"
+. "$root/scripts/core/provenance.sh"
+. "$root/scripts/core/lifecycle.sh"
+. "$root/scripts/core/adapter.sh"
 
-codex_bin="${SUPERPOWERS_CODEX:-codex}"
-
-spw_require_command "$codex_bin"
 spw_require_command python3
 
-# Preflight: read and parse BOTH Codex listings before removing anything, so a
-# read/parse failure aborts before any removal (fail closed). Each helper
-# spw_die's on query/parse failure; a clean return only ever means genuine
-# present/absent.
-plugin_present=false
-marketplace_present=false
-if spw_plugin_is_installed "$codex_bin" "$SPW_PLUGIN_ID"; then
-  plugin_present=true
+tmp_parent="${TMPDIR:-/tmp}"
+if ! uninstall_workspace=$(mktemp -d "$tmp_parent/superpowers-wrapper.uninstall.XXXXXX"); then
+  spw_die "cannot create uninstall workspace under $tmp_parent"
 fi
-if spw_marketplace_is_registered "$codex_bin" "$SPW_MARKETPLACE_NAME"; then
-  marketplace_present=true
-fi
+inspect_result="$uninstall_workspace/inspect.json"
+uninstall_result="$uninstall_workspace/uninstall.json"
+cleanup() {
+  status=$?
+  trap - 0 HUP INT TERM
+  rm -rf "$uninstall_workspace" || :
+  exit "$status"
+}
+trap cleanup 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-# Remove the plugin first, then the marketplace, so an installed plugin is
-# never orphaned from a just-removed marketplace source.
-if [ "$plugin_present" = true ]; then
-  if ! "$codex_bin" plugin remove "$SPW_PLUGIN_ID"; then
-    spw_die "codex plugin remove failed for $SPW_PLUGIN_ID"
-  fi
-  echo "removed plugin $SPW_PLUGIN_ID"
-else
-  echo "plugin not installed; skipping"
-fi
+TMPDIR="$uninstall_workspace"
+export TMPDIR
 
-if [ "$marketplace_present" = true ]; then
-  if ! "$codex_bin" plugin marketplace remove "$SPW_MARKETPLACE_NAME"; then
-    spw_die "codex plugin marketplace remove failed for $SPW_MARKETPLACE_NAME"
-  fi
-  echo "removed marketplace $SPW_MARKETPLACE_NAME"
-else
-  echo "marketplace not registered; skipping"
-fi
+spw_inspect_ownership "$inspect_result"
+plugin_present=$(spw_adapter_result_boolean "$inspect_result" "resources.plugin")
+marketplace_present=$(spw_adapter_result_boolean "$inspect_result" "resources.marketplace")
 
-# Verify-after: re-query and refuse to claim success while either target
-# survives. Uses the same fail-closed helpers, so a read/parse failure during
-# verification also aborts non-zero.
-if spw_plugin_is_installed "$codex_bin" "$SPW_PLUGIN_ID"; then
-  spw_die "plugin $SPW_PLUGIN_ID is still installed after removal"
-fi
-if spw_marketplace_is_registered "$codex_bin" "$SPW_MARKETPLACE_NAME"; then
-  spw_die "marketplace $SPW_MARKETPLACE_NAME is still registered after removal"
-fi
+spw_adapter_uninstall "$uninstall_result" "$plugin_present" "$marketplace_present"
+
+spw_inspect_ownership "$inspect_result"
+spw_verify_uninstalled_resources "$inspect_result"
 
 echo "uninstall complete"
 echo "note: local generated artifacts under plugins/superpowers/ and .cache/upstream/ were left in place; remove them manually or regenerate with scripts/prepare."

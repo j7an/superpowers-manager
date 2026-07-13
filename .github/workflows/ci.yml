@@ -27,5 +27,5 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run hermetic test suite
-        run: sh tests/run.sh
+      - name: Run container acceptance suite
+        run: sh tests/container.sh

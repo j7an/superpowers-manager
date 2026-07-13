@@ -2,18 +2,13 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-. "$root/scripts/lib.sh"
+. "$root/scripts/core/common.sh"
+. "$root/scripts/core/provenance.sh"
+. "$root/scripts/core/status.sh"
+. "$root/scripts/core/lifecycle.sh"
+. "$root/scripts/core/adapter.sh"
 
-codex_bin="${SUPERPOWERS_CODEX:-codex}"
-refresh_mode="${SUPERPOWERS_INSTALL_REFRESH_MODE:-add-only}"
-
-spw_require_command "$codex_bin"
 spw_require_command python3
-
-case "$refresh_mode" in
-  add-only|remove-add) ;;
-  *) spw_die "unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: $refresh_mode" ;;
-esac
 
 echo "Note: remove or disable conflicting Superpowers providers yourself before relying on wrapper skills."
 
@@ -37,19 +32,26 @@ esac
 desired_commit=$(spw_metadata_commit_or_empty "$root/plugins/superpowers/.superpowers-upstream.json" || true)
 [ -n "$desired_commit" ] || spw_die "generated metadata missing desired commit after prepare"
 
-# Reconcile the wrapper marketplace pointer to this package root, then always
-# run the Codex install step: `install` means "make Codex use this root" and
-# never skips it because the generated tree looks current.
-spw_reconcile_marketplace "$codex_bin" "$root"
-
-case "$refresh_mode" in
-  remove-add)
-    "$codex_bin" plugin remove "$SPW_PLUGIN_ID" || true
-    ;;
-esac
-
-if ! "$codex_bin" plugin add "$SPW_PLUGIN_ID"; then
-  spw_die "codex plugin add failed for $SPW_PLUGIN_ID"
+tmp_parent="${TMPDIR:-/tmp}"
+if ! install_workspace=$(mktemp -d "$tmp_parent/superpowers-wrapper.install.XXXXXX"); then
+  spw_die "cannot create install workspace under $tmp_parent"
 fi
+cleanup_install_workspace() {
+  status=$?
+  trap - 0 HUP INT TERM
+  rm -rf "$install_workspace" || :
+  exit "$status"
+}
+trap cleanup_install_workspace 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-spw_verify_refresh "$desired_commit"
+TMPDIR="$install_workspace"
+export TMPDIR
+install_result="$install_workspace/install.json"
+inspect_result="$install_workspace/inspect.json"
+spw_adapter_install "$install_result" "$root"
+if ! spw_verify_installed_fingerprint "$desired_commit" "$install_result" "$inspect_result"; then
+  exit 1
+fi

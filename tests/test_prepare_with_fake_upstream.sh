@@ -8,8 +8,29 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 upstream="$tmpdir/upstream"
 output="$tmpdir/out"
 home="$tmpdir/home"
+pkg="$root"
 template="$root/plugins/superpowers/.codex-plugin/plugin.template.json"
 template_before=$(cksum "$template")
+adapter_log="$tmpdir/adapter.log"
+recording_adapter="$tmpdir/recording-adapter"
+python3_log="$tmpdir/python3.log"
+real_python3=$(command -v python3)
+
+cat > "$recording_adapter" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SPW_TEST_ADAPTER_LOG"
+exec "$SPW_TEST_REAL_ADAPTER" "$@"
+EOF
+chmod +x "$recording_adapter"
+
+cat > "$tmpdir/python3" <<'EOF'
+#!/bin/sh
+for arg in "$@"; do
+  printf '%s\n' "$arg" >> "$SPW_TEST_PYTHON3_LOG"
+done
+exec "$SPW_TEST_REAL_PYTHON3" "$@"
+EOF
+chmod +x "$tmpdir/python3"
 
 mkdir -p "$upstream/skills/brainstorming" "$upstream/assets" "$upstream/hooks"
 mkdir -p "$home"
@@ -23,6 +44,9 @@ plugin_root = sys.argv[1]
 required = os.path.join(plugin_root, ".codex-plugin", "plugin.template.json")
 if not os.path.isfile(required):
     print(f"additional validator did not receive complete candidate: {required}", file=sys.stderr)
+    sys.exit(1)
+if any(name.startswith(".adapter-build") for _, dirs, _ in os.walk(plugin_root) for name in dirs):
+    print("adapter build scratch leaked into the exact candidate", file=sys.stderr)
     sys.exit(1)
 
 with open(os.environ["SUPERPOWERS_FAKE_VALIDATOR_LOG"], "a", encoding="utf-8") as handle:
@@ -202,21 +226,31 @@ if sys.argv[2] in data:
 PY
 }
 
-run_prepare_for_ref() {
+run_prepare_for_ref_with_env() {
   ref="$1"
   destination="$2"
-  SUPERPOWERS_REF="$ref" \
-  SUPERPOWERS_UPSTREAM_URL="$upstream" \
-  SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
-  SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
-  SUPERPOWERS_VALIDATOR= \
-  HOME="$home" \
-  sh "$root/scripts/prepare" >/dev/null
+  shift 2
+  env \
+    SUPERPOWERS_REF="$ref" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
+    SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
+    SUPERPOWERS_CODEX="$tmpdir/missing-codex" \
+    SUPERPOWERS_VALIDATOR= \
+    HOME="$home" \
+    "$@" \
+    sh "$root/scripts/prepare" >/dev/null
+}
+
+run_prepare_for_ref() {
+  run_prepare_for_ref_with_env "$1" "$2"
 }
 
 assert_bad_manifest_error() {
   destination="$1"
   err="$tmpdir/$destination.err"
+  mkdir -p "$tmpdir/$destination"
+  printf 'preserve me\n' > "$tmpdir/$destination/preexisting-sentinel"
   if SUPERPOWERS_REF="bad-manifest" \
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
     SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
@@ -237,6 +271,10 @@ assert_bad_manifest_error() {
     cat "$err" >&2
     exit 1
   fi
+  [ -f "$tmpdir/$destination/preexisting-sentinel" ] || {
+    echo "malformed upstream manifest must fail before swapping the live tree" >&2
+    exit 1
+  }
 }
 
 assert_rejected_manifest_input() {
@@ -299,7 +337,54 @@ assert_prepare_upstream_manifest_version() {
   fi
 }
 
-run_prepare_for_ref "latest-release" "out-latest"
+: > "$adapter_log"
+run_prepare_for_ref_with_env "latest-release" "out-recorded" \
+  SPW_ADAPTER="$recording_adapter" \
+  SPW_TEST_ADAPTER_LOG="$adapter_log" \
+  SPW_TEST_REAL_ADAPTER="$root/scripts/adapters/codex/adapter"
+recorded_upstream_root="$tmpdir/cache-out-recorded/superpowers"
+grep -Fq "build --upstream-root $recorded_upstream_root" "$adapter_log"
+grep -Fq -- "--upstream-manifest-version 6.0.3" "$adapter_log"
+grep -Fq -- "--fallback-manifest $pkg/plugins/superpowers/.codex-plugin/plugin.template.json" "$adapter_log"
+
+relative_workdir="$tmpdir/relative-workdir"
+relative_adapter_log="$tmpdir/relative-adapter.log"
+mkdir -p "$relative_workdir"
+relative_workdir_physical=$(CDPATH= cd -- "$relative_workdir" && pwd -P)
+: > "$relative_adapter_log"
+(
+  cd "$relative_workdir"
+  env \
+    SUPERPOWERS_REF="latest-release" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_CACHE_DIR="cache-relative" \
+    SUPERPOWERS_PLUGIN_ROOT="out-relative" \
+    SUPERPOWERS_VALIDATOR= \
+    HOME="$home" \
+    SPW_ADAPTER="$recording_adapter" \
+    SPW_TEST_ADAPTER_LOG="$relative_adapter_log" \
+    SPW_TEST_REAL_ADAPTER="$root/scripts/adapters/codex/adapter" \
+    sh "$root/scripts/prepare" >/dev/null
+)
+grep -Fq \
+  "build --upstream-root $relative_workdir_physical/cache-relative/superpowers --candidate-root $relative_workdir_physical/.superpowers.prepare." \
+  "$relative_adapter_log"
+grep -Fq "/superpowers --requested-ref" "$relative_adapter_log"
+test -f "$relative_workdir/out-relative/.codex-plugin/plugin.json"
+test -f "$relative_workdir/out-relative/.superpowers-upstream.json"
+
+: > "$python3_log"
+run_prepare_for_ref_with_env "latest-release" "out-latest" \
+  PATH="$tmpdir:$PATH" \
+  SPW_TEST_PYTHON3_LOG="$python3_log" \
+  SPW_TEST_REAL_PYTHON3="$real_python3"
+latest_upstream_root="$tmpdir/cache-out-latest/superpowers"
+manifest_read_count=$(grep -Fxc "$latest_upstream_root/.codex-plugin/plugin.json" "$python3_log" || true)
+[ "$manifest_read_count" -eq 1 ] || {
+  echo "core must read $latest_upstream_root/.codex-plugin/plugin.json exactly once" >&2
+  cat "$python3_log" >&2
+  exit 1
+}
 expected_short=$(printf '%s' "$release_commit" | cut -c 1-7)
 assert_prepare_commit "out-latest" "$release_commit"
 assert_prepare_version "out-latest" "6.0.3+wrapper.$expected_short"
@@ -353,7 +438,7 @@ assert_rejected_manifest_input "deeply-nested-json" "out-deeply-nested" "JSON ne
 unreadable_json="$tmpdir/json-directory"
 mkdir "$unreadable_json"
 printf 'sentinel\n' > "$unreadable_json/sentinel"
-if ( . "$root/scripts/lib.sh"; spw_json_get "$unreadable_json" version ) \
+if ( . "$root/scripts/core/common.sh"; . "$root/scripts/core/provenance.sh"; spw_json_get "$unreadable_json" version ) \
   >"$tmpdir/unreadable-json.out" 2>"$tmpdir/unreadable-json.err"; then
   echo "JSON helper unexpectedly accepted an unreadable file" >&2
   exit 1
@@ -449,11 +534,10 @@ if SUPERPOWERS_REF="invalid-skill" \
   exit 1
 fi
 grep -Fq "exactly one top-level \`description:\`" "$tmpdir/invalid-skill.err"
-prepare_pid=$(cat "$prepare_pid_file")
-[ ! -e "$tmpdir/.superpowers.tmp.$prepare_pid" ] || {
+if find "$tmpdir" -maxdepth 1 -name '.superpowers.prepare.*' -print | grep -q .; then
   echo "built-in failure must remove its staged plugin tree" >&2
   exit 1
-}
+fi
 [ -f "$unrelated_tmp/sentinel" ] || {
   echo "built-in failure must not remove another invocation's staged tree" >&2
   exit 1

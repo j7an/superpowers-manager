@@ -12,7 +12,7 @@ node_bin=$(command -v node)
 pkg="$tmpdir/pkg"
 mkdir -p "$pkg/bin" "$pkg/scripts"
 cp "$root/bin/superpowers-wrapper.js" "$pkg/bin/"
-printf '{ "name": "superpowers-wrapper", "version": "9.9.9-test" }\n' > "$pkg/package.json"
+printf '{ "name": "superpowers-wrapper", "version": "9.9.9-test", "type": "module" }\n' > "$pkg/package.json"
 log="$tmpdir/dispatch.log"
 for cmd in prepare probe install update uninstall; do
   cat > "$pkg/scripts/$cmd" <<EOF
@@ -88,6 +88,12 @@ grep -Fq "usage:" "$tmpdir/help"
 [ ! -s "$tmpdir/help-err" ]
 version_out=$(run_bin --version)
 [ "$version_out" = "9.9.9-test" ] || { echo "unexpected --version output: $version_out" >&2; exit 1; }
+
+# npm/npx invoke bins through links; the ESM direct-entry gate must resolve it.
+bin_link="$tmpdir/superpowers-wrapper"
+ln -s "$pkg/bin/superpowers-wrapper.js" "$bin_link"
+version_out=$(PATH="$fakebin" "$fakebin/node" "$bin_link" --version)
+[ "$version_out" = "9.9.9-test" ] || { echo "unexpected symlinked --version output: $version_out" >&2; exit 1; }
 
 # --- Exit-code propagation ---
 cat > "$pkg/scripts/probe" <<EOF

@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitReturns": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2024",
+    "types": ["node"],
+    "typeRoots": ["/opt/spw-test-tools/node_modules/@types"]
+  },
+  "include": ["../bin/**/*.js", "bin/**/*.js"]
+}

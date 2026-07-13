@@ -37,6 +37,8 @@ cp -R "$root/scripts" "$pkg/scripts"
 cp -R "$root/config" "$pkg/config"
 cp "$root/plugins/superpowers/.codex-plugin/plugin.template.json" "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json"
 test -x "$pkg/scripts/install" || { echo "install must remain executable in the packaged root" >&2; exit 1; }
+test -x "$pkg/scripts/adapters/codex/adapter" || { echo "codex adapter must remain executable in the packaged root" >&2; exit 1; }
+test -f "$pkg/scripts/adapters/codex/validate-generated-plugin.py" || { echo "codex validator must remain packaged" >&2; exit 1; }
 
 # --- Additional validator failure fixture ---
 failing_validator="$tmpdir/failing_validator.py"
@@ -50,7 +52,10 @@ PY
 #     the post-install verifier can find it. Behavior flags are marker files. ---
 state="$tmpdir/state"
 mkdir -p "$state"
+install_tmp="$tmpdir/install-tmp"
+mkdir -p "$install_tmp"
 fake_codex="$tmpdir/codex"
+fake_adapter="$tmpdir/adapter"
 log="$state/codex.log"
 cat > "$fake_codex" <<'EOF'
 #!/bin/sh
@@ -89,6 +94,7 @@ PY
   exit 0
 fi
 if [ "$1" = plugin ] && [ "$2" = add ]; then
+  [ -f "$state/plugin_add_fail" ] && exit 1
   [ -f "$state/plugin_add_noop" ] && exit 0
   dest="$state/codex-home/plugins/cache/superpowers-wrapper/superpowers/1.0.0"
   mkdir -p "$dest"
@@ -114,23 +120,53 @@ exit 0
 EOF
 chmod +x "$fake_codex"
 
+cat > "$fake_adapter" <<'EOF'
+#!/bin/sh
+set -eu
+state=$(CDPATH= cd -- "$(dirname "$0")" && pwd)/state
+printf '%s\n' "$*" >> "$state/adapter.log"
+exec "$SPW_TEST_PKG_ROOT/scripts/adapters/codex/adapter" "$@"
+EOF
+chmod +x "$fake_adapter"
+
 marketplace_absent='{"marketplaces":[{"name":"openai-curated","root":"/x"}]}'
 
 reset() {
   rm -f "$state/marketplace_list.rc" "$state/marketplace_add_fail" \
-        "$state/plugin_add_noop" "$state/plugin_add_stale"
+        "$state/plugin_add_fail" "$state/plugin_add_noop" "$state/plugin_add_stale"
   rm -rf "$state/codex-home"
   : > "$log"
+  : > "$state/adapter.log"
+}
+
+seed_installed_current() {
+  dest="$state/codex-home/plugins/cache/superpowers-wrapper/superpowers/1.0.0"
+  mkdir -p "$dest"
+  cp "$pkg/plugins/superpowers/.superpowers-upstream.json" "$dest/.superpowers-upstream.json"
 }
 
 run_install() {
   env \
+    TMPDIR="$install_tmp" \
+    SPW_ADAPTER="$fake_adapter" \
     SUPERPOWERS_CODEX="$fake_codex" \
     SUPERPOWERS_UPSTREAM_URL="$upstream" \
     SUPERPOWERS_INSTALLED_SEARCH_ROOT="$state/codex-home" \
     SPW_TEST_PKG_ROOT="$pkg" \
     "$@" \
     sh "$pkg/scripts/install"
+}
+
+run_update() {
+  env \
+    TMPDIR="$install_tmp" \
+    SPW_ADAPTER="$fake_adapter" \
+    SUPERPOWERS_CODEX="$fake_codex" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_INSTALLED_SEARCH_ROOT="$state/codex-home" \
+    SPW_TEST_PKG_ROOT="$pkg" \
+    "$@" \
+    sh "$pkg/scripts/update"
 }
 
 expect_fail() {
@@ -141,8 +177,20 @@ expect_fail() {
   fi
 }
 
+assert_install_tmp_empty() {
+  if find "$install_tmp" -mindepth 1 -print | grep -q .; then
+    echo "install leaked its invocation workspace or adapter sidecars:" >&2
+    find "$install_tmp" -mindepth 1 -print >&2
+    exit 1
+  fi
+}
+
 line_of() {
   grep -Fn "$1" "$log" | head -n1 | cut -d: -f1
+}
+
+adapter_line_of() {
+  grep -Fn "$1" "$state/adapter.log" | head -n1 | cut -d: -f1
 }
 
 # ---------------------------------------------------------------------------
@@ -203,6 +251,7 @@ pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
 { [ "$list_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
   echo "order must be: marketplace list, marketplace add, plugin add" >&2; cat "$log" >&2; exit 1; }
 grep -Fq "wrapper updated" "$state/out"
+assert_install_tmp_empty
 if grep -Fq "marketplace remove" "$log"; then
   echo "fresh install must not remove any marketplace" >&2; exit 1
 fi
@@ -212,6 +261,45 @@ fi
 if grep -Fq "openai-curated" "$log"; then
   echo "install must never name openai-curated" >&2; exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Scenario 1b: a generated/current wrapper still runs adapter install so the
+# package root is actively reconciled instead of being skipped as "already up to
+# date".
+# ---------------------------------------------------------------------------
+reset
+seed_installed_current
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+run_install > "$state/out"
+grep -Fq "install --package-root $pkg" "$state/adapter.log"
+list_line=$(line_of "plugin marketplace list")
+add_line=$(line_of "plugin marketplace add $pkg")
+pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+{ [ "$list_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
+  echo "current install must still reconcile via adapter install" >&2
+  cat "$state/adapter.log" >&2
+  cat "$log" >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 1c: even when the installed fingerprint already matches, a different
+# registered package root is reconciled through adapter install.
+# ---------------------------------------------------------------------------
+reset
+seed_installed_current
+printf '{"marketplaces":[{"name":"superpowers-wrapper","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
+run_install > "$state/out"
+grep -Fq "install --package-root $pkg" "$state/adapter.log"
+rm_line=$(line_of "plugin marketplace remove superpowers-wrapper")
+add_line=$(line_of "plugin marketplace add $pkg")
+pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+{ [ "$rm_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
+  echo "same-commit install must still reconcile a different package root" >&2
+  cat "$state/adapter.log" >&2
+  cat "$log" >&2
+  exit 1
+}
 
 # ---------------------------------------------------------------------------
 # Scenario 2: registered at the same physical root via a symlink -> keep.
@@ -248,6 +336,25 @@ if grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"; then
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario 3b: update stays read-only when probe reports current.
+# ---------------------------------------------------------------------------
+reset
+seed_installed_current
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+run_update > "$state/out"
+grep -Fq "wrapper is current" "$state/out"
+if grep -Fq "install --package-root" "$state/adapter.log"; then
+  echo "update must not invoke adapter install when probe reports current" >&2
+  cat "$state/adapter.log" >&2
+  exit 1
+fi
+[ ! -s "$log" ] || {
+  echo "current update must not mutate Codex state" >&2
+  cat "$log" >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
 # Scenario 4: remove succeeds, add fails -> non-zero, recovery message names
 # the current root AND the previous root; plugin add never attempted.
 # ---------------------------------------------------------------------------
@@ -280,25 +387,40 @@ reset
 printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 : > "$state/plugin_add_noop"
 expect_fail
-grep -Fq "installed wrapper not detectable" "$state/out"
+grep -Fq "fingerprint is not detectable" "$state/out"
+assert_install_tmp_empty
 if grep -Fq "wrapper updated" "$state/out"; then
   echo "must not print success when the installed wrapper is undetectable" >&2; exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Scenario 7: installed fingerprint stays stale -> install fails, no success.
+# Scenario 7: installed fingerprint stays stale -> install fails, no success,
+# and any retry hint comes from the adapter result rather than hardcoded core
+# text.
 # ---------------------------------------------------------------------------
 reset
 printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 : > "$state/plugin_add_stale"
 expect_fail
-grep -Fq "still stale" "$state/out"
+grep -Fq "does not match the prepared plugin" "$state/out"
+grep -Fq "SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add" "$state/out"
 if grep -Fq "wrapper updated" "$state/out"; then
   echo "must not print success while stale" >&2; exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# Scenario 8: remove-add refresh mode -> plugin remove between marketplace
+# Scenario 8: missing fingerprint replay hint also comes only from the adapter
+# result.
+# ---------------------------------------------------------------------------
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+: > "$state/plugin_add_noop"
+expect_fail
+grep -Fq "fingerprint is not detectable" "$state/out"
+grep -Fq "verify with 'codex plugin list --json'" "$state/out"
+
+# ---------------------------------------------------------------------------
+# Scenario 9: remove-add refresh mode -> plugin remove between marketplace
 # reconcile and plugin add; still only wrapper-scoped.
 # ---------------------------------------------------------------------------
 reset
@@ -318,7 +440,7 @@ if grep -Fq "openai-curated" "$log"; then
 fi
 
 # ---------------------------------------------------------------------------
-# Scenario 9: invalid refresh mode -> fails before any codex call.
+# Scenario 10: invalid refresh mode -> fails before any codex call.
 # ---------------------------------------------------------------------------
 reset
 printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
@@ -326,5 +448,40 @@ expect_fail SUPERPOWERS_INSTALL_REFRESH_MODE=bogus
 if [ -s "$log" ]; then
   echo "invalid refresh mode must fail before any codex call" >&2; exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Scenario 11: malformed generated provenance is remediated by install. Probe
+# reports needs prepare, prepare replaces the bad tree, and mutation happens
+# only after the regenerated candidate validates.
+# ---------------------------------------------------------------------------
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
+run_install > "$state/out"
+grep -Fq "prepared v1.0.0" "$state/out"
+grep -Fq "wrapper updated" "$state/out"
+grep -Fq "install --package-root $pkg" "$state/adapter.log"
+python3 - "$pkg/plugins/superpowers/.superpowers-upstream.json" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    commit = json.load(handle)["commit"]
+if not isinstance(commit, str) or re.fullmatch(r"[0-9a-fA-F]{40}", commit) is None:
+    raise SystemExit("install did not replace malformed generated provenance")
+PY
+
+# ---------------------------------------------------------------------------
+# Scenario 12: update follows the same malformed-provenance remediation path
+# instead of aborting or incorrectly taking the current-state skip.
+# ---------------------------------------------------------------------------
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
+run_update > "$state/out"
+grep -Fq "prepared v1.0.0" "$state/out"
+grep -Fq "wrapper updated" "$state/out"
+grep -Fq "install --package-root $pkg" "$state/adapter.log"
 
 echo "test_install_commands: OK"

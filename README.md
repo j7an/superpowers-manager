@@ -54,6 +54,16 @@ and never falsely reports success.
   a previously generated tree).
 - Registers the local marketplace and installs/refreshes the plugin in Codex.
 
+## Runtime architecture
+
+- `scripts/core/` owns the shared lifecycle, status, and protocol validation.
+- `scripts/adapters/codex/` owns build, inspection, reconciliation, and Codex
+  mutation.
+- The public CLI remains plugin-first (`prepare`, `probe`, `install`, `update`,
+  `uninstall`); there is no public harness selector or adapter-selection flag.
+- A future non-Codex adapter would need its own design plus native/container
+  compatibility spike before it becomes part of the supported surface.
+
 ## Requirements
 
 - `git`, `python3`, and a POSIX `sh`.
@@ -68,6 +78,11 @@ upstream owns skill semantics and Codex owns its evolving schema.
 after the built-in check. It receives the candidate plugin root as its only
 argument. It cannot replace or bypass built-in validation, and either check
 failing prevents the tree swap and all Codex mutation.
+
+Direct `scripts/install` keeps harness-specific validation in the Codex adapter:
+phase 1 prepares the exact candidate first, then the adapter performs its Codex
+and refresh-mode preflight before any Codex mutation. The Node dispatcher keeps
+its existing Codex preflight before dispatching to the shell lifecycle.
 
 ## Quick start
 
@@ -213,14 +228,27 @@ SUPERPOWERS_REF=latest-release scripts/probe
 ## Tests
 
 ```sh
-sh tests/run.sh                          # full hermetic suite (no network, no Codex)
-sh tests/manual/codex-behavior-probe.sh  # live probe of Codex marketplace behavior
+sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
+sh tests/container.sh                    # Layer 4: blocking Docker acceptance command
+sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
 ```
 
-The automated suite is fully hermetic: it uses a fake local upstream repo and a
-fake `codex`. The manual probe is opt-in and exercises real Codex CLI behavior
-(it only ever touches a throwaway `wrapper-probe@superpowers-wrapper-probe`).
-GitHub Actions runs the hermetic suite on pull requests and pushes to `main`.
+Layers 1-3 stay offline and hermetic: they use a fake local upstream repo plus
+host-side fixtures, and they perform no mutation of the developer's or runner's
+real Codex state.
+
+Layer 4 is the Docker acceptance path. It is the required completion command
+because the isolated-container Codex probe graduated from a temporary
+nonblocking spike to a blocking acceptance gate. `sh tests/container.sh` runs
+the inner `sh tests/run.sh` suite and then the real Codex offline probe inside
+an isolated container home with networking disabled. That container run may
+mutate the throwaway container-local Codex state, but it still performs no
+mutation of the developer's or runner's real Codex state.
+
+The manual probe is opt-in and covers native-only compatibility residue such as
+path/cache behavior against an intentionally real local Codex install. It is
+not part of acceptance. GitHub Actions runs the blocking container acceptance
+command on pull requests and pushes to `main`.
 
 ## Repository layout
 
@@ -232,7 +260,10 @@ plugins/superpowers/
   .codex-plugin/plugin.json                # generated manifest          (gitignored)
   skills/ assets/ LICENSE ...              # generated from upstream      (gitignored)
   .superpowers-upstream.json               # generated provenance         (gitignored)
-scripts/                                   # prepare / probe / install / update + lib.sh
+scripts/
+  adapters/codex/                          # Codex adapter entrypoint + validator helpers
+  core/                                    # shared lifecycle/provenance/status modules
+  prepare probe install update uninstall   # user-facing shell entrypoints
 tests/                                     # hermetic suite + manual Codex probe
 .cache/upstream/                           # upstream clone cache         (gitignored)
 ```

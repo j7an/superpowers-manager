@@ -1,0 +1,10 @@
+.git
+.cache
+node_modules
+.superpowers/
+.worktrees/
+plugins/.superpowers.prepare.*/
+*.tgz
+docs/superpowers
+plugins/superpowers/**
+!plugins/superpowers/.codex-plugin/plugin.template.json

@@ -1,9 +1,31 @@
 #!/usr/bin/env node
-'use strict';
+// @ts-check
 
-const fs = require('fs');
-const path = require('path');
-const { spawnSync } = require('child_process');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+/**
+ * @typedef {'prepare' | 'probe' | 'install' | 'update' | 'uninstall'} Subcommand
+ */
+
+/**
+ * @typedef {{ kind: 'run', cmd: Subcommand, args: string[] }} RunParseResult
+ * @typedef {{ kind: 'help' }} HelpParseResult
+ * @typedef {{ kind: 'version' }} VersionParseResult
+ * @typedef {{ kind: 'usage-error', message: string }} UsageErrorParseResult
+ * @typedef {RunParseResult | HelpParseResult | VersionParseResult | UsageErrorParseResult} ParseResult
+ */
+
+/**
+ * @typedef {{ ok: true, shell: string }} PreflightOk
+ * @typedef {{ ok: false, errors: string[] }} PreflightError
+ * @typedef {PreflightOk | PreflightError} PreflightResult
+ */
+
+/**
+ * @typedef {{ file: string, argv: string[] }} SpawnDescriptor
+ */
 
 const SUBCOMMANDS = ['prepare', 'probe', 'install', 'update', 'uninstall'];
 const CODEX_SUBCOMMANDS = ['install', 'update', 'uninstall'];
@@ -16,6 +38,10 @@ const GIT_BASH_CANDIDATES = [
 // Walk upward from the bin's physical location to the directory containing
 // package.json. realpathSync first: npm/npx expose the bin through a symlink
 // or shim outside the package root.
+/**
+ * @param {string} scriptPath
+ * @returns {string | null}
+ */
 function resolvePackageRoot(scriptPath) {
   let dir;
   try {
@@ -31,19 +57,40 @@ function resolvePackageRoot(scriptPath) {
   }
 }
 
+/**
+ * @param {string} moduleFilename
+ * @param {string | undefined} argvPath
+ * @returns {boolean}
+ */
+function isMain(moduleFilename, argvPath) {
+  if (!argvPath) return false;
+  return moduleFilename === fs.realpathSync(argvPath);
+}
+
+/**
+ * @param {string[]} argv
+ * @returns {ParseResult}
+ */
 function parseArgs(argv) {
-  if (argv.length === 0) return { kind: 'run', cmd: 'update', args: [] };
+  /** @type {string | undefined} */
   const first = argv[0];
+  if (argv.length === 0) return { kind: 'run', cmd: 'update', args: [] };
   if (first === '--help' || first === '-h') return { kind: 'help' };
   if (first === '--version') return { kind: 'version' };
-  if (SUBCOMMANDS.includes(first)) {
-    return { kind: 'run', cmd: first, args: argv.slice(1) };
+  if (first && SUBCOMMANDS.includes(first)) {
+    return { kind: 'run', cmd: /** @type {Subcommand} */ (first), args: argv.slice(1) };
   }
   return { kind: 'usage-error', message: `unknown subcommand: ${first}` };
 }
 
 // Search env.PATH for an executable named `name`; on win32 also try PATHEXT
 // extensions. Returns the full path or null.
+/**
+ * @param {string} name
+ * @param {NodeJS.ProcessEnv} env
+ * @param {NodeJS.Platform} platform
+ * @returns {string | null}
+ */
 function findTool(name, env, platform) {
   const pathVar = env.PATH || env.Path || '';
   const dirs = pathVar.split(path.delimiter).filter(Boolean);
@@ -64,6 +111,11 @@ function findTool(name, env, platform) {
 
 // POSIX: `sh` on PATH. Windows: Git Bash at its standard install paths,
 // then `bash` on PATH.
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {NodeJS.Platform} platform
+ * @returns {string | null}
+ */
 function discoverShell(env, platform) {
   if (platform !== 'win32') return findTool('sh', env, platform);
   for (const candidate of GIT_BASH_CANDIDATES) {
@@ -77,6 +129,12 @@ function discoverShell(env, platform) {
 
 // Tool preflight; never touches Codex state. codex is required only for the
 // subcommands that mutate or read Codex.
+/**
+ * @param {Subcommand} cmd
+ * @param {NodeJS.ProcessEnv} env
+ * @param {NodeJS.Platform} platform
+ * @returns {PreflightResult}
+ */
 function preflight(cmd, env, platform) {
   const errors = [];
   for (const tool of ['git', 'python3']) {
@@ -100,12 +158,21 @@ function preflight(cmd, env, platform) {
       errors.push(`required command not found: ${codexBin} — install the Codex CLI or set SUPERPOWERS_CODEX`);
     }
   }
-  return errors.length ? { ok: false, errors } : { ok: true, shell };
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, shell: /** @type {string} */ (shell) };
 }
 
 // POSIX executes the script directly (#!/bin/sh shebang); Windows cannot
 // spawn extensionless scripts, so the discovered shell runs the script as
 // its first argument.
+/**
+ * @param {Subcommand} cmd
+ * @param {string[]} args
+ * @param {string} root
+ * @param {string} shell
+ * @param {NodeJS.Platform} platform
+ * @returns {SpawnDescriptor}
+ */
 function buildSpawn(cmd, args, root, shell, platform) {
   const script = path.join(root, 'scripts', cmd);
   if (platform === 'win32') {
@@ -138,7 +205,7 @@ function main() {
     console.log(usage());
     process.exit(0);
   }
-  const root = resolvePackageRoot(__filename);
+  const root = resolvePackageRoot(import.meta.filename);
   if (!root) {
     console.error('error: cannot resolve the superpowers-wrapper package root');
     process.exit(1);
@@ -172,6 +239,6 @@ function main() {
   process.exit(res.status === null ? 1 : res.status);
 }
 
-module.exports = { resolvePackageRoot, parseArgs, findTool, discoverShell, preflight, buildSpawn, usage };
+export { resolvePackageRoot, isMain, parseArgs, findTool, discoverShell, preflight, buildSpawn, usage };
 
-if (require.main === module) main();
+if (isMain(import.meta.filename, process.argv[1])) main();

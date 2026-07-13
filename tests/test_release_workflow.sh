@@ -72,7 +72,7 @@ with = expect_hash(fetch(publish, "with", "jobs.publish.with"), "jobs.publish.wi
 expected_with = {
   "tag" => "${{ github.ref_name }}",
   "package-name" => "superpowers-wrapper",
-  "test-command" => "sh tests/run.sh",
+  "test-command" => "sh tests/container.sh",
   "pack-contents-script" => "tests/assert_pack_contents.sh",
   "verify-command" => "test \"$(npx --yes \"${PACKAGE}@${VERSION}\" --version)\" = \"$VERSION\"",
 }

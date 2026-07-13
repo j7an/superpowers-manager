@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-. "$root/scripts/lib.sh"
+. "$root/scripts/adapters/codex/lib.sh"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -53,3 +53,5 @@ test "$flat_metadata" = "$flat/.superpowers-upstream.json"
 
 flat_manifest=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/flat" spw_find_installed_manifest)
 test "$flat_manifest" = "$flat/.codex-plugin/plugin.json"
+
+echo "test_installed_finders: OK"

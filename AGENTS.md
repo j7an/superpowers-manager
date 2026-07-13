@@ -51,11 +51,15 @@ Codex below describe the product integration, not a required agent harness.
 ## Testing
 
 - Run the closest targeted test while iterating.
-- Run `sh tests/run.sh` before declaring a change complete.
-- Keep automated tests hermetic: no network access and no mutation of a real
-  Codex installation.
-- Use `tests/manual/codex-behavior-probe.sh` only for intentional live Codex
-  compatibility checks.
+- Run `sh tests/run.sh` while iterating on the inner hermetic host suite.
+- Run `sh tests/container.sh` before declaring a change complete.
+- Keep Layers 1-3 hermetic: no network access and no mutation of the developer's or runner's real Codex state.
+- Layer 4 lives behind `sh tests/container.sh` and is blocking: it exercises
+  the real Codex CLI only inside an isolated container home with networking
+  disabled, so it may mutate that throwaway container state but never the
+  developer's or runner's real Codex state.
+- Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
+  native-only compatibility residue that is not part of acceptance.
 - Run `git diff --check` before completion.
 
 ## Workflows and Dependencies

@@ -1,0 +1,79 @@
+#!/bin/sh
+set -eu
+
+scenario="${SPW_FAKE_ADAPTER_SCENARIO:-success}"
+operation="${1:-}"
+view="${2:-}"
+
+case "$scenario" in
+  success)
+    case "$operation" in
+      build|uninstall)
+        printf '%s\n' \
+          '{"protocol":1,"operation":"'"$operation"'","ok":true,"messages":[],"result":{},"error":null}'
+        ;;
+      inspect)
+        case "$view" in
+          fingerprint)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"fingerprint","fingerprint":"0123456789abcdef0123456789abcdef01234567"},"error":null}'
+            ;;
+          ownership)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"ownership","resources":{"plugin":true,"marketplace":false}},"error":null}'
+            ;;
+          *)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"fingerprint","fingerprint":null},"error":null}'
+            ;;
+        esac
+        ;;
+      install)
+        case "$view" in
+          both-hints)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"install","ok":true,"messages":[],"result":{"verification_hints":{"mismatch":"installed commit differs","missing":"plugin metadata missing"}},"error":null}'
+            ;;
+          one-hint)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"install","ok":true,"messages":[],"result":{"verification_hints":{"missing":"plugin metadata missing"}},"error":null}'
+            ;;
+          *)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"install","ok":true,"messages":[],"result":{"verification_hints":{}},"error":null}'
+            ;;
+        esac
+        ;;
+      *)
+        printf '%s\n' \
+          '{"protocol":1,"operation":"'"$operation"'","ok":true,"messages":[],"result":{},"error":null}'
+        ;;
+    esac
+    ;;
+  controlled-failure)
+    printf '%s\n' 'adapter-stderr-before-failure' >&2
+    printf '%s\n' \
+      '{"protocol":1,"operation":"'"$operation"'","ok":false,"messages":[{"channel":"stdout","text":"before-failure"},{"channel":"stderr","text":"replayed-warning"}],"result":null,"error":{"code":"controlled-failure","message":"controlled failure","hints":["retry later","inspect wrapper state"]}}'
+    exit 1
+    ;;
+  malformed)
+    printf '%s' '{'
+    ;;
+  wrong-operation)
+    printf '%s\n' \
+      '{"protocol":1,"operation":"wrong-operation","ok":true,"messages":[],"result":{},"error":null}'
+    ;;
+  stdout-noise)
+    printf '%s\n' 'noise-before-json'
+    printf '%s\n' \
+      '{"protocol":1,"operation":"'"$operation"'","ok":true,"messages":[],"result":{},"error":null}'
+    ;;
+  crash)
+    printf '%s\n' 'adapter crashed' >&2
+    exit 99
+    ;;
+  *)
+    printf '%s\n' "unknown fake adapter scenario: $scenario" >&2
+    exit 97
+    ;;
+esac
