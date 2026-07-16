@@ -2,7 +2,7 @@
 
 ## Repository Purpose
 
-This repository is a stateless npm/npx wrapper that turns upstream Superpowers
+This repository is a stateless npm/npx manager that turns upstream Superpowers
 releases into a locally installable Codex plugin marketplace. References to
 Codex below describe the product integration, not a required agent harness.
 
@@ -21,8 +21,8 @@ Codex below describe the product integration, not a required agent harness.
 
 - Use the upstream plugin manifest when available and preserve unknown upstream
   fields. The fallback template exists for upstream refs without a manifest.
-- Enforce the wrapper-owned contract: plugin name `superpowers`, a ref-aware
-  wrapper version, `skills: ./skills/`, upstream provenance, and no manifest
+- Enforce the manager-owned contract: plugin name `superpowers`, a ref-aware
+  manager version, `skills: ./skills/`, upstream provenance, and no manifest
   `hooks` field or physical `hooks/` directory.
 - The hook-free policy is deliberate. Changing it requires a separate design
   and current compatibility evidence.
@@ -33,8 +33,10 @@ Codex below describe the product integration, not a required agent harness.
   mutating Codex state, then verify the resulting installed state.
 - Fail closed when state cannot be inspected or parsed. Never report
   unverifiable state as success.
-- Mutate only `superpowers@superpowers-wrapper` and the `superpowers-wrapper`
+- Mutate only `superpowers@superpowers-manager` and the `superpowers-manager`
   marketplace. Never remove another provider automatically.
+- Keep existing `spw_*` internal names; they are implementation details, not
+  shipped package identity.
 - Keep `scripts/probe` read-only.
 
 ## Development Workflow
@@ -51,11 +53,16 @@ Codex below describe the product integration, not a required agent harness.
 ## Testing
 
 - Run the closest targeted test while iterating.
-- Run `sh tests/run.sh` before declaring a change complete.
-- Keep automated tests hermetic: no network access and no mutation of a real
-  Codex installation.
-- Use `tests/manual/codex-behavior-probe.sh` only for intentional live Codex
-  compatibility checks.
+- Run `sh tests/run.sh` while iterating on the inner hermetic host suite.
+- Run `sh tests/container.sh` before declaring a change complete.
+- Keep Layers 1-3 hermetic: no network access and no mutation of the
+  developer's or runner's real Codex state.
+- Layer 4 lives behind `sh tests/container.sh` and is blocking: it exercises
+  the real Codex CLI only inside an isolated container home with networking
+  disabled, so it may mutate that throwaway container state but never the
+  developer's or runner's real Codex state.
+- Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
+  native-only compatibility residue that is not part of acceptance.
 - Run `git diff --check` before completion.
 
 ## Workflows and Dependencies

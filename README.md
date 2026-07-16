@@ -1,241 +1,203 @@
-# Superpowers Wrapper
+# Superpowers Manager
 
-A local [Codex](https://github.com/openai/codex) marketplace that repackages
-upstream [Superpowers](https://github.com/obra/superpowers) so you can install
-it as `superpowers@superpowers-wrapper`.
+Install and update the latest stable
+[`obra/superpowers`](https://github.com/obra/superpowers) release directly from
+upstream, without waiting for agent marketplaces to catch up.
+Codex supported today.
 
-By default the wrapper tracks the **latest stable upstream release tag** and
-records the exact upstream commit it was built from, separately from a generated
-wrapper manifest version that includes `+wrapper.<short-sha>`. Nothing upstream
-is vendored into Git — you generate the runtime tree locally from a pinned ref.
-
-## Install via npx (no clone)
-
-```sh
-npx superpowers-wrapper            # bare = update: probe, then prepare/install only if needed
-npx superpowers-wrapper install    # register this package as a Codex marketplace and install the plugin
-npx superpowers-wrapper probe      # report upstream / generated / installed status
-npx superpowers-wrapper uninstall  # remove the wrapper plugin and marketplace from Codex
-```
-
-Requires `git`, `python3`, a POSIX shell, and (for install/update/uninstall)
-the Codex CLI. Node ≥ 24.
-
-The package is stateless: each run treats the npx-materialized package
-directory as the marketplace source, and Codex's own marketplace and
-installed-plugin state is the only persistent state. If npm prunes its cache
-between runs, the installed plugin keeps working (Codex copies plugins into
-its own cache) and the marketplace pointer is reconciled on the next run.
-Each package version re-clones upstream on first prepare; set
-`SUPERPOWERS_CACHE_DIR` to a persistent directory if you want to keep the
-upstream clone between runs.
-
-### Windows
-
-Tested platforms are macOS and Linux; the supported Windows path is WSL2.
-Native Windows is unblocked but untested: if the preflight finds Git Bash
-(standard Git for Windows locations, then `bash` on `PATH`), `git`, and
-`python3`, the scripts run — but path handling between the wrapper and Codex
-(MSYS vs. Windows path forms in marketplace-root comparison) has known risk
-areas. The fail-closed checks bound the damage: a failed run exits non-zero
-and never falsely reports success.
-
-## What it does
-
-- Resolves an upstream ref (default: latest `vX.Y.Z` release tag).
-- Clones/fetches upstream at that commit and assembles a Codex plugin tree under
-  `plugins/superpowers/` (skills, assets, license/readme, and manifest;
-  upstream's `hooks/` directory is deliberately excluded).
-- Stamps the generated manifest with a ref-aware wrapper version ending in
-  `+wrapper.<short-sha>` and writes the upstream provenance to
-  `.superpowers-upstream.json`.
-- Validates the generated tree with the wrapper's shipped, Python-standard-library
-  contract validator before swapping it into place (a failed run never destroys
-  a previously generated tree).
-- Registers the local marketplace and installs/refreshes the plugin in Codex.
-
-## Requirements
-
-- `git`, `python3`, and a POSIX `sh`.
-- The `codex` CLI (only for `install`/`update`/`uninstall`; `prepare`/`probe` don't need it).
-
-Validation checks the wrapper-owned manifest overlay, generated-tree structure,
-skill frontmatter envelope, known local paths, and provenance. It deliberately
-does not implement a general YAML parser or mirror every Codex ingestion rule;
-upstream owns skill semantics and Codex owns its evolving schema.
-
-`SUPERPOWERS_VALIDATOR=/path/to/validator.py` adds an optional Python validator
-after the built-in check. It receives the candidate plugin root as its only
-argument. It cannot replace or bypass built-in validation, and either check
-failing prevents the tree swap and all Codex mutation.
+> Unofficial community integration. Not affiliated with the
+> `obra/superpowers` maintainers.
 
 ## Quick start
 
 ```sh
-# 1. Generate the runtime plugin tree from upstream (clones on first run).
-scripts/prepare
-
-# 2. See what state you're in (read-only).
-scripts/probe
-
-# 3. Install into Codex (registers the marketplace, then adds the plugin).
-scripts/install
+npx superpowers-manager install
+npx superpowers-manager probe
+npx superpowers-manager update
 ```
 
-> **Provider collision is your responsibility.** If another `superpowers`
-> provider is installed (e.g. `superpowers@openai-curated`), remove or disable
-> it yourself first — the wrapper never removes a plugin other than its own
-> `superpowers@superpowers-wrapper`:
->
-> ```sh
-> codex plugin remove superpowers@openai-curated   # only if you want the wrapper to take over
-> ```
+Use the official marketplace for the simplest native Codex installation. Use
+Superpowers Manager when you want immediate stable-upstream freshness after a
+user-triggered install/update, per-invocation release or commit selection,
+recorded upstream provenance, diagnostics, Codex-specific hook-free packaging,
+and explicit install/update/probe/uninstall lifecycle control.
 
-After installation, the wrapper delivers upstream **skills**. Upstream's
-`hooks/` directory is not copied into the generated plugin, and the wrapper's
-generated-tree contract requires both no manifest `hooks` key and no physical
-`hooks/` directory. This preserves the wrapper's current hook-free policy; a
-future hook-policy change requires its own design and compatibility evidence.
+| Choose | Best fit |
+|---|---|
+| Official marketplace | Simplest Codex-native installation and marketplace-managed cadence |
+| `superpowers-manager` | Direct stable-upstream freshness when invoked, exact ref selection, provenance, diagnostics, and lifecycle control |
 
-## Scripts
-
-| Script | Side effects | Purpose |
-|--------|--------------|---------|
-| `scripts/prepare` | Clones upstream into `.cache/`, writes `plugins/superpowers/` | Build the runtime tree from the resolved upstream ref and validate it |
-| `scripts/probe` | None (read-only) | Report `requested_ref`, `resolved_ref`, desired/generated/installed commit, and `status` |
-| `scripts/install` | Codex marketplace + plugin state | Register the marketplace and add/refresh the plugin |
-| `scripts/update` | Runs prepare/install as needed | Probe, then prepare and/or install to reach `current`, and verify the refresh actually took |
-| `scripts/uninstall` | Codex marketplace + plugin state | Remove the wrapper's plugin and marketplace from Codex (idempotent; verifies removal) |
-
-### `scripts/probe`
+### Moving from `superpowers-wrapper`
 
 ```sh
-scripts/probe              # human-readable
-scripts/probe --porcelain  # key=value lines for scripting
+npx superpowers-wrapper@0.1.1 uninstall
+npx superpowers-manager@0.1.2 install
 ```
 
-`status` is one of:
+The manager detects legacy wrapper-owned Codex state and stops before mutation.
+It never removes the legacy provider automatically.
 
-- `needs prepare` — the generated tree is missing or doesn't match the desired commit.
-- `needs install` — generated tree is current, but the installed wrapper isn't (or can't be detected).
-- `current` — installed wrapper matches the desired upstream commit.
+## Requirements and platforms
 
-### `scripts/update`
+Superpowers Manager requires Node 24+, `git`, Python 3, and a POSIX `sh`.
+Codex CLI is required for `probe`, `install`, `update`, and `uninstall`;
+`prepare` does not require it.
 
-Runs the whole loop and refuses to report success while the installed wrapper is
-still detectably stale:
+macOS and Linux are tested. WSL2 is supported. The native Windows path is
+untested; the launcher looks for Git Bash, `git`, and `python3`, but path
+handling between MSYS and Codex remains a known risk area.
 
-```sh
-scripts/update
-```
+Prepare, install, probe, and update resolve the requested upstream ref over the
+network. Updates are user-triggered and need upstream network access; the
+manager does not run automatic or background updates.
 
-If a refresh ever fails to take, it exits non-zero and suggests the `remove-add`
-refresh mode (see below).
+## What it does
 
-### `scripts/uninstall`
+- Resolves an upstream ref, defaulting to the latest stable `vX.Y.Z` release
+  tag.
+- Clones or fetches that exact upstream commit and assembles a Codex plugin tree
+  under `plugins/superpowers/`.
+- Preserves the upstream manifest when available, while applying the
+  manager-owned plugin contract.
+- Records `source`, `requested_ref`, `resolved_ref`, `commit`, and the upstream
+  manifest version in `.superpowers-upstream.json`.
+- Validates the candidate tree before replacing a previous generated tree or
+  mutating Codex state.
+- Registers the `superpowers-manager` marketplace and installs or refreshes
+  `superpowers@superpowers-manager` in Codex.
 
-Removes exactly the Codex-side state `install` created — the plugin and the
-local marketplace — and nothing else:
-
-```sh
-scripts/uninstall
-```
-
-It is idempotent: removing something already absent prints a `skipping` note and
-still succeeds. It reads Codex's plugin and marketplace listings first and fails
-closed if either cannot be read or parsed, so a listing error never triggers a
-partial removal. Removal order is plugin-first, then marketplace. After removing,
-it re-queries Codex and refuses to report success while the plugin or marketplace
-is still present. It only ever removes `superpowers@superpowers-wrapper` and the
-`superpowers-wrapper` marketplace — `openai-curated` and any other
-plugin/marketplace are never touched.
-
-Local generated artifacts under `plugins/superpowers/` and `.cache/upstream/`
-are left in place; delete them manually or regenerate with `scripts/prepare`.
+The generated plugin carries upstream skills, assets, and documentation. The
+manager excludes upstream `hooks/`, removes the manifest `hooks` field, and
+validates that both stay absent. This is a Codex-specific adapter policy, not a
+claim about how Superpowers should be packaged for future or other harnesses.
+Changing the hook-free policy requires a separate design and current
+compatibility evidence.
 
 ## Choosing the upstream version
 
-The tracked ref lives in `config/upstream-ref` (default `latest-release`).
-Override it per-invocation with `SUPERPOWERS_REF`, or edit the file. Accepted
-values:
+`SUPERPOWERS_REF` selects a stable release tag, full commit SHA, branch, or
+other resolvable upstream ref for that invocation. The stateless npx package
+records the requested ref, resolved ref, and exact commit, but does not persist
+the selection for a later invocation that omits `SUPERPOWERS_REF`.
 
-- `latest-release` — highest stable `vX.Y.Z` tag (prereleases are excluded).
-- A specific tag, e.g. `v6.0.3`.
+Without `SUPERPOWERS_REF`, the manager reads `config/upstream-ref`, which ships
+as `latest-release`. Accepted values include:
+
+- `latest-release` — the highest stable `vX.Y.Z` tag; prereleases are excluded.
+- A specific tag, such as `v6.0.3`.
 - A full 40-character commit SHA.
-- Any other ref upstream resolves (e.g. a branch name).
+- Any other ref upstream resolves, such as `main` or a branch name.
 
 ```sh
-SUPERPOWERS_REF=v6.0.3 scripts/prepare      # pin to a specific release
-SUPERPOWERS_REF=main scripts/prepare        # track upstream main
-SUPERPOWERS_REF=feature/foo scripts/prepare # build another upstream ref
-SUPERPOWERS_REF=latest-release scripts/probe
+SUPERPOWERS_REF=v6.0.3 npx superpowers-manager prepare
+SUPERPOWERS_REF=main npx superpowers-manager probe
+SUPERPOWERS_REF=feature/foo npx superpowers-manager install
+SUPERPOWERS_REF=latest-release npx superpowers-manager update
 ```
 
-## How versioning works
+`SUPERPOWERS_CACHE_DIR` may point to a persistent upstream clone cache to avoid
+re-cloning between package materializations. It caches Git objects; it does not
+persist ref selection or trigger updates.
 
-- **Upstream manifest first:** when upstream provides
-  `.codex-plugin/plugin.json`, `prepare` uses it as the generated manifest base
-  so future upstream metadata fields are preserved by default.
-- **Fallback template:** `plugins/superpowers/.codex-plugin/plugin.template.json`
-  is committed as a minimal fallback for older upstream refs that do not ship a
-  Codex manifest. It carries the placeholder version
-  `0.0.0+wrapper.template`.
-- **Wrapper overlay:** `prepare` replaces the version with a ref-aware wrapper
-  version, forces `skills` to `./skills/`, and enforces the wrapper's current
-  hook-free policy: no manifest `hooks` key and no copied `hooks/` directory.
-  Unknown upstream manifest fields remain preserved.
-- Stable tags generate release-looking versions such as
-  `6.0.3+wrapper.896224c`; explicit prerelease tags generate versions such as
-  `6.1.0-beta.1+wrapper.abc1234`.
-- Branch builds deliberately stay below real releases:
-  `main` generates `0.0.0-main+wrapper.<short-sha>` and other named refs
-  generate `0.0.0-ref-<sanitized-ref>+wrapper.<short-sha>`.
-- Raw 40-character commit SHAs generate `0.0.0+wrapper.<short-sha>`.
-- **`.superpowers-upstream.json`** records the authoritative provenance:
-  `source`, `requested_ref`, `resolved_ref`, `commit`, and the upstream manifest
-  version. The generated manifest version is for human readability and Codex
-  package identity; the upstream `commit` is what `probe`/`update` compare
-  against.
+## Provider ownership
 
-## Refresh modes
+If another `superpowers` provider is installed, remove or disable it yourself
+before installing this one. The manager never removes another provider and
+mutates only `superpowers@superpowers-manager` and the `superpowers-manager`
+marketplace.
 
-`scripts/install` and `scripts/update` accept `SUPERPOWERS_INSTALL_REFRESH_MODE`:
+For example, if you intentionally want the manager to take over from the
+official provider:
 
-- `add-only` (default) — `plugin add` re-reads the local source, which refreshes
-  a mutated tree. Verified sufficient for local marketplaces.
-- `remove-add` — removes the wrapper's own plugin first, then re-adds it. Use
-  only if a refresh ever fails to take:
+```sh
+codex plugin remove superpowers@openai-curated
+npx superpowers-manager install
+```
 
-  ```sh
-  SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add scripts/update
-  ```
+Manager install, update, and uninstall commands inspect both current and legacy
+identities and fail closed when Codex state cannot be read or parsed. If legacy
+`superpowers-wrapper` state remains, use the migration commands above; the
+manager will not remove it for you.
+
+## Lifecycle commands
+
+| Command | Codex side effects | Purpose |
+|---|---|---|
+| `npx superpowers-manager prepare` | None | Resolve upstream, build a staged plugin tree, validate it, and replace the generated tree only on success |
+| `npx superpowers-manager probe` | None | Report requested and resolved refs, desired/generated/installed commits, identity state, and status |
+| `npx superpowers-manager install` | Marketplace and plugin state | Prepare and validate, register the marketplace, install the plugin, and verify installed state |
+| `npx superpowers-manager update` | Marketplace and plugin state when stale | Probe, prepare and/or install as needed, then verify the refresh |
+| `npx superpowers-manager uninstall` | Marketplace and plugin state | Remove only manager-owned Codex state and verify removal |
+
+Calling `npx superpowers-manager` without a subcommand is equivalent to
+`update`. `probe` is read-only. Install and update prepare and validate before changing Codex state.
+Uninstall inspects and removes only manager-owned Codex state. Those mutating
+commands fail closed when required state cannot be inspected and refuse to
+report success when the resulting state cannot be verified.
+
+### Refresh modes
+
+`install` and `update` accept `SUPERPOWERS_INSTALL_REFRESH_MODE`:
+
+- `add-only` (default) asks Codex to add the plugin from the current local
+  marketplace source.
+- `remove-add` removes only the manager-owned plugin before adding it again.
+
+Use `remove-add` only when an add-only refresh fails to take:
+
+```sh
+SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add npx superpowers-manager update
+```
+
+## How generated versions work
+
+- If upstream provides `.codex-plugin/plugin.json`, the manager uses it as the
+  manifest base and preserves unknown upstream fields.
+- The committed fallback template supports older refs without an upstream
+  manifest and uses the placeholder version `0.0.0+manager.template`.
+- Stable tags produce versions such as `6.0.3+manager.896224c`; explicit
+  prereleases produce versions such as `6.1.0-beta.1+manager.abc1234`.
+- `main` produces `0.0.0-main+manager.<short-sha>`; other named refs produce
+  `0.0.0-ref-<sanitized-ref>+manager.<short-sha>`.
+- Full commit SHAs produce `0.0.0+manager.<short-sha>`.
+
+The generated version is for readable Codex package identity. The exact commit
+in `.superpowers-upstream.json` is the authoritative value compared by `probe`
+and `update`.
+
+`SUPERPOWERS_VALIDATOR=/path/to/validator.py` adds an optional Python validator
+after the built-in generated-tree validation. It receives the candidate plugin
+root as its only argument. It cannot bypass the built-in validator, and either
+check failing prevents replacement and Codex mutation.
 
 ## Tests
 
 ```sh
-sh tests/run.sh                          # full hermetic suite (no network, no Codex)
-sh tests/manual/codex-behavior-probe.sh  # live probe of Codex marketplace behavior
+sh tests/run.sh        # Layers 1-3: hermetic, no network or real Codex state
+sh tests/container.sh  # Layer 4: blocking isolated real-Codex CLI check
 ```
 
-The automated suite is fully hermetic: it uses a fake local upstream repo and a
-fake `codex`. The manual probe is opt-in and exercises real Codex CLI behavior
-(it only ever touches a throwaway `wrapper-probe@superpowers-wrapper-probe`).
-GitHub Actions runs the hermetic suite on pull requests and pushes to `main`.
+The container suite runs with networking disabled and a throwaway home, so it
+may mutate only isolated container state. The optional
+`tests/manual/codex-behavior-probe.sh` is reserved for intentional native-only
+compatibility residue and is not part of acceptance.
 
 ## Repository layout
 
-```
-.agents/plugins/marketplace.json          # local marketplace definition (tracked)
-config/upstream-ref                        # which upstream ref to track (tracked)
+```text
+.agents/plugins/marketplace.json           # local manager marketplace definition
+bin/superpowers-manager.js                 # npm CLI launcher
+config/upstream-ref                        # default upstream ref
 plugins/superpowers/
-  .codex-plugin/plugin.template.json       # fallback manifest template (tracked)
-  .codex-plugin/plugin.json                # generated manifest          (gitignored)
-  skills/ assets/ LICENSE ...              # generated from upstream      (gitignored)
-  .superpowers-upstream.json               # generated provenance         (gitignored)
-scripts/                                   # prepare / probe / install / update + lib.sh
-tests/                                     # hermetic suite + manual Codex probe
-.cache/upstream/                           # upstream clone cache         (gitignored)
+  .codex-plugin/plugin.template.json       # tracked fallback manifest
+  .codex-plugin/plugin.json                # generated manifest (ignored)
+  skills/ assets/ LICENSE ...              # generated from upstream (ignored)
+  .superpowers-upstream.json               # generated provenance (ignored)
+scripts/                                   # prepare/probe/install/update/uninstall
+tests/                                     # hermetic and isolated-container suites
+.cache/upstream/                           # optional upstream clone cache (ignored)
 ```
 
-Everything under `plugins/superpowers/` except the fallback manifest template is
-generated by `prepare` and ignored by Git; re-run `prepare` to regenerate it.
+Everything under `plugins/superpowers/` except the fallback manifest template
+is generated by `prepare` and ignored by Git. Do not edit generated plugin
+content; regenerate it instead.
