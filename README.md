@@ -31,7 +31,7 @@ and explicit install/update/probe/uninstall lifecycle control.
 
 ```sh
 npx superpowers-wrapper@0.1.1 uninstall
-npx superpowers-manager@0.1.2 install
+npx superpowers-manager@0.1.3 install
 ```
 
 The manager detects legacy wrapper-owned Codex state and stops before mutation.

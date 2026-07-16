@@ -92,7 +92,7 @@ rm -f "$tmpdir/marketplace.rc"
 
 legacy_message='Legacy superpowers-wrapper Codex state is installed.'
 legacy_uninstall='Run: npx superpowers-wrapper@0.1.1 uninstall'
-manager_install='Then run: npx superpowers-manager@0.1.2 install'
+manager_install='Then run: npx superpowers-manager@0.1.3 install'
 
 for state in legacy both; do
   if (spw_require_no_legacy_state "$state") >"$tmpdir/out" 2>&1; then

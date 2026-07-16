@@ -46,7 +46,7 @@ fi
 
 assert_contains "config/upstream-ref" "latest-release"
 assert_contains "package.json" '"name": "superpowers-manager"'
-assert_contains "package.json" '"version": "0.1.2"'
+assert_contains "package.json" '"version": "0.1.3"'
 assert_contains "package.json" '"superpowers-manager": "bin/superpowers-manager.js"'
 assert_contains ".agents/plugins/marketplace.json" '"name": "superpowers-manager"'
 assert_contains ".agents/plugins/marketplace.json" '"products": ["CODEX"]'
@@ -59,6 +59,7 @@ assert_contains "plugins/superpowers/.codex-plugin/plugin.template.json" '"name"
 assert_contains "plugins/superpowers/.codex-plugin/plugin.template.json" '"version": "0.0.0+manager.template"'
 assert_contains "plugins/superpowers/.codex-plugin/plugin.template.json" '"skills": "./skills/"'
 assert_contains "README.md" "Install and update the latest stable"
+assert_contains "README.md" "npx superpowers-manager@0.1.3 install"
 assert_contains "README.md" "Codex supported today"
 assert_contains "README.md" "Unofficial community integration"
 assert_contains "README.md" "Use the official marketplace"

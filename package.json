@@ -1,6 +1,6 @@
 {
   "name": "superpowers-manager",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Install and update the latest stable obra/superpowers release directly from upstream, without waiting for agent marketplaces to catch up. Codex supported today.",
   "keywords": [
     "superpowers",
