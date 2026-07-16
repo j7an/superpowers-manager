@@ -116,7 +116,7 @@ grep -Fq "required command not found: git" "$tmpdir/err"
 [ ! -s "$log" ] || { echo "preflight failure must not dispatch" >&2; exit 1; }
 printf '#!/bin/sh\nexit 0\n' > "$fakebin/git" && chmod +x "$fakebin/git"
 
-# --- codex required for install, not for probe ---
+# --- codex required for probe and install ---
 rm "$fakebin/codex"
 : > "$log"
 cat > "$pkg/scripts/probe" <<EOF
@@ -125,8 +125,10 @@ printf 'probe ran\n' >> "$log"
 exit 0
 EOF
 chmod +x "$pkg/scripts/probe"
-run_bin probe >/dev/null
-grep -Fq "probe ran" "$log"
+rc=0; run_bin probe >/dev/null 2>"$tmpdir/err" || rc=$?
+[ "$rc" -eq 1 ]
+grep -Fq "required command not found: codex" "$tmpdir/err"
+[ ! -s "$log" ] || { echo "missing codex must not dispatch probe" >&2; exit 1; }
 : > "$log"
 rc=0; run_bin install >/dev/null 2>"$tmpdir/err" || rc=$?
 [ "$rc" -eq 1 ]

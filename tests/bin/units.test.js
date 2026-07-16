@@ -41,11 +41,11 @@ assert.strictEqual(root, path.resolve(__dirname, '..', '..'));
 // --- usage identifies the public executable ---
 assert.match(bin.usage(), /^usage: superpowers-manager /);
 
-// --- preflight: codex required only for install/update/uninstall ---
+// --- preflight: codex required for every command that reads or mutates Codex ---
 const emptyEnv = { PATH: '/nonexistent-dir-for-test' };
 const probePf = bin.preflight('probe', emptyEnv, 'linux');
 assert.strictEqual(probePf.ok, false);
-assert.ok(!probePf.errors.join('\n').includes('codex'), 'probe must not require codex');
+assert.ok(probePf.errors.join('\n').includes('codex'), 'probe must require codex');
 const installPf = bin.preflight('install', emptyEnv, 'linux');
 assert.strictEqual(installPf.ok, false);
 assert.ok(installPf.errors.join('\n').includes('codex'), 'install must require codex');

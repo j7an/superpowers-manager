@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const SUBCOMMANDS = ['prepare', 'probe', 'install', 'update', 'uninstall'];
-const CODEX_SUBCOMMANDS = ['install', 'update', 'uninstall'];
+const CODEX_SUBCOMMANDS = ['probe', 'install', 'update', 'uninstall'];
 // Mirrors upstream Superpowers' hooks/run-hook.cmd discovery order.
 const GIT_BASH_CANDIDATES = [
   'C:\\Program Files\\Git\\bin\\bash.exe',
@@ -75,8 +75,8 @@ function discoverShell(env, platform) {
   return findTool('bash', env, platform);
 }
 
-// Tool preflight; never touches Codex state. codex is required only for the
-// subcommands that mutate or read Codex.
+// Tool preflight; never touches Codex state. codex is required for subcommands
+// whose scripts read or mutate Codex state.
 function preflight(cmd, env, platform) {
   const errors = [];
   for (const tool of ['git', 'python3']) {

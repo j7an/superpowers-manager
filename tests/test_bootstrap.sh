@@ -70,3 +70,20 @@ assert_contains "README.md" "Install and update prepare and validate before chan
 assert_contains "README.md" "Uninstall inspects and removes only manager-owned Codex state."
 assert_not_contains "README.md" "automatically updates"
 assert_not_contains "README.md" "Claude Code supported"
+
+manual_probe="tests/manual/codex-behavior-probe.sh"
+assert_contains "$manual_probe" 'marketplace_name="superpowers-manager-probe"'
+assert_contains "$manual_probe" 'plugin_name="manager-probe"'
+assert_contains "$manual_probe" '/superpowers-manager-codex-probe'
+assert_contains "$manual_probe" '/superpowers-manager-hook-probe-ran'
+assert_contains "$manual_probe" '"displayName": "Superpowers Manager Probe"'
+assert_contains "$manual_probe" '"displayName": "Manager Probe"'
+assert_contains "$manual_probe" '"developerName": "superpowers-manager"'
+assert_contains "$manual_probe" 'Use manager-probe only for local marketplace testing.'
+assert_contains "$manual_probe" '.manager-probe-upstream.json'
+assert_contains "$manual_probe" 'Run manager-plugin remove, then plugin add'
+assert_contains "$manual_probe" 'Respond with manager probe check.'
+assert_contains "$manual_probe" '+manager.'
+assert_not_contains "$manual_probe" 'superpowers-wrapper'
+assert_not_contains "$manual_probe" 'wrapper-probe'
+assert_not_contains "$manual_probe" '+wrapper.'
