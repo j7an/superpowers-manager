@@ -1,22 +1,250 @@
-name: Release
+name: Release 0.1.2 Migration
 
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v0.1.2"
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: manager-bootstrap-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
-      contents: write   # GitHub release, created by the reusable workflow
-      id-token: write   # npm trusted publishing; validated against THIS workflow's filename
-    uses: j7an/shared-workflows/.github/workflows/publish-npm.yml@dc9105acf09a4ad43bad2e4a86f4c65f553fe3c0 # v4.2.2
-    with:
-      tag: ${{ github.ref_name }}
-      package-name: superpowers-wrapper
-      test-command: sh tests/run.sh
-      pack-contents-script: tests/assert_pack_contents.sh
-      verify-command: 'test "$(npx --yes "${PACKAGE}@${VERSION}" --version)" = "$VERSION"'
+      contents: read
+    outputs:
+      filename: ${{ steps.pack.outputs.filename }}
+      integrity: ${{ steps.pack.outputs.integrity }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out frozen tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Ensure npm provenance support
+        shell: sh
+        run: |
+          npm install --global "npm@>=11.5.1"
+          npm --version
+
+      - name: Verify frozen release source
+        shell: sh
+        run: |
+          set -eu
+          test "$GITHUB_REF" = "refs/tags/v0.1.2"
+          test "$GITHUB_REF_NAME" = "v0.1.2"
+          git fetch --no-tags origin \
+            'refs/heads/release/0.1.2-manager:refs/remotes/origin/release/0.1.2-manager'
+          branch_sha=$(git rev-parse origin/release/0.1.2-manager)
+          test "$branch_sha" = "$GITHUB_SHA"
+          git merge-base --is-ancestor v0.1.1 "$GITHUB_SHA"
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const pkg = require('./package.json');
+          assert.equal(pkg.name, 'superpowers-manager');
+          assert.equal(pkg.version, '0.1.2');
+          assert.equal(
+            pkg.repository.url,
+            'git+https://github.com/j7an/superpowers-manager.git',
+          );
+          NODE
+
+      - name: Run isolated acceptance suite
+        run: sh tests/container.sh
+
+      - name: Pack and assert artifact
+        id: pack
+        shell: sh
+        run: |
+          set -eu
+          report="$RUNNER_TEMP/pack.json"
+          npm pack --json > "$report"
+          sh tests/assert_pack_contents.sh "$report"
+          filename=$(node -p 'require(process.argv[1])[0].filename' "$report")
+          integrity=$(node -p 'require(process.argv[1])[0].integrity' "$report")
+          test "$filename" = "superpowers-manager-0.1.2.tgz"
+          test -f "$filename"
+          case "$integrity" in
+            sha512-*) ;;
+            *) echo "::error::unexpected pack integrity: $integrity"; exit 1 ;;
+          esac
+          printf 'filename=%s\n' "$filename" >> "$GITHUB_OUTPUT"
+          printf 'integrity=%s\n' "$integrity" >> "$GITHUB_OUTPUT"
+
+      - name: Upload npm distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-dist
+          path: ${{ steps.pack.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-bootstrap
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out frozen tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and npm registry
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Ensure npm provenance support
+        shell: sh
+        run: |
+          npm install --global "npm@>=11.5.1"
+          npm --version
+
+      - name: Download npm distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-dist
+          path: dist
+
+      - name: Publish exact tarball idempotently
+        shell: sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+          PACKAGE: superpowers-manager
+          VERSION: 0.1.2
+          TARBALL: dist/${{ needs.build.outputs.filename }}
+          EXPECTED_INTEGRITY: ${{ needs.build.outputs.integrity }}
+        run: |
+          set -eu
+          test -f "$TARBALL"
+          existing_integrity=$(npm view "${PACKAGE}@${VERSION}" dist.integrity 2>/dev/null || true)
+          if [ -n "$existing_integrity" ]; then
+            test "$existing_integrity" = "$EXPECTED_INTEGRITY" || {
+              echo "::error::immutable registry version has different integrity"
+              exit 1
+            }
+          else
+            npm publish "$TARBALL" --access public --provenance
+          fi
+
+      - name: Wait for registry integrity
+        shell: sh
+        env:
+          PACKAGE: superpowers-manager
+          VERSION: 0.1.2
+          EXPECTED_INTEGRITY: ${{ needs.build.outputs.integrity }}
+        run: |
+          set -eu
+          attempt=1
+          observed_integrity=
+          while [ "$attempt" -le 30 ]; do
+            observed_integrity=$(npm view "${PACKAGE}@${VERSION}" dist.integrity 2>/dev/null || true)
+            if [ -n "$observed_integrity" ]; then
+              break
+            fi
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          test "$observed_integrity" = "$EXPECTED_INTEGRITY" || {
+            echo "::error::registry integrity unavailable or different after bounded retry"
+            exit 1
+          }
+
+      - name: Verify clean npx execution
+        shell: sh
+        run: |
+          set -eu
+          NPM_CONFIG_CACHE=$(mktemp -d)
+          export NPM_CONFIG_CACHE
+          trap 'rm -rf "$NPM_CONFIG_CACHE"' EXIT INT TERM
+          test "$(npx --yes superpowers-manager@0.1.2 --version)" = "0.1.2"
+
+      - name: Verify npm provenance
+        shell: sh
+        run: |
+          node tests/verify_npm_provenance.mjs \
+            superpowers-manager \
+            0.1.2 \
+            https://github.com/j7an/superpowers-manager \
+            refs/tags/v0.1.2 \
+            .github/workflows/release.yml \
+            ${{ github.sha }} \
+            ${{ needs.build.outputs.integrity }}
+
+  github-release:
+    needs:
+      - build
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Download npm distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-dist
+          path: dist
+
+      - name: Create or verify GitHub release
+        shell: sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILENAME: ${{ needs.build.outputs.filename }}
+        run: |
+          set -eu
+          TAG=v0.1.2
+          TARBALL="dist/${{ needs.build.outputs.filename }}"
+          test -f "$TARBALL"
+          expected_digest="sha256:$(sha256sum "$TARBALL" | cut -d ' ' -f 1)"
+          release_json="$RUNNER_TEMP/release.json"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "$release_json" 2>/dev/null; then
+            test "$(jq -r '.tag_name' "$release_json")" = "$TAG"
+            existing_digest=$(jq -r --arg name "$FILENAME" \
+              '[.assets[] | select(.name == $name) | .digest] | if length == 0 then "" elif length == 1 then .[0] else "duplicate" end' \
+              "$release_json")
+            if [ -z "$existing_digest" ]; then
+              gh release upload "$TAG" "$TARBALL"
+            else
+              test "$existing_digest" = "$expected_digest" || {
+                echo "::error::existing release asset has different digest"
+                exit 1
+              }
+            fi
+          else
+            gh release create "$TAG" "$TARBALL" \
+              --verify-tag \
+              --title "Superpowers Manager 0.1.2" \
+              --notes "One-time stable-line migration release for Superpowers Manager."
+          fi
