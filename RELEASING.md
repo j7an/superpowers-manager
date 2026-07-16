@@ -41,13 +41,60 @@ The failed run must never be rerun. v0.1.2 must not be moved, deleted, or recrea
 read-only before continuing:
 
 ```sh
+set -eu
+require_npm_absent() {
+  package_spec=$1
+  if npm_absence_output=$(npm view "$package_spec" --json 2>&1); then
+    printf 'unexpected npm package/version exists: %s\n' "$package_spec" >&2
+    printf '%s\n' "$npm_absence_output" >&2
+    exit 1
+  else
+    npm_absence_status=$?
+  fi
+  case "$npm_absence_output" in
+    *E404*) ;;
+    *)
+      printf 'npm absence check failed with status %s:\n%s\n' \
+        "$npm_absence_status" "$npm_absence_output" >&2
+      exit 1
+      ;;
+  esac
+  case "$npm_absence_output" in
+    *"$package_spec"*) ;;
+    *)
+      printf 'npm E404 did not name exact package/version %s:\n%s\n' \
+        "$package_spec" "$npm_absence_output" >&2
+      exit 1
+      ;;
+  esac
+}
+require_release_absent() {
+  release_tag=$1
+  if release_absence_output=$(
+    gh api "repos/j7an/superpowers-manager/releases/tags/$release_tag" --silent \
+      2>&1
+  ); then
+    printf 'unexpected GitHub release exists: %s\n' "$release_tag" >&2
+    exit 1
+  else
+    release_absence_status=$?
+  fi
+  case "$release_absence_output" in
+    *"HTTP 404"*) ;;
+    *)
+      printf 'GitHub release absence check failed with status %s:\n%s\n' \
+        "$release_absence_status" "$release_absence_output" >&2
+      exit 1
+      ;;
+  esac
+}
 test "$(git rev-parse v0.1.2)" = \
   "733ddfc0dce4598c65a4945df08f7a0f64d875a4"
 gh run view 29501874951 \
   --repo j7an/superpowers-manager \
   --json databaseId,headBranch,headSha,status,conclusion,url
-npm view superpowers-manager@0.1.2 --json
-gh release view v0.1.2 --repo j7an/superpowers-manager
+require_npm_absent superpowers-manager@0.1.2
+require_release_absent v0.1.2
 gh api repos/j7an/superpowers-manager/environments \
   --jq '.environments[].name'
 gh secret list --repo j7an/superpowers-manager
@@ -236,6 +283,62 @@ Immediately before requesting R1 approval, recheck read-only:
 - `npm-bootstrap` and `NPM_BOOTSTRAP_TOKEN` are absent; and
 - `origin/release/0.1.3-manager` still equals `"$frozen_sha"`.
 
+Use fail-closed absence checks. npm absence is valid only when npm returns an
+E404 that names the exact requested package or version. Remote tag absence is
+valid only when `git ls-remote --exit-code` returns status 2:
+
+```sh
+set -eu
+require_npm_absent() {
+  package_spec=$1
+  if npm_absence_output=$(npm view "$package_spec" --json 2>&1); then
+    printf 'unexpected npm package/version exists: %s\n' "$package_spec" >&2
+    printf '%s\n' "$npm_absence_output" >&2
+    exit 1
+  else
+    npm_absence_status=$?
+  fi
+  case "$npm_absence_output" in
+    *E404*) ;;
+    *)
+      printf 'npm absence check failed with status %s:\n%s\n' \
+        "$npm_absence_status" "$npm_absence_output" >&2
+      exit 1
+      ;;
+  esac
+  case "$npm_absence_output" in
+    *"$package_spec"*) ;;
+    *)
+      printf 'npm E404 did not name exact package/version %s:\n%s\n' \
+        "$package_spec" "$npm_absence_output" >&2
+      exit 1
+      ;;
+  esac
+}
+require_remote_tag_absent() {
+  remote_tag=$1
+  if remote_tag_output=$(
+    git ls-remote --exit-code origin "refs/tags/$remote_tag" 2>&1
+  ); then
+    printf 'unexpected remote tag exists: %s\n%s\n' \
+      "$remote_tag" "$remote_tag_output" >&2
+    exit 1
+  else
+    remote_tag_status=$?
+  fi
+  if [ "$remote_tag_status" -ne 2 ]; then
+    printf 'remote tag absence check failed with status %s:\n%s\n' \
+      "$remote_tag_status" "$remote_tag_output" >&2
+    exit 1
+  fi
+}
+require_npm_absent superpowers-manager
+require_npm_absent superpowers-manager@0.1.3
+test -z "$(git tag --list v0.1.3)"
+require_remote_tag_absent v0.1.3
+test "$(git rev-parse origin/release/0.1.3-manager)" = "$frozen_sha"
+```
+
 Present the token's minimum current package-creation scope, one-day expiry,
 2FA-bypass requirement, required environment reviewer, secret name, and cleanup
 obligation. Stop if npm policy now requires a different publication path.
@@ -282,11 +385,29 @@ other mutation.
 Recheck:
 
 ```sh
+set -eu
+require_remote_tag_absent() {
+  remote_tag=$1
+  if remote_tag_output=$(
+    git ls-remote --exit-code origin "refs/tags/$remote_tag" 2>&1
+  ); then
+    printf 'unexpected remote tag exists: %s\n%s\n' \
+      "$remote_tag" "$remote_tag_output" >&2
+    exit 1
+  else
+    remote_tag_status=$?
+  fi
+  if [ "$remote_tag_status" -ne 2 ]; then
+    printf 'remote tag absence check failed with status %s:\n%s\n' \
+      "$remote_tag_status" "$remote_tag_output" >&2
+    exit 1
+  fi
+}
 git fetch origin release/0.1.3-manager --tags
 test "$(git rev-parse origin/release/0.1.3-manager)" = "$frozen_sha"
 test "$(git rev-parse "$frozen_sha^")" = "$(git rev-parse v0.1.2)"
 test -z "$(git tag --list v0.1.3)"
-git ls-remote --exit-code origin refs/tags/v0.1.3
+require_remote_tag_absent v0.1.3
 git show "$frozen_sha:package.json"
 git show "$frozen_sha:.github/workflows/release.yml"
 ```
@@ -369,13 +490,61 @@ Before R3, verify:
   present; and
 - npm and the GitHub release still report `0.1.3` absent.
 
-Useful read-only inspection commands:
+Inspect the artifact, then use fail-closed absence checks for the exact npm
+version and GitHub release:
 
 ```sh
+set -eu
+require_npm_absent() {
+  package_spec=$1
+  if npm_absence_output=$(npm view "$package_spec" --json 2>&1); then
+    printf 'unexpected npm package/version exists: %s\n' "$package_spec" >&2
+    printf '%s\n' "$npm_absence_output" >&2
+    exit 1
+  else
+    npm_absence_status=$?
+  fi
+  case "$npm_absence_output" in
+    *E404*) ;;
+    *)
+      printf 'npm absence check failed with status %s:\n%s\n' \
+        "$npm_absence_status" "$npm_absence_output" >&2
+      exit 1
+      ;;
+  esac
+  case "$npm_absence_output" in
+    *"$package_spec"*) ;;
+    *)
+      printf 'npm E404 did not name exact package/version %s:\n%s\n' \
+        "$package_spec" "$npm_absence_output" >&2
+      exit 1
+      ;;
+  esac
+}
+require_release_absent() {
+  release_tag=$1
+  if release_absence_output=$(
+    gh api "repos/j7an/superpowers-manager/releases/tags/$release_tag" --silent \
+      2>&1
+  ); then
+    printf 'unexpected GitHub release exists: %s\n' "$release_tag" >&2
+    exit 1
+  else
+    release_absence_status=$?
+  fi
+  case "$release_absence_output" in
+    *"HTTP 404"*) ;;
+    *)
+      printf 'GitHub release absence check failed with status %s:\n%s\n' \
+        "$release_absence_status" "$release_absence_output" >&2
+      exit 1
+      ;;
+  esac
+}
 tar -tzf "$artifact"
 tar -xOf "$artifact" package/package.json
-npm view superpowers-manager@0.1.3 --json
-gh release view v0.1.3 --repo j7an/superpowers-manager
+require_npm_absent superpowers-manager@0.1.3
+require_release_absent v0.1.3
 ```
 
 Any mismatch is a stop condition. Do not rebuild or replace the artifact under

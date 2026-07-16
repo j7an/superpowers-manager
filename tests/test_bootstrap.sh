@@ -49,6 +49,15 @@ assert_count() {
   fi
 }
 
+assert_line() {
+  path="$1"
+  text="$2"
+  if ! grep -Fxq "$text" "$root/$path"; then
+    echo "missing exact line in $path: $text" >&2
+    exit 1
+  fi
+}
+
 assert_file ".gitignore"
 assert_file "config/upstream-ref"
 assert_file ".agents/plugins/marketplace.json"
@@ -124,6 +133,27 @@ assert_contains "$release_runbook" 'artifact_integrity=$(node - "$artifact"'
 assert_contains "$release_runbook" "createHash('sha512')"
 assert_contains "$release_runbook" 'printf '\''artifact_integrity=%s\n'\'' "$artifact_integrity"'
 assert_contains "$release_runbook" 'test "$registry_integrity" = "$artifact_integrity"'
+assert_count "$release_runbook" 'require_npm_absent() {' 3
+assert_count "$release_runbook" 'case "$npm_absence_output" in' 6
+assert_count "$release_runbook" '*E404*) ;;' 3
+assert_count "$release_runbook" '*"$package_spec"*) ;;' 3
+assert_count "$release_runbook" 'require_release_absent() {' 2
+assert_count "$release_runbook" 'gh api "repos/j7an/superpowers-manager/releases/tags/$release_tag" --silent' 2
+assert_count "$release_runbook" '*"HTTP 404"*) ;;' 2
+assert_count "$release_runbook" 'require_remote_tag_absent() {' 2
+assert_count "$release_runbook" 'git ls-remote --exit-code origin "refs/tags/$remote_tag"' 2
+assert_count "$release_runbook" 'if [ "$remote_tag_status" -ne 2 ]; then' 2
+assert_line "$release_runbook" 'require_npm_absent superpowers-manager@0.1.2'
+assert_line "$release_runbook" 'require_npm_absent superpowers-manager'
+assert_count "$release_runbook" 'require_npm_absent superpowers-manager@0.1.3' 2
+assert_line "$release_runbook" 'require_release_absent v0.1.2'
+assert_line "$release_runbook" 'require_release_absent v0.1.3'
+assert_count "$release_runbook" 'require_remote_tag_absent v0.1.3' 2
+assert_not_contains "$release_runbook" 'npm view superpowers-manager@0.1.2 --json'
+assert_not_contains "$release_runbook" 'npm view superpowers-manager@0.1.3 --json'
+assert_not_contains "$release_runbook" 'gh release view v0.1.2 --repo j7an/superpowers-manager'
+assert_not_contains "$release_runbook" 'gh release view v0.1.3 --repo j7an/superpowers-manager'
+assert_not_matches "$release_runbook" '^[[:space:]]*git[[:space:]]+ls-remote[[:space:]]+--exit-code[[:space:]]+origin[[:space:]]+refs/tags/v0\.1\.3[[:space:]]*$'
 assert_not_contains "$release_runbook" "SHA-512 integrity equals the build output"
 assert_not_contains "$release_runbook" "reported manager identity state"
 assert_not_matches "$release_runbook" '(^|[[:space:]])gh[[:space:]]+run[[:space:]]+rerun[^[:cntrl:]]*29501874951'
