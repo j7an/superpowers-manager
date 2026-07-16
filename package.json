@@ -1,14 +1,32 @@
 {
-  "name": "superpowers-wrapper",
-  "version": "0.1.1",
-  "description": "Stateless npx wrapper that repackages upstream Superpowers as a local Codex plugin marketplace",
+  "name": "superpowers-manager",
+  "version": "0.1.2",
+  "description": "Install and update the latest stable obra/superpowers release directly from upstream, without waiting for agent marketplaces to catch up. Codex supported today.",
+  "keywords": [
+    "superpowers",
+    "obra-superpowers",
+    "agent-skills",
+    "ai-coding-agent",
+    "coding-agent",
+    "agent-harness",
+    "codex",
+    "codex-plugin",
+    "plugin-manager",
+    "cli",
+    "installer",
+    "updater"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/j7an/superpowers-wrapper.git"
+    "url": "git+https://github.com/j7an/superpowers-manager.git"
+  },
+  "homepage": "https://github.com/j7an/superpowers-manager#readme",
+  "bugs": {
+    "url": "https://github.com/j7an/superpowers-manager/issues"
   },
   "bin": {
-    "superpowers-wrapper": "bin/superpowers-wrapper.js"
+    "superpowers-manager": "bin/superpowers-manager.js"
   },
   "engines": {
     "node": ">=24"

@@ -4,6 +4,12 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/lib.sh"
 
+codex_bin="${SUPERPOWERS_CODEX:-codex}"
+spw_require_command "$codex_bin"
+spw_require_command python3
+identity_snapshot=$(spw_codex_identity_snapshot "$codex_bin")
+identity_state=$(spw_snapshot_get "$identity_snapshot" identity_state)
+
 upstream_url="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
 requested_ref=$(spw_config_ref "$root")
 resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
@@ -31,12 +37,14 @@ if [ "${1:-}" = "--porcelain" ]; then
   printf 'desired_commit=%s\n' "$desired_commit"
   printf 'generated_commit=%s\n' "$generated_commit"
   printf 'installed_commit=%s\n' "$installed_commit"
+  printf 'identity_state=%s\n' "$identity_state"
   printf 'status=%s\n' "$status"
 else
   printf 'requested ref: %s\n' "$requested_ref"
   printf 'resolved ref: %s\n' "$resolved_ref"
   printf 'desired commit: %s\n' "$desired_commit"
   printf 'generated plugin commit: %s\n' "${generated_commit:-not present}"
-  printf 'installed wrapper commit or fingerprint: %s\n' "${installed_commit:-not detected}"
+  printf 'installed manager commit or fingerprint: %s\n' "${installed_commit:-not detected}"
+  printf 'Codex identity state: %s\n' "$identity_state"
   printf 'status: %s\n' "$status"
 fi

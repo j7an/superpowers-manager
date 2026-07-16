@@ -10,17 +10,10 @@ spw_require_command "$codex_bin"
 spw_require_command python3
 
 # Preflight: read and parse BOTH Codex listings before removing anything, so a
-# read/parse failure aborts before any removal (fail closed). Each helper
-# spw_die's on query/parse failure; a clean return only ever means genuine
-# present/absent.
-plugin_present=false
-marketplace_present=false
-if spw_plugin_is_installed "$codex_bin" "$SPW_PLUGIN_ID"; then
-  plugin_present=true
-fi
-if spw_marketplace_is_registered "$codex_bin" "$SPW_MARKETPLACE_NAME"; then
-  marketplace_present=true
-fi
+# read/parse failure aborts before any removal (fail closed).
+ownership=$(spw_codex_identity_snapshot "$codex_bin")
+plugin_present=$(spw_snapshot_get "$ownership" manager_plugin)
+marketplace_present=$(spw_snapshot_get "$ownership" manager_marketplace)
 
 # Remove the plugin first, then the marketplace, so an installed plugin is
 # never orphaned from a just-removed marketplace source.
@@ -42,15 +35,27 @@ else
   echo "marketplace not registered; skipping"
 fi
 
-# Verify-after: re-query and refuse to claim success while either target
-# survives. Uses the same fail-closed helpers, so a read/parse failure during
-# verification also aborts non-zero.
-if spw_plugin_is_installed "$codex_bin" "$SPW_PLUGIN_ID"; then
+# Verify-after: re-query and refuse to claim success while either manager
+# target survives. The strict snapshot also records whether legacy state is
+# still present without ever mutating that state.
+ownership=$(spw_codex_identity_snapshot "$codex_bin")
+plugin_present=$(spw_snapshot_get "$ownership" manager_plugin)
+marketplace_present=$(spw_snapshot_get "$ownership" manager_marketplace)
+identity_state=$(spw_snapshot_get "$ownership" identity_state)
+if [ "$plugin_present" = true ]; then
   spw_die "plugin $SPW_PLUGIN_ID is still installed after removal"
 fi
-if spw_marketplace_is_registered "$codex_bin" "$SPW_MARKETPLACE_NAME"; then
+if [ "$marketplace_present" = true ]; then
   spw_die "marketplace $SPW_MARKETPLACE_NAME is still registered after removal"
 fi
+
+case "$identity_state" in
+  legacy|both)
+    printf '%s\n' \
+      'Legacy superpowers-wrapper Codex state remains installed.' \
+      'Run: npx superpowers-wrapper@0.1.1 uninstall'
+    ;;
+esac
 
 echo "uninstall complete"
 echo "note: local generated artifacts under plugins/superpowers/ and .cache/upstream/ were left in place; remove them manually or regenerate with scripts/prepare."

@@ -3,6 +3,7 @@
 .superpowers/
 .claude/worktrees/
 plugins/.superpowers.tmp.*/
+plugins/.superpowers.bak.*/
 plugins/superpowers/assets/
 plugins/superpowers/hooks/
 plugins/superpowers/skills/

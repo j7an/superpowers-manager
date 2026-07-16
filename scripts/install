@@ -15,12 +15,15 @@ case "$refresh_mode" in
   *) spw_die "unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: $refresh_mode" ;;
 esac
 
-echo "Note: remove or disable conflicting Superpowers providers yourself before relying on wrapper skills."
+echo "Note: remove or disable conflicting Superpowers providers yourself before relying on manager-provided skills."
 
 # Prepare-before-mutate: probe, and (re)generate the plugin tree if it is
 # missing or stale — including validation — entirely before any Codex
 # marketplace or plugin mutation. A failed prepare leaves Codex untouched.
 probe_output=$(sh "$root/scripts/probe" --porcelain)
+identity_state=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "identity_state" { print $2 }')
+[ -n "$identity_state" ] || spw_die "probe did not report Codex identity state"
+spw_require_no_legacy_state "$identity_state"
 status=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "status" { print $2 }')
 case "$status" in
   needs\ prepare)
@@ -37,7 +40,7 @@ esac
 desired_commit=$(spw_metadata_commit_or_empty "$root/plugins/superpowers/.superpowers-upstream.json" || true)
 [ -n "$desired_commit" ] || spw_die "generated metadata missing desired commit after prepare"
 
-# Reconcile the wrapper marketplace pointer to this package root, then always
+# Reconcile the manager marketplace pointer to this package root, then always
 # run the Codex install step: `install` means "make Codex use this root" and
 # never skips it because the generated tree looks current.
 spw_reconcile_marketplace "$codex_bin" "$root"

@@ -302,7 +302,7 @@ assert_prepare_upstream_manifest_version() {
 run_prepare_for_ref "latest-release" "out-latest"
 expected_short=$(printf '%s' "$release_commit" | cut -c 1-7)
 assert_prepare_commit "out-latest" "$release_commit"
-assert_prepare_version "out-latest" "6.0.3+wrapper.$expected_short"
+assert_prepare_version "out-latest" "6.0.3+manager.$expected_short"
 assert_manifest_path "out-latest" "description" "Upstream manifest description"
 assert_manifest_path "out-latest" "skills" "./skills/"
 assert_manifest_path "out-latest" "x_future_manifest" '{"items":[1,"two"],"preserved":true}'
@@ -310,28 +310,28 @@ assert_manifest_path "out-latest" "x_future_manifest" '{"items":[1,"two"],"prese
 run_prepare_for_ref "v6.1.0-beta.1" "out-prerelease"
 prerelease_short=$(printf '%s' "$main_commit" | cut -c 1-7)
 assert_prepare_commit "out-prerelease" "$main_commit"
-assert_prepare_version "out-prerelease" "6.1.0-beta.1+wrapper.$prerelease_short"
+assert_prepare_version "out-prerelease" "6.1.0-beta.1+manager.$prerelease_short"
 
 run_prepare_for_ref "main" "out-main"
 main_short=$(printf '%s' "$main_commit" | cut -c 1-7)
 assert_prepare_commit "out-main" "$main_commit"
-assert_prepare_version "out-main" "0.0.0-main+wrapper.$main_short"
+assert_prepare_version "out-main" "0.0.0-main+manager.$main_short"
 assert_prepare_upstream_manifest_version "out-main" "6.0.3"
 
 run_prepare_for_ref "feature/foo" "out-feature"
 feature_short=$(printf '%s' "$feature_commit" | cut -c 1-7)
 assert_prepare_commit "out-feature" "$feature_commit"
-assert_prepare_version "out-feature" "0.0.0-ref-feature-foo+wrapper.$feature_short"
+assert_prepare_version "out-feature" "0.0.0-ref-feature-foo+manager.$feature_short"
 
 run_prepare_for_ref "042" "out-leading-zero"
 leading_zero_short=$(printf '%s' "$leading_zero_commit" | cut -c 1-7)
 assert_prepare_commit "out-leading-zero" "$leading_zero_commit"
-assert_prepare_version "out-leading-zero" "0.0.0-ref-042+wrapper.$leading_zero_short"
+assert_prepare_version "out-leading-zero" "0.0.0-ref-042+manager.$leading_zero_short"
 
 run_prepare_for_ref "v5.0.0" "out-legacy"
 legacy_short=$(printf '%s' "$legacy_commit" | cut -c 1-7)
 assert_prepare_commit "out-legacy" "$legacy_commit"
-assert_prepare_version "out-legacy" "5.0.0+wrapper.$legacy_short"
+assert_prepare_version "out-legacy" "5.0.0+manager.$legacy_short"
 assert_prepare_upstream_manifest_version "out-legacy" ""
 assert_manifest_path "out-legacy" "skills" "./skills/"
 assert_manifest_lacks_key "out-legacy" "hooks"
@@ -342,7 +342,7 @@ fi
 
 run_prepare_for_ref "$feature_commit" "out-raw"
 assert_prepare_commit "out-raw" "$feature_commit"
-assert_prepare_version "out-raw" "0.0.0+wrapper.$feature_short"
+assert_prepare_version "out-raw" "0.0.0+manager.$feature_short"
 
 assert_bad_manifest_error "out-bad-manifest"
 assert_rejected_manifest_input "nonstandard-json" "out-nonstandard-json" "invalid JSON in"

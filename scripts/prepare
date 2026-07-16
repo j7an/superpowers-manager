@@ -85,12 +85,12 @@ spw_write_metadata_json \
   "$commit" \
   "$upstream_manifest_version"
 
-wrapper_version=$(
+manager_version=$(
   spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit"
 )
 spw_apply_manifest_overlay \
   "$tmp_plugin/.codex-plugin/plugin.json" \
-  "$wrapper_version"
+  "$manager_version"
 
 # The validator must inspect the exact complete tree that will be swapped.
 cp "$manifest_template" "$tmp_plugin/.codex-plugin/plugin.template.json"
@@ -101,7 +101,7 @@ if ! python3 -S "$builtin_validator" \
   --requested-ref "$requested_ref" \
   --resolved-ref "$resolved_ref" \
   --commit "$commit" \
-  --manifest-version "$wrapper_version" \
+  --manifest-version "$manager_version" \
   --upstream-manifest-version "$upstream_manifest_version"; then
   spw_die "built-in generated plugin validation failed"
 fi

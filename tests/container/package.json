@@ -1,0 +1,10 @@
+{
+  "name": "superpowers-wrapper-test-tools",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@openai/codex": "0.144.1",
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2"
+  }
+}

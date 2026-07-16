@@ -22,29 +22,29 @@ if [ "$selected" != "v6.0.10 4444444444444444444444444444444444444444" ]; then
 fi
 
 version=$(spw_manifest_version_for_commit "896224c4b1879920ab573417e68fd51d2ccc9072")
-if [ "$version" != "0.0.0+wrapper.896224c" ]; then
+if [ "$version" != "0.0.0+manager.896224c" ]; then
   echo "unexpected manifest version: $version" >&2
   exit 1
 fi
 
 short_commit="896224c4b1879920ab573417e68fd51d2ccc9072"
 
-test "$(spw_manifest_version_for_ref "latest-release" "latest-release" "v6.0.3" "$short_commit")" = "6.0.3+wrapper.896224c"
-test "$(spw_manifest_version_for_ref "v6.1.0-beta.1" "tag" "v6.1.0-beta.1" "abc1234abc1234abc1234abc1234abc1234abc12")" = "6.1.0-beta.1+wrapper.abc1234"
-test "$(spw_manifest_version_for_ref "main" "ref" "main" "def5678def5678def5678def5678def5678def56")" = "0.0.0-main+wrapper.def5678"
-test "$(spw_manifest_version_for_ref "feature/foo" "ref" "feature/foo" "fedcba9fedcba9fedcba9fedcba9fedcba9fedc")" = "0.0.0-ref-feature-foo+wrapper.fedcba9"
-test "$(spw_manifest_version_for_ref "042" "ref" "042" "0123abc0123abc0123abc0123abc0123abc0123")" = "0.0.0-ref-042+wrapper.0123abc"
-test "$(spw_manifest_version_for_ref "896224c4b1879920ab573417e68fd51d2ccc9072" "raw-commit" "896224c4b1879920ab573417e68fd51d2ccc9072" "$short_commit")" = "0.0.0+wrapper.896224c"
-test "$(spw_manifest_version_for_ref "v1.2.3" "ref" "v1.2.3" "$short_commit")" = "0.0.0-ref-v1-2-3+wrapper.896224c"
-test "$(spw_manifest_version_for_ref "!!!" "ref" "!!!" "$short_commit")" = "0.0.0-ref-unknown+wrapper.896224c"
+test "$(spw_manifest_version_for_ref "latest-release" "latest-release" "v6.0.3" "$short_commit")" = "6.0.3+manager.896224c"
+test "$(spw_manifest_version_for_ref "v6.1.0-beta.1" "tag" "v6.1.0-beta.1" "abc1234abc1234abc1234abc1234abc1234abc12")" = "6.1.0-beta.1+manager.abc1234"
+test "$(spw_manifest_version_for_ref "main" "ref" "main" "def5678def5678def5678def5678def5678def56")" = "0.0.0-main+manager.def5678"
+test "$(spw_manifest_version_for_ref "feature/foo" "ref" "feature/foo" "fedcba9fedcba9fedcba9fedcba9fedcba9fedc")" = "0.0.0-ref-feature-foo+manager.fedcba9"
+test "$(spw_manifest_version_for_ref "042" "ref" "042" "0123abc0123abc0123abc0123abc0123abc0123")" = "0.0.0-ref-042+manager.0123abc"
+test "$(spw_manifest_version_for_ref "896224c4b1879920ab573417e68fd51d2ccc9072" "raw-commit" "896224c4b1879920ab573417e68fd51d2ccc9072" "$short_commit")" = "0.0.0+manager.896224c"
+test "$(spw_manifest_version_for_ref "v1.2.3" "ref" "v1.2.3" "$short_commit")" = "0.0.0-ref-v1-2-3+manager.896224c"
+test "$(spw_manifest_version_for_ref "!!!" "ref" "!!!" "$short_commit")" = "0.0.0-ref-unknown+manager.896224c"
 test "$(spw_sanitize_ref_for_version "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu/tail")" = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu"
 
 long_ref="feature/abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
 long_version=$(spw_manifest_version_for_ref "$long_ref" "ref" "$long_ref" "$short_commit")
-test "$long_version" = "0.0.0-ref-feature-abcdefghijklmnopqrstuvwxyzabcdefghijklmn+wrapper.896224c"
+test "$long_version" = "0.0.0-ref-feature-abcdefghijklmnopqrstuvwxyzabcdefghijklmn+manager.896224c"
 
 invalid_prerelease=$(spw_manifest_version_for_ref "v1.2.3-042" "tag" "v1.2.3-042" "$short_commit")
-test "$invalid_prerelease" = "0.0.0+wrapper.896224c"
+test "$invalid_prerelease" = "0.0.0+manager.896224c"
 
 repo="$tmpdir/upstream"
 git -C "$tmpdir" init upstream >/dev/null

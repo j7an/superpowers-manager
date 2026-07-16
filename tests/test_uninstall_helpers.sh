@@ -4,8 +4,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/lib.sh"
 
-plugins='{"installed":[{"pluginId":"superpowers@superpowers-wrapper"},{"pluginId":"other@x"}],"available":[]}'
-markets='{"marketplaces":[{"name":"openai-curated"},{"name":"superpowers-wrapper"}]}'
+plugins='{"installed":[{"pluginId":"superpowers@superpowers-manager"},{"pluginId":"other@x"}],"available":[]}'
+markets='{"marketplaces":[{"name":"openai-curated"},{"name":"superpowers-manager"}]}'
 
 assert_fails() {
   if out=$(spw_json_array_has "$1" "$2" "$3" "$4" 2>&1); then
@@ -23,16 +23,16 @@ assert_fails() {
 }
 
 # present: value found in the named array on the named field
-test "$(spw_json_array_has "$plugins" installed pluginId "superpowers@superpowers-wrapper")" = present
-test "$(spw_json_array_has "$markets" marketplaces name "superpowers-wrapper")" = present
+test "$(spw_json_array_has "$plugins" installed pluginId "superpowers@superpowers-manager")" = present
+test "$(spw_json_array_has "$markets" marketplaces name "superpowers-manager")" = present
 
 # absent: value not present
 test "$(spw_json_array_has "$plugins" installed pluginId "missing@x")" = absent
 test "$(spw_json_array_has "$markets" marketplaces name "missing")" = absent
 
 # malformed schema -> non-zero exit (fail closed), no "present"/"absent" output
-assert_fails '{}' installed pluginId "superpowers@superpowers-wrapper"
-assert_fails '{"installed":{}}' installed pluginId "superpowers@superpowers-wrapper"
+assert_fails '{}' installed pluginId "superpowers@superpowers-manager"
+assert_fails '{"installed":{}}' installed pluginId "superpowers@superpowers-manager"
 
 # absent: empty array
 test "$(spw_json_array_has '{"installed":[]}' installed pluginId "x")" = absent

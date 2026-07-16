@@ -1,8 +1,10 @@
 #!/bin/sh
 
 SPW_UPSTREAM_URL_DEFAULT="https://github.com/obra/superpowers"
-SPW_PLUGIN_ID="superpowers@superpowers-wrapper"
-SPW_MARKETPLACE_NAME="superpowers-wrapper"
+SPW_PLUGIN_ID="superpowers@superpowers-manager"
+SPW_MARKETPLACE_NAME="superpowers-manager"
+SPW_LEGACY_PLUGIN_ID="superpowers@superpowers-wrapper"
+SPW_LEGACY_MARKETPLACE_NAME="superpowers-wrapper"
 
 spw_die() {
   echo "error: $*" >&2
@@ -60,24 +62,24 @@ spw_manifest_version_for_ref() {
     latest-release|tag)
       base=$(printf '%s' "$resolved_ref" | sed -n 's/^v//p')
       if [ -n "$base" ] && spw_is_semver_base "$base"; then
-        printf '%s+wrapper.%s\n' "$base" "$short"
+        printf '%s+manager.%s\n' "$base" "$short"
         return
       fi
       ;;
     ref)
       if [ "$requested_ref" = "main" ]; then
-        printf '0.0.0-main+wrapper.%s\n' "$short"
+        printf '0.0.0-main+manager.%s\n' "$short"
         return
       fi
       sanitized=$(spw_sanitize_ref_for_version "$requested_ref")
-      printf '0.0.0-ref-%s+wrapper.%s\n' "$sanitized" "$short"
+      printf '0.0.0-ref-%s+manager.%s\n' "$sanitized" "$short"
       return
       ;;
     raw-commit)
       ;;
   esac
 
-  printf '0.0.0+wrapper.%s\n' "$short"
+  printf '0.0.0+manager.%s\n' "$short"
 }
 
 spw_manifest_version_for_commit() {
@@ -379,7 +381,7 @@ spw_manifest_short_sha_or_empty() {
   fi
   version=$(spw_json_get "$file" "version")
   case "$version" in
-    *+wrapper.*)
+    *+manager.*)
       short="${version##*.}"
       case "$short" in
         ""|*[!0-9a-fA-F]*)
@@ -396,21 +398,21 @@ spw_manifest_short_sha_or_empty() {
 #   ~/.codex/plugins/cache/<marketplace>/superpowers/<version>/...
 # so the metadata/manifest live one directory below the plugin name, not
 # directly inside it (confirmed by the Task 1 behavior probe against the live
-# install). Match both the versioned layout and a flat layout (no intervening
-# version directory) so staging copies and any future flat cache still resolve.
+# install). Match both the versioned layout and a flat manager-cache layout (no
+# intervening version directory).
 spw_find_installed_metadata() {
   search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
   find "$search_root" \
-    \( -path "*/superpowers/.superpowers-upstream.json" \
-       -o -path "*/superpowers/*/.superpowers-upstream.json" \) \
+    \( -path "*/plugins/cache/$SPW_MARKETPLACE_NAME/superpowers/.superpowers-upstream.json" \
+       -o -path "*/plugins/cache/$SPW_MARKETPLACE_NAME/superpowers/*/.superpowers-upstream.json" \) \
     -type f 2>/dev/null | head -n 1
 }
 
 spw_find_installed_manifest() {
   search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
   find "$search_root" \
-    \( -path "*/superpowers/.codex-plugin/plugin.json" \
-       -o -path "*/superpowers/*/.codex-plugin/plugin.json" \) \
+    \( -path "*/plugins/cache/$SPW_MARKETPLACE_NAME/superpowers/.codex-plugin/plugin.json" \
+       -o -path "*/plugins/cache/$SPW_MARKETPLACE_NAME/superpowers/*/.codex-plugin/plugin.json" \) \
     -type f 2>/dev/null | head -n 1
 }
 
@@ -431,53 +433,97 @@ spw_json_array_has() {
 import json, sys
 raw, array_key, field, value = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 try:
-    data = json.loads(raw)
-except (json.JSONDecodeError, RecursionError):
+    data = json.loads(
+        raw,
+        parse_constant=lambda constant: (_ for _ in ()).throw(ValueError(constant)),
+    )
+except (json.JSONDecodeError, RecursionError, ValueError):
     sys.exit(2)
 if not isinstance(data, dict):
     sys.exit(2)
 items = data.get(array_key)
 if not isinstance(items, list):
     sys.exit(2)
-found = any(isinstance(i, dict) and i.get(field) == value for i in items)
+for item in items:
+    if not isinstance(item, dict):
+        sys.exit(2)
+    item_value = item.get(field)
+    if not isinstance(item_value, str) or not item_value:
+        sys.exit(2)
+found = any(item[field] == value for item in items)
 print("present" if found else "absent")
 PY
 }
 
-# Return 0 if <plugin_id> is installed, 1 if genuinely not installed. Fail
-# closed: spw_die (exit) if the listing cannot be queried or parsed, so a
-# read/parse error is never mistaken for "absent".
-spw_plugin_is_installed() {
-  codex_bin="$1"
-  plugin_id="$2"
-  if ! out=$("$codex_bin" plugin list --json 2>/dev/null); then
-    spw_die "cannot list Codex plugins via '$codex_bin plugin list --json'"
-  fi
-  if ! result=$(spw_json_array_has "$out" "installed" "pluginId" "$plugin_id"); then
-    spw_die "cannot parse output of '$codex_bin plugin list --json'"
-  fi
-  [ "$result" = present ]
+spw_snapshot_get() {
+  snapshot="$1"
+  key="$2"
+  printf '%s\n' "$snapshot" | awk -F= -v key="$key" '$1 == key { print $2; found = 1 } END { if (!found) exit 1 }'
 }
 
-# Return 0 if <marketplace_name> is registered, 1 if genuinely not registered.
-# Fail closed exactly like spw_plugin_is_installed.
-spw_marketplace_is_registered() {
+spw_codex_identity_snapshot() {
   codex_bin="$1"
-  marketplace_name="$2"
-  if ! out=$("$codex_bin" plugin marketplace list --json 2>/dev/null); then
+  if ! plugin_listing=$("$codex_bin" plugin list --json 2>/dev/null); then
+    spw_die "cannot list Codex plugins via '$codex_bin plugin list --json'"
+  fi
+  if ! manager_plugin=$(spw_json_array_has "$plugin_listing" installed pluginId "$SPW_PLUGIN_ID"); then
+    spw_die "cannot parse output of '$codex_bin plugin list --json'"
+  fi
+  if ! legacy_plugin=$(spw_json_array_has "$plugin_listing" installed pluginId "$SPW_LEGACY_PLUGIN_ID"); then
+    spw_die "cannot parse output of '$codex_bin plugin list --json'"
+  fi
+
+  if ! marketplace_listing=$("$codex_bin" plugin marketplace list --json 2>/dev/null); then
     spw_die "cannot list Codex marketplaces via '$codex_bin plugin marketplace list --json'"
   fi
-  if ! result=$(spw_json_array_has "$out" "marketplaces" "name" "$marketplace_name"); then
+  if ! manager_marketplace=$(spw_json_array_has "$marketplace_listing" marketplaces name "$SPW_MARKETPLACE_NAME"); then
     spw_die "cannot parse output of '$codex_bin plugin marketplace list --json'"
   fi
-  [ "$result" = present ]
+  if ! legacy_marketplace=$(spw_json_array_has "$marketplace_listing" marketplaces name "$SPW_LEGACY_MARKETPLACE_NAME"); then
+    spw_die "cannot parse output of '$codex_bin plugin marketplace list --json'"
+  fi
+
+  manager=false
+  legacy=false
+  if [ "$manager_plugin" = present ] || [ "$manager_marketplace" = present ]; then
+    manager=true
+  fi
+  if [ "$legacy_plugin" = present ] || [ "$legacy_marketplace" = present ]; then
+    legacy=true
+  fi
+  case "$manager:$legacy" in
+    true:true) identity_state=both ;;
+    true:false) identity_state=manager ;;
+    false:true) identity_state=legacy ;;
+    false:false) identity_state=neither ;;
+  esac
+
+  printf 'manager_plugin=%s\n' "$([ "$manager_plugin" = present ] && printf true || printf false)"
+  printf 'manager_marketplace=%s\n' "$([ "$manager_marketplace" = present ] && printf true || printf false)"
+  printf 'legacy_plugin=%s\n' "$([ "$legacy_plugin" = present ] && printf true || printf false)"
+  printf 'legacy_marketplace=%s\n' "$([ "$legacy_marketplace" = present ] && printf true || printf false)"
+  printf 'identity_state=%s\n' "$identity_state"
+}
+
+spw_require_no_legacy_state() {
+  case "$1" in
+    neither|manager) return 0 ;;
+    legacy|both)
+      printf '%s\n' \
+        'Legacy superpowers-wrapper Codex state is installed.' \
+        'Run: npx superpowers-wrapper@0.1.1 uninstall' \
+        'Then run: npx superpowers-manager@0.1.2 install' >&2
+      return 1
+      ;;
+    *) spw_die "unknown Codex identity state: $1" ;;
+  esac
 }
 
 # Print the registered root of <marketplace_name> from a marketplace-list JSON
 # document (as a string argument, like spw_json_array_has), or nothing if the
 # marketplace is absent. Exit 2 on unparseable JSON, a non-object item, or an
 # item without a non-empty string name: such an item cannot be proven unrelated
-# and must not be mistaken for an absent wrapper marketplace. Validate root only
+# and must not be mistaken for an absent manager marketplace. Validate root only
 # on the matching item; unrelated marketplace roots are never read. A matching
 # item without a non-empty string root also exits 2. Empty output is unambiguous:
 # a valid registered root is always a non-empty path.
@@ -528,14 +574,14 @@ print("same" if na == nb else "different")
 PY
 }
 
-# Reconcile Codex's wrapper marketplace pointer to <current_root>:
+# Reconcile Codex's manager marketplace pointer to <current_root>:
 #   absent                     -> add
 #   same physical root         -> keep
 #   different root             -> remove, then add
 # List/parse failures abort before any marketplace change. If remove
 # succeeds and add fails, print a recovery command for the current root AND
 # the previous root so the user can restore last-known-good state. Only the
-# superpowers-wrapper marketplace is ever touched.
+# superpowers-manager marketplace is ever touched.
 spw_reconcile_marketplace() {
   codex_bin="$1"
   current_root="$2"
@@ -566,7 +612,7 @@ spw_reconcile_marketplace() {
   fi
 }
 
-# Return the currently installed wrapper commit/fingerprint, or empty if the
+# Return the currently installed manager commit/fingerprint, or empty if the
 # installed plugin cannot be detected. This is intentionally local-only: callers
 # pass the desired commit into spw_verify_refresh so post-mutation verification
 # never refetches or re-resolves upstream after Codex state has changed.
@@ -583,8 +629,8 @@ spw_installed_commit_or_empty() {
   printf '%s\n' "$installed_commit"
 }
 
-# After an install, confirm the installed wrapper refreshed to <desired_commit>.
-# Never prints a success line while the installed wrapper is detectably stale.
+# After an install, confirm the installed manager refreshed to <desired_commit>.
+# Never prints a success line while the installed manager is detectably stale.
 # Shared by scripts/install and scripts/update.
 spw_verify_refresh() {
   desired_commit="$1"
@@ -592,14 +638,14 @@ spw_verify_refresh() {
   printf 'desired_commit=%s\n' "$desired_commit"
   printf 'installed_commit=%s\n' "$installed_commit"
   if [ -n "$installed_commit" ] && spw_commit_matches "$desired_commit" "$installed_commit"; then
-    echo "wrapper updated"
+    echo "manager updated"
     return 0
   fi
   if [ -n "$installed_commit" ]; then
-    echo "error: installed wrapper is still stale after install; the local plugin cache did not refresh." >&2
+    echo "error: installed manager is still stale after install; the local plugin cache did not refresh." >&2
     echo "hint: retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add" >&2
     exit 1
   fi
-  echo "error: installed wrapper not detectable, cannot confirm refresh; verify with 'codex plugin list --json'." >&2
+  echo "error: installed manager not detectable, cannot confirm refresh; verify with 'codex plugin list --json'." >&2
   return 1
 }

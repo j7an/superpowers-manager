@@ -5,12 +5,15 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/lib.sh"
 
 probe_output=$(sh "$root/scripts/probe" --porcelain)
+identity_state=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "identity_state" { print $2 }')
+[ -n "$identity_state" ] || spw_die "probe did not report Codex identity state"
+spw_require_no_legacy_state "$identity_state"
 status=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "status" { print $2 }')
 
 case "$status" in
   current)
     printf '%s\n' "$probe_output"
-    echo "wrapper is current"
+    echo "manager is current"
     ;;
   needs\ prepare)
     sh "$root/scripts/prepare"
