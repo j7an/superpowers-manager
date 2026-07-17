@@ -30,7 +30,7 @@ class ValidatorTests(unittest.TestCase):
             "requested_ref": "latest-release",
             "resolved_ref": "v6.1.1",
             "commit": COMMIT,
-            "manifest_version": "6.1.1+wrapper.d884ae0",
+            "manifest_version": "6.1.1+manager.d884ae0",
             "upstream_manifest_version": "6.1.1",
         }
         self.reset_candidate()
@@ -120,10 +120,10 @@ class ValidatorTests(unittest.TestCase):
 
     def test_full_semver_forms_pass(self) -> None:
         versions = (
-            "6.1.1+wrapper.d884ae0",
-            "6.1.0-beta.1+wrapper.d884ae0",
-            "0.0.0-main+wrapper.d884ae0",
-            "0.0.0-ref-feature-x+wrapper.d884ae0",
+            "6.1.1+manager.d884ae0",
+            "6.1.0-beta.1+manager.d884ae0",
+            "0.0.0-main+manager.d884ae0",
+            "0.0.0-ref-feature-x+manager.d884ae0",
         )
         for version in versions:
             with self.subTest(version=version):
@@ -148,7 +148,7 @@ class ValidatorTests(unittest.TestCase):
     def test_json_rejects_nonstandard_numeric_constants(self) -> None:
         manifest_path = self.plugin / ".codex-plugin" / "plugin.json"
         manifest_path.write_text(
-            '{"name":"superpowers","version":"6.1.1+wrapper.d884ae0",'
+            '{"name":"superpowers","version":"6.1.1+manager.d884ae0",'
             '"description":"Generated Superpowers","skills":"./skills/",'
             '"x_future_manifest":NaN}\n',
             encoding="utf-8",
@@ -169,7 +169,7 @@ class ValidatorTests(unittest.TestCase):
         nested = "[" * 2000 + "0" + "]" * 2000
         manifest_path = self.plugin / ".codex-plugin" / "plugin.json"
         manifest_path.write_text(
-            '{"name":"superpowers","version":"6.1.1+wrapper.d884ae0",'
+            '{"name":"superpowers","version":"6.1.1+manager.d884ae0",'
             '"description":"Generated Superpowers","skills":"./skills/",'
             f'"x_future_manifest":{nested}}}\n',
             encoding="utf-8",

@@ -10,7 +10,7 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 
 spw_require_command python3
 
-echo "Note: remove or disable conflicting Superpowers providers yourself before relying on wrapper skills."
+echo "Note: remove or disable conflicting Superpowers providers yourself before relying on manager skills."
 
 # Prepare-before-mutate: probe, and (re)generate the plugin tree if it is
 # missing or stale — including validation — entirely before any Codex
@@ -33,7 +33,7 @@ desired_commit=$(spw_metadata_commit_or_empty "$root/plugins/superpowers/.superp
 [ -n "$desired_commit" ] || spw_die "generated metadata missing desired commit after prepare"
 
 tmp_parent="${TMPDIR:-/tmp}"
-if ! install_workspace=$(mktemp -d "$tmp_parent/superpowers-wrapper.install.XXXXXX"); then
+if ! install_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.install.XXXXXX"); then
   spw_die "cannot create install workspace under $tmp_parent"
 fi
 cleanup_install_workspace() {

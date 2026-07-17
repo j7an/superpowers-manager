@@ -44,15 +44,15 @@ JSON
   fi
 }
 
-assert_manifest_short "6.0.3+wrapper.896224c" "896224c"
-assert_manifest_short "6.1.0-beta.1+wrapper.abc1234" "abc1234"
-assert_manifest_short "0.0.0-main+wrapper.def5678" "def5678"
-assert_manifest_short "0.0.0-ref-feature-foo+wrapper.fedcba9" "fedcba9"
-assert_manifest_short "0.0.0-ref-042+wrapper.0123abc" "0123abc"
-assert_manifest_short "0.0.0+wrapper.896224c" "896224c"
+assert_manifest_short "6.0.3+manager.896224c" "896224c"
+assert_manifest_short "6.1.0-beta.1+manager.abc1234" "abc1234"
+assert_manifest_short "0.0.0-main+manager.def5678" "def5678"
+assert_manifest_short "0.0.0-ref-feature-foo+manager.fedcba9" "fedcba9"
+assert_manifest_short "0.0.0-ref-042+manager.0123abc" "0123abc"
+assert_manifest_short "0.0.0+manager.896224c" "896224c"
 # The template's placeholder version is not a real fingerprint -> empty.
-assert_manifest_short "0.0.0+wrapper.template" ""
-assert_manifest_short "6.0.3+wrapper.abcxyz1" ""
+assert_manifest_short "0.0.0+manager.template" ""
+assert_manifest_short "6.0.3+manager.abcxyz1" ""
 
 fixture_generated_root="$tmpdir/generated-root"
 fixture_generated_metadata="$fixture_generated_root/plugins/superpowers/.superpowers-upstream.json"

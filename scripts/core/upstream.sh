@@ -43,24 +43,24 @@ spw_manifest_version_for_ref() {
     latest-release|tag)
       base=$(printf '%s' "$resolved_ref" | sed -n 's/^v//p')
       if [ -n "$base" ] && spw_is_semver_base "$base"; then
-        printf '%s+wrapper.%s\n' "$base" "$short"
+        printf '%s+manager.%s\n' "$base" "$short"
         return
       fi
       ;;
     ref)
       if [ "$requested_ref" = "main" ]; then
-        printf '0.0.0-main+wrapper.%s\n' "$short"
+        printf '0.0.0-main+manager.%s\n' "$short"
         return
       fi
       sanitized=$(spw_sanitize_ref_for_version "$requested_ref")
-      printf '0.0.0-ref-%s+wrapper.%s\n' "$sanitized" "$short"
+      printf '0.0.0-ref-%s+manager.%s\n' "$sanitized" "$short"
       return
       ;;
     raw-commit)
       ;;
   esac
 
-  printf '0.0.0+wrapper.%s\n' "$short"
+  printf '0.0.0+manager.%s\n' "$short"
 }
 
 spw_manifest_version_for_commit() {

@@ -100,7 +100,7 @@ spw_write_metadata_json \
   "$commit" \
   "$upstream_manifest_version"
 
-wrapper_version=$(
+manager_version=$(
   spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit"
 )
 spw_invoke_adapter build "$adapter_result" "" -- \
@@ -109,7 +109,7 @@ spw_invoke_adapter build "$adapter_result" "" -- \
   --requested-ref "$requested_ref" \
   --resolved-ref "$resolved_ref" \
   --commit "$commit" \
-  --wrapper-version "$wrapper_version" \
+  --manager-version "$manager_version" \
   --upstream-manifest-version "$upstream_manifest_version" \
   --fallback-manifest "$manifest_template"
 

@@ -4,7 +4,7 @@
 .agents/plugins/marketplace.json
 LICENSE
 README.md
-bin/superpowers-wrapper.js
+bin/superpowers-manager.js
 config/upstream-ref
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json

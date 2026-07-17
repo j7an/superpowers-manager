@@ -9,7 +9,7 @@ status=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "status" { print $2 }')
 case "$status" in
   current)
     printf '%s\n' "$probe_output"
-    echo "wrapper is current"
+    echo "manager is current"
     ;;
   needs\ prepare)
     sh "$root/scripts/prepare"

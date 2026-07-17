@@ -12,7 +12,7 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 # The <version> directory segment sits between the plugin name and the files,
 # so the finders must tolerate it (an earlier pattern anchored the file
 # directly under */superpowers/ and silently missed every real install).
-cache="$tmpdir/.codex/plugins/cache/superpowers-wrapper/superpowers/6.0.3+wrapper.abc1234"
+cache="$tmpdir/.codex/plugins/cache/superpowers-manager/superpowers/6.0.3+manager.abc1234"
 mkdir -p "$cache/.codex-plugin"
 cat > "$cache/.superpowers-upstream.json" <<'JSON'
 {
@@ -22,7 +22,7 @@ JSON
 cat > "$cache/.codex-plugin/plugin.json" <<'JSON'
 {
   "name": "superpowers",
-  "version": "6.0.3+wrapper.abc1234"
+  "version": "6.0.3+manager.abc1234"
 }
 JSON
 
@@ -44,7 +44,7 @@ JSON
 cat > "$flat/.codex-plugin/plugin.json" <<'JSON'
 {
   "name": "superpowers",
-  "version": "0.0.0-main+wrapper.0000000"
+  "version": "0.0.0-main+manager.0000000"
 }
 JSON
 

@@ -67,8 +67,8 @@ printf 'license\n' > "$upstream/LICENSE"
 printf 'readme\n' > "$upstream/README.md"
 printf 'code\n' > "$upstream/CODE_OF_CONDUCT.md"
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream without manifest" >/dev/null
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c tag.gpgsign=false tag -a v5.0.0 -m "fake legacy release"
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream without manifest" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v5.0.0 -m "fake legacy release"
 legacy_commit=$(git -C "$upstream" rev-list -n1 v5.0.0)
 
 mkdir -p "$upstream/.codex-plugin"
@@ -86,17 +86,17 @@ cat > "$upstream/.codex-plugin/plugin.json" <<'JSON'
 }
 JSON
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream with manifest" >/dev/null
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c tag.gpgsign=false tag -a v6.0.3 -m "fake release"
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream with manifest" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v6.0.3 -m "fake release"
 
 release_commit=$(git -C "$upstream" rev-list -n1 v6.0.3)
 git -C "$upstream" branch -M main
 
 printf 'branch data\n' > "$upstream/skills/brainstorming/branch.txt"
 git -C "$upstream" add skills/brainstorming/branch.txt
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "main branch update" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "main branch update" >/dev/null
 main_commit=$(git -C "$upstream" rev-parse HEAD)
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c tag.gpgsign=false tag -a v6.1.0-beta.1 -m "fake prerelease"
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v6.1.0-beta.1 -m "fake prerelease"
 
 git -C "$upstream" checkout -b invalid-skill >/dev/null
 cat > "$upstream/skills/brainstorming/SKILL.md" <<'EOF'
@@ -106,7 +106,7 @@ name: brainstorming
 # Missing description
 EOF
 git -C "$upstream" add skills/brainstorming/SKILL.md
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "invalid skill frontmatter" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "invalid skill frontmatter" >/dev/null
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b nonstandard-json >/dev/null
@@ -119,13 +119,13 @@ text = path.read_text(encoding="utf-8")
 path.write_text(text.replace('"preserved": true', '"preserved": NaN'), encoding="utf-8")
 PY
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "nonstandard manifest JSON" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "nonstandard manifest JSON" >/dev/null
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b unreadable-manifest >/dev/null
 printf '\377' > "$upstream/.codex-plugin/plugin.json"
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "non-UTF-8 manifest" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "non-UTF-8 manifest" >/dev/null
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b unencodable-manifest-version >/dev/null
@@ -138,7 +138,7 @@ text = path.read_text(encoding="utf-8")
 path.write_text(text.replace('"version": "6.0.3"', '"version": "\\ud800"'), encoding="utf-8")
 PY
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "unencodable manifest version" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "unencodable manifest version" >/dev/null
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b deeply-nested-json >/dev/null
@@ -152,26 +152,26 @@ nested = "[" * 2000 + "0" + "]" * 2000
 path.write_text(text.replace('"preserved": true', f'"preserved": {nested}'), encoding="utf-8")
 PY
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "deeply nested manifest JSON" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "deeply nested manifest JSON" >/dev/null
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b feature/foo >/dev/null
 printf 'feature data\n' > "$upstream/skills/brainstorming/feature.txt"
 git -C "$upstream" add skills/brainstorming/feature.txt
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "feature branch update" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "feature branch update" >/dev/null
 feature_commit=$(git -C "$upstream" rev-parse HEAD)
 
 git -C "$upstream" checkout -b 042 >/dev/null
 printf 'leading zero ref\n' > "$upstream/skills/brainstorming/leading-zero.txt"
 git -C "$upstream" add skills/brainstorming/leading-zero.txt
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "leading zero branch" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "leading zero branch" >/dev/null
 leading_zero_commit=$(git -C "$upstream" rev-parse HEAD)
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b bad-manifest >/dev/null
 printf '{ "name": "superpowers", "version": ' > "$upstream/.codex-plugin/plugin.json"
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "bad upstream manifest" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "bad upstream manifest" >/dev/null
 git -C "$upstream" checkout main >/dev/null
 
 read_json_key() {
@@ -387,7 +387,7 @@ manifest_read_count=$(grep -Fxc "$latest_upstream_root/.codex-plugin/plugin.json
 }
 expected_short=$(printf '%s' "$release_commit" | cut -c 1-7)
 assert_prepare_commit "out-latest" "$release_commit"
-assert_prepare_version "out-latest" "6.0.3+wrapper.$expected_short"
+assert_prepare_version "out-latest" "6.0.3+manager.$expected_short"
 assert_manifest_path "out-latest" "description" "Upstream manifest description"
 assert_manifest_path "out-latest" "skills" "./skills/"
 assert_manifest_path "out-latest" "x_future_manifest" '{"items":[1,"two"],"preserved":true}'
@@ -395,28 +395,28 @@ assert_manifest_path "out-latest" "x_future_manifest" '{"items":[1,"two"],"prese
 run_prepare_for_ref "v6.1.0-beta.1" "out-prerelease"
 prerelease_short=$(printf '%s' "$main_commit" | cut -c 1-7)
 assert_prepare_commit "out-prerelease" "$main_commit"
-assert_prepare_version "out-prerelease" "6.1.0-beta.1+wrapper.$prerelease_short"
+assert_prepare_version "out-prerelease" "6.1.0-beta.1+manager.$prerelease_short"
 
 run_prepare_for_ref "main" "out-main"
 main_short=$(printf '%s' "$main_commit" | cut -c 1-7)
 assert_prepare_commit "out-main" "$main_commit"
-assert_prepare_version "out-main" "0.0.0-main+wrapper.$main_short"
+assert_prepare_version "out-main" "0.0.0-main+manager.$main_short"
 assert_prepare_upstream_manifest_version "out-main" "6.0.3"
 
 run_prepare_for_ref "feature/foo" "out-feature"
 feature_short=$(printf '%s' "$feature_commit" | cut -c 1-7)
 assert_prepare_commit "out-feature" "$feature_commit"
-assert_prepare_version "out-feature" "0.0.0-ref-feature-foo+wrapper.$feature_short"
+assert_prepare_version "out-feature" "0.0.0-ref-feature-foo+manager.$feature_short"
 
 run_prepare_for_ref "042" "out-leading-zero"
 leading_zero_short=$(printf '%s' "$leading_zero_commit" | cut -c 1-7)
 assert_prepare_commit "out-leading-zero" "$leading_zero_commit"
-assert_prepare_version "out-leading-zero" "0.0.0-ref-042+wrapper.$leading_zero_short"
+assert_prepare_version "out-leading-zero" "0.0.0-ref-042+manager.$leading_zero_short"
 
 run_prepare_for_ref "v5.0.0" "out-legacy"
 legacy_short=$(printf '%s' "$legacy_commit" | cut -c 1-7)
 assert_prepare_commit "out-legacy" "$legacy_commit"
-assert_prepare_version "out-legacy" "5.0.0+wrapper.$legacy_short"
+assert_prepare_version "out-legacy" "5.0.0+manager.$legacy_short"
 assert_prepare_upstream_manifest_version "out-legacy" ""
 assert_manifest_path "out-legacy" "skills" "./skills/"
 assert_manifest_lacks_key "out-legacy" "hooks"
@@ -427,7 +427,7 @@ fi
 
 run_prepare_for_ref "$feature_commit" "out-raw"
 assert_prepare_commit "out-raw" "$feature_commit"
-assert_prepare_version "out-raw" "0.0.0+wrapper.$feature_short"
+assert_prepare_version "out-raw" "0.0.0+manager.$feature_short"
 
 assert_bad_manifest_error "out-bad-manifest"
 assert_rejected_manifest_input "nonstandard-json" "out-nonstandard-json" "invalid JSON in"

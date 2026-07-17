@@ -1,8 +1,8 @@
 #!/bin/sh
 # Sourced module; callers own set -eu.
 
-SPW_PLUGIN_ID="superpowers@superpowers-wrapper"
-SPW_MARKETPLACE_NAME="superpowers-wrapper"
+SPW_PLUGIN_ID="superpowers@superpowers-manager"
+SPW_MARKETPLACE_NAME="superpowers-manager"
 
 # Given a JSON document as the FIRST ARGUMENT (a string), print "present" if any
 # element of the top-level array <array_key> is an object whose <field> equals
@@ -46,7 +46,7 @@ PY
 # document (as a string argument, like spw_json_array_has), or nothing if the
 # marketplace is absent. Exit 2 on unparseable JSON, a non-object item, or an
 # item without a non-empty string name: such an item cannot be proven unrelated
-# and must not be mistaken for an absent wrapper marketplace. Validate root only
+# and must not be mistaken for an absent manager marketplace. Validate root only
 # on the matching item; unrelated marketplace roots are never read. A matching
 # item without a non-empty string root also exits 2. Empty output is unambiguous:
 # a valid registered root is always a non-empty path.
@@ -252,7 +252,7 @@ spw_manifest_short_sha_or_empty() {
     return 1
   fi
   case "$version" in
-    *+wrapper.*)
+    *+manager.*)
       short="${version##*.}"
       case "$short" in
         [0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])

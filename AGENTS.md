@@ -2,7 +2,7 @@
 
 ## Repository Purpose
 
-This repository is a stateless npm/npx wrapper that turns upstream Superpowers
+This repository is a stateless npm/npx manager that turns upstream Superpowers
 releases into a locally installable Codex plugin marketplace. References to
 Codex below describe the product integration, not a required agent harness.
 
@@ -21,8 +21,8 @@ Codex below describe the product integration, not a required agent harness.
 
 - Use the upstream plugin manifest when available and preserve unknown upstream
   fields. The fallback template exists for upstream refs without a manifest.
-- Enforce the wrapper-owned contract: plugin name `superpowers`, a ref-aware
-  wrapper version, `skills: ./skills/`, upstream provenance, and no manifest
+- Enforce the manager-owned contract: plugin name `superpowers`, a ref-aware
+  manager version, `skills: ./skills/`, upstream provenance, and no manifest
   `hooks` field or physical `hooks/` directory.
 - The hook-free policy is deliberate. Changing it requires a separate design
   and current compatibility evidence.
@@ -33,7 +33,7 @@ Codex below describe the product integration, not a required agent harness.
   mutating Codex state, then verify the resulting installed state.
 - Fail closed when state cannot be inspected or parsed. Never report
   unverifiable state as success.
-- Mutate only `superpowers@superpowers-wrapper` and the `superpowers-wrapper`
+- Mutate only `superpowers@superpowers-manager` and the `superpowers-manager`
   marketplace. Never remove another provider automatically.
 - Keep `scripts/probe` read-only.
 

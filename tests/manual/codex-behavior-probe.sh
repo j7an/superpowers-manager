@@ -8,11 +8,11 @@ set -eu
 # gate, and that isolated container path is the only automated flow allowed to
 # mutate Codex state.
 
-marketplace_name="superpowers-wrapper-probe"
-plugin_name="wrapper-probe"
+marketplace_name="superpowers-manager-probe"
+plugin_name="manager-probe"
 plugin_id="${plugin_name}@${marketplace_name}"
-probe_root="${TMPDIR:-/tmp}/superpowers-wrapper-codex-probe"
-sentinel="${TMPDIR:-/tmp}/superpowers-wrapper-hook-probe-ran"
+probe_root="${TMPDIR:-/tmp}/superpowers-manager-codex-probe"
+sentinel="${TMPDIR:-/tmp}/superpowers-manager-hook-probe-ran"
 
 codex_bin="${CODEX_BIN:-codex}"
 
@@ -34,7 +34,7 @@ write_probe_plugin() {
 {
   "name": "$marketplace_name",
   "interface": {
-    "displayName": "Superpowers Wrapper Probe"
+    "displayName": "Superpowers Manager Probe"
   },
   "plugins": [
     {
@@ -60,18 +60,18 @@ JSON
   "version": "$version",
   "description": "Throwaway Codex local marketplace behavior probe.",
   "author": {
-    "name": "superpowers-wrapper"
+    "name": "superpowers-manager"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Wrapper Probe",
+    "displayName": "Manager Probe",
     "shortDescription": "Local marketplace behavior probe.",
     "longDescription": "A temporary plugin used to observe Codex local marketplace refresh, cache, and hook behavior.",
-    "developerName": "superpowers-wrapper",
+    "developerName": "superpowers-manager",
     "category": "Developer Tools",
     "capabilities": ["skills"],
     "defaultPrompt": [
-      "Use wrapper-probe only for local marketplace testing."
+      "Use manager-probe only for local marketplace testing."
     ]
   }
 }
@@ -88,7 +88,7 @@ description: Temporary local marketplace probe skill
 This temporary skill records Codex local marketplace behavior.
 EOF
 
-  cat > "$probe_root/plugins/$plugin_name/.wrapper-probe-upstream.json" <<JSON
+  cat > "$probe_root/plugins/$plugin_name/.manager-probe-upstream.json" <<JSON
 {
   "commit": "$commit"
 }
@@ -102,7 +102,7 @@ EOF
 }
 
 find_installed_metadata() {
-  find "$HOME/.codex" -path "*/$plugin_name/.wrapper-probe-upstream.json" -type f 2>/dev/null | head -n 1
+  find "$HOME/.codex" -path "*/$plugin_name/.manager-probe-upstream.json" -type f 2>/dev/null | head -n 1
 }
 
 metadata_commit() {
@@ -153,7 +153,7 @@ if [ -n "$installed_metadata" ]; then
   echo "Installed commit after marketplace re-add and plugin add: $(metadata_commit "$installed_metadata")"
 fi
 
-echo "Run wrapper-plugin remove, then plugin add"
+echo "Run manager-plugin remove, then plugin add"
 "$codex_bin" plugin remove "$plugin_id" || true
 "$codex_bin" plugin add "$plugin_id"
 installed_metadata="$(find_installed_metadata || true)"
@@ -163,10 +163,10 @@ fi
 
 echo "Stable-to-branch version precedence probe"
 cache_root="$HOME/.codex/plugins/cache/$marketplace_name/$plugin_name"
-stable_root="$cache_root/6.0.3+wrapper.ccccccc"
-branch_root="$cache_root/0.0.0-main+wrapper.ddddddd"
+stable_root="$cache_root/6.0.3+manager.ccccccc"
+branch_root="$cache_root/0.0.0-main+manager.ddddddd"
 
-write_probe_plugin "cccccccccccccccccccccccccccccccccccccccc" "6.0.3+wrapper.ccccccc"
+write_probe_plugin "cccccccccccccccccccccccccccccccccccccccc" "6.0.3+manager.ccccccc"
 "$codex_bin" plugin marketplace add "$probe_root" >/dev/null 2>&1 || true
 "$codex_bin" plugin add "$plugin_id" || true
 echo "Installed root after stable-looking add:"
@@ -176,7 +176,7 @@ else
   echo "not found"
 fi
 
-write_probe_plugin "dddddddddddddddddddddddddddddddddddddddd" "0.0.0-main+wrapper.ddddddd"
+write_probe_plugin "dddddddddddddddddddddddddddddddddddddddd" "0.0.0-main+manager.ddddddd"
 "$codex_bin" plugin add "$plugin_id" || true
 echo "Installed root after stable-to-branch add-only refresh:"
 if [ -d "$branch_root" ]; then
@@ -203,7 +203,7 @@ fi
 
 if "$codex_bin" exec --help >/dev/null 2>&1; then
   echo "Run a noninteractive session to check hook activation"
-  "$codex_bin" exec "Respond with wrapper probe check." >/dev/null 2>&1 || true
+  "$codex_bin" exec "Respond with manager probe check." >/dev/null 2>&1 || true
   echo "Hook sentinel after codex exec:"
   if [ -f "$sentinel" ]; then
     cat "$sentinel"

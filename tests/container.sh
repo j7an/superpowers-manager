@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-image="superpowers-wrapper-test:local"
+image="superpowers-manager-test:local"
 
 if [ "${1:-}" = "--inside" ]; then
   actual_uid=$(id -u)

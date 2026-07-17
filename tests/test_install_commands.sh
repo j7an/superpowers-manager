@@ -27,8 +27,8 @@ printf 'readme\n' > "$upstream/README.md"
 printf 'code\n' > "$upstream/CODE_OF_CONDUCT.md"
 git -C "$tmpdir" init upstream >/dev/null
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream" >/dev/null
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c tag.gpgsign=false tag -a v1.0.0 -m "fake release"
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v1.0.0 -m "fake release"
 
 # --- Copied package root (simulates the npx-materialized package) ---
 pkg="$tmpdir/pkg"
@@ -74,8 +74,8 @@ import json, sys
 path, new_root = sys.argv[1], sys.argv[2]
 with open(path, encoding="utf-8") as f:
     data = json.load(f)
-data["marketplaces"] = [m for m in data["marketplaces"] if m.get("name") != "superpowers-wrapper"]
-data["marketplaces"].append({"name": "superpowers-wrapper", "root": new_root})
+data["marketplaces"] = [m for m in data["marketplaces"] if m.get("name") != "superpowers-manager"]
+data["marketplaces"].append({"name": "superpowers-manager", "root": new_root})
 with open(path, "w", encoding="utf-8") as f:
     json.dump(data, f)
 PY
@@ -96,7 +96,7 @@ fi
 if [ "$1" = plugin ] && [ "$2" = add ]; then
   [ -f "$state/plugin_add_fail" ] && exit 1
   [ -f "$state/plugin_add_noop" ] && exit 0
-  dest="$state/codex-home/plugins/cache/superpowers-wrapper/superpowers/1.0.0"
+  dest="$state/codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0"
   mkdir -p "$dest"
   cp "$SPW_TEST_PKG_ROOT/plugins/superpowers/.superpowers-upstream.json" "$dest/.superpowers-upstream.json"
   if [ -f "$state/plugin_add_stale" ]; then
@@ -113,7 +113,7 @@ PY
   exit 0
 fi
 if [ "$1" = plugin ] && [ "$2" = remove ]; then
-  rm -rf "$state/codex-home/plugins/cache/superpowers-wrapper"
+  rm -rf "$state/codex-home/plugins/cache/superpowers-manager"
   exit 0
 fi
 exit 0
@@ -126,7 +126,7 @@ set -eu
 state=$(CDPATH= cd -- "$(dirname "$0")" && pwd)/state
 printf '%s\n' "$*" >> "$state/adapter.log"
 if [ "${1:-}" = inspect ] && [ "${2:-}" = --view ] && [ "${3:-}" = fingerprint ] &&
-   [ -d "$state/codex-home/plugins/cache/superpowers-wrapper" ]; then
+   [ -d "$state/codex-home/plugins/cache/superpowers-manager" ]; then
   if [ -f "$state/fingerprint_inspect_fail" ]; then
     printf '%s\n' 'fingerprint inspection failed in adapter fixture' >&2
     exit 99
@@ -152,7 +152,7 @@ reset() {
 }
 
 seed_installed_current() {
-  dest="$state/codex-home/plugins/cache/superpowers-wrapper/superpowers/1.0.0"
+  dest="$state/codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0"
   mkdir -p "$dest"
   cp "$pkg/plugins/superpowers/.superpowers-upstream.json" "$dest/.superpowers-upstream.json"
 }
@@ -259,15 +259,15 @@ run_install > "$state/out"
 test -f "$pkg/plugins/superpowers/.superpowers-upstream.json" || { echo "prepare must have generated the tree" >&2; exit 1; }
 list_line=$(line_of "plugin marketplace list")
 add_line=$(line_of "plugin marketplace add $pkg")
-pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+pa_line=$(line_of "plugin add superpowers@superpowers-manager")
 { [ "$list_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
   echo "order must be: marketplace list, marketplace add, plugin add" >&2; cat "$log" >&2; exit 1; }
-grep -Fq "wrapper updated" "$state/out"
+grep -Fq "manager updated" "$state/out"
 assert_install_tmp_empty
 if grep -Fq "marketplace remove" "$log"; then
   echo "fresh install must not remove any marketplace" >&2; exit 1
 fi
-if grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"; then
+if grep -Fq "plugin remove superpowers@superpowers-manager" "$log"; then
   echo "add-only fresh install must not remove the wrapper plugin" >&2; exit 1
 fi
 if grep -Fq "openai-curated" "$log"; then
@@ -286,7 +286,7 @@ run_install > "$state/out"
 grep -Fq "install --package-root $pkg" "$state/adapter.log"
 list_line=$(line_of "plugin marketplace list")
 add_line=$(line_of "plugin marketplace add $pkg")
-pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+pa_line=$(line_of "plugin add superpowers@superpowers-manager")
 { [ "$list_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
   echo "current install must still reconcile via adapter install" >&2
   cat "$state/adapter.log" >&2
@@ -300,12 +300,12 @@ pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
 # ---------------------------------------------------------------------------
 reset
 seed_installed_current
-printf '{"marketplaces":[{"name":"superpowers-wrapper","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
+printf '{"marketplaces":[{"name":"superpowers-manager","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
 run_install > "$state/out"
 grep -Fq "install --package-root $pkg" "$state/adapter.log"
-rm_line=$(line_of "plugin marketplace remove superpowers-wrapper")
+rm_line=$(line_of "plugin marketplace remove superpowers-manager")
 add_line=$(line_of "plugin marketplace add $pkg")
-pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+pa_line=$(line_of "plugin add superpowers@superpowers-manager")
 { [ "$rm_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
   echo "same-commit install must still reconcile a different package root" >&2
   cat "$state/adapter.log" >&2
@@ -319,13 +319,13 @@ pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
 # ---------------------------------------------------------------------------
 reset
 ln -s "$pkg" "$tmpdir/pkg-link"
-printf '{"marketplaces":[{"name":"superpowers-wrapper","root":"%s"}]}\n' "$tmpdir/pkg-link" > "$state/marketplace_list.json"
+printf '{"marketplaces":[{"name":"superpowers-manager","root":"%s"}]}\n' "$tmpdir/pkg-link" > "$state/marketplace_list.json"
 run_install > "$state/out"
 if grep -Fq "marketplace add" "$log" || grep -Fq "marketplace remove" "$log"; then
   echo "same-root install must not re-register the marketplace" >&2; cat "$log" >&2; exit 1
 fi
-grep -Fq "plugin add superpowers@superpowers-wrapper" "$log"
-if grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"; then
+grep -Fq "plugin add superpowers@superpowers-manager" "$log"
+if grep -Fq "plugin remove superpowers@superpowers-manager" "$log"; then
   echo "add-only same-root install must not remove the wrapper plugin" >&2; exit 1
 fi
 
@@ -333,17 +333,17 @@ fi
 # Scenario 3: registered at a different root -> remove then add, in order.
 # ---------------------------------------------------------------------------
 reset
-printf '{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-wrapper","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
+printf '{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
 run_install > "$state/out"
-rm_line=$(line_of "plugin marketplace remove superpowers-wrapper")
+rm_line=$(line_of "plugin marketplace remove superpowers-manager")
 add_line=$(line_of "plugin marketplace add $pkg")
-pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+pa_line=$(line_of "plugin add superpowers@superpowers-manager")
 { [ "$rm_line" -lt "$add_line" ] && [ "$add_line" -lt "$pa_line" ]; } || {
   echo "order must be: marketplace remove, marketplace add, plugin add" >&2; cat "$log" >&2; exit 1; }
 if grep -Fq "marketplace remove openai-curated" "$log"; then
   echo "must only ever remove the wrapper marketplace" >&2; exit 1
 fi
-if grep -Fq "plugin remove superpowers@superpowers-wrapper" "$log"; then
+if grep -Fq "plugin remove superpowers@superpowers-manager" "$log"; then
   echo "add-only drift reconciliation must not remove the wrapper plugin" >&2; exit 1
 fi
 
@@ -354,7 +354,7 @@ reset
 seed_installed_current
 printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 run_update > "$state/out"
-grep -Fq "wrapper is current" "$state/out"
+grep -Fq "manager is current" "$state/out"
 if grep -Fq "install --package-root" "$state/adapter.log"; then
   echo "update must not invoke adapter install when probe reports current" >&2
   cat "$state/adapter.log" >&2
@@ -371,12 +371,12 @@ fi
 # the current root AND the previous root; plugin add never attempted.
 # ---------------------------------------------------------------------------
 reset
-printf '{"marketplaces":[{"name":"superpowers-wrapper","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
+printf '{"marketplaces":[{"name":"superpowers-manager","root":"%s"}]}\n' "$tmpdir/otherroot" > "$state/marketplace_list.json"
 : > "$state/marketplace_add_fail"
 expect_fail
 grep -Fq "plugin marketplace add $pkg" "$state/out"
 grep -Fq "$tmpdir/otherroot" "$state/out"
-if grep -Fq "plugin add superpowers@superpowers-wrapper" "$log"; then
+if grep -Fq "plugin add superpowers@superpowers-manager" "$log"; then
   echo "plugin add must not run after a failed marketplace add" >&2; exit 1
 fi
 
@@ -401,8 +401,8 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 expect_fail
 grep -Fq "fingerprint is not detectable" "$state/out"
 assert_install_tmp_empty
-if grep -Fq "wrapper updated" "$state/out"; then
-  echo "must not print success when the installed wrapper is undetectable" >&2; exit 1
+if grep -Fq "manager updated" "$state/out"; then
+  echo "must not print success when the installed manager is undetectable" >&2; exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -416,7 +416,7 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 expect_fail
 grep -Fq "does not match the prepared plugin" "$state/out"
 grep -Fq "SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add" "$state/out"
-if grep -Fq "wrapper updated" "$state/out"; then
+if grep -Fq "manager updated" "$state/out"; then
   echo "must not print success while stale" >&2; exit 1
 fi
 
@@ -441,7 +441,7 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 expect_fail
 grep -Fq "fingerprint inspection" "$state/out"
 if grep -Fq "fingerprint is not detectable" "$state/out" ||
-   grep -Fq "wrapper updated" "$state/out"; then
+   grep -Fq "manager updated" "$state/out"; then
   echo "unverifiable fingerprint state must not be reported as absence or success" >&2
   exit 1
 fi
@@ -457,7 +457,7 @@ expect_fail
 grep -Fq "invalid adapter response" "$state/out"
 grep -Fq "fingerprint inspection" "$state/out"
 if grep -Fq "fingerprint is not detectable" "$state/out" ||
-   grep -Fq "wrapper updated" "$state/out"; then
+   grep -Fq "manager updated" "$state/out"; then
   echo "unverifiable fingerprint state must not be reported as absence or success" >&2
   exit 1
 fi
@@ -471,8 +471,8 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 run_install SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add > "$state/out"
 list_line=$(line_of "plugin marketplace list")
 add_line=$(line_of "plugin marketplace add $pkg")
-rm_line=$(line_of "plugin remove superpowers@superpowers-wrapper")
-pa_line=$(line_of "plugin add superpowers@superpowers-wrapper")
+rm_line=$(line_of "plugin remove superpowers@superpowers-manager")
+pa_line=$(line_of "plugin add superpowers@superpowers-manager")
 { [ "$list_line" -lt "$add_line" ] && [ "$add_line" -lt "$rm_line" ] && [ "$rm_line" -lt "$pa_line" ]; } || {
   echo "remove-add order must be: marketplace reconcile, plugin remove, plugin add" >&2
   cat "$log" >&2
@@ -502,7 +502,7 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
 run_install > "$state/out"
 grep -Fq "prepared v1.0.0" "$state/out"
-grep -Fq "wrapper updated" "$state/out"
+grep -Fq "manager updated" "$state/out"
 grep -Fq "install --package-root $pkg" "$state/adapter.log"
 python3 - "$pkg/plugins/superpowers/.superpowers-upstream.json" <<'PY'
 import json
@@ -524,7 +524,7 @@ printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
 printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
 run_update > "$state/out"
 grep -Fq "prepared v1.0.0" "$state/out"
-grep -Fq "wrapper updated" "$state/out"
+grep -Fq "manager updated" "$state/out"
 grep -Fq "install --package-root $pkg" "$state/adapter.log"
 
 echo "test_install_commands: OK"

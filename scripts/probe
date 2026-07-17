@@ -17,7 +17,7 @@ desired_commit=$(printf '%s\n' "$resolved_record" | awk '{ print $3 }')
 
 generated_commit=$(spw_generated_commit_or_empty "$root")
 tmp_parent="${TMPDIR:-/tmp}"
-if ! probe_workspace=$(mktemp -d "$tmp_parent/superpowers-wrapper.probe.XXXXXX"); then
+if ! probe_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.probe.XXXXXX"); then
   spw_die "cannot create probe workspace under $tmp_parent"
 fi
 inspect_result="$probe_workspace/inspect.json"
@@ -51,6 +51,6 @@ else
   printf 'resolved ref: %s\n' "$resolved_ref"
   printf 'desired commit: %s\n' "$desired_commit"
   printf 'generated plugin commit: %s\n' "${generated_commit:-not present}"
-  printf 'installed wrapper commit or fingerprint: %s\n' "${installed_commit:-not detected}"
+  printf 'installed manager commit or fingerprint: %s\n' "${installed_commit:-not detected}"
   printf 'status: %s\n' "$status"
 fi

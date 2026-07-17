@@ -183,13 +183,13 @@ function buildSpawn(cmd, args, root, shell, platform) {
 
 function usage() {
   return [
-    'usage: superpowers-wrapper [prepare|probe|install|update|uninstall] [args...]',
+    'usage: superpowers-manager [prepare|probe|install|update|uninstall] [args...]',
     '',
     '  prepare    fetch the pinned upstream ref and generate the plugin tree',
     '  probe      report upstream/generated/installed status (accepts --porcelain)',
     '  install    register this package root as a Codex marketplace and install the plugin',
     '  update     probe, then prepare/install only if needed (default when no subcommand)',
-    '  uninstall  remove the wrapper plugin and marketplace from Codex',
+    '  uninstall  remove the manager plugin and marketplace from Codex',
     '',
     'Environment overrides (passed through to the scripts): SUPERPOWERS_REF,',
     'SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,',
@@ -207,7 +207,7 @@ function main() {
   }
   const root = resolvePackageRoot(import.meta.filename);
   if (!root) {
-    console.error('error: cannot resolve the superpowers-wrapper package root');
+    console.error('error: cannot resolve the superpowers-manager package root');
     process.exit(1);
   }
   if (parsed.kind === 'version') {

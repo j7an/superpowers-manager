@@ -13,7 +13,7 @@ mkdir -p "$upstream"
 git -C "$tmpdir" init upstream >/dev/null
 printf '%s\n' 'upstream' > "$upstream/README.md"
 git -C "$upstream" add README.md >/dev/null
-git -C "$upstream" -c user.email=superpowers-wrapper@example.invalid -c user.name=superpowers-wrapper -c commit.gpgsign=false commit -m "fake upstream" >/dev/null
+git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream" >/dev/null
 
 pkg="$tmpdir/pkg"
 mkdir -p "$pkg"
@@ -21,7 +21,7 @@ cp -R "$root/scripts" "$pkg/scripts"
 cp -R "$root/config" "$pkg/config"
 mkdir -p "$pkg/plugins/superpowers"
 
-installed_root="$tmpdir/codex-home/plugins/cache/superpowers-wrapper/superpowers/1.0.0"
+installed_root="$tmpdir/codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0"
 mkdir -p "$installed_root/.codex-plugin"
 
 adapter_log="$tmpdir/adapter.log"
@@ -118,7 +118,7 @@ assert_probe_tmp_empty() {
 # and probe still works with no codex executable on PATH.
 write_generated_metadata "$desired_commit"
 printf '%s\n' '{' > "$installed_root/.superpowers-upstream.json"
-write_installed_manifest "0.0.0+wrapper.$desired_short"
+write_installed_manifest "0.0.0+manager.$desired_short"
 : > "$adapter_log"
 output=$(run_probe)
 assert_probe_porcelain "$desired_short" "current" "$output"
@@ -128,7 +128,7 @@ assert_probe_tmp_empty
 # Scenario 1b: semantically invalid metadata falls through to a valid manifest
 # fingerprint instead of poisoning the protocol response.
 printf '%s\n' '{"commit":"not-a-fingerprint"}' > "$installed_root/.superpowers-upstream.json"
-write_installed_manifest "0.0.0+wrapper.$desired_short"
+write_installed_manifest "0.0.0+manager.$desired_short"
 : > "$adapter_log"
 output=$(run_probe)
 assert_probe_porcelain "$desired_short" "current" "$output"

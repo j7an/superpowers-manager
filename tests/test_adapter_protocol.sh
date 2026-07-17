@@ -211,7 +211,7 @@ if "$root/scripts/adapters/codex/adapter" >"$zero_out" 2>/dev/null; then
 fi
 [ "$(spw_json_get "$zero_out" operation)" = adapter ]
 [ "$(spw_json_get "$zero_out" error.code)" = invalid-arguments ]
-grep -Fxq 'error: codex plugin add failed for superpowers@superpowers-wrapper' "$RUN_STDERR"
+grep -Fxq 'error: codex plugin add failed for superpowers@superpowers-manager' "$RUN_STDERR"
 if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
   echo "escaped Codex output must not poison a controlled failure envelope" >&2
   exit 1

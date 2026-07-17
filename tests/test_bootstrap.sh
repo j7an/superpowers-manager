@@ -38,9 +38,9 @@ assert_file "scripts/adapters/codex/validate-generated-plugin.py"
 assert_file "scripts/core/validate-adapter-response.py"
 
 assert_contains "package.json" '"type": "module"'
-assert_not_contains "bin/superpowers-wrapper.js" "import.meta.main"
+assert_not_contains "bin/superpowers-manager.js" "import.meta.main"
 assert_contains "config/upstream-ref" "latest-release"
-assert_contains ".agents/plugins/marketplace.json" '"name": "superpowers-wrapper"'
+assert_contains ".agents/plugins/marketplace.json" '"name": "superpowers-manager"'
 assert_contains ".agents/plugins/marketplace.json" '"products": ["CODEX"]'
 assert_contains ".gitignore" "plugins/superpowers/.codex-plugin/plugin.json"
 assert_contains ".gitignore" "plugins/.superpowers.prepare.*/"

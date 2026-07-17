@@ -1,7 +1,7 @@
 {
-  "name": "superpowers-wrapper",
+  "name": "superpowers-manager",
   "interface": {
-    "displayName": "Superpowers Wrapper"
+    "displayName": "Superpowers Manager"
   },
   "plugins": [
     {

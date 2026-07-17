@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the wrapper-owned generated Superpowers plugin contract."""
+"""Validate the manager-owned generated Superpowers plugin contract."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def json_nesting_exceeds_limit(value: Any) -> bool:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate a generated Superpowers wrapper candidate."
+        description="Validate a generated Superpowers manager candidate."
     )
     parser.add_argument("--plugin-root", required=True)
     parser.add_argument("--source", required=True)
@@ -270,7 +270,7 @@ def validate_provenance(args: argparse.Namespace, plugin_root: Path, errors: lis
     if provenance is None:
         return
     if set(provenance) != PROVENANCE_KEYS:
-        errors.append("provenance keys do not match the wrapper-owned contract")
+        errors.append("provenance keys do not match the manager-owned contract")
     expected = {
         "source": args.source,
         "requested_ref": args.requested_ref,

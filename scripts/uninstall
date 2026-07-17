@@ -10,7 +10,7 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 spw_require_command python3
 
 tmp_parent="${TMPDIR:-/tmp}"
-if ! uninstall_workspace=$(mktemp -d "$tmp_parent/superpowers-wrapper.uninstall.XXXXXX"); then
+if ! uninstall_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.uninstall.XXXXXX"); then
   spw_die "cannot create uninstall workspace under $tmp_parent"
 fi
 inspect_result="$uninstall_workspace/inspect.json"
