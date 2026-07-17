@@ -32,9 +32,9 @@ The intended first modular-main release uses `bump=minor`. Commit analysis uses
 version-bump commit and release tag are created on `main`, so the tag passes the
 shared publisher's main-ancestry gate.
 
-The checked-in `package.json` version remains `0.1.1` until Tag Release writes
-the approved next version. Do not bump it manually or invent another release
-path.
+The checked-in `package.json` version is synchronized to the immutable published
+`0.1.4` baseline. Tag Release writes the approved next version. Do not invent
+another release path.
 
 No prerelease path is authorized. Do not create a beta tag, publish with
 `--tag next`, or add a prerelease dist-tag through this workflow. Persistent
