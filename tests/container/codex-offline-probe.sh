@@ -3,6 +3,9 @@ set -eu
 
 case "$HOME" in /home/spw|/tmp/*) ;; *) echo "error: refusing non-isolated HOME: $HOME" >&2; exit 1 ;; esac
 
+repo_root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+. "$repo_root/scripts/lib.sh"
+
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT INT TERM
 market="$root/market-a"
@@ -150,6 +153,8 @@ PY
 write_market "$market" "$commit_a"
 run_codex plugin marketplace add "$market"
 install_plugin_and_assert_active "$version_a" "$commit_a" "$commit_b"
+snapshot=$(spw_codex_identity_snapshot run_codex)
+test "$(spw_snapshot_get "$snapshot" identity_state)" = "neither"
 assert_marketplace_root "$market"
 
 write_market "$moved" "$commit_b"

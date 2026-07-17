@@ -512,7 +512,7 @@ spw_require_no_legacy_state() {
       printf '%s\n' \
         'Legacy superpowers-wrapper Codex state is installed.' \
         'Run: npx superpowers-wrapper@0.1.1 uninstall' \
-        'Then run: npx superpowers-manager@0.1.2 install' >&2
+        'Then run: npx superpowers-manager@0.1.3 install' >&2
       return 1
       ;;
     *) spw_die "unknown Codex identity state: $1" ;;

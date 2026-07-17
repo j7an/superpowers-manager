@@ -3,9 +3,9 @@ import test from 'node:test';
 
 const expected = {
   pkg: 'superpowers-manager',
-  version: '0.1.2',
+  version: '0.1.3',
   repository: 'https://github.com/j7an/superpowers-manager',
-  ref: 'refs/tags/v0.1.2',
+  ref: 'refs/tags/v0.1.3',
   workflow: '.github/workflows/release.yml',
   commit: 'a'.repeat(40),
   integrity: `sha512-${Buffer.from('b'.repeat(128), 'hex').toString('base64')}`,
@@ -15,7 +15,7 @@ function createValidFixture() {
   const statement = {
     subject: [
       {
-        name: 'pkg:npm/superpowers-manager@0.1.2',
+        name: 'pkg:npm/superpowers-manager@0.1.3',
         digest: { sha512: 'b'.repeat(128) },
       },
     ],
@@ -40,7 +40,7 @@ function createValidFixture() {
       },
     },
   };
-  const attestationUrl = 'https://registry.npmjs.org/-/npm/v1/attestations/superpowers-manager@0.1.2';
+  const attestationUrl = 'https://registry.npmjs.org/-/npm/v1/attestations/superpowers-manager@0.1.3';
   return {
     metadataStatus: 200,
     attestationStatus: 200,
@@ -117,9 +117,9 @@ test('accepts exact npm metadata and SLSA provenance', async () => {
   const { calls, fetchImpl } = fakeFetch(fixture);
   const statement = await verifyPublishedPackage({
     pkg: 'superpowers-manager',
-    version: '0.1.2',
+    version: '0.1.3',
     repository: 'https://github.com/j7an/superpowers-manager',
-    ref: 'refs/tags/v0.1.2',
+    ref: 'refs/tags/v0.1.3',
     workflow: '.github/workflows/release.yml',
     commit: 'a'.repeat(40),
     integrity: `sha512-${Buffer.from('b'.repeat(128), 'hex').toString('base64')}`,

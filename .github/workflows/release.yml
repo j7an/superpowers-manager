@@ -1,9 +1,9 @@
-name: Release 0.1.2 Migration
+name: Release 0.1.3 Recovery
 
 on:
   push:
     tags:
-      - "v0.1.2"
+      - "v0.1.3"
 
 permissions: {}
 
@@ -40,25 +40,26 @@ jobs:
       - name: Ensure npm provenance support
         shell: sh
         run: |
-          npm install --global "npm@>=11.5.1"
-          npm --version
+          npm install --global "npm@11.16.0"
+          test "$(npm --version)" = "11.16.0"
 
       - name: Verify frozen release source
         shell: sh
         run: |
           set -eu
-          test "$GITHUB_REF" = "refs/tags/v0.1.2"
-          test "$GITHUB_REF_NAME" = "v0.1.2"
+          test "$GITHUB_REF" = "refs/tags/v0.1.3"
+          test "$GITHUB_REF_NAME" = "v0.1.3"
           git fetch --no-tags origin \
-            'refs/heads/release/0.1.2-manager:refs/remotes/origin/release/0.1.2-manager'
-          branch_sha=$(git rev-parse origin/release/0.1.2-manager)
+            'refs/heads/release/0.1.3-manager:refs/remotes/origin/release/0.1.3-manager'
+          branch_sha=$(git rev-parse origin/release/0.1.3-manager)
           test "$branch_sha" = "$GITHUB_SHA"
-          git merge-base --is-ancestor v0.1.1 "$GITHUB_SHA"
+          git merge-base --is-ancestor v0.1.2 "$GITHUB_SHA"
+          test "$(git rev-parse "$GITHUB_SHA^")" = "$(git rev-parse v0.1.2)"
           node <<'NODE'
           const assert = require('node:assert/strict');
           const pkg = require('./package.json');
           assert.equal(pkg.name, 'superpowers-manager');
-          assert.equal(pkg.version, '0.1.2');
+          assert.equal(pkg.version, '0.1.3');
           assert.equal(
             pkg.repository.url,
             'git+https://github.com/j7an/superpowers-manager.git',
@@ -78,7 +79,7 @@ jobs:
           sh tests/assert_pack_contents.sh "$report"
           filename=$(node -p 'require(process.argv[1])[0].filename' "$report")
           integrity=$(node -p 'require(process.argv[1])[0].integrity' "$report")
-          test "$filename" = "superpowers-manager-0.1.2.tgz"
+          test "$filename" = "superpowers-manager-0.1.3.tgz"
           test -f "$filename"
           case "$integrity" in
             sha512-*) ;;
@@ -123,8 +124,8 @@ jobs:
       - name: Ensure npm provenance support
         shell: sh
         run: |
-          npm install --global "npm@>=11.5.1"
-          npm --version
+          npm install --global "npm@11.16.0"
+          test "$(npm --version)" = "11.16.0"
 
       - name: Download npm distribution
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -137,19 +138,42 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
           PACKAGE: superpowers-manager
-          VERSION: 0.1.2
+          VERSION: 0.1.3
           TARBALL: dist/${{ needs.build.outputs.filename }}
           EXPECTED_INTEGRITY: ${{ needs.build.outputs.integrity }}
         run: |
           set -eu
           test -f "$TARBALL"
-          existing_integrity=$(npm view "${PACKAGE}@${VERSION}" dist.integrity 2>/dev/null || true)
-          if [ -n "$existing_integrity" ]; then
+          lookup_file="$RUNNER_TEMP/npm-publish-lookup.txt"
+          if npm view "${PACKAGE}@${VERSION}" dist.integrity > "$lookup_file" 2>&1; then
+            existing_integrity=$(cat "$lookup_file")
+            test -n "$existing_integrity" || {
+              echo "::error::existing registry version returned empty integrity"
+              exit 1
+            }
             test "$existing_integrity" = "$EXPECTED_INTEGRITY" || {
               echo "::error::immutable registry version has different integrity"
               exit 1
             }
           else
+            lookup_status=$?
+            lookup_output=$(cat "$lookup_file")
+            case "$lookup_output" in
+              *E404*) ;;
+              *)
+                printf '::error::npm lookup failed with status %s: %s\n' \
+                  "$lookup_status" "$lookup_output"
+                exit 1
+                ;;
+            esac
+            case "$lookup_output" in
+              *"${PACKAGE}@${VERSION}"*) ;;
+              *)
+                printf '::error::npm E404 did not name exact package/version %s@%s: %s\n' \
+                  "$PACKAGE" "$VERSION" "$lookup_output"
+                exit 1
+                ;;
+            esac
             npm publish "$TARBALL" --access public --provenance
           fi
 
@@ -157,16 +181,40 @@ jobs:
         shell: sh
         env:
           PACKAGE: superpowers-manager
-          VERSION: 0.1.2
+          VERSION: 0.1.3
           EXPECTED_INTEGRITY: ${{ needs.build.outputs.integrity }}
         run: |
           set -eu
           attempt=1
           observed_integrity=
+          lookup_file="$RUNNER_TEMP/npm-integrity-lookup.txt"
           while [ "$attempt" -le 30 ]; do
-            observed_integrity=$(npm view "${PACKAGE}@${VERSION}" dist.integrity 2>/dev/null || true)
-            if [ -n "$observed_integrity" ]; then
+            if npm view "${PACKAGE}@${VERSION}" dist.integrity > "$lookup_file" 2>&1; then
+              observed_integrity=$(cat "$lookup_file")
+              test -n "$observed_integrity" || {
+                echo "::error::registry lookup returned empty integrity"
+                exit 1
+              }
               break
+            else
+              lookup_status=$?
+              lookup_output=$(cat "$lookup_file")
+              case "$lookup_output" in
+                *E404*) ;;
+                *)
+                  printf '::error::registry lookup failed with status %s: %s\n' \
+                    "$lookup_status" "$lookup_output"
+                  exit 1
+                  ;;
+              esac
+              case "$lookup_output" in
+                *"${PACKAGE}@${VERSION}"*) ;;
+                *)
+                  printf '::error::registry E404 did not name exact package/version %s@%s: %s\n' \
+                    "$PACKAGE" "$VERSION" "$lookup_output"
+                  exit 1
+                  ;;
+              esac
             fi
             sleep 10
             attempt=$((attempt + 1))
@@ -183,16 +231,16 @@ jobs:
           NPM_CONFIG_CACHE=$(mktemp -d)
           export NPM_CONFIG_CACHE
           trap 'rm -rf "$NPM_CONFIG_CACHE"' EXIT INT TERM
-          test "$(npx --yes superpowers-manager@0.1.2 --version)" = "0.1.2"
+          test "$(npx --yes superpowers-manager@0.1.3 --version)" = "0.1.3"
 
       - name: Verify npm provenance
         shell: sh
         run: |
           node tests/verify_npm_provenance.mjs \
             superpowers-manager \
-            0.1.2 \
+            0.1.3 \
             https://github.com/j7an/superpowers-manager \
-            refs/tags/v0.1.2 \
+            refs/tags/v0.1.3 \
             .github/workflows/release.yml \
             ${{ github.sha }} \
             ${{ needs.build.outputs.integrity }}
@@ -224,27 +272,40 @@ jobs:
           FILENAME: ${{ needs.build.outputs.filename }}
         run: |
           set -eu
-          TAG=v0.1.2
+          TAG=v0.1.3
           TARBALL="dist/${{ needs.build.outputs.filename }}"
           test -f "$TARBALL"
           expected_digest="sha256:$(sha256sum "$TARBALL" | cut -d ' ' -f 1)"
           release_json="$RUNNER_TEMP/release.json"
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "$release_json" 2>/dev/null; then
+          release_error="$RUNNER_TEMP/release-error.txt"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            > "$release_json" 2> "$release_error"; then
             test "$(jq -r '.tag_name' "$release_json")" = "$TAG"
+            test "$(jq -r '.name' "$release_json")" = "Superpowers Manager 0.1.3"
             existing_digest=$(jq -r --arg name "$FILENAME" \
               '[.assets[] | select(.name == $name) | .digest] | if length == 0 then "" elif length == 1 then .[0] else "duplicate" end' \
               "$release_json")
             if [ -z "$existing_digest" ]; then
-              gh release upload "$TAG" "$TARBALL"
-            else
-              test "$existing_digest" = "$expected_digest" || {
-                echo "::error::existing release asset has different digest"
-                exit 1
-              }
+              echo "::error::existing release is missing the expected asset"
+              exit 1
             fi
+            test "$existing_digest" = "$expected_digest" || {
+              echo "::error::existing release asset has different digest"
+              exit 1
+            }
           else
+            release_lookup_status=$?
+            release_lookup_output=$(cat "$release_error")
+            case "$release_lookup_output" in
+              *"HTTP 404"*) ;;
+              *)
+                printf '::error::GitHub release lookup failed with status %s: %s\n' \
+                  "$release_lookup_status" "$release_lookup_output"
+                exit 1
+                ;;
+            esac
             gh release create "$TAG" "$TARBALL" \
               --verify-tag \
-              --title "Superpowers Manager 0.1.2" \
+              --title "Superpowers Manager 0.1.3" \
               --notes "One-time stable-line migration release for Superpowers Manager."
           fi
