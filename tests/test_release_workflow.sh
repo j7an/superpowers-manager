@@ -38,6 +38,15 @@ def step_run(job, name)
   fetch(step, "run", "step #{name}.run")
 end
 
+def named_step(job, name)
+  step = fetch(job, "steps", "job.steps").find do |candidate|
+    candidate["name"] == name
+  end
+  raise "missing step #{name.inspect}" unless step
+
+  step
+end
+
 def action_steps(job, prefix)
   fetch(job, "steps", "job.steps").select do |step|
     step.fetch("uses", "").start_with?(prefix)
@@ -45,7 +54,7 @@ def action_steps(job, prefix)
 end
 
 workflow = expect_hash(workflow, "workflow")
-expect_equal(fetch(workflow, "name", "name"), "Release 0.1.3 Recovery", "name")
+expect_equal(fetch(workflow, "name", "name"), "Release 0.1.4 Recovery", "name")
 
 # Psych implements YAML 1.1, where an unquoted GitHub `on` key becomes true.
 on_keys = ["on", true].select { |key| workflow.key?(key) }
@@ -55,7 +64,7 @@ on_config = expect_hash(fetch(workflow, on_keys.fetch(0), "on"), "on")
 expect_equal(on_config.keys, ["push"], "on keys")
 push = expect_hash(fetch(on_config, "push", "on.push"), "on.push")
 expect_equal(push.keys, ["tags"], "on.push keys")
-expect_equal(fetch(push, "tags", "on.push.tags"), ["v0.1.3"], "on.push.tags")
+expect_equal(fetch(push, "tags", "on.push.tags"), ["v0.1.4"], "on.push.tags")
 
 expect_equal(fetch(workflow, "permissions", "permissions"), {}, "permissions")
 concurrency = expect_hash(fetch(workflow, "concurrency", "concurrency"), "concurrency")
@@ -130,18 +139,18 @@ end
 
 source_check = step_run(build, "Verify frozen release source")
 [
-  'test "$GITHUB_REF" = "refs/tags/v0.1.3"',
-  'origin/release/0.1.3-manager',
+  'test "$GITHUB_REF" = "refs/tags/v0.1.4"',
+  'origin/release/0.1.4-manager',
   'test "$branch_sha" = "$GITHUB_SHA"',
-  'git merge-base --is-ancestor v0.1.2 "$GITHUB_SHA"',
-  'test "$(git rev-parse "$GITHUB_SHA^")" = "$(git rev-parse v0.1.2)"',
+  'git merge-base --is-ancestor v0.1.3 "$GITHUB_SHA"',
+  'test "$(git rev-parse "$GITHUB_SHA^")" = "$(git rev-parse v0.1.3)"',
 ].each do |needle|
   raise "source check missing #{needle.inspect}" unless source_check.include?(needle)
 end
 source_lines = source_check.lines.map(&:strip)
 [
   "assert.equal(pkg.name, 'superpowers-manager');",
-  "assert.equal(pkg.version, '0.1.3');",
+  "assert.equal(pkg.version, '0.1.4');",
 ].each do |line|
   raise "source check missing exact assertion line #{line.inspect}" unless source_lines.include?(line)
 end
@@ -190,12 +199,29 @@ pack = step_run(build, "Pack and assert artifact")
 [
   "npm pack --json",
   "sh tests/assert_pack_contents.sh",
-  'test "$filename" = "superpowers-manager-0.1.3.tgz"',
+  'test "$filename" = "superpowers-manager-0.1.4.tgz"',
   'filename=',
   'integrity=',
   'GITHUB_OUTPUT',
 ].each do |needle|
   raise "pack step missing #{needle.inspect}" unless pack.include?(needle)
+end
+dry_run_step = named_step(build, "Verify local tarball publish path")
+expect_equal(
+  fetch(dry_run_step, "env", "dry-run env"),
+  { "FILENAME" => "${{ steps.pack.outputs.filename }}" },
+  "dry-run env",
+)
+dry_run = fetch(dry_run_step, "run", "dry-run command")
+[
+  'test "$(npm --version)" = "11.16.0"',
+  'dry_run_root="$RUNNER_TEMP/npm-publish-dry-run"',
+  'mkdir -p "$dry_run_root/dist"',
+  'cp "$FILENAME" "$dry_run_root/dist/$FILENAME"',
+  'cd "$dry_run_root"',
+  'npm publish "./dist/$FILENAME" --dry-run --ignore-scripts',
+].each do |needle|
+  raise "dry-run step missing #{needle.inspect}" unless dry_run.include?(needle)
 end
 expect_equal(
   fetch(build, "outputs", "jobs.build.outputs"),
@@ -235,10 +261,10 @@ end
 publish_step = fetch(publish, "steps", "jobs.publish.steps").find { |step| step["name"] == "Publish exact tarball idempotently" }
 publish_env = fetch(publish_step, "env", "publish step env")
 expect_equal(fetch(publish_env, "PACKAGE", "publish PACKAGE"), "superpowers-manager", "publish PACKAGE")
-expect_equal(fetch(publish_env, "VERSION", "publish VERSION"), "0.1.3", "publish VERSION")
+expect_equal(fetch(publish_env, "VERSION", "publish VERSION"), "0.1.4", "publish VERSION")
 expect_equal(
   fetch(publish_env, "TARBALL", "publish TARBALL"),
-  "dist/${{ needs.build.outputs.filename }}",
+  "./dist/${{ needs.build.outputs.filename }}",
   "publish TARBALL",
 )
 expect_equal(
@@ -254,6 +280,18 @@ jobs.each_value do |job|
   end
 end
 
+publish_commands = all_runs.lines.map(&:strip).select do |line|
+  line.start_with?("npm publish ")
+end
+expect_equal(
+  publish_commands,
+  [
+    'npm publish "./dist/$FILENAME" --dry-run --ignore-scripts',
+    'npm publish "$TARBALL" --access public --provenance',
+  ],
+  "all npm publish commands",
+)
+
 poll = step_run(publish, "Wait for registry integrity")
 raise "registry polling must be bounded" unless poll.include?('while [ "$attempt" -le 30 ]') && poll.include?("sleep 10")
 raise "registry polling must verify integrity" unless poll.include?('test "$observed_integrity" = "$EXPECTED_INTEGRITY"')
@@ -261,19 +299,19 @@ raise "registry polling must not suppress npm failures" if poll.include?("|| tru
 raise "registry polling must fail on non-E404 lookup errors" unless poll.include?("registry lookup failed with status")
 poll_step = fetch(publish, "steps", "jobs.publish.steps").find { |step| step["name"] == "Wait for registry integrity" }
 poll_env = fetch(poll_step, "env", "poll step env")
-expect_equal(fetch(poll_env, "VERSION", "poll VERSION"), "0.1.3", "poll VERSION")
+expect_equal(fetch(poll_env, "VERSION", "poll VERSION"), "0.1.4", "poll VERSION")
 
 npx = step_run(publish, "Verify clean npx execution")
 raise "npx check must use a new temporary cache" unless npx.include?('NPM_CONFIG_CACHE=$(mktemp -d)')
-raise "missing exact npx check" unless npx.include?('test "$(npx --yes superpowers-manager@0.1.3 --version)" = "0.1.3"')
+raise "missing exact npx check" unless npx.include?('test "$(npx --yes superpowers-manager@0.1.4 --version)" = "0.1.4"')
 
 provenance = step_run(publish, "Verify npm provenance")
 [
   "node tests/verify_npm_provenance.mjs",
   "superpowers-manager",
-  "0.1.3",
+  "0.1.4",
   "https://github.com/j7an/superpowers-manager",
-  "refs/tags/v0.1.3",
+  "refs/tags/v0.1.4",
   ".github/workflows/release.yml",
   "${{ github.sha }}",
   "${{ needs.build.outputs.integrity }}",
@@ -283,11 +321,11 @@ end
 
 release_run = step_run(github_release, "Create or verify GitHub release")
 [
-  "TAG=v0.1.3",
+  "TAG=v0.1.4",
   "${{ needs.build.outputs.filename }}",
   "gh release create",
-  '--title "Superpowers Manager 0.1.3"',
-  'test "$(jq -r \'.name\' "$release_json")" = "Superpowers Manager 0.1.3"',
+  '--title "Superpowers Manager 0.1.4"',
+  'test "$(jq -r \'.name\' "$release_json")" = "Superpowers Manager 0.1.4"',
   'release_lookup_status=$?',
   '*"HTTP 404"*) ;;',
   "GitHub release lookup failed with status",
@@ -352,8 +390,16 @@ RUBY
     '*"HTTP 404"*) ;;' \
     '*"HTTP 404"*|*"HTTP 500"*) ;;'
   assert_mutant_rejected \
+    bare-publish-tarball \
+    'TARBALL: ./dist/${{ needs.build.outputs.filename }}' \
+    'TARBALL: dist/${{ needs.build.outputs.filename }}'
+  assert_mutant_rejected \
+    bare-dry-run-tarball \
+    'npm publish "./dist/$FILENAME" --dry-run --ignore-scripts' \
+    'npm publish "dist/$FILENAME" --dry-run --ignore-scripts'
+  assert_mutant_rejected \
     wrong-release-title \
-    'test "$(jq -r '\''.name'\'' "$release_json")" = "Superpowers Manager 0.1.3"' \
+    'test "$(jq -r '\''.name'\'' "$release_json")" = "Superpowers Manager 0.1.4"' \
     'test "$(jq -r '\''.name'\'' "$release_json")" = "Wrong title"'
 fi
 

@@ -1,9 +1,9 @@
-name: Release 0.1.3 Recovery
+name: Release 0.1.4 Recovery
 
 on:
   push:
     tags:
-      - "v0.1.3"
+      - "v0.1.4"
 
 permissions: {}
 
@@ -47,19 +47,19 @@ jobs:
         shell: sh
         run: |
           set -eu
-          test "$GITHUB_REF" = "refs/tags/v0.1.3"
-          test "$GITHUB_REF_NAME" = "v0.1.3"
+          test "$GITHUB_REF" = "refs/tags/v0.1.4"
+          test "$GITHUB_REF_NAME" = "v0.1.4"
           git fetch --no-tags origin \
-            'refs/heads/release/0.1.3-manager:refs/remotes/origin/release/0.1.3-manager'
-          branch_sha=$(git rev-parse origin/release/0.1.3-manager)
+            'refs/heads/release/0.1.4-manager:refs/remotes/origin/release/0.1.4-manager'
+          branch_sha=$(git rev-parse origin/release/0.1.4-manager)
           test "$branch_sha" = "$GITHUB_SHA"
-          git merge-base --is-ancestor v0.1.2 "$GITHUB_SHA"
-          test "$(git rev-parse "$GITHUB_SHA^")" = "$(git rev-parse v0.1.2)"
+          git merge-base --is-ancestor v0.1.3 "$GITHUB_SHA"
+          test "$(git rev-parse "$GITHUB_SHA^")" = "$(git rev-parse v0.1.3)"
           node <<'NODE'
           const assert = require('node:assert/strict');
           const pkg = require('./package.json');
           assert.equal(pkg.name, 'superpowers-manager');
-          assert.equal(pkg.version, '0.1.3');
+          assert.equal(pkg.version, '0.1.4');
           assert.equal(
             pkg.repository.url,
             'git+https://github.com/j7an/superpowers-manager.git',
@@ -79,7 +79,7 @@ jobs:
           sh tests/assert_pack_contents.sh "$report"
           filename=$(node -p 'require(process.argv[1])[0].filename' "$report")
           integrity=$(node -p 'require(process.argv[1])[0].integrity' "$report")
-          test "$filename" = "superpowers-manager-0.1.3.tgz"
+          test "$filename" = "superpowers-manager-0.1.4.tgz"
           test -f "$filename"
           case "$integrity" in
             sha512-*) ;;
@@ -87,6 +87,21 @@ jobs:
           esac
           printf 'filename=%s\n' "$filename" >> "$GITHUB_OUTPUT"
           printf 'integrity=%s\n' "$integrity" >> "$GITHUB_OUTPUT"
+
+      - name: Verify local tarball publish path
+        shell: sh
+        env:
+          FILENAME: ${{ steps.pack.outputs.filename }}
+        run: |
+          set -eu
+          test "$(npm --version)" = "11.16.0"
+          dry_run_root="$RUNNER_TEMP/npm-publish-dry-run"
+          mkdir -p "$dry_run_root/dist"
+          cp "$FILENAME" "$dry_run_root/dist/$FILENAME"
+          (
+            cd "$dry_run_root"
+            npm publish "./dist/$FILENAME" --dry-run --ignore-scripts
+          )
 
       - name: Upload npm distribution
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -138,8 +153,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
           PACKAGE: superpowers-manager
-          VERSION: 0.1.3
-          TARBALL: dist/${{ needs.build.outputs.filename }}
+          VERSION: 0.1.4
+          TARBALL: ./dist/${{ needs.build.outputs.filename }}
           EXPECTED_INTEGRITY: ${{ needs.build.outputs.integrity }}
         run: |
           set -eu
@@ -181,7 +196,7 @@ jobs:
         shell: sh
         env:
           PACKAGE: superpowers-manager
-          VERSION: 0.1.3
+          VERSION: 0.1.4
           EXPECTED_INTEGRITY: ${{ needs.build.outputs.integrity }}
         run: |
           set -eu
@@ -231,16 +246,16 @@ jobs:
           NPM_CONFIG_CACHE=$(mktemp -d)
           export NPM_CONFIG_CACHE
           trap 'rm -rf "$NPM_CONFIG_CACHE"' EXIT INT TERM
-          test "$(npx --yes superpowers-manager@0.1.3 --version)" = "0.1.3"
+          test "$(npx --yes superpowers-manager@0.1.4 --version)" = "0.1.4"
 
       - name: Verify npm provenance
         shell: sh
         run: |
           node tests/verify_npm_provenance.mjs \
             superpowers-manager \
-            0.1.3 \
+            0.1.4 \
             https://github.com/j7an/superpowers-manager \
-            refs/tags/v0.1.3 \
+            refs/tags/v0.1.4 \
             .github/workflows/release.yml \
             ${{ github.sha }} \
             ${{ needs.build.outputs.integrity }}
@@ -272,7 +287,7 @@ jobs:
           FILENAME: ${{ needs.build.outputs.filename }}
         run: |
           set -eu
-          TAG=v0.1.3
+          TAG=v0.1.4
           TARBALL="dist/${{ needs.build.outputs.filename }}"
           test -f "$TARBALL"
           expected_digest="sha256:$(sha256sum "$TARBALL" | cut -d ' ' -f 1)"
@@ -281,7 +296,7 @@ jobs:
           if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
             > "$release_json" 2> "$release_error"; then
             test "$(jq -r '.tag_name' "$release_json")" = "$TAG"
-            test "$(jq -r '.name' "$release_json")" = "Superpowers Manager 0.1.3"
+            test "$(jq -r '.name' "$release_json")" = "Superpowers Manager 0.1.4"
             existing_digest=$(jq -r --arg name "$FILENAME" \
               '[.assets[] | select(.name == $name) | .digest] | if length == 0 then "" elif length == 1 then .[0] else "duplicate" end' \
               "$release_json")
@@ -306,6 +321,6 @@ jobs:
             esac
             gh release create "$TAG" "$TARBALL" \
               --verify-tag \
-              --title "Superpowers Manager 0.1.3" \
+              --title "Superpowers Manager 0.1.4" \
               --notes "One-time stable-line migration release for Superpowers Manager."
           fi
