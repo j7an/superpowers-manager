@@ -143,9 +143,18 @@ source_check = step_run(build, "Verify frozen release source")
   'origin/release/0.1.4-manager',
   'test "$branch_sha" = "$GITHUB_SHA"',
   'git merge-base --is-ancestor v0.1.3 "$GITHUB_SHA"',
-  'test "$(git rev-parse "$GITHUB_SHA^")" = "$(git rev-parse v0.1.3)"',
 ].each do |needle|
   raise "source check missing #{needle.inspect}" unless source_check.include?(needle)
+end
+expected_lineage_assertion = <<~'SH'.strip
+  test "$(git rev-list --parents -n 1 "$GITHUB_SHA")" = \
+    "$GITHUB_SHA $(git rev-parse v0.1.3)"
+SH
+unless source_check.include?(expected_lineage_assertion)
+  raise "source check missing exact sole-parent lineage assertion"
+end
+if source_check.include?('git rev-parse "$GITHUB_SHA^"')
+  raise "first-parent-only release lineage check is forbidden"
 end
 source_lines = source_check.lines.map(&:strip)
 [
@@ -401,6 +410,10 @@ RUBY
     wrong-release-title \
     'test "$(jq -r '\''.name'\'' "$release_json")" = "Superpowers Manager 0.1.4"' \
     'test "$(jq -r '\''.name'\'' "$release_json")" = "Wrong title"'
+  assert_mutant_rejected \
+    first-parent-only-lineage \
+    'git rev-list --parents -n 1 "$GITHUB_SHA"' \
+    'git rev-parse "$GITHUB_SHA^"'
 fi
 
 echo "test_release_workflow: OK"

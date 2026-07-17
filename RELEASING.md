@@ -181,8 +181,23 @@ The changes may only:
 - pin build and publish jobs to exact `npm@11.16.0`; and
 - document and test this recovery.
 
-After explicit PR approval, squash-merge into `release/0.1.4-manager`. Then
-fetch and freeze the full post-squash remote head SHA:
+After content review and explicit PR approval, stop.
+Content review and PR approval do not authorize the squash merge.
+
+### Recovery Gate pre-R1: authorize the squash merge
+
+**STOP — EXTERNAL MUTATION GATE PRE-R1 MERGE**
+
+Obtain separate just-in-time authorization immediately before the squash merge.
+Present the exact approved pull request, its head SHA, the target
+`release/0.1.4-manager` branch, and the squash-only consequence. Pre-R1 merge
+authorization permits only squash-merging that exact approved pull request
+into that exact target branch. It does not authorize a tag, package,
+environment, credential, release, or npm metadata mutation.
+
+After separate explicit pre-R1 merge authorization only, squash-merge into
+`release/0.1.4-manager`. Then fetch and freeze the full post-squash remote head
+SHA:
 
 ```sh
 set -eu
@@ -203,7 +218,8 @@ tests/test_verify_npm_provenance.mjs
 EOF
 git fetch origin release/0.1.4-manager --tags
 frozen_sha=$(git rev-parse origin/release/0.1.4-manager)
-test "$(git rev-parse "$frozen_sha^")" = "$(git rev-parse v0.1.3)"
+test "$(git rev-list --parents -n 1 "$frozen_sha")" = \
+  "$frozen_sha $(git rev-parse v0.1.3)"
 git show --stat --oneline "$frozen_sha"
 git diff --name-only v0.1.3..."$frozen_sha" |
   LC_ALL=C sort > "$actual_files"
@@ -228,7 +244,8 @@ test "$(node -p 'require("./package.json").version')" = "0.1.4"
 test "$(node -p 'require("./package.json").repository.url')" = \
   "git+https://github.com/j7an/superpowers-manager.git"
 git merge-base --is-ancestor v0.1.3 "$frozen_sha"
-test "$(git rev-parse "$frozen_sha^")" = "$(git rev-parse v0.1.3)"
+test "$(git rev-list --parents -n 1 "$frozen_sha")" = \
+  "$frozen_sha $(git rev-parse v0.1.3)"
 ```
 
 Run the focused contracts and full host suite:
@@ -475,7 +492,8 @@ require_remote_tag_absent() {
 }
 git fetch origin release/0.1.4-manager --tags
 test "$(git rev-parse origin/release/0.1.4-manager)" = "$frozen_sha"
-test "$(git rev-parse "$frozen_sha^")" = "$(git rev-parse v0.1.3)"
+test "$(git rev-list --parents -n 1 "$frozen_sha")" = \
+  "$frozen_sha $(git rev-parse v0.1.3)"
 test -z "$(git tag --list v0.1.4)"
 require_remote_tag_absent v0.1.4
 git show "$frozen_sha:package.json"
@@ -610,7 +628,7 @@ case "$artifact_integrity" in
 esac
 printf 'artifact_integrity=%s\n' "$artifact_integrity"
 python3 - "$artifact" tests/expected_tarball_contents.txt <<'PY'
-# BEGIN PRE_R3_TARBALL_VERIFIER
+# BEGIN PRE_R2_TARBALL_VERIFIER
 import json
 import sys
 import tarfile
@@ -638,7 +656,7 @@ with tarfile.open(artifact_path, "r:gz") as archive:
 assert package["name"] == "superpowers-manager"
 assert package["version"] == "0.1.4"
 assert package["repository"]["url"] == "git+https://github.com/j7an/superpowers-manager.git"
-# END PRE_R3_TARBALL_VERIFIER
+# END PRE_R2_TARBALL_VERIFIER
 PY
 ```
 

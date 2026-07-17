@@ -132,6 +132,20 @@ assert_contains "$release_runbook" "87783582029"
 assert_contains "$release_runbook" 'npm publish "dist/superpowers-manager-0.1.3.tgz"'
 assert_contains "$release_runbook" 'npm publish "./dist/superpowers-manager-0.1.3.tgz"'
 assert_contains "$release_runbook" 'TARBALL: ./dist/${{ needs.build.outputs.filename }}'
+merge_gate="### Recovery Gate pre-R1: authorize the squash merge"
+r1_gate="## 5. Recovery Gate R1: push exact lightweight v0.1.4"
+merge_authorization='After separate explicit pre-R1 merge authorization only, squash-merge'
+assert_line "$release_runbook" "$merge_gate"
+assert_line "$release_runbook" "$r1_gate"
+assert_contains "$release_runbook" '**STOP — EXTERNAL MUTATION GATE PRE-R1 MERGE**'
+assert_contains "$release_runbook" 'Content review and PR approval do not authorize the squash merge.'
+assert_contains "$release_runbook" 'Obtain separate just-in-time authorization immediately before the squash merge.'
+assert_contains "$release_runbook" "$merge_authorization"
+assert_not_contains "$release_runbook" 'After explicit PR approval, squash-merge'
+assert_before "$release_runbook" 'Content review and PR approval do not authorize the squash merge.' "$merge_gate"
+assert_before "$release_runbook" "$merge_gate" 'Obtain separate just-in-time authorization immediately before the squash merge.'
+assert_before "$release_runbook" "$merge_gate" "$merge_authorization"
+assert_before "$release_runbook" "$merge_authorization" "$r1_gate"
 trusted_gate="## 11. Recovery Gate R4: configure permanent trusted publishing"
 token_gate="## 12. Recovery Gate R5: disallow token publishing"
 deprecation_gate="## 13. Recovery Gate R6: deprecate the exact old package"
@@ -161,6 +175,9 @@ assert_count "$release_runbook" 'cmp -s "$expected_files" "$actual_files"' 2
 assert_count "$release_runbook" 'diff -u "$expected_files" "$actual_files"' 2
 assert_contains "$release_runbook" 'git diff --name-only v0.1.3...HEAD'
 assert_contains "$release_runbook" 'git diff --name-only v0.1.3..."$frozen_sha"'
+assert_count "$release_runbook" 'git rev-list --parents -n 1 "$frozen_sha"' 3
+assert_count "$release_runbook" '"$frozen_sha $(git rev-parse v0.1.3)"' 3
+assert_not_contains "$release_runbook" 'git rev-parse "$frozen_sha^"'
 assert_contains "$release_runbook" 'git show "$frozen_sha:tests/container/codex-offline-probe.sh"'
 assert_contains "$release_runbook" 'snapshot=$(spw_codex_identity_snapshot run_codex)'
 assert_contains "$release_runbook" 'test "$(spw_snapshot_get "$snapshot" identity_state)" = "neither"'
@@ -170,8 +187,9 @@ assert_contains "$release_runbook" "createHash('sha512')"
 assert_contains "$release_runbook" 'printf '\''artifact_integrity=%s\n'\'' "$artifact_integrity"'
 assert_contains "$release_runbook" 'test "$registry_integrity" = "$artifact_integrity"'
 assert_contains "$release_runbook" 'python3 - "$artifact" tests/expected_tarball_contents.txt <<'\''PY'\'''
-assert_contains "$release_runbook" '# BEGIN PRE_R3_TARBALL_VERIFIER'
-assert_contains "$release_runbook" '# END PRE_R3_TARBALL_VERIFIER'
+assert_contains "$release_runbook" '# BEGIN PRE_R2_TARBALL_VERIFIER'
+assert_contains "$release_runbook" '# END PRE_R2_TARBALL_VERIFIER'
+assert_not_contains "$release_runbook" 'PRE_R3_TARBALL_VERIFIER'
 assert_contains "$release_runbook" 'with tarfile.open(artifact_path, "r:gz") as archive:'
 assert_contains "$release_runbook" 'member.name.removeprefix("package/")'
 assert_contains "$release_runbook" 'assert actual_files == expected_files'
@@ -251,8 +269,8 @@ verifier_dir=$(mktemp -d)
 trap 'rm -rf "$verifier_dir"' EXIT HUP INT TERM
 verifier_script="$verifier_dir/verify_tarball.py"
 awk '
-  /^# BEGIN PRE_R3_TARBALL_VERIFIER$/ { capture = 1; next }
-  /^# END PRE_R3_TARBALL_VERIFIER$/ { capture = 0; exit }
+  /^# BEGIN PRE_R2_TARBALL_VERIFIER$/ { capture = 1; next }
+  /^# END PRE_R2_TARBALL_VERIFIER$/ { capture = 0; exit }
   capture { print }
 ' "$root/$release_runbook" > "$verifier_script"
 test -s "$verifier_script"
