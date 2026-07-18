@@ -27,10 +27,12 @@ base:
 - minor produces `0.2.0`;
 - major produces `1.0.0`.
 
-The intended first modular-main release uses `bump=minor`. Commit analysis uses
-`v0.1.4..HEAD` even though the maintenance and main histories diverged. The new
-version-bump commit and release tag are created on `main`, so the tag passes the
-shared publisher's main-ancestry gate.
+The one-time `0.1.5` release uses `bump=patch`. It is the first end-to-end OIDC
+validation: Tag Release changes `package.json` to `0.1.5`, commits through the
+release bot, creates lightweight `v0.1.5`, and triggers the OIDC Release
+workflow. Commit analysis uses `v0.1.4..HEAD` even though the maintenance and
+main histories diverged. The new version-bump commit and release tag are
+created on `main`, so the tag passes the shared publisher's main-ancestry gate.
 
 The checked-in `package.json` version is synchronized to the immutable published
 `0.1.4` baseline. Tag Release writes the approved next version. Do not invent
@@ -38,8 +40,8 @@ another release path.
 
 No prerelease path is authorized. Do not create a beta tag, publish with
 `--tag next`, or add a prerelease dist-tag through this workflow. Persistent
-track-latest, pin, and unpin behavior requires its own approved design before
-the production modular release.
+track-latest, pin, and unpin behavior remains outside the one-time `0.1.5`
+release. Persistent pinning remains required before `0.2.0`.
 
 ## Normal release
 
@@ -52,9 +54,10 @@ the production modular release.
 3. Confirm the protected `npm` environment still requires reviewer approval,
    has zero npm secrets, and the trusted-publisher mapping still matches this
    repository, caller workflow, and environment exactly.
-4. Dispatch **Tag Release** on `main` with `bump=minor` for the first modular
+4. Dispatch **Tag Release** on `main` with `bump=patch` for the one-time `0.1.5`
    release. Later releases may use `auto|patch|minor|major` only after reviewing
-   the computed version.
+   the computed version and satisfying the persistent-pinning prerequisite for
+   `0.2.0`.
 5. Approve the `release` environment deployment only after its proposed version
    and frozen source SHA match the intended release.
 6. When the tag-triggered **Release** run reaches the `npm` environment, verify
@@ -105,11 +108,12 @@ The container suite is authoritative for Node 24 TypeScript checks and the real
 Codex CLI in an isolated offline home. The package assertion must expose only
 the manager executable and approved source allowlist.
 
-For the first modular release, also verify that:
+For the one-time `0.1.5` release, also verify that:
 
+- the release is the first end-to-end OIDC validation;
 - npm provenance names `j7an/superpowers-manager` and caller `release.yml`;
 - the OIDC publish succeeds with zero GitHub npm secrets;
-- `npx --yes superpowers-manager@X.Y.Z --version` prints exactly `X.Y.Z` from a
+- `npx --yes superpowers-manager@0.1.5 --version` prints exactly `0.1.5` from a
   clean cache; and
 - `superpowers-wrapper@0.1.0` and `0.1.1` remain published and untouched.
 
@@ -118,6 +122,8 @@ For the first modular release, also verify that:
 - Preserve every public tag and workflow run as immutable evidence.
 - If a build fails before publication, fix through a reviewed higher version;
   never reuse or move the failed tag.
+- Do not manually create the `v0.1.5` tag or GitHub Release. If automation fails,
+  preserve its evidence and adjudicate a reviewed higher-version recovery.
 - If publication succeeds and post-publish verification fails, do not
   republish. Verify registry integrity and provenance read-only, then adjudicate
   release-only recovery separately.

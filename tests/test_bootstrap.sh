@@ -57,7 +57,10 @@ assert_contains "README.md" "no public harness selector"
 assert_contains "RELEASING.md" 'Ensure `main` is green (`sh tests/container.sh`)'
 assert_contains "RELEASING.md" "sh tests/container.sh"
 assert_contains "RELEASING.md" 'immutable out-of-main maintenance tag `v0.1.4`'
-assert_contains "RELEASING.md" 'minor produces `0.2.0`'
+assert_contains "RELEASING.md" 'The one-time `0.1.5` release uses `bump=patch`.'
+assert_contains "RELEASING.md" 'first end-to-end OIDC validation'
+assert_contains "RELEASING.md" 'Persistent pinning remains required before `0.2.0`.'
+assert_contains "RELEASING.md" 'Do not manually create the `v0.1.5` tag or GitHub Release.'
 assert_contains "RELEASING.md" 'j7an/superpowers-manager'
 assert_contains "RELEASING.md" 'workflow `release.yml`'
 assert_contains "RELEASING.md" 'environment `npm`'
