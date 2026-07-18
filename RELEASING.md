@@ -14,69 +14,41 @@ traditional tokens; OIDC remains allowed.
 
 ## Release lineage and version computation
 
-`v0.1.2` and `v0.1.3` are immutable failed maintenance attempts and were never
-published. `superpowers-manager@0.1.4` and its GitHub Release were recovered
-from the immutable out-of-main maintenance tag `v0.1.4`. Never move, delete,
-recreate, rerun, or republish any of those versions.
+`v0.1.2` and `v0.1.3` were failed and unpublished maintenance attempts.
+`v0.1.4` was the recovered maintenance publication.
+`v0.1.5` failed before publication and must never be moved, reused, rerun, or published.
+`v0.1.6` published successfully through OIDC and is immutable. Never move,
+delete, recreate, rerun, or republish any public release tag or published
+version.
 
-`v0.1.5` is an immutable failed pre-publication build. Its release-bot commit
-and lightweight tag are on `main`, but the Release workflow failed its caller
-test before packing, npm publication, or GitHub Release creation.
-At failure time, registry `latest` remained `superpowers-manager@0.1.4`.
-Never move, delete, or recreate `v0.1.5`.
-
-The monotonicity contract reads one explicit current registry marker rather
-than inferring state from historical release prose:
-
-Published Manager baseline for version monotonicity: `superpowers-manager@0.1.4`.
-
-Advance this marker after successful publication and before another Tag Release.
-
-The pinned Tag Release workflow selects the highest semver tag in the entire
-repository, not only tags reachable from `main`. With `v0.1.5` as the current
-base:
-
-- patch produces `0.1.6`;
-- minor produces `0.2.0`;
-- major produces `1.0.0`.
-
-The one-time `0.1.6` recovery uses `bump=patch`. It is the first end-to-end OIDC
-validation: Tag Release changes `package.json` to `0.1.6`, commits through the
-release bot, creates lightweight `v0.1.6`, and triggers the OIDC Release
-workflow. Commit analysis uses `v0.1.5..HEAD`. The new version-bump commit and
-release tag are created on `main`, so the tag passes the shared publisher's
-main-ancestry gate. No npm token belongs in this recovery.
-
-The checked-in `package.json` version `0.1.5` records the release-bot source for
-the failed immutable tag; it is not a published npm version. At recovery
-authorization, the published registry baseline was `0.1.4`, so Tag Release
-computes the approved `0.1.6` recovery from the highest repository tag. Do not
-invent another release path.
+The pinned Tag Release workflow selects the highest SemVer tag in the entire
+repository, not only tags reachable from `main`. It updates the checked-in
+`package.json` version, commits through the release bot, and creates the
+lightweight release tag on `main`. Do not invent another release path.
 
 No prerelease path is authorized. Do not create a beta tag, publish with
-`--tag next`, or add a prerelease dist-tag through this workflow. Persistent
-track-latest, pin, and unpin behavior remains outside the one-time `0.1.6`
-release recovery. Persistent pinning remains required before `0.2.0`.
+`--tag next`, or add a prerelease dist-tag through this workflow.
+Persistent upstream-version pinning is required before production `0.2.0`.
 
 ## Normal release
 
 1. Ensure `main` is green (`sh tests/container.sh`) and inspect every commit
-   since `v0.1.5`. Confirm Conventional Commit subjects match user-visible
-   intent and that the selected bump is deliberate.
+   since the latest version tag. Confirm Conventional Commit subjects match
+   user-visible intent and that the selected bump is deliberate.
 2. Confirm release-bot prerequisites remain present: repository variable
    `RELEASE_BOT_APP_ID`, repository secret `RELEASE_BOT_PRIVATE_KEY`, and the
    protected `release` environment used by the shared Tag Release workflow.
 3. Confirm the protected `npm` environment still requires reviewer approval,
    has zero npm secrets, and the trusted-publisher mapping still matches this
    repository, caller workflow, and environment exactly.
-4. Dispatch **Tag Release** on `main` with `bump=patch` for the one-time `0.1.6`
-   recovery. Later releases may use `auto|patch|minor|major` only after reviewing
-   the computed version and satisfying the persistent-pinning prerequisite for
-   `0.2.0`.
+4. Dispatch **Tag Release** on `main` with `auto|patch|minor|major` only after
+   reviewing the computed stable version and satisfying the persistent
+   upstream-version-pinning prerequisite for production `0.2.0`.
 5. Approve the `release` environment deployment only after its proposed version
    and frozen source SHA match the intended release.
 6. When the tag-triggered **Release** run reaches the `npm` environment, verify
-   its tag and build evidence before approving publication.
+   its tag, frozen source SHA, package name and version, and tarball digest
+   before approving publication.
 7. Verify the completed npm package, SLSA provenance, GitHub tag, GitHub Release,
    release asset digest, and clean `npx` execution against the same source SHA.
 
@@ -107,7 +79,7 @@ If npm publication succeeds but either verification path lags, retry only
 read-only checks within the bounded workflow. Never rerun publication, move the
 tag, or attempt to overwrite the immutable npm version.
 
-## Required verification before approval
+## Required verification
 
 Run locally while iterating:
 
@@ -123,14 +95,17 @@ The container suite is authoritative for Node 24 TypeScript checks and the real
 Codex CLI in an isolated offline home. The package assertion must expose only
 the manager executable and approved source allowlist.
 
-For the one-time `0.1.6` recovery, also verify that:
+### Pre-publication approval
 
-- the release is the first end-to-end OIDC validation;
-- npm provenance names `j7an/superpowers-manager` and caller `release.yml`;
-- the OIDC publish succeeds with zero GitHub npm secrets;
-- `npx --yes superpowers-manager@0.1.6 --version` prints exactly `0.1.6` from a
-  clean cache; and
-- `superpowers-wrapper@0.1.0` and `0.1.1` remain published and untouched.
+Verify the frozen tag and source SHA, package name and version, tarball digest,
+and zero npm secrets before approving publication.
+
+### Post-publication verification
+
+Verify npm provenance and clean-cache `npx` execution against the same
+published version and source SHA after publication. Provenance must name
+`j7an/superpowers-manager` and caller `release.yml`, and clean-cache `npx`
+execution must print the published stable version exactly.
 
 ## Failure recovery
 
