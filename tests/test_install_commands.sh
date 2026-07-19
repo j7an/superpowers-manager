@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
+spw_test_tmpdir
 
 # ---------------------------------------------------------------------------
 # Harness: a fake upstream git repo, a copied package root (running install
@@ -27,8 +28,8 @@ printf 'readme\n' > "$upstream/README.md"
 printf 'code\n' > "$upstream/CODE_OF_CONDUCT.md"
 git -C "$tmpdir" init upstream >/dev/null
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream" >/dev/null
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v1.0.0 -m "fake release"
+spw_git_commit "$upstream" "fake upstream"
+spw_git_tag "$upstream" v1.0.0 "fake release"
 
 # --- Copied package root (simulates the npx-materialized package) ---
 pkg="$tmpdir/pkg"
