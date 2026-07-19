@@ -6,6 +6,11 @@ spw_die() {
   exit 1
 }
 
+spw_usage_error() {
+  echo "error: $*" >&2
+  exit 2
+}
+
 spw_require_command() {
   command_name="$1"
   if ! command -v "$command_name" >/dev/null 2>&1; then

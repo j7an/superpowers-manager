@@ -4,24 +4,19 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/upstream.sh"
+. "$root/scripts/core/selection.sh"
 . "$root/scripts/core/provenance.sh"
 . "$root/scripts/core/status.sh"
 . "$root/scripts/core/lifecycle.sh"
 . "$root/scripts/core/adapter.sh"
 
-upstream_url="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
-requested_ref=$(spw_config_ref "$root")
-resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
-resolved_ref=$(printf '%s\n' "$resolved_record" | awk '{ print $2 }')
-desired_commit=$(printf '%s\n' "$resolved_record" | awk '{ print $3 }')
-
-generated_commit=$(spw_generated_commit_or_empty "$root")
 tmp_parent="${TMPDIR:-/tmp}"
 if ! probe_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.probe.XXXXXX"); then
   spw_die "cannot create probe workspace under $tmp_parent"
 fi
 fingerprint_result="$probe_workspace/fingerprint.json"
 ownership_result="$probe_workspace/ownership.json"
+update_control_result="$probe_workspace/update-control.json"
 cleanup() {
   status=$?
   trap - 0 HUP INT TERM
@@ -35,27 +30,62 @@ trap 'exit 143' TERM
 
 TMPDIR="$probe_workspace"
 export TMPDIR
+spw_compute_effective_selection "$root" "$probe_workspace"
+effective_source=$(spw_display_source "$SPW_EFFECTIVE_SOURCE")
+if [ -n "$SPW_SAVED_SOURCE" ]; then
+  saved_source=$(spw_display_source "$SPW_SAVED_SOURCE")
+else
+  saved_source=""
+fi
+
+generated_commit=$(spw_generated_commit_or_empty "$root")
 spw_inspect_fingerprint "$fingerprint_result"
 installed_commit=$(spw_adapter_result_get "$fingerprint_result" "fingerprint")
 spw_inspect_ownership "$ownership_result"
 identity_state=$(spw_adapter_result_get "$ownership_result" "identity_state")
+spw_inspect_update_control "$update_control_result"
+update_control=$(spw_adapter_result_get "$update_control_result" "update_control")
 
-status=$(spw_status_for_commits "$desired_commit" "$generated_commit" "$installed_commit")
+status=$(spw_status_for_commits "$SPW_DESIRED_COMMIT" "$generated_commit" "$installed_commit")
 
 if [ "${1:-}" = "--porcelain" ]; then
-  printf 'requested_ref=%s\n' "$requested_ref"
-  printf 'resolved_ref=%s\n' "$resolved_ref"
-  printf 'desired_commit=%s\n' "$desired_commit"
+  printf 'requested_ref=%s\n' "$SPW_REQUESTED_REF"
+  printf 'resolved_ref=%s\n' "$SPW_RESOLVED_REF"
+  printf 'desired_commit=%s\n' "$SPW_DESIRED_COMMIT"
   printf 'generated_commit=%s\n' "$generated_commit"
   printf 'installed_commit=%s\n' "$installed_commit"
   printf 'identity_state=%s\n' "$identity_state"
   printf 'status=%s\n' "$status"
+  printf 'selection_origin=%s\n' "$SPW_SELECTION_ORIGIN"
+  printf 'selection_mode=%s\n' "$SPW_SELECTION_MODE"
+  printf 'upstream_source_origin=%s\n' "$SPW_UPSTREAM_SOURCE_ORIGIN"
+  printf 'effective_source=%s\n' "$effective_source"
+  printf 'saved_mode=%s\n' "$SPW_SAVED_MODE"
+  printf 'saved_source=%s\n' "$saved_source"
+  printf 'saved_requested_ref=%s\n' "$SPW_SAVED_REQUESTED_REF"
+  printf 'saved_resolved_ref=%s\n' "$SPW_SAVED_RESOLVED_REF"
+  printf 'saved_commit=%s\n' "$SPW_SAVED_COMMIT"
+  printf 'update_control=%s\n' "$update_control"
 else
-  printf 'requested ref: %s\n' "$requested_ref"
-  printf 'resolved ref: %s\n' "$resolved_ref"
-  printf 'desired commit: %s\n' "$desired_commit"
+  printf 'requested ref: %s\n' "$SPW_REQUESTED_REF"
+  printf 'resolved ref: %s\n' "$SPW_RESOLVED_REF"
+  printf 'desired commit: %s\n' "$SPW_DESIRED_COMMIT"
   printf 'generated plugin commit: %s\n' "${generated_commit:-not present}"
   printf 'installed manager commit or fingerprint: %s\n' "${installed_commit:-not detected}"
   printf 'Codex identity state: %s\n' "$identity_state"
   printf 'status: %s\n' "$status"
+  printf 'selection origin: %s\n' "$SPW_SELECTION_ORIGIN"
+  printf 'selection mode: %s\n' "$SPW_SELECTION_MODE"
+  printf 'upstream source origin: %s\n' "$SPW_UPSTREAM_SOURCE_ORIGIN"
+  printf 'effective source: %s\n' "$effective_source"
+  printf 'saved mode: %s\n' "$SPW_SAVED_MODE"
+  printf 'saved source: %s\n' "$saved_source"
+  printf 'saved requested ref: %s\n' "$SPW_SAVED_REQUESTED_REF"
+  printf 'saved resolved ref: %s\n' "$SPW_SAVED_RESOLVED_REF"
+  printf 'saved commit: %s\n' "$SPW_SAVED_COMMIT"
+  printf 'update control: %s\n' "$update_control"
+  if [ "$SPW_SELECTION_ORIGIN" != "$SPW_UPSTREAM_SOURCE_ORIGIN" ]; then
+    printf 'warning: effective ref and source have mixed origins (ref: %s, source: %s)\n' \
+      "$SPW_SELECTION_ORIGIN" "$SPW_UPSTREAM_SOURCE_ORIGIN"
+  fi
 fi

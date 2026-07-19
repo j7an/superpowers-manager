@@ -4,11 +4,11 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/upstream.sh"
+. "$root/scripts/core/selection.sh"
 . "$root/scripts/core/provenance.sh"
 . "$root/scripts/core/lifecycle.sh"
 . "$root/scripts/core/adapter.sh"
 
-upstream_url="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
 cache_parent="${SUPERPOWERS_CACHE_DIR:-$root/.cache/upstream}"
 plugin_root="${SUPERPOWERS_PLUGIN_ROOT:-$root/plugins/superpowers}"
 manifest_template="${SUPERPOWERS_MANIFEST_TEMPLATE:-$root/plugins/superpowers/.codex-plugin/plugin.template.json}"
@@ -46,30 +46,30 @@ trap 'exit 143' TERM
 TMPDIR="$prepare_workspace"
 export TMPDIR
 
-requested_ref=$(spw_config_ref "$root")
-
-spw_require_command git
 spw_require_command python3
+spw_compute_effective_selection "$root" "$prepare_workspace"
+spw_require_command git
 spw_require_command "$SPW_ADAPTER"
 [ -f "$manifest_template" ] || spw_die "missing fallback manifest template: $manifest_template"
 
-resolved_record=$(spw_resolve_ref "$upstream_url" "$requested_ref")
-resolution_kind=$(printf '%s\n' "$resolved_record" | awk '{ print $1 }')
-resolved_ref=$(printf '%s\n' "$resolved_record" | awk '{ print $2 }')
-commit=$(printf '%s\n' "$resolved_record" | awk '{ print $3 }')
-
 mkdir -p "$cache_parent" "$tmp_parent"
-if [ -d "$cache/.git" ]; then
-  if ! git -C "$cache" fetch --tags --prune "$upstream_url"; then
-    spw_die "cannot fetch upstream repo: $upstream_url"
-  fi
+if [ "$SPW_SELECTION_MODE" = "pinned" ]; then
+  spw_fetch_exact_commit \
+    "$SPW_EFFECTIVE_SOURCE" "$SPW_DESIRED_COMMIT" "$cache" "$prepare_workspace"
 else
-  if ! git clone "$upstream_url" "$cache"; then
-    spw_die "cannot clone upstream repo: $upstream_url"
+  git_source=$(spw_git_safe_source "$SPW_EFFECTIVE_SOURCE")
+  if [ -d "$cache/.git" ]; then
+    if ! git -C "$cache" fetch --tags --prune -- "$git_source"; then
+      spw_die "cannot fetch upstream repo: $SPW_EFFECTIVE_SOURCE"
+    fi
+  else
+    if ! git clone -- "$git_source" "$cache"; then
+      spw_die "cannot clone upstream repo: $SPW_EFFECTIVE_SOURCE"
+    fi
   fi
 fi
-if ! git -C "$cache" checkout --detach "$commit" >/dev/null; then
-  spw_die "cannot check out upstream commit: $commit"
+if ! git -C "$cache" checkout --detach "$SPW_DESIRED_COMMIT" >/dev/null; then
+  spw_die "cannot check out upstream commit: $SPW_DESIRED_COMMIT"
 fi
 
 spw_require_upstream_path "$cache/skills" "skills/"
@@ -94,21 +94,23 @@ fi
 
 spw_write_metadata_json \
   "$tmp_plugin/.superpowers-upstream.json" \
-  "$upstream_url" \
-  "$requested_ref" \
-  "$resolved_ref" \
-  "$commit" \
+  "$SPW_EFFECTIVE_SOURCE" \
+  "$SPW_REQUESTED_REF" \
+  "$SPW_RESOLVED_REF" \
+  "$SPW_DESIRED_COMMIT" \
   "$upstream_manifest_version"
 
 manager_version=$(
-  spw_manifest_version_for_ref "$requested_ref" "$resolution_kind" "$resolved_ref" "$commit"
+  spw_manifest_version_for_ref \
+    "$SPW_REQUESTED_REF" "$SPW_RESOLUTION_KIND" \
+    "$SPW_RESOLVED_REF" "$SPW_DESIRED_COMMIT"
 )
 spw_invoke_adapter build "$adapter_result" "" -- \
   --upstream-root "$cache" \
   --candidate-root "$tmp_plugin" \
-  --requested-ref "$requested_ref" \
-  --resolved-ref "$resolved_ref" \
-  --commit "$commit" \
+  --requested-ref "$SPW_REQUESTED_REF" \
+  --resolved-ref "$SPW_RESOLVED_REF" \
+  --commit "$SPW_DESIRED_COMMIT" \
   --manager-version "$manager_version" \
   --upstream-manifest-version "$upstream_manifest_version" \
   --fallback-manifest "$manifest_template"
@@ -123,4 +125,4 @@ fi
 
 spw_replace_generated_tree "$tmp_plugin" "$plugin_root"
 
-echo "prepared $resolved_ref at $commit"
+echo "prepared $SPW_RESOLVED_REF at $SPW_DESIRED_COMMIT"

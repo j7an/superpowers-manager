@@ -250,7 +250,7 @@ spw_codex_build() {
 
   if python3 -S "$validator" \
     --plugin-root "$candidate_root" \
-    --source "$upstream_source" \
+    --source="$upstream_source" \
     --requested-ref "$requested_ref" \
     --resolved-ref "$resolved_ref" \
     --commit "$commit" \
@@ -491,12 +491,62 @@ spw_codex_inspect() {
 
   case "$view" in
     fingerprint)
-      fingerprint=$(spw_installed_commit_or_empty || true)
-      if [ -n "$fingerprint" ]; then
-        spw_codex_success inspect "{\"view\":\"fingerprint\",\"fingerprint\":\"$fingerprint\"}" ""
-      else
-        spw_codex_success inspect '{"view":"fingerprint","fingerprint":null}' ""
+      codex_bin="${SUPERPOWERS_CODEX:-codex}"
+      spw_require_command python3
+      spw_codex_require_command inspect "$codex_bin"
+
+      tmp_parent="${TMPDIR:-/tmp}"
+      if ! scratch=$(mktemp -d "$tmp_parent/superpowers-manager.adapter-fingerprint.XXXXXX"); then
+        spw_codex_failure inspect "inspect-failed" "cannot create adapter fingerprint workspace under $tmp_parent" "" ""
       fi
+      stderr_file="$scratch/stderr"
+      messages_file="$scratch/messages"
+      cleanup() {
+        status=$?
+        trap - 0 HUP INT TERM
+        rm -rf "$scratch" || :
+        exit "$status"
+      }
+      trap cleanup 0
+      trap 'exit 129' HUP
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+
+      : > "$messages_file"
+      : > "$stderr_file"
+      if ! plugin_listing=$("$codex_bin" plugin list --json 2>"$stderr_file"); then
+        spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+        spw_codex_failure inspect "inspect-failed" "cannot list Codex plugins via '$codex_bin plugin list --json'" "" "$messages_file"
+      fi
+      spw_codex_append_messages "$messages_file" stderr "$stderr_file"
+      if ! active_version=$(spw_active_plugin_version_from_json \
+        "$plugin_listing" "$SPW_PLUGIN_ID"); then
+        spw_codex_failure inspect "inspect-failed" "cannot parse output of '$codex_bin plugin list --json'" "" "$messages_file"
+      fi
+      if [ -z "$active_version" ]; then
+        spw_codex_success inspect \
+          '{"view":"fingerprint","fingerprint":null}' "$messages_file"
+        return 0
+      fi
+
+      search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
+      active_root=$(spw_installed_root_for_version \
+        "$search_root" "$SPW_MARKETPLACE_NAME" "superpowers" "$active_version")
+      fingerprint=$(spw_installed_commit_from_root_or_empty "$active_root")
+      if [ -z "$fingerprint" ]; then
+        spw_codex_failure inspect "inspect-failed" \
+          "cannot inspect active Codex plugin fingerprint under $active_root" "" "$messages_file"
+      fi
+      spw_codex_success inspect \
+        "{\"view\":\"fingerprint\",\"fingerprint\":\"$fingerprint\"}" \
+        "$messages_file"
+      ;;
+    update-control)
+      # Capability declaration for the fixed Codex local-package topology,
+      # backed by Layer-4 A/B evidence; revisit if topology or observed update
+      # behavior changes.
+      spw_codex_success inspect \
+        '{"view":"update-control","update_control":"managed"}' ""
       ;;
     ownership)
       codex_bin="${SUPERPOWERS_CODEX:-codex}"

@@ -22,6 +22,10 @@ case "$scenario" in
             printf '%s\n' \
               '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"ownership","resources":{"plugin":true,"marketplace":false},"legacy_resources":{"plugin":false,"marketplace":false},"identity_state":"manager"},"error":null}'
             ;;
+          update-control)
+            printf '%s\n' \
+              '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"update-control","update_control":"managed"},"error":null}'
+            ;;
           *)
             printf '%s\n' \
               '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"fingerprint","fingerprint":null},"error":null}'
@@ -49,6 +53,10 @@ case "$scenario" in
           '{"protocol":1,"operation":"'"$operation"'","ok":true,"messages":[],"result":{},"error":null}'
         ;;
     esac
+    ;;
+  update-control-unsupported)
+    printf '%s\n' \
+      '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"update-control","update_control":"unsupported"},"error":null}'
     ;;
   controlled-failure)
     printf '%s\n' 'adapter-stderr-before-failure' >&2

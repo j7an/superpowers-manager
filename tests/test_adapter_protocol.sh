@@ -44,6 +44,7 @@ run_adapter() {
   rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
 
   RUN_RC=0
+  SPW_ADAPTER="$root/tests/fixtures/fake-adapter" \
   SPW_FAKE_ADAPTER_SCENARIO="$scenario" \
     spw_invoke_adapter "$operation" "$RUN_RESULT" "$inspect_view" -- "$@" \
     >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
@@ -65,6 +66,37 @@ run_adapter success inspect ownership ownership
 [ "$(spw_adapter_result_boolean "$RUN_RESULT" "resources.plugin")" = true ]
 [ "$(spw_adapter_result_boolean "$RUN_RESULT" "legacy_resources.plugin")" = false ]
 [ "$(spw_adapter_result_get "$RUN_RESULT" "identity_state")" = manager ]
+
+run_adapter success inspect update-control update-control
+[ "$RUN_RC" -eq 0 ]
+[ "$(spw_adapter_result_get "$RUN_RESULT" "view")" = "update-control" ]
+[ "$(spw_adapter_result_get "$RUN_RESULT" "update_control")" = "managed" ]
+
+run_adapter update-control-unsupported inspect update-control update-control
+[ "$RUN_RC" -eq 0 ]
+[ "$(spw_adapter_result_get "$RUN_RESULT" "update_control")" = "unsupported" ]
+
+real_update_control_result="$tmpdir/real-update-control.result.json"
+missing_update_control_codex="$tmpdir/codex-must-not-run"
+SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SUPERPOWERS_CODEX="$missing_update_control_codex" \
+  spw_inspect_update_control "$real_update_control_result"
+[ "$(spw_adapter_result_get "$real_update_control_result" "view")" = "update-control" ]
+[ "$(spw_adapter_result_get "$real_update_control_result" "update_control")" = "managed" ]
+
+old_adapter="$tmpdir/old-adapter"
+cat > "$old_adapter" <<'SH'
+#!/bin/sh
+printf '%s\n' '{"protocol":1,"operation":"inspect","ok":false,"messages":[],"result":null,"error":{"code":"invalid-arguments","message":"unsupported inspect view: update-control","hints":[]}}'
+exit 1
+SH
+chmod +x "$old_adapter"
+old_result="$tmpdir/old-adapter-update-control.result.json"
+old_rc=0
+SPW_ADAPTER="$old_adapter" \
+  spw_inspect_update_control "$old_result" >/dev/null 2>/dev/null || old_rc=$?
+[ "$old_rc" -eq 1 ]
+[ ! -f "$old_result" ]
 
 identity_codex="$tmpdir/identity-codex"
 cat > "$identity_codex" <<'SH'
@@ -140,19 +172,23 @@ grep -Fxq 'hint: retry later' "$RUN_STDERR"
 grep -Fxq 'hint: inspect manager state' "$RUN_STDERR"
 
 run_adapter wrong-operation build ""
-[ "$RUN_RC" -eq 2 ]
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
 grep -Fq 'response operation does not match invocation' "$RUN_STDERR"
 
 run_adapter malformed build ""
-[ "$RUN_RC" -eq 2 ]
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
 grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"
 
 run_adapter stdout-noise build ""
-[ "$RUN_RC" -eq 2 ]
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
 grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"
 
 run_adapter crash build ""
-[ "$RUN_RC" -eq 2 ]
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
 grep -Fxq 'adapter crashed' "$RUN_STDERR"
 grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"
 
@@ -302,6 +338,56 @@ if grep -Fq 'response operation does not match invocation' "$RUN_STDERR"; then
   exit 1
 fi
 
+fingerprint_codex="$tmpdir/fingerprint-codex"
+cat > "$fingerprint_codex" <<'SH'
+#!/bin/sh
+set -eu
+[ "$*" = "plugin list --json" ] || exit 99
+printf '%s\n' "${SPW_FINGERPRINT_LISTING:?}"
+SH
+chmod +x "$fingerprint_codex"
+fingerprint_root="$tmpdir/fingerprint-root"
+fingerprint_a="$fingerprint_root/plugins/cache/superpowers-manager/superpowers/1.0.0+manager.aaaaaaa"
+fingerprint_b="$fingerprint_root/plugins/cache/superpowers-manager/superpowers/1.0.0+manager.bbbbbbb"
+mkdir -p "$fingerprint_a" "$fingerprint_b"
+printf '%s\n' '{"commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' \
+  > "$fingerprint_a/.superpowers-upstream.json"
+printf '%s\n' '{"commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}' \
+  > "$fingerprint_b/.superpowers-upstream.json"
+
+RUN_RESULT="$tmpdir/active-fingerprint.result.json"
+SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SUPERPOWERS_CODEX="$fingerprint_codex" \
+SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root" \
+SPW_FINGERPRINT_LISTING='{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0+manager.bbbbbbb"}]}' \
+  spw_inspect_fingerprint "$RUN_RESULT"
+[ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = \
+  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]
+
+RUN_RESULT="$tmpdir/absent-fingerprint.result.json"
+SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SUPERPOWERS_CODEX="$fingerprint_codex" \
+SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root" \
+SPW_FINGERPRINT_LISTING='{"installed":[]}' \
+  spw_inspect_fingerprint "$RUN_RESULT"
+[ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = "" ]
+
+for invalid_listing in \
+  '{' \
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"missing-cache"}]}'
+do
+  RUN_RESULT="$tmpdir/failed-fingerprint.result.json"
+  rm -f "$RUN_RESULT" "$RUN_RESULT.response"
+  RUN_RC=0
+  SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+  SUPERPOWERS_CODEX="$fingerprint_codex" \
+  SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root" \
+  SPW_FINGERPRINT_LISTING="$invalid_listing" \
+    spw_inspect_fingerprint "$RUN_RESULT" >/dev/null 2>/dev/null || RUN_RC=$?
+  [ "$RUN_RC" -eq 1 ]
+  [ ! -f "$RUN_RESULT" ]
+done
+
 missing_codex="$tmpdir/missing-codex"
 RUN_RESULT="$tmpdir/missing-codex-install.result.json"
 RUN_STDOUT="$tmpdir/missing-codex-install.stdout"
@@ -333,10 +419,11 @@ SUPERPOWERS_CODEX="$missing_codex" \
 SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/empty-codex" \
 spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint \
   >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
-[ "$RUN_RC" -eq 0 ]
-[ "$(spw_adapter_result_get "$RUN_RESULT" "fingerprint")" = "" ]
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
 [ ! -s "$RUN_STDOUT" ]
-[ ! -s "$RUN_STDERR" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = "command-not-found" ]
+grep -Fxq "error: required Codex command not found: $missing_codex" "$RUN_STDERR"
 
 for missing_case in ownership uninstall; do
   RUN_RESULT="$tmpdir/missing-codex-$missing_case.result.json"

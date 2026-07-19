@@ -14,7 +14,7 @@ mkdir -p "$pkg/bin" "$pkg/scripts"
 cp "$root/bin/superpowers-manager.js" "$pkg/bin/"
 printf '{ "name": "superpowers-manager", "version": "9.9.9-test", "type": "module" }\n' > "$pkg/package.json"
 log="$tmpdir/dispatch.log"
-for cmd in prepare probe install update uninstall; do
+for cmd in pin track-latest unpin prepare probe install update uninstall; do
   cat > "$pkg/scripts/$cmd" <<EOF
 #!/bin/sh
 printf '%s\n' "$cmd \$* ref=\${SUPERPOWERS_REF:-}" >> "$log"
@@ -48,6 +48,18 @@ grep -Fqx "probe --porcelain ref=" "$log"
 : > "$log"
 run_bin prepare --ref test >/dev/null
 grep -Fqx "prepare --ref test ref=" "$log"
+
+: > "$log"
+run_bin pin v6.1.1 >/dev/null
+grep -Fqx "pin v6.1.1 ref=" "$log"
+
+: > "$log"
+run_bin track-latest >/dev/null
+grep -Fqx "track-latest  ref=" "$log"
+
+: > "$log"
+run_bin unpin >/dev/null
+grep -Fqx "unpin  ref=" "$log"
 
 : > "$log"
 run_bin install --dry-run >/dev/null
@@ -120,7 +132,30 @@ rc=0; run_bin install >/dev/null 2>"$tmpdir/err" || rc=$?
 [ "$rc" -eq 1 ] || { echo "expected exit 1 on missing git, got $rc" >&2; exit 1; }
 grep -Fq "required command not found: git" "$tmpdir/err"
 [ ! -s "$log" ] || { echo "preflight failure must not dispatch" >&2; exit 1; }
+
+# Invalid pin syntax is a usage error before Git/Python preflight or dispatch.
+rm "$fakebin/python3"
+: > "$log"
+rc=0; run_bin pin main >/dev/null 2>"$tmpdir/err" || rc=$?
+[ "$rc" -eq 2 ] || { echo "expected exit 2 for invalid pin ref, got $rc" >&2; exit 1; }
+grep -Fq 'pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit' \
+  "$tmpdir/err"
+[ ! -s "$log" ] || { echo "invalid pin ref must not dispatch" >&2; exit 1; }
+printf '#!/bin/sh\nexit 0\n' > "$fakebin/python3" && chmod +x "$fakebin/python3"
+
+for cmd in track-latest unpin uninstall; do
+  : > "$log"
+  run_bin "$cmd" >/dev/null
+  grep -Fqx "$cmd  ref=" "$log"
+done
 printf '#!/bin/sh\nexit 0\n' > "$fakebin/git" && chmod +x "$fakebin/git"
+
+# --- Missing python does not block unpin ---
+rm "$fakebin/python3"
+: > "$log"
+run_bin unpin >/dev/null
+grep -Fqx "unpin  ref=" "$log"
+printf '#!/bin/sh\nexit 0\n' > "$fakebin/python3" && chmod +x "$fakebin/python3"
 
 # --- codex required for probe and install ---
 rm "$fakebin/codex"
@@ -140,6 +175,15 @@ rc=0; run_bin install >/dev/null 2>"$tmpdir/err" || rc=$?
 [ "$rc" -eq 1 ]
 grep -Fq "required command not found: codex" "$tmpdir/err"
 [ ! -s "$log" ] || { echo "missing codex must not dispatch" >&2; exit 1; }
+
+: > "$log"
+run_bin pin v6.1.1 >/dev/null
+grep -Fqx "pin v6.1.1 ref=" "$log"
+for cmd in track-latest unpin prepare; do
+  : > "$log"
+  run_bin "$cmd" >/dev/null
+  grep -Fqx "$cmd  ref=" "$log"
+done
 printf '#!/bin/sh\nexit 0\n' > "$fakebin/codex" && chmod +x "$fakebin/codex"
 
 # --- Missing script file: diagnostic, non-zero ---

@@ -4,6 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
+tmpdir_physical=$(CDPATH= cd -- "$tmpdir" && pwd -P)
 
 upstream="$tmpdir/upstream"
 output="$tmpdir/out"
@@ -13,8 +14,11 @@ template="$root/plugins/superpowers/.codex-plugin/plugin.template.json"
 template_before=$(cksum "$template")
 adapter_log="$tmpdir/adapter.log"
 recording_adapter="$tmpdir/recording-adapter"
+git_log="$tmpdir/git.log"
+git_tool_path="$tmpdir/git-tool-path"
 python3_log="$tmpdir/python3.log"
 real_python3=$(command -v python3)
+real_git=$(command -v git)
 
 cat > "$recording_adapter" <<'EOF'
 #!/bin/sh
@@ -22,6 +26,14 @@ printf '%s\n' "$*" >> "$SPW_TEST_ADAPTER_LOG"
 exec "$SPW_TEST_REAL_ADAPTER" "$@"
 EOF
 chmod +x "$recording_adapter"
+
+mkdir -p "$git_tool_path"
+cat > "$git_tool_path/git" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SPW_TEST_GIT_LOG"
+exec "$SPW_TEST_REAL_GIT" "$@"
+EOF
+chmod +x "$git_tool_path/git"
 
 cat > "$tmpdir/python3" <<'EOF'
 #!/bin/sh
@@ -336,6 +348,166 @@ assert_prepare_upstream_manifest_version() {
     exit 1
   fi
 }
+
+assert_prepare_metadata_value() {
+  destination="$1"
+  key="$2"
+  expected="$3"
+  metadata="$tmpdir/$destination/.superpowers-upstream.json"
+  actual=$(read_json_key "$metadata" "$key")
+  if [ "$actual" != "$expected" ]; then
+    echo "metadata $key mismatch for $destination: $actual != $expected" >&2
+    exit 1
+  fi
+}
+
+run_prepare_with_saved_selection() {
+  config_dir="$1"
+  destination="$2"
+  shift 2
+  env -u SUPERPOWERS_REF -u SUPERPOWERS_UPSTREAM_URL \
+    PATH="$git_tool_path:$PATH" \
+    SUPERPOWERS_CONFIG_DIR="$config_dir" \
+    SUPERPOWERS_CACHE_DIR="$tmpdir/cache-$destination" \
+    SUPERPOWERS_PLUGIN_ROOT="$tmpdir/$destination" \
+    SUPERPOWERS_VALIDATOR= \
+    HOME="$home" \
+    SPW_ADAPTER="$recording_adapter" \
+    SPW_TEST_ADAPTER_LOG="$adapter_log" \
+    SPW_TEST_REAL_ADAPTER="$root/scripts/adapters/codex/adapter" \
+    SPW_TEST_GIT_LOG="$git_log" \
+    SPW_TEST_REAL_GIT="$real_git" \
+    "$@" \
+    sh "$root/scripts/prepare" >/dev/null
+}
+
+# A saved exact pin supplies the requested/resolved/commit record directly.
+# Prepare must fetch that exact object from the effective source without
+# re-resolving the saved tag, then pass the same record into provenance/build.
+saved_config="$tmpdir/saved-config"
+python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+  --path "$saved_config/selection.json" --source "$upstream" \
+  --requested-ref v6.0.3 --resolved-ref v6.0.3 --commit "$release_commit"
+: > "$adapter_log"
+: > "$git_log"
+run_prepare_with_saved_selection "$saved_config" "out-saved-pin"
+assert_prepare_commit "out-saved-pin" "$release_commit"
+assert_prepare_metadata_value "out-saved-pin" source "$upstream"
+assert_prepare_metadata_value "out-saved-pin" requested_ref v6.0.3
+assert_prepare_metadata_value "out-saved-pin" resolved_ref v6.0.3
+if grep -Fq 'ls-remote' "$git_log"; then
+  echo "saved exact pin must not be re-resolved" >&2
+  cat "$git_log" >&2
+  exit 1
+fi
+grep -Fq -- "fetch --no-tags -- $upstream $release_commit" "$git_log"
+grep -Fq -- "--requested-ref v6.0.3 --resolved-ref v6.0.3 --commit $release_commit" "$adapter_log"
+
+# A source override that cannot supply the saved commit must fail even when the
+# persistent cache was primed by the original source. Failure precedes adapter
+# access and generated-tree replacement.
+empty_upstream="$tmpdir/empty-upstream"
+git init --bare "$empty_upstream" >/dev/null
+test "$(git -C "$tmpdir/cache-out-saved-pin/superpowers" cat-file -t "$release_commit")" = commit
+printf 'preserve me\n' > "$tmpdir/out-saved-pin/preexisting-sentinel"
+: > "$adapter_log"
+: > "$git_log"
+if run_prepare_with_saved_selection "$saved_config" "out-saved-pin" \
+    SUPERPOWERS_UPSTREAM_URL="$empty_upstream" \
+    >"$tmpdir/source-proof.out" 2>"$tmpdir/source-proof.err"; then
+  echo "prepare unexpectedly used a cached object as source proof" >&2
+  exit 1
+fi
+grep -Fq "source cannot supply requested commit: $release_commit" \
+  "$tmpdir/source-proof.err"
+test -f "$tmpdir/out-saved-pin/preexisting-sentinel"
+test ! -s "$adapter_log"
+
+# Ref/source overrides remain independent. An environment ref uses the saved
+# source; an environment source can supply the still-authoritative saved pin.
+: > "$git_log"
+run_prepare_with_saved_selection "$saved_config" "out-mixed-ref" \
+  SUPERPOWERS_REF=main
+assert_prepare_commit "out-mixed-ref" "$main_commit"
+assert_prepare_metadata_value "out-mixed-ref" source "$upstream"
+assert_prepare_metadata_value "out-mixed-ref" requested_ref main
+
+alternate_upstream="$tmpdir/alternate-upstream"
+git clone --bare "$upstream" "$alternate_upstream" >/dev/null 2>&1
+: > "$git_log"
+run_prepare_with_saved_selection "$saved_config" "out-mixed-source" \
+  SUPERPOWERS_UPSTREAM_URL="$alternate_upstream"
+assert_prepare_commit "out-mixed-source" "$release_commit"
+assert_prepare_metadata_value "out-mixed-source" source "$alternate_upstream"
+assert_prepare_metadata_value "out-mixed-source" requested_ref v6.0.3
+if grep -Fq 'ls-remote' "$git_log"; then
+  echo "environment source must not cause a saved pin to be re-resolved" >&2
+  exit 1
+fi
+
+# A dash-prefixed local source saved by track-latest remains usable by prepare
+# for both the initial clone and a later cache fetch.
+ln -s upstream "$tmpdir/-upstream"
+dash_config="$tmpdir/dash-config"
+(
+  cd "$tmpdir"
+  SUPERPOWERS_CONFIG_DIR="$dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
+    sh "$root/scripts/track-latest" >/dev/null
+)
+: > "$git_log"
+(
+  cd "$tmpdir"
+  run_prepare_with_saved_selection "$dash_config" "out-dash-source"
+  run_prepare_with_saved_selection "$dash_config" "out-dash-source"
+)
+assert_prepare_commit "out-dash-source" "$release_commit"
+assert_prepare_metadata_value "out-dash-source" source -upstream
+grep -Fq -- "ls-remote --tags -- $tmpdir_physical/-upstream refs/tags/v*" "$git_log"
+grep -Fq -- "clone -- $tmpdir_physical/-upstream $tmpdir/cache-out-dash-source/superpowers" \
+  "$git_log"
+grep -Fq -- \
+  "fetch --tags --prune -- $tmpdir_physical/-upstream" "$git_log"
+
+# Unsafe or invalid selection state fails before any Git or adapter access and
+# preserves the previous generated tree.
+assert_prepare_preflight_failure() {
+  config_dir="$1"
+  destination="$2"
+  expected="$3"
+  shift 3
+  mkdir -p "$tmpdir/$destination"
+  printf '%s\n' 'preserve me' > "$tmpdir/$destination/preexisting-sentinel"
+  : > "$adapter_log"
+  : > "$git_log"
+  if run_prepare_with_saved_selection "$config_dir" "$destination" "$@" \
+      >"$tmpdir/$destination.out" 2>"$tmpdir/$destination.err"; then
+    echo "prepare unexpectedly accepted invalid selection preflight" >&2
+    exit 1
+  fi
+  grep -Fq "$expected" "$tmpdir/$destination.err"
+  test ! -s "$git_log"
+  test ! -s "$adapter_log"
+  test -f "$tmpdir/$destination/preexisting-sentinel"
+}
+
+malformed_config="$tmpdir/malformed-config"
+mkdir -p "$malformed_config"
+printf '%s\n' '{' > "$malformed_config/selection.json"
+assert_prepare_preflight_failure "$malformed_config" "out-malformed-selection" \
+  'invalid JSON' SUPERPOWERS_REF="$release_commit" SUPERPOWERS_UPSTREAM_URL="$upstream"
+
+unsupported_config="$tmpdir/unsupported-config"
+mkdir -p "$unsupported_config"
+printf '%s\n' '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}' \
+  > "$unsupported_config/selection.json"
+assert_prepare_preflight_failure "$unsupported_config" "out-unsupported-selection" \
+  'schema_version must equal integer 1' \
+  SUPERPOWERS_REF="$release_commit" SUPERPOWERS_UPSTREAM_URL="$upstream"
+
+assert_prepare_preflight_failure "$tmpdir/no-selection" "out-unsafe-source" \
+  'HTTP(S) source must not include userinfo' \
+  SUPERPOWERS_REF="$release_commit" \
+  SUPERPOWERS_UPSTREAM_URL='https://token@example.invalid/repo'
 
 : > "$adapter_log"
 run_prepare_for_ref_with_env "latest-release" "out-recorded" \

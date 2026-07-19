@@ -41,15 +41,19 @@ It never removes the legacy provider automatically.
 
 Superpowers Manager requires Node 24+, `git`, Python 3, and a POSIX `sh`.
 Codex CLI is required for `probe`, `install`, `update`, and `uninstall`;
-`prepare` does not require it.
+`prepare`, `pin`, `track-latest`, and `unpin` do not require it. Codex is the
+only supported integration today.
 
 macOS and Linux are tested. WSL2 is supported. The native Windows path is
 untested; the launcher looks for Git Bash, `git`, and `python3`, but path
 handling between MSYS and Codex remains a known risk area.
 
-Prepare, install, probe, and update resolve the requested upstream ref over the
-network. Updates are user-triggered and need upstream network access; the
-manager does not run automatic or background updates.
+Network needs depend on the saved policy. `pin` verifies its target;
+`track-latest` and invocation overrides resolve from upstream when applied; and
+`prepare`, `install`, and `update` fetch or verify the effective source. A probe
+of a saved exact pin can reuse its recorded identity without upstream access.
+Updates remain user-triggered; the manager does not run automatic or background
+updates.
 
 ## What it does
 
@@ -121,6 +125,9 @@ manager will not remove it for you.
 
 | Command | Codex side effects | Purpose |
 |---|---|---|
+| `npx superpowers-manager pin REF` | None | Resolve and save an exact upstream release tag or full commit |
+| `npx superpowers-manager track-latest` | None | Save a policy that resolves the latest stable release when applied |
+| `npx superpowers-manager unpin` | None | Remove saved selection and return to the packaged fallback policy |
 | `npx superpowers-manager prepare` | None | Resolve upstream, build a staged plugin tree, validate it, and replace the generated tree only on success |
 | `npx superpowers-manager probe` | None | Report requested and resolved refs, desired/generated/installed commits, identity state, and status |
 | `npx superpowers-manager install` | Marketplace and plugin state | Prepare and validate, register the marketplace, install the plugin, and verify installed state |
@@ -136,29 +143,75 @@ when resulting manager state cannot be verified.
 
 ## Choosing the upstream version
 
-`SUPERPOWERS_REF` selects a stable release tag, full commit SHA, branch, or
-other resolvable upstream ref for that invocation. The stateless npx package
-records the requested ref, resolved ref, and exact commit, but does not persist
-the selection for a later invocation that omits `SUPERPOWERS_REF`.
-
-Without `SUPERPOWERS_REF`, the manager reads `config/upstream-ref`, which ships
-as `latest-release`. Accepted values include:
-
-- `latest-release` — highest stable `vX.Y.Z` tag (prereleases are excluded).
-- A specific tag, e.g. `v6.0.3`.
-- A full 40-character commit SHA.
-- Any other ref upstream resolves (e.g. a branch name).
+Save a tag pin, commit pin, or explicit latest-stable policy for future
+invocations:
 
 ```sh
-SUPERPOWERS_REF=v6.0.3 npx superpowers-manager prepare
-SUPERPOWERS_REF=main npx superpowers-manager probe
-SUPERPOWERS_REF=feature/foo npx superpowers-manager install
-SUPERPOWERS_REF=latest-release npx superpowers-manager update
+npx superpowers-manager pin v6.1.1
+npx superpowers-manager pin 0123456789abcdef0123456789abcdef01234567  # replace with a real upstream commit
+npx superpowers-manager track-latest
+npx superpowers-manager unpin
 ```
 
-`SUPERPOWERS_CACHE_DIR` may point to a persistent upstream clone cache to avoid
-re-cloning between package materializations. It caches Git objects; it does not
-persist ref selection or trigger updates.
+The selection commands save intent only; they do not prepare generated content
+or change Codex state. Run `npx superpowers-manager install` for a first
+installation or `npx superpowers-manager update` to apply the saved policy to
+an existing installation. There is no background updater: selection changes
+take effect only through a user-triggered `prepare`, `install`, or `update`.
+
+`pin` accepts only an exact `vMAJOR.MINOR.PATCH` tag (optionally with a SemVer
+prerelease suffix) or a full 40-character commit. It resolves and verifies the
+target before saving both the exact commit identity and its source. The saved
+identity is the contract, not the contents of a clone cache: clearing or moving
+`SUPERPOWERS_CACHE_DIR` does not change the selection. `track-latest` saves the
+source and resolves the highest stable `vX.Y.Z` tag each time the policy is
+applied. `unpin` removes only the saved selection and restores the packaged
+`config/upstream-ref` fallback, currently `latest-release`.
+
+The user-wide selection file is `selection.json` under the first configured
+location:
+
+1. `$SUPERPOWERS_CONFIG_DIR`
+2. `$XDG_CONFIG_HOME/superpowers-manager`
+3. `$HOME/.config/superpowers-manager`
+
+Each location must be absolute. The ref and source precedence chains are
+independent:
+
+- Ref: `SUPERPOWERS_REF`, then saved selection, then `config/upstream-ref`.
+- Source: `SUPERPOWERS_UPSTREAM_URL`, then saved source, then the official
+  `https://github.com/obra/superpowers` source.
+
+`SUPERPOWERS_REF` is an invocation-only override and is not persisted. Unlike
+an exact saved pin, it accepts stable tags, full commit SHAs, branches, and
+other resolvable upstream refs for that invocation:
+
+```sh
+SUPERPOWERS_REF=feature/foo npx superpowers-manager probe
+```
+
+`pin` and `track-latest` bind the current `SUPERPOWERS_UPSTREAM_URL`, or the
+official source when that variable is unset, to the saved intent. An invocation
+may override only the ref or only the source; `probe` exposes
+`selection_origin`, `selection_mode`, `upstream_source_origin`,
+`effective_source`, the saved-selection fields, and a mixed-origin warning in
+human output so that combination remains visible.
+
+A saved exact pin lets `probe` determine the desired upstream identity without
+contacting Git, even when the saved source is temporarily unavailable. This is
+not a general offline installation promise: `pin` verifies the requested
+target, `track-latest` must resolve when applied, and `prepare`/`install`/`update`
+must fetch or verify content from the effective source. Codex inspection is
+still required for lifecycle status.
+
+HTTP(S) upstream URLs containing userinfo are now rejected, including
+token-only userinfo. This is an intentional compatibility break: use a Git
+credential helper for HTTP(S) authentication or an SSH source instead of
+embedding credentials in the URL.
+
+Saved selection does not claim or transfer provider ownership. The manager
+continues to mutate only `superpowers@superpowers-manager` and never removes or
+updates the official provider or any other provider automatically.
 
 ## How versioning works
 
@@ -236,8 +289,9 @@ plugins/superpowers/
   .superpowers-upstream.json               # generated provenance         (gitignored)
 scripts/
   adapters/codex/                          # Codex adapter entrypoint + validator helpers
-  core/                                    # shared lifecycle/provenance/status modules
-  prepare probe install update uninstall   # user-facing shell entrypoints
+  core/                                    # shared lifecycle, selection, provenance, and status modules
+  pin track-latest unpin                   # persistent-selection entrypoints
+  prepare probe install update uninstall   # lifecycle entrypoints
 tests/                                     # hermetic suite + manual Codex probe
 .cache/upstream/                           # upstream clone cache         (gitignored)
 ```

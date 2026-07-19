@@ -55,6 +55,16 @@ spw_require_no_legacy_state() {
   esac
 }
 
+spw_require_managed_update_control() {
+  case "$1" in
+    managed) return 0 ;;
+    unsupported)
+      spw_die "adapter cannot guarantee manager-controlled updates"
+      ;;
+    *) spw_die "unknown adapter update-control capability: $1" ;;
+  esac
+}
+
 spw_report_legacy_state() {
   case "$1" in
     legacy|both)

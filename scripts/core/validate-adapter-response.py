@@ -160,7 +160,23 @@ def validate_result(
                 "legacy_resources": legacy_resources,
                 "identity_state": identity_state,
             }
-        raise ProtocolError("inspect view must be fingerprint or ownership")
+        if inspect_view == "update-control":
+            require_exact_keys(
+                result,
+                {"view", "update_control"},
+                "update-control inspect result",
+            )
+            if result.get("view") != "update-control":
+                raise ProtocolError("inspect result view must be update-control")
+            value = result.get("update_control")
+            if value not in {"managed", "unsupported"}:
+                raise ProtocolError(
+                    "update-control value must be managed or unsupported"
+                )
+            return {"view": "update-control", "update_control": value}
+        raise ProtocolError(
+            "inspect view must be fingerprint or ownership, or update-control"
+        )
     if operation == "install":
         require_exact_keys(result, {"verification_hints"}, "install result")
         hints = require_object(result.get("verification_hints"), "verification_hints")
@@ -216,7 +232,9 @@ def main() -> int:
     parser.add_argument("--adapter-exit", type=int, required=True)
     parser.add_argument("--response", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
-    parser.add_argument("--inspect-view", choices=("fingerprint", "ownership"))
+    parser.add_argument(
+        "--inspect-view", choices=("fingerprint", "ownership", "update-control")
+    )
     args = parser.parse_args()
     try:
         with args.response.open(encoding="utf-8") as handle:

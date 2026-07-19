@@ -4,6 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
+tmpdir_physical=$(CDPATH= cd -- "$tmpdir" && pwd -P)
 
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/provenance.sh"
@@ -29,6 +30,23 @@ recording_adapter="$tmpdir/recording-adapter"
 cat > "$recording_adapter" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >> "$adapter_log"
+if [ "\$*" = "inspect --view fingerprint" ]; then
+  SPW_PROBE_PLUGIN_JSON="\${SPW_PROBE_FINGERPRINT_JSON:?}"
+  export SPW_PROBE_PLUGIN_JSON
+fi
+if [ "\$*" = "inspect --view update-control" ]; then
+  case "\${SPW_TEST_UPDATE_CONTROL:-managed}" in
+    managed) ;;
+    unsupported)
+      printf '%s\n' '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"update-control","update_control":"unsupported"},"error":null}'
+      exit 0
+      ;;
+    malformed)
+      printf '%s' '{'
+      exit 0
+      ;;
+  esac
+fi
 exec "$pkg/scripts/adapters/codex/adapter" "\$@"
 EOF
 chmod +x "$recording_adapter"
@@ -52,16 +70,25 @@ esac
 SH
 chmod +x "$probe_codex"
 probe_plugin_json='{"installed":[]}'
+probe_fingerprint_json='{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}'
 probe_marketplace_json='{"marketplaces":[]}'
 
 tool_path="$tmpdir/tool-path"
 probe_tmp="$tmpdir/probe-tmp"
+git_log="$tmpdir/git.log"
 mkdir -p "$tool_path"
 mkdir -p "$probe_tmp"
-for tool in git awk sed find head cut dirname pwd grep rm mktemp; do
+for tool in awk sed find head cut dirname pwd grep rm mktemp sort tail; do
   real=$(command -v "$tool")
   ln -sf "$real" "$tool_path/$tool"
 done
+real_git=$(command -v git)
+cat > "$tool_path/git" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$SPW_TEST_GIT_LOG"
+exec "$SPW_TEST_REAL_GIT" "$@"
+EOF
+chmod +x "$tool_path/git"
 
 # Model a pyenv/asdf-style interpreter shim whose env-based shell lookup is not
 # available in the deliberately restricted probe PATH. The test harness must
@@ -117,19 +144,53 @@ assert_probe_porcelain() {
   printf '%s\n' "$output" | grep -Fxq "installed_commit=$expected_installed"
   printf '%s\n' "$output" | grep -Fxq "identity_state=$expected_identity"
   printf '%s\n' "$output" | grep -Fxq "status=$expected_status"
+  printf '%s\n' "$output" | grep -Fxq "update_control=${SPW_EXPECTED_UPDATE_CONTROL:-managed}"
 }
 
 run_probe() {
   PATH="$tool_path" \
   TMPDIR="$probe_tmp" \
+  SUPERPOWERS_CONFIG_DIR="$tmpdir/no-selection" \
   SUPERPOWERS_REF="$desired_commit" \
   SUPERPOWERS_UPSTREAM_URL="$upstream" \
   SUPERPOWERS_CODEX="$probe_codex" \
   SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex-home" \
   SPW_PROBE_PLUGIN_JSON="$probe_plugin_json" \
+  SPW_PROBE_FINGERPRINT_JSON="$probe_fingerprint_json" \
   SPW_PROBE_MARKETPLACE_JSON="$probe_marketplace_json" \
   SPW_ADAPTER="$recording_adapter" \
+  SPW_TEST_GIT_LOG="$git_log" \
+  SPW_TEST_REAL_GIT="$real_git" \
+  SPW_TEST_UPDATE_CONTROL="${SPW_TEST_UPDATE_CONTROL:-managed}" \
   /bin/sh "$pkg/scripts/probe" --porcelain
+}
+
+run_probe_with_saved_selection() {
+  config_dir="$1"
+  output_mode="$2"
+  shift 2
+  set -- "$@" /bin/sh "$pkg/scripts/probe"
+  case "$output_mode" in
+    human) ;;
+    porcelain) set -- "$@" --porcelain ;;
+    *)
+      echo "unknown probe output mode: $output_mode" >&2
+      return 2
+      ;;
+  esac
+  env -u SUPERPOWERS_REF -u SUPERPOWERS_UPSTREAM_URL \
+    PATH="$tool_path" \
+    TMPDIR="$probe_tmp" \
+    SUPERPOWERS_CONFIG_DIR="$config_dir" \
+    SUPERPOWERS_CODEX="$probe_codex" \
+    SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex-home" \
+    SPW_PROBE_PLUGIN_JSON="$probe_plugin_json" \
+    SPW_PROBE_FINGERPRINT_JSON="$probe_fingerprint_json" \
+    SPW_PROBE_MARKETPLACE_JSON="$probe_marketplace_json" \
+    SPW_ADAPTER="$recording_adapter" \
+    SPW_TEST_GIT_LOG="$git_log" \
+    SPW_TEST_REAL_GIT="$real_git" \
+    "$@"
 }
 
 assert_probe_tmp_empty() {
@@ -149,7 +210,162 @@ output=$(run_probe)
 assert_probe_porcelain "$desired_short" "current" neither "$output"
 grep -Fxq "inspect --view fingerprint" "$adapter_log"
 grep -Fxq "inspect --view ownership" "$adapter_log"
+grep -Fxq "inspect --view update-control" "$adapter_log"
+expected_keys='requested_ref
+resolved_ref
+desired_commit
+generated_commit
+installed_commit
+identity_state
+status
+selection_origin
+selection_mode
+upstream_source_origin
+effective_source
+saved_mode
+saved_source
+saved_requested_ref
+saved_resolved_ref
+saved_commit
+update_control'
+actual_keys=$(printf '%s\n' "$output" | sed 's/=.*//')
+test "$actual_keys" = "$expected_keys"
+printf '%s\n' "$output" | grep -Fxq 'selection_origin=environment'
+printf '%s\n' "$output" | grep -Fxq 'selection_mode=override'
+printf '%s\n' "$output" | grep -Fxq 'upstream_source_origin=environment'
+printf '%s\n' "$output" | grep -Fxq "effective_source=$upstream"
+printf '%s\n' "$output" | grep -Fxq 'saved_mode=none'
+printf '%s\n' "$output" | grep -Fxq 'saved_source='
+printf '%s\n' "$output" | grep -Fxq 'saved_requested_ref='
+printf '%s\n' "$output" | grep -Fxq 'saved_resolved_ref='
+printf '%s\n' "$output" | grep -Fxq 'saved_commit='
 assert_probe_tmp_empty
+
+# A saved exact pin is authoritative and probe stays current without touching
+# Git, even after its source is unavailable. Dormant saved fields remain visible
+# when an environment ref overrides only the ref side of selection.
+saved_config="$tmpdir/saved-config"
+python3 -S "$pkg/scripts/core/selection-state.py" write-pinned \
+  --path "$saved_config/selection.json" --source "$upstream" \
+  --requested-ref "$desired_commit" --resolved-ref "$desired_commit" \
+  --commit "$desired_commit"
+offline_source="$tmpdir/upstream-offline"
+mv "$upstream" "$offline_source"
+: > "$adapter_log"
+: > "$git_log"
+output=$(run_probe_with_saved_selection "$saved_config" porcelain)
+assert_probe_porcelain "$desired_short" "current" neither "$output"
+printf '%s\n' "$output" | grep -Fxq 'selection_origin=user-config'
+printf '%s\n' "$output" | grep -Fxq 'selection_mode=pinned'
+printf '%s\n' "$output" | grep -Fxq 'upstream_source_origin=user-config'
+printf '%s\n' "$output" | grep -Fxq "effective_source=$upstream"
+printf '%s\n' "$output" | grep -Fxq 'saved_mode=pinned'
+printf '%s\n' "$output" | grep -Fxq "saved_source=$upstream"
+printf '%s\n' "$output" | grep -Fxq "saved_requested_ref=$desired_commit"
+printf '%s\n' "$output" | grep -Fxq "saved_resolved_ref=$desired_commit"
+printf '%s\n' "$output" | grep -Fxq "saved_commit=$desired_commit"
+test ! -s "$git_log"
+grep -Fxq 'inspect --view update-control' "$adapter_log"
+assert_probe_tmp_empty
+
+: > "$adapter_log"
+: > "$git_log"
+output=$(run_probe_with_saved_selection \
+  "$saved_config" porcelain SUPERPOWERS_REF="$desired_commit")
+printf '%s\n' "$output" | grep -Fxq 'selection_origin=environment'
+printf '%s\n' "$output" | grep -Fxq 'upstream_source_origin=user-config'
+printf '%s\n' "$output" | grep -Fxq 'saved_mode=pinned'
+printf '%s\n' "$output" | grep -Fxq "saved_commit=$desired_commit"
+test ! -s "$git_log"
+
+human_output=$(run_probe_with_saved_selection \
+  "$saved_config" human SUPERPOWERS_REF="$desired_commit")
+printf '%s\n' "$human_output" | grep -Fxq 'selection origin: environment'
+printf '%s\n' "$human_output" | grep -Fxq 'selection mode: override'
+printf '%s\n' "$human_output" | grep -Fxq 'upstream source origin: user-config'
+printf '%s\n' "$human_output" | grep -Fxq "effective source: $upstream"
+printf '%s\n' "$human_output" | grep -Fxq 'saved mode: pinned'
+printf '%s\n' "$human_output" | grep -Fxq "saved source: $upstream"
+printf '%s\n' "$human_output" | grep -Fxq "saved requested ref: $desired_commit"
+printf '%s\n' "$human_output" | grep -Fxq "saved resolved ref: $desired_commit"
+printf '%s\n' "$human_output" | grep -Fxq "saved commit: $desired_commit"
+printf '%s\n' "$human_output" | grep -Fxq 'update control: managed'
+printf '%s\n' "$human_output" | grep -Fxq \
+  'warning: effective ref and source have mixed origins (ref: environment, source: user-config)'
+
+mv "$offline_source" "$upstream"
+
+# A dash-prefixed local source saved by track-latest remains usable by probe.
+git -C "$upstream" tag v1.0.0
+ln -s upstream "$tmpdir/-upstream"
+dash_config="$tmpdir/dash-config"
+(
+  cd "$tmpdir"
+  SUPERPOWERS_CONFIG_DIR="$dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
+    /bin/sh "$pkg/scripts/track-latest" >/dev/null
+)
+: > "$adapter_log"
+: > "$git_log"
+output=$(
+  cd "$tmpdir"
+  run_probe_with_saved_selection "$dash_config" porcelain
+)
+assert_probe_porcelain "$desired_short" "current" neither "$output"
+printf '%s\n' "$output" | grep -Fxq 'selection_mode=track-latest'
+printf '%s\n' "$output" | grep -Fxq 'effective_source=-upstream'
+printf '%s\n' "$output" | grep -Fxq 'saved_source=-upstream'
+grep -Fq -- "ls-remote --tags -- $tmpdir_physical/-upstream refs/tags/v*" "$git_log"
+assert_probe_tmp_empty
+
+# Honest unsupported update control is reportable; execution or protocol
+# validation failures remain operational failures.
+: > "$adapter_log"
+SPW_TEST_UPDATE_CONTROL=unsupported
+SPW_EXPECTED_UPDATE_CONTROL=unsupported
+export SPW_TEST_UPDATE_CONTROL SPW_EXPECTED_UPDATE_CONTROL
+output=$(run_probe)
+assert_probe_porcelain "$desired_short" "current" neither "$output"
+unset SPW_EXPECTED_UPDATE_CONTROL
+SPW_TEST_UPDATE_CONTROL=malformed
+export SPW_TEST_UPDATE_CONTROL
+if run_probe >"$tmpdir/malformed-update-control.out" 2>"$tmpdir/malformed-update-control.err"; then
+  echo "probe unexpectedly accepted malformed update-control inspection" >&2
+  exit 1
+fi
+SPW_TEST_UPDATE_CONTROL=managed
+export SPW_TEST_UPDATE_CONTROL
+
+# Selection/source validation must fail before Git or adapter inspection.
+assert_preflight_failure() {
+  config_dir="$1"
+  expected="$2"
+  shift 2
+  : > "$adapter_log"
+  : > "$git_log"
+  if run_probe_with_saved_selection "$config_dir" porcelain "$@" \
+      >"$tmpdir/preflight.out" 2>"$tmpdir/preflight.err"; then
+    echo "probe unexpectedly accepted invalid selection preflight" >&2
+    exit 1
+  fi
+  grep -Fq "$expected" "$tmpdir/preflight.err"
+  test ! -s "$git_log"
+  test ! -s "$adapter_log"
+}
+
+malformed_config="$tmpdir/malformed-config"
+mkdir -p "$malformed_config"
+printf '%s\n' '{' > "$malformed_config/selection.json"
+assert_preflight_failure "$malformed_config" 'invalid JSON'
+
+unsupported_config="$tmpdir/unsupported-config"
+mkdir -p "$unsupported_config"
+printf '%s\n' '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}' \
+  > "$unsupported_config/selection.json"
+assert_preflight_failure "$unsupported_config" 'schema_version must equal integer 1'
+
+assert_preflight_failure "$tmpdir/no-selection" 'HTTP(S) source must not include userinfo' \
+  SUPERPOWERS_REF="$desired_commit" \
+  SUPERPOWERS_UPSTREAM_URL='https://token@example.invalid/repo'
 
 # Probe reports every validated identity state without mutation.
 probe_plugin_json='{"installed":[{"pluginId":"superpowers@superpowers-manager"}]}'
@@ -185,6 +401,7 @@ assert_probe_tmp_empty
 
 # Scenario 2: semantically invalid metadata plus malformed manifest -> null
 # fingerprint and needs install when generated is current.
+probe_fingerprint_json='{"installed":[]}'
 printf '%s\n' '{"commit":"not-a-fingerprint"}' > "$installed_root/.superpowers-upstream.json"
 printf '%s\n' '{' > "$installed_root/.codex-plugin/plugin.json"
 : > "$adapter_log"

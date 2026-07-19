@@ -30,6 +30,18 @@ No prerelease path is authorized. Do not create a beta tag, publish with
 `--tag next`, or add a prerelease dist-tag through this workflow.
 Persistent upstream-version pinning is required before production `0.2.0`.
 
+### Persistent-pinning release gate
+
+Persistent pinning is fulfilled only after every host check and the complete
+Layer 4 container acceptance gate have passed on the exact reviewed commit and
+that commit has landed on `main`. Host-only success does not satisfy this gate.
+
+After those changes merge, production `0.2.0` remains a separate release
+decision. If authorized, dispatch the protected Tag Release workflow on `main`
+with a `minor` bump, then use the existing protected `release` and `npm`
+environment approvals and trusted-publishing OIDC path. Do not create a
+prerelease, publish manually, or introduce an npm token for this decision.
+
 ## Normal release
 
 1. Ensure `main` is green (`sh tests/container.sh`) and inspect every commit

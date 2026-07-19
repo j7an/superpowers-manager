@@ -49,11 +49,23 @@ assert_contains "plugins/superpowers/.codex-plugin/plugin.template.json" '"name"
 assert_contains "plugins/superpowers/.codex-plugin/plugin.template.json" '"skills": "./skills/"'
 assert_contains "AGENTS.md" 'Run `sh tests/container.sh` before declaring a change complete.'
 assert_contains "AGENTS.md" "no mutation of the developer's or runner's real Codex state"
+assert_contains "AGENTS.md" "Adapter installation and refresh mutations require current, validated update-control evidence."
 assert_contains "README.md" "sh tests/container.sh"
 assert_contains "README.md" "Layers 1-3 stay offline and hermetic"
 assert_contains "README.md" "Layer 4 is the Docker acceptance path"
 assert_contains "README.md" "sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command"
 assert_contains "README.md" "no public harness selector"
+assert_contains "README.md" "superpowers-manager pin v6.1.1"
+assert_contains "README.md" "superpowers-manager track-latest"
+assert_contains "README.md" "superpowers-manager unpin"
+assert_contains "README.md" "selection commands save intent only"
+assert_contains "README.md" '`SUPERPOWERS_REF` is an invocation-only override'
+assert_contains "README.md" "SUPERPOWERS_REF=feature/foo npx superpowers-manager probe"
+assert_contains "tests/expected_tarball_contents.txt" "scripts/core/selection-state.py"
+assert_contains "tests/expected_tarball_contents.txt" "scripts/core/selection.sh"
+assert_contains "tests/expected_tarball_contents.txt" "scripts/pin"
+assert_contains "tests/expected_tarball_contents.txt" "scripts/track-latest"
+assert_contains "tests/expected_tarball_contents.txt" "scripts/unpin"
 assert_contains "RELEASING.md" 'Ensure `main` is green (`sh tests/container.sh`)'
 assert_contains "RELEASING.md" "sh tests/container.sh"
 assert_contains "RELEASING.md" '`v0.1.2` and `v0.1.3` were failed and unpublished maintenance attempts.'

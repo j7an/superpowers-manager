@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 /**
- * @typedef {'prepare' | 'probe' | 'install' | 'update' | 'uninstall'} Subcommand
+ * @typedef {'pin' | 'track-latest' | 'unpin' | 'prepare' | 'probe' | 'install' | 'update' | 'uninstall'} Subcommand
  */
 
 /**
@@ -27,8 +27,22 @@ import { spawnSync } from 'node:child_process';
  * @typedef {{ file: string, argv: string[] }} SpawnDescriptor
  */
 
-const SUBCOMMANDS = ['prepare', 'probe', 'install', 'update', 'uninstall'];
-const CODEX_SUBCOMMANDS = ['probe', 'install', 'update', 'uninstall'];
+const SUBCOMMANDS = [
+  'pin', 'track-latest', 'unpin', 'prepare', 'probe', 'install', 'update', 'uninstall',
+];
+const PIN_TAG_RE = /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
+const PIN_COMMIT_RE = /^[0-9A-Fa-f]{40}$/;
+/** @type {Record<Subcommand, string[]>} */
+const COMMAND_REQUIREMENTS = {
+  pin: ['git', 'python3'],
+  'track-latest': ['python3'],
+  unpin: [],
+  prepare: ['git', 'python3'],
+  probe: ['git', 'python3', 'codex'],
+  install: ['git', 'python3', 'codex'],
+  update: ['git', 'python3', 'codex'],
+  uninstall: ['python3', 'codex'],
+};
 // Mirrors upstream Superpowers' hooks/run-hook.cmd discovery order.
 const GIT_BASH_CANDIDATES = [
   'C:\\Program Files\\Git\\bin\\bash.exe',
@@ -78,7 +92,20 @@ function parseArgs(argv) {
   if (first === '--help' || first === '-h') return { kind: 'help' };
   if (first === '--version') return { kind: 'version' };
   if (first && SUBCOMMANDS.includes(first)) {
-    return { kind: 'run', cmd: /** @type {Subcommand} */ (first), args: argv.slice(1) };
+    const args = argv.slice(1);
+    if (first === 'pin' && args.length !== 1) {
+      return { kind: 'usage-error', message: 'usage: superpowers-manager pin REF' };
+    }
+    if (first === 'pin' && !PIN_TAG_RE.test(args[0]) && !PIN_COMMIT_RE.test(args[0])) {
+      return {
+        kind: 'usage-error',
+        message: 'pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit',
+      };
+    }
+    if ((first === 'track-latest' || first === 'unpin') && args.length !== 0) {
+      return { kind: 'usage-error', message: `usage: superpowers-manager ${first}` };
+    }
+    return { kind: 'run', cmd: /** @type {Subcommand} */ (first), args };
   }
   return { kind: 'usage-error', message: `unknown subcommand: ${first}` };
 }
@@ -127,8 +154,15 @@ function discoverShell(env, platform) {
   return findTool('bash', env, platform);
 }
 
-// Tool preflight; never touches Codex state. codex is required only for the
-// subcommands that mutate or read Codex.
+/**
+ * @returns {Record<Subcommand, string[]>}
+ */
+function commandRequirements() {
+  return COMMAND_REQUIREMENTS;
+}
+
+// Tool preflight; never touches Codex state. Requirements are specific to the
+// selected command, while a POSIX shell remains mandatory for every command.
 /**
  * @param {Subcommand} cmd
  * @param {NodeJS.ProcessEnv} env
@@ -137,8 +171,17 @@ function discoverShell(env, platform) {
  */
 function preflight(cmd, env, platform) {
   const errors = [];
-  for (const tool of ['git', 'python3']) {
-    if (!findTool(tool, env, platform)) {
+  for (const tool of COMMAND_REQUIREMENTS[cmd]) {
+    if (tool === 'codex') {
+      const codexBin = env.SUPERPOWERS_CODEX || 'codex';
+      // An explicit override may be a path rather than a PATH-resolvable name.
+      const found = codexBin.includes(path.sep)
+        ? fs.existsSync(codexBin)
+        : Boolean(findTool(codexBin, env, platform));
+      if (!found) {
+        errors.push(`required command not found: ${codexBin} — install the Codex CLI or set SUPERPOWERS_CODEX`);
+      }
+    } else if (!findTool(tool, env, platform)) {
       errors.push(`required command not found: ${tool} — install ${tool} and re-run`);
     }
   }
@@ -147,16 +190,6 @@ function preflight(cmd, env, platform) {
     errors.push(platform === 'win32'
       ? 'no POSIX shell found — install Git for Windows (provides bash) or use WSL2'
       : 'required command not found: sh');
-  }
-  if (CODEX_SUBCOMMANDS.includes(cmd)) {
-    const codexBin = env.SUPERPOWERS_CODEX || 'codex';
-    // An explicit override may be a path rather than a PATH-resolvable name.
-    const found = codexBin.includes(path.sep)
-      ? fs.existsSync(codexBin)
-      : Boolean(findTool(codexBin, env, platform));
-    if (!found) {
-      errors.push(`required command not found: ${codexBin} — install the Codex CLI or set SUPERPOWERS_CODEX`);
-    }
   }
   if (errors.length) return { ok: false, errors };
   return { ok: true, shell: /** @type {string} */ (shell) };
@@ -183,8 +216,14 @@ function buildSpawn(cmd, args, root, shell, platform) {
 
 function usage() {
   return [
-    'usage: superpowers-manager [prepare|probe|install|update|uninstall] [args...]',
+    'usage: superpowers-manager [command] [args...]',
     '',
+    'Selection commands (save intent only; they do not prepare or install it):',
+    '  pin REF       save an exact upstream release tag or commit',
+    '  track-latest  save selection of the latest stable upstream release',
+    '  unpin         remove the saved selection and return to the packaged fallback',
+    '',
+    'Apply and lifecycle commands:',
     '  prepare    fetch the pinned upstream ref and generate the plugin tree',
     '  probe      report upstream/generated/installed status (accepts --porcelain)',
     '  install    register this package root as a Codex marketplace and install the plugin',
@@ -193,9 +232,13 @@ function usage() {
     '',
     'Environment overrides (passed through to the scripts): SUPERPOWERS_REF,',
     'SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,',
+    'SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,',
     'SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,',
     'SUPERPOWERS_VALIDATOR,',
     'SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE',
+    '',
+    'Selection state uses SUPERPOWERS_CONFIG_DIR when set; otherwise it uses',
+    '$XDG_CONFIG_HOME/superpowers-manager, then $HOME/.config/superpowers-manager.',
   ].join('\n');
 }
 
@@ -239,6 +282,9 @@ function main() {
   process.exit(res.status === null ? 1 : res.status);
 }
 
-export { resolvePackageRoot, isMain, parseArgs, findTool, discoverShell, preflight, buildSpawn, usage };
+export {
+  resolvePackageRoot, isMain, parseArgs, findTool, discoverShell,
+  commandRequirements, preflight, buildSpawn, usage,
+};
 
 if (isMain(import.meta.filename, process.argv[1])) main();

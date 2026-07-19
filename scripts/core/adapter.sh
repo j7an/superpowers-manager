@@ -24,6 +24,7 @@ spw_invoke_adapter() {
   shift
 
   response_file="${result_file}.response"
+  rm -f "$result_file"
   adapter_exit=0
   "$SPW_ADAPTER" "$operation" "$@" > "$response_file" || adapter_exit=$?
 
@@ -31,15 +32,20 @@ spw_invoke_adapter() {
   if [ -n "$inspect_view" ]; then
     args="$inspect_view"
   fi
+  validator_exit=0
   if [ -n "$args" ]; then
     python3 -S "$SPW_ADAPTER_RESPONSE_VALIDATOR" \
       --operation "$operation" --adapter-exit "$adapter_exit" \
       --response "$response_file" --result "$result_file" \
-      --inspect-view "$inspect_view"
+      --inspect-view "$inspect_view" || validator_exit=$?
   else
     python3 -S "$SPW_ADAPTER_RESPONSE_VALIDATOR" \
       --operation "$operation" --adapter-exit "$adapter_exit" \
-      --response "$response_file" --result "$result_file"
+      --response "$response_file" --result "$result_file" || validator_exit=$?
+  fi
+  if [ "$validator_exit" -ne 0 ]; then
+    rm -f "$result_file"
+    return 1
   fi
 }
 
@@ -74,6 +80,11 @@ spw_inspect_fingerprint() {
 spw_inspect_ownership() {
   result_file="$1"
   spw_invoke_adapter inspect "$result_file" ownership -- --view ownership
+}
+
+spw_inspect_update_control() {
+  result_file="$1"
+  spw_invoke_adapter inspect "$result_file" update-control -- --view update-control
 }
 
 spw_adapter_install() {

@@ -4,10 +4,18 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/provenance.sh"
+. "$root/scripts/core/upstream.sh"
+. "$root/scripts/core/selection.sh"
 . "$root/scripts/core/status.sh"
 . "$root/scripts/core/lifecycle.sh"
 
 desired="896224c4b1879920ab573417e68fd51d2ccc9072"
+
+# Probe source fields must always use the defensive display path.
+test "$(spw_display_source 'https://example.invalid/upstream')" = \
+  'https://example.invalid/upstream'
+test "$(spw_display_source 'https://token@example.invalid/upstream')" = \
+  '<redacted-source>'
 
 test "$(spw_status_for_commits "$desired" "" "")" = "needs prepare"
 test "$(spw_status_for_commits "$desired" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "")" = "needs prepare"

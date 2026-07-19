@@ -105,6 +105,10 @@ if [ "$1 $2 $3" = "plugin marketplace list" ] && [ "$4" = "--json" ]; then
   fi
   exit 0
 fi
+if [ "$1 $2 $3" = "plugin list --json" ]; then
+  printf '%s\n' "${FAKE_CODEX_PLUGIN_LIST_OUTPUT:?}"
+  exit 0
+fi
 if [ "$1 $2 $3" = "plugin marketplace add" ]; then
   exit "${FAKE_CODEX_ADD_EXIT:-0}"
 fi
@@ -122,6 +126,8 @@ exit 99
 SH
 chmod +x "$fake_codex"
 export FAKE_CODEX_LOG="$fake_log"
+SUPERPOWERS_CODEX="$fake_codex"
+export SUPERPOWERS_CODEX
 
 assert_exact_commands() {
   expected="$1"
@@ -309,23 +315,28 @@ mkdir -p "$installed_root"
 cat > "$installed_root/.superpowers-upstream.json" <<EOF
 {"commit":"$desired"}
 EOF
+FAKE_CODEX_PLUGIN_LIST_OUTPUT='{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}'
+export FAKE_CODEX_PLUGIN_LIST_OUTPUT
+SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex"
+export SUPERPOWERS_INSTALLED_SEARCH_ROOT
 install_result="$tmpdir/install-result.json"
 inspect_result="$tmpdir/inspect-result.json"
 cat > "$install_result" <<'EOF'
 {"verification_hints":{"mismatch":"adapter mismatch hint","missing":"adapter missing hint"}}
 EOF
-out=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "$desired" "$install_result" "$inspect_result")
+out=$(spw_verify_installed_fingerprint "$desired" "$install_result" "$inspect_result")
 printf '%s\n' "$out" | grep -Fq "manager updated"
 printf '%s\n' "$out" | grep -Fq "installed_commit=$desired"
 
-if (SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "1111111111111111111111111111111111111111" "$install_result" "$inspect_result") >"$tmpdir/stale.out" 2>&1; then
+if (spw_verify_installed_fingerprint "1111111111111111111111111111111111111111" "$install_result" "$inspect_result") >"$tmpdir/stale.out" 2>&1; then
   echo "stale installed metadata must fail" >&2; exit 1
 fi
 grep -Fq "does not match the prepared plugin" "$tmpdir/stale.out"
 grep -Fq "adapter mismatch hint" "$tmpdir/stale.out"
 
 rm -rf "$tmpdir/codex"
-if (SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/codex" spw_verify_installed_fingerprint "$desired" "$install_result" "$inspect_result") >"$tmpdir/undetectable.out" 2>&1; then
+FAKE_CODEX_PLUGIN_LIST_OUTPUT='{"installed":[]}'
+if (spw_verify_installed_fingerprint "$desired" "$install_result" "$inspect_result") >"$tmpdir/undetectable.out" 2>&1; then
   echo "undetectable installed metadata must fail" >&2; exit 1
 fi
 grep -Fq "fingerprint is not detectable" "$tmpdir/undetectable.out"

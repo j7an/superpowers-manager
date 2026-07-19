@@ -99,20 +99,77 @@ print("same" if na == nb else "different")
 PY
 }
 
-spw_find_installed_metadata() {
-  search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
-  find "$search_root" \
-    \( -path "*/$SPW_MARKETPLACE_NAME/superpowers/.superpowers-upstream.json" \
-       -o -path "*/$SPW_MARKETPLACE_NAME/superpowers/*/.superpowers-upstream.json" \) \
-    -type f 2>/dev/null | head -n 1
+spw_active_plugin_version_from_json() {
+  json="$1"
+  plugin_id="$2"
+  python3 - "$json" "$plugin_id" <<'PY'
+import json
+import sys
+
+raw, plugin_id = sys.argv[1:]
+
+def reject_constant(value):
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+def has_terminal_control(value):
+    return any(
+        ord(character) < 0x20
+        or 0x7F <= ord(character) <= 0x9F
+        or 0xD800 <= ord(character) <= 0xDFFF
+        for character in value
+    )
+
+try:
+    data = json.loads(raw, parse_constant=reject_constant)
+except (json.JSONDecodeError, RecursionError, ValueError):
+    sys.exit(2)
+
+if not isinstance(data, dict):
+    sys.exit(2)
+items = data.get("installed")
+if not isinstance(items, list):
+    sys.exit(2)
+
+matches = []
+for item in items:
+    if not isinstance(item, dict):
+        sys.exit(2)
+    item_plugin_id = item.get("pluginId")
+    if not isinstance(item_plugin_id, str) or not item_plugin_id:
+        sys.exit(2)
+    if item_plugin_id == plugin_id:
+        matches.append(item)
+
+if len(matches) > 1:
+    sys.exit(2)
+if not matches:
+    sys.exit(0)
+
+version = matches[0].get("version")
+if (
+    not isinstance(version, str)
+    or not version
+    or version in {".", ".."}
+    or "/" in version
+    or "\\" in version
+    or has_terminal_control(version)
+):
+    sys.exit(2)
+print(version)
+PY
 }
 
-spw_find_installed_manifest() {
-  search_root="${SUPERPOWERS_INSTALLED_SEARCH_ROOT:-$HOME/.codex}"
-  find "$search_root" \
-    \( -path "*/$SPW_MARKETPLACE_NAME/superpowers/.codex-plugin/plugin.json" \
-       -o -path "*/$SPW_MARKETPLACE_NAME/superpowers/*/.codex-plugin/plugin.json" \) \
-    -type f 2>/dev/null | head -n 1
+spw_installed_root_for_version() {
+  search_root="$1"
+  marketplace="$2"
+  plugin="$3"
+  version="$4"
+  case "$search_root" in
+    /) search_root= ;;
+    */) search_root=${search_root%/} ;;
+  esac
+  printf '%s/plugins/cache/%s/%s/%s\n' \
+    "$search_root" "$marketplace" "$plugin" "$version"
 }
 
 spw_codex_json_get_or_empty() {
@@ -265,14 +322,15 @@ spw_manifest_short_sha_or_empty() {
   esac
 }
 
-spw_installed_commit_or_empty() {
-  installed_metadata=$(spw_find_installed_metadata || true)
-  installed_manifest=$(spw_find_installed_manifest || true)
+spw_installed_commit_from_root_or_empty() {
+  active_root="$1"
+  installed_metadata="$active_root/.superpowers-upstream.json"
+  installed_manifest="$active_root/.codex-plugin/plugin.json"
   installed_commit=""
-  if [ -n "$installed_metadata" ]; then
+  if [ -f "$installed_metadata" ]; then
     installed_commit=$(spw_codex_metadata_commit_or_empty "$installed_metadata" || true)
   fi
-  if [ -z "$installed_commit" ] && [ -n "$installed_manifest" ]; then
+  if [ -z "$installed_commit" ] && [ -f "$installed_manifest" ]; then
     installed_commit=$(spw_manifest_short_sha_or_empty "$installed_manifest" || true)
   fi
   printf '%s\n' "$installed_commit"

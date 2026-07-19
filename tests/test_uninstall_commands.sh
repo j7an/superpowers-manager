@@ -87,6 +87,12 @@ cat > "$recording_adapter" <<EOF
 #!/bin/sh
 state="$state"
 printf '%s\n' "\$*" >> "\$state/adapter.log"
+if [ "\$*" = "inspect --view update-control" ]; then
+  update_control=managed
+  [ ! -f "\$state/update-control" ] || update_control=\$(cat "\$state/update-control")
+  printf '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"update-control","update_control":"%s"},"error":null}\n' "\$update_control"
+  exit 0
+fi
 exec "$root/scripts/adapters/codex/adapter" "\$@"
 EOF
 chmod +x "$recording_adapter"
@@ -102,9 +108,14 @@ both_marketplaces_present='{"marketplaces":[{"name":"superpowers-manager","root"
 
 reset() {
   rm -f "$state/plugin_list.rc" "$state/marketplace_list.rc" "$state/remove_noop" \
-    "$state/remove_plugin_missing_installed" "$state/remove_marketplace_fail"
+    "$state/remove_plugin_missing_installed" "$state/remove_marketplace_fail" \
+    "$state/update-control"
   : > "$log"
   : > "$adapter_log"
+}
+
+set_update_control() {
+  printf '%s\n' "$1" > "$state/update-control"
 }
 
 run_uninstall() {
@@ -146,6 +157,34 @@ assert_no_removes() {
 line_of() {
   grep -Fn "$1" "$2" | head -n1 | cut -d: -f1
 }
+
+# Uninstall remains a selection-independent recovery path: malformed saved
+# selection, missing Git, and unsupported update control cannot prevent owned
+# resource removal and verification.
+reset
+printf '%s\n' "$plugin_present" > "$state/plugin_list.json"
+printf '%s\n' "$marketplace_present" > "$state/marketplace_list.json"
+config_home="$tmpdir/config-home"
+mkdir -p "$config_home/superpowers-manager"
+printf '%s\n' '{' > "$config_home/superpowers-manager/selection.json"
+set_update_control unsupported
+no_git_path="$tmpdir/no-git-path"
+mkdir -p "$no_git_path"
+real_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
+for tool in awk cat cut dirname find grep head mktemp mv pwd rm sed sh tail tr; do
+  real=$(command -v "$tool")
+  ln -sf "$real" "$no_git_path/$tool"
+done
+ln -s "$real_python3" "$no_git_path/python3"
+PATH="$no_git_path" XDG_CONFIG_HOME="$config_home" run_uninstall >"$state/out"
+grep -Fq 'plugin remove superpowers@superpowers-manager' "$log"
+grep -Fq 'plugin marketplace remove superpowers-manager' "$log"
+if grep -Fq 'inspect --view update-control' "$adapter_log"; then
+  echo "uninstall must not inspect update control" >&2
+  cat "$adapter_log" >&2
+  exit 1
+fi
+grep -Fq 'uninstall complete' "$state/out"
 
 # --- Scenario 0: missing python3 -> clear requirement error, no Codex calls ---
 reset

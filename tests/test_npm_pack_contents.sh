@@ -10,6 +10,32 @@ command -v npm >/dev/null 2>&1 || { echo "error: npm is required for this test" 
 (cd "$root" && npm pack --dry-run --json > "$tmpdir/pack.json")
 sh "$root/tests/assert_pack_contents.sh" "$tmpdir/pack.json"
 
+python3 - "$tmpdir/pack.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    report = json.load(f)
+
+paths = tuple(file["path"] for file in report[0]["files"])
+for path in paths:
+    parts = path.split("/")
+    if (
+        "selection.json" in parts
+        or any(part.startswith("superpowers-manager.pin.") for part in parts)
+        or ".git" in parts
+        or ".cache" in parts
+        or (
+            path.startswith("plugins/superpowers/")
+            and path
+            != "plugins/superpowers/.codex-plugin/plugin.template.json"
+        )
+        or path == "docs/superpowers"
+        or path.startswith("docs/superpowers/")
+    ):
+        raise SystemExit(f"forbidden npm pack path: {path}")
+PY
+
 assert_rejected_identity() {
     field=$1
     value=$2

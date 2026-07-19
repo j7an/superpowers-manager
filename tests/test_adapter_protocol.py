@@ -188,6 +188,27 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
                     },
                 )
 
+    def test_inspect_update_control_accepts_only_exact_allowed_values(self) -> None:
+        for value in ("managed", "unsupported"):
+            result = {"view": "update-control", "update_control": value}
+            self.assert_valid(
+                envelope("inspect", result),
+                operation="inspect",
+                inspect_view="update-control",
+                expected_result=result,
+            )
+        for result in (
+            {"view": "update-control"},
+            {"view": "update-control", "update_control": "unknown"},
+            {"view": "update-control", "update_control": "managed", "extra": True},
+        ):
+            self.assert_invalid(
+                envelope("inspect", result),
+                operation="inspect",
+                inspect_view="update-control",
+                fragment="update-control",
+            )
+
     def test_inspect_ownership_accepts_all_consistent_identity_states(self) -> None:
         cases = (
             (False, False, False, False, "neither"),

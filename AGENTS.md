@@ -31,6 +31,11 @@ Codex below describe the product integration, not a required agent harness.
   trapped exit, and preserve the previous generated tree on failure.
 - `scripts/install` and `scripts/update` must prepare and validate before
   mutating Codex state, then verify the resulting installed state.
+- Saved upstream intent and generated provenance are separate contracts; never
+  treat one as evidence of the other.
+- Every consumer of saved selection must validate it and fail closed before
+  network or integration access when selection state is invalid.
+- Adapter installation and refresh mutations require current, validated update-control evidence.
 - Fail closed when state cannot be inspected or parsed. Never report
   unverifiable state as success.
 - Mutate only `superpowers@superpowers-manager` and the `superpowers-manager`

@@ -7,61 +7,78 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
-# Legacy cache entries must never satisfy manager fingerprint inspection.
-legacy="$tmpdir/.codex/plugins/cache/superpowers-wrapper/superpowers/0.1.1"
-mkdir -p "$legacy/.codex-plugin"
-printf '%s\n' '{"commit":"1111111111111111111111111111111111111111"}' \
-  > "$legacy/.superpowers-upstream.json"
-printf '%s\n' '{"name":"superpowers","version":"0.0.0+wrapper.1111111"}' \
-  > "$legacy/.codex-plugin/plugin.json"
-[ -z "$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/.codex" spw_find_installed_metadata)" ]
-[ -z "$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/.codex" spw_find_installed_manifest)" ]
+search_root="$tmpdir/.codex"
+version_a="6.0.3+manager.aaaaaaa"
+version_b="6.0.3+manager.bbbbbbb"
+cache_a="$search_root/plugins/cache/superpowers-manager/superpowers/$version_a"
+cache_b="$search_root/plugins/cache/superpowers-manager/superpowers/$version_b"
+mkdir -p "$cache_a/.codex-plugin" "$cache_b/.codex-plugin"
 
-# Reproduce the real Codex installed-cache layout observed by the Task 1
-# behavior probe: ~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/...
-# The <version> directory segment sits between the plugin name and the files,
-# so the finders must tolerate it (an earlier pattern anchored the file
-# directly under */superpowers/ and silently missed every real install).
-cache="$tmpdir/.codex/plugins/cache/superpowers-manager/superpowers/6.0.3+manager.abc1234"
-mkdir -p "$cache/.codex-plugin"
-cat > "$cache/.superpowers-upstream.json" <<'JSON'
-{
-  "commit": "abc1234def5678abc1234def5678abc1234def56"
-}
+cat > "$cache_a/.superpowers-upstream.json" <<'JSON'
+{"commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 JSON
-cat > "$cache/.codex-plugin/plugin.json" <<'JSON'
-{
-  "name": "superpowers",
-  "version": "6.0.3+manager.abc1234"
-}
+cat > "$cache_b/.superpowers-upstream.json" <<'JSON'
+{"commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+JSON
+cat > "$cache_a/.codex-plugin/plugin.json" <<'JSON'
+{"name":"superpowers","version":"6.0.3+manager.aaaaaaa"}
+JSON
+cat > "$cache_b/.codex-plugin/plugin.json" <<'JSON'
+{"name":"superpowers","version":"6.0.3+manager.bbbbbbb"}
 JSON
 
-found_metadata=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/.codex" spw_find_installed_metadata)
-test "$found_metadata" = "$cache/.superpowers-upstream.json"
+# Codex's active listing is authoritative even when an older retained cache
+# directory sorts first on disk.
+listing_b='{"installed":[{"pluginId":"unrelated@elsewhere","version":"1.0.0"},{"pluginId":"superpowers@superpowers-manager","version":"6.0.3+manager.bbbbbbb"}]}'
+active_version=$(spw_active_plugin_version_from_json \
+  "$listing_b" "superpowers@superpowers-manager")
+[ "$active_version" = "$version_b" ]
+active_root=$(spw_installed_root_for_version \
+  "$search_root" "superpowers-manager" "superpowers" "$active_version")
+[ "$active_root" = "$cache_b" ]
+[ "$(spw_installed_commit_from_root_or_empty "$active_root")" = \
+  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]
 
-found_manifest=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/.codex" spw_find_installed_manifest)
-test "$found_manifest" = "$cache/.codex-plugin/plugin.json"
+# Verified absence is successful and prints an empty version.
+absent_version=$(spw_active_plugin_version_from_json \
+  '{"installed":[{"pluginId":"unrelated@elsewhere"}]}' \
+  "superpowers@superpowers-manager")
+[ -z "$absent_version" ]
 
-# Backward-compatible: a layout with no intervening version directory must
-# still resolve (covers staging copies and any future flat cache layout).
-flat="$tmpdir/flat/superpowers-manager/superpowers"
-mkdir -p "$flat/.codex-plugin"
-cat > "$flat/.superpowers-upstream.json" <<'JSON'
-{
-  "commit": "0000000111111122222223333333444444455555"
+assert_listing_rejected() {
+  listing="$1"
+  output_file="$tmpdir/rejected.out"
+  rc=0
+  spw_active_plugin_version_from_json \
+    "$listing" "superpowers@superpowers-manager" >"$output_file" || rc=$?
+  [ "$rc" -eq 2 ]
+  [ ! -s "$output_file" ]
 }
-JSON
-cat > "$flat/.codex-plugin/plugin.json" <<'JSON'
-{
-  "name": "superpowers",
-  "version": "0.0.0-main+manager.0000000"
-}
-JSON
 
-flat_metadata=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/flat" spw_find_installed_metadata)
-test "$flat_metadata" = "$flat/.superpowers-upstream.json"
+assert_listing_rejected '{'
+assert_listing_rejected '[]'
+assert_listing_rejected '{"installed":{}}'
+assert_listing_rejected '{"installed":[{}]}'
+assert_listing_rejected '{"installed":[{"pluginId":""}]}'
+assert_listing_rejected '{"installed":[{"pluginId":7}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":7}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":""}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"."}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":".."}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad/name"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad\\name"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad\nname"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad\rname"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad\u001bname"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad\u0085name"}]}'
+assert_listing_rejected '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"},{"pluginId":"superpowers@superpowers-manager","version":"2.0.0"}]}'
 
-flat_manifest=$(SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/flat" spw_find_installed_manifest)
-test "$flat_manifest" = "$flat/.codex-plugin/plugin.json"
+# The old filesystem-sweep selection path must not remain available.
+if grep -Eq 'spw_find_installed_(metadata|manifest)|find .*plugins/cache|head -n 1' \
+  "$root/scripts/adapters/codex/lib.sh"; then
+  echo "installed fingerprint selection must not sweep retained cache roots" >&2
+  exit 1
+fi
 
 echo "test_installed_finders: OK"
