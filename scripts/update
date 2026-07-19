@@ -10,9 +10,12 @@ identity_state=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "identity_state"
 [ -n "$identity_state" ] || spw_die "probe did not report adapter identity state"
 spw_require_no_legacy_state "$identity_state"
 status=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "status" { print $2 }')
+update_control=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "update_control" { print $2 }')
+[ -n "$update_control" ] || spw_die "probe did not report adapter update-control capability"
 
 case "$status" in
   current)
+    spw_require_managed_update_control "$update_control"
     printf '%s\n' "$probe_output"
     echo "manager is current"
     ;;

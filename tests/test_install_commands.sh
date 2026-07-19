@@ -104,6 +104,7 @@ if [ "$1" = plugin ] && [ "$2" = add ]; then
   dest="$state/codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0"
   mkdir -p "$dest"
   cp "$SPW_TEST_PKG_ROOT/plugins/superpowers/.superpowers-upstream.json" "$dest/.superpowers-upstream.json"
+  printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}],"available":[]}' > "$state/plugin_list.json"
   if [ -f "$state/plugin_add_stale" ]; then
     python3 - "$dest/.superpowers-upstream.json" <<'PY'
 import json, sys
@@ -130,6 +131,39 @@ cat > "$fake_adapter" <<'EOF'
 set -eu
 state=$(CDPATH= cd -- "$(dirname "$0")" && pwd)/state
 printf '%s\n' "$*" >> "$state/adapter.log"
+if [ "${1:-}" = inspect ] && [ "${2:-}" = --view ] && [ "${3:-}" = update-control ]; then
+  count=0
+  [ ! -f "$state/update-control-count" ] || count=$(cat "$state/update-control-count")
+  count=$((count + 1))
+  printf '%s\n' "$count" > "$state/update-control-count"
+  update_control=managed
+  [ ! -f "$state/update-control" ] || update_control=$(cat "$state/update-control")
+  if [ "$update_control" = managed-then-unsupported ]; then
+    if [ "$count" -eq 1 ]; then
+      update_control=managed
+    else
+      update_control=unsupported
+    fi
+  fi
+  case "$update_control" in
+    managed|unsupported)
+      printf '{"protocol":1,"operation":"inspect","ok":true,"messages":[],"result":{"view":"update-control","update_control":"%s"},"error":null}\n' "$update_control"
+      exit 0
+      ;;
+    malformed)
+      printf '%s' '{'
+      exit 0
+      ;;
+    failure)
+      printf '%s\n' '{"protocol":1,"operation":"inspect","ok":false,"messages":[],"result":null,"error":{"code":"inspect-failed","message":"update-control inspection failed","hints":[]}}'
+      exit 1
+      ;;
+    *)
+      echo "unknown update-control fixture: $update_control" >&2
+      exit 99
+      ;;
+  esac
+fi
 if [ "${1:-}" = inspect ] && [ "${2:-}" = --view ] && [ "${3:-}" = fingerprint ] &&
    [ -d "$state/codex-home/plugins/cache/superpowers-manager" ]; then
   if [ -f "$state/fingerprint_inspect_fail" ]; then
@@ -151,17 +185,27 @@ reset() {
   rm -f "$state/marketplace_list.rc" "$state/marketplace_add_fail" \
         "$state/plugin_add_fail" "$state/plugin_add_noop" "$state/plugin_add_stale" \
         "$state/fingerprint_inspect_fail" "$state/fingerprint_inspect_malformed" \
-        "$state/plugin_list.rc"
+        "$state/plugin_list.rc" "$state/update-control" "$state/update-control-count"
   rm -rf "$state/codex-home"
   printf '%s\n' '{"installed":[],"available":[]}' > "$state/plugin_list.json"
   : > "$log"
   : > "$state/adapter.log"
 }
 
+set_update_control() {
+  printf '%s\n' "$1" > "$state/update-control"
+}
+
 seed_installed_current() {
   dest="$state/codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0"
   mkdir -p "$dest"
-  cp "$pkg/plugins/superpowers/.superpowers-upstream.json" "$dest/.superpowers-upstream.json"
+  if [ -f "$pkg/plugins/superpowers/.superpowers-upstream.json" ]; then
+    cp "$pkg/plugins/superpowers/.superpowers-upstream.json" "$dest/.superpowers-upstream.json"
+  else
+    seed_commit=$(git -C "$upstream" rev-parse HEAD)
+    printf '{"commit":"%s"}\n' "$seed_commit" > "$dest/.superpowers-upstream.json"
+  fi
+  printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}],"available":[]}' > "$state/plugin_list.json"
 }
 
 run_install() {
@@ -186,6 +230,18 @@ run_update() {
     SPW_TEST_PKG_ROOT="$pkg" \
     "$@" \
     sh "$pkg/scripts/update"
+}
+
+run_prepare() {
+  env \
+    TMPDIR="$install_tmp" \
+    SPW_ADAPTER="$fake_adapter" \
+    SUPERPOWERS_CODEX="$fake_codex" \
+    SUPERPOWERS_UPSTREAM_URL="$upstream" \
+    SUPERPOWERS_INSTALLED_SEARCH_ROOT="$state/codex-home" \
+    SPW_TEST_PKG_ROOT="$pkg" \
+    "$@" \
+    sh "$pkg/scripts/prepare"
 }
 
 expect_fail() {
@@ -220,6 +276,110 @@ assert_no_codex_mutation() {
   fi
 }
 
+# Prepare remains capability-independent because it does not inspect or mutate
+# Codex state.
+reset
+set_update_control unsupported
+run_prepare >"$state/out"
+if grep -Fq 'inspect --view update-control' "$state/adapter.log"; then
+  echo "prepare must not inspect update control" >&2
+  cat "$state/adapter.log" >&2
+  exit 1
+fi
+if grep -Fq 'install --package-root' "$state/adapter.log"; then
+  echo "prepare must not invoke adapter install" >&2
+  cat "$state/adapter.log" >&2
+  exit 1
+fi
+assert_no_codex_mutation
+
+# Unsupported update control blocks both the current update fast path and a
+# direct install before any Codex mutation.
+reset
+seed_installed_current
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+set_update_control unsupported
+if run_update >"$state/out" 2>&1; then exit 1; fi
+grep -Fq 'adapter cannot guarantee manager-controlled updates' "$state/out"
+if grep -Fq 'manager is current' "$state/out"; then exit 1; fi
+assert_no_codex_mutation
+
+reset
+set_update_control unsupported
+if run_install >"$state/out" 2>&1; then exit 1; fi
+assert_no_codex_mutation
+
+# Protocol and execution failures from an old adapter remain public exit 1.
+reset
+set_update_control malformed
+if run_install >"$state/out" 2>&1; then
+  echo "install unexpectedly accepted malformed update-control output" >&2
+  exit 1
+else
+  rc=$?
+fi
+[ "$rc" -eq 1 ] || { echo "malformed adapter response exited $rc, expected 1" >&2; exit 1; }
+assert_no_codex_mutation
+
+reset
+set_update_control failure
+if run_update >"$state/out" 2>&1; then
+  echo "update unexpectedly accepted failed update-control inspection" >&2
+  exit 1
+else
+  rc=$?
+fi
+[ "$rc" -eq 1 ] || { echo "failed adapter response exited $rc, expected 1" >&2; exit 1; }
+assert_no_codex_mutation
+
+# A needs-prepare install reinspects after preparation and rejects capability
+# drift before mutation.
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+printf '%s\n' '{' > "$pkg/plugins/superpowers/.superpowers-upstream.json"
+set_update_control managed-then-unsupported
+if run_install >"$state/out" 2>&1; then
+  echo "install must reject capability drift after prepare" >&2
+  exit 1
+fi
+grep -Fq 'prepared v1.0.0' "$state/out"
+[ "$(cat "$state/update-control-count")" -eq 2 ]
+build_line=$(adapter_line_of 'build --upstream-root')
+second_control_line=$(grep -Fn 'inspect --view update-control' "$state/adapter.log" | tail -n1 | cut -d: -f1)
+[ "$build_line" -lt "$second_control_line" ] || { echo "update control must be reinspected after prepare" >&2; exit 1; }
+assert_no_codex_mutation
+
+# A needs-install path performs fresh ownership and capability inspections
+# immediately before adapter install.
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+run_install >"$state/out"
+[ "$(cat "$state/update-control-count")" -eq 2 ]
+last_ownership_line=$(grep -Fn 'inspect --view ownership' "$state/adapter.log" | tail -n1 | cut -d: -f1)
+last_control_line=$(grep -Fn 'inspect --view update-control' "$state/adapter.log" | tail -n1 | cut -d: -f1)
+install_line=$(adapter_line_of "install --package-root $pkg")
+[ "$last_ownership_line" -lt "$last_control_line" ] || { echo "fresh ownership inspection must precede update-control gate" >&2; exit 1; }
+[ "$last_control_line" -lt "$install_line" ] || { echo "fresh update-control gate must precede adapter install" >&2; exit 1; }
+
+# The fresh needs-install gate, rather than the initial probe result, controls
+# mutation authority.
+reset
+printf '%s\n' "$marketplace_absent" > "$state/marketplace_list.json"
+set_update_control managed-then-unsupported
+if run_install >"$state/out" 2>&1; then
+  echo "install must reject capability drift before adapter install" >&2
+  exit 1
+fi
+[ "$(cat "$state/update-control-count")" -eq 2 ]
+assert_no_codex_mutation
+
+# Restore the copied package's initial template-only state so the established
+# validation scenarios retain their original preconditions.
+rm -rf "$pkg/plugins/superpowers"
+mkdir -p "$pkg/plugins/superpowers/.codex-plugin"
+cp "$root/plugins/superpowers/.codex-plugin/plugin.template.json" \
+  "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json"
+
 # Legacy and mixed identity state stop before prepare or adapter mutation.
 for legacy_state in legacy both; do
   reset
@@ -228,7 +388,8 @@ for legacy_state in legacy both; do
       printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-wrapper"}],"available":[]}' > "$state/plugin_list.json"
       ;;
     both)
-      printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-manager"},{"pluginId":"superpowers@superpowers-wrapper"}],"available":[]}' > "$state/plugin_list.json"
+      seed_installed_current
+      printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"},{"pluginId":"superpowers@superpowers-wrapper"}],"available":[]}' > "$state/plugin_list.json"
       ;;
   esac
   printf '%s\n' '{"marketplaces":[{"name":"superpowers-wrapper","root":"/legacy"}]}' > "$state/marketplace_list.json"
@@ -402,7 +563,7 @@ fi
 # fingerprint is already current.
 reset
 seed_installed_current
-printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-manager"},{"pluginId":"superpowers@superpowers-wrapper"}],"available":[]}' > "$state/plugin_list.json"
+printf '%s\n' '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"},{"pluginId":"superpowers@superpowers-wrapper"}],"available":[]}' > "$state/plugin_list.json"
 printf '%s\n' '{"marketplaces":[{"name":"superpowers-wrapper","root":"/legacy"}]}' > "$state/marketplace_list.json"
 if run_update >"$state/out" 2>&1; then
   echo "current update must reject mixed legacy state" >&2

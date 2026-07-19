@@ -54,6 +54,14 @@ TMPDIR="$install_workspace"
 export TMPDIR
 install_result="$install_workspace/install.json"
 inspect_result="$install_workspace/inspect.json"
+ownership_result="$install_workspace/ownership.json"
+update_control_result="$install_workspace/update-control.json"
+spw_inspect_ownership "$ownership_result"
+spw_inspect_update_control "$update_control_result"
+identity_state=$(spw_adapter_result_get "$ownership_result" "identity_state")
+update_control=$(spw_adapter_result_get "$update_control_result" "update_control")
+spw_require_no_legacy_state "$identity_state"
+spw_require_managed_update_control "$update_control"
 spw_adapter_install "$install_result" "$root"
 if ! spw_verify_installed_fingerprint "$desired_commit" "$install_result" "$inspect_result"; then
   exit 1
