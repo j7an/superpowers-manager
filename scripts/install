@@ -16,10 +16,10 @@ echo "Note: remove or disable conflicting Superpowers providers yourself before 
 # missing or stale — including validation — entirely before any Codex
 # marketplace or plugin mutation. A failed prepare leaves Codex untouched.
 probe_output=$(sh "$root/scripts/probe" --porcelain)
-identity_state=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "identity_state" { print $2 }')
+identity_state=$(spw_probe_field "$probe_output" identity_state)
 [ -n "$identity_state" ] || spw_die "probe did not report adapter identity state"
 spw_require_no_legacy_state "$identity_state"
-status=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "status" { print $2 }')
+status=$(spw_probe_field "$probe_output" status)
 case "$status" in
   needs\ prepare)
     sh "$root/scripts/prepare"
@@ -36,19 +36,10 @@ desired_commit=$(spw_metadata_commit_or_empty "$root/plugins/superpowers/.superp
 [ -n "$desired_commit" ] || spw_die "generated metadata missing desired commit after prepare"
 
 tmp_parent="${TMPDIR:-/tmp}"
-if ! install_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.install.XXXXXX"); then
+if ! install_workspace=$(spw_make_workspace "$tmp_parent" "superpowers-manager.install"); then
   spw_die "cannot create install workspace under $tmp_parent"
 fi
-cleanup_install_workspace() {
-  status=$?
-  trap - 0 HUP INT TERM
-  rm -rf "$install_workspace" || :
-  exit "$status"
-}
-trap cleanup_install_workspace 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+spw_install_workspace_trap "$install_workspace"
 
 TMPDIR="$install_workspace"
 export TMPDIR

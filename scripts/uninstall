@@ -10,21 +10,12 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 spw_require_command python3
 
 tmp_parent="${TMPDIR:-/tmp}"
-if ! uninstall_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.uninstall.XXXXXX"); then
+if ! uninstall_workspace=$(spw_make_workspace "$tmp_parent" "superpowers-manager.uninstall"); then
   spw_die "cannot create uninstall workspace under $tmp_parent"
 fi
+spw_install_workspace_trap "$uninstall_workspace"
 inspect_result="$uninstall_workspace/inspect.json"
 uninstall_result="$uninstall_workspace/uninstall.json"
-cleanup() {
-  status=$?
-  trap - 0 HUP INT TERM
-  rm -rf "$uninstall_workspace" || :
-  exit "$status"
-}
-trap cleanup 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 TMPDIR="$uninstall_workspace"
 export TMPDIR

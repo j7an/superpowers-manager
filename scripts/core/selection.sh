@@ -33,6 +33,20 @@ spw_selection_state_path() {
   printf '%s/selection.json\n' "$_spw_selection_config_dir"
 }
 
+spw_selection_state() {
+  _spw_selection_state_root="$1"
+  shift
+  if _spw_selection_state_error=$(
+    python3 -S "$_spw_selection_state_root/scripts/core/selection-state.py" \
+      "$@" 2>&1
+  ); then
+    :
+  else
+    _spw_selection_state_error=${_spw_selection_state_error#error: }
+    spw_die "$_spw_selection_state_error"
+  fi
+}
+
 spw_load_saved_selection() {
   _spw_selection_root="$1"
   _spw_selection_workspace="$2"
@@ -81,15 +95,8 @@ spw_compute_effective_selection() {
     SPW_EFFECTIVE_SOURCE="$SPW_UPSTREAM_URL_DEFAULT"
   fi
 
-  if _spw_selection_error=$(
-    python3 -S "$_spw_selection_root/scripts/core/selection-state.py" \
-      validate-source --source="$SPW_EFFECTIVE_SOURCE" 2>&1
-  ); then
-    :
-  else
-    _spw_selection_error=${_spw_selection_error#error: }
-    spw_die "$_spw_selection_error"
-  fi
+  spw_selection_state "$_spw_selection_root" \
+    validate-source --source="$SPW_EFFECTIVE_SOURCE"
 
   _spw_selection_uses_saved_pin=false
   if [ -n "${SUPERPOWERS_REF:-}" ]; then

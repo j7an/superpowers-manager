@@ -203,24 +203,15 @@ spw_codex_build() {
   [ -f "$validator" ] || spw_codex_failure build "build-failed" "missing built-in plugin validator: $validator" "" ""
 
   tmp_parent="${TMPDIR:-/tmp}"
-  if ! scratch=$(mktemp -d "$tmp_parent/superpowers-manager.adapter-build.XXXXXX"); then
+  if ! scratch=$(spw_make_workspace "$tmp_parent" "superpowers-manager.adapter-build"); then
     spw_codex_failure build "build-failed" "cannot create adapter build workspace under $tmp_parent" "" ""
   fi
+  spw_install_workspace_trap "$scratch"
   stdout_file="$scratch/stdout"
   stderr_file="$scratch/stderr"
   messages_file="$scratch/messages"
   candidate_manifest="$candidate_root/.codex-plugin/plugin.json"
   provenance_path="$candidate_root/.superpowers-upstream.json"
-  cleanup() {
-    status=$?
-    trap - 0 HUP INT TERM
-    rm -rf "$scratch" || :
-    exit "$status"
-  }
-  trap cleanup 0
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
 
   mkdir -p "$candidate_root/.codex-plugin"
   : > "$messages_file"
@@ -302,23 +293,14 @@ spw_codex_install() {
   esac
 
   tmp_parent="${TMPDIR:-/tmp}"
-  if ! scratch=$(mktemp -d "$tmp_parent/superpowers-manager.adapter-install.XXXXXX"); then
+  if ! scratch=$(spw_make_workspace "$tmp_parent" "superpowers-manager.adapter-install"); then
     spw_codex_failure install "install-failed" "cannot create adapter install workspace under $tmp_parent" "" ""
   fi
+  spw_install_workspace_trap "$scratch"
   stdout_file="$scratch/stdout"
   stderr_file="$scratch/stderr"
   messages_file="$scratch/messages"
   hints_file="$scratch/hints"
-  cleanup() {
-    status=$?
-    trap - 0 HUP INT TERM
-    rm -rf "$scratch" || :
-    exit "$status"
-  }
-  trap cleanup 0
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
 
   : > "$messages_file"
   : > "$hints_file"
@@ -426,22 +408,13 @@ spw_codex_uninstall() {
   spw_codex_require_command uninstall "$codex_bin"
 
   tmp_parent="${TMPDIR:-/tmp}"
-  if ! scratch=$(mktemp -d "$tmp_parent/superpowers-manager.adapter-uninstall.XXXXXX"); then
+  if ! scratch=$(spw_make_workspace "$tmp_parent" "superpowers-manager.adapter-uninstall"); then
     spw_codex_failure uninstall "uninstall-failed" "cannot create adapter uninstall workspace under $tmp_parent" "" ""
   fi
+  spw_install_workspace_trap "$scratch"
   stdout_file="$scratch/stdout"
   stderr_file="$scratch/stderr"
   messages_file="$scratch/messages"
-  cleanup() {
-    status=$?
-    trap - 0 HUP INT TERM
-    rm -rf "$scratch" || :
-    exit "$status"
-  }
-  trap cleanup 0
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
 
   : > "$messages_file"
 
@@ -496,21 +469,12 @@ spw_codex_inspect() {
       spw_codex_require_command inspect "$codex_bin"
 
       tmp_parent="${TMPDIR:-/tmp}"
-      if ! scratch=$(mktemp -d "$tmp_parent/superpowers-manager.adapter-fingerprint.XXXXXX"); then
+      if ! scratch=$(spw_make_workspace "$tmp_parent" "superpowers-manager.adapter-fingerprint"); then
         spw_codex_failure inspect "inspect-failed" "cannot create adapter fingerprint workspace under $tmp_parent" "" ""
       fi
+      spw_install_workspace_trap "$scratch"
       stderr_file="$scratch/stderr"
       messages_file="$scratch/messages"
-      cleanup() {
-        status=$?
-        trap - 0 HUP INT TERM
-        rm -rf "$scratch" || :
-        exit "$status"
-      }
-      trap cleanup 0
-      trap 'exit 129' HUP
-      trap 'exit 130' INT
-      trap 'exit 143' TERM
 
       : > "$messages_file"
       : > "$stderr_file"
@@ -554,21 +518,12 @@ spw_codex_inspect() {
       spw_codex_require_command inspect "$codex_bin"
 
       tmp_parent="${TMPDIR:-/tmp}"
-      if ! scratch=$(mktemp -d "$tmp_parent/superpowers-manager.adapter-inspect.XXXXXX"); then
+      if ! scratch=$(spw_make_workspace "$tmp_parent" "superpowers-manager.adapter-inspect"); then
         spw_codex_failure inspect "inspect-failed" "cannot create adapter inspect workspace under $tmp_parent" "" ""
       fi
+      spw_install_workspace_trap "$scratch"
       stderr_file="$scratch/stderr"
       messages_file="$scratch/messages"
-      cleanup() {
-        status=$?
-        trap - 0 HUP INT TERM
-        rm -rf "$scratch" || :
-        exit "$status"
-      }
-      trap cleanup 0
-      trap 'exit 129' HUP
-      trap 'exit 130' INT
-      trap 'exit 143' TERM
 
       : > "$messages_file"
 

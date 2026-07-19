@@ -73,19 +73,10 @@ spw_verify_raw_commit() (
   source_display=$(spw_display_source "$source")
   fetch_source=$(spw_git_safe_source "$source")
 
-  if ! verify_workspace=$(mktemp -d "$workspace/superpowers-manager.commit.XXXXXX"); then
+  if ! verify_workspace=$(spw_make_workspace "$workspace" "superpowers-manager.commit"); then
     spw_die "cannot create raw-commit verification workspace under $workspace"
   fi
-  cleanup_verify_workspace() {
-    status=$?
-    trap - 0 HUP INT TERM
-    rm -rf "$verify_workspace" || :
-    exit "$status"
-  }
-  trap cleanup_verify_workspace 0
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  spw_install_workspace_trap "$verify_workspace"
 
   if ! init_output=$(git init "$verify_workspace" 2>&1); then
     spw_die "cannot initialize raw-commit verification workspace: $init_output"
@@ -119,19 +110,10 @@ spw_fetch_exact_commit() (
   source_display=$(spw_display_source "$source")
   fetch_source=$(spw_git_safe_source "$source")
 
-  if ! fetch_workspace=$(mktemp -d "$workspace/superpowers-manager.fetch.XXXXXX"); then
+  if ! fetch_workspace=$(spw_make_workspace "$workspace" "superpowers-manager.fetch"); then
     spw_die "cannot create exact-commit fetch workspace under $workspace"
   fi
-  cleanup_fetch_workspace() {
-    status=$?
-    trap - 0 HUP INT TERM
-    rm -rf "$fetch_workspace" || :
-    exit "$status"
-  }
-  trap cleanup_fetch_workspace 0
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  spw_install_workspace_trap "$fetch_workspace"
 
   if ! init_output=$(git init "$fetch_workspace" 2>&1); then
     spw_die "cannot initialize exact-commit fetch workspace: $init_output"

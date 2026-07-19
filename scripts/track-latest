@@ -11,44 +11,20 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 spw_require_command python3
 state_path=$(spw_selection_state_path)
 tmp_parent="${TMPDIR:-/tmp}"
-if ! track_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.track-latest.XXXXXX"); then
+if ! track_workspace=$(spw_make_workspace "$tmp_parent" "superpowers-manager.track-latest"); then
   spw_die "cannot create track-latest workspace under $tmp_parent"
 fi
-cleanup_track_workspace() {
-  status=$?
-  trap - 0 HUP INT TERM
-  rm -rf "$track_workspace" || :
-  exit "$status"
-}
-trap cleanup_track_workspace 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+spw_install_workspace_trap "$track_workspace"
 
 normalized="$track_workspace/selection.json"
-if state_error=$(python3 -S "$root/scripts/core/selection-state.py" read \
-  --path="$state_path" --output="$normalized" 2>&1); then
-  :
-else
-  state_error=${state_error#error: }
-  spw_die "$state_error"
-fi
+spw_selection_state "$root" read \
+  --path="$state_path" --output="$normalized"
 
 source="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
-if source_error=$(python3 -S "$root/scripts/core/selection-state.py" \
-  validate-source --source="$source" 2>&1); then
-  :
-else
-  source_error=${source_error#error: }
-  spw_die "$source_error"
-fi
+spw_selection_state "$root" \
+  validate-source --source="$source"
 
-if write_error=$(python3 -S "$root/scripts/core/selection-state.py" write-track-latest \
-  --path="$state_path" --source="$source" 2>&1); then
-  :
-else
-  write_error=${write_error#error: }
-  spw_die "$write_error"
-fi
+spw_selection_state "$root" write-track-latest \
+  --path="$state_path" --source="$source"
 
 printf '%s\n' 'saved upstream selection: latest stable release'

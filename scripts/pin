@@ -20,37 +20,18 @@ fi
 spw_require_command python3
 state_path=$(spw_selection_state_path)
 tmp_parent="${TMPDIR:-/tmp}"
-if ! pin_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.pin.XXXXXX"); then
+if ! pin_workspace=$(spw_make_workspace "$tmp_parent" "superpowers-manager.pin"); then
   spw_die "cannot create pin workspace under $tmp_parent"
 fi
-cleanup_pin_workspace() {
-  status=$?
-  trap - 0 HUP INT TERM
-  rm -rf "$pin_workspace" || :
-  exit "$status"
-}
-trap cleanup_pin_workspace 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+spw_install_workspace_trap "$pin_workspace"
 
 normalized="$pin_workspace/selection.json"
-if state_error=$(python3 -S "$root/scripts/core/selection-state.py" read \
-  --path="$state_path" --output="$normalized" 2>&1); then
-  :
-else
-  state_error=${state_error#error: }
-  spw_die "$state_error"
-fi
+spw_selection_state "$root" read \
+  --path="$state_path" --output="$normalized"
 
 source="${SUPERPOWERS_UPSTREAM_URL:-$SPW_UPSTREAM_URL_DEFAULT}"
-if source_error=$(python3 -S "$root/scripts/core/selection-state.py" \
-  validate-source --source="$source" 2>&1); then
-  :
-else
-  source_error=${source_error#error: }
-  spw_die "$source_error"
-fi
+spw_selection_state "$root" \
+  validate-source --source="$source"
 
 if [ "$requested_kind" = tag ]; then
   spw_require_command git
@@ -63,13 +44,8 @@ else
   commit=$(spw_verify_raw_commit "$source" "$requested_ref" "$pin_workspace")
 fi
 
-if write_error=$(python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+spw_selection_state "$root" write-pinned \
   --path="$state_path" --source="$source" --requested-ref="$requested_ref" \
-  --resolved-ref="$resolved_ref" --commit="$commit" 2>&1); then
-  :
-else
-  write_error=${write_error#error: }
-  spw_die "$write_error"
-fi
+  --resolved-ref="$resolved_ref" --commit="$commit"
 
 printf 'pinned upstream selection to %s at %s\n' "$requested_ref" "$commit"

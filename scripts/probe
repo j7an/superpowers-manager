@@ -11,22 +11,13 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/adapter.sh"
 
 tmp_parent="${TMPDIR:-/tmp}"
-if ! probe_workspace=$(mktemp -d "$tmp_parent/superpowers-manager.probe.XXXXXX"); then
+if ! probe_workspace=$(spw_make_workspace "$tmp_parent" "superpowers-manager.probe"); then
   spw_die "cannot create probe workspace under $tmp_parent"
 fi
+spw_install_workspace_trap "$probe_workspace"
 fingerprint_result="$probe_workspace/fingerprint.json"
 ownership_result="$probe_workspace/ownership.json"
 update_control_result="$probe_workspace/update-control.json"
-cleanup() {
-  status=$?
-  trap - 0 HUP INT TERM
-  rm -rf "$probe_workspace" || :
-  exit "$status"
-}
-trap cleanup 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 TMPDIR="$probe_workspace"
 export TMPDIR

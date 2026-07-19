@@ -36,6 +36,10 @@ spw_generated_commit_or_empty() (
   spw_metadata_commit_lenient_or_empty "$generated_metadata"
 )
 
+spw_probe_field() {
+  printf '%s\n' "$1" | awk -F= -v key="$2" '$1 == key { print $2 }'
+}
+
 spw_require_no_legacy_state() {
   identity_state="$1"
   case "$identity_state" in

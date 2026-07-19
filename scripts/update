@@ -6,11 +6,11 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$root/scripts/core/lifecycle.sh"
 
 probe_output=$(sh "$root/scripts/probe" --porcelain)
-identity_state=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "identity_state" { print $2 }')
+identity_state=$(spw_probe_field "$probe_output" identity_state)
 [ -n "$identity_state" ] || spw_die "probe did not report adapter identity state"
 spw_require_no_legacy_state "$identity_state"
-status=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "status" { print $2 }')
-update_control=$(printf '%s\n' "$probe_output" | awk -F= '$1 == "update_control" { print $2 }')
+status=$(spw_probe_field "$probe_output" status)
+update_control=$(spw_probe_field "$probe_output" update_control)
 [ -n "$update_control" ] || spw_die "probe did not report adapter update-control capability"
 
 case "$status" in

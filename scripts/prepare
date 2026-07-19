@@ -25,23 +25,12 @@ esac
 cache="$cache_parent/superpowers"
 tmp_parent=$(dirname "$plugin_root")
 mkdir -p "$tmp_parent"
-if ! prepare_workspace=$(mktemp -d "$tmp_parent/.superpowers.prepare.XXXXXX"); then
+if ! prepare_workspace=$(spw_make_workspace "$tmp_parent" ".superpowers.prepare"); then
   spw_die "cannot create prepare workspace under $tmp_parent"
 fi
+spw_install_workspace_trap "$prepare_workspace"
 tmp_plugin="$prepare_workspace/superpowers"
 adapter_result="$prepare_workspace/adapter-build.json"
-
-cleanup_tmp_plugin() {
-  status=$?
-  trap - 0 HUP INT TERM
-  rm -rf "$prepare_workspace" || :
-  exit "$status"
-}
-
-trap cleanup_tmp_plugin 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 TMPDIR="$prepare_workspace"
 export TMPDIR
