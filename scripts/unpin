@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+. "$root/scripts/core/common.sh"
+. "$root/scripts/core/upstream.sh"
+. "$root/scripts/core/selection.sh"
+
+[ "$#" -eq 0 ] || spw_usage_error 'usage: superpowers-manager unpin'
+
+state_path=$(spw_selection_state_path)
+fallback=$(SUPERPOWERS_REF= spw_config_ref "$root")
+removed=false
+
+if [ -L "$state_path" ]; then
+  spw_die "selection state path is not a regular file; remove it manually after inspecting: $state_path"
+elif [ -e "$state_path" ]; then
+  if [ ! -f "$state_path" ]; then
+    spw_die "selection state path is not a regular file; remove it manually after inspecting: $state_path"
+  fi
+  if ! rm -f "$state_path"; then
+    spw_die "cannot remove selection state: $state_path"
+  fi
+  removed=true
+fi
+
+if [ -e "$state_path" ] || [ -L "$state_path" ]; then
+  spw_die "selection state remains after removal attempt: $state_path"
+fi
+
+if [ "$removed" = true ]; then
+  printf 'removed saved upstream selection; packaged fallback is %s\n' "$fallback"
+else
+  printf 'no saved upstream selection; packaged fallback is %s\n' "$fallback"
+fi
+if [ -n "${SUPERPOWERS_REF:-}" ]; then
+  printf '%s\n' 'note: active SUPERPOWERS_REF override remains effective'
+fi
+if [ -n "${SUPERPOWERS_UPSTREAM_URL:-}" ]; then
+  printf '%s\n' 'note: active SUPERPOWERS_UPSTREAM_URL override remains effective'
+fi

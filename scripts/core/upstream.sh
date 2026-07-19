@@ -22,6 +22,71 @@ spw_is_semver_base() {
   printf '%s' "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 }
 
+spw_is_pinnable_tag() {
+  ref="$1"
+  case "$ref" in
+    v*) spw_is_semver_base "${ref#v}" ;;
+    *) return 1 ;;
+  esac
+}
+
+spw_resolve_exact_tag() {
+  source="$1"
+  ref="$2"
+  source_display=$(spw_display_source "$source")
+  if ! output=$(git ls-remote --tags "$source" "refs/tags/$ref" "refs/tags/$ref^{}" 2>&1); then
+    spw_die "cannot query exact upstream tag $ref from $source_display: $output"
+  fi
+  commit=$(printf '%s\n' "$output" | awk -v direct="refs/tags/$ref" '
+    $2 == direct { direct_sha = $1 }
+    $2 == direct "^{}" { peeled_sha = $1 }
+    END { if (peeled_sha != "") print peeled_sha; else if (direct_sha != "") print direct_sha }
+  ')
+  [ -n "$commit" ] || spw_die "upstream tag not found: $ref"
+  printf '%s\n' "$commit"
+}
+
+spw_verify_raw_commit() (
+  source="$1"
+  commit=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+  workspace="$3"
+  source_display=$(spw_display_source "$source")
+
+  if ! verify_workspace=$(mktemp -d "$workspace/superpowers-manager.commit.XXXXXX"); then
+    spw_die "cannot create raw-commit verification workspace under $workspace"
+  fi
+  cleanup_verify_workspace() {
+    status=$?
+    trap - 0 HUP INT TERM
+    rm -rf "$verify_workspace" || :
+    exit "$status"
+  }
+  trap cleanup_verify_workspace 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  if ! init_output=$(git init "$verify_workspace" 2>&1); then
+    spw_die "cannot initialize raw-commit verification workspace: $init_output"
+  fi
+  if fetch_output=$(git -C "$verify_workspace" fetch --no-tags "$source" "$commit" 2>&1); then
+    :
+  else
+    case "$fetch_output" in
+      *'not our ref'*|*'unadvertised object'*|*"couldn't find remote ref"*)
+        spw_die "source cannot supply requested commit: $commit"
+        ;;
+      *)
+        spw_die "cannot fetch requested commit from $source_display"
+        ;;
+    esac
+  fi
+  if ! git -C "$verify_workspace" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    spw_die "requested object is not a commit: $commit"
+  fi
+  printf '%s\n' "$commit"
+)
+
 spw_sanitize_ref_for_version() {
   ref="$1"
   sanitized=$(printf '%s' "$ref" | sed 's/[^0-9A-Za-z-][^0-9A-Za-z-]*/-/g; s/^-*//; s/-*$//')
