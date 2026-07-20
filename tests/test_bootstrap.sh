@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
 
 assert_file() {
   path="$1"

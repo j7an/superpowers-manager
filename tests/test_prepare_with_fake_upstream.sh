@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
+spw_test_tmpdir
 tmpdir_physical=$(CDPATH= cd -- "$tmpdir" && pwd -P)
 
 upstream="$tmpdir/upstream"
@@ -79,8 +80,8 @@ printf 'license\n' > "$upstream/LICENSE"
 printf 'readme\n' > "$upstream/README.md"
 printf 'code\n' > "$upstream/CODE_OF_CONDUCT.md"
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream without manifest" >/dev/null
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v5.0.0 -m "fake legacy release"
+spw_git_commit "$upstream" "fake upstream without manifest"
+spw_git_tag "$upstream" v5.0.0 "fake legacy release"
 legacy_commit=$(git -C "$upstream" rev-list -n1 v5.0.0)
 
 mkdir -p "$upstream/.codex-plugin"
@@ -98,17 +99,17 @@ cat > "$upstream/.codex-plugin/plugin.json" <<'JSON'
 }
 JSON
 git -C "$upstream" add .
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "fake upstream with manifest" >/dev/null
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v6.0.3 -m "fake release"
+spw_git_commit "$upstream" "fake upstream with manifest"
+spw_git_tag "$upstream" v6.0.3 "fake release"
 
 release_commit=$(git -C "$upstream" rev-list -n1 v6.0.3)
 git -C "$upstream" branch -M main
 
 printf 'branch data\n' > "$upstream/skills/brainstorming/branch.txt"
 git -C "$upstream" add skills/brainstorming/branch.txt
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "main branch update" >/dev/null
+spw_git_commit "$upstream" "main branch update"
 main_commit=$(git -C "$upstream" rev-parse HEAD)
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c tag.gpgsign=false tag -a v6.1.0-beta.1 -m "fake prerelease"
+spw_git_tag "$upstream" v6.1.0-beta.1 "fake prerelease"
 
 git -C "$upstream" checkout -b invalid-skill >/dev/null
 cat > "$upstream/skills/brainstorming/SKILL.md" <<'EOF'
@@ -118,7 +119,7 @@ name: brainstorming
 # Missing description
 EOF
 git -C "$upstream" add skills/brainstorming/SKILL.md
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "invalid skill frontmatter" >/dev/null
+spw_git_commit "$upstream" "invalid skill frontmatter"
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b nonstandard-json >/dev/null
@@ -131,13 +132,13 @@ text = path.read_text(encoding="utf-8")
 path.write_text(text.replace('"preserved": true', '"preserved": NaN'), encoding="utf-8")
 PY
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "nonstandard manifest JSON" >/dev/null
+spw_git_commit "$upstream" "nonstandard manifest JSON"
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b unreadable-manifest >/dev/null
 printf '\377' > "$upstream/.codex-plugin/plugin.json"
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "non-UTF-8 manifest" >/dev/null
+spw_git_commit "$upstream" "non-UTF-8 manifest"
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b unencodable-manifest-version >/dev/null
@@ -150,7 +151,7 @@ text = path.read_text(encoding="utf-8")
 path.write_text(text.replace('"version": "6.0.3"', '"version": "\\ud800"'), encoding="utf-8")
 PY
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "unencodable manifest version" >/dev/null
+spw_git_commit "$upstream" "unencodable manifest version"
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b deeply-nested-json >/dev/null
@@ -164,78 +165,50 @@ nested = "[" * 2000 + "0" + "]" * 2000
 path.write_text(text.replace('"preserved": true', f'"preserved": {nested}'), encoding="utf-8")
 PY
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "deeply nested manifest JSON" >/dev/null
+spw_git_commit "$upstream" "deeply nested manifest JSON"
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b feature/foo >/dev/null
 printf 'feature data\n' > "$upstream/skills/brainstorming/feature.txt"
 git -C "$upstream" add skills/brainstorming/feature.txt
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "feature branch update" >/dev/null
+spw_git_commit "$upstream" "feature branch update"
 feature_commit=$(git -C "$upstream" rev-parse HEAD)
 
 git -C "$upstream" checkout -b 042 >/dev/null
 printf 'leading zero ref\n' > "$upstream/skills/brainstorming/leading-zero.txt"
 git -C "$upstream" add skills/brainstorming/leading-zero.txt
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "leading zero branch" >/dev/null
+spw_git_commit "$upstream" "leading zero branch"
 leading_zero_commit=$(git -C "$upstream" rev-parse HEAD)
 git -C "$upstream" checkout main >/dev/null
 
 git -C "$upstream" checkout -b bad-manifest >/dev/null
 printf '{ "name": "superpowers", "version": ' > "$upstream/.codex-plugin/plugin.json"
 git -C "$upstream" add .codex-plugin/plugin.json
-git -C "$upstream" -c user.email=superpowers-manager@example.invalid -c user.name=superpowers-manager -c commit.gpgsign=false commit -m "bad upstream manifest" >/dev/null
+spw_git_commit "$upstream" "bad upstream manifest"
 git -C "$upstream" checkout main >/dev/null
 
-read_json_key() {
-  file="$1"
-  key="$2"
-  python3 - "$file" "$key" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    print(json.load(f)[sys.argv[2]])
-PY
+json_string() {
+  python3 -S -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
 }
 
-read_json_path() {
-  file="$1"
-  path="$2"
-  python3 - "$file" "$path" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    value = json.load(f)
-for part in sys.argv[2].split("."):
-    value = value[part]
-if isinstance(value, (dict, list)):
-    print(json.dumps(value, sort_keys=True, separators=(",", ":")))
-else:
-    print(value)
-PY
+assert_json_string() {
+  spw_assert_json equal "$1" "$2" "$(json_string "$3")"
 }
 
-assert_manifest_path() {
-  destination="$1"
-  path="$2"
-  expected="$3"
-  manifest="$tmpdir/$destination/.codex-plugin/plugin.json"
-  actual=$(read_json_path "$manifest" "$path")
-  if [ "$actual" != "$expected" ]; then
-    echo "manifest $path mismatch for $destination: $actual != $expected" >&2
-    exit 1
-  fi
+assert_manifest_json() {
+  destination=$1
+  pointer=$2
+  expected_json=$3
+  spw_assert_json equal \
+    "$tmpdir/$destination/.codex-plugin/plugin.json" \
+    "$pointer" "$expected_json"
 }
 
 assert_manifest_lacks_key() {
-  destination="$1"
-  key="$2"
-  manifest="$tmpdir/$destination/.codex-plugin/plugin.json"
-  python3 - "$manifest" "$key" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    data = json.load(f)
-if sys.argv[2] in data:
-    print(f"manifest must not contain key: {sys.argv[2]}", file=sys.stderr)
-    sys.exit(1)
-PY
+  destination=$1
+  key=$2
+  spw_assert_json absent \
+    "$tmpdir/$destination/.codex-plugin/plugin.json" "/$key"
 }
 
 run_prepare_for_ref_with_env() {
@@ -319,46 +292,31 @@ assert_rejected_manifest_input() {
 assert_prepare_version() {
   destination="$1"
   expected="$2"
-  manifest="$tmpdir/$destination/.codex-plugin/plugin.json"
-  version=$(read_json_key "$manifest" version)
-  if [ "$version" != "$expected" ]; then
-    echo "unexpected manager version for $destination: $version (expected $expected)" >&2
-    exit 1
-  fi
+  assert_json_string \
+    "$tmpdir/$destination/.codex-plugin/plugin.json" "/version" "$expected"
 }
 
 assert_prepare_commit() {
   destination="$1"
   expected="$2"
-  metadata="$tmpdir/$destination/.superpowers-upstream.json"
-  actual_commit=$(read_json_key "$metadata" commit)
-  if [ "$actual_commit" != "$expected" ]; then
-    echo "metadata commit mismatch for $destination: $actual_commit != $expected" >&2
-    exit 1
-  fi
+  assert_json_string \
+    "$tmpdir/$destination/.superpowers-upstream.json" "/commit" "$expected"
 }
 
 assert_prepare_upstream_manifest_version() {
   destination="$1"
   expected="$2"
-  metadata="$tmpdir/$destination/.superpowers-upstream.json"
-  actual_version=$(read_json_key "$metadata" upstream_manifest_version)
-  if [ "$actual_version" != "$expected" ]; then
-    echo "upstream manifest version mismatch for $destination: $actual_version != $expected" >&2
-    exit 1
-  fi
+  assert_json_string \
+    "$tmpdir/$destination/.superpowers-upstream.json" \
+    "/upstream_manifest_version" "$expected"
 }
 
 assert_prepare_metadata_value() {
   destination="$1"
   key="$2"
   expected="$3"
-  metadata="$tmpdir/$destination/.superpowers-upstream.json"
-  actual=$(read_json_key "$metadata" "$key")
-  if [ "$actual" != "$expected" ]; then
-    echo "metadata $key mismatch for $destination: $actual != $expected" >&2
-    exit 1
-  fi
+  assert_json_string \
+    "$tmpdir/$destination/.superpowers-upstream.json" "/$key" "$expected"
 }
 
 run_prepare_with_saved_selection() {
@@ -560,9 +518,11 @@ manifest_read_count=$(grep -Fxc "$latest_upstream_root/.codex-plugin/plugin.json
 expected_short=$(printf '%s' "$release_commit" | cut -c 1-7)
 assert_prepare_commit "out-latest" "$release_commit"
 assert_prepare_version "out-latest" "6.0.3+manager.$expected_short"
-assert_manifest_path "out-latest" "description" "Upstream manifest description"
-assert_manifest_path "out-latest" "skills" "./skills/"
-assert_manifest_path "out-latest" "x_future_manifest" '{"items":[1,"two"],"preserved":true}'
+assert_manifest_json \
+  "out-latest" "/description" "$(json_string "Upstream manifest description")"
+assert_manifest_json "out-latest" "/skills" "$(json_string "./skills/")"
+assert_manifest_json \
+  "out-latest" "/x_future_manifest" '{"items":[1,"two"],"preserved":true}'
 
 run_prepare_for_ref "v6.1.0-beta.1" "out-prerelease"
 prerelease_short=$(printf '%s' "$main_commit" | cut -c 1-7)
@@ -590,7 +550,7 @@ legacy_short=$(printf '%s' "$legacy_commit" | cut -c 1-7)
 assert_prepare_commit "out-legacy" "$legacy_commit"
 assert_prepare_version "out-legacy" "5.0.0+manager.$legacy_short"
 assert_prepare_upstream_manifest_version "out-legacy" ""
-assert_manifest_path "out-legacy" "skills" "./skills/"
+assert_manifest_json "out-legacy" "/skills" "$(json_string "./skills/")"
 assert_manifest_lacks_key "out-legacy" "hooks"
 if [ -e "$tmpdir/out-legacy/hooks" ]; then
   echo "legacy fallback plugin must not contain a hooks/ directory" >&2

@@ -1,13 +1,14 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/upstream.sh"
 . "$root/scripts/core/selection.sh"
 
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+spw_test_tmpdir
 
 fixture_config_root="$tmpdir/config-root"
 mkdir -p "$fixture_config_root/config"

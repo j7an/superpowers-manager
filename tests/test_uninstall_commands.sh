@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
+spw_test_tmpdir
 
 if grep -Fq 'scripts/adapters/codex/lib.sh' "$root/scripts/uninstall"; then
   echo "public uninstall must not source the Codex adapter library" >&2

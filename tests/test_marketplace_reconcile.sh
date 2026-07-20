@@ -1,15 +1,16 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/provenance.sh"
 . "$root/scripts/core/status.sh"
 . "$root/scripts/core/lifecycle.sh"
 . "$root/scripts/core/adapter.sh"
 . "$root/scripts/adapters/codex/lib.sh"
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+spw_test_tmpdir
 
 # --- spw_marketplace_root_from_json ---
 json='{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"/y"}]}'

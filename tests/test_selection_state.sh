@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
 
 python3 -S "$root/tests/test_selection_state.py"
 
@@ -10,8 +12,7 @@ python3 -S "$root/tests/test_selection_state.py"
 . "$root/scripts/core/upstream.sh"
 . "$root/scripts/core/selection.sh"
 
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+spw_test_tmpdir
 mkdir -p "$tmpdir/home" "$tmpdir/workspace" "$tmpdir/config-root/config"
 ln -s "$root/scripts" "$tmpdir/config-root/scripts"
 printf '%s\n' 'v1.2.3' > "$tmpdir/config-root/config/upstream-ref"

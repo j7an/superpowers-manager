@@ -1,13 +1,15 @@
 #!/bin/sh
 set -eu
 
-root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+. "$test_dir/lib/harness.sh"
+spw_test_root
+
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/upstream.sh"
 . "$root/scripts/core/selection.sh"
 
-tmpdir=$(mktemp -d)
-trap 'rm -rf "$tmpdir"' EXIT INT TERM
+spw_test_tmpdir
 
 state_helper="$root/scripts/core/selection-state.py"
 config="$tmpdir/config"
@@ -37,12 +39,12 @@ run_pin() {
   python3 -S "$state_helper" read --path "$config/selection.json" --output "$normalized"
 }
 
-json_get() {
-  python3 -S - "$normalized" "$1" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as handle:
-    print(json.load(handle)[sys.argv[2]])
-PY
+json_string() {
+  python3 -S -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+assert_saved_string() {
+  spw_assert_json equal "$normalized" "/$1" "$(json_string "$2")"
 }
 
 assert_pin_usage_failure() {
@@ -112,24 +114,24 @@ done
 # Lightweight and annotated tags use only the exact tag namespace, with peeling.
 run_pin v1.0.0 >"$tmpdir/out"
 grep -Fxq "pinned upstream selection to v1.0.0 at $v1_commit" "$tmpdir/out"
-test "$(json_get saved_mode)" = pinned
-test "$(json_get saved_source)" = "$upstream"
-test "$(json_get saved_requested_ref)" = v1.0.0
-test "$(json_get saved_resolved_ref)" = v1.0.0
-test "$(json_get saved_commit)" = "$v1_commit"
+assert_saved_string saved_mode pinned
+assert_saved_string saved_source "$upstream"
+assert_saved_string saved_requested_ref v1.0.0
+assert_saved_string saved_resolved_ref v1.0.0
+assert_saved_string saved_commit "$v1_commit"
 
 run_pin v1.1.0-rc.1 >/dev/null
-test "$(json_get saved_requested_ref)" = v1.1.0-rc.1
-test "$(json_get saved_resolved_ref)" = v1.1.0-rc.1
-test "$(json_get saved_commit)" = "$head_commit"
+assert_saved_string saved_requested_ref v1.1.0-rc.1
+assert_saved_string saved_resolved_ref v1.1.0-rc.1
+assert_saved_string saved_commit "$head_commit"
 
 # Full commit input is normalized before verification and persistence.
 raw_tmp="$tmpdir/raw-success"
 mkdir "$raw_tmp"
 TMPDIR="$raw_tmp" run_pin "$(printf '%s' "$head_commit" | tr '[:lower:]' '[:upper:]')" >/dev/null
-test "$(json_get saved_requested_ref)" = "$head_commit"
-test "$(json_get saved_resolved_ref)" = "$head_commit"
-test "$(json_get saved_commit)" = "$head_commit"
+assert_saved_string saved_requested_ref "$head_commit"
+assert_saved_string saved_resolved_ref "$head_commit"
+assert_saved_string saved_commit "$head_commit"
 assert_path_empty "$raw_tmp"
 
 # Raw verification retains the caller's context for relative and dash-prefixed
@@ -142,8 +144,8 @@ relative_config="$tmpdir/relative-config"
 )
 python3 -S "$state_helper" read \
   --path "$relative_config/selection.json" --output "$normalized"
-test "$(json_get saved_source)" = upstream
-test "$(json_get saved_commit)" = "$head_commit"
+assert_saved_string saved_source upstream
+assert_saved_string saved_commit "$head_commit"
 
 ln -s upstream "$tmpdir/-upstream"
 dash_config="$tmpdir/dash-config"
@@ -154,8 +156,8 @@ dash_config="$tmpdir/dash-config"
 )
 python3 -S "$state_helper" read \
   --path "$dash_config/selection.json" --output "$normalized"
-test "$(json_get saved_source)" = -upstream
-test "$(json_get saved_commit)" = "$head_commit"
+assert_saved_string saved_source -upstream
+assert_saved_string saved_commit "$head_commit"
 
 # Exact-tag verification supports the same relative and dash-prefixed local
 # source forms, with the repository separated from ls-remote options.
@@ -167,8 +169,8 @@ tag_relative_config="$tmpdir/tag-relative-config"
 )
 python3 -S "$state_helper" read \
   --path "$tag_relative_config/selection.json" --output "$normalized"
-test "$(json_get saved_source)" = upstream
-test "$(json_get saved_commit)" = "$v1_commit"
+assert_saved_string saved_source upstream
+assert_saved_string saved_commit "$v1_commit"
 
 tag_dash_config="$tmpdir/tag-dash-config"
 (
@@ -178,8 +180,8 @@ tag_dash_config="$tmpdir/tag-dash-config"
 )
 python3 -S "$state_helper" read \
   --path "$tag_dash_config/selection.json" --output "$normalized"
-test "$(json_get saved_source)" = -upstream
-test "$(json_get saved_commit)" = "$v1_commit"
+assert_saved_string saved_source -upstream
+assert_saved_string saved_commit "$v1_commit"
 
 for ref in 1.2.3 v1.2 v1.2.3+build.4 latest-release main "${head_commit%????????}"; do
   assert_pin_usage_failure "$ref"
@@ -425,14 +427,14 @@ PATH="$nogit_bin" TMPDIR="$tmpdir" SUPERPOWERS_CONFIG_DIR="$track_config" \
   >"$tmpdir/out"
 grep -Fxq 'saved upstream selection: latest stable release' "$tmpdir/out"
 python3 -S "$state_helper" read --path "$track_config/selection.json" --output "$normalized"
-test "$(json_get saved_mode)" = track-latest
-test "$(json_get saved_source)" = "$upstream"
+assert_saved_string saved_mode track-latest
+assert_saved_string saved_source "$upstream"
 
 official_config="$tmpdir/official-config"
 PATH="$nogit_bin" TMPDIR="$tmpdir" SUPERPOWERS_CONFIG_DIR="$official_config" \
   SUPERPOWERS_UPSTREAM_URL= /bin/sh "$root/scripts/track-latest" >/dev/null
 python3 -S "$state_helper" read --path "$official_config/selection.json" --output "$normalized"
-test "$(json_get saved_source)" = 'https://github.com/obra/superpowers'
+assert_saved_string saved_source 'https://github.com/obra/superpowers'
 
 printf '%s\n' '{"schema_version":3,"mode":"track-latest","source":"https://example.invalid/repo"}' \
   > "$track_config/selection.json"
