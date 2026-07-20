@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts/core/validate-adapter-response.py"
+EXPECTED_MAX_RESPONSE_BYTES = 1_048_576
 
 
 def envelope(operation: str, result: object, *, ok: bool = True) -> dict[str, object]:
@@ -26,6 +27,19 @@ def envelope(operation: str, result: object, *, ok: bool = True) -> dict[str, ob
             "hints": [],
         },
     }
+
+
+def padded_build_response(size: int) -> str:
+    payload = envelope("build", {})
+    payload["messages"] = [
+        {"channel": "stdout", "text": "size-stdout-sentinel"},
+        {"channel": "stderr", "text": "size-stderr-sentinel"},
+    ]
+    raw_payload = json.dumps(payload, separators=(",", ":"))
+    padding_bytes = size - len(raw_payload.encode("utf-8"))
+    if padding_bytes < 0:
+        raise AssertionError("response-size fixture exceeds requested size")
+    return raw_payload + " " * padding_bytes
 
 
 def validate(
@@ -311,6 +325,39 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
             stdout="build-start\nbuild-done\n",
             stderr="warn-1\nwarn-2\n",
         )
+
+    def test_enforces_inclusive_response_size_boundary_before_replay(self) -> None:
+        at_limit = padded_build_response(EXPECTED_MAX_RESPONSE_BYTES)
+        over_limit = at_limit + " "
+        self.assertEqual(
+            len(at_limit.encode("utf-8")), EXPECTED_MAX_RESPONSE_BYTES
+        )
+        self.assertEqual(
+            len(over_limit.encode("utf-8")), EXPECTED_MAX_RESPONSE_BYTES + 1
+        )
+
+        accepted = validate_raw(at_limit, "build")
+        self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
+        self.assertEqual(accepted.stdout, "size-stdout-sentinel\n")
+        self.assertEqual(accepted.stderr, "size-stderr-sentinel\n")
+        self.assertEqual(accepted.validated_result, {})
+
+        rejected = validate_raw(over_limit, "build")
+        self.assertEqual(rejected.returncode, 2, rejected.stdout + rejected.stderr)
+        self.assertEqual(rejected.stdout, "")
+        self.assertEqual(
+            rejected.stderr,
+            "error: invalid adapter response: "
+            "response exceeds 1048576-byte limit\n",
+        )
+        self.assertNotIn("Traceback", rejected.stderr)
+        self.assertNotIn(
+            "size-stdout-sentinel", rejected.stdout + rejected.stderr
+        )
+        self.assertNotIn(
+            "size-stderr-sentinel", rejected.stdout + rejected.stderr
+        )
+        self.assertIsNone(rejected.validated_result)
 
     def test_controlled_failure_replays_messages_error_and_hints(self) -> None:
         payload = envelope("install", {}, ok=False)

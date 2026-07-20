@@ -15,6 +15,7 @@ VERIFICATION_HINT_KEYS = {"mismatch", "missing"}
 OPERATIONS = {"build", "inspect", "install", "uninstall"}
 FINGERPRINT_RE = re.compile(r"(?:[0-9a-fA-F]{7}|[0-9a-fA-F]{40})\Z")
 MAX_NESTING = 64
+MAX_RESPONSE_BYTES = 1_048_576
 
 
 class ProtocolError(ValueError):
@@ -248,6 +249,11 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
+        response_size = args.response.stat().st_size
+        if response_size > MAX_RESPONSE_BYTES:
+            raise ProtocolError(
+                f"response exceeds {MAX_RESPONSE_BYTES}-byte limit"
+            )
         with args.response.open(encoding="utf-8") as handle:
             raw = json.load(
                 handle,
