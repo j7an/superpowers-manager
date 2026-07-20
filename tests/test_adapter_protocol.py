@@ -523,6 +523,60 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
                 self.assertNotIn("constant-stderr-sentinel", result.stdout + result.stderr)
                 self.assertIsNone(result.validated_result)
 
+    def test_rejects_duplicate_object_keys_recursively_without_replay(self) -> None:
+        cases = (
+            (
+                (
+                    '{"protocol":1,"operation":"build","ok":true,"ok":false,'
+                    '"messages":['
+                    '{"channel":"stdout","text":"duplicate-stdout-sentinel"},'
+                    '{"channel":"stderr","text":"duplicate-stderr-sentinel"}'
+                    '],"result":{},"error":null}'
+                ),
+                "build",
+                None,
+            ),
+            (
+                (
+                    '{"protocol":1,"operation":"inspect","ok":true,'
+                    '"messages":['
+                    '{"channel":"stdout","text":"duplicate-stdout-sentinel"},'
+                    '{"channel":"stderr","text":"duplicate-stderr-sentinel"}'
+                    '],"result":{"view":"ownership",'
+                    '"resources":{"plugin":true,"plugin":false,"marketplace":false},'
+                    '"legacy_resources":{"plugin":false,"marketplace":false},'
+                    '"identity_state":"neither"},"error":null}'
+                ),
+                "inspect",
+                "ownership",
+            ),
+        )
+        for raw_payload, operation, inspect_view in cases:
+            with self.subTest(operation=operation, inspect_view=inspect_view):
+                result = validate_raw(
+                    raw_payload, operation, inspect_view=inspect_view
+                )
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertEqual(
+                    result.stderr,
+                    "error: invalid adapter response: duplicate object key\n",
+                )
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn(
+                    "duplicate-stdout-sentinel", result.stdout + result.stderr
+                )
+                self.assertNotIn(
+                    "duplicate-stderr-sentinel", result.stdout + result.stderr
+                )
+                self.assertIsNone(result.validated_result)
+
+        valid_raw = json.dumps(envelope("build", {}), separators=(",", ":"))
+        control = validate_raw(valid_raw, "build")
+        self.assertEqual(control.returncode, 0, control.stdout + control.stderr)
+        self.assertEqual(control.stdout, "")
+        self.assertEqual(control.stderr, "")
+        self.assertEqual(control.validated_result, {})
+
     def test_enforces_exact_json_nesting_boundary(self) -> None:
         depth_64 = "[" * 64 + "0" + "]" * 64
         accepted_boundary = validate_raw(depth_64, "build")
