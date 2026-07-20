@@ -501,6 +501,54 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIsNone(result.validated_result)
 
+    def test_rejects_non_standard_json_constants_without_replay(self) -> None:
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(constant=constant):
+                raw_payload = (
+                    '{"protocol":'
+                    + constant
+                    + ',"operation":"build","ok":true,'
+                    '"messages":['
+                    '{"channel":"stdout","text":"constant-stdout-sentinel"},'
+                    '{"channel":"stderr","text":"constant-stderr-sentinel"}'
+                    '],"result":{},"error":null}'
+                )
+                result = validate_raw(raw_payload, "build")
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(
+                    f"non-standard JSON constant: {constant}", result.stderr
+                )
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertNotIn("constant-stdout-sentinel", result.stdout + result.stderr)
+                self.assertNotIn("constant-stderr-sentinel", result.stdout + result.stderr)
+                self.assertIsNone(result.validated_result)
+
+    def test_enforces_exact_json_nesting_boundary(self) -> None:
+        depth_64 = "[" * 64 + "0" + "]" * 64
+        accepted_boundary = validate_raw(depth_64, "build")
+        self.assertEqual(
+            accepted_boundary.returncode,
+            2,
+            accepted_boundary.stdout + accepted_boundary.stderr,
+        )
+        self.assertIn("response must be an object", accepted_boundary.stderr)
+        self.assertNotIn("nesting exceeds limit", accepted_boundary.stderr)
+        self.assertNotIn("Traceback", accepted_boundary.stderr)
+        self.assertEqual(accepted_boundary.stdout, "")
+        self.assertIsNone(accepted_boundary.validated_result)
+
+        depth_65 = "[" * 65 + "0" + "]" * 65
+        rejected_boundary = validate_raw(depth_65, "build")
+        self.assertEqual(
+            rejected_boundary.returncode,
+            2,
+            rejected_boundary.stdout + rejected_boundary.stderr,
+        )
+        self.assertIn("response JSON nesting exceeds limit", rejected_boundary.stderr)
+        self.assertNotIn("Traceback", rejected_boundary.stderr)
+        self.assertEqual(rejected_boundary.stdout, "")
+        self.assertIsNone(rejected_boundary.validated_result)
+
     def test_rejects_wrong_protocol_operation_types_and_views(self) -> None:
         invalid_cases = (
             (
