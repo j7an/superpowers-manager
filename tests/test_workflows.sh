@@ -3,6 +3,7 @@ set -eu
 
 test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 . "$test_dir/lib/harness.sh"
+. "$test_dir/lib/action-pin-assertions.sh"
 spw_test_root
 
 workflow_checks_rb=$(cat <<'RUBY'
@@ -199,6 +200,69 @@ end
 RUBY
 )
 
+assert_rejected_action_pin() {
+  _block=$1
+  _target=$2
+  if action_pin_pair "$_block" "$_target" >/dev/null 2>&1; then
+    printf 'expected action pin rejection for %s:\n%s\n' "$_target" "$_block" >&2
+    return 1
+  fi
+}
+
+test_action_pin_helper() {
+  sha_one=$(printf '%040d' 1)
+  sha_two=$(printf '%040d' 2)
+  uppercase_sha=$(printf '%040d' 0 | tr 0 A)
+  target=github/codeql-action/analyze
+
+  block=$(printf '        uses: %s@%s # v4.99.0' "$target" "$sha_one")
+  expected_pair=$(printf '%s\t%s' "$sha_one" "v4.99.0")
+  actual_pair=$(action_pin_pair "$block" "$target")
+  [ "$actual_pair" = "$expected_pair" ]
+  assert_action_pin "$block" "$target"
+
+  block=$(printf "        uses: '%s@%s' # v4.99.0" "$target" "$sha_one")
+  assert_action_pin "$block" "$target"
+  block=$(printf '        uses: "%s@%s" # v4.99.0' "$target" "$sha_one")
+  assert_action_pin "$block" "$target"
+
+  assert_rejected_action_pin \
+    "        uses: $target@v4.99.0 # v4.99.0" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$uppercase_sha # v4.99.0" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$sha_one" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$sha_one # v4" "$target"
+
+  near_target=google/osv-scanner-action/Xgithub/workflows/osv-scanner-reusableXyml
+  exact_target=google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml
+  assert_rejected_action_pin \
+    "        uses: $near_target@$sha_one # v2.99.0" "$exact_target"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    "        uses: actions/checkout@$sha_two # v7.1.0")
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    "        uses: actions/checkout@v7 # v7.0.0")
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    "        uses: 'actions/checkout@v7' # v7.0.0")
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    '        uses: "actions/checkout@v7" # v7.0.0')
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  echo "test_action_pin_helper: OK"
+}
+
 test_ci_workflow() {
   spw_test_tmpdir
   wf="$root/.github/workflows/ci.yml"
@@ -380,6 +444,7 @@ echo "test_tag_release_workflow: OK"
 }
 
 failed=0
+spw_section test_action_pin_helper test_action_pin_helper
 spw_section test_ci_workflow test_ci_workflow
 spw_section test_release_workflow test_release_workflow
 spw_section test_tag_release_workflow test_tag_release_workflow
