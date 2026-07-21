@@ -3,6 +3,7 @@ set -eu
 
 test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 . "$test_dir/lib/harness.sh"
+. "$test_dir/lib/action-pin-assertions.sh"
 spw_test_root
 
 workflow_checks_rb=$(cat <<'RUBY'
@@ -23,13 +24,20 @@ def expect_equal(actual, expected, path)
   raise "unexpected #{path}: #{actual.inspect} (expected #{expected.inspect})"
 end
 
-def unique_step_index(steps, key, value)
+def uses_target(value, path)
+  raise "expected string at #{path}, got #{value.class}" unless value.is_a?(String)
+  value.split("@", 2).fetch(0)
+end
+
+def unique_step_target_index(steps, target)
   matches = steps.each_index.select do |index|
     step = steps.fetch(index)
-    step.is_a?(Hash) && step[key] == value
+    step.is_a?(Hash) &&
+      step["uses"].is_a?(String) &&
+      uses_target(step.fetch("uses"), "steps[#{index}].uses") == target
   end
   unless matches.length == 1
-    raise "expected exactly one step with #{key}=#{value.inspect}, found #{matches.length}"
+    raise "expected exactly one step using #{target.inspect}, found #{matches.length}"
   end
   matches.fetch(0)
 end
@@ -57,10 +65,8 @@ def check_ci(workflow)
   steps = fetch(test_job, "steps", "jobs.test.steps")
   raise "expected jobs.test.steps to be an array" unless steps.is_a?(Array)
 
-  harden_uses = "step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411"
-  checkout_uses = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
-  harden_index = unique_step_index(steps, "uses", harden_uses)
-  checkout_index = unique_step_index(steps, "uses", checkout_uses)
+  harden_index = unique_step_target_index(steps, "step-security/harden-runner")
+  checkout_index = unique_step_target_index(steps, "actions/checkout")
 
   container_invocations = []
   steps.each_with_index do |step, index|
@@ -127,6 +133,52 @@ def assert_no_forbidden(value, path = "workflow")
   end
 end
 
+def collect_external_targets(value, path, targets)
+  case value
+  when Hash
+    value.each do |key, child|
+      if key == "uses"
+        unless child.is_a?(String)
+          raise "expected string at #{path}.uses, got #{child.class}"
+        end
+        targets << uses_target(child, "#{path}.uses") unless child.start_with?("./")
+      end
+      collect_external_targets(child, "#{path}.#{key}", targets)
+    end
+  when Array
+    value.each_with_index do |child, index|
+      collect_external_targets(child, "#{path}[#{index}]", targets)
+    end
+  end
+  targets
+end
+
+def load_expected_external_pins(path)
+  pairs = File.readlines(path, chomp: true).map.with_index(1) do |line, line_number|
+    fields = line.split("\t", -1)
+    unless fields.length == 2 && fields.none?(&:empty?)
+      raise "malformed external-pin manifest line #{line_number}: #{line.inspect}"
+    end
+    fields
+  end
+  raise "duplicate external-pin manifest entry" unless pairs.uniq.length == pairs.length
+  pairs
+end
+
+def check_inventory(root, manifest_path, workflow_paths)
+  prefix = "#{root}/"
+  actual = workflow_paths.flat_map do |path|
+    raise "workflow path outside root: #{path}" unless path.start_with?(prefix)
+    relative_path = path[prefix.length..]
+    workflow = YAML.load_file(path)
+    collect_external_targets(workflow, relative_path, []).map do |target|
+      [relative_path, target]
+    end
+  end
+  expected = load_expected_external_pins(manifest_path)
+  expect_equal(actual.sort, expected.sort, "external uses inventory")
+end
+
 def check_release(workflow)
   workflow = expect_hash(workflow, "workflow")
   on_keys = ["on", true].select { |key| workflow.key?(key) }
@@ -138,10 +190,11 @@ def check_release(workflow)
 
   jobs = expect_hash(fetch(workflow, "jobs", "jobs"), "jobs")
   publish = expect_hash(fetch(jobs, "publish", "jobs.publish"), "jobs.publish")
+  publish_uses = fetch(publish, "uses", "jobs.publish.uses")
   expect_equal(
-    fetch(publish, "uses", "jobs.publish.uses"),
-    "j7an/shared-workflows/.github/workflows/publish-npm.yml@dc9105acf09a4ad43bad2e4a86f4c65f553fe3c0",
-    "jobs.publish.uses",
+    uses_target(publish_uses, "jobs.publish.uses"),
+    "j7an/shared-workflows/.github/workflows/publish-npm.yml",
+    "jobs.publish.uses target",
   )
 
   permissions = expect_hash(fetch(publish, "permissions", "jobs.publish.permissions"), "jobs.publish.permissions")
@@ -185,19 +238,228 @@ def check_release(workflow)
   assert_no_forbidden(workflow)
 end
 
-domain = ARGV.fetch(0)
-path = ARGV.fetch(1)
-workflow = YAML.load_file(path)
+domain = ARGV.shift
 case domain
-when "ci"
-  check_ci(workflow)
-when "release"
-  check_release(workflow)
+when "inventory"
+  root = ARGV.shift
+  manifest_path = ARGV.shift
+  raise "missing inventory root" if root.nil?
+  raise "missing inventory manifest" if manifest_path.nil?
+  check_inventory(root, manifest_path, ARGV)
+when "ci", "release"
+  path = ARGV.shift
+  raise "missing workflow path for #{domain}" if path.nil?
+  raise "unexpected arguments for #{domain}: #{ARGV.inspect}" unless ARGV.empty?
+  workflow = YAML.load_file(path)
+  domain == "ci" ? check_ci(workflow) : check_release(workflow)
 else
   raise "unknown workflow assertion domain: #{domain}"
 end
 RUBY
 )
+
+assert_rejected_action_pin() {
+  _block=$1
+  _target=$2
+  if action_pin_pair "$_block" "$_target" >/dev/null 2>&1; then
+    printf 'expected action pin rejection for %s:\n%s\n' "$_target" "$_block" >&2
+    return 1
+  fi
+}
+
+test_action_pin_helper() {
+  sha_one=$(printf '%040d' 1)
+  sha_two=$(printf '%040d' 2)
+  short_sha=$(printf '%039d' 1)
+  long_sha=$(printf '%041d' 1)
+  uppercase_sha=$(printf '%040d' 0 | tr 0 A)
+  target=github/codeql-action/analyze
+
+  block=$(printf '        uses: %s@%s # v4.99.0' "$target" "$sha_one")
+  expected_pair=$(printf '%s\t%s' "$sha_one" "v4.99.0")
+  actual_pair=$(action_pin_pair "$block" "$target")
+  if [ "$actual_pair" != "$expected_pair" ]; then
+    printf 'action pin pair mismatch for %s: got %s, expected %s\n' \
+      "$target" "$actual_pair" "$expected_pair" >&2
+    return 1
+  fi
+  assert_action_pin "$block" "$target"
+
+  block=$(printf "        uses: '%s@%s' # v4.99.0" "$target" "$sha_one")
+  assert_action_pin "$block" "$target"
+  block=$(printf '        uses: "%s@%s" # v4.99.0' "$target" "$sha_one")
+  assert_action_pin "$block" "$target"
+
+  assert_rejected_action_pin \
+    "        uses: $target@v4.99.0 # v4.99.0" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$uppercase_sha # v4.99.0" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$short_sha # v4.99.0" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$long_sha # v4.99.0" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$sha_one" "$target"
+  assert_rejected_action_pin \
+    "        uses: $target@$sha_one # v4" "$target"
+
+  near_target=google/osv-scanner-action/Xgithub/workflows/osv-scanner-reusableXyml
+  exact_target=google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml
+  assert_rejected_action_pin \
+    "        uses: $near_target@$sha_one # v2.99.0" "$exact_target"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    "        uses: actions/checkout@$sha_two # v7.1.0")
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    "        uses: actions/checkout@v7 # v7.0.0")
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    "        uses: 'actions/checkout@v7' # v7.0.0")
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  block=$(printf '%s\n%s\n' \
+    "        uses: actions/checkout@$sha_one # v7.0.0" \
+    '        uses: "actions/checkout@v7" # v7.0.0')
+  assert_rejected_action_pin "$block" "actions/checkout"
+
+  echo "test_action_pin_helper: OK"
+}
+
+write_expected_external_pins() {
+  cat >"$1" <<'PINS'
+.github/workflows/ci.yml	step-security/harden-runner
+.github/workflows/ci.yml	actions/checkout
+.github/workflows/dependency-safety.yml	j7an/shared-workflows/.github/workflows/dependency-safety.yml
+.github/workflows/dependency-safety-non-bot-gate.yml	j7an/shared-workflows/.github/workflows/dependency-safety-non-bot-gate.yml
+.github/workflows/release.yml	j7an/shared-workflows/.github/workflows/publish-npm.yml
+.github/workflows/security.yml	j7an/shared-workflows/.github/workflows/security-scan.yml
+.github/workflows/tag-release.yml	j7an/shared-workflows/.github/workflows/tag-release.yml
+PINS
+}
+
+test_workflow_pin_contracts() {
+  spw_test_tmpdir
+  checker="$tmpdir/workflow_checks.rb"
+  manifest="$tmpdir/external-pins.tsv"
+  printf '%s\n' "$workflow_checks_rb" >"$checker"
+  write_expected_external_pins "$manifest"
+
+  set --
+  for workflow_path in \
+    "$root"/.github/workflows/*.yml \
+    "$root"/.github/workflows/*.yaml
+  do
+    [ -f "$workflow_path" ] || continue
+    set -- "$@" "$workflow_path"
+  done
+  ruby "$checker" inventory "$root" "$manifest" "$@"
+
+  pin_count=0
+  shared_count=0
+  shared_pair=
+  while IFS="$(printf '\t')" read -r relative_path target
+  do
+    block=$(cat "$root/$relative_path")
+    pair=$(action_pin_pair "$block" "$target")
+    pin_count=$((pin_count + 1))
+    case "$target" in
+      j7an/shared-workflows/*)
+        shared_count=$((shared_count + 1))
+        if [ -z "$shared_pair" ]; then
+          shared_pair=$pair
+        elif [ "$pair" != "$shared_pair" ]; then
+          printf 'shared-workflows pin disagreement: %s has %s, expected %s\n' \
+            "$relative_path" "$pair" "$shared_pair" >&2
+          return 1
+        fi
+        ;;
+    esac
+  done <"$manifest"
+
+  if [ "$pin_count" -ne 7 ]; then
+    printf 'workflow pin inventory count mismatch: got %d, expected 7\n' \
+      "$pin_count" >&2
+    return 1
+  fi
+  if [ "$shared_count" -ne 5 ]; then
+    printf 'shared-workflows pin count mismatch: got %d, expected 5\n' \
+      "$shared_count" >&2
+    return 1
+  fi
+  echo "test_workflow_pin_contracts: OK"
+}
+
+test_literal_action_pin_detector() {
+  spw_test_tmpdir
+  source_file="$tmpdir/literal-pins.sh"
+  negative_file="$tmpdir/non-literal-pins.sh"
+  sha=$(printf '%040d' 1)
+  short_sha=$(printf '%039d' 1)
+  long_sha=$(printf '%041d' 1)
+
+  plain=$(printf 'assert_contains "$block" "actions/checkout@%s"' "$sha")
+  full=$(printf 'uses: actions/checkout@%s # v7.0.0' "$sha")
+  single=$(printf "uses: 'actions/checkout@%s' # v7.0.0" "$sha")
+  double=$(printf 'uses: "actions/checkout@%s" # v7.0.0' "$sha")
+  escaped=$(printf 'block="uses: \\"actions/checkout@%s\\" # v7.0.0"' "$sha")
+  parenthesis=$(printf 'pin=(actions/checkout@%s)' "$sha")
+  backtick=$(printf 'pin=`actions/checkout@%s`' "$sha")
+  semicolon=$(printf 'pin=actions/checkout@%s;' "$sha")
+  printf '%s\n' \
+    "$plain" "$full" "$single" "$double" "$escaped" \
+    "$parenthesis" "$backtick" "$semicolon" \
+    >"$source_file"
+
+  expected=$(printf '%s:%d:%s\n%s:%d:%s\n%s:%d:%s\n%s:%d:%s\n%s:%d:%s\n%s:%d:%s\n%s:%d:%s\n%s:%d:%s' \
+    "$source_file" 1 "$plain" \
+    "$source_file" 2 "$full" \
+    "$source_file" 3 "$single" \
+    "$source_file" 4 "$double" \
+    "$source_file" 5 "$escaped" \
+    "$source_file" 6 "$parenthesis" \
+    "$source_file" 7 "$backtick" \
+    "$source_file" 8 "$semicolon")
+  actual=$(find_literal_action_pin_snapshots "$source_file")
+  if [ "$actual" != "$expected" ]; then
+    printf 'literal action pin detector output mismatch:\nexpected:\n%s\nactual:\n%s\n' \
+      "$expected" "$actual" >&2
+    return 1
+  fi
+
+  printf '%s\n' \
+    "HEAD_SHA=$sha" \
+    "uses: actions/checkout@$short_sha # v7.0.0" \
+    "uses: actions/checkout@$long_sha # v7.0.0" \
+    "uses: actions/checkout@v7 # v7.0.0" \
+    >"$negative_file"
+  actual=$(find_literal_action_pin_snapshots "$negative_file")
+  if [ -n "$actual" ]; then
+    printf 'literal action pin detector accepted negative fixtures:\n%s\n' \
+      "$actual" >&2
+    return 1
+  fi
+
+  echo "test_literal_action_pin_detector: OK"
+}
+
+test_workflow_pin_source_policy() {
+  violations=$(find_literal_action_pin_snapshots \
+    "$root"/tests/*.sh \
+    "$root"/tests/*.py \
+    "$root"/tests/lib/*.sh \
+    "$root"/tests/lib/*.py)
+  if [ -n "$violations" ]; then
+    printf 'literal workflow pin snapshots found:\n%s\n' "$violations" >&2
+    return 1
+  fi
+  echo "test_workflow_pin_source_policy: OK"
+}
 
 test_ci_workflow() {
   spw_test_tmpdir
@@ -238,7 +500,6 @@ package="$root/package.json"
 [ -f "$package" ] || { echo "missing $package" >&2; exit 1; }
 
 grep -q 'workflow_dispatch:' "$wf"
-grep -Fq 'uses: j7an/shared-workflows/.github/workflows/tag-release.yml@dc9105acf09a4ad43bad2e4a86f4c65f553fe3c0 # v4.2.2' "$wf"
 grep -Fq 'bump: ${{ inputs.bump }}' "$wf"
 grep -q 'tag-prefix: "v"' "$wf"
 grep -q 'RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}' "$wf"
@@ -380,6 +641,10 @@ echo "test_tag_release_workflow: OK"
 }
 
 failed=0
+spw_section test_action_pin_helper test_action_pin_helper
+spw_section test_literal_action_pin_detector test_literal_action_pin_detector
+spw_section test_workflow_pin_source_policy test_workflow_pin_source_policy
+spw_section test_workflow_pin_contracts test_workflow_pin_contracts
 spw_section test_ci_workflow test_ci_workflow
 spw_section test_release_workflow test_release_workflow
 spw_section test_tag_release_workflow test_tag_release_workflow
