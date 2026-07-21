@@ -45,7 +45,7 @@ their declared streams. Malformed input never replays any message.
 | `build` | Empty object. |
 | `uninstall` | Empty object. |
 | `install` | Exact key `verification_hints`; its object may contain only `mismatch` and/or `missing`, each satisfying the terminal-facing string rule. |
-| `inspect/fingerprint` | Exact keys `view` and `fingerprint`; view is `fingerprint`, value is `null`, 7 hexadecimal characters, or 40 hexadecimal characters. |
+| `inspect/fingerprint` | Exact keys `view` and `fingerprint`; view is `fingerprint`; `fingerprint` is `null` or a 7- or 40-character hexadecimal string. |
 | `inspect/ownership` | Exact keys `view`, `resources`, `legacy_resources`, and `identity_state`; each resource object has Boolean `plugin` and `marketplace`. State is `neither`, `manager`, `legacy`, or `both` and must equal the presence derived from the two resource groups. |
 | `inspect/update-control` | Exact keys `view` and `update_control`; view is `update-control`, value is `managed` or `unsupported`. |
 
@@ -62,9 +62,7 @@ true. Those two derived presence values determine `identity_state`.
 | Object keys | Duplicate keys are invalid in every object at every depth. |
 | Response bytes | At most 1,048,576 bytes (1 MiB) on disk; exactly the limit is accepted. |
 
-Every malformed-input row above produces validator exit 2, no validated
-result, and no adapter-message replay. The validator's own generic diagnostic
-remains visible.
+All rows above use the malformed-input behavior defined below.
 
 ## Failure behavior
 
@@ -89,7 +87,7 @@ The measurement pass recorded these response maxima without rounding:
 | Container Layer 4 | 652 | `layer4-real-codex:install:adapter-exit=0:validator-exit=0:install.json.response` |
 | Overall observed | 733 | `hermetic:install:adapter-exit=1:validator-exit=1:adapter-result.json.response` |
 
-The selected limit is 1,048,576 bytes. The selection rule is
+The response-byte limit in the table above follows the selection rule
 `max(1 MiB, smallest power of two greater than or equal to 100 × largest observed response)`.
 Measured current operations sit far below the limit. A future legitimate
 response approaching it requires re-measurement, reviewed reselection,
