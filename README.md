@@ -75,9 +75,10 @@ The generated plugin carries upstream skills, assets, documentation, and the
 upstream-owned hook policy. When upstream provides a Codex manifest, its
 `hooks` declaration is preserved: exact `{}` suppresses the `hooks/` subtree;
 active declarations conditionally materialize the upstream hook files; and a
-missing or empty declaration uses Codex's default discovery only when upstream
-ships `hooks/hooks.json`. Manifest-less fallback refs use the committed minimal
-template and generate neither a manifest `hooks` key nor a `hooks/` directory.
+missing `hooks` key or explicit empty array (`[]`) declaration uses Codex's
+default discovery only when upstream ships `hooks/hooks.json`. Manifest-less
+fallback refs use the committed minimal template and generate neither a manifest
+`hooks` key nor a `hooks/` directory.
 The manager never creates its own hooks or mutates Codex trust state.
 
 Review upstream hook command definitions with Codex's `/hooks` flow. Codex
