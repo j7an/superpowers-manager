@@ -81,9 +81,22 @@ RUBY
 
 ruby - "$probe" "$hooks_rpc" <<'RUBY'
 def function_body(probe, name)
-  function = probe.match(/^#{Regexp.escape(name)}\(\) \{\n(?<body>.*?)^\}\n/m)
+  function = probe.match(/^#{Regexp.escape(name)}\(\) \{\n/)
   raise "offline probe must define #{name}" unless function
-  function[:body]
+  body = +''
+  heredoc = nil
+  probe[function.end(0)..].each_line do |raw|
+    if heredoc
+      body << raw
+      heredoc = nil if raw.strip == heredoc
+      next
+    end
+    return body if raw.match?(/^}\s*$/)
+    body << raw
+    delimiter = raw.match(/<<['"]?(?<delimiter>[A-Za-z_][A-Za-z0-9_]*)['"]?/)
+    heredoc = delimiter[:delimiter] if delimiter
+  end
+  raise "offline probe has unterminated function #{name}"
 end
 
 def active_lines(source)
@@ -148,6 +161,9 @@ def validate_hooks_rpc!(hooks_rpc)
   required = [
     'if process.poll() is not None or process.stdin is None:',
     'fail(f"could not send request: {exc}")',
+    'def reject_constant(constant: str) -> None:',
+    'raise ValueError(f"non-standard numeric constant: {constant}")',
+    'parse_constant=reject_constant',
     'fail(f"malformed JSONL response: {exc}")',
     'deadline = time.monotonic() + 25',
     'remaining = deadline - time.monotonic()',
@@ -158,7 +174,8 @@ def validate_hooks_rpc!(hooks_rpc)
     'if not chunk:',
     'fail("EOF before the required response")',
     'if not isinstance(message, dict):',
-    'if message.get("id") != expected_id:',
+    'id_value = message.get("id")',
+    'if type(id_value) is not int or id_value != expected_id:',
     'if "error" in message:',
     'if "result" not in message:',
     'fail(f"response id {expected_id} has no result")',
@@ -354,11 +371,25 @@ def validate_probe!(probe)
   active_fields = [
     '"source": "plugin",',
     '"pluginId": "superpowers@superpowers-manager",',
-    '"enabled": True,',
-    '"isManaged": False,',
     '"trustStatus": "untrusted",',
+    'if actual.get("enabled") is not True:',
+    'if actual.get("isManaged") is not False:',
   ]
   active_fields.each { |text| raise "active hook assertion missing exact metadata: #{text}" unless active_body.include?(text) }
+
+  schema_body = function_body(probe, 'assert_hooks_schema_compatible')
+  schema_gates = [
+    'if "pluginId" not in properties:',
+    'if "pluginId" in required:',
+    'fail("HookMetadata pluginId unexpectedly became required")',
+    'plugin_id_types = allowed_types(hooks_response, properties["pluginId"])',
+    'if plugin_id_types != {"string", "null"}:',
+  ]
+  require_ordered_source(
+    schema_body,
+    schema_gates,
+    "schema preflight must require optional, exact string-or-null pluginId"
+  )
 
   top_level = top_level_shell_lines(probe)
   manager_mutations = [
@@ -464,6 +495,22 @@ mutations = {
     'if matches[0].get("version") != expected_version:',
     'if expected_version != expected_version:'
   ),
+  'required pluginId accepted' => probe.sub(
+    'if "pluginId" in required:',
+    'if False:'
+  ),
+  'additional pluginId types accepted' => probe.sub(
+    'if plugin_id_types != {"string", "null"}:',
+    'if not {"string", "null"}.issubset(plugin_id_types):'
+  ),
+  'non-boolean enabled accepted' => probe.sub(
+    'if actual.get("enabled") is not True:',
+    'if actual.get("enabled") != True:'
+  ),
+  'non-boolean isManaged accepted' => probe.sub(
+    'if actual.get("isManaged") is not False:',
+    'if actual.get("isManaged") != False:'
+  ),
 }
 mutations.each do |name, mutation|
   raise "semantic mutation fixture made no change: #{name}" if mutation == probe
@@ -489,6 +536,14 @@ rpc_mutations = {
     'fail(f"malformed JSONL response: {exc}")',
     'pass'
   ),
+  'missing non-standard constant parser' => hooks_rpc.sub(
+    ', parse_constant=reject_constant',
+    ''
+  ),
+  'weakened non-standard constant rejection' => hooks_rpc.sub(
+    'raise ValueError(f"non-standard numeric constant: {constant}")',
+    'return None'
+  ),
   'removed deadline' => hooks_rpc.sub(
     'deadline = time.monotonic() + 25',
     'deadline = float("inf")'
@@ -510,8 +565,12 @@ rpc_mutations = {
     'if False:'
   ),
   'missing response id gate' => hooks_rpc.sub(
-    'if message.get("id") != expected_id:',
+    'if type(id_value) is not int or id_value != expected_id:',
     'if False:'
+  ),
+  'weakened exact response id type' => hooks_rpc.sub(
+    'if type(id_value) is not int or id_value != expected_id:',
+    'if id_value != expected_id:'
   ),
   'missing RPC error gate' => hooks_rpc.sub(
     'if "error" in message:',

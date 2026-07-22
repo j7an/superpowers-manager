@@ -355,7 +355,10 @@ if "untrusted" not in scalar_values(hooks_response, properties["trustStatus"]):
     fail('HookMetadata trustStatus no longer includes "untrusted"')
 if "pluginId" not in properties:
     fail("HookMetadata no longer exposes pluginId")
-if not {"string", "null"}.issubset(allowed_types(hooks_response, properties["pluginId"])):
+if "pluginId" in required:
+    fail("HookMetadata pluginId unexpectedly became required")
+plugin_id_types = allowed_types(hooks_response, properties["pluginId"])
+if plugin_id_types != {"string", "null"}:
     fail("HookMetadata pluginId is not string-or-null")
 PY
 }
@@ -439,14 +442,16 @@ if len(manager_hooks) != 1:
 expected = {
     "source": "plugin",
     "pluginId": "superpowers@superpowers-manager",
-    "enabled": True,
-    "isManaged": False,
     "trustStatus": "untrusted",
 }
 actual = manager_hooks[0]
 for key, value in expected.items():
     if actual.get(key) != value:
         raise SystemExit(f"active manager hook metadata mismatch for {key}: {actual.get(key)!r}")
+if actual.get("enabled") is not True:
+    raise SystemExit(f"active manager hook enabled is not true: {actual.get('enabled')!r}")
+if actual.get("isManaged") is not False:
+    raise SystemExit(f"active manager hook isManaged is not false: {actual.get('isManaged')!r}")
 PY
 }
 

@@ -17,6 +17,10 @@ def fail(message: str) -> None:
     raise SystemExit(f"Codex 0.144.6 hooks/list protocol failed: {message}")
 
 
+def reject_constant(constant: str) -> None:
+    raise ValueError(f"non-standard numeric constant: {constant}")
+
+
 def send(process: subprocess.Popen[bytes], message: dict[str, object]) -> None:
     if process.poll() is not None or process.stdin is None:
         fail("app-server exited before request")
@@ -42,8 +46,10 @@ def next_message(
             if not raw:
                 continue
             try:
-                message = json.loads(raw.decode("utf-8"))
-            except (UnicodeError, json.JSONDecodeError) as exc:
+                message = json.loads(
+                    raw.decode("utf-8"), parse_constant=reject_constant
+                )
+            except (UnicodeError, ValueError) as exc:
                 fail(f"malformed JSONL response: {exc}")
             if not isinstance(message, dict):
                 fail("JSONL response must be an object")
@@ -67,7 +73,8 @@ def receive(
 ) -> dict[str, object]:
     while True:
         message = next_message(process, selector)
-        if message.get("id") != expected_id:
+        id_value = message.get("id")
+        if type(id_value) is not int or id_value != expected_id:
             continue
         if "error" in message:
             fail(f"RPC error for id {expected_id}: {message['error']!r}")
