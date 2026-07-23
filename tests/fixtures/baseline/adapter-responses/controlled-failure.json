@@ -1,0 +1,1 @@
+{"protocol":1,"operation":"install","ok":false,"messages":[{"channel":"stdout","text":"before-failure"},{"channel":"stderr","text":"pre-error-warning"}],"result":null,"error":{"code":"controlled-failure","message":"controlled failure","hints":["retry later","inspect manager state"]}}

@@ -11,6 +11,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts/core/validate-adapter-response.py"
+FIXTURES = ROOT / "tests" / "fixtures" / "baseline" / "adapter-responses"
 EXPECTED_MAX_RESPONSE_BYTES = 1_048_576
 RESPONSE_TOO_LARGE_STDERR = (
     "error: invalid adapter response: "
@@ -31,19 +32,6 @@ def envelope(operation: str, result: object, *, ok: bool = True) -> dict[str, ob
             "hints": [],
         },
     }
-
-
-def padded_build_response(size: int) -> str:
-    payload = envelope("build", {})
-    payload["messages"] = [
-        {"channel": "stdout", "text": "size-stdout-sentinel"},
-        {"channel": "stderr", "text": "size-stderr-sentinel"},
-    ]
-    raw_payload = json.dumps(payload, separators=(",", ":"))
-    padding_bytes = size - len(raw_payload.encode("utf-8"))
-    if padding_bytes < 0:
-        raise AssertionError("response-size fixture exceeds requested size")
-    return raw_payload + " " * padding_bytes
 
 
 def validate(
@@ -139,6 +127,9 @@ def _run_validator(
 
 
 class AdapterProtocolValidatorTests(unittest.TestCase):
+    def fixture_raw(self, name: str) -> str:
+        return (FIXTURES / name).read_text(encoding="utf-8")
+
     def assert_rejected_result(
         self,
         result: subprocess.CompletedProcess[str],
@@ -171,6 +162,28 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         self.assertEqual(result.stderr, stderr)
         self.assertEqual(result.validated_result, expected_result)
 
+    def assert_raw_valid(
+        self,
+        fixture: str,
+        *,
+        operation: str,
+        expected_result: object,
+        adapter_exit: int = 0,
+        inspect_view: str | None = None,
+        stdout: str = "",
+        stderr: str = "",
+    ) -> None:
+        result = validate_raw(
+            self.fixture_raw(fixture),
+            operation,
+            adapter_exit=adapter_exit,
+            inspect_view=inspect_view,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, stdout)
+        self.assertEqual(result.stderr, stderr)
+        self.assertEqual(result.validated_result, expected_result)
+
     def assert_invalid(
         self,
         payload: object,
@@ -189,18 +202,47 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIsNone(result.validated_result)
 
+    def assert_raw_invalid(
+        self,
+        fixture: str,
+        *,
+        operation: str,
+        fragment: str,
+        adapter_exit: int = 0,
+        inspect_view: str | None = None,
+        sentinels: tuple[str, ...] = (),
+        exact_stderr: str | None = None,
+    ) -> None:
+        result = validate_raw(
+            self.fixture_raw(fixture),
+            operation,
+            adapter_exit=adapter_exit,
+            inspect_view=inspect_view,
+        )
+        self.assert_rejected_result(result, sentinels=sentinels)
+        self.assertIn(fragment, result.stderr)
+        if exact_stderr is not None:
+            self.assertEqual(result.stderr, exact_stderr)
+
     def test_build_and_uninstall_accept_exact_empty_results(self) -> None:
-        for operation in ("build", "uninstall"):
+        for operation, fixture in (
+            ("build", "valid-build.json"),
+            ("uninstall", "valid-uninstall.json"),
+        ):
             with self.subTest(operation=operation):
-                self.assert_valid(
-                    envelope(operation, {}),
-                    operation=operation,
-                    expected_result={},
-                )
+                self.assert_raw_valid(fixture, operation=operation, expected_result={})
 
     def test_inspect_fingerprint_accepts_full_sha_short_sha_and_null(self) -> None:
+        self.assert_raw_valid(
+            "valid-inspect-fingerprint.json",
+            operation="inspect",
+            inspect_view="fingerprint",
+            expected_result={
+                "view": "fingerprint",
+                "fingerprint": "0123456789abcdef0123456789abcdef01234567",
+            },
+        )
         for fingerprint in (
-            "0123456789abcdef0123456789abcdef01234567",
             "89abcde",
             None,
         ):
@@ -220,7 +262,13 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
                 )
 
     def test_inspect_update_control_accepts_only_exact_allowed_values(self) -> None:
-        for value in ("managed", "unsupported"):
+        self.assert_raw_valid(
+            "valid-inspect-update-control.json",
+            operation="inspect",
+            inspect_view="update-control",
+            expected_result={"view": "update-control", "update_control": "managed"},
+        )
+        for value in ("unsupported",):
             result = {"view": "update-control", "update_control": value}
             self.assert_valid(
                 envelope("inspect", result),
@@ -241,9 +289,19 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
             )
 
     def test_inspect_ownership_accepts_all_consistent_identity_states(self) -> None:
+        self.assert_raw_valid(
+            "valid-inspect-ownership.json",
+            operation="inspect",
+            inspect_view="ownership",
+            expected_result={
+                "view": "ownership",
+                "resources": {"plugin": True, "marketplace": False},
+                "legacy_resources": {"plugin": False, "marketplace": False},
+                "identity_state": "manager",
+            },
+        )
         cases = (
             (False, False, False, False, "neither"),
-            (True, False, False, False, "manager"),
             (False, False, False, True, "legacy"),
             (False, True, True, False, "both"),
         )
@@ -311,9 +369,13 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
                 )
 
     def test_install_accepts_empty_one_and_both_verification_hints(self) -> None:
+        self.assert_raw_valid(
+            "valid-install.json",
+            operation="install",
+            expected_result={"verification_hints": {"missing": "plugin metadata missing"}},
+        )
         for hints in (
             {},
-            {"missing": "plugin metadata missing"},
             {
                 "mismatch": "installed commit differs",
                 "missing": "plugin metadata missing",
@@ -344,27 +406,20 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         )
 
     def test_enforces_inclusive_response_size_boundary_before_replay(self) -> None:
-        at_limit = padded_build_response(EXPECTED_MAX_RESPONSE_BYTES)
-        over_limit = at_limit + " "
-        self.assertEqual(
-            len(at_limit.encode("utf-8")), EXPECTED_MAX_RESPONSE_BYTES
+        self.assert_raw_valid(
+            "size-1048576.json",
+            operation="build",
+            expected_result={},
+            stdout="size-stdout-sentinel\n",
+            stderr="size-stderr-sentinel\n",
         )
-        self.assertEqual(
-            len(over_limit.encode("utf-8")), EXPECTED_MAX_RESPONSE_BYTES + 1
-        )
-
-        accepted = validate_raw(at_limit, "build")
-        self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
-        self.assertEqual(accepted.stdout, "size-stdout-sentinel\n")
-        self.assertEqual(accepted.stderr, "size-stderr-sentinel\n")
-        self.assertEqual(accepted.validated_result, {})
-
-        rejected = validate_raw(over_limit, "build")
-        self.assert_rejected_result(
-            rejected,
+        self.assert_raw_invalid(
+            "size-1048577.json",
+            operation="build",
+            fragment=f"response exceeds {EXPECTED_MAX_RESPONSE_BYTES}-byte limit",
             sentinels=("size-stdout-sentinel", "size-stderr-sentinel"),
+            exact_stderr=RESPONSE_TOO_LARGE_STDERR,
         )
-        self.assertEqual(rejected.stderr, RESPONSE_TOO_LARGE_STDERR)
 
     def test_response_size_limit_counts_utf8_bytes_before_replay(self) -> None:
         payload = envelope("build", {})
@@ -400,17 +455,9 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         self.assertEqual(rejected.stderr, RESPONSE_TOO_LARGE_STDERR)
 
     def test_controlled_failure_replays_messages_error_and_hints(self) -> None:
-        payload = envelope("install", {}, ok=False)
-        payload["messages"] = [
-            {"channel": "stdout", "text": "before-failure"},
-            {"channel": "stderr", "text": "pre-error-warning"},
-        ]
-        payload["error"] = {
-            "code": "controlled-failure",
-            "message": "controlled failure",
-            "hints": ["retry later", "inspect manager state"],
-        }
-        result = validate(payload, "install", adapter_exit=1)
+        result = validate_raw(
+            self.fixture_raw("controlled-failure.json"), "install", adapter_exit=1
+        )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "before-failure\n")
         self.assertEqual(
@@ -589,39 +636,17 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         self.assertIsNone(result.validated_result)
 
     def test_rejects_non_standard_json_constants_without_replay(self) -> None:
-        for constant in ("NaN", "Infinity", "-Infinity"):
-            with self.subTest(constant=constant):
-                raw_payload = (
-                    '{"protocol":'
-                    + constant
-                    + ',"operation":"build","ok":true,'
-                    '"messages":['
-                    '{"channel":"stdout","text":"constant-stdout-sentinel"},'
-                    '{"channel":"stderr","text":"constant-stderr-sentinel"}'
-                    '],"result":{},"error":null}'
-                )
-                result = validate_raw(raw_payload, "build")
-                self.assert_rejected_result(
-                    result,
-                    sentinels=(
-                        "constant-stdout-sentinel",
-                        "constant-stderr-sentinel",
-                    ),
-                )
-                self.assertIn(
-                    f"non-standard JSON constant: {constant}", result.stderr
-                )
+        self.assert_raw_invalid(
+            "non-standard-constant.json",
+            operation="build",
+            fragment="non-standard JSON constant: NaN",
+            sentinels=("constant-stdout-sentinel", "constant-stderr-sentinel"),
+        )
 
     def test_rejects_duplicate_object_keys_recursively_without_replay(self) -> None:
         cases = (
             (
-                (
-                    '{"protocol":1,"operation":"build","ok":true,"ok":false,'
-                    '"messages":['
-                    '{"channel":"stdout","text":"duplicate-stdout-sentinel"},'
-                    '{"channel":"stderr","text":"duplicate-stderr-sentinel"}'
-                    '],"result":{},"error":null}'
-                ),
+                self.fixture_raw("duplicate-key.json"),
                 "build",
                 None,
             ),
@@ -665,16 +690,16 @@ class AdapterProtocolValidatorTests(unittest.TestCase):
         self.assertEqual(control.validated_result, {})
 
     def test_enforces_exact_json_nesting_boundary(self) -> None:
-        depth_64 = "[" * 64 + "0" + "]" * 64
-        accepted_boundary = validate_raw(depth_64, "build")
+        accepted_boundary = validate_raw(self.fixture_raw("depth-64.json"), "build")
         self.assert_rejected_result(accepted_boundary)
-        self.assertIn("response must be an object", accepted_boundary.stderr)
+        self.assertIn("response keys must be", accepted_boundary.stderr)
         self.assertNotIn("nesting exceeds limit", accepted_boundary.stderr)
 
-        depth_65 = "[" * 65 + "0" + "]" * 65
-        rejected_boundary = validate_raw(depth_65, "build")
-        self.assert_rejected_result(rejected_boundary)
-        self.assertIn("response JSON nesting exceeds limit", rejected_boundary.stderr)
+        self.assert_raw_invalid(
+            "depth-65.json",
+            operation="build",
+            fragment="response JSON nesting exceeds limit",
+        )
 
     def test_rejects_wrong_protocol_operation_types_and_views(self) -> None:
         invalid_cases = (

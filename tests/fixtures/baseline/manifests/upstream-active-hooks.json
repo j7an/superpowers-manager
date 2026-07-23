@@ -1,0 +1,10 @@
+{
+  "name": "superpowers",
+  "version": "6.1.1",
+  "description": "Upstream manifest description",
+  "skills": "./wrong-skills/",
+  "hooks": "./hooks/hooks-codex.json",
+  "x_future_manifest": {
+    "nested": [true, null, "preserve-me"]
+  }
+}

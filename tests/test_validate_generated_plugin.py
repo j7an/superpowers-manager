@@ -16,6 +16,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts/adapters/codex/validate-generated-plugin.py"
+FIXTURES = ROOT / "tests" / "fixtures" / "baseline"
+MANIFESTS = FIXTURES / "manifests"
+PROVENANCE = FIXTURES / "provenance"
 COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99"
 SOURCE = "https://example.invalid/superpowers.git"
 
@@ -51,15 +54,9 @@ class ValidatorTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.plugin / "assets" / "logo.svg").write_text("svg\n", encoding="utf-8")
-        self.write_manifest(
-            {
-                "name": "superpowers",
-                "version": self.expected["manifest_version"],
-                "description": "Generated Superpowers",
-                "skills": "./skills/",
-                "interface": {"logo": "./assets/logo.svg", "screenshots": []},
-                "x_future_manifest": {"preserved": True},
-            }
+        shutil.copyfile(
+            MANIFESTS / "candidate-unknown-field.json",
+            self.plugin / ".codex-plugin" / "plugin.json",
         )
         self.write_metadata()
 
@@ -85,13 +82,11 @@ class ValidatorTests(unittest.TestCase):
 
     def write_metadata(self, value: Any | None = None) -> None:
         if value is None:
-            value = {
-                "source": self.expected["source"],
-                "requested_ref": self.expected["requested_ref"],
-                "resolved_ref": self.expected["resolved_ref"],
-                "commit": self.expected["commit"],
-                "upstream_manifest_version": self.expected["upstream_manifest_version"],
-            }
+            shutil.copyfile(
+                PROVENANCE / "valid-tag.json",
+                self.plugin / ".superpowers-upstream.json",
+            )
+            return
         (self.plugin / ".superpowers-upstream.json").write_text(
             json.dumps(value) + "\n", encoding="utf-8"
         )
@@ -174,22 +169,12 @@ class ValidatorTests(unittest.TestCase):
 
     def test_json_rejects_nonstandard_numeric_constants(self) -> None:
         manifest_path = self.plugin / ".codex-plugin" / "plugin.json"
-        manifest_path.write_text(
-            '{"name":"superpowers","version":"6.1.1+manager.d884ae0",'
-            '"description":"Generated Superpowers","skills":"./skills/",'
-            '"x_future_manifest":NaN}\n',
-            encoding="utf-8",
-        )
+        shutil.copyfile(MANIFESTS / "candidate-non-standard-constant.json", manifest_path)
         self.assert_rejected("plugin manifest must contain valid JSON")
 
         self.reset_candidate()
         metadata_path = self.plugin / ".superpowers-upstream.json"
-        metadata_path.write_text(
-            '{"source":"https://example.invalid/superpowers.git",'
-            '"requested_ref":"latest-release","resolved_ref":"v6.1.1",'
-            f'"commit":"{COMMIT}","upstream_manifest_version":Infinity}}\n',
-            encoding="utf-8",
-        )
+        shutil.copyfile(PROVENANCE / "non-standard-constant.json", metadata_path)
         self.assert_rejected("provenance must contain valid JSON")
 
     def test_json_rejects_excessive_nesting_without_traceback(self) -> None:
@@ -605,7 +590,9 @@ class ValidatorTests(unittest.TestCase):
             self.assert_rejected("escapes the plugin root")
 
     def test_provenance_shape_values_and_commit_fail_closed(self) -> None:
-        (self.plugin / ".superpowers-upstream.json").write_text("{bad", encoding="utf-8")
+        shutil.copyfile(
+            PROVENANCE / "malformed.json", self.plugin / ".superpowers-upstream.json"
+        )
         self.assert_rejected("provenance must contain valid JSON")
 
         self.reset_candidate()
@@ -613,9 +600,9 @@ class ValidatorTests(unittest.TestCase):
         self.assert_rejected("provenance must contain a JSON object")
 
         self.reset_candidate()
-        metadata = json.loads((self.plugin / ".superpowers-upstream.json").read_text())
-        metadata.pop("resolved_ref")
-        self.write_metadata(metadata)
+        shutil.copyfile(
+            PROVENANCE / "wrong-key-set.json", self.plugin / ".superpowers-upstream.json"
+        )
         self.assert_rejected("provenance keys do not match")
 
         self.reset_candidate()
@@ -625,10 +612,10 @@ class ValidatorTests(unittest.TestCase):
         self.assert_rejected("provenance field `source` does not match")
 
         self.reset_candidate()
-        metadata = json.loads((self.plugin / ".superpowers-upstream.json").read_text())
-        metadata["commit"] = "D" * 40
-        self.write_metadata(metadata)
-        self.expected["commit"] = "D" * 40
+        shutil.copyfile(
+            PROVENANCE / "commit-7-hex.json", self.plugin / ".superpowers-upstream.json"
+        )
+        self.expected["commit"] = "d884ae0"
         self.assert_rejected("commit must be 40 lowercase hexadecimal characters")
 
 

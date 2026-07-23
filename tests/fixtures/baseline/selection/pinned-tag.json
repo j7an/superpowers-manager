@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "mode": "pinned",
+  "source": "https://github.com/obra/superpowers",
+  "requested_ref": "v6.1.1",
+  "resolved_ref": "v6.1.1",
+  "commit": "0123456789abcdef0123456789abcdef01234567"
+}

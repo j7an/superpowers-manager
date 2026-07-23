@@ -1,0 +1,12 @@
+.codex-plugin/
+.codex-plugin/plugin.json
+.codex-plugin/plugin.template.json
+.superpowers-upstream.json
+CODE_OF_CONDUCT.md
+LICENSE
+README.md
+assets/
+assets/superpowers-small.svg
+skills/
+skills/brainstorming/
+skills/brainstorming/SKILL.md

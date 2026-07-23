@@ -1,0 +1,1 @@
+{"protocol":NaN,"operation":"build","ok":true,"messages":[{"channel":"stdout","text":"constant-stdout-sentinel"},{"channel":"stderr","text":"constant-stderr-sentinel"}],"result":{},"error":null}

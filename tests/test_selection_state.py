@@ -15,6 +15,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/core/selection-state.py"
+FIXTURES = ROOT / "tests" / "fixtures" / "baseline" / "selection"
 SOURCE = "https://github.com/obra/superpowers"
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 OTHER_COMMIT = "89abcdef0123456789abcdef0123456789abcdef"
@@ -75,6 +76,9 @@ class SelectionStateTests(unittest.TestCase):
         self.state_path.parent.mkdir(mode=0o700, exist_ok=True)
         self.state_path.write_text(raw, encoding="utf-8")
         return self.read()
+
+    def fixture_text(self, name: str) -> str:
+        return (FIXTURES / name).read_text(encoding="utf-8")
 
     def assert_read_fails(self, raw: str, fragment: str | None = None) -> None:
         result = self.read_raw(raw)
@@ -137,29 +141,56 @@ class SelectionStateTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(output.read_text(encoding="utf-8")), NORMALIZED_ABSENT)
-        self.assertEqual(self.read_record(PINNED)["saved_commit"], PINNED["commit"])
-        self.assertEqual(self.read_record(TRACK_LATEST)["saved_mode"], "track-latest")
+        pinned = self.read_raw(self.fixture_text("pinned-tag.json"))
+        self.assertEqual(pinned.returncode, 0, pinned.stdout + pinned.stderr)
+        normalized = self.base / "normalized.json"
+        self.assertEqual(
+            json.loads(normalized.read_text(encoding="utf-8"))["saved_commit"], PINNED["commit"]
+        )
+        latest = self.read_raw(self.fixture_text("track-latest.json"))
+        self.assertEqual(latest.returncode, 0, latest.stdout + latest.stderr)
+        self.assertEqual(
+            json.loads(normalized.read_text(encoding="utf-8"))["saved_mode"], "track-latest"
+        )
 
     def test_read_rejects_duplicate_unknown_missing_and_inconsistent_fields(self) -> None:
         raw_cases = (
-            '{"schema_version":1,"schema_version":1,"mode":"track-latest","source":"x"}',
-            json.dumps({**TRACK_LATEST, "extra": True}),
+            self.fixture_text("duplicate-key.json"),
+            self.fixture_text("unknown-key.json"),
             json.dumps({"schema_version": 1, "mode": "pinned", "source": "x"}),
             json.dumps({**PINNED, "resolved_ref": "v6.1.2"}),
             json.dumps({**PINNED, "commit": PINNED["commit"].upper()}),
             json.dumps({**TRACK_LATEST, "schema_version": True}),
-            json.dumps({**TRACK_LATEST, "schema_version": 2}),
+            self.fixture_text("wrong-schema-version.json"),
         )
         for raw in raw_cases:
             with self.subTest(raw=raw):
                 self.assert_read_fails(raw)
 
     def test_read_rejects_non_object_constants_and_excessive_nesting(self) -> None:
-        for raw in ("[]", '"value"', "null", "NaN", "Infinity", "-Infinity"):
+        for raw in (
+            self.fixture_text("wrong-top-level-type.json"),
+            '"value"',
+            "null",
+            self.fixture_text("non-standard-constant.json"),
+            "Infinity",
+            "-Infinity",
+        ):
             with self.subTest(raw=raw):
                 self.assert_read_fails(raw)
-        deeply_nested = "[" * 300 + "0" + "]" * 300
-        self.assert_read_fails(deeply_nested, "nesting")
+        self.assert_read_fails(self.fixture_text("depth-257.json"), "nesting")
+
+    def test_read_enforces_exact_nesting_boundary(self) -> None:
+        at_limit = "[" * 256 + "0" + "]" * 256
+        self.assert_read_fails(at_limit, "selection state must be a JSON object")
+        self.assert_read_fails(self.fixture_text("depth-257.json"), "JSON nesting exceeds limit")
+
+    def test_read_has_no_input_byte_limit(self) -> None:
+        raw = self.fixture_text("track-latest.json") + " " * (1_048_576 + 1)
+        result = self.read_raw(raw)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        output = self.base / "normalized.json"
+        self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["saved_mode"], "track-latest")
 
     def test_read_rejects_oversized_integer_without_traceback(self) -> None:
         oversized_integer = "9" * 5000
