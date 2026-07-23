@@ -394,6 +394,62 @@ test('stateful build delegates to the copied runtime adapter', () => {
   });
 });
 
+test('public install shares generated provenance with the copied package', () => {
+  withSandbox({}, (sandbox) => {
+    const upstream = join(sandbox.root, 'install-upstream');
+    const scenario = runScenario(
+      sandbox,
+      'git-release-repo',
+      upstream,
+    );
+    assertCleanResult(scenario);
+    const stableMatch = /^STABLE_COMMIT=([0-9a-f]{40})$/m.exec(
+      scenario.stdout,
+    );
+    assert.ok(stableMatch, 'scenario must report its stable commit');
+    const expectedFingerprint = stableMatch[1];
+
+    const result = runCli(
+      sandbox,
+      ['install'],
+      {
+        SPW_ADAPTER: sandbox.adapter,
+        SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
+        SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
+        SPW_BASELINE_FINGERPRINT: expectedFingerprint,
+        SUPERPOWERS_REF: 'v1.1.0',
+        SUPERPOWERS_UPSTREAM_URL: upstream,
+      },
+    );
+    assertCleanResult(result);
+    assert.equal(
+      existsSync(join(
+        sandbox.pkg,
+        'plugins',
+        'superpowers',
+        '.superpowers-upstream.json',
+      )),
+      true,
+    );
+    assert.deepEqual(
+      JSON.parse(readFileSync(
+        join(sandbox.adapterState, 'state.json'),
+        'utf8',
+      )),
+      {
+        plugin: true,
+        marketplace: true,
+        legacy_plugin: false,
+        legacy_marketplace: false,
+        update_control: 'managed',
+        fingerprint: expectedFingerprint,
+      },
+    );
+    assert.match(readFileSync(sandbox.adapterLog, 'utf8'), /^build$/m);
+    assert.match(readFileSync(sandbox.adapterLog, 'utf8'), /^install$/m);
+  });
+});
+
 test('sandbox paths and copied adapter are immutable and contained', () => {
   withSandbox({}, (sandbox) => {
     assert.equal(Object.isFrozen(sandbox), true);

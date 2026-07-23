@@ -322,7 +322,7 @@ function createSandbox({ stubScripts = false } = {}) {
     tmp: join(root, 'tmp'),
     config: join(root, 'config'),
     cache: join(root, 'cache'),
-    plugin: join(root, 'plugin'),
+    plugin: join(root, 'pkg', 'plugins', 'superpowers'),
     codex: join(root, 'codex'),
     git: join(root, 'git'),
     gitConfig: join(root, 'git', 'config'),
