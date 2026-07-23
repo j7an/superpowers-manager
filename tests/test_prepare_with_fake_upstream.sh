@@ -363,6 +363,35 @@ git -C "$upstream" add .codex-plugin/plugin.json
 spw_git_commit "$upstream" "deeply nested manifest JSON"
 git -C "$upstream" checkout main >/dev/null
 
+git -C "$upstream" checkout -b reader-depth-257 >/dev/null
+cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
+  "$upstream/.codex-plugin/plugin.json"
+git -C "$upstream" add .codex-plugin/plugin.json
+spw_git_commit "$upstream" "manifest reader depth 257"
+git -C "$upstream" checkout main >/dev/null
+
+git -C "$upstream" checkout -b reader-duplicate >/dev/null
+cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
+  "$upstream/.codex-plugin/plugin.json"
+git -C "$upstream" add .codex-plugin/plugin.json
+spw_git_commit "$upstream" "manifest reader duplicate key"
+git -C "$upstream" checkout main >/dev/null
+
+git -C "$upstream" checkout -b reader-large >/dev/null
+python3 -S - "$upstream/.codex-plugin/plugin.json" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(
+    path.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+git -C "$upstream" add .codex-plugin/plugin.json
+spw_git_commit "$upstream" "manifest reader large valid input"
+git -C "$upstream" checkout main >/dev/null
+
 git -C "$upstream" checkout -b feature/foo >/dev/null
 printf 'feature data\n' > "$upstream/skills/brainstorming/feature.txt"
 git -C "$upstream" add skills/brainstorming/feature.txt
@@ -546,6 +575,93 @@ assert_prepare_metadata_value() {
   assert_json_string \
     "$tmpdir/$destination/.superpowers-upstream.json" "/$key" "$expected"
 }
+
+# BASELINE CASE: MANIFEST-READER-MATERIALIZE-01 hook materializer profile
+materialize_root="$tmpdir/materialize-reader"
+materialize_upstream="$materialize_root/upstream"
+materialize_candidate="$materialize_root/candidate"
+materialize_manifest="$materialize_candidate/.codex-plugin/plugin.json"
+mkdir -p "$materialize_upstream" \
+  "$materialize_candidate/.codex-plugin"
+run_materializer() {
+  python3 -S "$root/scripts/adapters/codex/materialize-hooks.py" \
+    --manifest "$materialize_manifest" \
+    --manifest-source upstream \
+    --upstream-root "$materialize_upstream" \
+    --candidate-root "$materialize_candidate"
+}
+cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
+  "$materialize_manifest"
+if run_materializer >"$materialize_root/constant.out" 2>&1; then
+  echo "hook materializer accepted a non-standard constant" >&2
+  exit 1
+fi
+grep -Fq 'non-standard numeric constant' "$materialize_root/constant.out"
+cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
+  "$materialize_manifest"
+if run_materializer >"$materialize_root/depth.out" 2>&1; then
+  echo "hook materializer accepted depth 257" >&2
+  exit 1
+fi
+grep -Fq 'JSON nesting exceeds limit' "$materialize_root/depth.out"
+cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
+  "$materialize_manifest"
+run_materializer
+python3 -S - \
+  "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
+  "$materialize_manifest" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+destination.write_text(
+    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+run_materializer
+
+# BASELINE CASE: MANIFEST-READER-OVERLAY-01 manifest overlay profile
+. "$root/scripts/adapters/codex/lib.sh"
+overlay_manifest="$tmpdir/overlay-reader.json"
+cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
+  "$overlay_manifest"
+if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+    >"$tmpdir/overlay-constant.out" 2>&1; then
+  echo "manifest overlay accepted a non-standard constant" >&2
+  exit 1
+fi
+grep -Fq 'non-standard numeric constant' "$tmpdir/overlay-constant.out"
+cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
+  "$overlay_manifest"
+if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+    >"$tmpdir/overlay-depth.out" 2>&1; then
+  echo "manifest overlay accepted depth 257" >&2
+  exit 1
+fi
+grep -Fq 'JSON nesting exceeds limit' "$tmpdir/overlay-depth.out"
+cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
+  "$overlay_manifest"
+spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+spw_assert_json equal "$overlay_manifest" /name '"renamed"'
+spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
+spw_assert_json equal "$overlay_manifest" /skills '"./skills/"'
+python3 -S - \
+  "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
+  "$overlay_manifest" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+destination.write_text(
+    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+spw_assert_json equal \
+  "$overlay_manifest" /x_future_manifest/nested/2 '"preserve-me"'
+spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
 
 run_prepare_with_saved_selection() {
   config_dir="$1"
@@ -876,7 +992,19 @@ assert_prepare_commit "out-raw" "$feature_commit"
 assert_prepare_version "out-raw" "0.0.0+manager.$feature_short"
 
 assert_bad_manifest_error "out-bad-manifest"
+
+# BASELINE CASE: MANIFEST-READER-UPSTREAM-01 upstream manifest reader profile
 assert_rejected_manifest_input "nonstandard-json" "out-nonstandard-json" "invalid JSON in"
+assert_rejected_manifest_input \
+  "reader-depth-257" "out-reader-depth-257" "JSON nesting exceeds limit in"
+assert_rejected_manifest_input \
+  "reader-duplicate" "out-reader-duplicate" \
+  'field `name` must equal `superpowers`'
+run_prepare_for_ref "reader-large" "out-reader-large"
+assert_manifest_json \
+  "out-reader-large" "/x_future_manifest" \
+  '{"items":[1,"two"],"preserved":true}'
+
 assert_rejected_manifest_input "unreadable-manifest" "out-unreadable-manifest" "cannot read JSON in"
 assert_rejected_manifest_input "unencodable-manifest-version" "out-unencodable-version" "cannot output JSON value from"
 assert_rejected_manifest_input "deeply-nested-json" "out-deeply-nested" "JSON nesting exceeds limit in"

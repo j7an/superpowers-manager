@@ -140,6 +140,71 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("generated plugin validation passed", result.stdout)
 
+    def test_candidate_provenance_reader_profile(self) -> None:
+        metadata_path = self.plugin / ".superpowers-upstream.json"
+
+        # BASELINE CASE: PROV-READER-CANDIDATE-01 candidate provenance validator profile
+        shutil.copyfile(PROVENANCE / "non-standard-constant.json", metadata_path)
+        self.assert_rejected("provenance must contain valid JSON")
+
+        self.reset_candidate()
+        shutil.copyfile(FIXTURES / "selection" / "depth-257.json", metadata_path)
+        self.assert_rejected("provenance exceeds maximum JSON nesting")
+
+        self.reset_candidate()
+        shutil.copyfile(PROVENANCE / "duplicate-key.json", metadata_path)
+        self.assert_rejected("provenance field `source` does not match")
+
+        self.reset_candidate()
+        metadata_path.write_text(
+            metadata_path.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+            encoding="utf-8",
+        )
+        result = self.run_validator()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        self.reset_candidate()
+        shutil.copyfile(PROVENANCE / "wrong-key-set.json", metadata_path)
+        self.assert_rejected("provenance keys do not match")
+
+    def test_candidate_manifest_reader_profile(self) -> None:
+        manifest_path = self.plugin / ".codex-plugin" / "plugin.json"
+
+        # BASELINE CASE: MANIFEST-READER-VALIDATOR-01 candidate validator profile
+        shutil.copyfile(
+            MANIFESTS / "candidate-non-standard-constant.json",
+            manifest_path,
+        )
+        self.assert_rejected("plugin manifest must contain valid JSON")
+
+        self.reset_candidate()
+        shutil.copyfile(
+            FIXTURES / "selection" / "depth-257.json",
+            manifest_path,
+        )
+        self.assert_rejected("plugin manifest exceeds maximum JSON nesting")
+
+        self.reset_candidate()
+        shutil.copyfile(
+            MANIFESTS / "candidate-duplicate-key.json",
+            manifest_path,
+        )
+        self.assert_rejected("field `name` must equal `superpowers`")
+
+        self.reset_candidate()
+        manifest_path.write_text(
+            manifest_path.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+            encoding="utf-8",
+        )
+        result = self.run_validator()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        self.reset_candidate()
+        manifest = self.read_manifest()
+        manifest["skills"] = "skills"
+        self.write_manifest(manifest)
+        self.assert_rejected("field `skills` must equal `./skills/`")
+
     def test_full_semver_forms_pass(self) -> None:
         versions = (
             "6.1.1+manager.d884ae0",

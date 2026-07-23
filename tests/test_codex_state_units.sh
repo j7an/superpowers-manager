@@ -41,6 +41,64 @@ JSON
   [ "$(spw_installed_commit_from_root_or_empty "$active_root")" = \
     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]
 
+  # BASELINE CASE: PROV-READER-CODEX-COMMIT-01 installed metadata reader profile
+  reader_metadata="$tmpdir/installed-metadata.json"
+  cp "$root/tests/fixtures/baseline/provenance/non-standard-constant.json" \
+    "$reader_metadata"
+  if spw_codex_metadata_commit_or_empty "$reader_metadata" >/dev/null 2>&1; then
+    echo "installed metadata reader accepted a non-standard constant" >&2
+    exit 1
+  fi
+  cp "$root/tests/fixtures/baseline/selection/depth-257.json" "$reader_metadata"
+  if spw_codex_metadata_commit_or_empty "$reader_metadata" >/dev/null 2>&1; then
+    echo "installed metadata reader accepted depth 257" >&2
+    exit 1
+  fi
+  python3 -S - "$reader_metadata" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+value = 0
+for _ in range(255):
+    value = [value]
+Path(sys.argv[1]).write_text(
+    json.dumps({
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "padding": value,
+    }) + "\n",
+    encoding="utf-8",
+)
+PY
+  test "$(spw_codex_metadata_commit_or_empty "$reader_metadata")" = \
+    "0123456789abcdef0123456789abcdef01234567"
+  cp "$root/tests/fixtures/baseline/provenance/duplicate-key.json" \
+    "$reader_metadata"
+  test "$(spw_codex_metadata_commit_or_empty "$reader_metadata")" = \
+    "d884ae04edebef577e82ff7c4e143debd0bbec99"
+  python3 -S - \
+    "$root/tests/fixtures/baseline/provenance/valid-commit.json" \
+    "$reader_metadata" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+destination.write_text(
+    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+  test "$(spw_codex_metadata_commit_or_empty "$reader_metadata")" = \
+    "d884ae04edebef577e82ff7c4e143debd0bbec99"
+  cp "$root/tests/fixtures/baseline/provenance/commit-7-hex.json" \
+    "$reader_metadata"
+  test "$(spw_codex_metadata_commit_or_empty "$reader_metadata")" = d884ae0
+  printf '%s\n' '{"commit":"d884ae04"}' > "$reader_metadata"
+  if spw_codex_metadata_commit_or_empty "$reader_metadata" >/dev/null 2>&1; then
+    echo "installed metadata reader accepted a non-7-or-40 commit" >&2
+    exit 1
+  fi
+
   # Verified absence is successful and prints an empty version.
   absent_version=$(spw_active_plugin_version_from_json \
     '{"installed":[{"pluginId":"unrelated@elsewhere"}]}' \
@@ -115,6 +173,38 @@ test_uninstall_helpers() {
         ;;
     esac
   }
+
+  assert_array_exit_2() {
+    set +e
+    out=$(spw_json_array_has "$1" "$2" "$3" "$4" 2>&1)
+    status=$?
+    set -e
+    [ "$status" -eq 2 ] || {
+      echo "expected spw_json_array_has exit 2, got $status" >&2
+      exit 1
+    }
+    [ -z "$out" ]
+  }
+
+  # BASELINE CASE: CODEX-JSON-ARRAY-01 installed/listing parser profile
+  test "$(spw_json_array_has \
+    '{"padding":NaN,"installed":[{"pluginId":"target@provider"}]}' \
+    installed pluginId target@provider)" = present
+  deep_array=$(python3 -S -c 'print("[" * 2000 + "0" + "]" * 2000)')
+  assert_array_exit_2 "$deep_array" installed pluginId target@provider
+  test "$(spw_json_array_has \
+    '{"installed":[],"installed":[{"pluginId":"target@provider"}]}' \
+    installed pluginId target@provider)" = present
+  large_array=$(python3 -S -c '
+import json
+print(json.dumps({
+    "padding": "x" * 65536,
+    "installed": [{"pluginId": "target@provider"}],
+}, separators=(",", ":")))
+')
+  test "$(spw_json_array_has "$large_array" installed pluginId target@provider)" = \
+    present
+  assert_array_exit_2 '{"installed":[{}]}' installed pluginId target@provider
 
   # present: value found in the named array on the named field
   test "$(spw_json_array_has "$plugins" installed pluginId "superpowers@superpowers-manager")" = present

@@ -39,6 +39,73 @@ test_probe_status() {
 
   spw_test_tmpdir
   mkdir -p "$tmpdir/plugin/.codex-plugin"
+
+  # BASELINE CASE: PROV-READER-STRICT-01 strict provenance reader profile
+  strict_json="$tmpdir/strict-provenance.json"
+  cp "$root/tests/fixtures/baseline/provenance/non-standard-constant.json" \
+    "$strict_json"
+  if (spw_json_get "$strict_json" commit >/dev/null 2>&1); then
+    echo "strict provenance reader accepted a non-standard constant" >&2
+    exit 1
+  fi
+  cp "$root/tests/fixtures/baseline/selection/depth-257.json" "$strict_json"
+  if (spw_json_get "$strict_json" commit >/dev/null 2>&1); then
+    echo "strict provenance reader accepted depth 257" >&2
+    exit 1
+  fi
+  cp "$root/tests/fixtures/baseline/provenance/duplicate-key.json" "$strict_json"
+  test "$(spw_json_get "$strict_json" source)" = \
+    "https://wrong.invalid/repo"
+  python3 -S - \
+    "$root/tests/fixtures/baseline/provenance/valid-commit.json" \
+    "$strict_json" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+destination.write_text(
+    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+  test "$(spw_json_get "$strict_json" commit)" = \
+    "d884ae04edebef577e82ff7c4e143debd0bbec99"
+
+  # BASELINE CASE: PROV-READER-LENIENT-01 lenient commit reader profile
+  lenient_json="$tmpdir/lenient-provenance.json"
+  cp "$root/tests/fixtures/baseline/provenance/non-standard-constant.json" \
+    "$lenient_json"
+  test "$(spw_metadata_commit_lenient_or_empty "$lenient_json")" = ""
+  python3 -S - "$lenient_json" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text(
+    "[" * 2000 + "0" + "]" * 2000 + "\n",
+    encoding="utf-8",
+)
+PY
+  test "$(spw_metadata_commit_lenient_or_empty "$lenient_json")" = ""
+  cp "$root/tests/fixtures/baseline/provenance/duplicate-key.json" "$lenient_json"
+  test "$(spw_metadata_commit_lenient_or_empty "$lenient_json")" = \
+    "d884ae04edebef577e82ff7c4e143debd0bbec99"
+  python3 -S - \
+    "$root/tests/fixtures/baseline/provenance/valid-commit.json" \
+    "$lenient_json" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+destination.write_text(
+    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+  test "$(spw_metadata_commit_lenient_or_empty "$lenient_json")" = \
+    "d884ae04edebef577e82ff7c4e143debd0bbec99"
+  cp "$root/tests/fixtures/baseline/provenance/commit-7-hex.json" "$lenient_json"
+  test "$(spw_metadata_commit_lenient_or_empty "$lenient_json")" = ""
+
   assert_manifest_short() {
     version="$1"
     expected="$2"
@@ -54,6 +121,59 @@ JSON
       exit 1
     fi
   }
+
+  # BASELINE CASE: MANIFEST-READER-INSTALLED-01 installed generated manifest reader profile
+  . "$root/scripts/adapters/codex/lib.sh"
+  installed_manifest="$tmpdir/plugin/.codex-plugin/plugin.json"
+  cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
+    "$installed_manifest"
+  if spw_manifest_short_sha_or_empty "$installed_manifest" >/dev/null 2>&1; then
+    echo "installed manifest reader accepted a non-standard constant" >&2
+    exit 1
+  fi
+  cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
+    "$installed_manifest"
+  if spw_manifest_short_sha_or_empty "$installed_manifest" >/dev/null 2>&1; then
+    echo "installed manifest reader accepted depth 257" >&2
+    exit 1
+  fi
+  python3 -S - "$installed_manifest" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+value = 0
+for _ in range(255):
+    value = [value]
+path.write_text(
+    json.dumps({
+        "name": "superpowers",
+        "version": "6.1.1+manager.d884ae0",
+        "padding": value,
+    }) + "\n",
+    encoding="utf-8",
+)
+PY
+  test "$(spw_manifest_short_sha_or_empty "$installed_manifest")" = d884ae0
+  cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
+    "$installed_manifest"
+  test "$(spw_manifest_short_sha_or_empty "$installed_manifest")" = d884ae0
+  python3 -S - "$installed_manifest" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text(
+    json.dumps({
+        "name": "superpowers",
+        "version": "6.1.1+manager.d884ae0",
+        "padding": "x" * (1_048_576 + 1),
+    }) + "\n",
+    encoding="utf-8",
+)
+PY
+  test "$(spw_manifest_short_sha_or_empty "$installed_manifest")" = d884ae0
 
   assert_manifest_short "6.0.3+manager.896224c" "896224c"
   assert_manifest_short "6.1.0-beta.1+manager.abc1234" "abc1234"

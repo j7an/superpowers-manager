@@ -461,4 +461,109 @@ for missing_case in ownership uninstall; do
   fi
 done
 
+# BASELINE CASE: PROV-READER-CODEX-SOURCE-01 Codex source reader profile
+source_upstream="$tmpdir/source-reader-upstream"
+source_candidate="$tmpdir/source-reader-candidate"
+source_provenance="$tmpdir/source-reader-provenance.json"
+mkdir -p "$source_upstream/.codex-plugin"
+cat > "$source_upstream/.codex-plugin/plugin.json" <<'JSON'
+{
+  "name": "superpowers",
+  "version": "6.1.1",
+  "description": "Source reader fixture",
+  "skills": "./skills/",
+  "hooks": {}
+}
+JSON
+
+reset_source_candidate() {
+  rm -rf "$source_candidate"
+  mkdir -p "$source_candidate/.codex-plugin" \
+    "$source_candidate/skills/brainstorming"
+  cat > "$source_candidate/skills/brainstorming/SKILL.md" <<'EOF'
+---
+name: brainstorming
+description: Source reader fixture
+---
+# Brainstorming
+EOF
+  printf '%s\n' license > "$source_candidate/LICENSE"
+  printf '%s\n' readme > "$source_candidate/README.md"
+  printf '%s\n' conduct > "$source_candidate/CODE_OF_CONDUCT.md"
+  cp "$source_provenance" "$source_candidate/.superpowers-upstream.json"
+}
+
+run_source_build() {
+  label="$1"
+  reset_source_candidate
+  SOURCE_RESULT="$tmpdir/source-reader-$label.result.json"
+  SOURCE_STDOUT="$tmpdir/source-reader-$label.stdout"
+  SOURCE_STDERR="$tmpdir/source-reader-$label.stderr"
+  rm -f "$SOURCE_RESULT" "$SOURCE_RESULT.response" \
+    "$SOURCE_STDOUT" "$SOURCE_STDERR"
+  SOURCE_RC=0
+  SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+    spw_invoke_adapter build "$SOURCE_RESULT" "" -- \
+      --upstream-root "$source_upstream" \
+      --candidate-root "$source_candidate" \
+      --requested-ref latest-release \
+      --resolved-ref v6.1.1 \
+      --commit d884ae04edebef577e82ff7c4e143debd0bbec99 \
+      --manager-version 6.1.1+manager.d884ae0 \
+      --upstream-manifest-version 6.1.1 \
+      --fallback-manifest \
+        "$root/plugins/superpowers/.codex-plugin/plugin.template.json" \
+      >"$SOURCE_STDOUT" 2>"$SOURCE_STDERR" || SOURCE_RC=$?
+}
+
+cp "$root/tests/fixtures/baseline/provenance/non-standard-constant.json" \
+  "$source_provenance"
+run_source_build constant
+[ "$SOURCE_RC" -eq 1 ]
+grep -Fq 'provenance must contain valid JSON' "$SOURCE_STDERR"
+! grep -Fq 'candidate provenance is missing or invalid' "$SOURCE_STDERR"
+
+python3 -S - "$source_provenance" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text(
+    "[" * 2000 + "0" + "]" * 2000 + "\n",
+    encoding="utf-8",
+)
+PY
+run_source_build recursion
+[ "$SOURCE_RC" -eq 1 ]
+grep -Fq 'candidate provenance is missing or invalid' "$SOURCE_STDERR"
+
+cp "$root/tests/fixtures/baseline/provenance/duplicate-key.json" \
+  "$source_provenance"
+run_source_build duplicate
+[ "$SOURCE_RC" -eq 0 ]
+[ -f "$SOURCE_RESULT" ]
+
+python3 -S - \
+  "$root/tests/fixtures/baseline/provenance/valid-tag.json" \
+  "$source_provenance" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+destination.write_text(
+    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
+    encoding="utf-8",
+)
+PY
+run_source_build large
+[ "$SOURCE_RC" -eq 0 ]
+[ -f "$SOURCE_RESULT" ]
+
+printf '%s\n' \
+  '{"source":"https://example.invalid/superpowers.git"}' \
+  > "$source_provenance"
+run_source_build source-only
+[ "$SOURCE_RC" -eq 1 ]
+grep -Fq 'provenance keys do not match' "$SOURCE_STDERR"
+! grep -Fq 'candidate provenance is missing or invalid' "$SOURCE_STDERR"
+
 echo "test_adapter_protocol: OK"

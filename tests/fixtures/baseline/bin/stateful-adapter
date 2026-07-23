@@ -132,6 +132,13 @@ if fingerprint is not None and (
 if not (state["plugin"] or state["marketplace"]) and fingerprint is not None:
     fail("invalid-state", "baseline adapter fingerprint has no owned resource")
 
+if (
+    view == "update-control"
+    and os.environ.get("SPW_BASELINE_UPDATE_CONTROL_RESPONSE") == "malformed"
+):
+    sys.stdout.write("{\n")
+    raise SystemExit(0)
+
 
 def write_state():
     temporary = state_directory / f".state.json.tmp.{os.getpid()}"
@@ -186,16 +193,26 @@ elif operation == "install":
         fail("invalid-arguments", "SPW_BASELINE_FINGERPRINT is required for install")
     if re.fullmatch(r"(?:[0-9A-Fa-f]{7}|[0-9A-Fa-f]{40})", desired_fingerprint) is None:
         fail("invalid-arguments", "SPW_BASELINE_FINGERPRINT must be 7 or 40 hex")
+    installed_fingerprint = os.environ.get(
+        "SPW_BASELINE_INSTALLED_FINGERPRINT",
+        desired_fingerprint,
+    )
+    if re.fullmatch(r"(?:[0-9A-Fa-f]{7}|[0-9A-Fa-f]{40})", installed_fingerprint) is None:
+        fail(
+            "invalid-arguments",
+            "SPW_BASELINE_INSTALLED_FINGERPRINT must be 7 or 40 hex",
+        )
     state["plugin"] = True
     state["marketplace"] = True
-    state["fingerprint"] = desired_fingerprint
+    state["fingerprint"] = installed_fingerprint
     write_state()
     succeed({"verification_hints": {}})
 elif operation == "uninstall":
-    state["plugin"] = False
-    state["marketplace"] = False
-    state["fingerprint"] = None
-    write_state()
+    if os.environ.get("SPW_BASELINE_UNINSTALL_NOOP") != "1":
+        state["plugin"] = False
+        state["marketplace"] = False
+        state["fingerprint"] = None
+        write_state()
     succeed({})
 elif view == "fingerprint":
     succeed({"view": "fingerprint", "fingerprint": state["fingerprint"]})

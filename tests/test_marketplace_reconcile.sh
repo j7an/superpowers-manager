@@ -13,6 +13,41 @@ spw_test_root
 spw_test_tmpdir
 
 # --- spw_marketplace_root_from_json ---
+assert_marketplace_exit_2() {
+  set +e
+  output=$(spw_marketplace_root_from_json "$1" superpowers-manager 2>&1)
+  status=$?
+  set -e
+  [ "$status" -eq 2 ] || {
+    echo "expected marketplace reader exit 2, got $status" >&2
+    exit 1
+  }
+  [ -z "$output" ]
+}
+
+# BASELINE CASE: CODEX-JSON-MARKETPLACE-01 marketplace-root parser profile
+out=$(spw_marketplace_root_from_json \
+  '{"padding":NaN,"marketplaces":[{"name":"superpowers-manager","root":"/manager"}]}' \
+  superpowers-manager)
+[ "$out" = /manager ]
+deep_marketplaces=$(python3 -S -c 'print("[" * 2000 + "0" + "]" * 2000)')
+assert_marketplace_exit_2 "$deep_marketplaces"
+out=$(spw_marketplace_root_from_json \
+  '{"marketplaces":[],"marketplaces":[{"name":"superpowers-manager","root":"/manager"}]}' \
+  superpowers-manager)
+[ "$out" = /manager ]
+large_marketplaces=$(python3 -S -c '
+import json
+print(json.dumps({
+    "padding": "x" * 65536,
+    "marketplaces": [{"name": "superpowers-manager", "root": "/manager"}],
+}, separators=(",", ":")))
+')
+out=$(spw_marketplace_root_from_json "$large_marketplaces" superpowers-manager)
+[ "$out" = /manager ]
+assert_marketplace_exit_2 \
+  '{"marketplaces":[{"name":"superpowers-manager","root":17}]}'
+
 json='{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"/y"}]}'
 out=$(spw_marketplace_root_from_json "$json" superpowers-manager)
 [ "$out" = "/y" ] || { echo "expected /y, got '$out'" >&2; exit 1; }
@@ -65,6 +100,45 @@ do
     exit 1
   }
 done
+
+# BASELINE CASE: CODEX-JSON-VERSION-01 active-version parser profile
+assert_version_exit_2() {
+  set +e
+  output=$(spw_active_plugin_version_from_json \
+    "$1" superpowers@superpowers-manager 2>&1)
+  status=$?
+  set -e
+  [ "$status" -eq 2 ] || {
+    echo "expected active-version reader exit 2, got $status" >&2
+    exit 1
+  }
+  [ -z "$output" ]
+}
+assert_version_exit_2 \
+  '{"padding":Infinity,"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}'
+deep_versions=$(python3 -S -c 'print("[" * 2000 + "0" + "]" * 2000)')
+assert_version_exit_2 "$deep_versions"
+version=$(spw_active_plugin_version_from_json \
+  '{"installed":[],"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}' \
+  superpowers@superpowers-manager)
+[ "$version" = 1.0.0 ]
+large_versions=$(python3 -S -c '
+import json
+print(json.dumps({
+    "padding": "x" * 65536,
+    "installed": [{
+        "pluginId": "superpowers@superpowers-manager",
+        "version": "1.0.0",
+    }],
+}, separators=(",", ":")))
+')
+version=$(spw_active_plugin_version_from_json \
+  "$large_versions" superpowers@superpowers-manager)
+[ "$version" = 1.0.0 ]
+assert_version_exit_2 \
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"},{"pluginId":"superpowers@superpowers-manager","version":"2.0.0"}]}'
+assert_version_exit_2 \
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad/name"}]}'
 
 # --- spw_paths_equal: symlinked roots are the same physical location.
 # This is the portable equivalent of macOS /var vs /private/var. ---
