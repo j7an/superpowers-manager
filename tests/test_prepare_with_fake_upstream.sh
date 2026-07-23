@@ -188,6 +188,24 @@ with path.open("w", encoding="utf-8") as handle:
 PY
 }
 
+write_depth_256_manifest() {
+  source="$1"
+  destination="$2"
+  python3 -S - "$source" "$destination" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+data = json.loads(source.read_text(encoding="utf-8"))
+value = 0
+for _ in range(255):
+    value = [value]
+data["x_future_manifest"] = value
+destination.write_text(json.dumps(data) + "\n", encoding="utf-8")
+PY
+}
+
 commit_hook_ref() {
   ref="$1"
   message="$2"
@@ -197,13 +215,20 @@ commit_hook_ref() {
 }
 
 git -C "$upstream" checkout -b hooks-empty-object >/dev/null
-set_manifest_hooks value '{}'
+cp "$root/tests/fixtures/baseline/manifests/upstream-empty-hooks.json" \
+  "$upstream/.codex-plugin/plugin.json"
 commit_hook_ref hooks-empty-object "manifest explicitly disables hooks"
 
 git -C "$upstream" checkout -b hooks-empty-array >/dev/null
-set_manifest_hooks value '[]'
+cp "$root/tests/fixtures/baseline/manifests/upstream-default-hooks.json" \
+  "$upstream/.codex-plugin/plugin.json"
 cp "$upstream/hooks/hooks-codex.json" "$upstream/hooks/hooks.json"
 commit_hook_ref hooks-empty-array "empty hook array uses default discovery"
+
+git -C "$upstream" checkout -b hooks-active-fixture >/dev/null
+cp "$root/tests/fixtures/baseline/manifests/upstream-active-hooks.json" \
+  "$upstream/.codex-plugin/plugin.json"
+commit_hook_ref hooks-active-fixture "manifest uses declared upstream hooks"
 
 git -C "$upstream" checkout -b hooks-string-array >/dev/null
 set_manifest_hooks value '["./config/hooks-first.json","./alternate/hooks-second.json"]'
@@ -221,7 +246,8 @@ set_manifest_hooks value '[{"SessionStart":[{"hooks":[{"type":"command","command
 commit_hook_ref hooks-inline-array "manifest declares an inline hook array"
 
 git -C "$upstream" checkout -b hooks-default >/dev/null
-set_manifest_hooks absent
+cp "$root/tests/fixtures/baseline/manifests/upstream-no-hooks.json" \
+  "$upstream/.codex-plugin/plugin.json"
 cp "$upstream/hooks/hooks-codex.json" "$upstream/hooks/hooks.json"
 commit_hook_ref hooks-default "manifest uses default hook discovery"
 
@@ -370,6 +396,14 @@ git -C "$upstream" add .codex-plugin/plugin.json
 spw_git_commit "$upstream" "manifest reader depth 257"
 git -C "$upstream" checkout main >/dev/null
 
+git -C "$upstream" checkout -b reader-depth-256 >/dev/null
+write_depth_256_manifest \
+  "$root/tests/fixtures/baseline/manifests/upstream-active-hooks.json" \
+  "$upstream/.codex-plugin/plugin.json"
+git -C "$upstream" add .codex-plugin/plugin.json
+spw_git_commit "$upstream" "manifest reader depth 256"
+git -C "$upstream" checkout main >/dev/null
+
 git -C "$upstream" checkout -b reader-duplicate >/dev/null
 cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
   "$upstream/.codex-plugin/plugin.json"
@@ -433,6 +467,28 @@ assert_manifest_lacks_key() {
   key=$2
   spw_assert_json absent \
     "$tmpdir/$destination/.codex-plugin/plugin.json" "/$key"
+}
+
+assert_generated_tree_matches() {
+  destination=$1
+  fixture=$2
+  actual="$tmpdir/$destination.tree.txt"
+  python3 -S - "$tmpdir/$destination" "$actual" <<'PY'
+from pathlib import Path
+import sys
+
+root, output = map(Path, sys.argv[1:])
+paths = []
+for path in root.rglob("*"):
+    relative = path.relative_to(root).as_posix()
+    paths.append(relative + "/" if path.is_dir() else relative)
+output.write_text("\n".join(sorted(paths)) + "\n", encoding="utf-8")
+PY
+  if ! cmp -s "$fixture" "$actual"; then
+    echo "generated tree does not match fixture: $fixture" >&2
+    diff -u "$fixture" "$actual" >&2 || true
+    exit 1
+  fi
 }
 
 run_prepare_for_ref_with_env() {
@@ -604,6 +660,10 @@ if run_materializer >"$materialize_root/depth.out" 2>&1; then
   exit 1
 fi
 grep -Fq 'JSON nesting exceeds limit' "$materialize_root/depth.out"
+write_depth_256_manifest \
+  "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
+  "$materialize_manifest"
+run_materializer
 cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
   "$materialize_manifest"
 run_materializer
@@ -647,6 +707,11 @@ if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
   exit 1
 fi
 grep -Fq 'JSON nesting exceeds limit' "$tmpdir/overlay-depth.out"
+write_depth_256_manifest \
+  "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
+  "$overlay_manifest"
+spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
 cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
   "$overlay_manifest"
 spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
@@ -896,8 +961,22 @@ test -f "$tmpdir/out-hooks-empty-array/hooks/hooks.json"
 test -f "$tmpdir/out-hooks-empty-array/hooks/hooks-codex.json"
 test -f "$tmpdir/out-hooks-empty-array/hooks/session-start-codex"
 test -f "$tmpdir/out-hooks-empty-array/hooks/support/helper.txt"
+# Layout fixtures contain only relative paths, so no dynamic commit, version, or
+# source values require normalization.
+assert_generated_tree_matches \
+  "out-hooks-empty-array" \
+  "$root/tests/fixtures/baseline/generated-tree/default-hooks.txt"
 
 # BASELINE CASE: GENERATED-HOOKS-DECLARED-01 declared path and inline hook forms
+run_prepare_for_ref "hooks-active-fixture" "out-hooks-active-fixture"
+assert_manifest_json \
+  "out-hooks-active-fixture" "/hooks" \
+  "$(json_string "./hooks/hooks-codex.json")"
+assert_manifest_json \
+  "out-hooks-active-fixture" "/x_future_manifest" \
+  '{"nested":[true,null,"preserve-me"]}'
+test -f "$tmpdir/out-hooks-active-fixture/hooks/hooks-codex.json"
+
 run_prepare_for_ref "hooks-string-array" "out-hooks-string-array"
 assert_manifest_json \
   "out-hooks-string-array" "/hooks" \
@@ -908,6 +987,9 @@ grep -Fxq \
 grep -Fxq \
   '{"fixture":"second"}' \
   "$tmpdir/out-hooks-string-array/alternate/hooks-second.json"
+assert_generated_tree_matches \
+  "out-hooks-string-array" \
+  "$root/tests/fixtures/baseline/generated-tree/declared-hooks.txt"
 
 run_prepare_for_ref "hooks-inline" "out-hooks-inline"
 assert_manifest_json \
@@ -1010,6 +1092,11 @@ assert_bad_manifest_error "out-bad-manifest"
 assert_rejected_manifest_input "nonstandard-json" "out-nonstandard-json" "invalid JSON in"
 assert_rejected_manifest_input \
   "reader-depth-257" "out-reader-depth-257" "JSON nesting exceeds limit in"
+run_prepare_for_ref "reader-depth-256" "out-reader-depth-256"
+reader_depth_256_commit=$(git -C "$upstream" rev-parse reader-depth-256)
+reader_depth_256_short=$(printf '%s' "$reader_depth_256_commit" | cut -c 1-7)
+assert_prepare_version \
+  "out-reader-depth-256" "6.1.1+manager.$reader_depth_256_short"
 assert_rejected_manifest_input \
   "reader-duplicate" "out-reader-duplicate" \
   'field `name` must equal `superpowers`'

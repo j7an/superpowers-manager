@@ -91,6 +91,12 @@ class ValidatorTests(unittest.TestCase):
             json.dumps(value) + "\n", encoding="utf-8"
         )
 
+    def nested_value(self, containers: int) -> Any:
+        value: Any = 0
+        for _ in range(containers):
+            value = [value]
+        return value
+
     def run_validator(self) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
@@ -150,6 +156,19 @@ class ValidatorTests(unittest.TestCase):
         self.reset_candidate()
         shutil.copyfile(FIXTURES / "selection" / "depth-257.json", metadata_path)
         self.assert_rejected("provenance exceeds maximum JSON nesting")
+
+        self.reset_candidate()
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        # The root object plus 255 arrays is the exact accepted depth 256.
+        metadata["source"] = self.nested_value(255)
+        self.write_metadata(metadata)
+        result = self.run_validator()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(
+            "provenance field `source` does not match expected value",
+            result.stderr,
+        )
+        self.assertNotIn("exceeds maximum JSON nesting", result.stderr)
 
         self.reset_candidate()
         shutil.copyfile(PROVENANCE / "duplicate-key.json", metadata_path)
@@ -220,6 +239,15 @@ class ValidatorTests(unittest.TestCase):
             manifest_path,
         )
         self.assert_rejected("plugin manifest exceeds maximum JSON nesting")
+
+        self.reset_candidate()
+        manifest = self.read_manifest()
+        # The root object plus 255 arrays is the exact accepted depth 256.
+        manifest["x_future_manifest"] = self.nested_value(255)
+        self.write_manifest(manifest)
+        result = self.run_validator()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("generated plugin validation passed", result.stdout)
 
         self.reset_candidate()
         shutil.copyfile(

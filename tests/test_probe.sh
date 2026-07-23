@@ -49,10 +49,30 @@ test_probe_status() {
     exit 1
   fi
   cp "$root/tests/fixtures/baseline/selection/depth-257.json" "$strict_json"
-  if (spw_json_get "$strict_json" commit >/dev/null 2>&1); then
+  if (spw_json_get "$strict_json" commit) \
+      >"$tmpdir/strict-depth-257.out" 2>&1; then
     echo "strict provenance reader accepted depth 257" >&2
     exit 1
   fi
+  grep -Fq 'JSON nesting exceeds limit' "$tmpdir/strict-depth-257.out"
+  python3 -S - "$strict_json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+value = 0
+for _ in range(255):
+    value = [value]
+Path(sys.argv[1]).write_text(
+    json.dumps({
+        "commit": "d884ae04edebef577e82ff7c4e143debd0bbec99",
+        "padding": value,
+    }) + "\n",
+    encoding="utf-8",
+)
+PY
+  test "$(spw_json_get "$strict_json" commit)" = \
+    "d884ae04edebef577e82ff7c4e143debd0bbec99"
   cp "$root/tests/fixtures/baseline/provenance/duplicate-key.json" "$strict_json"
   test "$(spw_json_get "$strict_json" source)" = \
     "https://wrong.invalid/repo"
@@ -136,6 +156,9 @@ JSON
   # BASELINE CASE: MANIFEST-READER-INSTALLED-01 installed generated manifest reader profile
   . "$root/scripts/adapters/codex/lib.sh"
   installed_manifest="$tmpdir/plugin/.codex-plugin/plugin.json"
+  cp "$root/tests/fixtures/baseline/manifests/installed-manager-version.json" \
+    "$installed_manifest"
+  test "$(spw_manifest_short_sha_or_empty "$installed_manifest")" = d884ae0
   cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
     "$installed_manifest"
   if spw_manifest_short_sha_or_empty "$installed_manifest" >/dev/null 2>&1; then

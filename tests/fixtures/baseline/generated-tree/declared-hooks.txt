@@ -19,3 +19,4 @@ hooks/support/helper.txt
 skills/
 skills/brainstorming/
 skills/brainstorming/SKILL.md
+skills/brainstorming/branch.txt
