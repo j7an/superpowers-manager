@@ -72,23 +72,21 @@ function inventoryIds() {
 function traceabilityRows() {
   const lines = readFileSync(TRACEABILITY, 'utf8').split('\n');
   const headerIndex = lines.findIndex(
-    (line) => /^\|\s*Behavior ID\s*\|\s*Behavior\s*\|\s*Exact test case\s*\|\s*Fixture \/ builder\s*\|$/.test(line),
+    (line) => /^\|\s*Behavior ID\s*\|\s*Exact test case\s*\|\s*Fixture \/ builder\s*\|$/.test(line),
   );
   assert.notEqual(headerIndex, -1, 'traceability table header is missing');
-  assertMarkdownDelimiter(lines, headerIndex, 4, 'traceability table');
+  assertMarkdownDelimiter(lines, headerIndex, 3, 'traceability table');
   const rows = [];
   for (let index = headerIndex + 2; /^\|.*\|$/.test(lines[index] || ''); index += 1) {
     const fields = markdownCells(lines[index]);
-    assert.equal(fields.length, 4, `traceability row must have four fields: ${lines[index]}`);
-    const [rawId, behavior, rawTestCase, rawSupport] = fields;
+    assert.equal(fields.length, 3, `traceability row must have three fields: ${lines[index]}`);
+    const [rawId, rawTestCase, rawSupport] = fields;
     const id = uncode(rawId);
     assert.match(id, ID_PATTERN, `invalid traceability behavior ID: ${id}`);
-    assert.ok(behavior, `${id} has an empty behavior field`);
     assert.ok(rawTestCase, `${id} has an empty exact test case`);
     assert.ok(rawSupport, `${id} has an empty fixture / builder field`);
     rows.push({
       id,
-      behavior,
       testCase: uncode(rawTestCase),
       support: uncode(rawSupport),
     });
