@@ -10,6 +10,16 @@ spw_test_root
 
 spw_test_tmpdir
 
+# BASELINE CASE: BUILDER-GIT-01 deterministic tagged repository
+builder_out=$(
+  sh "$root/tests/builders/baseline-scenario.sh" git-release-repo \
+    "$tmpdir/baseline-upstream"
+)
+repo=$(printf '%s\n' "$builder_out" | sed -n 's/^REPO=//p')
+stable_commit=$(printf '%s\n' "$builder_out" | sed -n 's/^STABLE_COMMIT=//p')
+test -d "$repo/.git"
+test "$(git -C "$repo" rev-parse 'refs/tags/v1.1.0^{}')" = "$stable_commit"
+
 fixture_config_root="$tmpdir/config-root"
 mkdir -p "$fixture_config_root/config"
 printf '%s\n' 'v6.0.3' > "$fixture_config_root/config/upstream-ref"

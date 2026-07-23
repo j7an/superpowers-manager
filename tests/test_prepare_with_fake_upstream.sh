@@ -7,6 +7,18 @@ spw_test_root
 spw_test_tmpdir
 tmpdir_physical=$(CDPATH= cd -- "$tmpdir" && pwd -P)
 
+# BASELINE CASE: BUILDER-SYMLINK-01 deterministic broken and escaping symlinks
+for symlink_scenario in broken-symlink escaping-symlink; do
+  builder_out=$(
+    sh "$root/tests/builders/baseline-scenario.sh" "$symlink_scenario" \
+      "$tmpdir/$symlink_scenario"
+  )
+  scenario_root=$(printf '%s\n' "$builder_out" | sed -n 's/^ROOT=//p')
+  scenario_target=$(printf '%s\n' "$builder_out" | sed -n 's/^TARGET=//p')
+  test -d "$scenario_root"
+  test -L "$scenario_target"
+done
+
 upstream="$tmpdir/upstream"
 output="$tmpdir/out"
 home="$tmpdir/home"

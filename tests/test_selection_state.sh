@@ -17,6 +17,25 @@ mkdir -p "$tmpdir/home" "$tmpdir/workspace" "$tmpdir/config-root/config"
 ln -s "$root/scripts" "$tmpdir/config-root/scripts"
 printf '%s\n' 'v1.2.3' > "$tmpdir/config-root/config/upstream-ref"
 
+# BASELINE CASE: BUILDER-PERMISSION-01 deterministic unreadable target
+builder_out=$(
+  sh "$root/tests/builders/baseline-scenario.sh" permission-denied \
+    "$tmpdir/permission-denied"
+)
+permission_root=$(printf '%s\n' "$builder_out" | sed -n 's/^ROOT=//p')
+permission_target=$(printf '%s\n' "$builder_out" | sed -n 's/^TARGET=//p')
+permission_parent=$(dirname "$permission_target")
+test -d "$permission_root"
+if [ "$(id -u)" -eq 0 ]; then
+  echo 'permission builder access assertion skipped for root' >&2
+else
+  if [ -r "$permission_target" ]; then
+    echo 'permission builder target unexpectedly readable' >&2
+    exit 1
+  fi
+fi
+chmod 700 "$permission_parent"
+
 test "$(SUPERPOWERS_CONFIG_DIR="$tmpdir/explicit" spw_selection_config_dir)" = "$tmpdir/explicit"
 test "$(XDG_CONFIG_HOME="$tmpdir/xdg" HOME="$tmpdir/home" spw_selection_config_dir)" = "$tmpdir/xdg/superpowers-manager"
 test "$(XDG_CONFIG_HOME= HOME="$tmpdir/home" spw_selection_config_dir)" = "$tmpdir/home/.config/superpowers-manager"
