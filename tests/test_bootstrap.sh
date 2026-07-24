@@ -52,10 +52,16 @@ assert_contains "plugins/superpowers/.codex-plugin/plugin.template.json" '"skill
 assert_contains "AGENTS.md" 'Run `sh tests/container.sh` before declaring a change complete.'
 assert_contains "AGENTS.md" "no mutation of the developer's or runner's real Codex state"
 assert_contains "AGENTS.md" "Adapter installation and refresh mutations require current, validated update-control evidence."
+assert_contains "AGENTS.md" 'pnpm install --frozen-lockfile'
+assert_contains "AGENTS.md" '`src/`'
+assert_contains "AGENTS.md" '`dist/`'
 assert_contains "README.md" "sh tests/container.sh"
 assert_contains "README.md" "Layers 1-3 stay offline and hermetic"
 assert_contains "README.md" "Layer 4 is the Docker acceptance path"
 assert_contains "README.md" "sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command"
+assert_contains "README.md" 'pnpm install --frozen-lockfile'
+assert_contains "README.md" 'pnpm run build'
+assert_contains "README.md" 'toolchain'
 assert_contains "README.md" "no public harness selector"
 assert_contains "README.md" "superpowers-manager pin v6.1.1"
 assert_contains "README.md" "superpowers-manager track-latest"
@@ -70,6 +76,9 @@ assert_contains "tests/expected_tarball_contents.txt" "scripts/track-latest"
 assert_contains "tests/expected_tarball_contents.txt" "scripts/unpin"
 assert_contains "RELEASING.md" 'Ensure `main` is green (`sh tests/container.sh`)'
 assert_contains "RELEASING.md" "sh tests/container.sh"
+assert_contains "RELEASING.md" 'pnpm install --frozen-lockfile'
+assert_contains "RELEASING.md" 'pnpm run build'
+assert_contains "RELEASING.md" '`prepack`'
 assert_contains "RELEASING.md" '`v0.1.2` and `v0.1.3` were failed and unpublished maintenance attempts.'
 assert_contains "RELEASING.md" '`v0.1.4` was the recovered maintenance publication.'
 assert_contains "RELEASING.md" '`v0.1.5` failed before publication and must never be moved, reused, rerun, or published.'

@@ -71,14 +71,12 @@ tag recovery, or any other registry mutation.
 
 The pinned reusable publisher:
 
-1. requires the tag to be an ancestor of `origin/main`;
-2. requires the tag version to equal `package.json.version`;
-3. runs `sh tests/container.sh`;
-4. packs once and checks `tests/assert_pack_contents.sh`;
-5. publishes that tarball through OIDC;
-6. polls `npm view` for bounded registry visibility;
-7. runs the caller's bounded `npx` verification; and
-8. creates the GitHub Release with the verified tarball.
+1. checks out and validates the release tag;
+2. runs the caller command that enables Corepack, installs the frozen root
+   dependencies, builds `dist/cli.js`, and runs `sh tests/container.sh`;
+3. packs once and validates the allowlist;
+4. continues the existing OIDC publish, registry verification, `npx`
+   verification, and GitHub Release flow.
 
 Registry metadata and the `npx` installation path can become visible at
 different times. The caller therefore retries `npx` six times with delays of
@@ -96,12 +94,17 @@ tag, or attempt to overwrite the immutable npm version.
 Run locally while iterating:
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm run check
 sh tests/run.sh
 sh tests/container.sh
 npm pack --dry-run --json
 sh tests/test_npm_pack_contents.sh
 git diff --check
 ```
+
+The dependency-free `prepack` guard intentionally rejects packing when `dist/cli.js` is absent; it never builds the package implicitly.
 
 The container suite is authoritative for Node 24 TypeScript checks and the real
 Codex CLI in an isolated offline home. The package assertion must expose only

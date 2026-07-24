@@ -268,6 +268,8 @@ updates the official provider or any other provider automatically.
 ## Tests
 
 ```sh
+pnpm install --frozen-lockfile
+pnpm run build
 sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
 sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command
 sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
@@ -290,14 +292,18 @@ for the tested Codex build. It is not a stable Superpowers Manager API.
 
 The manual probe is opt-in and covers native-only compatibility residue such as
 path/cache and version-precedence behavior against an intentionally real local
-Codex install. It is not part of acceptance. GitHub Actions runs the blocking
-container acceptance command on pull requests and pushes to `main`.
+Codex install. It is not part of acceptance. GitHub Actions runs both the
+toolchain check and the blocking container acceptance command on pull requests
+and pushes to `main`.
 
 ## Repository layout
 
 ```
 .agents/plugins/marketplace.json          # local marketplace definition (tracked)
 config/upstream-ref                        # which upstream ref to track (tracked)
+src/cli.ts                                # maintained TypeScript CLI implementation
+dist/cli.js                               # generated ESM CLI build (gitignored)
+bin/superpowers-manager.js                # public thin loader for dist/cli.js
 plugins/superpowers/
   .codex-plugin/plugin.template.json       # fallback manifest template (tracked)
   .codex-plugin/plugin.json                # generated manifest          (gitignored)
