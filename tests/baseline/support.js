@@ -109,6 +109,32 @@ function hostExecutable(name) {
     const candidate = join(directory, name);
     try {
       accessSync(candidate, constants.X_OK);
+    } catch {
+      // Keep looking through the host PATH used only during sandbox setup.
+      continue;
+    }
+    if (name === 'python3') {
+      const result = spawnSync(
+        candidate,
+        ['-c', 'import os,sys; print(os.path.realpath(sys.executable))'],
+        { env: process.env, encoding: 'utf8' },
+      );
+      const executable = result.status === 0 ? result.stdout.trim() : '';
+      if (!isAbsolute(executable)) {
+        throw new Error(
+          `unable to resolve an absolute Python executable from host command: ${candidate}`,
+        );
+      }
+      try {
+        accessSync(executable, constants.X_OK);
+        return realpathSync(executable);
+      } catch {
+        throw new Error(
+          `resolved Python executable is not runnable: ${executable}`,
+        );
+      }
+    }
+    try {
       return realpathSync(candidate);
     } catch {
       // Keep looking through the host PATH used only during sandbox setup.
@@ -119,6 +145,18 @@ function hostExecutable(name) {
 
 function linkHostTool(bin, name) {
   symlinkSync(hostExecutable(name), join(bin, name));
+}
+
+function assertSandboxHostTool(bin, name) {
+  const result = spawnSync(join(bin, name), ['--version'], {
+    env: { PATH: bin },
+    encoding: 'utf8',
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `sandbox tool setup failed for ${name} under controlled PATH; resolve its host shim to a runnable executable`,
+    );
+  }
 }
 
 function registeredRoot(sandbox) {
@@ -351,6 +389,9 @@ function createSandbox({ stubScripts = false } = {}) {
   chmodSync(sandbox.adapter, 0o755);
   for (const tool of SANDBOX_TOOLS) {
     linkHostTool(sandbox.bin, tool);
+  }
+  for (const tool of ['node', 'python3', 'git']) {
+    assertSandboxHostTool(sandbox.bin, tool);
   }
   REGISTERED_SANDBOXES.set(sandbox, root);
   if (stubScripts) installDispatchStubs(sandbox);

@@ -12,7 +12,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, delimiter, dirname, join, relative } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -356,6 +356,47 @@ test('CLI-MODE-HELP-01 help modes', () => {
       assert.deepEqual(readDispatchLog(sandbox), []);
     }
   });
+});
+
+test('CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim before sandboxing', () => {
+  const originalPath = process.env.PATH;
+  const hostPython = spawnSync(
+    'python3',
+    ['-c', 'import os,sys; print(os.path.realpath(sys.executable))'],
+    {
+      env: { ...process.env, PATH: originalPath },
+      encoding: 'utf8',
+    },
+  );
+  assertCleanResult(hostPython);
+  const resolvedPython = hostPython.stdout.trim();
+  assert.ok(resolvedPython.startsWith('/'));
+
+  const hostSandbox = createSandbox();
+  let sandbox;
+  try {
+    const shimDirectory = join(hostSandbox.root, 'pyenv-shims');
+    mkdirSync(shimDirectory);
+    const shim = join(shimDirectory, 'python3');
+    writeFileSync(
+      shim,
+      `#!/usr/bin/env bash\nexec ${JSON.stringify(resolvedPython)} "$@"\n`,
+      'utf8',
+    );
+    chmodSync(shim, 0o755);
+    process.env.PATH = `${shimDirectory}${delimiter}${originalPath || ''}`;
+
+    sandbox = createSandbox();
+    const result = runCli(sandbox, ['track-latest']);
+    assertCleanResult(result);
+    assert.equal(result.stdout, 'saved upstream selection: latest stable release\n');
+    assert.equal(result.stderr, '');
+  } finally {
+    if (sandbox) destroySandbox(sandbox);
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    destroySandbox(hostSandbox);
+  }
 });
 
 test('CLI-MODE-VERSION-01 version mode', () => {
