@@ -1,7 +1,16 @@
 // @ts-check
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { mkdtemp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,7 +18,8 @@ import test from "node:test";
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import("../../dist/safety-error.js");
 /** @type {typeof import("../../src/atomic.js")} */
-const { atomicReplaceDir, atomicWriteFile } = await import("../../dist/atomic.js");
+const { atomicReplaceDir, atomicWriteFile } =
+  await import("../../dist/atomic.js");
 
 /** @param {import("node:test").TestContext} t */
 async function sandbox(t) {
@@ -28,7 +38,9 @@ async function safetyFailure(operation) {
     assert.fail("expected SafetyError");
   } catch (error) {
     assert.ok(error instanceof SafetyError);
-    return /** @type {import("../../src/safety-error.js").SafetyError<import("../../src/atomic.js").AtomicErrorDetails>} */ (error);
+    return /** @type {import("../../src/safety-error.js").SafetyError<import("../../src/atomic.js").AtomicErrorDetails>} */ (
+      error
+    );
   }
 }
 
@@ -55,7 +67,9 @@ test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and removes on
   assert.equal(await readFile(target, "utf8"), "before");
   assert.equal(await readFile(foreign, "utf8"), "keep");
   assert.deepEqual(
-    (await readdir(directory)).filter((name) => name.startsWith(".selection.json.tmp.")),
+    (await readdir(directory)).filter((name) =>
+      name.startsWith(".selection.json.tmp."),
+    ),
     [".selection.json.tmp.foreign"],
   );
 });
@@ -67,14 +81,20 @@ test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves prior 
   const error = await safetyFailure(
     atomicWriteFile(target, Buffer.from("after"), {
       validate: async () => {},
-      hooks: { rename: async () => { throw Object.assign(new Error("rename"), { code: "EIO" }); } },
+      hooks: {
+        rename: async () => {
+          throw Object.assign(new Error("rename"), { code: "EIO" });
+        },
+      },
     }),
   );
   assert.ok(error.details);
   assert.equal(error.details.phase, "pre-replacement");
   assert.equal(await readFile(target, "utf8"), "before");
   assert.deepEqual(
-    (await readdir(directory)).filter((name) => name.startsWith(".selection.json.tmp.")),
+    (await readdir(directory)).filter((name) =>
+      name.startsWith(".selection.json.tmp."),
+    ),
     [],
   );
 });
@@ -86,7 +106,11 @@ test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that l
   const error = await safetyFailure(
     atomicWriteFile(target, payload, {
       validate: async () => {},
-      hooks: { afterReplace: async () => { throw new Error("uncertain completion"); } },
+      hooks: {
+        afterReplace: async () => {
+          throw new Error("uncertain completion");
+        },
+      },
     }),
   );
   assert.ok(error.details);
@@ -96,19 +120,46 @@ test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that l
   assert.deepEqual(await readFile(target), payload);
 });
 
+test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement read fails", async (t) => {
+  const directory = await sandbox(t);
+  const target = join(directory, "selection.json");
+  const error = await safetyFailure(
+    atomicWriteFile(target, Buffer.from("after"), {
+      validate: async () => {},
+      hooks: {
+        afterReplace: async () => {
+          await rm(target);
+          throw new Error("uncertain completion");
+        },
+      },
+    }),
+  );
+  assert.ok(error.details);
+  assert.equal(error.details.phase, "post-replacement");
+  assert.equal("finalBytes" in error.details, false);
+});
+
 test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payload", async (t) => {
   const directory = await sandbox(t);
   const target = join(directory, "selection.json");
-  const payloads = [Buffer.from('{"mode":"pinned"}\\n'), Buffer.from('{"mode":"track-latest"}\\n')];
+  const payloads = [
+    Buffer.from('{"mode":"pinned"}\\n'),
+    Buffer.from('{"mode":"track-latest"}\\n'),
+  ];
   await Promise.all(
     payloads.map((bytes) =>
       atomicWriteFile(target, bytes, { validate: async () => {} }),
     ),
   );
   const final = await readFile(target);
-  assert.equal(payloads.some((payload) => payload.equals(final)), true);
+  assert.equal(
+    payloads.some((payload) => payload.equals(final)),
+    true,
+  );
   assert.deepEqual(
-    (await readdir(directory)).filter((name) => name.startsWith(".selection.json.tmp.")),
+    (await readdir(directory)).filter((name) =>
+      name.startsWith(".selection.json.tmp."),
+    ),
     [],
   );
 });
@@ -139,7 +190,10 @@ test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t) => 
   );
   assert.equal(await readFile(join(live, "marker"), "utf8"), "before");
   await assert.rejects(stat(candidate), { code: "ENOENT" });
-  assert.equal((await readdir(parent)).some((name) => name.includes(".bak.")), false);
+  assert.equal(
+    (await readdir(parent)).some((name) => name.includes(".bak.")),
+    false,
+  );
 });
 
 test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup", async (t) => {
@@ -165,5 +219,8 @@ test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup", asyn
   const backup = (await readdir(parent)).find((name) => name.includes(".bak."));
   assert.ok(backup);
   assert.match(error.message, new RegExp(escapeRegex(backup)));
-  assert.equal(await readFile(join(parent, backup, "marker"), "utf8"), "before");
+  assert.equal(
+    await readFile(join(parent, backup, "marker"), "utf8"),
+    "before",
+  );
 });

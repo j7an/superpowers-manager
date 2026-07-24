@@ -76,13 +76,12 @@ export async function atomicWriteFile(
     await options.hooks?.afterReplace?.(path);
     await fsyncDirectoryBestEffort(dirname(path));
   } catch (cause) {
+    let finalBytes: Uint8Array | undefined;
+    if (phase === "post-replacement") {
+      finalBytes = await readFile(path).catch(() => undefined);
+    }
     const details: AtomicErrorDetails =
-      phase === "post-replacement"
-        ? {
-            phase,
-            finalBytes: await readFile(path).catch(() => undefined),
-          }
-        : { phase };
+      finalBytes === undefined ? { phase } : { phase, finalBytes };
     throw new SafetyError<AtomicErrorDetails>(
       "atomic",
       `atomic file write failed during ${phase}`,
@@ -153,10 +152,10 @@ export async function atomicReplaceDir(
 ): Promise<void> {
   const renamePath = options.hooks?.rename ?? rename;
   const removePath = options.hooks?.rm ?? rm;
-  const backup = await chooseBackup(live);
   let backupCreated = false;
   let phase: AtomicErrorDetails["phase"] = "pre-replacement";
   try {
+    const backup = await chooseBackup(live);
     if (await exists(live)) {
       await renamePath(live, backup);
       backupCreated = true;
