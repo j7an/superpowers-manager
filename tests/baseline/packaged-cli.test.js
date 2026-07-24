@@ -59,6 +59,28 @@ function assertSucceeded(result, label) {
   assert.equal(result.status, 0, `${label} failed:\n${result.stderr}`);
 }
 
+function normalizePackReport(report) {
+  assert.notEqual(report, null, 'npm pack JSON report must be an array or keyed object');
+  assert.equal(typeof report, 'object', 'npm pack JSON report must be an array or keyed object');
+  return Array.isArray(report) ? report : Object.values(report);
+}
+
+test('normalizes npm pack JSON array and keyed-object reports', () => {
+  const entry = { filename: 'superpowers-wrapper-1.0.0.tgz' };
+  const expected = [entry];
+
+  assert.deepEqual(normalizePackReport(expected), expected);
+  assert.deepEqual(normalizePackReport({ 'superpowers-wrapper': entry }), expected);
+  assert.throws(
+    () => normalizePackReport(null),
+    /npm pack JSON report must be an array or keyed object/,
+  );
+  assert.throws(
+    () => normalizePackReport('not a report'),
+    /npm pack JSON report must be an array or keyed object/,
+  );
+});
+
 function packagedManifest(tarball, environment) {
   const extracted = run('tar', ['-xOf', tarball, 'package/package.json'], {
     env: environment,
@@ -81,7 +103,7 @@ test('PACKAGE-CLI-01 offline installed tarball exposes help and version', () => 
       env: environment,
     });
     assertSucceeded(packed, 'npm pack');
-    const report = JSON.parse(packed.stdout);
+    const report = normalizePackReport(JSON.parse(packed.stdout));
     assert.equal(report.length, 1, 'npm pack must produce one artifact');
     assert.equal(typeof report[0].filename, 'string', 'npm pack report must include filename');
     const tarball = isAbsolute(report[0].filename)
