@@ -5,6 +5,7 @@ const { withWorkspace } = await import("../../../dist/workspace.js");
 const parent = process.argv[2];
 if (!parent) throw new Error("missing parent");
 const never = new Promise(() => {
+  // A pending Promise does not hold Node's event loop, so a referenced handle must exist until the signal arrives.
   setInterval(() => {}, 2 ** 31 - 1);
 });
 
