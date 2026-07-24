@@ -12,11 +12,11 @@ test_bin_units() {
 }
 
 test_js_types() {
-  tsc_bin="${SPW_TSC:-/opt/spw-test-tools/node_modules/.bin/tsc}"
+  tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"
 
   if [ ! -x "$tsc_bin" ]; then
-    echo "SKIP (tsc unavailable; container run is authoritative)"
-    exit 0
+    echo "error: repo TypeScript compiler missing — run pnpm install --frozen-lockfile" >&2
+    exit 1
   fi
 
   "$tsc_bin" -p "$root/tests/tsconfig.json"

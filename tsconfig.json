@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "verbatimModuleSyntax": true,
+    "target": "ES2024",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedSideEffectImports": true,
+    "libReplacement": false
+  },
+  "include": ["src/**/*.ts"]
+}

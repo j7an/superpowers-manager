@@ -41,6 +41,33 @@ run_bin() {
   PATH="$fakebin" "$fakebin/node" "$pkg/bin/superpowers-manager.js" "$@"
 }
 
+# A checkout without generated dist gets only the actionable build diagnostic.
+rc=0
+run_bin --version >"$tmpdir/missing-dist-out" 2>"$tmpdir/missing-dist-err" || rc=$?
+[ "$rc" -eq 1 ] || {
+  echo "expected exit 1 for missing dist/cli.js, got $rc" >&2
+  exit 1
+}
+grep -Fq 'dist/ not built — run `pnpm install --frozen-lockfile && pnpm run build`' \
+  "$tmpdir/missing-dist-err"
+
+# A present module that fails during import keeps its real error.
+mkdir -p "$pkg/dist"
+printf '%s\n' 'throw new Error("synthetic dist import failure");' >"$pkg/dist/cli.js"
+rc=0
+run_bin --version >"$tmpdir/invalid-dist-out" 2>"$tmpdir/invalid-dist-err" || rc=$?
+[ "$rc" -ne 0 ] || {
+  echo "invalid dist/cli.js must fail" >&2
+  exit 1
+}
+grep -Fq 'synthetic dist import failure' "$tmpdir/invalid-dist-err"
+if grep -Fq 'dist/ not built' "$tmpdir/invalid-dist-err"; then
+  echo "real import failure was mislabeled as an unbuilt checkout" >&2
+  exit 1
+fi
+
+cp "$root/dist/cli.js" "$pkg/dist/cli.js"
+
 # --- Routing: each subcommand reaches its script with its args ---
 : > "$log"
 run_bin probe --porcelain >/dev/null
