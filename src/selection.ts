@@ -121,9 +121,7 @@ export function validateSource(raw: unknown): string {
   ) {
     leadingWhitespaceEnd += 1;
   }
-  const parsed = source
-    .slice(leadingWhitespaceEnd)
-    .replaceAll("\t", "");
+  const parsed = source.slice(leadingWhitespaceEnd).replaceAll("\t", "");
   const schemeMatch = /^([A-Za-z][A-Za-z0-9+.-]*):(.*)$/s.exec(parsed);
   const scheme = schemeMatch?.[1]?.toLowerCase() ?? "";
   const remainder = schemeMatch?.[2] ?? parsed;
