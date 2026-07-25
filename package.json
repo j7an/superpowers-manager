@@ -22,11 +22,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "node --input-type=module -e \"import{existsSync}from'node:fs';if(!existsSync('dist/cli.js')){console.error('error: dist/cli.js is missing — run pnpm install --frozen-lockfile && pnpm run build');process.exit(1)}\"",
-    "lint": "oxlint src/ bin/ tests/bin/",
-    "format": "prettier --write src/ bin/ tests/bin/",
-    "format:check": "prettier --check src/ bin/ tests/bin/",
+    "lint": "oxlint src/ bin/ tests/bin/ tests/unit/",
+    "format": "prettier --write src/ bin/ tests/bin/ tests/unit/",
+    "format:check": "prettier --check src/ bin/ tests/bin/ tests/unit/",
     "typecheck:js": "tsc -p tests/tsconfig.json",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run build && pnpm run typecheck:js && node tests/bin/units.test.js"
+    "check": "pnpm run format:check && pnpm run lint && pnpm run build && pnpm run typecheck:js && node --test \"tests/bin/*.test.js\" \"tests/unit/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

@@ -1,0 +1,7 @@
+{
+  "source": "\u00e9\u4e2d\ud83d\ude00\"\\\n\t\r\b\f\u0001\u007f/",
+  "requested_ref": "requested",
+  "resolved_ref": "resolved",
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "upstream_manifest_version": "version"
+}
