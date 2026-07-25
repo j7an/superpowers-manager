@@ -115,9 +115,17 @@ export async function assertProspectiveContained(
   try {
     const resolvedRoot = await realpath(lexicalRoot);
     const missing: string[] = [];
+    const visitedCursors = new Set<string>();
     let cursor = lexicalCandidate;
     let resolvedAncestor: string;
     for (;;) {
+      if (visitedCursors.has(cursor)) {
+        throw new SafetyError(
+          "safe-path",
+          `prospective path resolution repeats cursor: ${cursor}`,
+        );
+      }
+      visitedCursors.add(cursor);
       try {
         resolvedAncestor = await realpath(cursor);
         break;

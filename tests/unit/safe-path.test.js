@@ -78,6 +78,42 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
   );
 });
 
+void test("FS-HOOK-CONTAINMENT-01 prospective containment rejects a repeating broken symlink", async (t) => {
+  const { root } = await sandbox(t);
+  const link = join(root, "a");
+  await symlink("missing/../a", link);
+  const script = [
+    `import { assertProspectiveContained } from ${JSON.stringify(new URL("../../dist/safe-path.js", import.meta.url).href)};`,
+    `try { await assertProspectiveContained(${JSON.stringify(root)}, ${JSON.stringify(link)}); process.stdout.write("resolved\\n"); } catch (cause) { process.stdout.write(cause?.name + "\\n"); }`,
+  ].join("\n");
+  /** @type {string} */
+  let output;
+  try {
+    output = execFileSync(
+      process.execPath,
+      ["--input-type=module", "--eval", script],
+      {
+        encoding: "utf8",
+        timeout: 1_000,
+      },
+    );
+  } catch (cause) {
+    const signal =
+      typeof cause === "object" &&
+      cause !== null &&
+      "signal" in cause &&
+      typeof cause.signal === "string"
+        ? cause.signal
+        : undefined;
+    const detail =
+      signal ?? (cause instanceof Error ? cause.message : String(cause));
+    assert.fail(
+      `prospective symlink resolution did not exit before bounded cleanup: ${detail}`,
+    );
+  }
+  assert.equal(output, "SafetyError\n");
+});
+
 void test("SEL-READER-PATHS-01 no-follow classification distinguishes path types", async (t) => {
   const { root } = await sandbox(t);
   const file = join(root, "file");
