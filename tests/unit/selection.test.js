@@ -199,6 +199,7 @@ void test("FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state
         hooks: {
           rename: async (temporary, destination) => {
             assert.equal(destination, target);
+            assert.ok(typeof temporary === "string");
             assert.ok(
               temporary.startsWith(join(directory, ".selection.json.tmp.")),
             );
