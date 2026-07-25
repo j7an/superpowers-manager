@@ -41,7 +41,10 @@ spw_selection_state_cli() {
     echo 'error: selection state helper missing' >&2
     return 1
   fi
-  env -u NODE_OPTIONS -u NODE_PATH node "$_spw_selection_state_cli" "$@"
+  (
+    unset NODE_OPTIONS NODE_PATH
+    exec node "$_spw_selection_state_cli" "$@"
+  )
 }
 
 spw_selection_state() {

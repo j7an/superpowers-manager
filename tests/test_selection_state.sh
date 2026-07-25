@@ -313,7 +313,7 @@ test ! -s "$resolver_log"
 test "$(spw_display_source "$SUPERPOWERS_UPSTREAM_URL")" = '<redacted-source>'
 test "$(spw_display_source "$official_source")" = "$official_source"
 
-# SEL-NODE-ENV-01 selection-state execution ignores ambient Node preload state.
+# Selection-state execution ignores ambient Node preload state.
 preload_marker="$tmpdir/preload-marker"
 preload_script="$tmpdir/preload.js"
 printf "require('node:fs').writeFileSync('%s', 'injected');\n" "$preload_marker" > "$preload_script"
@@ -323,7 +323,7 @@ spw_selection_state "$tmpdir/config-root" validate-source --source="$official_so
 unset NODE_OPTIONS
 test ! -e "$preload_marker"
 
-# SEL-NODE-MISSING-01 missing helpers fail with one controlled diagnostic.
+# Missing selection-state helpers fail with one controlled diagnostic.
 missing_helper_root="$tmpdir/missing-helper-root"
 mkdir -p "$missing_helper_root"
 if (spw_selection_state "$missing_helper_root" validate-source --source="$official_source") \
