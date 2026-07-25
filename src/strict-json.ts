@@ -8,6 +8,7 @@ export interface StrictJsonProfile {
   readonly duplicateKeys: "reject" | "last-wins";
   readonly maxDepth?: number;
   readonly maxBytes?: number;
+  readonly integerNumbersOnly?: boolean;
 }
 
 export function parseStrictJson(
@@ -173,8 +174,12 @@ class Parser {
       this.text.slice(this.index),
     );
     if (match === null) this.fail("expected JSON value");
-    this.index += match[0].length;
-    return Number(match[0]);
+    const token = match[0];
+    this.index += token.length;
+    if (this.profile.integerNumbersOnly === true && /[.eE]/.test(token)) {
+      this.fail("non-integer JSON number");
+    }
+    return Number(token);
   }
 
   private parseLiteral<T extends null | boolean>(literal: string, value: T): T {

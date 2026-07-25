@@ -100,3 +100,16 @@ void test("standard JSON strings, escapes, numbers, and literals parse", () => {
     },
   );
 });
+
+void test("optional integer-token profile rejects decimal and exponent spellings", () => {
+  /** @type {import("../../src/strict-json.js").StrictJsonProfile} */
+  const integersOnly = {
+    duplicateKeys: "reject",
+    integerNumbersOnly: true,
+  };
+  assert.equal(parseStrictJson("1", integersOnly), 1);
+  for (const text of ["1.0", "1e0"]) {
+    assert.throws(() => parseStrictJson(text, integersOnly), SafetyError, text);
+    assert.equal(parseStrictJson(text, reject), 1, text);
+  }
+});
