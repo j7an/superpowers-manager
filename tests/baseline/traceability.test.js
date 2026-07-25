@@ -156,7 +156,7 @@ test('TRACEABILITY-TESTS-01 every row names an exact running test case', () => {
     assert.equal(existsSync(absolute), true, `${id} test path does not exist: ${path}`);
     assert.equal(statSync(absolute).isFile(), true, `${id} test path is not a file: ${path}`);
     const source = readFileSync(absolute, 'utf8');
-    if (/^tests\/baseline\/[^/]+\.test\.js$/.test(path)) {
+    if (/^tests\/(?:baseline|unit)\/[^/]+\.test\.js$/.test(path)) {
       assert.equal(
         source.includes(`test('${selector}'`) || source.includes(`test("${selector}"`),
         true,

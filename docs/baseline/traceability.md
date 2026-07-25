@@ -105,9 +105,9 @@ selectors or intentionally update the inventory, test, and this map together.
 | `FS-CLEANUP-01` | `tests/baseline/cli-parity.test.js::FS-CLEANUP-01 interrupted state cleanup is invocation-scoped` | `tests/builders/baseline-scenario.sh` |
 | `FS-SYMLINK-01` | `tests/baseline/cli-parity.test.js::FS-SYMLINK-01 escaping and broken symlinks fail closed` | `tests/builders/baseline-scenario.sh` |
 | `FS-HOOK-CONTAINMENT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: FS-HOOK-CONTAINMENT-01 unsafe hook paths and symlinks fail closed` | — |
-| `FS-SELECTION-ATOMIC-01` | `tests/test_selection_state.py::test_failed_replace_cleans_only_own_temporary_file` | — |
+| `FS-SELECTION-ATOMIC-01` | `tests/unit/selection.test.js::FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary` | — |
 | `FS-SELECTION-CONCURRENT-01` | `tests/test_selection_state.py::test_two_concurrent_writers_leave_one_complete_valid_record` | — |
-| `FS-SELECTION-POST-REPLACE-01` | `tests/test_selection_state.py::test_post_replace_failure_truthfully_reports_final_mode` | — |
+| `FS-SELECTION-POST-REPLACE-01` | `tests/unit/selection.test.js::FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode` | — |
 | `FS-SELECTION-TYPES-01` | `tests/test_selection_state.py::test_writer_rejects_unexpected_state_and_parent_path_types` | — |
 | `FS-SELECTION-UNPIN-TYPES-01` | `tests/test_selection_commands.sh::# BASELINE CASE: FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types` | — |
 | `SEL-READER-PARENT-01` | `tests/test_selection_state.py::test_read_rejects_absent_state_below_symlinked_config_directory` | — |
