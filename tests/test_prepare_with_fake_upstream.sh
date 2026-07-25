@@ -759,7 +759,7 @@ run_prepare_with_saved_selection() {
 # Prepare must fetch that exact object from the effective source without
 # re-resolving the saved tag, then pass the same record into provenance/build.
 saved_config="$tmpdir/saved-config"
-python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+node "$root/dist/selection-state-cli.js" write-pinned \
   --path "$saved_config/selection.json" --source "$upstream" \
   --requested-ref v6.0.3 --resolved-ref v6.0.3 --commit "$release_commit"
 : > "$adapter_log"

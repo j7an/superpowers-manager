@@ -5,6 +5,8 @@ test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 . "$test_dir/lib/harness.sh"
 spw_test_root
 
+state_helper="$root/dist/selection-state-cli.js"
+
 python3 -S "$root/tests/test_selection_state.py"
 
 . "$root/scripts/core/common.sh"
@@ -15,6 +17,8 @@ python3 -S "$root/tests/test_selection_state.py"
 spw_test_tmpdir
 mkdir -p "$tmpdir/home" "$tmpdir/workspace" "$tmpdir/config-root/config"
 ln -s "$root/scripts" "$tmpdir/config-root/scripts"
+ln -s "$root/dist" "$tmpdir/config-root/dist"
+ln -s "$root/package.json" "$tmpdir/config-root/package.json"
 printf '%s\n' 'v1.2.3' > "$tmpdir/config-root/config/upstream-ref"
 
 # BASELINE CASE: BUILDER-PERMISSION-01 deterministic unreadable target
@@ -88,9 +92,9 @@ spw_resolve_ref() {
 absent_config="$tmpdir/absent"
 track_config="$tmpdir/track"
 pinned_config="$tmpdir/pinned"
-python3 -S "$root/scripts/core/selection-state.py" write-track-latest \
+node "$state_helper" write-track-latest \
   --path "$track_config/selection.json" --source "$saved_source"
-python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+node "$state_helper" write-pinned \
   --path "$pinned_config/selection.json" --source "$saved_source" \
   --requested-ref v6.1.1 --resolved-ref v6.1.1 --commit "$pinned_commit"
 
@@ -263,7 +267,7 @@ assert_effective environment override package-default "$official_source" \
 
 # Raw commit saved pins derive their resolution kind without resolver access.
 raw_config="$tmpdir/raw"
-python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+node "$state_helper" write-pinned \
   --path "$raw_config/selection.json" --source "$saved_source" \
   --requested-ref "$pinned_commit" --resolved-ref "$pinned_commit" \
   --commit "$pinned_commit"

@@ -11,7 +11,7 @@ spw_test_root
 
 spw_test_tmpdir
 
-state_helper="$root/scripts/core/selection-state.py"
+state_helper="$root/dist/selection-state-cli.js"
 config="$tmpdir/config"
 normalized="$tmpdir/normalized.json"
 upstream="$tmpdir/upstream"
@@ -36,7 +36,7 @@ blob_commit=$(git -C "$upstream" rev-parse HEAD:file.txt)
 run_pin() {
   SUPERPOWERS_CONFIG_DIR="$config" SUPERPOWERS_UPSTREAM_URL="$upstream" \
     sh "$root/scripts/pin" "$@"
-  python3 -S "$state_helper" read --path "$config/selection.json" --output "$normalized"
+  node "$state_helper" read --path "$config/selection.json" --output "$normalized"
 }
 
 json_string() {
@@ -143,7 +143,7 @@ relative_config="$tmpdir/relative-config"
   SUPERPOWERS_CONFIG_DIR="$relative_config" SUPERPOWERS_UPSTREAM_URL=upstream \
     sh "$root/scripts/pin" "$head_commit" >"$tmpdir/out"
 )
-python3 -S "$state_helper" read \
+node "$state_helper" read \
   --path "$relative_config/selection.json" --output "$normalized"
 assert_saved_string saved_source upstream
 assert_saved_string saved_commit "$head_commit"
@@ -155,7 +155,7 @@ dash_config="$tmpdir/dash-config"
   SUPERPOWERS_CONFIG_DIR="$dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
     sh "$root/scripts/pin" "$head_commit" >"$tmpdir/out"
 )
-python3 -S "$state_helper" read \
+node "$state_helper" read \
   --path "$dash_config/selection.json" --output "$normalized"
 assert_saved_string saved_source -upstream
 assert_saved_string saved_commit "$head_commit"
@@ -168,7 +168,7 @@ tag_relative_config="$tmpdir/tag-relative-config"
   SUPERPOWERS_CONFIG_DIR="$tag_relative_config" SUPERPOWERS_UPSTREAM_URL=upstream \
     sh "$root/scripts/pin" v1.0.0 >"$tmpdir/out"
 )
-python3 -S "$state_helper" read \
+node "$state_helper" read \
   --path "$tag_relative_config/selection.json" --output "$normalized"
 assert_saved_string saved_source upstream
 assert_saved_string saved_commit "$v1_commit"
@@ -179,7 +179,7 @@ tag_dash_config="$tmpdir/tag-dash-config"
   SUPERPOWERS_CONFIG_DIR="$tag_dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
     sh "$root/scripts/pin" v1.0.0 >"$tmpdir/out"
 )
-python3 -S "$state_helper" read \
+node "$state_helper" read \
   --path "$tag_dash_config/selection.json" --output "$normalized"
 assert_saved_string saved_source -upstream
 assert_saved_string saved_commit "$v1_commit"
@@ -420,22 +420,24 @@ track_config="$tmpdir/track-config"
 nogit_bin="$tmpdir/no-git-bin"
 mkdir "$nogit_bin"
 real_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
+node_bin="$(node -e 'process.stdout.write(require("node:fs").realpathSync(process.execPath))')"
 ln -s "$(command -v dirname)" "$nogit_bin/dirname"
 ln -s "$(command -v mktemp)" "$nogit_bin/mktemp"
 ln -s "$(command -v rm)" "$nogit_bin/rm"
 ln -s "$real_python3" "$nogit_bin/python3"
+ln -s "$node_bin" "$nogit_bin/node"
 PATH="$nogit_bin" TMPDIR="$tmpdir" SUPERPOWERS_CONFIG_DIR="$track_config" \
   SUPERPOWERS_UPSTREAM_URL="$upstream" /bin/sh "$root/scripts/track-latest" \
   >"$tmpdir/out"
 grep -Fxq 'saved upstream selection: latest stable release' "$tmpdir/out"
-python3 -S "$state_helper" read --path "$track_config/selection.json" --output "$normalized"
+node "$state_helper" read --path "$track_config/selection.json" --output "$normalized"
 assert_saved_string saved_mode track-latest
 assert_saved_string saved_source "$upstream"
 
 official_config="$tmpdir/official-config"
 PATH="$nogit_bin" TMPDIR="$tmpdir" SUPERPOWERS_CONFIG_DIR="$official_config" \
   SUPERPOWERS_UPSTREAM_URL= /bin/sh "$root/scripts/track-latest" >/dev/null
-python3 -S "$state_helper" read --path "$official_config/selection.json" --output "$normalized"
+node "$state_helper" read --path "$official_config/selection.json" --output "$normalized"
 assert_saved_string saved_source 'https://github.com/obra/superpowers'
 
 printf '%s\n' '{"schema_version":3,"mode":"track-latest","source":"https://example.invalid/repo"}' \

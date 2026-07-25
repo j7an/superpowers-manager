@@ -71,6 +71,8 @@ pkg="$tmpdir/pkg"
 mkdir -p "$pkg/plugins/superpowers/.codex-plugin"
 cp -R "$root/scripts" "$pkg/scripts"
 cp -R "$root/config" "$pkg/config"
+cp -R "$root/dist" "$pkg/dist"
+cp "$root/package.json" "$pkg/package.json"
 cp "$root/plugins/superpowers/.codex-plugin/plugin.template.json" "$pkg/plugins/superpowers/.codex-plugin/plugin.template.json"
 test -x "$pkg/scripts/install" || { echo "install must remain executable in the packaged root" >&2; exit 1; }
 test -x "$pkg/scripts/adapters/codex/adapter" || { echo "codex adapter must remain executable in the packaged root" >&2; exit 1; }
