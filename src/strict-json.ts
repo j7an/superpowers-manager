@@ -19,7 +19,9 @@ export function parseStrictJson(
     text =
       typeof input === "string"
         ? input
-        : new TextDecoder("utf-8", { fatal: true }).decode(input);
+        : new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+            input,
+          );
   } catch (cause) {
     throw new SafetyError("strict-json", "input is not valid UTF-8", { cause });
   }

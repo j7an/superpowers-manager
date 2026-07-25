@@ -62,6 +62,14 @@ void test("byte input uses fatal UTF-8 decoding", () => {
   );
 });
 
+void test("byte input rejects a UTF-8 BOM", () => {
+  assert.throws(
+    () =>
+      parseStrictJson(Uint8Array.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d]), reject),
+    SafetyError,
+  );
+});
+
 void test("maxBytes is an inclusive UTF-8 byte boundary", () => {
   assert.equal(
     parseStrictJson('"é"', { duplicateKeys: "reject", maxBytes: 4 }),

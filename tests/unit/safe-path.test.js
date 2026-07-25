@@ -56,6 +56,26 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
     paths.assertProspectiveContained(root, join(root, "escape", "new")),
     SafetyError,
   );
+  await symlink(
+    join(base, "missing-outside"),
+    join(root, "broken-escape"),
+    "dir",
+  );
+  await assert.rejects(
+    paths.assertProspectiveContained(root, join(root, "broken-escape", "new")),
+    SafetyError,
+  );
+  await symlink(
+    join(root, "missing-inside"),
+    join(root, "broken-contained"),
+    "dir",
+  );
+  await assert.doesNotReject(
+    paths.assertProspectiveContained(
+      root,
+      join(root, "broken-contained", "new"),
+    ),
+  );
 });
 
 void test("SEL-READER-PATHS-01 no-follow classification distinguishes path types", async (t) => {

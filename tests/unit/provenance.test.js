@@ -65,6 +65,14 @@ void test("PROV-READER-STRICT-01 reads fields under the strict provenance profil
 
   await writeFile(file, Uint8Array.from([0xc3, 0x28]));
   await assert.rejects(readStrictProvenanceField(file, "commit"), SafetyError);
+  await writeFile(
+    file,
+    Uint8Array.from([
+      0xef, 0xbb, 0xbf, 0x7b, 0x22, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x22,
+      0x3a, 0x22, 0x61, 0x62, 0x63, 0x22, 0x7d,
+    ]),
+  );
+  await assert.rejects(readStrictProvenanceField(file, "commit"), SafetyError);
 
   await writeFile(
     file,
@@ -95,6 +103,14 @@ void test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", 
     assert.equal(await readGeneratedCommitLenient(file), "", value);
   }
   await writeFile(file, Uint8Array.from([0xc3, 0x28]));
+  assert.equal(await readGeneratedCommitLenient(file), "");
+  await writeFile(
+    file,
+    Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from(`{"commit":"${commit}"}`),
+    ]),
+  );
   assert.equal(await readGeneratedCommitLenient(file), "");
   await writeFile(file, `{"padding":${nested(20_000)}}`);
   assert.equal(await readGeneratedCommitLenient(file), "");

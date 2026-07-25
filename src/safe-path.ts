@@ -1,4 +1,4 @@
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, readlink, realpath } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -123,6 +123,18 @@ export async function assertProspectiveContained(
         break;
       } catch (cause) {
         if (!isErrno(cause, "ENOENT")) throw cause;
+        let symlinkTarget: string | undefined;
+        try {
+          if ((await lstat(cursor)).isSymbolicLink()) {
+            symlinkTarget = await readlink(cursor);
+          }
+        } catch (inspectionCause) {
+          if (!isErrno(inspectionCause, "ENOENT")) throw inspectionCause;
+        }
+        if (symlinkTarget !== undefined) {
+          cursor = resolve(dirname(cursor), symlinkTarget);
+          continue;
+        }
         const parent = dirname(cursor);
         if (parent === cursor) throw cause;
         missing.unshift(basename(cursor));
