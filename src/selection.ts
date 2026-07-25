@@ -79,6 +79,7 @@ function requireSingleLineString(value: unknown, label: string): string {
   return value;
 }
 
+// Bounded CPython urllib.parse bracket/NFKC emulation preserves version compatibility.
 function bracketedHostIsInvalid(host: string): boolean {
   if (host.startsWith("v")) return !/^v[0-9A-Fa-f]+\..+$/.test(host);
   return isIP(host) !== 6;
@@ -101,7 +102,7 @@ function authorityHasMalformedBrackets(authority: string): boolean {
     const suffix = closing === -1 ? "" : bracketed.slice(closing + 1);
     if (suffix !== "" && !suffix.startsWith(":")) return true;
   } else {
-    host = hostPort.split(":", 1)[0] ?? "";
+    host = hostPort.split(":", 1)[0];
   }
   return bracketedHostIsInvalid(host);
 }
@@ -127,7 +128,7 @@ export function validateSource(raw: unknown): string {
   const remainder = schemeMatch?.[2] ?? parsed;
   let authority = "";
   if (remainder.startsWith("//")) {
-    authority = remainder.slice(2).split(/[/?#]/, 1)[0] ?? "";
+    authority = remainder.slice(2).split(/[/?#]/, 1)[0];
   }
   if (
     authorityHasMalformedBrackets(authority) ||

@@ -156,8 +156,11 @@ class SelectionStateTests(unittest.TestCase):
         )
 
     def test_read_rejects_duplicate_unknown_missing_and_inconsistent_fields(self) -> None:
-        raw_cases = (
+        self.assert_read_fails(
             self.fixture_text("duplicate-key.json"),
+            "duplicate JSON key: schema_version",
+        )
+        raw_cases = (
             self.fixture_text("unknown-key.json"),
             json.dumps({"schema_version": 1, "mode": "pinned", "source": "x"}),
             json.dumps({**PINNED, "resolved_ref": "v6.1.2"}),
@@ -193,7 +196,7 @@ class SelectionStateTests(unittest.TestCase):
         output = self.base / "normalized.json"
         self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["saved_mode"], "track-latest")
 
-    def test_read_rejects_oversized_integer_without_traceback(self) -> None:
+    def test_read_rejects_oversized_integer_as_a_controlled_schema_failure(self) -> None:
         oversized_integer = "9" * 5000
         self.assert_read_fails('{"schema_version":' + oversized_integer + "}")
 

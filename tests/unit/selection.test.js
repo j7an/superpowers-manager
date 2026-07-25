@@ -119,6 +119,8 @@ void test("validateSource matches the bounded CPython urlsplit verdict corpus", 
     "git://[v1.future]/repo",
     "git://[vabc.future]/repo",
     "ssh://[::1]:22[/repo",
+    "ssh://user]@[::1/repo",
+    "https://ﬀ.example/r",
   ];
   for (const source of accepted) {
     assert.equal(validateSource(source), source, source);
@@ -136,6 +138,9 @@ void test("validateSource matches the bounded CPython urlsplit verdict corpus", 
     ["ssh://a[b]c/repo", /source URL is malformed/],
     ["git://user[x]@host/repo", /source URL is malformed/],
     ["git://[V1.future]/repo", /source URL is malformed/],
+    ["git://[vZ.future]/repo", /source URL is malformed/],
+    ["ssh://[::1]x/repo", /source URL is malformed/],
+    ["ssh://[invalid]/repo", /source URL is malformed/],
     ["https://exa／mple.invalid/repo", /source URL is malformed/],
     ["https://ex＠ample/repo", /source URL is malformed/],
   ];
@@ -194,6 +199,9 @@ void test("FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state
         hooks: {
           rename: async (temporary, destination) => {
             assert.equal(destination, target);
+            assert.ok(
+              temporary.startsWith(join(directory, ".selection.json.tmp.")),
+            );
             temporaryMode = (await stat(temporary)).mode & 0o777;
             throw Object.assign(new Error("rename failed"), { code: "EIO" });
           },

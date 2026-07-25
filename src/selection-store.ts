@@ -19,6 +19,7 @@ import { parseStrictJson, type StrictJsonProfile } from "./strict-json.js";
 const SELECTION_JSON_PROFILE: StrictJsonProfile = {
   duplicateKeys: "reject",
   maxDepth: 256,
+  // integerNumbersOnly owns lexical 1.0/1e0 rejection.
   integerNumbersOnly: true,
 };
 
@@ -202,6 +203,7 @@ export async function writeSelectionState(
   options: SelectionWriteOptions = {},
 ): Promise<void> {
   await ensureStateDirectory(dirname(path));
+  // Invalid existing state must block overwrite.
   await readSelectionState(path);
   const record = validateRecord(proposed);
   const bytes = new TextEncoder().encode(serializeRecord(record));
