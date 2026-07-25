@@ -8,8 +8,65 @@ spw_test_tmpdir
 
 command -v npm >/dev/null 2>&1 || { echo "error: npm is required for this test" >&2; exit 1; }
 
-(cd "$root" && npm pack --dry-run --json > "$tmpdir/pack.json")
-sh "$root/tests/assert_pack_contents.sh" "$tmpdir/pack.json"
+(cd "$root" && npm pack --dry-run --json > "$tmpdir/pack-raw.json")
+
+sh "$root/tests/assert_pack_contents.sh" "$tmpdir/pack-raw.json"
+
+python3 - "$tmpdir/pack-raw.json" "$tmpdir/pack.json" "$tmpdir/pack-array.json" "$tmpdir/pack-keyed.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    report = json.load(f)
+if isinstance(report, list) and len(report) == 1:
+    packed = report[0]
+elif isinstance(report, dict) and len(report) == 1:
+    packed = next(iter(report.values()))
+else:
+    raise SystemExit("unexpected npm pack report fixture shape")
+
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump([packed], f)
+with open(sys.argv[3], "w", encoding="utf-8") as f:
+    json.dump([packed], f)
+with open(sys.argv[4], "w", encoding="utf-8") as f:
+    json.dump({"packed": packed}, f)
+PY
+sh "$root/tests/assert_pack_contents.sh" "$tmpdir/pack-array.json"
+sh "$root/tests/assert_pack_contents.sh" "$tmpdir/pack-keyed.json"
+
+python3 - "$tmpdir/pack.json" "$tmpdir" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    packed = json.load(f)[0]
+fixtures = {
+    "shape-empty-array.json": [],
+    "shape-two-element-array.json": [packed, packed],
+    "shape-empty-object.json": {},
+    "shape-two-entry-object.json": {"first": packed, "second": packed},
+    "shape-non-object-entry.json": [None],
+}
+for name, report in fixtures.items():
+    with open(f"{sys.argv[2]}/{name}", "w", encoding="utf-8") as f:
+        json.dump(report, f)
+PY
+
+for fixture in "$tmpdir"/shape-*.json; do
+    if output=$(sh "$root/tests/assert_pack_contents.sh" "$fixture" 2>&1); then
+        echo "error: malformed npm pack report was accepted: $fixture" >&2
+        exit 1
+    fi
+    case $output in
+        *"unexpected npm pack --json shape: expected a one-element array or a keyed object with exactly one value"*) ;;
+        *)
+            echo "error: malformed npm pack report lacked shape diagnostic: $fixture" >&2
+            printf '%s\n' "$output" >&2
+            exit 1
+            ;;
+    esac
+done
 
 python3 - "$tmpdir/pack.json" <<'PY'
 import json

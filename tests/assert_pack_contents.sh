@@ -13,8 +13,20 @@ import json, sys
 
 with open(sys.argv[1], encoding="utf-8") as f:
     report = json.load(f)
-if not isinstance(report, list) or len(report) != 1:
-    sys.exit("unexpected npm pack --json shape: expected a one-element array")
+if isinstance(report, list) and len(report) == 1:
+    packed = report[0]
+elif isinstance(report, dict) and len(report) == 1:
+    packed = next(iter(report.values()))
+else:
+    sys.exit(
+        "unexpected npm pack --json shape: expected a one-element array "
+        "or a keyed object with exactly one value"
+    )
+if not isinstance(packed, dict):
+    sys.exit(
+        "unexpected npm pack --json shape: expected a one-element array "
+        "or a keyed object with exactly one value"
+    )
 with open(sys.argv[2], encoding="utf-8") as f:
     package = json.load(f)
 if package.get("name") != "superpowers-manager":
@@ -25,7 +37,6 @@ if package.get("name") != "superpowers-manager":
 version = package.get("version")
 if not isinstance(version, str) or not version:
     sys.exit(f"root package version is missing or invalid: {version!r}")
-packed = report[0]
 if packed.get("name") != package["name"]:
     sys.exit(
         "pack report name mismatch: "
