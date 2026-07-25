@@ -140,7 +140,7 @@ export async function assertProspectiveContained(
           if (!isErrno(inspectionCause, "ENOENT")) throw inspectionCause;
         }
         if (symlinkTarget !== undefined) {
-          cursor = resolve(dirname(cursor), symlinkTarget);
+          cursor = resolve(await realpath(dirname(cursor)), symlinkTarget);
           continue;
         }
         const parent = dirname(cursor);

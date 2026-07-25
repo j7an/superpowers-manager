@@ -78,6 +78,21 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
   );
 });
 
+void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves relative broken links from their real parent", async (t) => {
+  const { base, root } = await sandbox(t);
+  const linkedDirectory = join(base, "linked-directory");
+  await mkdir(linkedDirectory);
+  await symlink(linkedDirectory, join(root, "directory-link"), "dir");
+  await symlink("../outside", join(linkedDirectory, "broken-link"), "dir");
+  await assert.rejects(
+    paths.assertProspectiveContained(
+      root,
+      join(root, "directory-link", "broken-link", "new"),
+    ),
+    SafetyError,
+  );
+});
+
 void test("FS-HOOK-CONTAINMENT-01 prospective containment rejects a repeating broken symlink", async (t) => {
   const { root } = await sandbox(t);
   const link = join(root, "a");
