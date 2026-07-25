@@ -24,9 +24,7 @@ export const PROVENANCE_LENIENT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
 };
 
-function asObject(
-  value: JsonValue,
-): { [key: string]: JsonValue } | undefined {
+function asObject(value: JsonValue): { [key: string]: JsonValue } | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value
     : undefined;
@@ -51,7 +49,8 @@ export async function readStrictProvenanceField(
     for (const part of dottedKey.split(".")) {
       const object: { [key: string]: JsonValue } | undefined =
         current === undefined ? undefined : asObject(current);
-      if (object === undefined || !Object.hasOwn(object, part)) return undefined;
+      if (object === undefined || !Object.hasOwn(object, part))
+        return undefined;
       current = object[part];
     }
     return current === null ? undefined : current;

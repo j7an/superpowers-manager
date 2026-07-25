@@ -7,7 +7,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 /** @type {typeof import("../../src/workspace.js")} */
-const { withWorkspace } = await import("../../dist/workspace.js");
+const { withWorkspace } = await import(
+  new URL("../../dist/workspace.js", import.meta.url).href
+);
 
 /** @param {import("node:test").TestContext} t */
 async function sandbox(t) {
@@ -48,8 +50,9 @@ async function signalChild(parent, signal) {
   return { announcedPaths, result };
 }
 
-test("FS-CLEANUP-01 withWorkspace returns a value and removes its directory", async (t) => {
+void test("FS-CLEANUP-01 withWorkspace returns a value and removes its directory", async (t) => {
   const parent = await sandbox(t);
+  /** @type {string | undefined} */
   let observed;
   const result = await withWorkspace(parent, "work-", async (workspace) => {
     observed = workspace;
@@ -57,11 +60,13 @@ test("FS-CLEANUP-01 withWorkspace returns a value and removes its directory", as
     return 42;
   });
   assert.equal(result, 42);
+  if (observed === undefined) throw new Error("workspace was not observed");
   await assert.rejects(stat(observed), { code: "ENOENT" });
 });
 
-test("FS-CLEANUP-01 withWorkspace cleans up after callback failure", async (t) => {
+void test("FS-CLEANUP-01 withWorkspace cleans up after callback failure", async (t) => {
   const parent = await sandbox(t);
+  /** @type {string | undefined} */
   let observed;
   const failure = new Error("callback failed");
   await assert.rejects(
@@ -71,15 +76,18 @@ test("FS-CLEANUP-01 withWorkspace cleans up after callback failure", async (t) =
     }),
     (error) => error === failure,
   );
+  if (observed === undefined) throw new Error("workspace was not observed");
   await assert.rejects(stat(observed), { code: "ENOENT" });
 });
 
-test("REF-CLEANUP-01 / REF-PIN-CLEANUP-01 signals clean only active workspaces", async (t) => {
-  for (const [signal, status] of [
+void test("REF-CLEANUP-01 / REF-PIN-CLEANUP-01 signals clean only active workspaces", async (t) => {
+  /** @type {[NodeJS.Signals, number][]} */
+  const signals = [
     ["SIGHUP", 129],
     ["SIGINT", 130],
     ["SIGTERM", 143],
-  ]) {
+  ];
+  for (const [signal, status] of signals) {
     await t.test(signal, async () => {
       const parent = await sandbox(t);
       const sibling = join(parent, "sibling");

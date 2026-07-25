@@ -1,6 +1,8 @@
 // @ts-check
 /** @type {typeof import("../../../src/workspace.js")} */
-const { withWorkspace } = await import("../../../dist/workspace.js");
+const { withWorkspace } = await import(
+  new URL("../../../dist/workspace.js", import.meta.url).href
+);
 
 const parent = process.argv[2];
 if (!parent) throw new Error("missing parent");

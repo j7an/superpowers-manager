@@ -16,10 +16,13 @@ import { join } from "node:path";
 import test from "node:test";
 
 /** @type {typeof import("../../src/safety-error.js")} */
-const { SafetyError } = await import("../../dist/safety-error.js");
+const { SafetyError } = await import(
+  new URL("../../dist/safety-error.js", import.meta.url).href
+);
 /** @type {typeof import("../../src/atomic.js")} */
-const { atomicReplaceDir, atomicWriteFile } =
-  await import("../../dist/atomic.js");
+const { atomicReplaceDir, atomicWriteFile } = await import(
+  new URL("../../dist/atomic.js", import.meta.url).href
+);
 
 /** @param {import("node:test").TestContext} t */
 async function sandbox(t) {
@@ -49,7 +52,7 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and removes only the owned temp", async (t) => {
+void test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and removes only the owned temp", async (t) => {
   const directory = await sandbox(t);
   const target = join(directory, "selection.json");
   const foreign = join(directory, ".selection.json.tmp.foreign");
@@ -74,7 +77,7 @@ test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and removes on
   );
 });
 
-test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves prior bytes", async (t) => {
+void test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves prior bytes", async (t) => {
   const directory = await sandbox(t);
   const target = join(directory, "selection.json");
   await writeFile(target, "before");
@@ -99,7 +102,7 @@ test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves prior 
   );
 });
 
-test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that landed", async (t) => {
+void test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that landed", async (t) => {
   const directory = await sandbox(t);
   const target = join(directory, "selection.json");
   const payload = Buffer.from("after");
@@ -120,7 +123,7 @@ test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that l
   assert.deepEqual(await readFile(target), payload);
 });
 
-test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement read fails", async (t) => {
+void test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement read fails", async (t) => {
   const directory = await sandbox(t);
   const target = join(directory, "selection.json");
   const error = await safetyFailure(
@@ -139,7 +142,7 @@ test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement read 
   assert.equal("finalBytes" in error.details, false);
 });
 
-test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payload", async (t) => {
+void test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payload", async (t) => {
   const directory = await sandbox(t);
   const target = join(directory, "selection.json");
   const payloads = [
@@ -164,7 +167,7 @@ test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payload",
   );
 });
 
-test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t) => {
+void test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t) => {
   const parent = await sandbox(t);
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
@@ -196,7 +199,7 @@ test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t) => 
   );
 });
 
-test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup", async (t) => {
+void test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup", async (t) => {
   const parent = await sandbox(t);
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");

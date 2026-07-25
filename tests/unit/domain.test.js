@@ -3,16 +3,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 /** @type {typeof import("../../src/safety-error.js")} */
-const { SafetyError } = await import("../../dist/safety-error.js");
+const { SafetyError } = await import(
+  new URL("../../dist/safety-error.js", import.meta.url).href
+);
 /** @type {typeof import("../../src/domain/refs.js")} */
-const refs = await import("../../dist/domain/refs.js");
+const refs = await import(
+  new URL("../../dist/domain/refs.js", import.meta.url).href
+);
 /** @type {typeof import("../../src/domain/fingerprint.js")} */
-const { commitMatches } = await import("../../dist/domain/fingerprint.js");
+const { commitMatches } = await import(
+  new URL("../../dist/domain/fingerprint.js", import.meta.url).href
+);
 
 const lower = "0123456789abcdef0123456789abcdef01234567";
 const upper = lower.toUpperCase();
 
-test("SafetyError exposes stable structured fields", () => {
+void test("SafetyError exposes stable structured fields", () => {
   const cause = new Error("cause");
   const error = new SafetyError("unit", "failed", {
     cause,
@@ -25,7 +31,7 @@ test("SafetyError exposes stable structured fields", () => {
   assert.deepEqual(error.details, { phase: "pre-replacement" });
 });
 
-test("REF-PINNABLE-01 / SEL-SCHEMA-REFS-01 tag grammar", () => {
+void test("REF-PINNABLE-01 / SEL-SCHEMA-REFS-01 tag grammar", () => {
   for (const value of ["v0.0.0", "v1.2.3-0", "v1.2.3-alpha.1"]) {
     assert.equal(refs.isTagRef(value), true, value);
   }
@@ -43,7 +49,7 @@ test("REF-PINNABLE-01 / SEL-SCHEMA-REFS-01 tag grammar", () => {
   }
 });
 
-test("REF-PIN-SOURCE-01 / SEL-SCHEMA-COMMIT-01 / SEL-SCHEMA-COMMIT-WRITE-01 commit forms", () => {
+void test("REF-PIN-SOURCE-01 / SEL-SCHEMA-COMMIT-01 / SEL-SCHEMA-COMMIT-WRITE-01 commit forms", () => {
   assert.equal(refs.isCommit(lower), true);
   assert.equal(refs.isCommit(upper), false);
   assert.equal(refs.COMMIT_INPUT_RE.test(lower), true);
@@ -52,7 +58,7 @@ test("REF-PIN-SOURCE-01 / SEL-SCHEMA-COMMIT-01 / SEL-SCHEMA-COMMIT-WRITE-01 comm
   assert.equal(refs.normalizeCommitInput("0123456"), null);
 });
 
-test("INSTALL-VERIFY-01 fingerprints match full or seven-character observed commits only", () => {
+void test("INSTALL-VERIFY-01 fingerprints match full or seven-character observed commits only", () => {
   assert.equal(commitMatches(lower, lower), true);
   assert.equal(commitMatches(lower, lower.slice(0, 7)), true);
   assert.equal(commitMatches(lower, ""), false);

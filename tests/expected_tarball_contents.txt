@@ -6,7 +6,15 @@ LICENSE
 README.md
 bin/superpowers-manager.js
 config/upstream-ref
+dist/atomic.js
 dist/cli.js
+dist/domain/fingerprint.js
+dist/domain/refs.js
+dist/provenance.js
+dist/safe-path.js
+dist/safety-error.js
+dist/strict-json.js
+dist/workspace.js
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json
 scripts/adapters/codex/adapter

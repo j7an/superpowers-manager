@@ -7,9 +7,13 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 /** @type {typeof import("../../src/safety-error.js")} */
-const { SafetyError } = await import("../../dist/safety-error.js");
+const { SafetyError } = await import(
+  new URL("../../dist/safety-error.js", import.meta.url).href
+);
 /** @type {typeof import("../../src/safe-path.js")} */
-const paths = await import("../../dist/safe-path.js");
+const paths = await import(
+  new URL("../../dist/safe-path.js", import.meta.url).href
+);
 
 /** @param {import("node:test").TestContext} t */
 async function sandbox(t) {
@@ -20,7 +24,7 @@ async function sandbox(t) {
   return { base, root };
 }
 
-test("FS-HOOK-CONTAINMENT-01 existing containment rejects lexical and resolved escapes", async (t) => {
+void test("FS-HOOK-CONTAINMENT-01 existing containment rejects lexical and resolved escapes", async (t) => {
   const { base, root } = await sandbox(t);
   const file = join(root, "file");
   await writeFile(file, "ok");
@@ -39,7 +43,7 @@ test("FS-HOOK-CONTAINMENT-01 existing containment rejects lexical and resolved e
   );
 });
 
-test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest existing ancestor", async (t) => {
+void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest existing ancestor", async (t) => {
   const { base, root } = await sandbox(t);
   assert.equal(
     await paths.assertProspectiveContained(root, join(root, "new", "file")),
@@ -54,7 +58,7 @@ test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest existi
   );
 });
 
-test("SEL-READER-PATHS-01 no-follow classification distinguishes path types", async (t) => {
+void test("SEL-READER-PATHS-01 no-follow classification distinguishes path types", async (t) => {
   const { root } = await sandbox(t);
   const file = join(root, "file");
   const directory = join(root, "directory");
@@ -68,14 +72,17 @@ test("SEL-READER-PATHS-01 no-follow classification distinguishes path types", as
   assert.equal(await paths.classifyPathNoFollow(directory), "directory");
   assert.equal(await paths.classifyPathNoFollow(link), "symlink");
   assert.equal(await paths.classifyPathNoFollow(fifo), "other");
-  assert.equal(await paths.classifyPathNoFollow(join(root, "missing")), "missing");
+  assert.equal(
+    await paths.classifyPathNoFollow(join(root, "missing")),
+    "missing",
+  );
   await assert.rejects(
     paths.assertNoFollowType(link, ["regular-file"]),
     SafetyError,
   );
 });
 
-test("FS-SELECTION-TYPES-01 / SEL-READER-PARENT-01 designated parent", async (t) => {
+void test("FS-SELECTION-TYPES-01 / SEL-READER-PARENT-01 designated parent", async (t) => {
   const { root } = await sandbox(t);
   const realParent = join(root, "real-parent");
   const linkedParent = join(root, "linked-parent");
@@ -83,12 +90,18 @@ test("FS-SELECTION-TYPES-01 / SEL-READER-PARENT-01 designated parent", async (t)
   await symlink(realParent, linkedParent, "dir");
   const absent = join(linkedParent, "selection.json");
   await assert.doesNotReject(paths.assertProspectiveContained(root, absent));
-  await assert.rejects(paths.assertDesignatedParentDirectory(absent), SafetyError);
+  await assert.rejects(
+    paths.assertDesignatedParentDirectory(absent),
+    SafetyError,
+  );
   await writeFile(join(realParent, "selection.json"), "{}");
-  await assert.rejects(paths.assertDesignatedParentDirectory(absent), SafetyError);
+  await assert.rejects(
+    paths.assertDesignatedParentDirectory(absent),
+    SafetyError,
+  );
 });
 
-test("FS-SYMLINK-01 symlink targets must remain contained", async (t) => {
+void test("FS-SYMLINK-01 symlink targets must remain contained", async (t) => {
   const { base, root } = await sandbox(t);
   const inside = join(root, "inside");
   const outside = join(base, "outside");

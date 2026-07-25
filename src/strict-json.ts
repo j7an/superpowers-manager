@@ -2,12 +2,7 @@ import { Buffer } from "node:buffer";
 import { SafetyError } from "./safety-error.js";
 
 export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export interface StrictJsonProfile {
   readonly duplicateKeys: "reject" | "last-wins";
@@ -30,7 +25,9 @@ export function parseStrictJson(
   }
 
   const byteLength =
-    typeof input === "string" ? Buffer.byteLength(input, "utf8") : input.byteLength;
+    typeof input === "string"
+      ? Buffer.byteLength(input, "utf8")
+      : input.byteLength;
   if (profile.maxBytes !== undefined && byteLength > profile.maxBytes) {
     throw new SafetyError(
       "strict-json",
@@ -86,7 +83,8 @@ class Parser {
     this.skipWhitespace();
     if (this.take("}")) return result;
     for (;;) {
-      if (this.text[this.index] !== '"') this.fail("object key must be a string");
+      if (this.text[this.index] !== '"')
+        this.fail("object key must be a string");
       const key = this.parseString();
       this.skipWhitespace();
       if (!this.take(":")) this.fail("expected ':' after object key");
@@ -152,7 +150,8 @@ class Parser {
         }
         if (escape === "u") {
           const hex = this.text.slice(this.index, this.index + 4);
-          if (!/^[0-9A-Fa-f]{4}$/.test(hex)) this.fail("invalid Unicode escape");
+          if (!/^[0-9A-Fa-f]{4}$/.test(hex))
+            this.fail("invalid Unicode escape");
           result += String.fromCharCode(Number.parseInt(hex, 16));
           this.index += 4;
           continue;
@@ -168,17 +167,17 @@ class Parser {
   }
 
   private parseNumber(): number {
-    const match =
-      /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/.exec(
-        this.text.slice(this.index),
-      );
+    const match = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/.exec(
+      this.text.slice(this.index),
+    );
     if (match === null) this.fail("expected JSON value");
     this.index += match[0].length;
     return Number(match[0]);
   }
 
   private parseLiteral<T extends null | boolean>(literal: string, value: T): T {
-    if (!this.text.startsWith(literal, this.index)) this.fail("invalid literal");
+    if (!this.text.startsWith(literal, this.index))
+      this.fail("invalid literal");
     this.index += literal.length;
     return value;
   }

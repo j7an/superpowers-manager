@@ -1,13 +1,16 @@
 import { lstat, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { SafetyError } from "./safety-error.js";
 
 export type NoFollowPathType =
-  | "missing"
-  | "regular-file"
-  | "directory"
-  | "symlink"
-  | "other";
+  "missing" | "regular-file" | "directory" | "symlink" | "other";
 
 function isErrno(value: unknown, code: string): boolean {
   return (
@@ -27,7 +30,10 @@ function isContained(root: string, candidate: string): boolean {
 
 function requireContained(root: string, candidate: string): void {
   if (!isContained(root, candidate)) {
-    throw new SafetyError("safe-path", `path escapes containment root: ${candidate}`);
+    throw new SafetyError(
+      "safe-path",
+      `path escapes containment root: ${candidate}`,
+    );
   }
 }
 

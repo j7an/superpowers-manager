@@ -11,9 +11,11 @@ const {
   readStrictProvenanceField,
   serializeProvenance,
   writeProvenance,
-} = await import("../../dist/provenance.js");
+} = await import(new URL("../../dist/provenance.js", import.meta.url).href);
 /** @type {typeof import("../../src/safety-error.js")} */
-const { SafetyError } = await import("../../dist/safety-error.js");
+const { SafetyError } = await import(
+  new URL("../../dist/safety-error.js", import.meta.url).href
+);
 
 const commit = "0123456789abcdef0123456789abcdef01234567";
 const mixedCommit = "0123456789ABCDEF0123456789abcdef01234567";
@@ -28,34 +30,50 @@ async function sandbox(t) {
 /** @param {number} depth */
 const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
-test("PROV-READER-STRICT-01 reads fields under the strict provenance profile", async (t) => {
+void test("PROV-READER-STRICT-01 reads fields under the strict provenance profile", async (t) => {
   const directory = await sandbox(t);
   const file = join(directory, "provenance.json");
 
-  await writeFile(file, '{"commit":"first","commit":"last","nested":{"field":42}}');
+  await writeFile(
+    file,
+    '{"commit":"first","commit":"last","nested":{"field":42}}',
+  );
   assert.equal(await readStrictProvenanceField(file, "commit"), "last");
   assert.equal(await readStrictProvenanceField(file, "nested.field"), 42);
   assert.equal(await readStrictProvenanceField(file, "missing"), undefined);
-  assert.equal(await readStrictProvenanceField(file, "nested.field.extra"), undefined);
+  assert.equal(
+    await readStrictProvenanceField(file, "nested.field.extra"),
+    undefined,
+  );
 
   await writeFile(file, `{"padding":${nested(255)}}`);
-  assert.equal(Array.isArray(await readStrictProvenanceField(file, "padding")), true);
+  assert.equal(
+    Array.isArray(await readStrictProvenanceField(file, "padding")),
+    true,
+  );
   await writeFile(file, `{"padding":${nested(256)}}`);
   await assert.rejects(readStrictProvenanceField(file, "padding"), SafetyError);
 
   for (const text of ["[]", "null", "NaN", "Infinity", "{"]) {
     await writeFile(file, text);
-    await assert.rejects(readStrictProvenanceField(file, "commit"), SafetyError, text);
+    await assert.rejects(
+      readStrictProvenanceField(file, "commit"),
+      SafetyError,
+      text,
+    );
   }
 
   await writeFile(file, Uint8Array.from([0xc3, 0x28]));
   await assert.rejects(readStrictProvenanceField(file, "commit"), SafetyError);
 
-  await writeFile(file, `{"commit":"${commit}","padding":"${"x".repeat(1024 * 1024)}"}`);
+  await writeFile(
+    file,
+    `{"commit":"${commit}","padding":"${"x".repeat(1024 * 1024)}"}`,
+  );
   assert.equal(await readStrictProvenanceField(file, "commit"), commit);
 });
 
-test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", async (t) => {
+void test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", async (t) => {
   const directory = await sandbox(t);
   const file = join(directory, "provenance.json");
 
@@ -80,7 +98,10 @@ test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", async
   assert.equal(await readGeneratedCommitLenient(file), "");
   await writeFile(file, `{"padding":${nested(20_000)}}`);
   assert.equal(await readGeneratedCommitLenient(file), "");
-  assert.equal(await readGeneratedCommitLenient(join(directory, "missing.json")), "");
+  assert.equal(
+    await readGeneratedCommitLenient(join(directory, "missing.json")),
+    "",
+  );
 });
 
 /** @type {import("../../src/provenance.js").ProvenanceRecord} */
@@ -103,23 +124,33 @@ const commitRecord = {
 
 /** @type {import("../../src/provenance.js").ProvenanceRecord} */
 const unicodeRecord = {
-  source: ['\u00e9\u4e2d\ud83d\ude00"', "\\", "\n\t\r\b\f\u0001\u007f/"].join(""),
+  source: ['\u00e9\u4e2d\ud83d\ude00"', "\\", "\n\t\r\b\f\u0001\u007f/"].join(
+    "",
+  ),
   requested_ref: "requested",
   resolved_ref: "resolved",
   commit,
   upstream_manifest_version: "version",
 };
 
-test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
+void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
   const directory = await sandbox(t);
-  for (const [fixture, record] of [
+  /** @type {[string, import("../../src/provenance.js").ProvenanceRecord][]} */
+  const fixtures = [
     ["tests/fixtures/baseline/provenance/valid-tag.json", tagRecord],
     ["tests/fixtures/baseline/provenance/valid-commit.json", commitRecord],
     ["tests/fixtures/unit/provenance/unicode-escaping.json", unicodeRecord],
-  ]) {
+  ];
+  for (const [fixture, record] of fixtures) {
     const expected = await readFile(fixture);
-    assert.deepEqual(Buffer.from(serializeProvenance(record), "utf8"), expected, fixture);
-    const output = join(directory, fixture.split("/").at(-1));
+    assert.deepEqual(
+      Buffer.from(serializeProvenance(record), "utf8"),
+      expected,
+      fixture,
+    );
+    const filename = fixture.split("/").at(-1);
+    if (filename === undefined) throw new Error("fixture has no filename");
+    const output = join(directory, filename);
     await writeProvenance(output, record);
     assert.deepEqual(await readFile(output), expected, fixture);
   }
