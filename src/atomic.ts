@@ -174,7 +174,6 @@ export async function atomicReplaceDir(
       }
       try {
         await renamePath(backup, live);
-        backupCreated = false;
       } catch (rollbackCause) {
         await removePath(candidate, { recursive: true, force: true }).catch(
           () => {},
@@ -198,7 +197,6 @@ export async function atomicReplaceDir(
     if (backupCreated) {
       try {
         await removePath(backup, { recursive: true, force: true });
-        backupCreated = false;
       } catch (cause) {
         throw new SafetyError<AtomicErrorDetails>(
           "atomic",

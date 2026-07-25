@@ -17,7 +17,7 @@ python3 -S "$root/tests/test_selection_state.py"
 spw_test_tmpdir
 mkdir -p "$tmpdir/home" "$tmpdir/workspace" "$tmpdir/config-root/config"
 ln -s "$root/scripts" "$tmpdir/config-root/scripts"
-ln -s "$root/dist" "$tmpdir/config-root/dist"
+cp -R "$root/dist" "$tmpdir/config-root/dist"
 ln -s "$root/package.json" "$tmpdir/config-root/package.json"
 printf '%s\n' 'v1.2.3' > "$tmpdir/config-root/config/upstream-ref"
 
