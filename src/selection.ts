@@ -70,7 +70,9 @@ function requireSingleLineString(value: unknown, label: string): string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||
-    /[\r\n\0]/.test(value)
+    value.includes("\r") ||
+    value.includes("\n") ||
+    value.includes("\0")
   ) {
     throw selectionError(`${label} must be a non-empty single-line string`);
   }
@@ -112,7 +114,16 @@ function authorityFailsNfkc(authority: string): boolean {
 
 export function validateSource(raw: unknown): string {
   const source = requireSingleLineString(raw, "source");
-  const parsed = source.replace(/^[\u0000-\u0020]+/, "").replaceAll("\t", "");
+  let leadingWhitespaceEnd = 0;
+  while (
+    leadingWhitespaceEnd < source.length &&
+    source.charCodeAt(leadingWhitespaceEnd) <= 0x20
+  ) {
+    leadingWhitespaceEnd += 1;
+  }
+  const parsed = source
+    .slice(leadingWhitespaceEnd)
+    .replaceAll("\t", "");
   const schemeMatch = /^([A-Za-z][A-Za-z0-9+.-]*):(.*)$/s.exec(parsed);
   const scheme = schemeMatch?.[1]?.toLowerCase() ?? "";
   const remainder = schemeMatch?.[2] ?? parsed;
