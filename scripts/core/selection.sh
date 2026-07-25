@@ -33,12 +33,22 @@ spw_selection_state_path() {
   printf '%s/selection.json\n' "$_spw_selection_config_dir"
 }
 
+spw_selection_state_cli() {
+  _spw_selection_state_root="$1"
+  shift
+  _spw_selection_state_cli="$_spw_selection_state_root/dist/selection-state-cli.js"
+  if [ ! -f "$_spw_selection_state_cli" ]; then
+    echo 'error: selection state helper missing' >&2
+    return 1
+  fi
+  env -u NODE_OPTIONS -u NODE_PATH node "$_spw_selection_state_cli" "$@"
+}
+
 spw_selection_state() {
   _spw_selection_state_root="$1"
   shift
   if _spw_selection_state_error=$(
-    node "$_spw_selection_state_root/dist/selection-state-cli.js" \
-      "$@" 2>&1
+    spw_selection_state_cli "$_spw_selection_state_root" "$@" 2>&1
   ); then
     :
   else
@@ -56,7 +66,7 @@ spw_load_saved_selection() {
   fi
 
   if _spw_selection_error=$(
-    node "$_spw_selection_root/dist/selection-state-cli.js" read \
+    spw_selection_state_cli "$_spw_selection_root" read \
       --path "$SPW_SELECTION_STATE_PATH" \
       --output "$_spw_selection_normalized" 2>&1
   ); then
@@ -158,7 +168,7 @@ EOF
 spw_display_source() {
   _spw_selection_display_source="$1"
   if _spw_selection_display=$(
-    node "$(spw_root)/dist/selection-state-cli.js" \
+    spw_selection_state_cli "$(spw_root)" \
       display-source --source="$_spw_selection_display_source" 2>/dev/null
   ); then
     printf '%s\n' "$_spw_selection_display"

@@ -16,7 +16,12 @@ test_unit_suite() {
     echo "error: node is required for this test" >&2
     exit 1
   }
-  node --test "$root"/tests/unit/*.test.js
+  set -- "$root"/tests/unit/*.test.js
+  if [ ! -f "$1" ]; then
+    echo "error: no unit tests found" >&2
+    exit 1
+  fi
+  node --test "$@"
   echo "test_unit_suite: OK"
 }
 
