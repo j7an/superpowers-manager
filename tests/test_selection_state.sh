@@ -5,6 +5,8 @@ test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 . "$test_dir/lib/harness.sh"
 spw_test_root
 
+state_helper="$root/dist/selection-state-cli.js"
+
 python3 -S "$root/tests/test_selection_state.py"
 
 . "$root/scripts/core/common.sh"
@@ -15,6 +17,8 @@ python3 -S "$root/tests/test_selection_state.py"
 spw_test_tmpdir
 mkdir -p "$tmpdir/home" "$tmpdir/workspace" "$tmpdir/config-root/config"
 ln -s "$root/scripts" "$tmpdir/config-root/scripts"
+cp -R "$root/dist" "$tmpdir/config-root/dist"
+ln -s "$root/package.json" "$tmpdir/config-root/package.json"
 printf '%s\n' 'v1.2.3' > "$tmpdir/config-root/config/upstream-ref"
 
 # BASELINE CASE: BUILDER-PERMISSION-01 deterministic unreadable target
@@ -88,9 +92,9 @@ spw_resolve_ref() {
 absent_config="$tmpdir/absent"
 track_config="$tmpdir/track"
 pinned_config="$tmpdir/pinned"
-python3 -S "$root/scripts/core/selection-state.py" write-track-latest \
+node "$state_helper" write-track-latest \
   --path "$track_config/selection.json" --source "$saved_source"
-python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+node "$state_helper" write-pinned \
   --path "$pinned_config/selection.json" --source "$saved_source" \
   --requested-ref v6.1.1 --resolved-ref v6.1.1 --commit "$pinned_commit"
 
@@ -263,7 +267,7 @@ assert_effective environment override package-default "$official_source" \
 
 # Raw commit saved pins derive their resolution kind without resolver access.
 raw_config="$tmpdir/raw"
-python3 -S "$root/scripts/core/selection-state.py" write-pinned \
+node "$state_helper" write-pinned \
   --path "$raw_config/selection.json" --source "$saved_source" \
   --requested-ref "$pinned_commit" --resolved-ref "$pinned_commit" \
   --commit "$pinned_commit"
@@ -308,5 +312,26 @@ grep -Fq 'HTTP(S) source must not include userinfo' "$tmpdir/out"
 test ! -s "$resolver_log"
 test "$(spw_display_source "$SUPERPOWERS_UPSTREAM_URL")" = '<redacted-source>'
 test "$(spw_display_source "$official_source")" = "$official_source"
+
+# Selection-state execution ignores ambient Node preload state.
+preload_marker="$tmpdir/preload-marker"
+preload_script="$tmpdir/preload.js"
+printf "require('node:fs').writeFileSync('%s', 'injected');\n" "$preload_marker" > "$preload_script"
+NODE_OPTIONS="--require=$preload_script"
+export NODE_OPTIONS
+spw_selection_state "$tmpdir/config-root" validate-source --source="$official_source"
+unset NODE_OPTIONS
+test ! -e "$preload_marker"
+
+# Missing selection-state helpers fail with one controlled diagnostic.
+missing_helper_root="$tmpdir/missing-helper-root"
+mkdir -p "$missing_helper_root"
+if (spw_selection_state "$missing_helper_root" validate-source --source="$official_source") \
+  >"$tmpdir/missing-helper.out" 2>&1; then
+  echo 'missing selection-state helper unexpectedly succeeded' >&2
+  exit 1
+fi
+test "$(wc -l < "$tmpdir/missing-helper.out" | tr -d ' ')" -eq 1
+grep -Fxq 'error: selection state helper missing' "$tmpdir/missing-helper.out"
 
 printf '%s\n' OK

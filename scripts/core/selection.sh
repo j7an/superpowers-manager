@@ -33,12 +33,25 @@ spw_selection_state_path() {
   printf '%s/selection.json\n' "$_spw_selection_config_dir"
 }
 
+spw_selection_state_cli() {
+  _spw_selection_state_root="$1"
+  shift
+  _spw_selection_state_cli="$_spw_selection_state_root/dist/selection-state-cli.js"
+  if [ ! -f "$_spw_selection_state_cli" ]; then
+    echo 'error: selection state helper missing' >&2
+    return 1
+  fi
+  (
+    unset NODE_OPTIONS NODE_PATH
+    exec node "$_spw_selection_state_cli" "$@"
+  )
+}
+
 spw_selection_state() {
   _spw_selection_state_root="$1"
   shift
   if _spw_selection_state_error=$(
-    python3 -S "$_spw_selection_state_root/scripts/core/selection-state.py" \
-      "$@" 2>&1
+    spw_selection_state_cli "$_spw_selection_state_root" "$@" 2>&1
   ); then
     :
   else
@@ -56,7 +69,7 @@ spw_load_saved_selection() {
   fi
 
   if _spw_selection_error=$(
-    python3 -S "$_spw_selection_root/scripts/core/selection-state.py" read \
+    spw_selection_state_cli "$_spw_selection_root" read \
       --path "$SPW_SELECTION_STATE_PATH" \
       --output "$_spw_selection_normalized" 2>&1
   ); then
@@ -158,7 +171,7 @@ EOF
 spw_display_source() {
   _spw_selection_display_source="$1"
   if _spw_selection_display=$(
-    python3 -S "$(spw_root)/scripts/core/selection-state.py" \
+    spw_selection_state_cli "$(spw_root)" \
       display-source --source="$_spw_selection_display_source" 2>/dev/null
   ); then
     printf '%s\n' "$_spw_selection_display"

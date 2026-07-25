@@ -174,7 +174,6 @@ export async function atomicReplaceDir(
       }
       try {
         await renamePath(backup, live);
-        backupCreated = false;
       } catch (rollbackCause) {
         await removePath(candidate, { recursive: true, force: true }).catch(
           () => {},
@@ -196,8 +195,15 @@ export async function atomicReplaceDir(
       );
     }
     if (backupCreated) {
-      await removePath(backup, { recursive: true, force: true });
-      backupCreated = false;
+      try {
+        await removePath(backup, { recursive: true, force: true });
+      } catch (cause) {
+        throw new SafetyError<AtomicErrorDetails>(
+          "atomic",
+          `directory replacement succeeded but backup cleanup failed at ${backup}`,
+          { cause, details: { phase: "post-replacement" } },
+        );
+      }
     }
   } catch (cause) {
     if (cause instanceof SafetyError) throw cause;

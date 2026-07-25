@@ -282,6 +282,8 @@ test_probe_commands() {
   mkdir -p "$pkg"
   cp -R "$root/scripts" "$pkg/scripts"
   cp -R "$root/config" "$pkg/config"
+  cp -R "$root/dist" "$pkg/dist"
+  cp "$root/package.json" "$pkg/package.json"
   mkdir -p "$pkg/plugins/superpowers"
 
   installed_root="$tmpdir/codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0"
@@ -356,6 +358,8 @@ EOF
   # available in the deliberately restricted probe PATH. The test harness must
   # resolve the interpreter itself rather than copying the shell shim.
   real_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
+  node_bin="$(node -e 'process.stdout.write(require("node:fs").realpathSync(process.execPath))')"
+  ln -s "$node_bin" "$tool_path/node"
   mkdir -p "$tmpdir/python-shims"
   cat > "$tmpdir/python-shims/python3" <<EOF
 #!/usr/bin/env sh
@@ -507,7 +511,7 @@ update_control'
   # Git, even after its source is unavailable. Dormant saved fields remain visible
   # when an environment ref overrides only the ref side of selection.
   saved_config="$tmpdir/saved-config"
-  python3 -S "$pkg/scripts/core/selection-state.py" write-pinned \
+  node "$pkg/dist/selection-state-cli.js" write-pinned \
     --path "$saved_config/selection.json" --source "$upstream" \
     --requested-ref "$desired_commit" --resolved-ref "$desired_commit" \
     --commit "$desired_commit"
