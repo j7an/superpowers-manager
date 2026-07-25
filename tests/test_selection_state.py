@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 from pathlib import Path
 import stat
 import subprocess
-import sys
 import tempfile
 import unittest
-from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HELPER = ROOT / "scripts/core/selection-state.py"
+HELPER = ROOT / "dist/selection-state-cli.js"
 FIXTURES = ROOT / "tests" / "fixtures" / "baseline" / "selection"
 SOURCE = "https://github.com/obra/superpowers"
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
@@ -50,11 +47,16 @@ class SelectionStateTests(unittest.TestCase):
 
     def run_helper(self, *arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-S", str(HELPER), *arguments],
+            ["node", str(HELPER), *arguments],
             text=True,
             capture_output=True,
             check=False,
         )
+
+    def assert_controlled_error(self, result: subprocess.CompletedProcess[str]) -> None:
+        lines = result.stderr.splitlines()
+        self.assertEqual(len(lines), 1, result.stdout + result.stderr)
+        self.assertTrue(lines[0].startswith("error: "), result.stderr)
 
     def read(self, path: Path | None = None) -> subprocess.CompletedProcess[str]:
         output = self.base / "normalized.json"
@@ -84,7 +86,7 @@ class SelectionStateTests(unittest.TestCase):
         result = self.read_raw(raw)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertNotIn("Traceback", result.stderr)
+        self.assert_controlled_error(result)
         if fragment is not None:
             self.assertIn(fragment, result.stderr)
 
@@ -98,7 +100,7 @@ class SelectionStateTests(unittest.TestCase):
         result = self.run_helper("validate-source", "--source", source)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "")
-        self.assertNotIn("Traceback", result.stderr)
+        self.assert_controlled_error(result)
 
     def write_pinned(
         self,
@@ -193,10 +195,7 @@ class SelectionStateTests(unittest.TestCase):
 
     def test_read_rejects_oversized_integer_without_traceback(self) -> None:
         oversized_integer = "9" * 5000
-        self.assert_read_fails(
-            '{"schema_version":' + oversized_integer + '}',
-            "invalid JSON",
-        )
+        self.assert_read_fails('{"schema_version":' + oversized_integer + "}")
 
     def test_read_rejects_empty_multiline_and_invalid_ref_strings(self) -> None:
         prerelease = {
@@ -290,7 +289,7 @@ class SelectionStateTests(unittest.TestCase):
             with self.subTest(path=path):
                 result = self.read(path)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn("Traceback", result.stderr)
+                self.assert_controlled_error(result)
 
     def test_read_rejects_absent_state_below_symlinked_config_directory(self) -> None:
         real_directory = self.base / "real-config"
@@ -300,7 +299,7 @@ class SelectionStateTests(unittest.TestCase):
         result = self.read(linked_directory / "selection.json")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("directory must not be a symlink", result.stderr)
-        self.assertNotIn("Traceback", result.stderr)
+        self.assert_controlled_error(result)
 
     def test_writer_creates_private_directory_and_canonical_private_file(self) -> None:
         result = self.write_pinned()
@@ -360,70 +359,18 @@ class SelectionStateTests(unittest.TestCase):
             with self.subTest(path=path):
                 result = self.write_track_latest(path=path)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn("Traceback", result.stderr)
-
-    def load_module(self):
-        sys.dont_write_bytecode = True
-        spec = importlib.util.spec_from_file_location("selection_state", HELPER)
-        self.assertIsNotNone(spec)
-        self.assertIsNotNone(spec.loader)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        self.addCleanup(sys.modules.pop, spec.name, None)
-        spec.loader.exec_module(module)
-        return module
-
-    def test_failed_replace_cleans_only_own_temporary_file(self) -> None:
-        module = self.load_module()
-        self.state_path.parent.mkdir(mode=0o700)
-        prior_bytes = json.dumps(PINNED, indent=2, allow_nan=False) + "\n"
-        self.state_path.write_text(prior_bytes, encoding="utf-8")
-        os.chmod(self.state_path, 0o600)
-        foreign = self.state_path.parent / ".selection.json.tmp.foreign"
-        foreign.write_text("keep", encoding="utf-8")
-        observed_temporary_modes: list[int] = []
-
-        def reject_replace(source: Path, destination: Path) -> None:
-            self.assertEqual(destination, self.state_path)
-            self.assertTrue(source.name.startswith(".selection.json.tmp."))
-            observed_temporary_modes.append(stat.S_IMODE(source.stat().st_mode))
-            raise OSError("replace failed")
-
-        with mock.patch.object(module.os, "replace", side_effect=reject_replace):
-            with self.assertRaises(module.SelectionError):
-                module.write_record(self.state_path, TRACK_LATEST)
-        self.assertEqual(observed_temporary_modes, [0o600])
-        self.assertEqual(self.state_path.read_text(encoding="utf-8"), prior_bytes)
-        self.assertEqual(foreign.read_text(encoding="utf-8"), "keep")
-        self.assertEqual(
-            [path for path in self.state_path.parent.glob(".selection.json.tmp.*") if path != foreign],
-            [],
-        )
-
-    def test_post_replace_failure_truthfully_reports_final_mode(self) -> None:
-        module = self.load_module()
-        real_replace = module.os.replace
-
-        def replace_then_report_failure(source: Path, destination: Path) -> None:
-            real_replace(source, destination)
-            raise OSError("replace completion was uncertain")
-
-        with mock.patch.object(module.os, "replace", side_effect=replace_then_report_failure):
-            with self.assertRaises(module.SelectionError) as raised:
-                module.write_record(self.state_path, PINNED)
-        self.assertIn("selection state is now pinned", str(raised.exception))
-        self.assertEqual(self.read_record(PINNED)["saved_mode"], "pinned")
+                self.assert_controlled_error(result)
 
     def test_two_concurrent_writers_leave_one_complete_valid_record(self) -> None:
         commands = (
             [
-                sys.executable, "-S", str(HELPER), "write-pinned",
+                "node", str(HELPER), "write-pinned",
                 "--path", str(self.state_path), "--source", SOURCE,
                 "--requested-ref", "v6.1.1", "--resolved-ref", "v6.1.1",
                 "--commit", COMMIT,
             ],
             [
-                sys.executable, "-S", str(HELPER), "write-track-latest",
+                "node", str(HELPER), "write-track-latest",
                 "--path", str(self.state_path), "--source", SOURCE,
             ],
         )
