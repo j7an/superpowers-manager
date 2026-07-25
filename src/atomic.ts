@@ -196,8 +196,16 @@ export async function atomicReplaceDir(
       );
     }
     if (backupCreated) {
-      await removePath(backup, { recursive: true, force: true });
-      backupCreated = false;
+      try {
+        await removePath(backup, { recursive: true, force: true });
+        backupCreated = false;
+      } catch (cause) {
+        throw new SafetyError<AtomicErrorDetails>(
+          "atomic",
+          `directory replacement succeeded but backup cleanup failed at ${backup}`,
+          { cause, details: { phase: "post-replacement" } },
+        );
+      }
     }
   } catch (cause) {
     if (cause instanceof SafetyError) throw cause;

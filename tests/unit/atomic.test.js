@@ -227,3 +227,33 @@ void test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup",
     "before",
   );
 });
+
+void test("atomicReplaceDir reports post-replacement backup cleanup failure", async (t) => {
+  const parent = await sandbox(t);
+  const live = join(parent, "live");
+  const candidate = join(parent, "candidate");
+  await mkdir(live);
+  await mkdir(candidate);
+  await writeFile(join(live, "marker"), "before");
+  await writeFile(join(candidate, "marker"), "after");
+  /** @type {string | undefined} */
+  let backup;
+  const error = await safetyFailure(
+    atomicReplaceDir(candidate, live, {
+      hooks: {
+        rm: async (path, options) => {
+          backup = String(path);
+          assert.deepEqual(options, { recursive: true, force: true });
+          throw new Error("cleanup failed");
+        },
+      },
+    }),
+  );
+  assert.equal(await readFile(join(live, "marker"), "utf8"), "after");
+  await assert.rejects(stat(candidate), { code: "ENOENT" });
+  assert.ok(error.details);
+  assert.equal(error.details.phase, "post-replacement");
+  assert.match(error.message, /backup cleanup failed/);
+  assert.ok(backup);
+  assert.match(error.message, new RegExp(escapeRegex(backup)));
+});

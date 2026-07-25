@@ -113,3 +113,16 @@ void test("optional integer-token profile rejects decimal and exponent spellings
     assert.equal(parseStrictJson(text, reject), 1, text);
   }
 });
+
+void test("__proto__ is an own enumerable data property without prototype mutation", () => {
+  const parsed = parseStrictJson('{"__proto__":{"polluted":true}}', lastWins);
+  assert.ok(
+    parsed !== null && typeof parsed === "object" && !Array.isArray(parsed),
+  );
+  const descriptor = Object.getOwnPropertyDescriptor(parsed, "__proto__");
+  assert.ok(descriptor);
+  assert.equal(descriptor.enumerable, true);
+  assert.equal("value" in descriptor, true);
+  assert.deepEqual(descriptor.value, { polluted: true });
+  assert.equal(Object.getPrototypeOf(parsed), Object.prototype);
+});
