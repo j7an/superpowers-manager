@@ -32,27 +32,6 @@ git_tool_path="$tmpdir/git-tool-path"
 python3_log="$tmpdir/python3.log"
 real_python3=$(command -v python3)
 real_git=$(command -v git)
-materializer="$root/scripts/adapters/codex/materialize-hooks.py"
-grep -Fxq 'from __future__ import annotations' "$materializer"
-
-system_python=/usr/bin/python3
-if [ -x "$system_python" ]; then
-  system_python_version=$(
-    "$system_python" -S -c 'import sys; print("%d.%d" % sys.version_info[:2])'
-  )
-  if [ "$system_python_version" = "3.9" ]; then
-    "$system_python" -S -c '
-import runpy
-import sys
-
-assert sys.version_info[:2] == (3, 9)
-materializer = sys.argv[1]
-sys.argv = [materializer, "--help"]
-runpy.run_path(materializer, run_name="__main__")
-' "$materializer" >/dev/null
-  fi
-fi
-
 cat > "$recording_adapter" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$SPW_TEST_ADAPTER_LOG"
@@ -640,7 +619,7 @@ materialize_manifest="$materialize_candidate/.codex-plugin/plugin.json"
 mkdir -p "$materialize_upstream" \
   "$materialize_candidate/.codex-plugin"
 run_materializer() {
-  python3 -S "$root/scripts/adapters/codex/materialize-hooks.py" \
+  node "$root/dist/hooks-cli.js" \
     --manifest "$materialize_manifest" \
     --manifest-source upstream \
     --upstream-root "$materialize_upstream" \
@@ -652,14 +631,37 @@ if run_materializer >"$materialize_root/constant.out" 2>&1; then
   echo "hook materializer accepted a non-standard constant" >&2
   exit 1
 fi
-grep -Fq 'non-standard numeric constant' "$materialize_root/constant.out"
 cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
   "$materialize_manifest"
 if run_materializer >"$materialize_root/depth.out" 2>&1; then
   echo "hook materializer accepted depth 257" >&2
   exit 1
 fi
-grep -Fq 'JSON nesting exceeds limit' "$materialize_root/depth.out"
+printf '{"a": "\303\050"}\n' > "$materialize_manifest"
+if run_materializer >"$materialize_root/utf8.out" 2>&1; then
+  echo "hook materializer accepted invalid UTF-8" >&2
+  exit 1
+fi
+printf '[]\n' > "$materialize_manifest"
+if run_materializer >"$materialize_root/non-object.out" 2>&1; then
+  echo "hook materializer accepted a non-object manifest" >&2
+  exit 1
+fi
+cp "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
+  "$materialize_manifest"
+materialize_usage_status=0
+node "$root/dist/hooks-cli.js" \
+  --manifest "$materialize_manifest" \
+  --manifest-source bogus \
+  --upstream-root "$materialize_upstream" \
+  --candidate-root "$materialize_candidate" \
+  >"$materialize_root/usage.out" 2>"$materialize_root/usage.err" \
+  || materialize_usage_status=$?
+if [ "$materialize_usage_status" -ne 2 ]; then
+  echo "hook materializer usage error exited $materialize_usage_status, expected 2" >&2
+  exit 1
+fi
+grep -Fq 'unknown manifest source: bogus' "$materialize_root/usage.err"
 write_depth_256_manifest \
   "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
   "$materialize_manifest"
