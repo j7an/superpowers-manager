@@ -295,12 +295,12 @@ async function runBuild(
           candidateRoot,
           ".codex-plugin/plugin.json",
         );
-        await mkdir(join(candidateRoot, ".codex-plugin"), { recursive: true });
         const upstreamManifest = join(upstreamRoot, ".codex-plugin/plugin.json");
         const manifestSource: ManifestSource = (await fileExists(upstreamManifest))
           ? "upstream"
           : "fallback";
         try {
+          await mkdir(join(candidateRoot, ".codex-plugin"), { recursive: true });
           await copyFile(
             manifestSource === "upstream" ? upstreamManifest : fallbackManifest,
             candidateManifest,

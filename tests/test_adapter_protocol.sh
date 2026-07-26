@@ -592,7 +592,20 @@ EOF
 
 run_source_build() {
   label="$1"
+  candidate_manifest_kind="${2:-directory}"
   reset_source_candidate
+  case "$candidate_manifest_kind" in
+    directory)
+      ;;
+    file)
+      rm -rf "$source_candidate/.codex-plugin"
+      : > "$source_candidate/.codex-plugin"
+      ;;
+    *)
+      echo "unknown source candidate manifest kind: $candidate_manifest_kind" >&2
+      exit 1
+      ;;
+  esac
   SOURCE_RESULT="$tmpdir/source-reader-$label.result.json"
   SOURCE_STDOUT="$tmpdir/source-reader-$label.stdout"
   SOURCE_STDERR="$tmpdir/source-reader-$label.stderr"
@@ -635,6 +648,20 @@ grep -Fq 'candidate provenance is missing or invalid' "$SOURCE_STDERR"
 
 cp "$root/tests/fixtures/baseline/provenance/duplicate-key.json" \
   "$source_provenance"
+run_source_build candidate-manifest-file file
+[ "$SOURCE_RC" -eq 1 ]
+[ ! -f "$SOURCE_RESULT" ]
+[ "$(spw_json_get "$SOURCE_RESULT.response" "operation")" = "build" ]
+[ "$(spw_json_get "$SOURCE_RESULT.response" "ok")" = "False" ]
+[ "$(spw_json_get "$SOURCE_RESULT.response" "error.code")" = "build-failed" ]
+[ "$(spw_json_get "$SOURCE_RESULT.response" "error.message")" = \
+  "cannot copy upstream manifest into candidate" ]
+grep -Fxq 'error: cannot copy upstream manifest into candidate' "$SOURCE_STDERR"
+if grep -Fq 'error: invalid adapter response:' "$SOURCE_STDERR"; then
+  echo "candidate manifest file must produce a controlled build failure" >&2
+  exit 1
+fi
+
 run_source_build duplicate
 [ "$SOURCE_RC" -eq 0 ]
 [ -f "$SOURCE_RESULT" ]
