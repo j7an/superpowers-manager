@@ -1,5 +1,14 @@
-import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import {
+  copyFile,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  stat,
+  symlink,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
   assertExistingContained,
   assertProspectiveContained,
@@ -221,4 +230,160 @@ export async function classifyHooks(
     await validateDeclaredFile(upstreamRoot, raw, index);
   }
   return { copyHooksSubtree: hooksRootPresent, declaredPaths: paths };
+}
+
+async function checkedDestination(
+  root: string,
+  relativePath: string,
+): Promise<string> {
+  const destination = resolve(root, relativePath);
+  await requireProspectiveContained(
+    root,
+    dirname(destination),
+    "declared hook destination parent",
+  );
+  const kind = await classifyOwned(destination, "declared hook destination");
+  if (kind === "symlink") {
+    throw hookError(
+      `declared hook destination must not be a symlink: ${destination}`,
+    );
+  }
+  if (kind === "missing") {
+    await requireProspectiveContained(
+      root,
+      destination,
+      "declared hook destination",
+    );
+    return destination;
+  }
+  await requireExistingContained(
+    root,
+    destination,
+    "declared hook destination",
+  );
+  if (!(await isRegularFileFollowing(destination))) {
+    throw hookError(
+      `declared hook destination is not a regular file: ${destination}`,
+    );
+  }
+  return destination;
+}
+
+async function collectEntries(tree: string): Promise<string[]> {
+  const found: string[] = [];
+  const pending: string[] = [tree];
+  while (pending.length > 0) {
+    const current = pending.pop() as string;
+    let entries;
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch (cause) {
+      throw hookError(`hook subtree escapes or is broken: ${current}`, cause);
+    }
+    for (const entry of entries) {
+      const path = join(current, entry.name);
+      found.push(path);
+      // Never descend through a symlink; isDirectory() is lstat-based here.
+      if (entry.isDirectory()) pending.push(path);
+    }
+  }
+  return found;
+}
+
+async function validateSubtreeSymlinks(
+  tree: string,
+  containmentRoot: string,
+): Promise<void> {
+  if ((await classifyOwned(tree, "hook subtree")) === "symlink") {
+    if (isAbsolute(await readlink(tree))) {
+      throw hookError(`absolute subtree symlink is not allowed: ${tree}`);
+    }
+  }
+  try {
+    await assertExistingContained(containmentRoot, tree);
+  } catch (cause) {
+    throw hookError(`hook subtree escapes or is broken: ${tree}`, cause);
+  }
+  if (!(await isDirectoryFollowing(tree))) {
+    throw hookError(`hook subtree is not a directory: ${tree}`);
+  }
+  for (const path of await collectEntries(tree)) {
+    if ((await classifyOwned(path, "hook subtree entry")) !== "symlink")
+      continue;
+    if (isAbsolute(await readlink(path))) {
+      throw hookError(`absolute symlink is not allowed: ${path}`);
+    }
+    try {
+      await assertExistingContained(containmentRoot, path);
+    } catch (cause) {
+      throw hookError(`symlink escapes or is broken: ${path}`, cause);
+    }
+  }
+}
+
+async function copyPreservingSymlink(
+  source: string,
+  destination: string,
+): Promise<void> {
+  if ((await classifyOwned(source, "declared hook source")) === "symlink") {
+    await symlink(await readlink(source), destination);
+    return;
+  }
+  await copyFile(source, destination);
+}
+
+async function validateMaterializedDestination(
+  destination: string,
+  candidateRoot: string,
+): Promise<void> {
+  const message = `materialized hook destination escapes or is broken: ${destination}`;
+  try {
+    await assertExistingContained(candidateRoot, destination);
+  } catch (cause) {
+    // Retain the safe-path error as `cause`; only the message and module are
+    // re-owned. Discarding it would erase why containment failed.
+    throw hookError(message, cause);
+  }
+  if (!(await isRegularFileFollowing(destination))) {
+    throw hookError(message);
+  }
+}
+
+export async function materializeHooks(
+  plan: HookPlan,
+  sourceRoot: string,
+  candidateRoot: string,
+): Promise<void> {
+  if (plan.copyHooksSubtree) {
+    const sourceHooks = resolve(sourceRoot, "hooks");
+    const candidateHooks = resolve(candidateRoot, "hooks");
+    await validateSubtreeSymlinks(sourceHooks, sourceRoot);
+    if ((await classifyOwned(sourceHooks, "hook subtree")) === "symlink") {
+      await symlink(await readlink(sourceHooks), candidateHooks);
+    } else {
+      await cp(sourceHooks, candidateHooks, {
+        recursive: true,
+        verbatimSymlinks: true,
+      });
+    }
+    await validateSubtreeSymlinks(candidateHooks, candidateRoot);
+  }
+
+  const destinations: string[] = [];
+  for (const raw of plan.declaredPaths) {
+    const relativePath = raw.slice(2);
+    const source = await checkedFile(sourceRoot, relativePath);
+    const destination = await checkedDestination(candidateRoot, relativePath);
+    await mkdir(dirname(destination), { recursive: true });
+    if (
+      (await classifyOwned(destination, "declared hook destination")) ===
+      "missing"
+    ) {
+      await copyPreservingSymlink(source, destination);
+    }
+    destinations.push(destination);
+  }
+  for (const destination of destinations) {
+    await validateMaterializedDestination(destination, candidateRoot);
+  }
 }

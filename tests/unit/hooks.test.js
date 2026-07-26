@@ -1,6 +1,15 @@
 // @ts-check
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,7 +19,7 @@ const { SafetyError } = await import(
   new URL("../../dist/safety-error.js", import.meta.url).href
 );
 /** @type {typeof import("../../src/hooks.js")} */
-const { classifyHooks, readManifest } = await import(
+const { classifyHooks, materializeHooks, readManifest } = await import(
   new URL("../../dist/hooks.js", import.meta.url).href
 );
 
@@ -282,4 +291,238 @@ void test("classifyHooks accepts a declared symlink contained in upstream", asyn
     await classifyHooks({ hooks: "./config/link" }, "upstream", root),
     { copyHooksSubtree: true, declaredPaths: ["./config/link"] },
   );
+});
+
+/**
+ * @param {import("node:test").TestContext} t
+ * @returns {Promise<{ source: string, candidate: string }>}
+ */
+async function roots(t) {
+  const base = await sandbox(t);
+  const source = join(base, "upstream");
+  const candidate = join(base, "candidate");
+  await mkdir(source, { recursive: true });
+  await mkdir(candidate, { recursive: true });
+  return { source, candidate };
+}
+
+void test("materializeHooks copies a regular hook subtree", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "hooks", "nested"), { recursive: true });
+  await writeFile(join(source, "hooks", "hooks.json"), "{}\n");
+  await writeFile(join(source, "hooks", "nested", "run.sh"), "#!/bin/sh\n");
+  await materializeHooks(
+    { copyHooksSubtree: true, declaredPaths: [] },
+    source,
+    candidate,
+  );
+  assert.equal(
+    await readFile(join(candidate, "hooks", "nested", "run.sh"), "utf8"),
+    "#!/bin/sh\n",
+  );
+});
+
+void test("materializeHooks rejects an absolute subtree symlink", async (t) => {
+  const { source, candidate } = await roots(t);
+  await symlink("/tmp", join(source, "hooks"));
+  await hookFailure(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: true, declaredPaths: [] },
+        source,
+        candidate,
+      ),
+    "absolute subtree symlink is not allowed",
+  );
+});
+
+void test("materializeHooks rejects a subtree that is not a directory", async (t) => {
+  const { source, candidate } = await roots(t);
+  await writeFile(join(source, "hooks"), "not a directory\n");
+  await hookFailure(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: true, declaredPaths: [] },
+        source,
+        candidate,
+      ),
+    "hook subtree is not a directory",
+  );
+});
+
+void test("materializeHooks rejects an escaping symlink inside the subtree", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "hooks"), { recursive: true });
+  await symlink("../../outside", join(source, "hooks", "escape"));
+  await hookFailure(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: true, declaredPaths: [] },
+        source,
+        candidate,
+      ),
+    "symlink escapes or is broken",
+  );
+});
+
+void test("materializeHooks rejects a source-contained symlink that dangles in the candidate", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "hooks"), { recursive: true });
+  await mkdir(join(source, "bin"), { recursive: true });
+  await writeFile(join(source, "bin", "target"), "target\n");
+  await symlink("../bin/target", join(source, "hooks", "contained"));
+  await hookFailure(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: true, declaredPaths: [] },
+        source,
+        candidate,
+      ),
+    "symlink escapes or is broken",
+  );
+});
+
+void test("materializeHooks copies a declared file", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "config"), { recursive: true });
+  await writeFile(join(source, "config", "hook.json"), "{}\n");
+  await materializeHooks(
+    { copyHooksSubtree: false, declaredPaths: ["./config/hook.json"] },
+    source,
+    candidate,
+  );
+  assert.equal(
+    await readFile(join(candidate, "config", "hook.json"), "utf8"),
+    "{}\n",
+  );
+});
+
+void test("materializeHooks does not overwrite an existing declared destination", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "config"), { recursive: true });
+  await mkdir(join(candidate, "config"), { recursive: true });
+  await writeFile(join(source, "config", "hook.json"), "from upstream\n");
+  await writeFile(join(candidate, "config", "hook.json"), "already here\n");
+  await materializeHooks(
+    { copyHooksSubtree: false, declaredPaths: ["./config/hook.json"] },
+    source,
+    candidate,
+  );
+  assert.equal(
+    await readFile(join(candidate, "config", "hook.json"), "utf8"),
+    "already here\n",
+  );
+});
+
+void test("materializeHooks rejects a symlink at a declared destination", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "config"), { recursive: true });
+  await mkdir(join(candidate, "config"), { recursive: true });
+  await writeFile(join(source, "config", "hook.json"), "{}\n");
+  await writeFile(join(candidate, "real.json"), "{}\n");
+  await symlink("../real.json", join(candidate, "config", "hook.json"));
+  await hookFailure(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: false, declaredPaths: ["./config/hook.json"] },
+        source,
+        candidate,
+      ),
+    "declared hook destination must not be a symlink",
+  );
+});
+
+void test("materializeHooks rejects a declared symlink that dangles in the candidate", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "config"), { recursive: true });
+  await mkdir(join(source, "bin"), { recursive: true });
+  await writeFile(join(source, "bin", "target"), "target\n");
+  await symlink("../bin/target", join(source, "config", "link"));
+  const plan = await classifyHooks(
+    { hooks: "./config/link" },
+    "upstream",
+    source,
+  );
+  await hookFailure(
+    () => materializeHooks(plan, source, candidate),
+    "materialized hook destination escapes or is broken",
+  );
+});
+
+void test("materializeHooks rejects a declared symlink that resolves outside the candidate", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "config"), { recursive: true });
+  await mkdir(join(source, "bin"), { recursive: true });
+  await writeFile(join(source, "bin", "target"), "target\n");
+  // Absolute target inside sourceRoot: classification accepts it, and the
+  // copied link RESOLVES successfully in the candidate — so a following stat
+  // alone would pass. Only the containment check rejects it. This is the test
+  // that proves the second pass enforces containment, not mere existence.
+  await symlink(join(source, "bin", "target"), join(source, "config", "abs.json"));
+  const plan = await classifyHooks(
+    { hooks: "./config/abs.json" },
+    "upstream",
+    source,
+  );
+  assert.deepEqual(plan.declaredPaths, ["./config/abs.json"]);
+  const copied = join(candidate, "config", "abs.json");
+  // The second pass must own the diagnostic (module "hooks") while retaining
+  // the underlying safe-path failure as `cause`.
+  await assert.rejects(
+    () => materializeHooks(plan, source, candidate),
+    (error) => {
+      assert.ok(error instanceof SafetyError);
+      assert.equal(error.module, "hooks");
+      assert.equal(
+        error.message.startsWith(
+          "materialized hook destination escapes or is broken",
+        ),
+        true,
+        error.message,
+      );
+      assert.ok(error.cause instanceof SafetyError, "cause must be retained");
+      assert.equal(error.cause.module, "safe-path");
+      return true;
+    },
+  );
+  // Confirm the premise: the copied link exists and resolves.
+  assert.equal((await lstat(copied)).isSymbolicLink(), true);
+  assert.equal(await readFile(copied, "utf8"), "target\n");
+});
+
+void test("materializeHooks rejects an absolute symlink inside the hook subtree", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "hooks"), { recursive: true });
+  await writeFile(join(source, "hooks", "hooks.json"), "{}\n");
+  await symlink("/etc/hosts", join(source, "hooks", "abs"));
+  await hookFailure(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: true, declaredPaths: [] },
+        source,
+        candidate,
+      ),
+    "absolute symlink is not allowed",
+  );
+});
+
+void test("materializeHooks accepts a declared symlink to another declared file", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "config"), { recursive: true });
+  await writeFile(join(source, "config", "real.json"), "{}\n");
+  await symlink("real.json", join(source, "config", "link.json"));
+  await materializeHooks(
+    {
+      copyHooksSubtree: false,
+      declaredPaths: ["./config/link.json", "./config/real.json"],
+    },
+    source,
+    candidate,
+  );
+  const copied = join(candidate, "config", "link.json");
+  // The link must survive AS a symlink with its original relative target —
+  // reading the right bytes would also pass if the copy had dereferenced it.
+  assert.equal((await lstat(copied)).isSymbolicLink(), true);
+  assert.equal(await readlink(copied), "real.json");
+  assert.equal(await readFile(copied, "utf8"), "{}\n");
 });
