@@ -273,6 +273,8 @@ const {
   gitSafeSource,
   verifyRawCommit,
   fetchExactCommit,
+  resolveRef,
+  resolveExactTag,
 } = await import(new URL("../../dist/upstream.js", import.meta.url).href);
 
 const LS_REMOTE_FIXTURE = [
@@ -451,4 +453,165 @@ void test("fetchExactCommit re-initializes a cache whose .git is a file", async 
     argv.includes(`init ${repository}`),
     `expected a cache init, got:\n${argv}`,
   );
+});
+
+void test("resolveRef reports a query failure for latest-release", async (t) => {
+  const bin = await fakeGitDir(t, 'printf "fatal: boom\\n" >&2; exit 128');
+  const url = "https://example.invalid/repo.git";
+  await assert.rejects(
+    withPath(bin, () => resolveRef(url, "latest-release")),
+    (error) =>
+      error instanceof Error &&
+      error.message === `cannot query upstream tags from ${url}: fatal: boom`,
+  );
+});
+
+void test("resolveRef reports a query failure for a tag lookup", async (t) => {
+  const bin = await fakeGitDir(t, 'printf "fatal: nope\\n" >&2; exit 128');
+  const url = "https://example.invalid/repo.git";
+  await assert.rejects(
+    withPath(bin, () => resolveRef(url, "v1.2.3")),
+    (error) =>
+      error instanceof Error &&
+      error.message ===
+        `cannot query upstream tag v1.2.3 from ${url}: fatal: nope`,
+  );
+});
+
+void test("resolveRef reports a query failure for the generic ref lookup", async (t) => {
+  const bin = await fakeGitDir(
+    t,
+    [
+      'case "$*" in',
+      "  *--tags*) exit 0 ;;",
+      '  *) printf "fatal: unreachable\\n" >&2; exit 1 ;;',
+      "esac",
+    ].join("\n"),
+  );
+  const url = "https://example.invalid/repo.git";
+  await assert.rejects(
+    withPath(bin, () => resolveRef(url, "topic-branch")),
+    (error) =>
+      error instanceof Error &&
+      error.message ===
+        `cannot query upstream ref topic-branch from ${url}: fatal: unreachable`,
+  );
+});
+
+void test("resolveRef fails closed when every rung misses", async (t) => {
+  const bin = await fakeGitDir(t, "exit 0");
+  const url = "https://example.invalid/repo.git";
+  await assert.rejects(
+    withPath(bin, () => resolveRef(url, "nowhere")),
+    (error) =>
+      error instanceof Error &&
+      error.message === "cannot resolve upstream ref: nowhere",
+  );
+});
+
+void test("resolveRef selects the greatest stable tag for latest-release", async (t) => {
+  const bin = await fakeGitDir(t, `printf '%s' '${LS_REMOTE_FIXTURE}'`);
+  const url = "https://example.invalid/repo.git";
+  const resolution = await withPath(bin, () =>
+    resolveRef(url, "latest-release"),
+  );
+  assert.deepEqual(resolution, {
+    kind: "latest-release",
+    ref: "v6.0.10",
+    commit: "4444444444444444444444444444444444444444",
+  });
+});
+
+void test("resolveRef treats a 40-hex ref as a raw commit without querying", async (t) => {
+  const bin = await fakeGitDir(
+    t,
+    'printf "fatal: must not run\\n" >&2; exit 1',
+  );
+  const url = "https://example.invalid/repo.git";
+  const resolution = await withPath(bin, () => resolveRef(url, COMMIT));
+  assert.deepEqual(resolution, {
+    kind: "raw-commit",
+    ref: COMMIT,
+    commit: COMMIT,
+  });
+});
+
+void test("resolveRef prefers the peeled tag entry over the direct one", async (t) => {
+  const bin = await fakeGitDir(
+    t,
+    [
+      'printf "%s\\n" "1111111111111111111111111111111111111111\trefs/tags/v6.0.10"',
+      'printf "%s\\n" "2222222222222222222222222222222222222222\trefs/tags/v6.0.10^{}"',
+      "exit 0",
+    ].join("\n"),
+  );
+  const url = "https://example.invalid/repo.git";
+  const resolution = await withPath(bin, () => resolveRef(url, "v6.0.10"));
+  assert.deepEqual(resolution, {
+    kind: "tag",
+    ref: "v6.0.10",
+    commit: "2222222222222222222222222222222222222222",
+  });
+});
+
+void test("resolveRef falls through to the first generic ls-remote entry", async (t) => {
+  const bin = await fakeGitDir(
+    t,
+    [
+      'case "$*" in',
+      "  *--tags*) exit 0 ;;",
+      "  *)",
+      '    printf "%s\\n" "3333333333333333333333333333333333333333\trefs/heads/topic-branch"',
+      '    printf "%s\\n" "4444444444444444444444444444444444444444\trefs/heads/topic-branch-other"',
+      "    exit 0",
+      "    ;;",
+      "esac",
+    ].join("\n"),
+  );
+  const url = "https://example.invalid/repo.git";
+  const resolution = await withPath(bin, () => resolveRef(url, "topic-branch"));
+  assert.deepEqual(resolution, {
+    kind: "ref",
+    ref: "topic-branch",
+    commit: "3333333333333333333333333333333333333333",
+  });
+});
+
+void test("resolveExactTag reports a query failure", async (t) => {
+  const bin = await fakeGitDir(t, 'printf "fatal: boom\\n" >&2; exit 128');
+  await assert.rejects(
+    withPath(bin, () => resolveExactTag("/srv/repo", "v1.2.3")),
+    (error) =>
+      error instanceof Error &&
+      error.message ===
+        "cannot query exact upstream tag v1.2.3 from /srv/repo: fatal: boom",
+  );
+});
+
+void test("resolveExactTag reports the tag as not found when absent from otherwise-valid output", async (t) => {
+  const bin = await fakeGitDir(
+    t,
+    'printf "%s\\n" "1111111111111111111111111111111111111111\trefs/tags/v9.9.9"',
+  );
+  await assert.rejects(
+    withPath(bin, () => resolveExactTag("/srv/repo", "v1.2.3")),
+    (error) =>
+      error instanceof Error &&
+      error.message === "upstream tag not found: v1.2.3",
+  );
+});
+
+void test("resolveExactTag prefers the peeled entry over the direct one", async (t) => {
+  const bin = await fakeGitDir(
+    t,
+    [
+      'printf "%s\\n" "1111111111111111111111111111111111111111\trefs/tags/v1.2.3"',
+      'printf "%s\\n" "2222222222222222222222222222222222222222\trefs/tags/v1.2.3^{}"',
+      "exit 0",
+    ].join("\n"),
+  );
+  const commit = await withPath(bin, () =>
+    resolveExactTag("/srv/repo", "v1.2.3"),
+  );
+  assert.equal(commit, "2222222222222222222222222222222222222222");
 });
