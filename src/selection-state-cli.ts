@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { SafetyError } from "./safety-error.js";
 import {
+  displaySource,
   normalizePinnedArguments,
   normalizeSaved,
   validateSource,
@@ -107,16 +107,7 @@ async function dispatch({ name, flags }: Command): Promise<void> {
     return;
   }
   if (name === "display-source") {
-    let display: string;
-    try {
-      display = validateSource(flags.source);
-    } catch (cause) {
-      if (!(cause instanceof SafetyError) || cause.module !== "selection") {
-        throw cause;
-      }
-      display = "<redacted-source>";
-    }
-    process.stdout.write(`${display}\n`);
+    process.stdout.write(`${displaySource(flags.source)}\n`);
     return;
   }
   const unreachable: never = name;
