@@ -68,6 +68,5 @@ spw_node_cli() (
     echo "error: $_label missing" >&2
     return 1
   fi
-  unset NODE_OPTIONS NODE_PATH
-  exec node "$_path" "$@"
+  exec /bin/sh -c 'unset NODE_OPTIONS NODE_PATH; exec node "$@"' sh "$_path" "$@"
 )
