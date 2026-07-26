@@ -9,6 +9,7 @@ spw_test_root
 . "$root/scripts/core/selection.sh"
 
 spw_test_tmpdir
+real_git=$(command -v git)
 
 # BASELINE CASE: BUILDER-GIT-01 deterministic tagged repository
 builder_out=$(
@@ -30,47 +31,12 @@ test "$root" = "$caller_root"
 test "$config_root" = "caller-config-root"
 test "$(cat "$tmpdir/config-ref.out")" = "v6.0.3"
 
-cat > "$tmpdir/ls-remote-tags.txt" <<'EOF'
-1111111111111111111111111111111111111111	refs/tags/v6.0.2
-2222222222222222222222222222222222222222	refs/tags/v6.0.2^{}
-3333333333333333333333333333333333333333	refs/tags/v6.0.10
-4444444444444444444444444444444444444444	refs/tags/v6.0.10^{}
-5555555555555555555555555555555555555555	refs/tags/v6.1.0-beta.1
-6666666666666666666666666666666666666666	refs/tags/v7.0
-7777777777777777777777777777777777777777	refs/tags/v8.0.0+build
-EOF
-
 # BASELINE CASE: REF-LATEST-STABLE-01 numeric stable release selection and peeling
-selected=$(spw_select_latest_release_from_ls_remote < "$tmpdir/ls-remote-tags.txt")
-if [ "$selected" != "v6.0.10 4444444444444444444444444444444444444444" ]; then
-  echo "unexpected latest release: $selected" >&2
-  exit 1
-fi
-
-version=$(spw_manifest_version_for_commit "896224c4b1879920ab573417e68fd51d2ccc9072")
-if [ "$version" != "0.0.0+manager.896224c" ]; then
-  echo "unexpected manifest version: $version" >&2
-  exit 1
-fi
-
+# Selection is exercised end to end against a real repository below; the
+# tag-grammar and version-derivation cases live in tests/unit/upstream.test.js.
 short_commit="896224c4b1879920ab573417e68fd51d2ccc9072"
-
 test "$(spw_manifest_version_for_ref "latest-release" "latest-release" "v6.0.3" "$short_commit")" = "6.0.3+manager.896224c"
-test "$(spw_manifest_version_for_ref "v6.1.0-beta.1" "tag" "v6.1.0-beta.1" "abc1234abc1234abc1234abc1234abc1234abc12")" = "6.1.0-beta.1+manager.abc1234"
 test "$(spw_manifest_version_for_ref "main" "ref" "main" "def5678def5678def5678def5678def5678def56")" = "0.0.0-main+manager.def5678"
-test "$(spw_manifest_version_for_ref "feature/foo" "ref" "feature/foo" "fedcba9fedcba9fedcba9fedcba9fedcba9fedc")" = "0.0.0-ref-feature-foo+manager.fedcba9"
-test "$(spw_manifest_version_for_ref "042" "ref" "042" "0123abc0123abc0123abc0123abc0123abc0123")" = "0.0.0-ref-042+manager.0123abc"
-test "$(spw_manifest_version_for_ref "896224c4b1879920ab573417e68fd51d2ccc9072" "raw-commit" "896224c4b1879920ab573417e68fd51d2ccc9072" "$short_commit")" = "0.0.0+manager.896224c"
-test "$(spw_manifest_version_for_ref "v1.2.3" "ref" "v1.2.3" "$short_commit")" = "0.0.0-ref-v1-2-3+manager.896224c"
-test "$(spw_manifest_version_for_ref "!!!" "ref" "!!!" "$short_commit")" = "0.0.0-ref-unknown+manager.896224c"
-test "$(spw_sanitize_ref_for_version "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu/tail")" = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu"
-
-long_ref="feature/abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
-long_version=$(spw_manifest_version_for_ref "$long_ref" "ref" "$long_ref" "$short_commit")
-test "$long_version" = "0.0.0-ref-feature-abcdefghijklmnopqrstuvwxyzabcdefghijklmn+manager.896224c"
-
-invalid_prerelease=$(spw_manifest_version_for_ref "v1.2.3-042" "tag" "v1.2.3-042" "$short_commit")
-test "$invalid_prerelease" = "0.0.0+manager.896224c"
 
 repo="$tmpdir/upstream"
 git -C "$tmpdir" init upstream >/dev/null
@@ -92,6 +58,12 @@ git -C "$repo" tag v1.2.2
 
 latest_resolved=$(spw_resolve_ref "$repo" "latest-release")
 test "$latest_resolved" = "latest-release v1.2.3 $release_commit"
+
+# A malformed leading-zero tag must not participate in selection.
+git -C "$repo" tag v01.9.9
+leading_zero_resolved=$(spw_resolve_ref "$repo" "latest-release")
+test "$leading_zero_resolved" = "latest-release v1.2.3 $release_commit"
+git -C "$repo" tag -d v01.9.9 >/dev/null
 
 tag_resolved=$(spw_resolve_ref "$repo" "v1.2.3")
 test "$tag_resolved" = "tag v1.2.3 $release_commit"
@@ -157,7 +129,6 @@ signal_workspace="$tmpdir/signal-workspace"
 signal_cache="$tmpdir/signal-cache"
 mkdir "$signal_bin" "$signal_workspace"
 printf 'keep\n' > "$signal_workspace/sibling"
-real_git=$(command -v git)
 cat > "$signal_bin/git" <<EOF
 #!/bin/sh
 printf '%s\n' "\$*" >> "$tmpdir/signal-git.log"
@@ -183,6 +154,8 @@ import time
 root, source, commit, cache, workspace, marker_name, output_name, result_name = sys.argv[1:]
 script = """
 set -eu
+SPW_MANAGER_ROOT="$1"
+export SPW_MANAGER_ROOT
 . "$1/scripts/core/common.sh"
 . "$1/scripts/core/upstream.sh"
 . "$1/scripts/core/selection.sh"
@@ -219,9 +192,51 @@ grep -Fq -- "-C $signal_workspace/superpowers-manager.fetch." \
 test "$(find "$signal_workspace" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" -eq 1
 test "$(cat "$signal_workspace/sibling")" = keep
 
-if spw_select_latest_release_from_ls_remote < /dev/null >/dev/null 2>&1; then
-  echo "expected empty tag list to fail" >&2
+# A source with no stable tags must still fail latest-release resolution.
+tagless="$tmpdir/tagless"
+git -C "$tmpdir" init tagless >/dev/null
+git -C "$tagless" config user.email superpowers-manager@example.invalid
+git -C "$tagless" config user.name superpowers-manager
+printf 'x\n' > "$tagless/file.txt"
+git -C "$tagless" add file.txt
+git -C "$tagless" -c commit.gpgsign=false commit -m "x" >/dev/null
+if spw_resolve_ref "$tagless" "latest-release" >/dev/null 2>"$tmpdir/tagless.err"; then
+  echo "expected latest-release to fail without stable tags" >&2
   exit 1
 fi
+grep -Fq "no stable semver tag found for latest-release" "$tmpdir/tagless.err"
+
+# The upstream seam must route through spw_node_cli and scrub NODE_OPTIONS.
+cat > "$tmpdir/upstream-preload.cjs" <<'JS'
+console.error("INJECTED");
+JS
+NODE_OPTIONS="--require $tmpdir/upstream-preload.cjs" NODE_PATH="$tmpdir" \
+  spw_resolve_ref "$repo" "main" > "$tmpdir/isolated.out" 2>"$tmpdir/isolated.err"
+test "$(cat "$tmpdir/isolated.out")" = "ref main $main_commit"
+if grep -Fq INJECTED "$tmpdir/isolated.err"; then
+  echo "upstream seam did not scrub NODE_OPTIONS" >&2
+  exit 1
+fi
+
+# The pinned child environment must reach git, with NODE_* scrubbed.
+env_bin="$tmpdir/env-bin"
+mkdir "$env_bin"
+cat > "$env_bin/git" <<EOF
+#!/bin/sh
+{
+  printf 'LC_ALL=%s\n' "\${LC_ALL-unset}"
+  printf 'GIT_TERMINAL_PROMPT=%s\n' "\${GIT_TERMINAL_PROMPT-unset}"
+  printf 'NODE_OPTIONS=%s\n' "\${NODE_OPTIONS-unset}"
+  printf 'NODE_PATH=%s\n' "\${NODE_PATH-unset}"
+} >> "$tmpdir/git-env.log"
+exec "$real_git" "\$@"
+EOF
+chmod +x "$env_bin/git"
+NODE_OPTIONS="--require $tmpdir/upstream-preload.cjs" NODE_PATH="$tmpdir" \
+  PATH="$env_bin:$PATH" spw_resolve_ref "$repo" "main" >/dev/null 2>&1
+grep -Fqx 'LC_ALL=C' "$tmpdir/git-env.log"
+grep -Fqx 'GIT_TERMINAL_PROMPT=0' "$tmpdir/git-env.log"
+grep -Fqx 'NODE_OPTIONS=unset' "$tmpdir/git-env.log"
+grep -Fqx 'NODE_PATH=unset' "$tmpdir/git-env.log"
 
 echo "test_ref_resolution: OK"
