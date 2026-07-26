@@ -71,7 +71,18 @@ assert_contains "README.md" '`SUPERPOWERS_REF` is an invocation-only override'
 assert_contains "README.md" "SUPERPOWERS_REF=feature/foo npx superpowers-manager probe"
 assert_contains "tests/expected_tarball_contents.txt" "dist/selection-state-cli.js"
 assert_not_contains "tests/expected_tarball_contents.txt" "scripts/core/selection-state.py"
-assert_contains "tests/expected_tarball_contents.txt" "dist/hooks-cli.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/adapter-cli.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/adapter-protocol.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/adapter.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/codex-json.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/codex-state.js"
+assert_not_contains "tests/expected_tarball_contents.txt" "dist/hooks-cli.js"
+assert_not_contains \
+  "tests/expected_tarball_contents.txt" \
+  "scripts/adapters/codex/lib.sh"
+assert_contains \
+  "tests/expected_tarball_contents.txt" \
+  "scripts/adapters/codex/apply-manifest-overlay.py"
 assert_contains "tests/expected_tarball_contents.txt" "dist/hooks.js"
 assert_not_contains "tests/expected_tarball_contents.txt" "scripts/adapters/codex/materialize-hooks.py"
 assert_contains "tests/expected_tarball_contents.txt" "scripts/core/selection.sh"

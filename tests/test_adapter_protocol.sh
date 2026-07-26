@@ -348,6 +348,20 @@ fi
 [ ! -s "$control_out" ]
 grep -Fq 'protocol strings must not contain terminal control characters' "$control_err"
 
+# The POSIX shim rejects non-ASCII operation names before Node can serialize a
+# terminal-facing protocol envelope. Raw C1 bytes remain covered below.
+non_ascii_out="$tmpdir/non-ascii-operation.out"
+non_ascii_err="$tmpdir/non-ascii-operation.err"
+if "$root/scripts/adapters/codex/adapter" "buildé" \
+  >"$non_ascii_out" 2>"$non_ascii_err"; then
+  echo "non-ASCII adapter operation must fail" >&2
+  exit 1
+fi
+[ ! -s "$non_ascii_out" ]
+grep -Fq \
+  'protocol strings must not contain terminal control characters' \
+  "$non_ascii_err"
+
 # A lone UTF-8 surrogate from a POSIX argv byte replays as its original byte
 # through Python's surrogateescape handler unless the emitter rejects it.
 surrogate=$(LC_ALL=C printf '\233')
