@@ -692,18 +692,19 @@ PY
 run_materializer
 
 # BASELINE CASE: MANIFEST-READER-OVERLAY-01 manifest overlay profile
-. "$root/scripts/adapters/codex/lib.sh"
 overlay_manifest="$tmpdir/overlay-reader.json"
 cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
   "$overlay_manifest"
-if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+if python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+    "$overlay_manifest" "9.8.7+manager.0123456" \
     >"$tmpdir/overlay-constant.out" 2>&1; then
   echo "manifest overlay accepted a non-standard constant" >&2
   exit 1
 fi
 grep -Fq 'non-standard numeric constant' "$tmpdir/overlay-constant.out"
 printf '%s\n' '[]' > "$overlay_manifest"
-if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+if python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+    "$overlay_manifest" "9.8.7+manager.0123456" \
     >"$tmpdir/overlay-object.out" 2>&1; then
   echo "manifest overlay accepted a non-object" >&2
   exit 1
@@ -711,7 +712,8 @@ fi
 grep -Fq 'manifest must be a JSON object' "$tmpdir/overlay-object.out"
 cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
   "$overlay_manifest"
-if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+if python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+    "$overlay_manifest" "9.8.7+manager.0123456" \
     >"$tmpdir/overlay-depth.out" 2>&1; then
   echo "manifest overlay accepted depth 257" >&2
   exit 1
@@ -720,11 +722,13 @@ grep -Fq 'JSON nesting exceeds limit' "$tmpdir/overlay-depth.out"
 write_depth_256_manifest \
   "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
   "$overlay_manifest"
-spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "9.8.7+manager.0123456"
 spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
 cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
   "$overlay_manifest"
-spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "9.8.7+manager.0123456"
 spw_assert_json equal "$overlay_manifest" /name '"renamed"'
 spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
 spw_assert_json equal "$overlay_manifest" /skills '"./skills/"'
@@ -740,10 +744,20 @@ destination.write_text(
     encoding="utf-8",
 )
 PY
-spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "9.8.7+manager.0123456"
 spw_assert_json equal \
   "$overlay_manifest" /x_future_manifest/nested/2 '"preserve-me"'
 spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
+cat > "$overlay_manifest" <<'JSON'
+{
+  "name": "superpowers",
+  "unknown_integer": 9007199254740993
+}
+JSON
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "1.2.3+manager.d884ae0"
+grep -Fq '"unknown_integer": 9007199254740993' "$overlay_manifest"
 
 run_prepare_with_saved_selection() {
   config_dir="$1"
