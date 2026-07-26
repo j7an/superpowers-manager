@@ -103,3 +103,37 @@ void test("REF-CLEANUP-01 / REF-PIN-CLEANUP-01 signals clean only active workspa
     });
   }
 });
+
+void test("withWorkspace preserves the callback error when cleanup fails", async (t) => {
+  const parent = await sandbox(t);
+  const failure = new Error("callback failed");
+  const cleanupFailure = new Error("cleanup failed");
+  await assert.rejects(
+    withWorkspace(
+      parent,
+      "work-",
+      async () => {
+        throw failure;
+      },
+      {
+        cleanup: async () => {
+          throw cleanupFailure;
+        },
+      },
+    ),
+    (error) => error === failure,
+  );
+});
+
+void test("withWorkspace surfaces a cleanup failure when the callback succeeds", async (t) => {
+  const parent = await sandbox(t);
+  const cleanupFailure = new Error("cleanup failed");
+  await assert.rejects(
+    withWorkspace(parent, "work-", async () => 42, {
+      cleanup: async () => {
+        throw cleanupFailure;
+      },
+    }),
+    (error) => error === cleanupFailure,
+  );
+});
