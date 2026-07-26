@@ -29,6 +29,9 @@ export function normalizeCommitInput(value: string): string | null {
 export function parseStableTag(tag: string): StableVersion | null {
   if (!TAG_RE.test(tag)) return null;
   const core = tag.slice(1);
+  // Prerelease filter. Sound only because TAG_RE already matched: the numeric
+  // components cannot contain "-", so the sole way one reaches `core` is a
+  // prerelease suffix. Stable-tag selection must exclude those.
   if (core.includes("-")) return null;
   const [major, minor, patch] = core.split(".");
   return { major: BigInt(major), minor: BigInt(minor), patch: BigInt(patch) };
