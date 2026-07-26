@@ -29,8 +29,8 @@ def nesting_exceeds_limit(value):
 
 
 try:
-    with open(path, "r", encoding="utf-8") as handle:
-        data = json.load(handle, parse_constant=reject_constant)
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f, parse_constant=reject_constant)
 except RecursionError:
     sys.exit(f"JSON nesting exceeds limit in {path}")
 except json.JSONDecodeError as exc:
@@ -53,9 +53,9 @@ data["version"] = version
 data["skills"] = "./skills/"
 
 try:
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2, allow_nan=False)
-        handle.write("\n")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, allow_nan=False)
+        f.write("\n")
 except RecursionError as exc:
     sys.exit(f"manifest JSON nesting exceeds limit while writing {path}: {exc}")
 except (OSError, UnicodeError, ValueError) as exc:
