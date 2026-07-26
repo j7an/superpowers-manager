@@ -1285,7 +1285,7 @@ grep -Fq 'spw_node_cli "$root" adapter-cli.js' \
   "$root/scripts/adapters/codex/adapter"
 
 # Behavioural half: drive the real prepare path with a node shim that records
-# both variables specifically when hooks-cli.js is launched.
+# both variables specifically when adapter-cli.js is launched.
 seam_root="$tmpdir/hook-seam"
 seam_bin="$seam_root/bin"
 seam_log="$seam_root/hooks-node-env.log"
