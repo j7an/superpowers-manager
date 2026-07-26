@@ -7,9 +7,11 @@ README.md
 bin/superpowers-manager.js
 config/upstream-ref
 dist/atomic.js
+dist/cli-arguments.js
 dist/cli.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
+dist/git.js
 dist/provenance.js
 dist/python-json.js
 dist/safe-path.js
@@ -18,6 +20,9 @@ dist/selection-state-cli.js
 dist/selection-store.js
 dist/selection.js
 dist/strict-json.js
+dist/upstream-cli.js
+dist/upstream-version.js
+dist/upstream.js
 dist/workspace.js
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json

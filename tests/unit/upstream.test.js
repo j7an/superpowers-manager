@@ -1,6 +1,8 @@
 // @ts-check
 import assert from "node:assert/strict";
 import test from "node:test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 /** @type {typeof import("../../src/domain/refs.js")} */
 const { parseStableTag, compareStable, TAG_RE, SEMVER_BASE_RE } = await import(
@@ -614,4 +616,55 @@ void test("resolveExactTag prefers the peeled entry over the direct one", async 
     resolveExactTag("/srv/repo", "v1.2.3"),
   );
   assert.equal(commit, "2222222222222222222222222222222222222222");
+});
+
+const execFileAsync = promisify(execFile);
+const UPSTREAM_CLI = new URL("../../dist/upstream-cli.js", import.meta.url)
+  .pathname;
+
+/** @param {string[]} args */
+async function runCli(args) {
+  try {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [
+      UPSTREAM_CLI,
+      ...args,
+    ]);
+    return { status: 0, stdout, stderr };
+  } catch (error) {
+    const failure = /** @type {any} */ (error);
+    return {
+      status: failure.code,
+      stdout: failure.stdout ?? "",
+      stderr: failure.stderr ?? "",
+    };
+  }
+}
+
+void test("pin-kind classifies without normalizing", async () => {
+  assert.equal((await runCli(["pin-kind", "--ref=v6.0.3"])).stdout, "tag\n");
+  const upper = "ABCDEF1234567890abcdef1234567890ABCDEF12";
+  assert.equal(
+    (await runCli(["pin-kind", `--ref=${upper}`])).stdout,
+    "raw-commit\n",
+  );
+  assert.equal((await runCli(["pin-kind", "--ref=main"])).stdout, "none\n");
+  assert.equal((await runCli(["pin-kind", "--ref=v6.0"])).stdout, "none\n");
+});
+
+void test("manifest-version rejects an unknown resolution kind with usage status", async () => {
+  const result = await runCli([
+    "manifest-version",
+    "--requested-ref=main",
+    "--resolution-kind=bogus",
+    "--resolved-ref=main",
+    "--commit=896224c4b1879920ab573417e68fd51d2ccc9072",
+  ]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /unknown resolution kind: bogus/);
+});
+
+void test("an unknown subcommand exits 2", async () => {
+  const result = await runCli(["nope"]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /unknown subcommand: nope/);
 });
