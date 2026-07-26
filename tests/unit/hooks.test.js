@@ -51,7 +51,10 @@ async function seedUpstream(root) {
  */
 async function hookFailure(operation, expected) {
   await assert.rejects(operation, (error) => {
-    assert.ok(error instanceof SafetyError, `expected SafetyError, got ${error}`);
+    assert.ok(
+      error instanceof SafetyError,
+      `expected SafetyError, got ${String(error)}`,
+    );
     assert.equal(error.module, "hooks");
     assert.equal(error.message.startsWith(expected), true, error.message);
     return true;
@@ -61,7 +64,10 @@ async function hookFailure(operation, expected) {
 void test("readManifest rejects invalid UTF-8 bytes", async (t) => {
   const root = await sandbox(t);
   const path = join(root, "manifest.json");
-  await writeFile(path, Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d]));
+  await writeFile(
+    path,
+    Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d]),
+  );
   // readFile returns bytes without decoding, so the fatal decoder inside
   // parseStrictJson is what rejects this — the parse branch, not the read branch.
   await hookFailure(() => readManifest(path), "invalid manifest JSON in");
@@ -102,6 +108,7 @@ void test("readManifest accepts depth 256 and rejects depth 257", async (t) => {
   // Mirrors write_depth_256_manifest at
   // tests/test_prepare_with_fake_upstream.sh:191-207: the top-level object is
   // depth 1, so 255 nested arrays beneath it make depth 256, and 256 make 257.
+  /** @param {number} levels */
   const nest = (levels) => `${"[".repeat(levels)}0${"]".repeat(levels)}`;
   await writeFile(accepted, `{"x_future_manifest": ${nest(255)}}\n`);
   await writeFile(rejected, `{"x_future_manifest": ${nest(256)}}\n`);
@@ -169,7 +176,11 @@ void test("classifyHooks accepts a string declaration", async (t) => {
   const root = await sandbox(t);
   await seedUpstream(root);
   assert.deepEqual(
-    await classifyHooks({ hooks: "./hooks/hooks-codex.json" }, "upstream", root),
+    await classifyHooks(
+      { hooks: "./hooks/hooks-codex.json" },
+      "upstream",
+      root,
+    ),
     { copyHooksSubtree: true, declaredPaths: ["./hooks/hooks-codex.json"] },
   );
 });
@@ -458,7 +469,10 @@ void test("materializeHooks rejects a declared symlink that resolves outside the
   // copied link RESOLVES successfully in the candidate — so a following stat
   // alone would pass. Only the containment check rejects it. This is the test
   // that proves the second pass enforces containment, not mere existence.
-  await symlink(join(source, "bin", "target"), join(source, "config", "abs.json"));
+  await symlink(
+    join(source, "bin", "target"),
+    join(source, "config", "abs.json"),
+  );
   const plan = await classifyHooks(
     { hooks: "./config/abs.json" },
     "upstream",
