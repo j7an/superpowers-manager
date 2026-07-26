@@ -12,6 +12,8 @@ dist/cli.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
 dist/git.js
+dist/hooks-cli.js
+dist/hooks.js
 dist/provenance.js
 dist/python-json.js
 dist/safe-path.js
@@ -28,7 +30,6 @@ package.json
 plugins/superpowers/.codex-plugin/plugin.template.json
 scripts/adapters/codex/adapter
 scripts/adapters/codex/lib.sh
-scripts/adapters/codex/materialize-hooks.py
 scripts/adapters/codex/validate-generated-plugin.py
 scripts/core/adapter.sh
 scripts/core/common.sh

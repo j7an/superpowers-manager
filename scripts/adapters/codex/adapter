@@ -233,7 +233,7 @@ spw_codex_build() {
     "$messages_file" \
     "$scratch/hook-materialize.stdout" \
     "$scratch/hook-materialize.stderr" \
-    python3 -S "$root/scripts/adapters/codex/materialize-hooks.py" \
+    spw_node_cli "$root" hooks-cli.js 'hook materializer' \
       --manifest "$candidate_manifest" \
       --manifest-source "$manifest_source" \
       --upstream-root "$upstream_root" \

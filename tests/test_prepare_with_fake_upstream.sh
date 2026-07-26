@@ -32,27 +32,6 @@ git_tool_path="$tmpdir/git-tool-path"
 python3_log="$tmpdir/python3.log"
 real_python3=$(command -v python3)
 real_git=$(command -v git)
-materializer="$root/scripts/adapters/codex/materialize-hooks.py"
-grep -Fxq 'from __future__ import annotations' "$materializer"
-
-system_python=/usr/bin/python3
-if [ -x "$system_python" ]; then
-  system_python_version=$(
-    "$system_python" -S -c 'import sys; print("%d.%d" % sys.version_info[:2])'
-  )
-  if [ "$system_python_version" = "3.9" ]; then
-    "$system_python" -S -c '
-import runpy
-import sys
-
-assert sys.version_info[:2] == (3, 9)
-materializer = sys.argv[1]
-sys.argv = [materializer, "--help"]
-runpy.run_path(materializer, run_name="__main__")
-' "$materializer" >/dev/null
-  fi
-fi
-
 cat > "$recording_adapter" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >> "$SPW_TEST_ADAPTER_LOG"
@@ -294,6 +273,14 @@ set_manifest_hooks value '"./hooks/declared-escape"'
 ln -s "$tmpdir/outside-declared-hook" "$upstream/hooks/declared-escape"
 printf 'outside declared hook\n' > "$tmpdir/outside-declared-hook"
 commit_hook_ref hooks-declared-symlink-escape "declared hook symlink escapes upstream"
+
+git -C "$upstream" checkout -b hooks-declared-symlink-dangles >/dev/null
+set_manifest_hooks value '"./config/declared-link"'
+mkdir -p "$upstream/config" "$upstream/bin"
+printf 'contained declared target\n' > "$upstream/bin/declared-target"
+ln -s ../bin/declared-target "$upstream/config/declared-link"
+commit_hook_ref hooks-declared-symlink-dangles \
+  "declared hook symlink is contained in upstream but dangles in the candidate"
 
 git -C "$upstream" checkout -b hooks-subtree-symlink-escape >/dev/null
 ln -s ../../outside "$upstream/hooks/escape"
@@ -640,7 +627,7 @@ materialize_manifest="$materialize_candidate/.codex-plugin/plugin.json"
 mkdir -p "$materialize_upstream" \
   "$materialize_candidate/.codex-plugin"
 run_materializer() {
-  python3 -S "$root/scripts/adapters/codex/materialize-hooks.py" \
+  node "$root/dist/hooks-cli.js" \
     --manifest "$materialize_manifest" \
     --manifest-source upstream \
     --upstream-root "$materialize_upstream" \
@@ -652,14 +639,37 @@ if run_materializer >"$materialize_root/constant.out" 2>&1; then
   echo "hook materializer accepted a non-standard constant" >&2
   exit 1
 fi
-grep -Fq 'non-standard numeric constant' "$materialize_root/constant.out"
 cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
   "$materialize_manifest"
 if run_materializer >"$materialize_root/depth.out" 2>&1; then
   echo "hook materializer accepted depth 257" >&2
   exit 1
 fi
-grep -Fq 'JSON nesting exceeds limit' "$materialize_root/depth.out"
+printf '{"a": "\303\050"}\n' > "$materialize_manifest"
+if run_materializer >"$materialize_root/utf8.out" 2>&1; then
+  echo "hook materializer accepted invalid UTF-8" >&2
+  exit 1
+fi
+printf '[]\n' > "$materialize_manifest"
+if run_materializer >"$materialize_root/non-object.out" 2>&1; then
+  echo "hook materializer accepted a non-object manifest" >&2
+  exit 1
+fi
+cp "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
+  "$materialize_manifest"
+materialize_usage_status=0
+node "$root/dist/hooks-cli.js" \
+  --manifest "$materialize_manifest" \
+  --manifest-source bogus \
+  --upstream-root "$materialize_upstream" \
+  --candidate-root "$materialize_candidate" \
+  >"$materialize_root/usage.out" 2>"$materialize_root/usage.err" \
+  || materialize_usage_status=$?
+if [ "$materialize_usage_status" -ne 2 ]; then
+  echo "hook materializer usage error exited $materialize_usage_status, expected 2" >&2
+  exit 1
+fi
+grep -Fq 'unknown manifest source: bogus' "$materialize_root/usage.err"
 write_depth_256_manifest \
   "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
   "$materialize_manifest"
@@ -1137,6 +1147,9 @@ assert_hook_prepare_failure \
   "hooks-declared-symlink-escape" "out-hooks-declared-symlink-escape" \
   "hook classification failed: declared hook source escapes or could not be resolved"
 assert_hook_prepare_failure \
+  "hooks-declared-symlink-dangles" "out-hooks-declared-symlink-dangles" \
+  "hook materialization failed: materialized hook destination escapes or is broken"
+assert_hook_prepare_failure \
   "hooks-subtree-symlink-escape" "out-hooks-subtree-symlink-escape" \
   "hook materialization failed: symlink escapes or is broken"
 assert_hook_prepare_failure \
@@ -1322,5 +1335,61 @@ if [ "$template_before" != "$template_after" ]; then
   echo "prepare test must not mutate the committed manifest template" >&2
   exit 1
 fi
+
+# The hook seam must route through spw_node_cli, which scrubs NODE_OPTIONS and
+# NODE_PATH before exec'ing node. Structural half: the adapter really calls the
+# helper rather than bare node.
+grep -Fq 'spw_node_cli "$root" hooks-cli.js' \
+  "$root/scripts/adapters/codex/adapter"
+
+# Behavioural half: drive the real prepare path with a node shim that records
+# both variables specifically when hooks-cli.js is launched.
+seam_root="$tmpdir/hook-seam"
+seam_bin="$seam_root/bin"
+seam_log="$seam_root/hooks-node-env.log"
+mkdir -p "$seam_bin" "$seam_root/plugin"
+real_node=$(command -v node)
+cat > "$seam_bin/node" <<EOF
+#!/bin/sh
+case \$1 in
+  *hooks-cli.js)
+    {
+      printf 'NODE_OPTIONS=%s\n' "\${NODE_OPTIONS-unset}"
+      printf 'NODE_PATH=%s\n' "\${NODE_PATH-unset}"
+    } >> "$seam_log"
+    ;;
+esac
+exec "$real_node" "\$@"
+EOF
+chmod +x "$seam_bin/node"
+: > "$seam_log"
+
+SUPERPOWERS_REF=hooks-outside-path \
+  SUPERPOWERS_UPSTREAM_URL="$upstream" \
+  SUPERPOWERS_CACHE_DIR="$seam_root/cache" \
+  SUPERPOWERS_PLUGIN_ROOT="$seam_root/plugin" \
+  SUPERPOWERS_VALIDATOR= \
+  HOME="$home" \
+  NODE_OPTIONS="--require $seam_root/absent-preload.cjs" \
+  NODE_PATH="$seam_root" \
+  PATH="$seam_bin:$PATH" \
+  sh "$root/scripts/prepare" >"$seam_root/prepare.out" 2>"$seam_root/prepare.err"
+
+# The shim must have seen the hook invocation at all.
+grep -Fq 'NODE_OPTIONS=' "$seam_log" || {
+  echo "hook seam guard never observed a hooks-cli.js launch" >&2
+  cat "$seam_root/prepare.err" >&2
+  exit 1
+}
+grep -Fqx 'NODE_OPTIONS=unset' "$seam_log" || {
+  echo "hook seam did not scrub NODE_OPTIONS" >&2
+  cat "$seam_log" >&2
+  exit 1
+}
+grep -Fqx 'NODE_PATH=unset' "$seam_log" || {
+  echo "hook seam did not scrub NODE_PATH" >&2
+  cat "$seam_log" >&2
+  exit 1
+}
 
 echo "test_prepare_with_fake_upstream: OK"
