@@ -83,8 +83,10 @@ async function sandboxDir(t) {
 
 /**
  * Runs `fn` with PATH replaced, restoring it afterwards.
+ * @template T
  * @param {string} value
- * @param {() => Promise<unknown>} fn
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
  */
 async function withPath(value, fn) {
   const original = process.env.PATH;
