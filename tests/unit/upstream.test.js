@@ -149,3 +149,119 @@ void test("runGit pins the child environment", async (t) => {
   assert.equal(result.stdout.includes("LC_ALL=C\n"), true);
   assert.equal(result.stdout.includes("GIT_TERMINAL_PROMPT=0\n"), true);
 });
+
+/** @type {typeof import("../../src/upstream-version.js")} */
+const { manifestVersionForRef, sanitizeRefForVersion, shortCommit } =
+  await import(new URL("../../dist/upstream-version.js", import.meta.url).href);
+
+void test("manifestVersionForRef reproduces the shell derivation table", () => {
+  const commit = "896224c4b1879920ab573417e68fd51d2ccc9072";
+  assert.equal(shortCommit(commit), "896224c");
+
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "latest-release",
+      resolutionKind: "latest-release",
+      resolvedRef: "v6.0.3",
+      commit,
+    }),
+    "6.0.3+manager.896224c",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "v6.1.0-beta.1",
+      resolutionKind: "tag",
+      resolvedRef: "v6.1.0-beta.1",
+      commit: "abc1234abc1234abc1234abc1234abc1234abc12",
+    }),
+    "6.1.0-beta.1+manager.abc1234",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "main",
+      resolutionKind: "ref",
+      resolvedRef: "main",
+      commit: "def5678def5678def5678def5678def5678def56",
+    }),
+    "0.0.0-main+manager.def5678",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "feature/foo",
+      resolutionKind: "ref",
+      resolvedRef: "feature/foo",
+      commit: "fedcba9fedcba9fedcba9fedcba9fedcba9fedc",
+    }),
+    "0.0.0-ref-feature-foo+manager.fedcba9",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "042",
+      resolutionKind: "ref",
+      resolvedRef: "042",
+      commit: "0123abc0123abc0123abc0123abc0123abc0123",
+    }),
+    "0.0.0-ref-042+manager.0123abc",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: commit,
+      resolutionKind: "raw-commit",
+      resolvedRef: commit,
+      commit,
+    }),
+    "0.0.0+manager.896224c",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "v1.2.3",
+      resolutionKind: "ref",
+      resolvedRef: "v1.2.3",
+      commit,
+    }),
+    "0.0.0-ref-v1-2-3+manager.896224c",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "!!!",
+      resolutionKind: "ref",
+      resolvedRef: "!!!",
+      commit,
+    }),
+    "0.0.0-ref-unknown+manager.896224c",
+  );
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: "v1.2.3-042",
+      resolutionKind: "tag",
+      resolvedRef: "v1.2.3-042",
+      commit,
+    }),
+    "0.0.0+manager.896224c",
+    "an invalid prerelease falls through to the 0.0.0 form",
+  );
+
+  const longRef =
+    "feature/abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
+  assert.equal(
+    manifestVersionForRef({
+      requestedRef: longRef,
+      resolutionKind: "ref",
+      resolvedRef: longRef,
+      commit,
+    }),
+    "0.0.0-ref-feature-abcdefghijklmnopqrstuvwxyzabcdefghijklmn+manager.896224c",
+  );
+});
+
+void test("sanitizeRefForVersion collapses, trims, and truncates", () => {
+  assert.equal(
+    sanitizeRefForVersion(
+      "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu/tail",
+    ),
+    "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu",
+  );
+  assert.equal(sanitizeRefForVersion("!!!"), "unknown");
+  assert.equal(sanitizeRefForVersion("---"), "unknown");
+  assert.equal(sanitizeRefForVersion("a//b"), "a-b");
+});
