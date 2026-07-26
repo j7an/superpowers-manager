@@ -265,3 +265,190 @@ void test("sanitizeRefForVersion collapses, trims, and truncates", () => {
   assert.equal(sanitizeRefForVersion("---"), "unknown");
   assert.equal(sanitizeRefForVersion("a//b"), "a-b");
 });
+
+/** @type {typeof import("../../src/upstream.js")} */
+const {
+  parseLsRemote,
+  selectLatestRelease,
+  gitSafeSource,
+  verifyRawCommit,
+  fetchExactCommit,
+} = await import(new URL("../../dist/upstream.js", import.meta.url).href);
+
+const LS_REMOTE_FIXTURE = [
+  "1111111111111111111111111111111111111111\trefs/tags/v6.0.2",
+  "2222222222222222222222222222222222222222\trefs/tags/v6.0.2^{}",
+  "3333333333333333333333333333333333333333\trefs/tags/v6.0.10",
+  "4444444444444444444444444444444444444444\trefs/tags/v6.0.10^{}",
+  "5555555555555555555555555555555555555555\trefs/tags/v6.1.0-beta.1",
+  "6666666666666666666666666666666666666666\trefs/tags/v7.0",
+  "7777777777777777777777777777777777777777\trefs/tags/v8.0.0+build",
+  "",
+].join("\n");
+
+void test("selectLatestRelease picks the greatest stable tag and prefers peeled shas", () => {
+  assert.deepEqual(selectLatestRelease(parseLsRemote(LS_REMOTE_FIXTURE)), {
+    tag: "v6.0.10",
+    sha: "4444444444444444444444444444444444444444",
+  });
+});
+
+void test("selectLatestRelease ignores malformed leading-zero tags", () => {
+  const entries = parseLsRemote(
+    [
+      "1111111111111111111111111111111111111111\trefs/tags/v1.2.3",
+      "2222222222222222222222222222222222222222\trefs/tags/v01.2.3",
+      "3333333333333333333333333333333333333333\trefs/tags/v099.0.0",
+      "",
+    ].join("\n"),
+  );
+  assert.deepEqual(selectLatestRelease(entries), {
+    tag: "v1.2.3",
+    sha: "1111111111111111111111111111111111111111",
+  });
+});
+
+void test("selectLatestRelease orders components beyond ten digits numerically", () => {
+  const entries = parseLsRemote(
+    [
+      "1111111111111111111111111111111111111111\trefs/tags/v99999999999999999999.0.0",
+      "2222222222222222222222222222222222222222\trefs/tags/v9999999999.0.0",
+      "",
+    ].join("\n"),
+  );
+  assert.deepEqual(selectLatestRelease(entries), {
+    tag: "v99999999999999999999.0.0",
+    sha: "1111111111111111111111111111111111111111",
+  });
+});
+
+void test("selectLatestRelease returns null when no stable tag exists", () => {
+  assert.equal(selectLatestRelease(parseLsRemote("")), null);
+  assert.equal(
+    selectLatestRelease(
+      parseLsRemote(
+        "1111111111111111111111111111111111111111\trefs/tags/v6.1.0-beta.1\n",
+      ),
+    ),
+    null,
+  );
+});
+
+void test("gitSafeSource anchors bare relative paths and leaves others alone", () => {
+  assert.equal(
+    gitSafeSource("https://github.com/obra/superpowers"),
+    "https://github.com/obra/superpowers",
+  );
+  assert.equal(gitSafeSource("/tmp/repo"), "/tmp/repo");
+  assert.equal(gitSafeSource("git@host:repo.git"), "git@host:repo.git");
+  assert.equal(gitSafeSource("~/repo"), "~/repo");
+  assert.equal(gitSafeSource("relative"), `${process.cwd()}/relative`);
+});
+
+const COMMIT = "1234567890123456789012345678901234567890";
+
+/**
+ * A fake git whose `fetch` behavior is caller-supplied; `init` and `cat-file`
+ * succeed, with `cat-file` reporting a commit.
+ * @param {import("node:test").TestContext} t
+ * @param {string} fetchBody
+ */
+async function fakeGitFetch(t, fetchBody) {
+  return fakeGitDir(
+    t,
+    [
+      'for arg in "$@"; do',
+      '  case "$arg" in',
+      `    fetch) ${fetchBody} ;;`,
+      "    init) exit 0 ;;",
+      '    cat-file) printf "commit\\n"; exit 0 ;;',
+      "  esac",
+      "done",
+      "exit 0",
+    ].join("\n"),
+  );
+}
+
+void test("verifyRawCommit classifies an unavailable object", async (t) => {
+  const parent = await sandboxDir(t);
+  for (const marker of [
+    "not our ref",
+    "unadvertised object",
+    "couldn't find remote ref",
+  ]) {
+    const bin = await fakeGitFetch(
+      t,
+      `printf "fatal: ${marker} xyz\\n" >&2; exit 128`,
+    );
+    await assert.rejects(
+      withPath(bin, () => verifyRawCommit("/srv/repo", COMMIT, parent)),
+      (error) =>
+        error instanceof Error &&
+        error.message === `source cannot supply requested commit: ${COMMIT}`,
+      `marker: ${marker}`,
+    );
+  }
+});
+
+void test("verifyRawCommit reports other fetch failures as transport failures", async (t) => {
+  const parent = await sandboxDir(t);
+  const bin = await fakeGitFetch(t, "printf 'fatal: boom\\n' >&2; exit 128");
+  await assert.rejects(
+    withPath(bin, () => verifyRawCommit("/srv/repo", COMMIT, parent)),
+    (error) =>
+      error instanceof Error &&
+      error.message === "cannot fetch requested commit from /srv/repo",
+  );
+});
+
+void test("verifyRawCommit rejects a non-commit object and lowercases input", async (t) => {
+  const parent = await sandboxDir(t);
+  const upper = "ABCDEF1234567890ABCDEF1234567890ABCDEF12";
+  const bin = await fakeGitDir(
+    t,
+    [
+      'for arg in "$@"; do',
+      '  case "$arg" in',
+      '    cat-file) printf "blob\\n"; exit 0 ;;',
+      "  esac",
+      "done",
+      "exit 0",
+    ].join("\n"),
+  );
+  await assert.rejects(
+    withPath(bin, () => verifyRawCommit("/srv/repo", upper, parent)),
+    (error) =>
+      error instanceof Error &&
+      error.message ===
+        `requested object is not a commit: ${upper.toLowerCase()}`,
+  );
+});
+
+void test("fetchExactCommit re-initializes a cache whose .git is a file", async (t) => {
+  const parent = await sandboxDir(t);
+  const repository = join(parent, "cache");
+  await mkdir(repository);
+  await writeFile(join(repository, ".git"), "gitdir: /elsewhere\n", "utf8");
+  const log = join(parent, "argv.log");
+  const bin = await fakeGitDir(
+    t,
+    [
+      `printf '%s\\n' "$*" >> ${JSON.stringify(log)}`,
+      'for arg in "$@"; do',
+      '  case "$arg" in',
+      "    init) exit 0 ;;",
+      '    cat-file) printf "commit\\n"; exit 0 ;;',
+      "  esac",
+      "done",
+      "exit 0",
+    ].join("\n"),
+  );
+  await withPath(bin, () =>
+    fetchExactCommit("/srv/repo", COMMIT, repository, parent),
+  );
+  const argv = await readFile(log, "utf8");
+  assert.ok(
+    argv.includes(`init ${repository}`),
+    `expected a cache init, got:\n${argv}`,
+  );
+});
