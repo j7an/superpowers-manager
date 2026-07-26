@@ -18,11 +18,13 @@ export interface ProvenanceRecord {
 
 export const PROVENANCE_STRICT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
+  nonStandardConstants: "reject",
   maxDepth: 256,
 };
 
 export const PROVENANCE_LENIENT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
+  nonStandardConstants: "reject",
 };
 
 function asObject(value: JsonValue): { [key: string]: JsonValue } | undefined {

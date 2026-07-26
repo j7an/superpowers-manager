@@ -97,6 +97,8 @@ void test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", 
     '{"commit":42}',
     "[]",
     "NaN",
+    "Infinity",
+    "-Infinity",
     "{",
   ]) {
     await writeFile(file, value);

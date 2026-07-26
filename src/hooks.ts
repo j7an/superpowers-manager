@@ -31,6 +31,7 @@ export interface HookPlan {
 // unsupported profile field here rather than at the parseStrictJson call.
 const MANIFEST_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
+  nonStandardConstants: "reject",
   maxDepth: 256,
 };
 
