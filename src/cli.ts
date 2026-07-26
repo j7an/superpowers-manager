@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
 
 type Subcommand =
   | "pin"
@@ -44,9 +45,6 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   "update",
   "uninstall",
 ];
-const PIN_TAG_RE =
-  /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?$/;
-const PIN_COMMIT_RE = /^[0-9A-Fa-f]{40}$/;
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git", "python3"],
   "track-latest": ["python3"],
@@ -102,8 +100,8 @@ function parseArgs(argv: string[]): ParseResult {
     }
     if (
       command === "pin" &&
-      !PIN_TAG_RE.test(args[0]!) &&
-      !PIN_COMMIT_RE.test(args[0]!)
+      !TAG_RE.test(args[0]!) &&
+      !COMMIT_INPUT_RE.test(args[0]!)
     ) {
       return {
         kind: "usage-error",
