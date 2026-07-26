@@ -18,6 +18,7 @@ const { SafetyError } = await import(
 );
 /** @type {typeof import("../../src/selection.js")} */
 const {
+  displaySource,
   normalizePinnedArguments,
   normalizeSaved,
   serializeRecord,
@@ -150,6 +151,17 @@ void test("validateSource matches the bounded CPython urlsplit verdict corpus", 
   for (const source of ["", "line\nbreak", "nul\0byte"]) {
     assert.throws(() => validateSource(source), SafetyError, source);
   }
+});
+
+void test("displaySource redacts sources that fail validation", () => {
+  assert.equal(
+    displaySource("https://github.com/obra/superpowers"),
+    "https://github.com/obra/superpowers",
+  );
+  assert.equal(
+    displaySource("https://user:password@example.invalid/repo"),
+    "<redacted-source>",
+  );
 });
 
 void test("selection serializer preserves Python-compatible bytes", () => {

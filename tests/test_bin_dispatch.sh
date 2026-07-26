@@ -66,7 +66,7 @@ if grep -Fq 'dist/ not built' "$tmpdir/invalid-dist-err"; then
   exit 1
 fi
 
-cp "$root/dist/cli.js" "$pkg/dist/cli.js"
+cp -R "$root/dist/." "$pkg/dist/"
 
 # --- Routing: each subcommand reaches its script with its args ---
 : > "$log"

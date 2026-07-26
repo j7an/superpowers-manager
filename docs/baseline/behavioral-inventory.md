@@ -105,7 +105,7 @@ Track-latest bytes:
 |---|---|
 | `REF-PINNABLE-01` | Public `pin` accepts only an exact v-prefixed SemVer tag or full 40-hex commit. Tag build metadata, short commits, branches, and symbolic refs are rejected as usage errors. |
 | `REF-GENERIC-FALLBACK-01` | Outside persisted `pin` grammar, a non-empty runtime branch ref is resolved by trying the exact tag namespace first, then the same text as a generic ref; this includes a branch whose spelling resembles a tag. |
-| `REF-LATEST-STABLE-01` | `latest-release` considers v-prefixed tags, ignores prereleases and non-three-component tags, uses peeled annotated-tag commits, and selects the greatest numeric stable major/minor/patch. |
+| `REF-LATEST-STABLE-01` | `latest-release` considers v-prefixed tags, ignores prereleases and non-three-component tags, ignores tags whose core components carry leading zeros, uses peeled annotated-tag commits, and selects the greatest stable major/minor/patch compared as arbitrary-width numbers. |
 | `REF-PIN-SOURCE-01` | Public `pin` resolves exact tags only from the selected source’s tag namespace, peels annotated tags, normalizes raw commit input to lowercase, and saves the proven identity and source. |
 | `REF-SOURCE-PROOF-01` | Exact-commit proof uses an invocation-private repository, cannot be satisfied by an object already in the persistent cache, and accepts only a commit object supplied by the selected source. |
 | `REF-CLEANUP-01` | An interrupted exact-fetch source-proof removes only its invocation-owned proof repository and preserves sibling workspace content. |

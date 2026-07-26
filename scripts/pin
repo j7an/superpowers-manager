@@ -9,11 +9,8 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 [ "$#" -eq 1 ] || spw_usage_error 'usage: superpowers-manager pin REF'
 requested_ref="$1"
 
-if spw_is_pinnable_tag "$requested_ref"; then
-  requested_kind=tag
-elif spw_is_full_commit "$requested_ref"; then
-  requested_kind=raw-commit
-else
+requested_kind=$(spw_pin_kind "$requested_ref")
+if [ "$requested_kind" = none ]; then
   spw_usage_error 'pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit'
 fi
 

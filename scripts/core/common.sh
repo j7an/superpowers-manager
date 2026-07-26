@@ -57,3 +57,16 @@ spw_require_upstream_path() {
     spw_die "required upstream path missing: $label"
   fi
 }
+
+spw_node_cli() (
+  _root="$1"
+  _script="$2"
+  _label="$3"
+  shift 3
+  _path="$_root/dist/$_script"
+  if [ ! -f "$_path" ]; then
+    echo "error: $_label missing" >&2
+    return 1
+  fi
+  exec /bin/sh -c 'unset NODE_OPTIONS NODE_PATH; exec node "$@"' sh "$_path" "$@"
+)

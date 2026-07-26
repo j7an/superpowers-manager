@@ -36,15 +36,8 @@ spw_selection_state_path() {
 spw_selection_state_cli() {
   _spw_selection_state_root="$1"
   shift
-  _spw_selection_state_cli="$_spw_selection_state_root/dist/selection-state-cli.js"
-  if [ ! -f "$_spw_selection_state_cli" ]; then
-    echo 'error: selection state helper missing' >&2
-    return 1
-  fi
-  (
-    unset NODE_OPTIONS NODE_PATH
-    exec node "$_spw_selection_state_cli" "$@"
-  )
+  spw_node_cli "$_spw_selection_state_root" selection-state-cli.js \
+    'selection state helper' "$@"
 }
 
 spw_selection_state() {

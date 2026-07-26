@@ -142,6 +142,17 @@ export function validateSource(raw: unknown): string {
   return source;
 }
 
+export function displaySource(raw: unknown): string {
+  try {
+    return validateSource(raw);
+  } catch (cause) {
+    if (!(cause instanceof SafetyError) || cause.module !== "selection") {
+      throw cause;
+    }
+    return "<redacted-source>";
+  }
+}
+
 function validatePinnedRecord(
   record: JsonObject,
   source: string,

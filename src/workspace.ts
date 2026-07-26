@@ -49,11 +49,17 @@ function deregisterCoordinator(): void {
   handlers.clear();
 }
 
+export interface WorkspaceOptions {
+  readonly cleanup?: (path: string) => Promise<void>;
+}
+
 export async function withWorkspace<T>(
   parent: string,
   prefix: string,
   fn: (workspace: string) => T | Promise<T>,
+  options: WorkspaceOptions = {},
 ): Promise<T> {
+  const remove = options.cleanup ?? cleanup;
   let workspace: string;
   try {
     workspace = await mkdtemp(join(parent, prefix));
@@ -63,13 +69,24 @@ export async function withWorkspace<T>(
   active.add(workspace);
   registerCoordinator();
   try {
-    return await fn(workspace);
-  } finally {
+    let result!: T;
+    let failed = false;
+    let callbackError: unknown;
     try {
-      await cleanup(workspace);
-    } finally {
-      active.delete(workspace);
-      deregisterCoordinator();
+      result = await fn(workspace);
+    } catch (error) {
+      failed = true;
+      callbackError = error;
     }
+    try {
+      await remove(workspace);
+    } catch (cleanupError) {
+      throw failed ? callbackError : cleanupError;
+    }
+    if (failed) throw callbackError;
+    return result;
+  } finally {
+    active.delete(workspace);
+    deregisterCoordinator();
   }
 }
