@@ -496,7 +496,7 @@ async function runInstall(
         let registeredRoot: string;
         try {
           registeredRoot = marketplaceRootFromJson(
-            marketplaceList.stdout.toString("utf8"),
+            marketplaceList.stdout,
             MARKETPLACE_NAME,
           );
         } catch {
@@ -701,7 +701,7 @@ async function runInspect(
           let activeVersion: string;
           try {
             activeVersion = activePluginVersionFromJson(
-              listing.stdout.toString("utf8"),
+              listing.stdout,
               PLUGIN_ID,
             );
           } catch {
@@ -784,21 +784,19 @@ async function runInspect(
               `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
             );
           }
-          const pluginJson = plugins.stdout.toString("utf8");
-          const marketplaceJson = marketplaces.stdout.toString("utf8");
           let managerPlugin: boolean;
           let legacyPlugin: boolean;
           let managerMarketplace: boolean;
           let legacyMarketplace: boolean;
           try {
             managerPlugin = installedListingHas(
-              pluginJson,
+              plugins.stdout,
               "installed",
               "pluginId",
               PLUGIN_ID,
             );
             legacyPlugin = installedListingHas(
-              pluginJson,
+              plugins.stdout,
               "installed",
               "pluginId",
               LEGACY_PLUGIN_ID,
@@ -811,13 +809,13 @@ async function runInspect(
           }
           try {
             managerMarketplace = installedListingHas(
-              marketplaceJson,
+              marketplaces.stdout,
               "marketplaces",
               "name",
               MARKETPLACE_NAME,
             );
             legacyMarketplace = installedListingHas(
-              marketplaceJson,
+              marketplaces.stdout,
               "marketplaces",
               "name",
               LEGACY_MARKETPLACE_NAME,

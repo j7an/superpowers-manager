@@ -16,6 +16,20 @@ const { SafetyError } = await import(
 /** @param {number} depth */
 const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
+void test("marketplace reader rejects invalid UTF-8 bytes", () => {
+  assert.throws(
+    () =>
+      marketplaceRootFromJson(
+        Buffer.from(
+          '{"marketplaces":[{"name":"openai-\xffcurated","root":"/other"}]}',
+          "latin1",
+        ),
+        "superpowers-manager",
+      ),
+    SafetyError,
+  );
+});
+
 void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => {
   assert.equal(
     installedListingHas(

@@ -26,7 +26,10 @@ function object(value: JsonValue): JsonObject | undefined {
     : undefined;
 }
 
-function parseObject(raw: string, profile: StrictJsonProfile): JsonObject {
+function parseObject(
+  raw: string | Uint8Array,
+  profile: StrictJsonProfile,
+): JsonObject {
   let parsed: JsonValue;
   try {
     parsed = parseStrictJson(raw, profile);
@@ -39,7 +42,7 @@ function parseObject(raw: string, profile: StrictJsonProfile): JsonObject {
 }
 
 function checkedItems(
-  raw: string,
+  raw: string | Uint8Array,
   profile: StrictJsonProfile,
   arrayKey: string,
   field: string,
@@ -74,7 +77,7 @@ function hasTerminalControl(value: string): boolean {
 }
 
 export function installedListingHas(
-  raw: string,
+  raw: string | Uint8Array,
   arrayKey: string,
   field: string,
   value: string,
@@ -85,7 +88,7 @@ export function installedListingHas(
 }
 
 export function marketplaceRootFromJson(
-  raw: string,
+  raw: string | Uint8Array,
   marketplaceName: string,
 ): string {
   const items = checkedItems(raw, ACCEPT_CONSTANTS, "marketplaces", "name");
@@ -98,7 +101,7 @@ export function marketplaceRootFromJson(
 }
 
 export function activePluginVersionFromJson(
-  raw: string,
+  raw: string | Uint8Array,
   pluginId: string,
 ): string {
   const matches = checkedItems(

@@ -33,6 +33,12 @@ if [ "$1 $2 $3" = "plugin marketplace list" ] && [ "$4" = "--json" ]; then
   if [ "${FAKE_CODEX_LIST_EXIT:-0}" -ne 0 ]; then
     exit "$FAKE_CODEX_LIST_EXIT"
   fi
+  if [ "${FAKE_CODEX_LIST_INVALID_UTF8:-0}" -ne 0 ]; then
+    printf '%s\377%s\n' \
+      '{"marketplaces":[{"name":"openai-' \
+      'curated","root":"/other"}]}'
+    exit 0
+  fi
   if [ -n "${FAKE_CODEX_LIST_OUTPUT+x}" ]; then
     printf '%s\n' "$FAKE_CODEX_LIST_OUTPUT"
   else
@@ -117,6 +123,10 @@ unset FAKE_CODEX_LIST_EXIT
 FAKE_CODEX_LIST_OUTPUT='not json {{{'
 export FAKE_CODEX_LIST_OUTPUT
 assert_reconcile_fails_without_mutation malformed-json
+FAKE_CODEX_LIST_INVALID_UTF8=1
+export FAKE_CODEX_LIST_INVALID_UTF8
+assert_reconcile_fails_without_mutation invalid-utf8-json
+unset FAKE_CODEX_LIST_INVALID_UTF8
 FAKE_CODEX_LIST_OUTPUT='{"unexpected":[]}'
 assert_reconcile_fails_without_mutation schema-invalid-json
 FAKE_CODEX_LIST_OUTPUT='{"marketplaces":[{"name":"superpowers-manager","root":""}]}'
