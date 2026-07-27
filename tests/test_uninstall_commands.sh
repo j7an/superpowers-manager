@@ -172,11 +172,13 @@ set_update_control unsupported
 no_git_path="$tmpdir/no-git-path"
 mkdir -p "$no_git_path"
 real_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
+node_bin="$(node -e 'process.stdout.write(require("node:fs").realpathSync(process.execPath))')"
 for tool in awk cat cut dirname find grep head mktemp mv pwd rm sed sh tail tr; do
   real=$(command -v "$tool")
   ln -sf "$real" "$no_git_path/$tool"
 done
 ln -s "$real_python3" "$no_git_path/python3"
+ln -s "$node_bin" "$no_git_path/node"
 PATH="$no_git_path" XDG_CONFIG_HOME="$config_home" run_uninstall >"$state/out"
 grep -Fq 'plugin remove superpowers@superpowers-manager' "$log"
 grep -Fq 'plugin marketplace remove superpowers-manager' "$log"
