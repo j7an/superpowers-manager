@@ -136,7 +136,10 @@ function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;
 }
 
-function mapCodexLaunchFailure(cause: unknown, codexBin: string): never {
+function mapCodexLaunchFailure(
+  cause: unknown,
+  codexBin: string,
+): CommandResult {
   const code =
     cause !== null && typeof cause === "object" && "code" in cause
       ? String(cause.code)
@@ -144,7 +147,12 @@ function mapCodexLaunchFailure(cause: unknown, codexBin: string): never {
   if (code === "ENOENT" || code === "EACCES") {
     fail("command-not-found", `required Codex command not found: ${codexBin}`);
   }
-  throw cause;
+  return {
+    status: 1,
+    signal: null,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.alloc(0),
+  };
 }
 
 async function runCodexCommand(
@@ -155,7 +163,7 @@ async function runCodexCommand(
   try {
     return await runCommand(codexBin, args, env);
   } catch (cause) {
-    mapCodexLaunchFailure(cause, codexBin);
+    return mapCodexLaunchFailure(cause, codexBin);
   }
 }
 
@@ -430,6 +438,7 @@ async function runBuild(
         }
         return {};
       },
+      { cleanupFailure: "ignore" },
     );
   } catch (cause) {
     if (!entered) {
@@ -572,6 +581,7 @@ async function runInstall(
           },
         };
       },
+      { cleanupFailure: "ignore" },
     );
   } catch (cause) {
     if (!entered) {
@@ -643,6 +653,7 @@ async function runUninstall(
         }
         return {};
       },
+      { cleanupFailure: "ignore" },
     );
   } catch (cause) {
     if (!entered) {
@@ -702,9 +713,16 @@ async function runInspect(
           if (activeVersion.length === 0) {
             return { view: "fingerprint", fingerprint: null };
           }
-          const searchRoot =
-            env.SUPERPOWERS_INSTALLED_SEARCH_ROOT ||
-            join(env.HOME ?? "", ".codex");
+          let searchRoot = env.SUPERPOWERS_INSTALLED_SEARCH_ROOT;
+          if (!searchRoot) {
+            if (env.HOME === undefined) {
+              fail(
+                "inspect-failed",
+                "cannot inspect active Codex plugin fingerprint without HOME",
+              );
+            }
+            searchRoot = join(env.HOME || "/", ".codex");
+          }
           const activeRoot = installedRootForVersion(
             searchRoot,
             MARKETPLACE_NAME,
@@ -720,6 +738,7 @@ async function runInspect(
           }
           return { view: "fingerprint", fingerprint };
         },
+        { cleanupFailure: "ignore" },
       );
     } catch (cause) {
       if (!entered) {
@@ -830,6 +849,7 @@ async function runInspect(
                 : "neither",
           };
         },
+        { cleanupFailure: "ignore" },
       );
     } catch (cause) {
       if (!entered) {

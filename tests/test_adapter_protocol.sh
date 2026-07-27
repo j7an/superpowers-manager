@@ -507,6 +507,69 @@ RUN_RESULT="$tmpdir/empty-override-fingerprint.result.json"
 [ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = \
   cccccccccccccccccccccccccccccccccccccccc ]
 
+# An explicitly empty HOME follows shell expansion and resolves under /.codex,
+# never under the current directory.
+empty_home_cwd="$tmpdir/empty-home-cwd"
+empty_home_version="1.0.0+manager.eeeeeee"
+empty_home_cache="$empty_home_cwd/.codex/plugins/cache/superpowers-manager/superpowers/$empty_home_version"
+mkdir -p "$empty_home_cache"
+printf '%s\n' '{"commit":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}' \
+  > "$empty_home_cache/.superpowers-upstream.json"
+RUN_RESULT="$tmpdir/empty-home-fingerprint.result.json"
+RUN_STDOUT="$tmpdir/empty-home-fingerprint.stdout"
+RUN_STDERR="$tmpdir/empty-home-fingerprint.stderr"
+rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
+RUN_RC=0
+(
+  cd "$empty_home_cwd"
+  unset SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT
+  HOME=""
+  PATH="$default_bin:$PATH"
+  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+  SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$empty_home_version\"}]}"
+  export HOME PATH SPW_ADAPTER SPW_FINGERPRINT_LISTING
+  spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint
+) >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "operation")" = inspect ]
+[ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = inspect-failed ]
+if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
+  echo "an empty HOME must produce a controlled fingerprint failure" >&2
+  exit 1
+fi
+
+# An absent HOME must not make the fingerprint lookup read a cwd-relative
+# .codex directory. An explicitly empty HOME remains covered above.
+unset_home_cwd="$tmpdir/unset-home-cwd"
+unset_home_version="1.0.0+manager.ddddddd"
+unset_home_cache="$unset_home_cwd/.codex/plugins/cache/superpowers-manager/superpowers/$unset_home_version"
+mkdir -p "$unset_home_cache"
+printf '%s\n' '{"commit":"dddddddddddddddddddddddddddddddddddddddd"}' \
+  > "$unset_home_cache/.superpowers-upstream.json"
+RUN_RESULT="$tmpdir/unset-home-fingerprint.result.json"
+RUN_STDOUT="$tmpdir/unset-home-fingerprint.stdout"
+RUN_STDERR="$tmpdir/unset-home-fingerprint.stderr"
+rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
+RUN_RC=0
+(
+  cd "$unset_home_cwd"
+  unset HOME SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT
+  PATH="$default_bin:$PATH"
+  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+  SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$unset_home_version\"}]}"
+  export PATH SPW_ADAPTER SPW_FINGERPRINT_LISTING
+  spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint
+) >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
+[ "$RUN_RC" -eq 1 ]
+[ ! -f "$RUN_RESULT" ]
+[ "$(spw_json_get "$RUN_RESULT.response" "operation")" = inspect ]
+[ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = inspect-failed ]
+if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
+  echo "an unset HOME must produce a controlled fingerprint failure" >&2
+  exit 1
+fi
+
 # An explicitly present empty PATH component resolves a bare Codex command
 # from the current directory, as execvp-style PATH lookup requires.
 path_component_cwd="$tmpdir/path-component-cwd"
@@ -550,6 +613,40 @@ real_node=$(node -e \
 )
 [ "$(spw_json_get "$absent_path_out" operation)" = inspect ]
 [ "$(spw_json_get "$absent_path_out" error.code)" = command-not-found ]
+
+# A launch failure after the executable precheck must retain the inspect
+# envelope instead of leaking Node's ErrnoException through adapter-cli.
+busy_codex="$tmpdir/busy-codex"
+busy_lock="$tmpdir/busy-codex.lock"
+busy_ready="$tmpdir/busy-codex.ready"
+cat > "$busy_codex" <<'SH'
+#!/bin/sh
+exit 0
+SH
+chmod +x "$busy_codex"
+: > "$busy_lock"
+(
+  exec 9>"$busy_codex"
+  : > "$busy_ready"
+  while [ -f "$busy_lock" ]; do sleep 1; done
+) &
+busy_pid=$!
+while [ ! -f "$busy_ready" ]; do sleep 1; done
+busy_launch_out="$tmpdir/busy-launch.out"
+busy_launch_err="$tmpdir/busy-launch.err"
+busy_launch_rc=0
+SUPERPOWERS_CODEX="$busy_codex" \
+  "$real_node" "$root/dist/adapter-cli.js" inspect --view ownership \
+  >"$busy_launch_out" 2>"$busy_launch_err" || busy_launch_rc=$?
+rm -f "$busy_lock"
+wait "$busy_pid"
+[ "$busy_launch_rc" -eq 1 ]
+[ "$(spw_json_get "$busy_launch_out" operation)" = inspect ]
+[ "$(spw_json_get "$busy_launch_out" error.code)" = inspect-failed ]
+if grep -Fq 'ETXTBSY' "$busy_launch_err"; then
+  echo "a Codex launch error must not leak through adapter-cli" >&2
+  exit 1
+fi
 
 for invalid_listing in \
   '{' \

@@ -137,3 +137,37 @@ void test("withWorkspace surfaces a cleanup failure when the callback succeeds",
     (error) => error === cleanupFailure,
   );
 });
+
+void test("withWorkspace can preserve a successful callback result when cleanup fails", async (t) => {
+  const parent = await sandbox(t);
+  const cleanupFailure = new Error("cleanup failed");
+  const result = await withWorkspace(parent, "work-", async () => 42, {
+    cleanup: async () => {
+      throw cleanupFailure;
+    },
+    cleanupFailure: "ignore",
+  });
+  assert.equal(result, 42);
+});
+
+void test("withWorkspace preserves the callback error when ignored cleanup also fails", async (t) => {
+  const parent = await sandbox(t);
+  const callbackFailure = new Error("callback failed");
+  const cleanupFailure = new Error("cleanup failed");
+  await assert.rejects(
+    withWorkspace(
+      parent,
+      "work-",
+      async () => {
+        throw callbackFailure;
+      },
+      {
+        cleanup: async () => {
+          throw cleanupFailure;
+        },
+        cleanupFailure: "ignore",
+      },
+    ),
+    (error) => error === callbackFailure,
+  );
+});
