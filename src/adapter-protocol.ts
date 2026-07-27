@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import type { JsonValue } from "./strict-json.js";
 
 export type AdapterChannel = "stdout" | "stderr";
