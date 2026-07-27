@@ -619,91 +619,20 @@ assert_prepare_metadata_value() {
     "$tmpdir/$destination/.superpowers-upstream.json" "/$key" "$expected"
 }
 
-# BASELINE CASE: MANIFEST-READER-MATERIALIZE-01 hook materializer profile
-materialize_root="$tmpdir/materialize-reader"
-materialize_upstream="$materialize_root/upstream"
-materialize_candidate="$materialize_root/candidate"
-materialize_manifest="$materialize_candidate/.codex-plugin/plugin.json"
-mkdir -p "$materialize_upstream" \
-  "$materialize_candidate/.codex-plugin"
-run_materializer() {
-  node "$root/dist/hooks-cli.js" \
-    --manifest "$materialize_manifest" \
-    --manifest-source upstream \
-    --upstream-root "$materialize_upstream" \
-    --candidate-root "$materialize_candidate"
-}
-cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
-  "$materialize_manifest"
-if run_materializer >"$materialize_root/constant.out" 2>&1; then
-  echo "hook materializer accepted a non-standard constant" >&2
-  exit 1
-fi
-cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
-  "$materialize_manifest"
-if run_materializer >"$materialize_root/depth.out" 2>&1; then
-  echo "hook materializer accepted depth 257" >&2
-  exit 1
-fi
-printf '{"a": "\303\050"}\n' > "$materialize_manifest"
-if run_materializer >"$materialize_root/utf8.out" 2>&1; then
-  echo "hook materializer accepted invalid UTF-8" >&2
-  exit 1
-fi
-printf '[]\n' > "$materialize_manifest"
-if run_materializer >"$materialize_root/non-object.out" 2>&1; then
-  echo "hook materializer accepted a non-object manifest" >&2
-  exit 1
-fi
-cp "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
-  "$materialize_manifest"
-materialize_usage_status=0
-node "$root/dist/hooks-cli.js" \
-  --manifest "$materialize_manifest" \
-  --manifest-source bogus \
-  --upstream-root "$materialize_upstream" \
-  --candidate-root "$materialize_candidate" \
-  >"$materialize_root/usage.out" 2>"$materialize_root/usage.err" \
-  || materialize_usage_status=$?
-if [ "$materialize_usage_status" -ne 2 ]; then
-  echo "hook materializer usage error exited $materialize_usage_status, expected 2" >&2
-  exit 1
-fi
-grep -Fq 'unknown manifest source: bogus' "$materialize_root/usage.err"
-write_depth_256_manifest \
-  "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
-  "$materialize_manifest"
-run_materializer
-cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
-  "$materialize_manifest"
-run_materializer
-python3 -S - \
-  "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
-  "$materialize_manifest" <<'PY'
-from pathlib import Path
-import sys
-
-source, destination = map(Path, sys.argv[1:])
-destination.write_text(
-    source.read_text(encoding="utf-8") + " " * (1_048_576 + 1),
-    encoding="utf-8",
-)
-PY
-run_materializer
-
 # BASELINE CASE: MANIFEST-READER-OVERLAY-01 manifest overlay profile
-. "$root/scripts/adapters/codex/lib.sh"
 overlay_manifest="$tmpdir/overlay-reader.json"
 cp "$root/tests/fixtures/baseline/manifests/candidate-non-standard-constant.json" \
   "$overlay_manifest"
-if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+if python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+    "$overlay_manifest" "9.8.7+manager.0123456" \
     >"$tmpdir/overlay-constant.out" 2>&1; then
   echo "manifest overlay accepted a non-standard constant" >&2
   exit 1
 fi
 grep -Fq 'non-standard numeric constant' "$tmpdir/overlay-constant.out"
 printf '%s\n' '[]' > "$overlay_manifest"
-if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+if python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+    "$overlay_manifest" "9.8.7+manager.0123456" \
     >"$tmpdir/overlay-object.out" 2>&1; then
   echo "manifest overlay accepted a non-object" >&2
   exit 1
@@ -711,7 +640,8 @@ fi
 grep -Fq 'manifest must be a JSON object' "$tmpdir/overlay-object.out"
 cp "$root/tests/fixtures/baseline/selection/depth-257.json" \
   "$overlay_manifest"
-if spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456" \
+if python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+    "$overlay_manifest" "9.8.7+manager.0123456" \
     >"$tmpdir/overlay-depth.out" 2>&1; then
   echo "manifest overlay accepted depth 257" >&2
   exit 1
@@ -720,11 +650,13 @@ grep -Fq 'JSON nesting exceeds limit' "$tmpdir/overlay-depth.out"
 write_depth_256_manifest \
   "$root/tests/fixtures/baseline/manifests/candidate-unknown-field.json" \
   "$overlay_manifest"
-spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "9.8.7+manager.0123456"
 spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
 cp "$root/tests/fixtures/baseline/manifests/candidate-duplicate-key.json" \
   "$overlay_manifest"
-spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "9.8.7+manager.0123456"
 spw_assert_json equal "$overlay_manifest" /name '"renamed"'
 spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
 spw_assert_json equal "$overlay_manifest" /skills '"./skills/"'
@@ -740,10 +672,20 @@ destination.write_text(
     encoding="utf-8",
 )
 PY
-spw_apply_manifest_overlay "$overlay_manifest" "9.8.7+manager.0123456"
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "9.8.7+manager.0123456"
 spw_assert_json equal \
   "$overlay_manifest" /x_future_manifest/nested/2 '"preserve-me"'
 spw_assert_json equal "$overlay_manifest" /version '"9.8.7+manager.0123456"'
+cat > "$overlay_manifest" <<'JSON'
+{
+  "name": "superpowers",
+  "unknown_integer": 9007199254740993
+}
+JSON
+python3 -S "$root/scripts/adapters/codex/apply-manifest-overlay.py" \
+  "$overlay_manifest" "1.2.3+manager.d884ae0"
+grep -Fq '"unknown_integer": 9007199254740993' "$overlay_manifest"
 
 run_prepare_with_saved_selection() {
   config_dir="$1"
@@ -1339,11 +1281,11 @@ fi
 # The hook seam must route through spw_node_cli, which scrubs NODE_OPTIONS and
 # NODE_PATH before exec'ing node. Structural half: the adapter really calls the
 # helper rather than bare node.
-grep -Fq 'spw_node_cli "$root" hooks-cli.js' \
+grep -Fq 'spw_node_cli "$root" adapter-cli.js' \
   "$root/scripts/adapters/codex/adapter"
 
 # Behavioural half: drive the real prepare path with a node shim that records
-# both variables specifically when hooks-cli.js is launched.
+# both variables specifically when adapter-cli.js is launched.
 seam_root="$tmpdir/hook-seam"
 seam_bin="$seam_root/bin"
 seam_log="$seam_root/hooks-node-env.log"
@@ -1352,7 +1294,7 @@ real_node=$(command -v node)
 cat > "$seam_bin/node" <<EOF
 #!/bin/sh
 case \$1 in
-  *hooks-cli.js)
+  *adapter-cli.js)
     {
       printf 'NODE_OPTIONS=%s\n' "\${NODE_OPTIONS-unset}"
       printf 'NODE_PATH=%s\n' "\${NODE_PATH-unset}"
@@ -1377,17 +1319,17 @@ SUPERPOWERS_REF=hooks-outside-path \
 
 # The shim must have seen the hook invocation at all.
 grep -Fq 'NODE_OPTIONS=' "$seam_log" || {
-  echo "hook seam guard never observed a hooks-cli.js launch" >&2
+  echo "adapter seam guard never observed an adapter-cli.js launch" >&2
   cat "$seam_root/prepare.err" >&2
   exit 1
 }
 grep -Fqx 'NODE_OPTIONS=unset' "$seam_log" || {
-  echo "hook seam did not scrub NODE_OPTIONS" >&2
+  echo "adapter seam did not scrub NODE_OPTIONS" >&2
   cat "$seam_log" >&2
   exit 1
 }
 grep -Fqx 'NODE_PATH=unset' "$seam_log" || {
-  echo "hook seam did not scrub NODE_PATH" >&2
+  echo "adapter seam did not scrub NODE_PATH" >&2
   cat "$seam_log" >&2
   exit 1
 }

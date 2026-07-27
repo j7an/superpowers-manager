@@ -6,6 +6,7 @@ export type JsonValue =
 
 export interface StrictJsonProfile {
   readonly duplicateKeys: "reject" | "last-wins";
+  readonly nonStandardConstants: "reject" | "accept";
   readonly maxDepth?: number;
   readonly maxBytes?: number;
   readonly integerNumbersOnly?: boolean;
@@ -15,6 +16,17 @@ export function parseStrictJson(
   input: string | Uint8Array,
   profile: StrictJsonProfile,
 ): JsonValue {
+  const byteLength =
+    typeof input === "string"
+      ? Buffer.byteLength(input, "utf8")
+      : input.byteLength;
+  if (profile.maxBytes !== undefined && byteLength > profile.maxBytes) {
+    throw new SafetyError(
+      "strict-json",
+      `input exceeds ${profile.maxBytes} UTF-8 bytes`,
+    );
+  }
+
   let text: string;
   try {
     text =
@@ -25,17 +37,6 @@ export function parseStrictJson(
           );
   } catch (cause) {
     throw new SafetyError("strict-json", "input is not valid UTF-8", { cause });
-  }
-
-  const byteLength =
-    typeof input === "string"
-      ? Buffer.byteLength(input, "utf8")
-      : input.byteLength;
-  if (profile.maxBytes !== undefined && byteLength > profile.maxBytes) {
-    throw new SafetyError(
-      "strict-json",
-      `input exceeds ${profile.maxBytes} UTF-8 bytes`,
-    );
   }
 
   try {
@@ -63,6 +64,15 @@ class Parser {
   }
 
   private parseValue(depth: number): JsonValue {
+    if (this.text.startsWith("NaN", this.index)) {
+      return this.parseNonStandardConstant("NaN", Number.NaN);
+    }
+    if (this.text.startsWith("Infinity", this.index)) {
+      return this.parseNonStandardConstant("Infinity", Infinity);
+    }
+    if (this.text.startsWith("-Infinity", this.index)) {
+      return this.parseNonStandardConstant("-Infinity", -Infinity);
+    }
     const token = this.text[this.index];
     if (token === "{") return this.parseObject(depth + 1);
     if (token === "[") return this.parseArray(depth + 1);
@@ -186,6 +196,14 @@ class Parser {
     if (!this.text.startsWith(literal, this.index))
       this.fail("invalid literal");
     this.index += literal.length;
+    return value;
+  }
+
+  private parseNonStandardConstant(token: string, value: number): number {
+    if (this.profile.nonStandardConstants === "reject") {
+      this.fail(`non-standard JSON constant ${token}`);
+    }
+    this.index += token.length;
     return value;
   }
 

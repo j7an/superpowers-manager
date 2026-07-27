@@ -33,6 +33,9 @@ async function sandbox(t) {
   return directory;
 }
 
+/** @param {number} depth */
+const nested = (depth) => `${"[".repeat(depth)}0${"]".repeat(depth)}`;
+
 /**
  * @param {string} root
  * @returns {Promise<void>}
@@ -61,61 +64,28 @@ async function hookFailure(operation, expected) {
   });
 }
 
-void test("readManifest rejects invalid UTF-8 bytes", async (t) => {
-  const root = await sandbox(t);
-  const path = join(root, "manifest.json");
-  await writeFile(
-    path,
-    Buffer.from([0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d]),
-  );
-  // readFile returns bytes without decoding, so the fatal decoder inside
-  // parseStrictJson is what rejects this — the parse branch, not the read branch.
-  await hookFailure(() => readManifest(path), "invalid manifest JSON in");
-});
+void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix", async (t) => {
+  const directory = await sandbox(t);
+  const file = join(directory, "manifest.json");
 
-void test("readManifest rejects a non-object top level", async (t) => {
-  const root = await sandbox(t);
-  const path = join(root, "manifest.json");
-  await writeFile(path, "[]\n");
-  await hookFailure(() => readManifest(path), "manifest must be a JSON object");
-});
+  await writeFile(file, '{"hooks":"first","hooks":"last"}');
+  assert.deepEqual(await readManifest(file), { hooks: "last" });
 
-void test("readManifest rejects non-standard numeric constants", async (t) => {
-  const root = await sandbox(t);
-  const path = join(root, "manifest.json");
-  await writeFile(path, '{"a": Infinity}\n');
-  await hookFailure(() => readManifest(path), "invalid manifest JSON in");
-});
+  await writeFile(file, `{"padding":"${"x".repeat(1_048_577)}","hooks":{}}`);
+  assert.deepEqual((await readManifest(file)).hooks, {});
 
-void test("readManifest accepts duplicate keys with last-wins", async (t) => {
-  const root = await sandbox(t);
-  const path = join(root, "manifest.json");
-  await writeFile(path, '{"a": 1, "a": 2}\n');
-  assert.deepEqual(await readManifest(path), { a: 2 });
-});
+  await writeFile(file, `{"padding":${nested(255)}}`);
+  assert.ok("padding" in (await readManifest(file)));
 
-void test("readManifest accepts a manifest padded past 1 MiB", async (t) => {
-  const root = await sandbox(t);
-  const path = join(root, "manifest.json");
-  await writeFile(path, `{"a":1}${" ".repeat(1_048_577)}`);
-  assert.deepEqual(await readManifest(path), { a: 1 });
-});
-
-void test("readManifest accepts depth 256 and rejects depth 257", async (t) => {
-  const root = await sandbox(t);
-  const accepted = join(root, "accepted.json");
-  const rejected = join(root, "rejected.json");
-  // Mirrors write_depth_256_manifest at
-  // tests/test_prepare_with_fake_upstream.sh:191-207: the top-level object is
-  // depth 1, so 255 nested arrays beneath it make depth 256, and 256 make 257.
-  /** @param {number} levels */
-  const nest = (levels) => `${"[".repeat(levels)}0${"]".repeat(levels)}`;
-  await writeFile(accepted, `{"x_future_manifest": ${nest(255)}}\n`);
-  await writeFile(rejected, `{"x_future_manifest": ${nest(256)}}\n`);
-  const parsed = await readManifest(accepted);
-  assert.equal(typeof parsed, "object");
-  assert.ok(Object.hasOwn(parsed, "x_future_manifest"));
-  await hookFailure(() => readManifest(rejected), "invalid manifest JSON in");
+  for (const input of [
+    Buffer.from('{"padding":NaN}'),
+    Buffer.from(`{"padding":${nested(256)}}`),
+    Buffer.from("[]"),
+    Uint8Array.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xc3, 0x28]),
+  ]) {
+    await writeFile(file, input);
+    await assert.rejects(readManifest(file), SafetyError, String(input));
+  }
 });
 
 void test("classifyHooks rejects hooks in a fallback manifest", async (t) => {

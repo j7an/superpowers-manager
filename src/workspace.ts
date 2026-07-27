@@ -51,6 +51,7 @@ function deregisterCoordinator(): void {
 
 export interface WorkspaceOptions {
   readonly cleanup?: (path: string) => Promise<void>;
+  readonly cleanupFailure?: "ignore";
 }
 
 export async function withWorkspace<T>(
@@ -81,7 +82,9 @@ export async function withWorkspace<T>(
     try {
       await remove(workspace);
     } catch (cleanupError) {
-      throw failed ? callbackError : cleanupError;
+      if (failed || options.cleanupFailure !== "ignore") {
+        throw failed ? callbackError : cleanupError;
+      }
     }
     if (failed) throw callbackError;
     return result;

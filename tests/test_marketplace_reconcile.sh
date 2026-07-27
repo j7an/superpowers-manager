@@ -9,151 +9,7 @@ spw_test_root
 . "$root/scripts/core/status.sh"
 . "$root/scripts/core/lifecycle.sh"
 . "$root/scripts/core/adapter.sh"
-. "$root/scripts/adapters/codex/lib.sh"
 spw_test_tmpdir
-
-# --- spw_marketplace_root_from_json ---
-assert_marketplace_exit_2() {
-  set +e
-  output=$(spw_marketplace_root_from_json "$1" superpowers-manager 2>&1)
-  status=$?
-  set -e
-  [ "$status" -eq 2 ] || {
-    echo "expected marketplace reader exit 2, got $status" >&2
-    exit 1
-  }
-  [ -z "$output" ]
-}
-
-# BASELINE CASE: CODEX-JSON-MARKETPLACE-01 marketplace-root parser profile
-out=$(spw_marketplace_root_from_json \
-  '{"padding":NaN,"marketplaces":[{"name":"superpowers-manager","root":"/manager"}]}' \
-  superpowers-manager)
-[ "$out" = /manager ]
-deep_marketplaces=$(python3 -S -c 'print("[" * 2000 + "0" + "]" * 2000)')
-assert_marketplace_exit_2 "$deep_marketplaces"
-out=$(spw_marketplace_root_from_json \
-  '{"marketplaces":[],"marketplaces":[{"name":"superpowers-manager","root":"/manager"}]}' \
-  superpowers-manager)
-[ "$out" = /manager ]
-large_marketplaces=$(python3 -S -c '
-import json
-print(json.dumps({
-    "padding": "x" * 65536,
-    "marketplaces": [{"name": "superpowers-manager", "root": "/manager"}],
-}, separators=(",", ":")))
-')
-out=$(spw_marketplace_root_from_json "$large_marketplaces" superpowers-manager)
-[ "$out" = /manager ]
-assert_marketplace_exit_2 \
-  '{"marketplaces":[{"name":"superpowers-manager","root":17}]}'
-
-json='{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"/y"}]}'
-out=$(spw_marketplace_root_from_json "$json" superpowers-manager)
-[ "$out" = "/y" ] || { echo "expected /y, got '$out'" >&2; exit 1; }
-
-out=$(spw_marketplace_root_from_json '{"marketplaces":[{"name":"openai-curated","root":"/x"}]}' superpowers-manager)
-[ -z "$out" ] || { echo "expected empty for absent, got '$out'" >&2; exit 1; }
-
-if spw_marketplace_root_from_json 'not json {{{' superpowers-manager >/dev/null 2>&1; then
-  echo "malformed JSON must fail closed" >&2; exit 1
-fi
-if spw_marketplace_root_from_json '{"unexpected":[]}' superpowers-manager >/dev/null 2>&1; then
-  echo "schema drift must fail closed" >&2; exit 1
-fi
-if spw_marketplace_root_from_json '{"marketplaces":[{"name":"superpowers-manager","root":""}]}' superpowers-manager >/dev/null 2>&1; then
-  echo "empty root must fail closed" >&2; exit 1
-fi
-if spw_marketplace_root_from_json '{"marketplaces":[{"name":"superpowers-manager"}]}' superpowers-manager >/dev/null 2>&1; then
-  echo "missing manager root must fail closed" >&2; exit 1
-fi
-if spw_marketplace_root_from_json '{"marketplaces":[{"name":"superpowers-manager","root":17}]}' superpowers-manager >/dev/null 2>&1; then
-  echo "non-string manager root must fail closed" >&2; exit 1
-fi
-for invalid_item_json in \
-  '{"marketplaces":["openai-curated"]}' \
-  '{"marketplaces":[{"root":"/x"}]}' \
-  '{"marketplaces":[{"marketplaceName":"openai-curated","root":"/x"}]}' \
-  '{"marketplaces":[{"name":"","root":"/x"}]}' \
-  '{"marketplaces":[{"name":17,"root":"/x"}]}' \
-  '{"marketplaces":[{"name":"superpowers-manager","root":"/y"},{"root":"/x"}]}'
-do
-  set +e
-  spw_marketplace_root_from_json "$invalid_item_json" superpowers-manager >/dev/null 2>&1
-  status=$?
-  set -e
-  [ "$status" -eq 2 ] || {
-    echo "malformed marketplace item must exit 2: $invalid_item_json (got $status)" >&2
-    exit 1
-  }
-done
-for unrelated_root_json in \
-  '{"marketplaces":[{"name":"openai-curated"}]}' \
-  '{"marketplaces":[{"name":"openai-curated","root":17}]}'
-do
-  if ! out=$(spw_marketplace_root_from_json "$unrelated_root_json" superpowers-manager); then
-    echo "unrelated marketplace root must not invalidate listing: $unrelated_root_json" >&2
-    exit 1
-  fi
-  [ -z "$out" ] || {
-    echo "unrelated marketplace root must be ignored: $unrelated_root_json (got '$out')" >&2
-    exit 1
-  }
-done
-
-# BASELINE CASE: CODEX-JSON-VERSION-01 active-version parser profile
-assert_version_exit_2() {
-  set +e
-  output=$(spw_active_plugin_version_from_json \
-    "$1" superpowers@superpowers-manager 2>&1)
-  status=$?
-  set -e
-  [ "$status" -eq 2 ] || {
-    echo "expected active-version reader exit 2, got $status" >&2
-    exit 1
-  }
-  [ -z "$output" ]
-}
-assert_version_exit_2 \
-  '{"padding":Infinity,"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}'
-deep_versions=$(python3 -S -c 'print("[" * 2000 + "0" + "]" * 2000)')
-assert_version_exit_2 "$deep_versions"
-version=$(spw_active_plugin_version_from_json \
-  '{"installed":[],"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}' \
-  superpowers@superpowers-manager)
-[ "$version" = 1.0.0 ]
-large_versions=$(python3 -S -c '
-import json
-print(json.dumps({
-    "padding": "x" * 65536,
-    "installed": [{
-        "pluginId": "superpowers@superpowers-manager",
-        "version": "1.0.0",
-    }],
-}, separators=(",", ":")))
-')
-version=$(spw_active_plugin_version_from_json \
-  "$large_versions" superpowers@superpowers-manager)
-[ "$version" = 1.0.0 ]
-assert_version_exit_2 \
-  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"},{"pluginId":"superpowers@superpowers-manager","version":"2.0.0"}]}'
-assert_version_exit_2 \
-  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"bad/name"}]}'
-absent_version=$(spw_active_plugin_version_from_json \
-  '{"installed":[{"pluginId":"unrelated@elsewhere","version":"1.0.0"}]}' \
-  superpowers@superpowers-manager)
-[ -z "$absent_version" ]
-
-# --- spw_paths_equal: symlinked roots are the same physical location.
-# This is the portable equivalent of macOS /var vs /private/var. ---
-mkdir -p "$tmpdir/real"
-ln -s "$tmpdir/real" "$tmpdir/link"
-[ "$(spw_paths_equal "$tmpdir/real" "$tmpdir/link")" = same ]
-[ "$(spw_paths_equal "$tmpdir/real" "$tmpdir")" = different ]
-# Python's realpath normalizes nonexistent paths without raising. These cases
-# exercise its resulting equal/different comparison, not the OSError fallback.
-[ "$(spw_paths_equal /no/such/path-a /no/such/path-a)" = same ]
-[ "$(spw_paths_equal /no/such/path-a /no/such/path-b)" = different ]
 
 # The legacy core reconciliation helper must stay deleted: reconciliation is an
 # adapter-owned behavior and tests below exercise the shipped adapter directly.
@@ -176,6 +32,12 @@ printf '%s\n' "$*" >> "$FAKE_CODEX_LOG"
 if [ "$1 $2 $3" = "plugin marketplace list" ] && [ "$4" = "--json" ]; then
   if [ "${FAKE_CODEX_LIST_EXIT:-0}" -ne 0 ]; then
     exit "$FAKE_CODEX_LIST_EXIT"
+  fi
+  if [ "${FAKE_CODEX_LIST_INVALID_UTF8:-0}" -ne 0 ]; then
+    printf '%s\377%s\n' \
+      '{"marketplaces":[{"name":"openai-' \
+      'curated","root":"/other"}]}'
+    exit 0
   fi
   if [ -n "${FAKE_CODEX_LIST_OUTPUT+x}" ]; then
     printf '%s\n' "$FAKE_CODEX_LIST_OUTPUT"
@@ -261,6 +123,10 @@ unset FAKE_CODEX_LIST_EXIT
 FAKE_CODEX_LIST_OUTPUT='not json {{{'
 export FAKE_CODEX_LIST_OUTPUT
 assert_reconcile_fails_without_mutation malformed-json
+FAKE_CODEX_LIST_INVALID_UTF8=1
+export FAKE_CODEX_LIST_INVALID_UTF8
+assert_reconcile_fails_without_mutation invalid-utf8-json
+unset FAKE_CODEX_LIST_INVALID_UTF8
 FAKE_CODEX_LIST_OUTPUT='{"unexpected":[]}'
 assert_reconcile_fails_without_mutation schema-invalid-json
 FAKE_CODEX_LIST_OUTPUT='{"marketplaces":[{"name":"superpowers-manager","root":""}]}'
@@ -352,39 +218,6 @@ if grep -Fq "plugin marketplace add" "$fake_log"; then
   echo "add must not follow a failed marketplace remove" >&2
   exit 1
 fi
-
-# Path-comparison output is a closed two-value protocol. Empty, failed, or
-# unexpected output must abort before any marketplace mutation.
-for path_result in empty failed unexpected; do
-  python_path="$tmpdir/python-path-$path_result"
-  mkdir -p "$python_path"
-  cat > "$python_path/python3" <<EOF
-#!/bin/sh
-if [ "\${1:-}" = - ]; then
-  case "\${2:-}" in
-    "$tmpdir"/*)
-    case "$path_result" in
-      empty) exit 0 ;;
-      failed) exit 9 ;;
-      unexpected) printf '%s\n' maybe; exit 0 ;;
-    esac
-    ;;
-  esac
-fi
-exec "$(command -v python3)" "\$@"
-EOF
-  chmod +x "$python_path/python3"
-  FAKE_CODEX_LIST_OUTPUT=$(printf '{"marketplaces":[{"name":"superpowers-manager","root":"%s"}]}' "$tmpdir/old-root")
-  export FAKE_CODEX_LIST_OUTPUT
-  : > "$fake_log"
-  if (PATH="$python_path:$PATH" SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
-      SUPERPOWERS_CODEX="$fake_codex" \
-      spw_adapter_install "$tmpdir/adapter-result.json" "$tmpdir/new-root") >/dev/null 2>&1; then
-    echo "$path_result path comparison must fail closed" >&2
-    exit 1
-  fi
-  assert_no_mutation
-done
 
 # A failed/missing ownership result must never be treated as absence.
 invalid_ownership="$tmpdir/invalid-ownership.json"

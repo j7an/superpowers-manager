@@ -18,11 +18,18 @@ export interface ProvenanceRecord {
 
 export const PROVENANCE_STRICT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
+  nonStandardConstants: "reject",
   maxDepth: 256,
 };
 
 export const PROVENANCE_LENIENT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
+  nonStandardConstants: "reject",
+};
+
+export const PROVENANCE_CODEX_SOURCE_PROFILE: StrictJsonProfile = {
+  duplicateKeys: "last-wins",
+  nonStandardConstants: "accept",
 };
 
 function asObject(value: JsonValue): { [key: string]: JsonValue } | undefined {
@@ -82,6 +89,29 @@ export async function readGeneratedCommitLenient(
       : "";
   } catch {
     return "";
+  }
+}
+
+export async function readCodexBuildSource(path: string): Promise<string> {
+  try {
+    const parsed = parseStrictJson(
+      await readFile(path),
+      PROVENANCE_CODEX_SOURCE_PROFILE,
+    );
+    const source = asObject(parsed)?.source;
+    if (typeof source !== "string" || source.length === 0) {
+      throw new SafetyError("provenance", `invalid Codex source in ${path}`);
+    }
+    return source;
+  } catch (cause) {
+    if (cause instanceof SafetyError && cause.module === "provenance") {
+      throw cause;
+    }
+    throw new SafetyError(
+      "provenance",
+      `cannot read Codex source from ${path}`,
+      { cause },
+    );
   }
 }
 

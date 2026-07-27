@@ -12,9 +12,17 @@ const { parseStrictJson } = await import(
 );
 
 /** @type {import("../../src/strict-json.js").StrictJsonProfile} */
-const reject = { duplicateKeys: "reject" };
+const reject = { duplicateKeys: "reject", nonStandardConstants: "reject" };
 /** @type {import("../../src/strict-json.js").StrictJsonProfile} */
-const lastWins = { duplicateKeys: "last-wins" };
+const lastWins = {
+  duplicateKeys: "last-wins",
+  nonStandardConstants: "reject",
+};
+/** @type {import("../../src/strict-json.js").StrictJsonProfile} */
+const acceptConstants = {
+  duplicateKeys: "last-wins",
+  nonStandardConstants: "accept",
+};
 /** @param {number} depth */
 const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
@@ -32,6 +40,7 @@ void test("depth cap accepts 256 containers and rejects 257", () => {
   assert.doesNotThrow(() =>
     parseStrictJson(nested(256), {
       duplicateKeys: "reject",
+      nonStandardConstants: "reject",
       maxDepth: 256,
     }),
   );
@@ -39,6 +48,7 @@ void test("depth cap accepts 256 containers and rejects 257", () => {
     () =>
       parseStrictJson(nested(257), {
         duplicateKeys: "reject",
+        nonStandardConstants: "reject",
         maxDepth: 256,
       }),
     SafetyError,
@@ -53,6 +63,39 @@ void test("grammar rejects constants, malformed input, and trailing input", () =
   for (const text of ["NaN", "Infinity", "-Infinity", "{", "[1,]", "true x"]) {
     assert.throws(() => parseStrictJson(text, reject), SafetyError, text);
   }
+});
+
+void test("non-standard constants are an explicit exact-token policy", () => {
+  assert.ok(Number.isNaN(parseStrictJson("NaN", acceptConstants)));
+  assert.equal(parseStrictJson("Infinity", acceptConstants), Infinity);
+  assert.equal(parseStrictJson("-Infinity", acceptConstants), -Infinity);
+
+  for (const text of ["NaN", "Infinity", "-Infinity"]) {
+    assert.throws(
+      () => parseStrictJson(text, reject),
+      (error) =>
+        error instanceof SafetyError &&
+        error.message.startsWith(`non-standard JSON constant ${text} at `),
+      text,
+    );
+  }
+  for (const text of ["nan", "infinity", "+Infinity"]) {
+    assert.throws(() => parseStrictJson(text, acceptConstants), SafetyError);
+  }
+});
+
+void test("maxBytes rejects before UTF-8 decoding", () => {
+  assert.throws(
+    () =>
+      parseStrictJson(Uint8Array.from([0xc3, 0x28]), {
+        duplicateKeys: "reject",
+        nonStandardConstants: "reject",
+        maxBytes: 1,
+      }),
+    (error) =>
+      error instanceof SafetyError &&
+      error.message === "input exceeds 1 UTF-8 bytes",
+  );
 });
 
 void test("byte input uses fatal UTF-8 decoding", () => {
@@ -72,13 +115,18 @@ void test("byte input rejects a UTF-8 BOM", () => {
 
 void test("maxBytes is an inclusive UTF-8 byte boundary", () => {
   assert.equal(
-    parseStrictJson('"é"', { duplicateKeys: "reject", maxBytes: 4 }),
+    parseStrictJson('"é"', {
+      duplicateKeys: "reject",
+      nonStandardConstants: "reject",
+      maxBytes: 4,
+    }),
     "é",
   );
   assert.throws(
     () =>
       parseStrictJson('"é"', {
         duplicateKeys: "reject",
+        nonStandardConstants: "reject",
         maxBytes: 3,
       }),
     SafetyError,
@@ -105,6 +153,7 @@ void test("optional integer-token profile rejects decimal and exponent spellings
   /** @type {import("../../src/strict-json.js").StrictJsonProfile} */
   const integersOnly = {
     duplicateKeys: "reject",
+    nonStandardConstants: "reject",
     integerNumbersOnly: true,
   };
   assert.equal(parseStrictJson("1", integersOnly), 1);

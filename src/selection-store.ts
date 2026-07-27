@@ -18,6 +18,7 @@ import { parseStrictJson, type StrictJsonProfile } from "./strict-json.js";
 
 const SELECTION_JSON_PROFILE: StrictJsonProfile = {
   duplicateKeys: "reject",
+  nonStandardConstants: "reject",
   maxDepth: 256,
   // integerNumbersOnly owns lexical 1.0/1e0 rejection.
   integerNumbersOnly: true,

@@ -8,6 +8,7 @@ import test from "node:test";
 /** @type {typeof import("../../src/provenance.js")} */
 const {
   readGeneratedCommitLenient,
+  readCodexBuildSource,
   readStrictProvenanceField,
   serializeProvenance,
   writeProvenance,
@@ -29,6 +30,25 @@ async function sandbox(t) {
 
 /** @param {number} depth */
 const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
+
+void test("Codex build source reader preserves its accepting profile", async (t) => {
+  const directory = await sandbox(t);
+  const file = join(directory, "provenance.json");
+  await writeFile(
+    file,
+    '{"padding":Infinity,"source":"https://example.invalid/repo"}',
+  );
+  assert.equal(
+    await readCodexBuildSource(file),
+    "https://example.invalid/repo",
+  );
+  await writeFile(file, '{"source":"first","source":"last"}');
+  assert.equal(await readCodexBuildSource(file), "last");
+  for (const text of ["{", "[]", "{}", '{"source":7}', '{"source":""}']) {
+    await writeFile(file, text);
+    await assert.rejects(readCodexBuildSource(file), SafetyError, text);
+  }
+});
 
 void test("PROV-READER-STRICT-01 reads fields under the strict provenance profile", async (t) => {
   const directory = await sandbox(t);
@@ -97,6 +117,8 @@ void test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", 
     '{"commit":42}',
     "[]",
     "NaN",
+    "Infinity",
+    "-Infinity",
     "{",
   ]) {
     await writeFile(file, value);
