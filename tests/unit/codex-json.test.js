@@ -37,12 +37,12 @@ void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => 
   );
   assert.equal(
     installedListingHas(
-      `{"padding":"${"x".repeat(65_536)}","installed":[]}`,
+      `{"padding":"${"x".repeat(65_536)}","installed":[{"pluginId":"target@provider"}]}`,
       "installed",
       "pluginId",
       "target@provider",
     ),
-    false,
+    true,
   );
   assert.equal(
     installedListingHas(
@@ -115,10 +115,10 @@ void test("CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix", () => 
   );
   assert.equal(
     marketplaceRootFromJson(
-      `{"padding":"${"x".repeat(65_536)}","marketplaces":[]}`,
+      `{"padding":"${"x".repeat(65_536)}","marketplaces":[{"name":"superpowers-manager","root":"/manager"}]}`,
       "superpowers-manager",
     ),
-    "",
+    "/manager",
   );
   for (const raw of [
     "{",

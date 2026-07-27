@@ -46,7 +46,7 @@ void test("Codex build source reader preserves its accepting profile", async (t)
   assert.equal(await readCodexBuildSource(file), "last");
   for (const text of ["{", "[]", "{}", '{"source":7}', '{"source":""}']) {
     await writeFile(file, text);
-    await assert.rejects(readCodexBuildSource(file), text);
+    await assert.rejects(readCodexBuildSource(file), SafetyError, text);
   }
 });
 

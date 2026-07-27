@@ -5,6 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+/** @type {typeof import("../../src/safety-error.js")} */
+const { SafetyError } = await import(
+  new URL("../../dist/safety-error.js", import.meta.url).href
+);
+
 /** @type {typeof import("../../src/codex-state.js")} */
 const {
   codexMetadataCommit,
@@ -53,7 +58,7 @@ void test("PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix", asyn
     `{"commit":"${full}","padding":${nested(256)}}`,
   ]) {
     await writeFile(file, text);
-    await assert.rejects(codexMetadataCommit(file), text);
+    await assert.rejects(codexMetadataCommit(file), SafetyError, text);
   }
 });
 
@@ -95,7 +100,7 @@ void test("MANIFEST-READER-INSTALLED-01 installed manifest complete matrix", asy
     `{"version":"6.1.1+manager.d884ae0","padding":${nested(256)}}`,
   ]) {
     await writeFile(file, text);
-    await assert.rejects(manifestShortSha(file), text);
+    await assert.rejects(manifestShortSha(file), SafetyError, text);
   }
 });
 

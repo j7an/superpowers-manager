@@ -84,7 +84,7 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
     Uint8Array.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xc3, 0x28]),
   ]) {
     await writeFile(file, input);
-    await assert.rejects(readManifest(file), String(input));
+    await assert.rejects(readManifest(file), SafetyError, String(input));
   }
 });
 
