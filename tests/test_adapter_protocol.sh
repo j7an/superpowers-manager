@@ -398,6 +398,16 @@ if "$root/scripts/adapters/codex/adapter" "" \
 fi
 [ "$(spw_json_get "$empty_operation_out" operation)" = adapter ]
 [ "$(spw_json_get "$empty_operation_out" error.code)" = invalid-arguments ]
+
+unknown_operation_out="$tmpdir/unknown-operation.out"
+if "$root/scripts/adapters/codex/adapter" future-operation \
+  >"$unknown_operation_out" 2>/dev/null; then
+  echo "unknown adapter operation invocation must fail" >&2
+  exit 1
+fi
+[ "$(spw_json_get "$unknown_operation_out" operation)" = future-operation ]
+[ "$(spw_json_get "$unknown_operation_out" error.code)" = unsupported-operation ]
+
 grep -Fxq 'error: codex plugin add failed for superpowers@superpowers-manager' "$RUN_STDERR"
 if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
   echo "escaped Codex output must not poison a controlled failure envelope" >&2
@@ -516,6 +526,28 @@ RUN_RESULT="$tmpdir/empty-path-component-fingerprint.result.json"
 )
 [ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = \
   bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]
+
+# An absent PATH does not synthesize a current-directory search component.
+absent_path_cwd="$tmpdir/absent-path-cwd"
+mkdir -p "$absent_path_cwd"
+ln -s "$fingerprint_codex" "$absent_path_cwd/codex-absent-path"
+absent_path_out="$tmpdir/absent-path.out"
+real_node=$(node -e \
+  'process.stdout.write(require("node:fs").realpathSync(process.execPath))')
+(
+  cd "$absent_path_cwd"
+  unset PATH
+  SUPERPOWERS_CODEX=codex-absent-path
+  SPW_FINGERPRINT_LISTING='{"installed":[]}'
+  export SUPERPOWERS_CODEX SPW_FINGERPRINT_LISTING
+  if "$real_node" "$root/dist/adapter-cli.js" inspect --view fingerprint \
+    >"$absent_path_out" 2>/dev/null; then
+    echo "absent PATH must not search the current directory" >&2
+    exit 1
+  fi
+)
+[ "$(spw_json_get "$absent_path_out" operation)" = inspect ]
+[ "$(spw_json_get "$absent_path_out" error.code)" = command-not-found ]
 
 for invalid_listing in \
   '{' \
