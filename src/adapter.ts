@@ -207,8 +207,9 @@ async function commandAvailable(
   env: NodeJS.ProcessEnv,
 ): Promise<boolean> {
   if (command.includes("/")) return executable(command);
-  for (const directory of (env.PATH ?? "").split(delimiter)) {
-    if (directory.length > 0 && (await executable(join(directory, command)))) {
+  if (env.PATH === undefined) return false;
+  for (const directory of env.PATH.split(delimiter)) {
+    if (await executable(join(directory, command))) {
       return true;
     }
   }
@@ -702,7 +703,7 @@ async function runInspect(
             return { view: "fingerprint", fingerprint: null };
           }
           const searchRoot =
-            env.SUPERPOWERS_INSTALLED_SEARCH_ROOT ??
+            env.SUPERPOWERS_INSTALLED_SEARCH_ROOT ||
             join(env.HOME ?? "", ".codex");
           const activeRoot = installedRootForVersion(
             searchRoot,
@@ -847,14 +848,15 @@ export async function runAdapter(
   argv: readonly string[],
   context: AdapterContext,
 ): Promise<AdapterResult> {
-  const operation = argv[0] ?? "adapter";
+  const rawOperation = argv[0];
+  const operation = rawOperation || "adapter";
   const args = argv.slice(1);
   const env = { ...process.env, ...context.env };
   const log = new AdapterMessageLog();
 
   try {
     let result: JsonValue;
-    if (argv.length === 0) {
+    if (rawOperation === undefined || rawOperation.length === 0) {
       fail("invalid-arguments", "missing adapter operation");
     } else if (operation === "build") {
       result = await runBuild(args, context.root, env, log);

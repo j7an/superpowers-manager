@@ -387,6 +387,17 @@ if "$root/scripts/adapters/codex/adapter" >"$zero_out" 2>/dev/null; then
 fi
 [ "$(spw_json_get "$zero_out" operation)" = adapter ]
 [ "$(spw_json_get "$zero_out" error.code)" = invalid-arguments ]
+
+# An explicit empty operation is equivalent to an omitted operation at the
+# protocol boundary, so its controlled envelope identifies that boundary.
+empty_operation_out="$tmpdir/empty-operation.out"
+if "$root/scripts/adapters/codex/adapter" "" \
+  >"$empty_operation_out" 2>/dev/null; then
+  echo "empty adapter operation invocation must fail" >&2
+  exit 1
+fi
+[ "$(spw_json_get "$empty_operation_out" operation)" = adapter ]
+[ "$(spw_json_get "$empty_operation_out" error.code)" = invalid-arguments ]
 grep -Fxq 'error: codex plugin add failed for superpowers@superpowers-manager' "$RUN_STDERR"
 if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
   echo "escaped Codex output must not poison a controlled failure envelope" >&2
@@ -469,6 +480,42 @@ RUN_RESULT="$tmpdir/default-fingerprint.result.json"
 )
 [ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = \
   cccccccccccccccccccccccccccccccccccccccc ]
+
+# An explicitly empty override uses the same default root as an omitted one.
+RUN_RESULT="$tmpdir/empty-override-fingerprint.result.json"
+(
+  unset SUPERPOWERS_CODEX
+  SUPERPOWERS_INSTALLED_SEARCH_ROOT=""
+  PATH="$default_bin:$PATH"
+  HOME="$default_home"
+  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+  SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$default_version\"}]}"
+  export SUPERPOWERS_INSTALLED_SEARCH_ROOT PATH HOME SPW_ADAPTER \
+    SPW_FINGERPRINT_LISTING
+  spw_inspect_fingerprint "$RUN_RESULT"
+)
+[ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = \
+  cccccccccccccccccccccccccccccccccccccccc ]
+
+# An explicitly present empty PATH component resolves a bare Codex command
+# from the current directory, as execvp-style PATH lookup requires.
+path_component_cwd="$tmpdir/path-component-cwd"
+mkdir -p "$path_component_cwd"
+ln -s "$fingerprint_codex" "$path_component_cwd/codex-empty-path-component"
+RUN_RESULT="$tmpdir/empty-path-component-fingerprint.result.json"
+(
+  cd "$path_component_cwd"
+  SUPERPOWERS_CODEX=codex-empty-path-component
+  SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root"
+  PATH=":$PATH"
+  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+  SPW_FINGERPRINT_LISTING='{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0+manager.bbbbbbb"}]}'
+  export SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT PATH SPW_ADAPTER \
+    SPW_FINGERPRINT_LISTING
+  spw_inspect_fingerprint "$RUN_RESULT"
+)
+[ "$(spw_adapter_result_get "$RUN_RESULT" fingerprint)" = \
+  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]
 
 for invalid_listing in \
   '{' \
