@@ -617,33 +617,18 @@ real_node=$(node -e \
 # A launch failure after the executable precheck must retain the inspect
 # envelope instead of leaking Node's ErrnoException through adapter-cli.
 busy_codex="$tmpdir/busy-codex"
-busy_lock="$tmpdir/busy-codex.lock"
-busy_ready="$tmpdir/busy-codex.ready"
-cat > "$busy_codex" <<'SH'
-#!/bin/sh
-exit 0
-SH
+: > "$busy_codex"
 chmod +x "$busy_codex"
-: > "$busy_lock"
-(
-  exec 9>"$busy_codex"
-  : > "$busy_ready"
-  while [ -f "$busy_lock" ]; do sleep 1; done
-) &
-busy_pid=$!
-while [ ! -f "$busy_ready" ]; do sleep 1; done
 busy_launch_out="$tmpdir/busy-launch.out"
 busy_launch_err="$tmpdir/busy-launch.err"
 busy_launch_rc=0
 SUPERPOWERS_CODEX="$busy_codex" \
   "$real_node" "$root/dist/adapter-cli.js" inspect --view ownership \
   >"$busy_launch_out" 2>"$busy_launch_err" || busy_launch_rc=$?
-rm -f "$busy_lock"
-wait "$busy_pid"
 [ "$busy_launch_rc" -eq 1 ]
 [ "$(spw_json_get "$busy_launch_out" operation)" = inspect ]
 [ "$(spw_json_get "$busy_launch_out" error.code)" = inspect-failed ]
-if grep -Fq 'ETXTBSY' "$busy_launch_err"; then
+if [ -s "$busy_launch_err" ]; then
   echo "a Codex launch error must not leak through adapter-cli" >&2
   exit 1
 fi
