@@ -88,12 +88,7 @@ export function marketplaceRootFromJson(
   raw: string,
   marketplaceName: string,
 ): string {
-  const items = checkedItems(
-    raw,
-    ACCEPT_CONSTANTS,
-    "marketplaces",
-    "name",
-  );
+  const items = checkedItems(raw, ACCEPT_CONSTANTS, "marketplaces", "name");
   const match = items.find((item) => item.name === marketplaceName);
   if (match === undefined) return "";
   if (typeof match.root !== "string" || match.root.length === 0) {

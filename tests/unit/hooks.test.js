@@ -71,10 +71,7 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
   await writeFile(file, '{"hooks":"first","hooks":"last"}');
   assert.deepEqual(await readManifest(file), { hooks: "last" });
 
-  await writeFile(
-    file,
-    `{"padding":"${"x".repeat(1_048_577)}","hooks":{}}`,
-  );
+  await writeFile(file, `{"padding":"${"x".repeat(1_048_577)}","hooks":{}}`);
   assert.deepEqual((await readManifest(file)).hooks, {});
 
   await writeFile(file, `{"padding":${nested(255)}}`);

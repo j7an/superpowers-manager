@@ -35,10 +35,7 @@ void test("PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix", asyn
   }
   await writeFile(file, `{"commit":"first","commit":"${full}"}`);
   assert.equal(await codexMetadataCommit(file), full);
-  await writeFile(
-    file,
-    `{"commit":"${full}","padding":${nested(255)}}`,
-  );
+  await writeFile(file, `{"commit":"${full}","padding":${nested(255)}}`);
   assert.equal(await codexMetadataCommit(file), full);
   await writeFile(
     file,
@@ -79,10 +76,7 @@ void test("MANIFEST-READER-INSTALLED-01 installed manifest complete matrix", asy
     await writeFile(file, JSON.stringify({ name: "superpowers", version }));
     assert.equal(await manifestShortSha(file), expected, version);
   }
-  await writeFile(
-    file,
-    '{"version":"bad","version":"6.1.1+manager.d884ae0"}',
-  );
+  await writeFile(file, '{"version":"bad","version":"6.1.1+manager.d884ae0"}');
   assert.equal(await manifestShortSha(file), "d884ae0");
   await writeFile(
     file,

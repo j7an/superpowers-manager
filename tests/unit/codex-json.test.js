@@ -77,12 +77,7 @@ void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => 
   ]) {
     assert.throws(
       () =>
-        installedListingHas(
-          raw,
-          "installed",
-          "pluginId",
-          "target@provider",
-        ),
+        installedListingHas(raw, "installed", "pluginId", "target@provider"),
       SafetyError,
       raw,
     );

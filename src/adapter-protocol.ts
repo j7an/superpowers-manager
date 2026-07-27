@@ -43,7 +43,7 @@ function byteEscape(byte: number): string {
 
 function decodeBackslashReplace(bytes: Uint8Array): string {
   let result = "";
-  for (let index = 0; index < bytes.length; ) {
+  for (let index = 0; index < bytes.length;) {
     const first = bytes[index]!;
     if (first < 0x80) {
       result += String.fromCodePoint(first);
@@ -104,8 +104,7 @@ function pythonUnicodeEscape(value: string): string {
     else if (code === 0x0a) result += "\\n";
     else if (code === 0x0d) result += "\\r";
     else if (code >= 0x20 && code <= 0x7e) result += character;
-    else if (code <= 0xff)
-      result += `\\x${code.toString(16).padStart(2, "0")}`;
+    else if (code <= 0xff) result += `\\x${code.toString(16).padStart(2, "0")}`;
     else if (code <= 0xffff)
       result += `\\u${code.toString(16).padStart(4, "0")}`;
     else result += `\\U${code.toString(16).padStart(8, "0")}`;

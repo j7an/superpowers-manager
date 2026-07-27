@@ -114,9 +114,8 @@ void test("serializer preserves envelope shape and rejects unsafe values", () =>
   );
   assert.throws(() =>
     serializeEnvelope(
-      successResult("build", {}, [
-        { channel: "stderr", text: "bad\tmessage" },
-      ]).envelope,
+      successResult("build", {}, [{ channel: "stderr", text: "bad\tmessage" }])
+        .envelope,
     ),
   );
 });

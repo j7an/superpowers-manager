@@ -274,7 +274,10 @@ async function runBuild(
     fail("invalid-arguments", `candidate root not found: ${candidateRoot}`);
   }
   if (!(await fileExists(fallbackManifest))) {
-    fail("invalid-arguments", `fallback manifest not found: ${fallbackManifest}`);
+    fail(
+      "invalid-arguments",
+      `fallback manifest not found: ${fallbackManifest}`,
+    );
   }
   const validator = join(
     root,
@@ -295,12 +298,19 @@ async function runBuild(
           candidateRoot,
           ".codex-plugin/plugin.json",
         );
-        const upstreamManifest = join(upstreamRoot, ".codex-plugin/plugin.json");
-        const manifestSource: ManifestSource = (await fileExists(upstreamManifest))
+        const upstreamManifest = join(
+          upstreamRoot,
+          ".codex-plugin/plugin.json",
+        );
+        const manifestSource: ManifestSource = (await fileExists(
+          upstreamManifest,
+        ))
           ? "upstream"
           : "fallback";
         try {
-          await mkdir(join(candidateRoot, ".codex-plugin"), { recursive: true });
+          await mkdir(join(candidateRoot, ".codex-plugin"), {
+            recursive: true,
+          });
           await copyFile(
             manifestSource === "upstream" ? upstreamManifest : fallbackManifest,
             candidateManifest,
@@ -323,13 +333,19 @@ async function runBuild(
           const manifest = await readManifest(candidateManifest);
           plan = await classifyHooks(manifest, manifestSource, sourceRoot);
         } catch (cause) {
-          log.appendText("stderr", `hook classification failed: ${oneLine(cause)}`);
+          log.appendText(
+            "stderr",
+            `hook classification failed: ${oneLine(cause)}`,
+          );
           fail("build-failed", "failed to prepare upstream Codex hooks");
         }
         try {
           await materializeHooks(plan, sourceRoot, realCandidateRoot);
         } catch (cause) {
-          log.appendText("stderr", `hook materialization failed: ${oneLine(cause)}`);
+          log.appendText(
+            "stderr",
+            `hook materialization failed: ${oneLine(cause)}`,
+          );
           fail("build-failed", "failed to prepare upstream Codex hooks");
         }
 
@@ -357,7 +373,10 @@ async function runBuild(
             join(candidateRoot, ".codex-plugin/plugin.template.json"),
           );
         } catch {
-          fail("build-failed", "cannot copy fallback manifest template into candidate");
+          fail(
+            "build-failed",
+            "cannot copy fallback manifest template into candidate",
+          );
         }
 
         let upstreamSource: string;
@@ -484,7 +503,10 @@ async function runInstall(
             env,
           );
           if (commandFailed(added)) {
-            fail("install-failed", `codex marketplace add failed for ${packageRoot}`);
+            fail(
+              "install-failed",
+              `codex marketplace add failed for ${packageRoot}`,
+            );
           }
         } else if (!(await pathsEqual(packageRoot, registeredRoot))) {
           log.appendText(
@@ -540,7 +562,10 @@ async function runInstall(
         return {
           verification_hints: {
             ...(refreshMode === "add-only"
-              ? { mismatch: "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add" }
+              ? {
+                  mismatch:
+                    "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add",
+                }
               : {}),
             missing: "verify with 'codex plugin list --json'.",
           },
@@ -589,7 +614,10 @@ async function runUninstall(
             env,
           );
           if (commandFailed(result)) {
-            fail("uninstall-failed", `codex plugin remove failed for ${PLUGIN_ID}`);
+            fail(
+              "uninstall-failed",
+              `codex plugin remove failed for ${PLUGIN_ID}`,
+            );
           }
           log.appendText("stdout", `removed plugin ${PLUGIN_ID}`);
         } else {
@@ -784,7 +812,10 @@ async function runInspect(
           const legacyPresent = legacyPlugin || legacyMarketplace;
           return {
             view: "ownership",
-            resources: { plugin: managerPlugin, marketplace: managerMarketplace },
+            resources: {
+              plugin: managerPlugin,
+              marketplace: managerMarketplace,
+            },
             legacy_resources: {
               plugin: legacyPlugin,
               marketplace: legacyMarketplace,
