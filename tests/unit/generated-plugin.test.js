@@ -1,5 +1,7 @@
 // @ts-check
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   mkdtemp,
   mkdir,
@@ -932,4 +934,171 @@ void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", asy
     errors.includes("provenance is unreadable UTF-8"),
     errors.join("|"),
   );
+});
+
+const execFileAsync = promisify(execFile);
+const CLI = new URL(
+  "../../dist/validate-generated-plugin-cli.js",
+  import.meta.url,
+).pathname;
+
+/**
+ * @param {string[]} argv
+ * @returns {Promise<{code: number, stdout: string, stderr: string}>}
+ */
+async function runCli(argv) {
+  try {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [
+      CLI,
+      ...argv,
+    ]);
+    return { code: 0, stdout, stderr };
+  } catch (error) {
+    const failure =
+      /** @type {{code?: number, stdout: string, stderr: string}} */ (error);
+    return {
+      code: failure.code ?? 1,
+      stdout: failure.stdout,
+      stderr: failure.stderr,
+    };
+  }
+}
+
+/** @param {string} pluginRoot */
+function cliArgv(pluginRoot) {
+  return [
+    "--plugin-root",
+    pluginRoot,
+    "--source",
+    SOURCE,
+    "--requested-ref",
+    "latest-release",
+    "--resolved-ref",
+    "v6.1.1",
+    "--commit",
+    COMMIT,
+    "--manifest-version",
+    "6.1.1+manager.d884ae0",
+    "--manifest-source",
+    "upstream",
+    "--upstream-manifest-version",
+    "6.1.1",
+  ];
+}
+
+void test("CLI exit, stdout and stderr are exact", async (t) => {
+  const { root } = await candidate(t);
+
+  assert.deepStrictEqual(await runCli(cliArgv(root)), {
+    code: 0,
+    stdout: `generated plugin validation passed: ${root}\n`,
+    stderr: "",
+  });
+
+  // The raw argument is echoed, not the resolved path.
+  const unresolved = join(root, ".", "");
+  assert.equal(
+    (await runCli(cliArgv(`${root}/.`))).stdout,
+    `generated plugin validation passed: ${root}/.\n`,
+  );
+  void unresolved;
+
+  await rm(join(root, "README.md"));
+  await rm(join(root, "LICENSE"));
+  assert.deepStrictEqual(await runCli(cliArgv(root)), {
+    code: 1,
+    stdout: "",
+    stderr:
+      "Generated plugin validation failed:\n" +
+      "- missing required file `LICENSE`\n" +
+      "- missing required file `README.md`\n",
+  });
+});
+
+void test("CLI accepts a reversed flag order and the equals form", async (t) => {
+  const { root } = await candidate(t);
+  const reversed = [
+    "--upstream-manifest-version",
+    "6.1.1",
+    "--manifest-source",
+    "upstream",
+    "--manifest-version",
+    "6.1.1+manager.d884ae0",
+    "--commit",
+    COMMIT,
+    "--resolved-ref",
+    "v6.1.1",
+    "--requested-ref",
+    "latest-release",
+    "--source",
+    SOURCE,
+    "--plugin-root",
+    root,
+  ];
+  assert.deepStrictEqual(await runCli(reversed), {
+    code: 0,
+    stdout: `generated plugin validation passed: ${root}\n`,
+    stderr: "",
+  });
+
+  // Attached form carrying a dash-leading value: production relies on this.
+  const attached = [
+    `--plugin-root=${root}`,
+    "--source=-upstream",
+    "--requested-ref=latest-release",
+    "--resolved-ref=v6.1.1",
+    `--commit=${COMMIT}`,
+    "--manifest-version=6.1.1+manager.d884ae0",
+    "--manifest-source=upstream",
+    "--upstream-manifest-version=6.1.1",
+  ];
+  const result = await runCli(attached);
+  assert.equal(result.code, 1, result.stderr);
+  assert.equal(
+    result.stderr,
+    "Generated plugin validation failed:\n" +
+      "- provenance field `source` does not match expected value\n",
+    "the attached dash-leading value must reach validation, not usage",
+  );
+});
+
+void test("CLI usage rejections exit 2 with an empty stdout and no traceback", async (t) => {
+  const { root } = await candidate(t);
+
+  for (const [argv, flag] of /** @type {[string[], string][]} */ ([
+    [
+      cliArgv(root).map((token) =>
+        token === "latest-release" ? "-foo" : token,
+      ),
+      "--requested-ref",
+    ],
+    [
+      cliArgv(root).map((token) => (token === "upstream" ? "sideways" : token)),
+      "--manifest-source",
+    ],
+    [cliArgv(`${root}/�`), "--plugin-root"],
+  ])) {
+    const result = await runCli(argv);
+    assert.equal(result.code, 2, `${flag}: ${result.stderr}`);
+    assert.equal(result.stdout, "");
+    assert.ok(result.stderr.includes(flag), result.stderr);
+    assert.ok(!result.stderr.includes("Traceback"), result.stderr);
+  }
+});
+
+void test("split dash-leading exceptions are accepted as argparse accepts them", async (t) => {
+  const { root } = await candidate(t);
+  for (const value of ["-", "-1", "-1.5", "-.5"]) {
+    const argv = cliArgv(root).map((token) =>
+      token === "latest-release" ? value : token,
+    );
+    const result = await runCli(argv);
+    assert.equal(result.code, 1, `${value}: ${result.stderr}`);
+    assert.equal(
+      result.stderr,
+      "Generated plugin validation failed:\n" +
+        "- provenance field `requested_ref` does not match expected value\n",
+      `${value} must reach validation, not usage`,
+    );
+  }
 });
