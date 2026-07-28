@@ -2,6 +2,7 @@ import type { Buffer } from "node:buffer";
 import { lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { posix } from "node:path";
+import { COMMIT_RE } from "./domain/refs.js";
 import { pythonSplitlines, pythonStrip } from "./python-text.js";
 import { parseStrictJson, type JsonValue } from "./strict-json.js";
 
@@ -849,6 +850,59 @@ async function validateTree(
   }
 }
 
+const PROVENANCE_KEYS = [
+  "source",
+  "requested_ref",
+  "resolved_ref",
+  "commit",
+  "upstream_manifest_version",
+] as const;
+
+async function validateProvenance(
+  options: GeneratedPluginValidationOptions,
+  pluginRoot: string,
+  errors: string[],
+  deps: GeneratedPluginFsDeps,
+): Promise<void> {
+  const path = posix.join(pluginRoot, ".superpowers-upstream.json");
+  let presence: Presence;
+  try {
+    presence = await inspectPath(path, deps, true);
+  } catch {
+    errors.push(
+      "provenance file `.superpowers-upstream.json` could not be inspected",
+    );
+    return;
+  }
+  if (presence !== "file") return;
+  const provenance = await loadJsonObject(path, "provenance", errors, deps);
+  if (provenance === null) return;
+  const keys = Object.keys(provenance).sort(compareByCodePoint);
+  const expectedKeys = [...PROVENANCE_KEYS].sort(compareByCodePoint);
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index])
+  ) {
+    errors.push("provenance keys do not match the manager-owned contract");
+  }
+  const expected: Record<string, string> = {
+    source: options.source,
+    requested_ref: options.requestedRef,
+    resolved_ref: options.resolvedRef,
+    commit: options.commit,
+    upstream_manifest_version: options.upstreamManifestVersion,
+  };
+  // Python iterates the literal's insertion order; PROVENANCE_KEYS matches it.
+  for (const key of PROVENANCE_KEYS) {
+    if (provenance[key] !== expected[key]) {
+      errors.push(`provenance field \`${key}\` does not match expected value`);
+    }
+  }
+  if (!COMMIT_RE.test(options.commit)) {
+    errors.push("commit must be 40 lowercase hexadecimal characters");
+  }
+}
+
 export async function validateGeneratedPlugin(
   options: GeneratedPluginValidationOptions,
   deps: GeneratedPluginFsDeps = DEFAULT_FS_DEPS,
@@ -871,5 +925,6 @@ export async function validateGeneratedPlugin(
     deps,
   );
   await validateTree(pluginRoot, hookPolicy, errors, deps);
+  await validateProvenance(options, pluginRoot, errors, deps);
   return errors;
 }

@@ -844,3 +844,92 @@ void test("enumeration rejects on absence rather than reading it as empty", asyn
     errors.join("|"),
   );
 });
+
+void test("provenance validation reproduces the Python diagnostics", async (t) => {
+  const { root } = await candidate(t);
+  await writeFile(
+    join(root, ".superpowers-upstream.json"),
+    `${JSON.stringify({
+      source: "https://other.invalid/x.git",
+      requested_ref: "latest-release",
+      resolved_ref: "v6.1.1",
+      commit: "NOTACOMMIT",
+      upstream_manifest_version: "6.1.1",
+      extra: 1,
+    })}\n`,
+  );
+  const errors = await generated.validateGeneratedPlugin({
+    ...options(root),
+    commit: "NOTACOMMIT",
+  });
+  assert.deepStrictEqual(errors, [
+    "provenance keys do not match the manager-owned contract",
+    "provenance field `source` does not match expected value",
+    "commit must be 40 lowercase hexadecimal characters",
+  ]);
+});
+
+void test("the full error list is ordered manifest, tree, provenance", async (t) => {
+  const { root } = await candidate(t);
+  await writeFile(
+    join(root, ".codex-plugin", "plugin.json"),
+    `${JSON.stringify({
+      name: "renamed",
+      version: "6.1.1+manager.d884ae0",
+      description: "Fake",
+      skills: "./skills/",
+      hooks: {},
+    })}\n`,
+  );
+  await rm(join(root, "README.md"));
+  await writeFile(
+    join(root, ".superpowers-upstream.json"),
+    `${JSON.stringify({
+      source: SOURCE,
+      requested_ref: "latest-release",
+      resolved_ref: "v6.1.0",
+      commit: COMMIT,
+      upstream_manifest_version: "6.1.1",
+    })}\n`,
+  );
+  assert.deepStrictEqual(
+    await generated.validateGeneratedPlugin(options(root)),
+    [
+      "plugin manifest field `name` must equal `superpowers`",
+      "missing required file `README.md`",
+      "provenance field `resolved_ref` does not match expected value",
+    ],
+  );
+});
+
+void test("the provenance probe fails closed with its frozen string", async (t) => {
+  // `:399` — distinct from the required-files probe of the same path, which
+  // reports `required file ... could not be inspected` from Task 3.
+  const { root } = await candidate(t);
+  const deps = failingDeps({
+    stat: (path) =>
+      String(path).endsWith("/.superpowers-upstream.json") &&
+      permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes(
+      "provenance file `.superpowers-upstream.json` could not be inspected",
+    ),
+    errors.join("|"),
+  );
+});
+
+void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", async (t) => {
+  const { root } = await candidate(t);
+  const deps = failingDeps({
+    readFile: (path) =>
+      String(path).endsWith("/.superpowers-upstream.json") &&
+      permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("provenance is unreadable UTF-8"),
+    errors.join("|"),
+  );
+});
