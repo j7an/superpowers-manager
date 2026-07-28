@@ -21,6 +21,7 @@ import {
   installedRootForVersion,
   pathsEqual,
 } from "./codex-state.js";
+import { validateGeneratedPlugin } from "./generated-plugin.js";
 import {
   classifyHooks,
   materializeHooks,
@@ -29,6 +30,7 @@ import {
 } from "./hooks.js";
 import { readCodexBuildSource } from "./provenance.js";
 import type { JsonValue } from "./strict-json.js";
+import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.js";
 import { withWorkspace } from "./workspace.js";
 
 const PLUGIN_ID = "superpowers@superpowers-manager";
@@ -288,13 +290,6 @@ async function runBuild(
       `fallback manifest not found: ${fallbackManifest}`,
     );
   }
-  const validator = join(
-    root,
-    "scripts/adapters/codex/validate-generated-plugin.py",
-  );
-  if (!(await fileExists(validator))) {
-    fail("build-failed", `missing built-in plugin validator: ${validator}`);
-  }
 
   let entered = false;
   try {
@@ -399,43 +394,66 @@ async function runBuild(
             "candidate provenance is missing or invalid",
           );
         }
-        let validation: CommandResult;
-        try {
-          validation = await pythonCommand(
-            log,
-            [
-              "-S",
-              validator,
-              "--plugin-root",
-              candidateRoot,
-              `--source=${upstreamSource}`,
-              "--requested-ref",
-              flags["--requested-ref"],
-              "--resolved-ref",
-              flags["--resolved-ref"],
-              "--commit",
-              flags["--commit"],
-              "--manifest-version",
-              flags["--manager-version"],
-              "--manifest-source",
-              manifestSource,
-              "--upstream-manifest-version",
-              flags["--upstream-manifest-version"],
-            ],
-            env,
+        // The seven values the validator CLI would receive in split form:
+        // --plugin-root, --requested-ref, --resolved-ref, --commit,
+        // --manifest-version, --manifest-source, --upstream-manifest-version.
+        // The eighth, --source, is passed attached, where argparse accepts any
+        // dash-leading value, so it is deliberately absent here.
+        const splitValues: readonly string[] = [
+          candidateRoot,
+          flags["--requested-ref"],
+          flags["--resolved-ref"],
+          flags["--commit"],
+          flags["--manager-version"],
+          manifestSource,
+          flags["--upstream-manifest-version"],
+        ];
+        if (!splitValues.every(isAcceptedSplitValue)) {
+          // Declared exception to message-record parity: argparse wrote usage
+          // records here; this guard precedes the call and writes none. The
+          // failure code and message are unchanged.
+          fail(
+            "generated-plugin-validation-failed",
+            "built-in generated plugin validation failed",
           );
+        }
+        let errors: readonly string[];
+        try {
+          errors = await validateGeneratedPlugin({
+            pluginRoot: candidateRoot,
+            source: upstreamSource,
+            requestedRef: flags["--requested-ref"],
+            resolvedRef: flags["--resolved-ref"],
+            commit: flags["--commit"],
+            manifestVersion: flags["--manager-version"],
+            manifestSource,
+            upstreamManifestVersion: flags["--upstream-manifest-version"],
+          });
         } catch {
           fail(
             "generated-plugin-validation-failed",
             "built-in generated plugin validation failed",
           );
         }
-        if (commandFailed(validation)) {
+        if (errors.length > 0) {
+          // appendBytes, not appendText: one record per line, matching what
+          // pythonCommand wrote from the subprocess streams.
+          const text =
+            "Generated plugin validation failed:\n" +
+            errors.map((error) => `- ${error}\n`).join("");
+          log.appendBytes("stderr", Buffer.from(text, "utf8"));
           fail(
             "generated-plugin-validation-failed",
             "built-in generated plugin validation failed",
           );
         }
+        log.appendBytes(
+          "stdout",
+          Buffer.from(
+            `generated plugin validation passed: ${candidateRoot}\n`,
+            "utf8",
+          ),
+        );
         return {};
       },
       { cleanupFailure: "ignore" },
