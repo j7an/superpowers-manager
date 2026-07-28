@@ -621,7 +621,16 @@ void test("the hooks.json probe fails closed with its frozen string", async (t) 
 });
 
 void test("each hook subtree site fails closed with its Python string", async (t) => {
-  /** @type {[string, Record<string, (path: unknown) => unknown>, string][]} */
+  // `:300` reaches `:305`, the path-bearing symlink text it shares with `:303`.
+  // Only `:324`/`:332`/`:340` share the subtree string. Each site is asserted
+  // separately so a site that stops reporting is still caught.
+  /**
+   * @type {[
+   *   string,
+   *   Record<string, (path: unknown) => unknown>,
+   *   (realRoot: string) => string,
+   * ][]}
+   */
   const cases = [
     [
       "the symlink probe (`:300`)",
@@ -629,7 +638,8 @@ void test("each hook subtree site fails closed with its Python string", async (t
         lstat: (path) =>
           String(path).endsWith("/hooks/nested") && permissionDenied(),
       },
-      "generated hook subtree could not be inspected",
+      (realRoot) =>
+        `generated hook symlink could not be inspected: ${join(realRoot, "hooks", "nested")}`,
     ],
     [
       "the enumeration call (`:332`)",
@@ -637,7 +647,7 @@ void test("each hook subtree site fails closed with its Python string", async (t
         readdir: (path) =>
           String(path).endsWith("/hooks") && permissionDenied(),
       },
-      "generated hook subtree could not be inspected",
+      () => "generated hook subtree could not be inspected",
     ],
     [
       "the entry type probe (`:340`)",
@@ -645,17 +655,20 @@ void test("each hook subtree site fails closed with its Python string", async (t
         stat: (path) =>
           String(path).endsWith("/hooks/nested") && permissionDenied(),
       },
-      "generated hook subtree could not be inspected",
+      () => "generated hook subtree could not be inspected",
     ],
   ];
   for (const [label, overrides, expected] of cases) {
     await t.test(label, async (t) => {
       const { root } = await candidateWithHooks(t);
+      // The validator addresses the tree through the resolved plugin root, so
+      // a path-bearing diagnostic never carries the `tmpdir()` spelling.
+      const realRoot = await realpath(root);
       const errors = await generated.validateGeneratedPlugin(
         options(root),
         failingDeps(overrides),
       );
-      assert.ok(errors.includes(expected), errors.join("|"));
+      assert.ok(errors.includes(expected(realRoot)), errors.join("|"));
     });
   }
 });

@@ -661,10 +661,10 @@ async function validateHookSubtree(
     try {
       isLink = (await inspectLink(path, deps)) === "symlink";
     } catch {
-      // `:300` has no Python diagnostic — `is_symlink()` propagates the
-      // OSError out of `validate()` — so it joins the two other subtree
-      // probes under their shared string.
-      errors.push("generated hook subtree could not be inspected");
+      // `:300` reaches `:305`, the same site-specific text as the `:303`
+      // readlink below. The three probes sharing the *subtree* string are
+      // `:324`/`:332`/`:340`, not this one.
+      errors.push(`generated hook symlink could not be inspected: ${path}`);
       return false;
     }
     if (!isLink) return true;
