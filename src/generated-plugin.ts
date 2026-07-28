@@ -2,7 +2,7 @@ import type { Buffer } from "node:buffer";
 import { lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { posix } from "node:path";
-import { pythonStrip } from "./python-text.js";
+import { pythonSplitlines, pythonStrip } from "./python-text.js";
 import { parseStrictJson, type JsonValue } from "./strict-json.js";
 
 export interface GeneratedPluginValidationOptions {
@@ -48,6 +48,8 @@ const MANIFEST_JSON_PROFILE = {
 class ResolutionFailure extends Error {}
 /** A non-absence error from an existence/type probe. */
 class InspectionFailure extends Error {}
+/** Any error from a directory enumeration, absence-like included. */
+class EnumerationFailure extends Error {}
 
 type Presence = "missing" | "file" | "directory" | "other";
 
@@ -224,6 +226,44 @@ async function inspectPath(
     if (isAbsenceError(cause)) return "missing";
     throw new InspectionFailure(path);
   }
+}
+
+/** `Path.is_symlink()` under the inspection-failure rule. */
+async function inspectLink(
+  path: string,
+  deps: GeneratedPluginFsDeps,
+): Promise<"symlink" | "other" | "missing"> {
+  if (hasUnpairedSurrogate(path)) throw new InspectionFailure(path);
+  try {
+    return (await deps.lstat(path)).isSymbolicLink() ? "symlink" : "other";
+  } catch (cause) {
+    if (isAbsenceError(cause)) return "missing";
+    throw new InspectionFailure(path);
+  }
+}
+
+/**
+ * Buffer-mode enumeration. Every error rejects — absence included — and an
+ * entry whose bytes are not valid UTF-8 rejects rather than being silently
+ * mapped to U+FFFD and then vanishing behind a later `ENOENT`.
+ */
+async function listDirectory(
+  path: string,
+  deps: GeneratedPluginFsDeps,
+): Promise<string[]> {
+  let entries: Buffer[];
+  try {
+    entries = (await deps.readdir(path, { encoding: "buffer" })) as Buffer[];
+  } catch {
+    throw new EnumerationFailure(path);
+  }
+  return entries.map((entry) => {
+    try {
+      return decodePathBytes(entry);
+    } catch {
+      throw new EnumerationFailure(path);
+    }
+  });
 }
 
 async function loadJsonObject(
@@ -528,6 +568,287 @@ async function validateManifest(
   return hookPolicy;
 }
 
+const REQUIRED_FILES = [
+  ".codex-plugin/plugin.template.json",
+  ".superpowers-upstream.json",
+  "LICENSE",
+  "README.md",
+  "CODE_OF_CONDUCT.md",
+] as const;
+
+/** Python `sorted()` orders by code point; JavaScript's default sort does not. */
+function compareByCodePoint(left: string, right: string): number {
+  // `Array.from` splits by code point, exactly as spreading would; oxlint's
+  // `no-misused-spread` rejects the spread form, and grapheme segmentation is
+  // the wrong unit here — Python compares code points.
+  const leftPoints = Array.from(left);
+  const rightPoints = Array.from(right);
+  const shared = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < shared; index += 1) {
+    const a = leftPoints[index]!.codePointAt(0)!;
+    const b = rightPoints[index]!.codePointAt(0)!;
+    if (a !== b) return a - b;
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
+async function validateSkillFrontmatter(
+  skillMd: string,
+  skillName: string,
+  errors: string[],
+  deps: GeneratedPluginFsDeps,
+): Promise<void> {
+  let contents: string;
+  try {
+    contents = STRICT_DECODER.decode(await deps.readFile(skillMd));
+  } catch {
+    errors.push(`skill \`${skillName}\` has unreadable UTF-8 \`SKILL.md\``);
+    return;
+  }
+  if (contents === "") {
+    errors.push(`skill \`${skillName}\` has empty \`SKILL.md\``);
+    return;
+  }
+  const lines = pythonSplitlines(contents);
+  if (lines.length === 0 || lines[0] !== "---") {
+    errors.push(`skill \`${skillName}\` must start with \`---\``);
+    return;
+  }
+  const closingIndex = lines.indexOf("---", 1);
+  if (closingIndex === -1) {
+    errors.push(`skill \`${skillName}\` frontmatter is not closed`);
+    return;
+  }
+  const frontmatter = lines.slice(1, closingIndex);
+  for (const key of ["name", "description"] as const) {
+    const matches = frontmatter.filter((line) => line.startsWith(`${key}:`));
+    if (matches.length !== 1) {
+      errors.push(
+        `skill \`${skillName}\` frontmatter must contain exactly one top-level \`${key}:\``,
+      );
+      continue;
+    }
+    const value = pythonStrip(matches[0]!.slice(matches[0]!.indexOf(":") + 1));
+    if (
+      value === "" ||
+      value === "''" ||
+      value === '""' ||
+      value.startsWith("#")
+    ) {
+      errors.push(
+        `skill \`${skillName}\` frontmatter field \`${key}\` must be non-empty`,
+      );
+    }
+  }
+}
+
+async function validateHookSubtree(
+  pluginRoot: string,
+  hooksRoot: string,
+  errors: string[],
+  deps: GeneratedPluginFsDeps,
+): Promise<void> {
+  let resolvedRoot: string;
+  try {
+    resolvedRoot = await resolvePath(pluginRoot, deps, { strict: true });
+  } catch {
+    errors.push("generated plugin root could not be resolved");
+    return;
+  }
+
+  const validateSymlink = async (path: string): Promise<boolean> => {
+    let isLink: boolean;
+    try {
+      isLink = (await inspectLink(path, deps)) === "symlink";
+    } catch {
+      // `:300` has no Python diagnostic — `is_symlink()` propagates the
+      // OSError out of `validate()` — so it joins the two other subtree
+      // probes under their shared string.
+      errors.push("generated hook subtree could not be inspected");
+      return false;
+    }
+    if (!isLink) return true;
+    let rawTarget: string;
+    try {
+      rawTarget = decodePathBytes(
+        (await deps.readlink(path, { encoding: "buffer" })) as Buffer,
+      );
+    } catch {
+      errors.push(`generated hook symlink could not be inspected: ${path}`);
+      return false;
+    }
+    if (posix.isAbsolute(rawTarget)) {
+      errors.push(`generated hook symlink must be relative: ${path}`);
+      return false;
+    }
+    try {
+      const resolved = await resolvePath(path, deps, { strict: true });
+      if (
+        resolved !== resolvedRoot &&
+        !resolved.startsWith(`${resolvedRoot}/`)
+      ) {
+        throw new ResolutionFailure(resolved);
+      }
+    } catch {
+      errors.push(`generated hook symlink escapes or is broken: ${path}`);
+      return false;
+    }
+    return true;
+  };
+
+  if (!(await validateSymlink(hooksRoot))) return;
+  const pending = [hooksRoot];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const directory = pending.pop()!;
+    let resolvedDirectory: string;
+    try {
+      resolvedDirectory = await resolvePath(directory, deps, { strict: true });
+    } catch {
+      errors.push("generated hook subtree could not be inspected");
+      continue;
+    }
+    if (visited.has(resolvedDirectory)) continue;
+    visited.add(resolvedDirectory);
+    let children: string[];
+    try {
+      // Unsorted on purpose: error order here is filesystem order.
+      children = await listDirectory(directory, deps);
+    } catch {
+      errors.push("generated hook subtree could not be inspected");
+      continue;
+    }
+    for (const name of children) {
+      const child = posix.join(directory, name);
+      if (!(await validateSymlink(child))) continue;
+      try {
+        if ((await inspectPath(child, deps, true)) === "directory") {
+          pending.push(child);
+        }
+      } catch {
+        errors.push("generated hook subtree could not be inspected");
+      }
+    }
+  }
+}
+
+async function validateTree(
+  pluginRoot: string,
+  hookPolicy: HookPolicy,
+  errors: string[],
+  deps: GeneratedPluginFsDeps,
+): Promise<void> {
+  for (const relative of REQUIRED_FILES) {
+    let presence: Presence;
+    try {
+      presence = await inspectPath(
+        posix.join(pluginRoot, relative),
+        deps,
+        true,
+      );
+    } catch {
+      errors.push(`required file \`${relative}\` could not be inspected`);
+      continue;
+    }
+    if (presence !== "file")
+      errors.push(`missing required file \`${relative}\``);
+  }
+
+  const hooksRoot = posix.join(pluginRoot, "hooks");
+  let hooksExists: boolean;
+  try {
+    // `os.path.lexists`: a broken `hooks` symlink counts as present.
+    hooksExists = (await inspectPath(hooksRoot, deps, false)) !== "missing";
+  } catch {
+    errors.push("generated plugin path `hooks/` could not be inspected");
+    hooksExists = false;
+  }
+  if (hookPolicy === "forbid" && hooksExists) {
+    errors.push(
+      "generated plugin must not contain `hooks/` for this manifest source",
+    );
+  } else if (hooksExists) {
+    await validateLocalPath(
+      pluginRoot,
+      "./hooks",
+      "generated plugin path `hooks/`",
+      errors,
+      deps,
+      { requireDirectory: true },
+    );
+    await validateHookSubtree(pluginRoot, hooksRoot, errors, deps);
+    if (hookPolicy === "default") {
+      let presence: Presence;
+      try {
+        presence = await inspectPath(
+          posix.join(hooksRoot, "hooks.json"),
+          deps,
+          true,
+        );
+      } catch {
+        errors.push("`hooks/hooks.json` could not be inspected");
+        presence = "file";
+      }
+      if (presence !== "file") {
+        errors.push(
+          "default-discovered `hooks/` must contain `hooks/hooks.json`",
+        );
+      }
+    }
+  }
+
+  const skillsRoot = posix.join(pluginRoot, "skills");
+  let skillsPresence: Presence;
+  try {
+    skillsPresence = await inspectPath(skillsRoot, deps, true);
+  } catch {
+    errors.push("required directory `skills/` could not be inspected");
+    return;
+  }
+  if (skillsPresence !== "directory") {
+    errors.push("missing required directory `skills/`");
+    return;
+  }
+  let skillDirs: string[];
+  try {
+    const entries = await listDirectory(skillsRoot, deps);
+    skillDirs = [];
+    for (const name of entries) {
+      if (name.startsWith(".")) continue;
+      if (
+        (await inspectPath(posix.join(skillsRoot, name), deps, true)) ===
+        "directory"
+      ) {
+        skillDirs.push(name);
+      }
+    }
+    skillDirs.sort(compareByCodePoint);
+  } catch {
+    // The Python wraps sorted(), iterdir() and is_dir() in one try/except.
+    errors.push("skills directory could not be enumerated");
+    return;
+  }
+  if (skillDirs.length === 0) {
+    errors.push("`skills/` must contain at least one skill directory");
+    return;
+  }
+  for (const name of skillDirs) {
+    const skillMd = posix.join(skillsRoot, name, "SKILL.md");
+    let presence: Presence;
+    try {
+      presence = await inspectPath(skillMd, deps, true);
+    } catch {
+      errors.push(`skill \`${name}\` \`SKILL.md\` could not be inspected`);
+      continue;
+    }
+    if (presence !== "file") {
+      errors.push(`skill \`${name}\` is missing \`SKILL.md\``);
+      continue;
+    }
+    await validateSkillFrontmatter(skillMd, name, errors, deps);
+  }
+}
+
 export async function validateGeneratedPlugin(
   options: GeneratedPluginValidationOptions,
   deps: GeneratedPluginFsDeps = DEFAULT_FS_DEPS,
@@ -549,6 +870,6 @@ export async function validateGeneratedPlugin(
     errors,
     deps,
   );
-  void hookPolicy;
+  await validateTree(pluginRoot, hookPolicy, errors, deps);
   return errors;
 }

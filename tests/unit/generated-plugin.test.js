@@ -1,6 +1,13 @@
 // @ts-check
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -20,6 +27,14 @@ function permissionDenied() {
   const error = new Error("permission denied");
   // @ts-expect-error Node attaches errno metadata to fs errors.
   error.code = "EACCES";
+  return Promise.reject(error);
+}
+
+/** An absence-like rejection: the site's missing-path behavior must apply. */
+function notFound() {
+  const error = new Error("no such file or directory");
+  // @ts-expect-error Node attaches errno metadata to fs errors.
+  error.code = "ENOENT";
   return Promise.reject(error);
 }
 
@@ -493,6 +508,326 @@ void test("a manifest path whose existence probe fails is reported", async (t) =
     errors.includes(
       "plugin manifest field `skills` target `./skills/` could not be inspected",
     ),
+    errors.join("|"),
+  );
+});
+
+void test("tree validation reproduces the Python diagnostics", async (t) => {
+  const { root } = await candidate(t);
+  await rm(join(root, "LICENSE"));
+  await rm(join(root, "skills", "brainstorming", "SKILL.md"));
+  const errors = await generated.validateGeneratedPlugin(options(root));
+  assert.deepStrictEqual(errors, [
+    "missing required file `LICENSE`",
+    "skill `brainstorming` is missing `SKILL.md`",
+  ]);
+});
+
+void test("skills are enumerated in code-point order", async (t) => {
+  const { root } = await candidate(t);
+  await rm(join(root, "skills", "brainstorming"), { recursive: true });
+  // U+FFFD sorts after U+10000 by code point and before it by UTF-16 code unit.
+  for (const name of ["�-skill", "\u{10000}-skill"]) {
+    await mkdir(join(root, "skills", name));
+  }
+  const errors = await generated.validateGeneratedPlugin(options(root));
+  assert.deepStrictEqual(errors, [
+    "skill `�-skill` is missing `SKILL.md`",
+    "skill `\u{10000}-skill` is missing `SKILL.md`",
+  ]);
+});
+
+void test("a broken hooks symlink counts as present under a forbid policy", async (t) => {
+  const { root } = await candidate(t);
+  await symlink("nowhere", join(root, "hooks"), "dir");
+  const errors = await generated.validateGeneratedPlugin(options(root));
+  assert.ok(
+    errors.includes(
+      "generated plugin must not contain `hooks/` for this manifest source",
+    ),
+    errors.join("|"),
+  );
+});
+
+void test("each tree inspection site fails closed with its frozen string", async (t) => {
+  /** @type {[string, string, "stat" | "lstat"][]} */
+  const cases = [
+    ["/LICENSE", "required file `LICENSE` could not be inspected", "stat"],
+    [
+      "/hooks",
+      "generated plugin path `hooks/` could not be inspected",
+      "lstat",
+    ],
+    ["/skills", "required directory `skills/` could not be inspected", "stat"],
+    [
+      "/skills/brainstorming/SKILL.md",
+      "skill `brainstorming` `SKILL.md` could not be inspected",
+      "stat",
+    ],
+    [
+      "/.superpowers-upstream.json",
+      "required file `.superpowers-upstream.json` could not be inspected",
+      "stat",
+    ],
+  ];
+  for (const [suffix, expected, call] of cases) {
+    await t.test(expected, async (t) => {
+      const { root } = await candidate(t);
+      const deps = failingDeps({
+        [call]: (path) => String(path).endsWith(suffix) && permissionDenied(),
+      });
+      const errors = await generated.validateGeneratedPlugin(
+        options(root),
+        deps,
+      );
+      assert.ok(errors.includes(expected), errors.join("|"));
+    });
+  }
+});
+
+/**
+ * The `candidate` fixture declares `hooks: {}`, which forbids `hooks/`. The
+ * hook-subtree sites are only reachable under a `default` policy: an upstream
+ * manifest with no `hooks` key at all.
+ * @param {import("node:test").TestContext} t
+ */
+async function candidateWithHooks(t) {
+  const { base, root } = await candidate(t);
+  await writeFile(
+    join(root, ".codex-plugin", "plugin.json"),
+    `${JSON.stringify({
+      name: "superpowers",
+      version: "6.1.1+manager.d884ae0",
+      description: "Fake",
+      skills: "./skills/",
+    })}\n`,
+  );
+  await mkdir(join(root, "hooks", "nested"), { recursive: true });
+  await writeFile(join(root, "hooks", "hooks.json"), "{}\n");
+  return { base, root };
+}
+
+void test("the hooks.json probe fails closed with its frozen string", async (t) => {
+  const { root } = await candidateWithHooks(t);
+  const deps = failingDeps({
+    stat: (path) =>
+      String(path).endsWith("/hooks/hooks.json") && permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("`hooks/hooks.json` could not be inspected"),
+    errors.join("|"),
+  );
+});
+
+void test("each hook subtree site fails closed with its Python string", async (t) => {
+  /** @type {[string, Record<string, (path: unknown) => unknown>, string][]} */
+  const cases = [
+    [
+      "the symlink probe (`:300`)",
+      {
+        lstat: (path) =>
+          String(path).endsWith("/hooks/nested") && permissionDenied(),
+      },
+      "generated hook subtree could not be inspected",
+    ],
+    [
+      "the enumeration call (`:332`)",
+      {
+        readdir: (path) =>
+          String(path).endsWith("/hooks") && permissionDenied(),
+      },
+      "generated hook subtree could not be inspected",
+    ],
+    [
+      "the entry type probe (`:340`)",
+      {
+        stat: (path) =>
+          String(path).endsWith("/hooks/nested") && permissionDenied(),
+      },
+      "generated hook subtree could not be inspected",
+    ],
+  ];
+  for (const [label, overrides, expected] of cases) {
+    await t.test(label, async (t) => {
+      const { root } = await candidateWithHooks(t);
+      const errors = await generated.validateGeneratedPlugin(
+        options(root),
+        failingDeps(overrides),
+      );
+      assert.ok(errors.includes(expected), errors.join("|"));
+    });
+  }
+});
+
+void test("each hook subtree resolution context fails closed", async (t) => {
+  await t.test("the strict plugin-root resolve (`:296`)", async (t) => {
+    const { root } = await candidateWithHooks(t);
+    // Strict resolution of the root happens only inside validate_hook_subtree;
+    // the non-strict resolve at `:425` has already succeeded by then, so an
+    // absence-shaped failure is what separates the two. Matched by trailing
+    // component rather than by equality with `root`: on macOS `tmpdir()` sits
+    // under `/var`, a symlink to `/private/var`, so the resolved candidate root
+    // never has the `root` string as a prefix.
+    const deps = failingDeps({
+      lstat: (path) => String(path).endsWith("/plugin") && notFound(),
+    });
+    const errors = await generated.validateGeneratedPlugin(options(root), deps);
+    assert.ok(
+      errors.includes("generated plugin root could not be resolved"),
+      errors.join("|"),
+    );
+  });
+
+  await t.test("the hook symlink's strict resolve (`:311`)", async (t) => {
+    const { root } = await candidateWithHooks(t);
+    await symlink("hooks.json", join(root, "hooks", "link"));
+    // The validator addresses the tree through the resolved plugin root, so the
+    // diagnostic carries the realpath, not the `tmpdir()` spelling.
+    const link = join(await realpath(root), "hooks", "link");
+    const deps = failingDeps({
+      lstat: (path) => String(path).endsWith("/hooks/hooks.json") && notFound(),
+    });
+    const errors = await generated.validateGeneratedPlugin(options(root), deps);
+    assert.ok(
+      errors.includes(`generated hook symlink escapes or is broken: ${link}`),
+      errors.join("|"),
+    );
+  });
+
+  await t.test("the subtree directory's strict resolve (`:326`)", async (t) => {
+    const { root } = await candidateWithHooks(t);
+    const deps = failingDeps({
+      lstat: (path) => String(path).endsWith("/hooks/nested") && notFound(),
+    });
+    const errors = await generated.validateGeneratedPlugin(options(root), deps);
+    assert.ok(
+      errors.includes("generated hook subtree could not be inspected"),
+      errors.join("|"),
+    );
+  });
+});
+
+void test("a hook symlink whose readlink fails is reported, not skipped", async (t) => {
+  const { root } = await candidateWithHooks(t);
+  await symlink("hooks.json", join(root, "hooks", "link"));
+  const link = join(await realpath(root), "hooks", "link");
+  const deps = failingDeps({
+    readlink: (path) =>
+      String(path).endsWith("/hooks/link") && permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes(`generated hook symlink could not be inspected: ${link}`),
+    errors.join("|"),
+  );
+});
+
+void test("a SKILL.md read error maps to the unreadable-UTF-8 diagnostic", async (t) => {
+  const { root } = await candidate(t);
+  const deps = failingDeps({
+    readFile: (path) => String(path).endsWith("SKILL.md") && permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("skill `brainstorming` has unreadable UTF-8 `SKILL.md`"),
+    errors.join("|"),
+  );
+});
+
+void test("an undecodable skill entry name fails closed at the type probe", async (t) => {
+  const { root } = await candidate(t);
+  // `:381` — an entry that survives enumeration but cannot be type-probed.
+  const deps = failingDeps({
+    stat: (path) =>
+      String(path).endsWith("/skills/brainstorming") && permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("skills directory could not be enumerated"),
+    errors.join("|"),
+  );
+});
+
+void test("skill enumeration failure is reported deterministically", async (t) => {
+  const { root } = await candidate(t);
+  const deps = failingDeps({
+    readdir: (path) => String(path).endsWith("/skills") && permissionDenied(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("skills directory could not be enumerated"),
+    errors.join("|"),
+  );
+});
+
+void test("an undecodable skills entry fails closed rather than vanishing", async (t) => {
+  const { root } = await candidate(t);
+  const deps = failingDeps({
+    readdir: (path) =>
+      String(path).endsWith("/skills") &&
+      Promise.resolve([Buffer.from([0xff, 0x2d, 0x78])]),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("skills directory could not be enumerated"),
+    errors.join("|"),
+  );
+});
+
+void test("frontmatter parsing uses CPython line splitting", async (t) => {
+  const { root } = await candidate(t);
+  const skill = join(root, "skills", "brainstorming", "SKILL.md");
+  await writeFile(
+    skill,
+    "---\r\nname: x\r\ndescription: y\r\n---\r\n# Body\r\n",
+  );
+  assert.deepStrictEqual(
+    await generated.validateGeneratedPlugin(options(root)),
+    [],
+  );
+
+  await writeFile(skill, "﻿---\nname: x\ndescription: y\n---\n");
+  assert.ok(
+    (await generated.validateGeneratedPlugin(options(root))).includes(
+      "skill `brainstorming` must start with `---`",
+    ),
+  );
+
+  await writeFile(skill, Buffer.from([0xff, 0x0a]));
+  assert.ok(
+    (await generated.validateGeneratedPlugin(options(root))).includes(
+      "skill `brainstorming` has unreadable UTF-8 `SKILL.md`",
+    ),
+  );
+
+  await writeFile(skill, "---\nname:\ndescription: y\n---\n");
+  assert.ok(
+    (await generated.validateGeneratedPlugin(options(root))).includes(
+      "skill `brainstorming` frontmatter field `name` must be non-empty",
+    ),
+  );
+
+  await writeFile(skill, "---\nname:\x1f\ndescription: y\n---\n");
+  assert.ok(
+    (await generated.validateGeneratedPlugin(options(root))).includes(
+      "skill `brainstorming` frontmatter field `name` must be non-empty",
+    ),
+    "U+001F is the one strip character that discriminates here",
+  );
+});
+
+void test("enumeration rejects on absence rather than reading it as empty", async (t) => {
+  // The absence half of the inspection-failure rule stops at the existence and
+  // type probes: a `skills/` that vanishes between its `is_dir` probe and its
+  // enumeration is unenumerable, not an empty skills directory.
+  const { root } = await candidate(t);
+  const deps = failingDeps({
+    readdir: (path) => String(path).endsWith("/skills") && notFound(),
+  });
+  const errors = await generated.validateGeneratedPlugin(options(root), deps);
+  assert.ok(
+    errors.includes("skills directory could not be enumerated"),
     errors.join("|"),
   );
 });
