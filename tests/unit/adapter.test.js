@@ -4,13 +4,14 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/adapter.js")} */
 const { runAdapter } = await import(
   new URL("../../dist/adapter.js", import.meta.url).href
 );
 
-const PACKAGE_ROOT = resolve(new URL("../../", import.meta.url).pathname);
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 const SOURCE = "https://example.invalid/superpowers.git";
 

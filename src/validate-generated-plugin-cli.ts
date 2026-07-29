@@ -115,6 +115,15 @@ export async function runValidateGeneratedPluginCli(
 }
 
 const entry = process.argv[1];
-if (entry !== undefined && import.meta.filename === realpathSync(entry)) {
+let entryRealpath: string | undefined;
+if (entry !== undefined) {
+  try {
+    entryRealpath = realpathSync(entry);
+  } catch {
+    // An unresolvable argv[1] means "not the entry point", not a crash.
+    entryRealpath = undefined;
+  }
+}
+if (entryRealpath !== undefined && import.meta.filename === entryRealpath) {
   process.exitCode = await runValidateGeneratedPluginCli(process.argv.slice(2));
 }

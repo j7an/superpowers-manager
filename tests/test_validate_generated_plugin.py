@@ -519,6 +519,11 @@ class ValidatorTests(unittest.TestCase):
                 ["./hooks/hooks-codex.json", {"hooks": {}}],
                 "field `hooks` array must contain only paths or only objects",
             ),
+            (
+                "string-array-escape",
+                ["./hooks/hooks-codex.json", "./../outside.json"],
+                "field `hooks[1]` escapes the plugin root",
+            ),
             ("missing-dot-slash", "hooks/hooks-codex.json", "must start with `./`"),
             ("absolute", "/tmp/hooks.json", "must start with `./`"),
             ("traversal", "./../outside.json", "escapes the plugin root"),

@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/python-text.js")} */
 const { pythonStrip, pythonSplitlines } = await import(
@@ -750,7 +751,7 @@ void test("a SKILL.md read error maps to the unreadable-UTF-8 diagnostic", async
   );
 });
 
-void test("an undecodable skill entry name fails closed at the type probe", async (t) => {
+void test("a skill entry type-probe failure fails closed", async (t) => {
   const { root } = await candidate(t);
   // `:381` — an entry that survives enumeration but cannot be type-probed.
   const deps = failingDeps({
@@ -937,10 +938,9 @@ void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", asy
 });
 
 const execFileAsync = promisify(execFile);
-const CLI = new URL(
-  "../../dist/validate-generated-plugin-cli.js",
-  import.meta.url,
-).pathname;
+const CLI = fileURLToPath(
+  new URL("../../dist/validate-generated-plugin-cli.js", import.meta.url),
+);
 
 /**
  * @param {string[]} argv
@@ -996,12 +996,10 @@ void test("CLI exit, stdout and stderr are exact", async (t) => {
   });
 
   // The raw argument is echoed, not the resolved path.
-  const unresolved = join(root, ".", "");
   assert.equal(
     (await runCli(cliArgv(`${root}/.`))).stdout,
     `generated plugin validation passed: ${root}/.\n`,
   );
-  void unresolved;
 
   await rm(join(root, "README.md"));
   await rm(join(root, "LICENSE"));

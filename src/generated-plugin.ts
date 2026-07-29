@@ -172,6 +172,7 @@ async function resolvePath(
         // A live cycle: leave this component unresolved and keep resolving the
         // remainder. Marking the path is what makes it rejectable if it turns
         // out to be where resolution ends.
+        if (strict) throw new ResolutionFailure(child);
         liveComponents.add(child);
         current = child;
         continue;
@@ -338,6 +339,9 @@ async function validateLocalPath(
     errors.push(`${label} could not be resolved`);
     return;
   }
+  // If `root` were `/`, `${root}/` is `//`, which no child ever starts with —
+  // everything would read as an escape. Fail-closed and unreachable in
+  // production, since the plugin root is never the filesystem root.
   if (target !== root && !target.startsWith(`${root}/`)) {
     errors.push(`${label} escapes the plugin root`);
     return;
@@ -858,6 +862,8 @@ const PROVENANCE_KEYS = [
   "upstream_manifest_version",
 ] as const;
 
+const SORTED_PROVENANCE_KEYS = [...PROVENANCE_KEYS].sort(compareByCodePoint);
+
 async function validateProvenance(
   options: GeneratedPluginValidationOptions,
   pluginRoot: string,
@@ -878,7 +884,7 @@ async function validateProvenance(
   const provenance = await loadJsonObject(path, "provenance", errors, deps);
   if (provenance === null) return;
   const keys = Object.keys(provenance).sort(compareByCodePoint);
-  const expectedKeys = [...PROVENANCE_KEYS].sort(compareByCodePoint);
+  const expectedKeys = SORTED_PROVENANCE_KEYS;
   if (
     keys.length !== expectedKeys.length ||
     keys.some((key, index) => key !== expectedKeys[index])
