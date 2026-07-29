@@ -94,7 +94,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `ADAPTER-READER-DUPLICATES-01` | `tests/test_adapter_protocol.py::test_rejects_duplicate_object_keys_recursively_without_replay` | `tests/fixtures/baseline/adapter-responses/duplicate-key.json` |
 | `GENERATED-LAYOUT-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
 | `GENERATED-UNKNOWN-FIELDS-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DECLARED-01 declared path and inline hook forms` | `tests/fixtures/baseline/manifests/upstream-active-hooks.json` |
-| `GENERATED-WRONG-NAME-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-WRONG-NAME-01 wrong upstream name is rejected` | — |
+| `GENERATED-WRONG-NAME-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected` | — |
 | `GENERATED-FALLBACK-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-FALLBACK-01 manifest-less upstream uses manager fallback` | — |
 | `GENERATED-HOOKS-FORBID-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-FORBID-01 explicit empty and fallback stay hook-free` | `tests/fixtures/baseline/manifests/upstream-empty-hooks.json` |
 | `GENERATED-HOOKS-DEFAULT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DEFAULT-01 absent and empty-array default discovery` | `tests/fixtures/baseline/manifests/upstream-default-hooks.json` |
@@ -105,6 +105,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `FS-CLEANUP-01` | `tests/baseline/cli-parity.test.js::FS-CLEANUP-01 interrupted state cleanup is invocation-scoped` | `tests/builders/baseline-scenario.sh` |
 | `FS-SYMLINK-01` | `tests/baseline/cli-parity.test.js::FS-SYMLINK-01 escaping and broken symlinks fail closed` | `tests/builders/baseline-scenario.sh` |
 | `FS-HOOK-CONTAINMENT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: FS-HOOK-CONTAINMENT-01 unsafe hook paths and symlinks fail closed` | — |
+| `FS-GENERATED-RESOLVE-01` | `tests/unit/generated-plugin.test.js::FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures` | — |
 | `FS-SELECTION-ATOMIC-01` | `tests/unit/selection.test.js::FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary` | — |
 | `FS-SELECTION-CONCURRENT-01` | `tests/test_selection_state.py::test_two_concurrent_writers_leave_one_complete_valid_record` | — |
 | `FS-SELECTION-POST-REPLACE-01` | `tests/unit/selection.test.js::FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode` | — |
