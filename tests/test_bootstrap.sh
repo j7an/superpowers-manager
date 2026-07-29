@@ -36,7 +36,12 @@ assert_file "config/upstream-ref"
 assert_file ".agents/plugins/marketplace.json"
 assert_file "plugins/superpowers/.codex-plugin/plugin.template.json"
 assert_file "scripts/adapters/codex/adapter"
-assert_file "scripts/adapters/codex/validate-generated-plugin.py"
+assert_file "src/generated-plugin.ts"
+assert_file "src/validate-generated-plugin-cli.ts"
+if [ -e "$root/scripts/adapters/codex/validate-generated-plugin.py" ]; then
+  echo "the Python generated-plugin validator must be gone" >&2
+  exit 1
+fi
 assert_file "scripts/core/validate-adapter-response.py"
 
 assert_contains "package.json" '"type": "module"'
@@ -74,6 +79,10 @@ assert_not_contains "tests/expected_tarball_contents.txt" "scripts/core/selectio
 assert_contains "tests/expected_tarball_contents.txt" "dist/adapter-cli.js"
 assert_contains "tests/expected_tarball_contents.txt" "dist/adapter-protocol.js"
 assert_contains "tests/expected_tarball_contents.txt" "dist/adapter.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/generated-plugin.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/python-text.js"
+assert_contains "tests/expected_tarball_contents.txt" "dist/validate-generated-plugin-cli.js"
+assert_not_contains "tests/expected_tarball_contents.txt" "scripts/adapters/codex/validate-generated-plugin.py"
 assert_contains "tests/expected_tarball_contents.txt" "dist/codex-json.js"
 assert_contains "tests/expected_tarball_contents.txt" "dist/codex-state.js"
 assert_not_contains "tests/expected_tarball_contents.txt" "dist/hooks-cli.js"
