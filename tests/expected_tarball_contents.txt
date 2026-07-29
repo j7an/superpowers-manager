@@ -16,10 +16,12 @@ dist/codex-json.js
 dist/codex-state.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
+dist/generated-plugin.js
 dist/git.js
 dist/hooks.js
 dist/provenance.js
 dist/python-json.js
+dist/python-text.js
 dist/safe-path.js
 dist/safety-error.js
 dist/selection-state-cli.js
@@ -29,12 +31,12 @@ dist/strict-json.js
 dist/upstream-cli.js
 dist/upstream-version.js
 dist/upstream.js
+dist/validate-generated-plugin-cli.js
 dist/workspace.js
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json
 scripts/adapters/codex/adapter
 scripts/adapters/codex/apply-manifest-overlay.py
-scripts/adapters/codex/validate-generated-plugin.py
 scripts/core/adapter.sh
 scripts/core/common.sh
 scripts/core/lifecycle.sh

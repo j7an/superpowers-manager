@@ -1037,7 +1037,6 @@ run_prepare_for_ref "$feature_commit" "out-raw"
 assert_prepare_commit "out-raw" "$feature_commit"
 assert_prepare_version "out-raw" "0.0.0+manager.$feature_short"
 
-# BASELINE CASE: GENERATED-WRONG-NAME-01 wrong upstream name is rejected
 assert_bad_manifest_error "out-bad-manifest"
 
 # BASELINE CASE: MANIFEST-READER-UPSTREAM-01 upstream manifest reader profile
@@ -1051,6 +1050,7 @@ assert_prepare_version \
   "out-reader-depth-256" \
   "0.0.0-ref-reader-depth-256+manager.$reader_depth_256_short"
 assert_prepare_upstream_manifest_version "out-reader-depth-256" "6.1.1"
+# BASELINE CASE: GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected
 assert_rejected_manifest_input \
   "reader-duplicate" "out-reader-duplicate" \
   'field `name` must equal `superpowers`'

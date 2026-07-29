@@ -65,9 +65,9 @@ updates.
 - Stamps the generated manifest with a ref-aware manager version ending in
   `+manager.<short-sha>` and writes the upstream provenance to
   `.superpowers-upstream.json`.
-- Validates the generated tree with the manager's shipped, Python-standard-library
-  contract validator before swapping it into place (a failed run never destroys
-  a previously generated tree).
+- Validates the generated tree with the manager's shipped contract validator
+  before swapping it into place (a failed run never destroys a previously
+  generated tree).
 - Registers the `superpowers-manager` marketplace and installs or refreshes
   `superpowers@superpowers-manager` in Codex.
 

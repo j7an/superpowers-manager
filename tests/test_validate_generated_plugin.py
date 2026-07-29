@@ -3,19 +3,16 @@ from __future__ import annotations
 
 import json
 import os
-import runpy
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VALIDATOR = ROOT / "scripts/adapters/codex/validate-generated-plugin.py"
+VALIDATOR = ROOT / "dist" / "validate-generated-plugin-cli.js"
 FIXTURES = ROOT / "tests" / "fixtures" / "baseline"
 MANIFESTS = FIXTURES / "manifests"
 PROVENANCE = FIXTURES / "provenance"
@@ -99,8 +96,7 @@ class ValidatorTests(unittest.TestCase):
 
     def run_validator(self) -> subprocess.CompletedProcess[str]:
         command = [
-            sys.executable,
-            "-S",
+            "node",
             str(VALIDATOR),
             "--plugin-root",
             str(self.plugin),
@@ -398,13 +394,6 @@ class ValidatorTests(unittest.TestCase):
         )
         self.assert_rejected("plugin manifest exceeds maximum JSON nesting")
 
-    def test_skill_enumeration_oserror_is_reported_deterministically(self) -> None:
-        validate_tree = runpy.run_path(str(VALIDATOR))["validate_tree"]
-        errors: list[str] = []
-        with mock.patch.object(Path, "iterdir", side_effect=OSError("fixture error")):
-            validate_tree(self.plugin, "forbid", errors)
-        self.assertIn("skills directory could not be enumerated", errors)
-
     def test_required_tree_and_skill_structure_fail_closed(self) -> None:
         required = (
             ".codex-plugin/plugin.template.json",
@@ -529,6 +518,11 @@ class ValidatorTests(unittest.TestCase):
                 "mixed-array",
                 ["./hooks/hooks-codex.json", {"hooks": {}}],
                 "field `hooks` array must contain only paths or only objects",
+            ),
+            (
+                "string-array-escape",
+                ["./hooks/hooks-codex.json", "./../outside.json"],
+                "field `hooks[1]` escapes the plugin root",
             ),
             ("missing-dot-slash", "hooks/hooks-codex.json", "must start with `./`"),
             ("absolute", "/tmp/hooks.json", "must start with `./`"),
