@@ -398,20 +398,39 @@ async function runBuild(
         // --plugin-root, --requested-ref, --resolved-ref, --commit,
         // --manifest-version, --manifest-source, --upstream-manifest-version.
         // The eighth, --source, is passed attached, where argparse accepts any
-        // dash-leading value, so it is deliberately absent here.
-        const splitValues: readonly string[] = [
-          candidateRoot,
-          flags["--requested-ref"],
-          flags["--resolved-ref"],
-          flags["--commit"],
-          flags["--manager-version"],
-          manifestSource,
-          flags["--upstream-manifest-version"],
+        // dash-leading value, so it is deliberately absent here. Each value is
+        // paired with the ADAPTER-facing flag name to report: --manager-version
+        // (the CLI calls it --manifest-version) and --plugin-root /
+        // --manifest-source (derived, not user-supplied) deliberately differ
+        // from the validator CLI's own names, since the operator can only act
+        // on the adapter's surface.
+        const splitValues: ReadonlyArray<{
+          readonly value: string;
+          readonly name: string;
+        }> = [
+          { value: candidateRoot, name: "--plugin-root" },
+          { value: flags["--requested-ref"], name: "--requested-ref" },
+          { value: flags["--resolved-ref"], name: "--resolved-ref" },
+          { value: flags["--commit"], name: "--commit" },
+          { value: flags["--manager-version"], name: "--manager-version" },
+          { value: manifestSource, name: "--manifest-source" },
+          {
+            value: flags["--upstream-manifest-version"],
+            name: "--upstream-manifest-version",
+          },
         ];
-        if (!splitValues.every(isAcceptedSplitValue)) {
+        const firstRejected = splitValues.find(
+          ({ value }) => !isAcceptedSplitValue(value),
+        );
+        if (firstRejected !== undefined) {
           // Declared exception to message-record parity: argparse wrote usage
-          // records here; this guard precedes the call and writes none. The
+          // records here; this guard precedes the call and writes a
+          // differently-worded record naming the rejected flag instead. The
           // failure code and message are unchanged.
+          const text =
+            "Generated plugin validation failed:\n" +
+            `- validator argument \`${firstRejected.name}\` has a dash-leading value the argument parser rejects\n`;
+          log.appendBytes("stderr", Buffer.from(text, "utf8"));
           fail(
             "generated-plugin-validation-failed",
             "built-in generated plugin validation failed",

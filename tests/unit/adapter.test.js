@@ -119,7 +119,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
   );
 });
 
-void test("a split dash-leading ref fails before the validator with no records", async (t) => {
+void test("a split dash-leading ref fails before the validator with a named-flag record", async (t) => {
   const workspace = await buildWorkspace(t);
   const result = await runAdapter(
     buildArgv(workspace, { "--requested-ref": "-foo" }),
@@ -131,8 +131,35 @@ void test("a split dash-leading ref fails before the validator with no records",
     "generated-plugin-validation-failed",
   );
   // Declared exception: argparse wrote usage records here; the pre-call guard
-  // writes none. The failure code and message are unchanged.
-  assert.deepStrictEqual(result.envelope.messages, []);
+  // writes a differently-worded record naming the rejected flag instead. The
+  // failure code and message are unchanged.
+  assert.deepStrictEqual(result.envelope.messages, [
+    { channel: "stderr", text: "Generated plugin validation failed:" },
+    {
+      channel: "stderr",
+      text: "- validator argument `--requested-ref` has a dash-leading value the argument parser rejects",
+    },
+  ]);
+});
+
+void test("a split dash-leading value on a different flag names that flag", async (t) => {
+  const workspace = await buildWorkspace(t);
+  const result = await runAdapter(
+    buildArgv(workspace, { "--commit": "-deadbeef" }),
+    { root: PACKAGE_ROOT },
+  );
+  assert.equal(result.envelope.ok, false);
+  assert.equal(
+    result.envelope.error?.code,
+    "generated-plugin-validation-failed",
+  );
+  assert.deepStrictEqual(result.envelope.messages, [
+    { channel: "stderr", text: "Generated plugin validation failed:" },
+    {
+      channel: "stderr",
+      text: "- validator argument `--commit` has a dash-leading value the argument parser rejects",
+    },
+  ]);
 });
 
 void test("split dash-leading exceptions still reach the validator", async (t) => {
