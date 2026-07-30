@@ -175,6 +175,15 @@ void test("broken symlink suite", (t) => {
   symlinkSync("/nonexistent/target", join(root, "tests/unit/broken.test.js"));
   const r = runIn(root);
   assert.equal(r.status, 1);
+  // Without the stderr match this case is vacuously satisfiable: a runner
+  // killed by a signal reports status null, which `runIn` maps to 1, and
+  // leaves both streams empty — passing the status check and
+  // assertNoRawFailure alike. The frozen diagnostic is what proves the
+  // statSync guard ran.
+  assert.match(
+    r.stderr,
+    /suite could not be inspected: tests\/unit\/broken\.test\.js/,
+  );
   assertNoRawFailure(r);
 });
 
