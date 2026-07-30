@@ -16,3 +16,4 @@ docs/superpowers/
 *.tgz
 dist/
 node_modules/
+__pycache__/

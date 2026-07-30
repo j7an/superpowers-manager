@@ -59,14 +59,14 @@ selectors or intentionally update the inventory, test, and this map together.
 | `SEL-READER-PATHS-01` | `tests/baseline/selection-state.test.js::SEL-READER-PATHS-01 read rejects symlink, directory, and FIFO paths` | — |
 | `PROV-READER-STRICT-01` | `tests/test_probe.sh::# BASELINE CASE: PROV-READER-STRICT-01 strict provenance reader profile` | `tests/fixtures/baseline/provenance/duplicate-key.json` |
 | `PROV-READER-LENIENT-01` | `tests/test_probe.sh::# BASELINE CASE: PROV-READER-LENIENT-01 lenient commit reader profile` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
-| `PROV-READER-CANDIDATE-01` | `tests/test_validate_generated_plugin.py::test_candidate_provenance_reader_profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
+| `PROV-READER-CANDIDATE-01` | `tests/baseline/generated-plugin-corpus.test.js::PROV-READER-CANDIDATE-01 candidate provenance validator profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
 | `PROV-READER-CODEX-SOURCE-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: PROV-READER-CODEX-SOURCE-01 Codex source reader profile` | `tests/fixtures/baseline/provenance/non-standard-constant.json` |
 | `PROV-READER-CODEX-COMMIT-01` | `tests/unit/codex-state.test.js::PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
 | `MANIFEST-READER-INSTALLED-01` | `tests/unit/codex-state.test.js::MANIFEST-READER-INSTALLED-01 installed manifest complete matrix` | `tests/fixtures/baseline/manifests/installed-manager-version.json` |
 | `MANIFEST-READER-UPSTREAM-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: MANIFEST-READER-UPSTREAM-01 upstream manifest reader profile` | `tests/fixtures/baseline/manifests/upstream-no-hooks.json` |
 | `MANIFEST-READER-MATERIALIZE-01` | `tests/unit/hooks.test.js::MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix` | `tests/fixtures/baseline/manifests/candidate-non-standard-constant.json` |
 | `MANIFEST-READER-OVERLAY-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: MANIFEST-READER-OVERLAY-01 manifest overlay profile` | `tests/fixtures/baseline/manifests/candidate-unknown-field.json` |
-| `MANIFEST-READER-VALIDATOR-01` | `tests/test_validate_generated_plugin.py::test_candidate_manifest_reader_profile` | `tests/fixtures/baseline/manifests/candidate-duplicate-key.json` |
+| `MANIFEST-READER-VALIDATOR-01` | `tests/baseline/generated-plugin-corpus.test.js::MANIFEST-READER-VALIDATOR-01 candidate validator profile` | `tests/fixtures/baseline/manifests/candidate-duplicate-key.json` |
 | `CODEX-JSON-ARRAY-01` | `tests/unit/codex-json.test.js::CODEX-JSON-ARRAY-01 installed listing reader complete matrix` | — |
 | `CODEX-JSON-MARKETPLACE-01` | `tests/unit/codex-json.test.js::CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix` | — |
 | `CODEX-JSON-VERSION-01` | `tests/unit/codex-json.test.js::CODEX-JSON-VERSION-01 active version reader complete matrix` | — |
