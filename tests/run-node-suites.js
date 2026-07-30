@@ -107,9 +107,21 @@ for (const suite of expected) {
 if (expected.length === 0) fail("tests/suites.json declares no suites");
 
 const ordered = [...expected].sort();
+
+// A caller that itself runs under `node --test` (this runner is one such
+// caller, since it is registered in its own manifest) has NODE_TEST_CONTEXT
+// / NODE_TEST_WORKER_ID set in its process.env. Left in the child's env, the
+// inner `node --test` invocation below misreads itself as a nested recursive
+// test run and silently skips executing every file — exit 0 having run
+// nothing, the exact silent pass this runner exists to prevent. Verified by
+// reproduction. Strip both before spawning.
+const childEnv = { ...process.env };
+delete childEnv.NODE_TEST_CONTEXT;
+delete childEnv.NODE_TEST_WORKER_ID;
 const result = spawnSync(process.execPath, ["--test", ...ordered], {
   cwd: ROOT,
   stdio: "inherit",
+  env: childEnv,
 });
 if (result.error) fail("could not start the Node test runner");
 process.exit(result.status ?? 1);

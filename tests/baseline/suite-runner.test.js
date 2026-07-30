@@ -47,21 +47,15 @@ function fakeRoot(t, shape) {
   return root;
 }
 
-/** @param {string} root */
-function runIn(root) {
-  // This suite itself runs under `node --test`, which sets NODE_TEST_CONTEXT
-  // / NODE_TEST_WORKER_ID in its own process.env. Left in the child's env,
-  // the runner's inner `node --test` invocation misreads itself as a nested
-  // recursive test run and silently skips executing every file (exit 0
-  // regardless of suite content) — verified by reproduction. Strip them so
-  // the child actually executes its suites.
-  const env = { ...process.env, SPW_RUNNER_ROOT: root };
-  delete env.NODE_TEST_CONTEXT;
-  delete env.NODE_TEST_WORKER_ID;
+/**
+ * @param {string} root
+ * @param {Record<string, string>} [extraEnv]
+ */
+function runIn(root, extraEnv) {
   const result = spawnSync(process.execPath, [RUNNER], {
     cwd: root,
     encoding: "utf8",
-    env,
+    env: { ...process.env, SPW_RUNNER_ROOT: root, ...extraEnv },
   });
   return {
     status: result.status ?? 1,
@@ -86,6 +80,7 @@ test("clean tree passes", (t) => {
   });
   const r = runIn(root);
   assert.equal(r.status, 0);
+  assertNoRawFailure(r);
 });
 
 test("declared but absent", (t) => {
@@ -96,6 +91,7 @@ test("declared but absent", (t) => {
   const r = runIn(root);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /tests\/unit\/missing\.test\.js/);
+  assertNoRawFailure(r);
 });
 
 test("present but unregistered", (t) => {
@@ -109,6 +105,7 @@ test("present but unregistered", (t) => {
   const r = runIn(root);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /tests\/unit\/extra\.test\.js/);
+  assertNoRawFailure(r);
 });
 
 test("empty manifest", (t) => {
@@ -118,6 +115,8 @@ test("empty manifest", (t) => {
   });
   const r = runIn(root);
   assert.equal(r.status, 1);
+  assert.match(r.stderr, /tests\/suites\.json declares no suites/);
+  assertNoRawFailure(r);
 });
 
 test("malformed manifest: not JSON", (t) => {
@@ -128,6 +127,11 @@ test("malformed manifest: not JSON", (t) => {
   writeFileSync(join(root, "tests", "suites.json"), "not json", "utf8");
   const r = runIn(root);
   assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /tests\/suites\.json is missing or is not valid JSON/,
+  );
+  assertNoRawFailure(r);
 });
 
 test("malformed manifest: suites is not an array", (t) => {
@@ -142,6 +146,11 @@ test("malformed manifest: suites is not an array", (t) => {
   );
   const r = runIn(root);
   assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /tests\/suites\.json must be an object with a `suites` array/,
+  );
+  assertNoRawFailure(r);
 });
 
 test("missing dist/cli.js", (t) => {
@@ -156,6 +165,7 @@ test("missing dist/cli.js", (t) => {
     r.stderr,
     /dist\/cli\.js is missing — run pnpm install --frozen-lockfile && pnpm run build/,
   );
+  assertNoRawFailure(r);
 });
 
 test("broken symlink suite", (t) => {
@@ -176,4 +186,26 @@ test("failing child suite propagates", (t) => {
   });
   const r = runIn(root);
   assert.notEqual(r.status, 0);
+  // Not assertNoRawFailure here: node:test's own failure reporter legitimately
+  // prints the thrown Error's stack for the failing child test — that is
+  // expected test output, not a leak from this runner's own error-handling
+  // paths, and the two are indistinguishable by the generic `/\n\s+at /`
+  // pattern.
+});
+
+test("failing child suite propagates even when the caller's own NODE_TEST_CONTEXT leaks into the child env", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: { "tests/unit/a.test.js": FAILING_SUITE },
+  });
+  // Simulates this contract suite's own invocation context: a caller that is
+  // itself running under `node --test` has NODE_TEST_CONTEXT set. Without the
+  // runner stripping it before its own inner `node --test` spawn, the inner
+  // invocation misreads itself as a nested recursive run, skips executing
+  // every suite file, and exits 0 — a silent pass in the exact gate meant to
+  // prevent silent passes.
+  const r = runIn(root, { NODE_TEST_CONTEXT: "child-v8" });
+  assert.notEqual(r.status, 0);
+  // Not assertNoRawFailure here either, for the same reason as the previous
+  // case: the failing child test's own stack is expected node:test output.
 });
