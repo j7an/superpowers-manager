@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -37,7 +37,9 @@ function fakeRoot(t, shape) {
     mkdirSync(join(root, dir), { recursive: true });
   }
   for (const [relative, contents] of Object.entries(shape.files)) {
-    writeFileSync(join(root, relative), contents, "utf8");
+    const target = join(root, relative);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents, "utf8");
   }
   writeFileSync(
     join(root, "tests", "suites.json"),
@@ -208,4 +210,31 @@ test("failing child suite propagates even when the caller's own NODE_TEST_CONTEX
   assert.notEqual(r.status, 0);
   // Not assertNoRawFailure here either, for the same reason as the previous
   // case: the failing child test's own stack is expected node:test output.
+});
+
+test("nested test file rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/nested/buried.test.js": PASSING_SUITE,
+    },
+  });
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /tests\/unit\/nested\/buried\.test\.js/);
+  assertNoRawFailure(r);
+});
+
+test("nested non-test helper accepted", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/helpers/child.js": "module.exports = {};\n",
+    },
+  });
+  const r = runIn(root);
+  assert.equal(r.status, 0);
+  assertNoRawFailure(r);
 });

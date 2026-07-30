@@ -64,7 +64,25 @@ for (const dir of SUITE_DIRS) {
     fail(`suite directory could not be read: ${dir}`);
   }
   for (const entry of entries) {
-    if (entry.isDirectory()) continue;
+    if (entry.isDirectory()) {
+      // Nested test files typecheck but never run: the runners are
+      // single-level and traceability.test.js only accepts flat Node
+      // selectors. Nested non-test helpers are supported.
+      const nested = readdirSync(join(absolute, entry.name), {
+        recursive: true,
+      });
+      const offenders = nested
+        .map((name) => String(name))
+        .filter((name) => name.endsWith(".test.js"))
+        .map((name) => `${dir}/${entry.name}/${name}`)
+        .sort();
+      if (offenders.length > 0) {
+        fail(
+          `test files must be flat; move these up one level: ${offenders.join(", ")}`,
+        );
+      }
+      continue;
+    }
     if (entry.name.endsWith(".test.js")) discovered.push(`${dir}/${entry.name}`);
   }
 }
