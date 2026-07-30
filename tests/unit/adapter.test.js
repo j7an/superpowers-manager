@@ -163,6 +163,31 @@ void test("a split dash-leading value on a different flag names that flag", asyn
   ]);
 });
 
+// `-١` U+0661 ARABIC-INDIC ONE, `-१` U+0967 DEVANAGARI ONE, `-١.٥` a Unicode
+// fractional exercising the matcher's second alternative. CPython `re` `\d`
+// matches Unicode category Nd, so real `argparse` accepts all three as negative
+// numbers; the guard must let them through to the validator rather than
+// reporting them as rejected split flags.
+void test("split Unicode-decimal values still reach the validator", async (t) => {
+  for (const value of ["-١", "-१", "-١.٥"]) {
+    await t.test(value, async (t) => {
+      const workspace = await buildWorkspace(t);
+      const result = await runAdapter(
+        buildArgv(workspace, { "--requested-ref": value }),
+        { root: PACKAGE_ROOT },
+      );
+      assert.equal(result.envelope.ok, false);
+      assert.deepStrictEqual(result.envelope.messages, [
+        { channel: "stderr", text: "Generated plugin validation failed:" },
+        {
+          channel: "stderr",
+          text: "- provenance field `requested_ref` does not match expected value",
+        },
+      ]);
+    });
+  }
+});
+
 void test("split dash-leading exceptions still reach the validator", async (t) => {
   for (const value of ["-", "-1", "-1.5", "-.5"]) {
     await t.test(value, async (t) => {

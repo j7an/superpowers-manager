@@ -25,6 +25,11 @@ const generated = await import(
   new URL("../../dist/generated-plugin.js", import.meta.url).href
 );
 
+/** @type {typeof import("../../src/validate-generated-plugin-cli.js")} */
+const { isAcceptedSplitValue } = await import(
+  new URL("../../dist/validate-generated-plugin-cli.js", import.meta.url).href
+);
+
 /** An `OSError`-shaped rejection whose errno is not absence-like. */
 function permissionDenied() {
   const error = new Error("permission denied");
@@ -1087,6 +1092,69 @@ void test("CLI usage rejections exit 2 with an empty stdout and no traceback", a
 void test("split dash-leading exceptions are accepted as argparse accepts them", async (t) => {
   const { root } = await candidate(t);
   for (const value of ["-", "-1", "-1.5", "-.5"]) {
+    const argv = cliArgv(root).map((token) =>
+      token === "latest-release" ? value : token,
+    );
+    const result = await runCli(argv);
+    assert.equal(result.code, 1, `${value}: ${result.stderr}`);
+    assert.equal(
+      result.stderr,
+      "Generated plugin validation failed:\n" +
+        "- provenance field `requested_ref` does not match expected value\n",
+      `${value} must reach validation, not usage`,
+    );
+  }
+});
+
+// Ground truth measured against CPython 3.11.15 `argparse` on 2026-07-29.
+// `_negative_number_matcher` is `^-\d+$|^-\d*\.\d+$`; CPython `\d` is Unicode
+// category Nd, JavaScript `\d` is ASCII-only.
+const DASH_LEADING_PARITY = [
+  { value: "-1", accepted: true, note: "ASCII integer" },
+  { value: "-0", accepted: true, note: "ASCII zero" },
+  { value: "-1.5", accepted: true, note: "ASCII fractional" },
+  { value: "-.5", accepted: true, note: "leading-dot fractional, \\d* empty" },
+  { value: "-١", accepted: true, note: "U+0661 ARABIC-INDIC ONE" },
+  { value: "-१", accepted: true, note: "U+0967 DEVANAGARI ONE" },
+  {
+    value: "-١.٥",
+    accepted: true,
+    note: "Unicode fractional, second alternative",
+  },
+  { value: "-", accepted: true, note: "bare dash" },
+  { value: "-x", accepted: false, note: "flag" },
+  { value: "--flagish", accepted: false, note: "long flag" },
+  { value: "-1a", accepted: false, note: "trailing non-digit" },
+];
+
+/** Unicode-decimal values the helper, the CLI and the adapter must all accept. */
+const UNICODE_ACCEPTED_VALUES = ["-١", "-१", "-١.٥"];
+
+void test("split dash-leading values match argparse", () => {
+  for (const { value, accepted, note } of DASH_LEADING_PARITY) {
+    assert.equal(
+      isAcceptedSplitValue(value),
+      accepted,
+      `${JSON.stringify(value)} (${note})`,
+    );
+  }
+});
+
+// INTENTIONAL DIVERGENCE — PR 8 divergence #1, not a defect.
+// `argparse` accepts a dash-leading token containing a space as a positional;
+// this port rejects it. Both implementations reject the input overall. Asserted
+// explicitly so a later reader does not "fix" the rejection into a regression.
+void test("a dash-leading token containing a space is rejected", () => {
+  assert.equal(isAcceptedSplitValue("-x y"), false);
+});
+
+// A helper-only table would let a call-site bypass regress while staying green,
+// so the same values are driven through the built CLI in split form. The
+// diagnostic is asserted exactly: reaching validation and failing there is the
+// only outcome that proves the value was not rejected as an option.
+void test("split Unicode-decimal values reach CLI validation", async (t) => {
+  const { root } = await candidate(t);
+  for (const value of UNICODE_ACCEPTED_VALUES) {
     const argv = cliArgv(root).map((token) =>
       token === "latest-release" ? value : token,
     );

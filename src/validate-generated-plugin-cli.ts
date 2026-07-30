@@ -18,7 +18,11 @@ const FLAGS = [
 
 // `argparse` accepts a lone `-` and a bare negative number as a split value;
 // every other dash-leading split value is treated as an option and rejected.
-const NEGATIVE_NUMBER_RE = /^-\d+$|^-\d*\.\d+$/;
+// CPython's `_negative_number_matcher` is `^-\d+$|^-\d*\.\d+$`, and `re` `\d` on
+// a `str` pattern matches every character in Unicode category Nd. JavaScript
+// `\d` is `[0-9]` whatever the flags, so `\p{Nd}` plus `u` is what mirrors it.
+// The `\.` stays a literal ASCII period: `argparse` accepts no other separator.
+const NEGATIVE_NUMBER_RE = /^-\p{Nd}+$|^-\p{Nd}*\.\p{Nd}+$/u;
 
 /** True when `argparse` would accept `value` in `--flag value` form. */
 export function isAcceptedSplitValue(value: string): boolean {
