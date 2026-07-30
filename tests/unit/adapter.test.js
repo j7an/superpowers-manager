@@ -1,6 +1,6 @@
 // @ts-check
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -206,4 +206,114 @@ void test("split dash-leading exceptions still reach the validator", async (t) =
       ]);
     });
   }
+});
+
+const FAKE_CODEX = fileURLToPath(
+  new URL("helpers/fake-codex.sh", import.meta.url),
+);
+
+/**
+ * A sandbox for the Codex-invoking adapter operations: a recorded fake Codex
+ * plus an isolated installed-plugin search root, so nothing reads or writes the
+ * developer's real `~/.codex`.
+ * @param {import("node:test").TestContext} t
+ */
+async function codexSandbox(t) {
+  const base = await mkdtemp(join(tmpdir(), "spw-adapter-codex-"));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const log = join(base, "commands.log");
+  await writeFile(log, "");
+  const searchRoot = join(base, "codex");
+  await mkdir(searchRoot);
+  const packageRoot = join(base, "package");
+  await mkdir(packageRoot);
+  return {
+    base,
+    log,
+    packageRoot,
+    /** @returns {Promise<string[]>} */
+    async commands() {
+      return (await readFile(log, "utf8")).split("\n").filter(Boolean);
+    },
+    /** @param {Record<string, string>} extra */
+    env(extra) {
+      return {
+        SUPERPOWERS_CODEX: FAKE_CODEX,
+        SUPERPOWERS_INSTALLED_SEARCH_ROOT: searchRoot,
+        FAKE_CODEX_LOG: log,
+        ...extra,
+      };
+    },
+  };
+}
+
+// The adapter reads `codex plugin list --json` as raw bytes
+// (`src/adapter.ts:93`, `:741`). `@@BAD@@` is a raw 0xff byte inside an
+// otherwise well-formed JSON string, so a lossy `.toString()` at the call site
+// would parse successfully and yield a fabricated version instead of failing
+// closed. Asserting the exact parse diagnostic is what distinguishes the two.
+void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({
+      FAKE_CODEX_PLUGIN_LIST:
+        '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0@@BAD@@"}]}',
+    }),
+  });
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.envelope.error?.code, "inspect-failed");
+  assert.equal(
+    result.envelope.error?.message,
+    `cannot parse output of '${FAKE_CODEX} plugin list --json'`,
+  );
+  assert.deepStrictEqual(await sandbox.commands(), ["plugin list --json"]);
+});
+
+// The ownership view's fail-open is silent: a lossy decode leaves the mangled
+// plugin id simply not matching, so the adapter would answer `ok:true` with
+// every resource `false`. The assertion therefore requires a rejection.
+void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const result = await runAdapter(["inspect", "--view", "ownership"], {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({
+      FAKE_CODEX_PLUGIN_LIST:
+        '{"installed":[{"pluginId":"superpowers@superpowers-manager@@BAD@@","version":"1.0.0"}]}',
+      FAKE_CODEX_MARKETPLACE_LIST: '{"marketplaces":[]}',
+    }),
+  });
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.envelope.error?.code, "inspect-failed");
+  assert.equal(
+    result.envelope.error?.message,
+    `cannot parse output of '${FAKE_CODEX} plugin list --json'`,
+  );
+});
+
+// The install reconciliation read (`src/adapter.ts:535`) is the destructive
+// one: a lossy decode turns the registered root into a value that cannot equal
+// `--package-root`, so the adapter performs a real `marketplace remove` plus
+// `add`. Assert both the parse diagnostic and the absence of any mutation.
+void test("install rejects an invalid-UTF-8 marketplace listing without mutating", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const result = await runAdapter(
+    ["install", "--package-root", sandbox.packageRoot],
+    {
+      root: PACKAGE_ROOT,
+      env: sandbox.env({
+        FAKE_CODEX_MARKETPLACE_LIST:
+          '{"marketplaces":[{"name":"superpowers-manager","root":"/registered@@BAD@@"}]}',
+      }),
+    },
+  );
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.envelope.error?.code, "install-failed");
+  assert.equal(
+    result.envelope.error?.message,
+    `cannot parse output of '${FAKE_CODEX} plugin marketplace list --json'`,
+  );
+  assert.deepStrictEqual(await sandbox.commands(), [
+    "plugin marketplace list --json",
+  ]);
 });

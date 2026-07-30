@@ -1,14 +1,34 @@
 // @ts-check
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/workspace.js")} */
 const { withWorkspace } = await import(
   new URL("../../dist/workspace.js", import.meta.url).href
+);
+
+/** @type {typeof import("../../src/adapter.js")} */
+const { runAdapter } = await import(
+  new URL("../../dist/adapter.js", import.meta.url).href
+);
+
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const FAKE_CODEX = fileURLToPath(
+  new URL("helpers/fake-codex.sh", import.meta.url),
 );
 
 /** @param {import("node:test").TestContext} t */
@@ -170,4 +190,54 @@ void test("withWorkspace preserves the callback error when ignored cleanup also 
     ),
     (error) => error === callbackFailure,
   );
+});
+
+// The capability tests above prove `cleanupFailure: "ignore"` works. This one
+// proves the adapter still passes it: `src/adapter.ts` opts every operation out
+// of cleanup-failure propagation (five call sites, `:478` `:621` `:693` `:778`
+// `:887`), because a workspace it never wrote to failing to be removed must not
+// discard an otherwise successful result. The fake Codex makes the temporary
+// directory's parent read-only while it runs, so the adapter's own cleanup
+// really fails.
+void test("an adapter operation keeps its result when workspace cleanup fails", async (t) => {
+  const base = await mkdtemp(join(tmpdir(), "spw-adapter-cleanup-"));
+  const temporary = join(base, "tmp");
+  await mkdir(temporary);
+  const log = join(base, "commands.log");
+  await writeFile(log, "");
+  const originalTmpdir = process.env.TMPDIR;
+  process.env.TMPDIR = temporary;
+  t.after(async () => {
+    if (originalTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = originalTmpdir;
+    await chmod(temporary, 0o700);
+    await rm(base, { recursive: true, force: true });
+  });
+
+  const result = await runAdapter(
+    ["uninstall", "--plugin-present", "true", "--marketplace-present", "false"],
+    {
+      root: PACKAGE_ROOT,
+      env: {
+        SUPERPOWERS_CODEX: FAKE_CODEX,
+        FAKE_CODEX_LOG: log,
+        FAKE_CODEX_LOCK_DIR: temporary,
+      },
+    },
+  );
+
+  assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+  assert.deepStrictEqual(result.envelope.messages, [
+    {
+      channel: "stdout",
+      text: "removed plugin superpowers@superpowers-manager",
+    },
+    { channel: "stdout", text: "marketplace not registered; skipping" },
+  ]);
+  // Guard against a vacuous pass: if the read-only parent had not actually
+  // blocked removal there would be nothing left to find, and the assertions
+  // above would say nothing about cleanup-failure adoption.
+  const leftover = await readdir(temporary);
+  assert.deepStrictEqual(leftover.length, 1, leftover.join(", "));
+  assert.match(leftover[0] ?? "", /^superpowers-manager\.adapter-uninstall\./);
 });
