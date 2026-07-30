@@ -220,6 +220,15 @@ function runValidator(harness) {
   );
   if (result.error)
     assert.fail("could not start the generated-plugin validator");
+  // A signal death reports status null, and `?? 1` would coerce it into the
+  // same value a legitimate rejection produces. Python's returncode would have
+  // been negative and failed the comparison, so assert the absence of a signal
+  // rather than letting a killed child masquerade as a clean rejection.
+  assert.equal(
+    result.signal,
+    null,
+    `validator terminated by signal ${result.signal}`,
+  );
   return {
     status: result.status ?? 1,
     stdout: result.stdout,
