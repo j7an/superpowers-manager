@@ -22,9 +22,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "node --input-type=module -e \"import{existsSync}from'node:fs';if(!existsSync('dist/cli.js')){console.error('error: dist/cli.js is missing — run pnpm install --frozen-lockfile && pnpm run build');process.exit(1)}\"",
-    "lint": "oxlint src/ bin/ tests/bin/ tests/unit/",
-    "format": "prettier --write src/ bin/ tests/bin/ tests/unit/",
-    "format:check": "prettier --check src/ bin/ tests/bin/ tests/unit/",
+    "lint": "oxlint src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/run-node-suites.js",
+    "format": "prettier --write src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/run-node-suites.js",
+    "format:check": "prettier --check src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/run-node-suites.js",
     "typecheck:js": "tsc -p tests/tsconfig.json",
     "test": "node tests/run-node-suites.js",
     "check": "pnpm run format:check && pnpm run lint && pnpm run build && pnpm run typecheck:js && pnpm run test"

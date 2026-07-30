@@ -75,7 +75,7 @@ function assertNoRawFailure(r) {
   }
 }
 
-test("clean tree passes", (t) => {
+void test("clean tree passes", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: { "tests/unit/a.test.js": PASSING_SUITE },
@@ -85,7 +85,7 @@ test("clean tree passes", (t) => {
   assertNoRawFailure(r);
 });
 
-test("declared but absent", (t) => {
+void test("declared but absent", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js", "tests/unit/missing.test.js"],
     files: { "tests/unit/a.test.js": PASSING_SUITE },
@@ -96,7 +96,7 @@ test("declared but absent", (t) => {
   assertNoRawFailure(r);
 });
 
-test("present but unregistered", (t) => {
+void test("present but unregistered", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: {
@@ -110,7 +110,7 @@ test("present but unregistered", (t) => {
   assertNoRawFailure(r);
 });
 
-test("empty manifest", (t) => {
+void test("empty manifest", (t) => {
   const root = fakeRoot(t, {
     suites: [],
     files: {},
@@ -121,7 +121,7 @@ test("empty manifest", (t) => {
   assertNoRawFailure(r);
 });
 
-test("malformed manifest: not JSON", (t) => {
+void test("malformed manifest: not JSON", (t) => {
   const root = fakeRoot(t, {
     suites: [],
     files: {},
@@ -133,7 +133,7 @@ test("malformed manifest: not JSON", (t) => {
   assertNoRawFailure(r);
 });
 
-test("malformed manifest: suites is not an array", (t) => {
+void test("malformed manifest: suites is not an array", (t) => {
   const root = fakeRoot(t, {
     suites: [],
     files: {},
@@ -152,7 +152,7 @@ test("malformed manifest: suites is not an array", (t) => {
   assertNoRawFailure(r);
 });
 
-test("missing dist/cli.js", (t) => {
+void test("missing dist/cli.js", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: { "tests/unit/a.test.js": PASSING_SUITE },
@@ -167,7 +167,7 @@ test("missing dist/cli.js", (t) => {
   assertNoRawFailure(r);
 });
 
-test("broken symlink suite", (t) => {
+void test("broken symlink suite", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/broken.test.js"],
     files: {},
@@ -178,7 +178,7 @@ test("broken symlink suite", (t) => {
   assertNoRawFailure(r);
 });
 
-test("failing child suite propagates", (t) => {
+void test("failing child suite propagates", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: { "tests/unit/a.test.js": FAILING_SUITE },
@@ -192,7 +192,7 @@ test("failing child suite propagates", (t) => {
   // pattern.
 });
 
-test("failing child suite propagates even when the caller's own NODE_TEST_CONTEXT leaks into the child env", (t) => {
+void test("failing child suite propagates even when the caller's own NODE_TEST_CONTEXT leaks into the child env", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: { "tests/unit/a.test.js": FAILING_SUITE },
@@ -209,7 +209,7 @@ test("failing child suite propagates even when the caller's own NODE_TEST_CONTEX
   // case: the failing child test's own stack is expected node:test output.
 });
 
-test("nested test file rejected", (t) => {
+void test("nested test file rejected", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: {
@@ -223,7 +223,7 @@ test("nested test file rejected", (t) => {
   assertNoRawFailure(r);
 });
 
-test("nested non-test helper accepted", (t) => {
+void test("nested non-test helper accepted", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: {
@@ -236,7 +236,7 @@ test("nested non-test helper accepted", (t) => {
   assertNoRawFailure(r);
 });
 
-test("unreadable nested directory fails closed without leaking errno", (t) => {
+void test("unreadable nested directory fails closed without leaking errno", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],
     files: {
