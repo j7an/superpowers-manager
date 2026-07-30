@@ -68,11 +68,19 @@ for (const dir of SUITE_DIRS) {
       // Nested test files typecheck but never run: the runners are
       // single-level and traceability.test.js only accepts flat Node
       // selectors. Nested non-test helpers are supported.
-      const nested = readdirSync(join(absolute, entry.name), {
-        recursive: true,
-      });
+      /** @type {string[]} */
+      let nested;
+      try {
+        nested = readdirSync(join(absolute, entry.name), {
+          recursive: true,
+        }).map((name) => String(name));
+      } catch {
+        // Unguarded, an unreadable subdirectory throws here and puts the raw
+        // EACCES text plus a stack on stderr — the same leak the sibling
+        // readdirSync above is wrapped to prevent.
+        fail(`suite subdirectory could not be read: ${dir}/${entry.name}`);
+      }
       const offenders = nested
-        .map((name) => String(name))
         .filter((name) => name.endsWith(".test.js"))
         .map((name) => `${dir}/${entry.name}/${name}`)
         .sort();
@@ -83,7 +91,8 @@ for (const dir of SUITE_DIRS) {
       }
       continue;
     }
-    if (entry.name.endsWith(".test.js")) discovered.push(`${dir}/${entry.name}`);
+    if (entry.name.endsWith(".test.js"))
+      discovered.push(`${dir}/${entry.name}`);
   }
 }
 

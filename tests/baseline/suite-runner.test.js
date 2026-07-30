@@ -2,8 +2,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -13,9 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const RUNNER = fileURLToPath(
-  new URL("../run-node-suites.js", import.meta.url),
-);
+const RUNNER = fileURLToPath(new URL("../run-node-suites.js", import.meta.url));
 
 const PASSING_SUITE = 'import test from "node:test";\ntest("ok", () => {});\n';
 const FAILING_SUITE =
@@ -129,10 +129,7 @@ test("malformed manifest: not JSON", (t) => {
   writeFileSync(join(root, "tests", "suites.json"), "not json", "utf8");
   const r = runIn(root);
   assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
-    /tests\/suites\.json is missing or is not valid JSON/,
-  );
+  assert.match(r.stderr, /tests\/suites\.json is missing or is not valid JSON/);
   assertNoRawFailure(r);
 });
 
@@ -237,4 +234,44 @@ test("nested non-test helper accepted", (t) => {
   const r = runIn(root);
   assert.equal(r.status, 0);
   assertNoRawFailure(r);
+});
+
+test("unreadable nested directory fails closed without leaking errno", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/locked/keep.js": "",
+    },
+  });
+  const locked = join(root, "tests", "unit", "locked");
+  chmodSync(locked, 0o000);
+  // Restore inside the test body, not in a t.after hook: fakeRoot registers
+  // its rmSync hook first and hooks run in registration order, so an
+  // unreadable directory would still be unreadable at removal time and the
+  // cleanup would fail with ENOTEMPTY.
+  try {
+    // Root ignores the mode bits, so the directory stays readable and this
+    // case would pass without exercising the guard at all. Skip rather than
+    // assert a condition the environment cannot produce.
+    let revoked = false;
+    try {
+      readdirSync(locked);
+    } catch {
+      revoked = true;
+    }
+    if (!revoked) {
+      t.skip("cannot revoke directory read access as this user");
+      return;
+    }
+    const r = runIn(root);
+    assert.equal(r.status, 1);
+    assert.match(
+      r.stderr,
+      /suite subdirectory could not be read: tests\/unit\/locked/,
+    );
+    assertNoRawFailure(r);
+  } finally {
+    chmodSync(locked, 0o755);
+  }
 });
