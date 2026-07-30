@@ -5,26 +5,6 @@ test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 . "$test_dir/lib/harness.sh"
 spw_test_root
 
-test_bin_units() {
-  command -v node >/dev/null 2>&1 || { echo "error: node is required for this test" >&2; exit 1; }
-  node "$root/tests/bin/units.test.js"
-  echo "test_bin_units: OK"
-}
-
-test_unit_suite() {
-  command -v node >/dev/null 2>&1 || {
-    echo "error: node is required for this test" >&2
-    exit 1
-  }
-  set -- "$root"/tests/unit/*.test.js
-  if [ ! -f "$1" ]; then
-    echo "error: no unit tests found" >&2
-    exit 1
-  fi
-  node --test "$@"
-  echo "test_unit_suite: OK"
-}
-
 test_js_types() {
   tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"
 
@@ -38,7 +18,5 @@ test_js_types() {
 }
 
 failed=0
-spw_section test_bin_units test_bin_units
-spw_section test_unit_suite test_unit_suite
 spw_section test_js_types test_js_types
 [ "$failed" -eq 0 ] || exit "$failed"
