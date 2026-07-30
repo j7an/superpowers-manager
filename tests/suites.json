@@ -3,6 +3,7 @@
     "tests/baseline/cli-parity.test.js",
     "tests/baseline/fixture-contract.test.js",
     "tests/baseline/packaged-cli.test.js",
+    "tests/baseline/selection-state.test.js",
     "tests/baseline/suite-runner.test.js",
     "tests/baseline/traceability.test.js",
     "tests/bin/units.test.js",

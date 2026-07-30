@@ -34,16 +34,16 @@ selectors or intentionally update the inventory, test, and this map together.
 | `SEL-PRECEDENCE-REF-01` | `tests/test_selection_state.sh::# BASELINE CASE: SEL-PRECEDENCE-REF-01 complete ref precedence` | — |
 | `SEL-PRECEDENCE-SOURCE-01` | `tests/baseline/cli-parity.test.js::SEL-PRECEDENCE-SOURCE-01 source precedence is independent` | `tests/fixtures/baseline/selection/track-latest.json` |
 | `SEL-PRECEDENCE-VALIDATE-01` | `tests/test_selection_state.sh::# BASELINE CASE: SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution` | — |
-| `SEL-SCHEMA-MODES-01` | `tests/test_selection_state.py::test_read_normalizes_absent_pinned_and_track_latest` | `tests/fixtures/baseline/selection/track-latest.json` |
-| `SEL-SCHEMA-KEYS-01` | `tests/test_selection_state.py::test_read_rejects_duplicate_unknown_missing_and_inconsistent_fields` | `tests/fixtures/baseline/selection/unknown-key.json` |
-| `SEL-SCHEMA-REFS-01` | `tests/test_selection_state.py::test_read_rejects_empty_multiline_and_invalid_ref_strings` | — |
-| `SEL-SCHEMA-COMMIT-01` | `tests/test_selection_state.py::test_raw_commit_requires_cross_field_equality` | — |
-| `SEL-SCHEMA-COMMIT-WRITE-01` | `tests/test_selection_state.py::test_writer_normalizes_raw_commit_input_to_lowercase` | — |
-| `SEL-SCHEMA-SOURCE-01` | `tests/test_selection_state.py::test_source_validation_rejects_http_userinfo_only` | — |
+| `SEL-SCHEMA-MODES-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-MODES-01 read normalizes absent, pinned, and track-latest state` | `tests/fixtures/baseline/selection/track-latest.json` |
+| `SEL-SCHEMA-KEYS-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-KEYS-01 read rejects unknown, missing, and inconsistent fields` | `tests/fixtures/baseline/selection/unknown-key.json` |
+| `SEL-SCHEMA-REFS-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-REFS-01 read rejects empty, multiline, and invalid ref strings` | — |
+| `SEL-SCHEMA-COMMIT-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-COMMIT-01 raw commit pins require cross-field equality` | — |
+| `SEL-SCHEMA-COMMIT-WRITE-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-COMMIT-WRITE-01 the writer normalizes raw commit input to lowercase` | — |
+| `SEL-SCHEMA-SOURCE-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-SOURCE-01 source validation rejects HTTP(S) userinfo only` | — |
 | `SEL-BYTES-PINNED-01` | `tests/baseline/cli-parity.test.js::SEL-BYTES-PINNED-01 pin writes canonical selection bytes` | `tests/fixtures/baseline/selection/pinned-tag.json` |
 | `SEL-BYTES-TRACK-01` | `tests/baseline/cli-parity.test.js::SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes` | `tests/fixtures/baseline/selection/track-latest.json` |
-| `SEL-BYTES-DIRECTORY-01` | `tests/test_selection_state.py::test_writer_creates_private_directory_and_canonical_private_file` | — |
-| `SEL-BYTES-DIRECTORY-PRESERVE-01` | `tests/test_selection_state.py::test_writer_preserves_existing_directory_mode` | — |
+| `SEL-BYTES-DIRECTORY-01` | `tests/baseline/selection-state.test.js::SEL-BYTES-DIRECTORY-01 the writer creates a private directory and a canonical private file` | — |
+| `SEL-BYTES-DIRECTORY-PRESERVE-01` | `tests/baseline/selection-state.test.js::SEL-BYTES-DIRECTORY-PRESERVE-01 the writer preserves an existing directory mode` | — |
 | `REF-PINNABLE-01` | `tests/baseline/cli-parity.test.js::CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only` | — |
 | `REF-GENERIC-FALLBACK-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup` | — |
 | `REF-LATEST-STABLE-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-LATEST-STABLE-01 numeric stable release selection and peeling` | — |
@@ -52,11 +52,11 @@ selectors or intentionally update the inventory, test, and this map together.
 | `REF-CLEANUP-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-CLEANUP-01 interrupted source proof cleans only its workspace` | — |
 | `REF-PIN-CLEANUP-01` | `tests/test_selection_commands.sh::# BASELINE CASE: REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace` | — |
 | `PROVENANCE-BYTES-01` | `tests/baseline/cli-parity.test.js::PROVENANCE-BYTES-01 prepare writes canonical provenance bytes` | `tests/fixtures/baseline/provenance/valid-commit.json` |
-| `SEL-READER-DUPLICATES-01` | `tests/test_selection_state.py::test_read_rejects_duplicate_unknown_missing_and_inconsistent_fields` | `tests/fixtures/baseline/selection/duplicate-key.json` |
-| `SEL-READER-CONSTANTS-01` | `tests/test_selection_state.py::test_read_rejects_non_object_and_constants` | `tests/fixtures/baseline/selection/non-standard-constant.json` |
-| `SEL-READER-DEPTH-01` | `tests/test_selection_state.py::test_read_enforces_exact_nesting_boundary` | `tests/fixtures/baseline/selection/depth-257.json` |
-| `SEL-READER-BYTES-01` | `tests/test_selection_state.py::test_read_has_no_input_byte_limit` | `tests/fixtures/baseline/selection/track-latest.json` |
-| `SEL-READER-PATHS-01` | `tests/test_selection_state.py::test_read_rejects_symlink_directory_and_fifo_paths` | — |
+| `SEL-READER-DUPLICATES-01` | `tests/baseline/selection-state.test.js::SEL-READER-DUPLICATES-01 read rejects duplicate JSON keys` | `tests/fixtures/baseline/selection/duplicate-key.json` |
+| `SEL-READER-CONSTANTS-01` | `tests/baseline/selection-state.test.js::SEL-READER-CONSTANTS-01 read rejects non-object documents and non-standard constants` | `tests/fixtures/baseline/selection/non-standard-constant.json` |
+| `SEL-READER-DEPTH-01` | `tests/baseline/selection-state.test.js::SEL-READER-DEPTH-01 read enforces the exact JSON nesting boundary` | `tests/fixtures/baseline/selection/depth-257.json` |
+| `SEL-READER-BYTES-01` | `tests/baseline/selection-state.test.js::SEL-READER-BYTES-01 read has no input byte limit` | `tests/fixtures/baseline/selection/track-latest.json` |
+| `SEL-READER-PATHS-01` | `tests/baseline/selection-state.test.js::SEL-READER-PATHS-01 read rejects symlink, directory, and FIFO paths` | — |
 | `PROV-READER-STRICT-01` | `tests/test_probe.sh::# BASELINE CASE: PROV-READER-STRICT-01 strict provenance reader profile` | `tests/fixtures/baseline/provenance/duplicate-key.json` |
 | `PROV-READER-LENIENT-01` | `tests/test_probe.sh::# BASELINE CASE: PROV-READER-LENIENT-01 lenient commit reader profile` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
 | `PROV-READER-CANDIDATE-01` | `tests/test_validate_generated_plugin.py::test_candidate_provenance_reader_profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
@@ -107,11 +107,11 @@ selectors or intentionally update the inventory, test, and this map together.
 | `FS-HOOK-CONTAINMENT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: FS-HOOK-CONTAINMENT-01 unsafe hook paths and symlinks fail closed` | — |
 | `FS-GENERATED-RESOLVE-01` | `tests/unit/generated-plugin.test.js::FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures` | — |
 | `FS-SELECTION-ATOMIC-01` | `tests/unit/selection.test.js::FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary` | — |
-| `FS-SELECTION-CONCURRENT-01` | `tests/test_selection_state.py::test_two_concurrent_writers_leave_one_complete_valid_record` | — |
+| `FS-SELECTION-CONCURRENT-01` | `tests/baseline/selection-state.test.js::FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete valid record` | — |
 | `FS-SELECTION-POST-REPLACE-01` | `tests/unit/selection.test.js::FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode` | — |
-| `FS-SELECTION-TYPES-01` | `tests/test_selection_state.py::test_writer_rejects_unexpected_state_and_parent_path_types` | — |
+| `FS-SELECTION-TYPES-01` | `tests/baseline/selection-state.test.js::FS-SELECTION-TYPES-01 the writer rejects unexpected state and parent path types` | — |
 | `FS-SELECTION-UNPIN-TYPES-01` | `tests/test_selection_commands.sh::# BASELINE CASE: FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types` | — |
-| `SEL-READER-PARENT-01` | `tests/test_selection_state.py::test_read_rejects_absent_state_below_symlinked_config_directory` | — |
+| `SEL-READER-PARENT-01` | `tests/baseline/selection-state.test.js::SEL-READER-PARENT-01 read rejects absent state below a symlinked config directory` | — |
 | `PREPARE-VALIDATE-01` | `tests/baseline/cli-parity.test.js::PREPARE-VALIDATE-01 validation completes before activation` | `tests/builders/baseline-scenario.sh` |
 | `PREPARE-DETERMINISTIC-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
 | `PROBE-READONLY-01` | `tests/baseline/cli-parity.test.js::PROBE-READONLY-01 probe is read-only` | `tests/builders/baseline-scenario.sh` |

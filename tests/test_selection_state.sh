@@ -7,8 +7,6 @@ spw_test_root
 
 state_helper="$root/dist/selection-state-cli.js"
 
-python3 -S "$root/tests/test_selection_state.py"
-
 . "$root/scripts/core/common.sh"
 . "$root/scripts/core/provenance.sh"
 . "$root/scripts/core/upstream.sh"
