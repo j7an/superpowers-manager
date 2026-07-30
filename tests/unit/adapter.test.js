@@ -252,6 +252,11 @@ async function codexSandbox(t) {
 // otherwise well-formed JSON string, so a lossy `.toString()` at the call site
 // would parse successfully and yield a fabricated version instead of failing
 // closed. Asserting the exact parse diagnostic is what distinguishes the two.
+//
+// This case's discriminating power rests on the exact message AND on the
+// sandbox `searchRoot` being empty: under a lossy decode the envelope is still
+// ok:false / inspect-failed, and differs only because the fabricated version
+// resolves to no directory. Pre-populating `searchRoot` would defeat it.
 void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async (t) => {
   const sandbox = await codexSandbox(t);
   const result = await runAdapter(["inspect", "--view", "fingerprint"], {
