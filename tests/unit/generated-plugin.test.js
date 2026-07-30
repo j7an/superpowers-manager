@@ -1122,12 +1122,23 @@ const DASH_LEADING_PARITY = [
     note: "Unicode fractional, second alternative",
   },
   { value: "-", accepted: true, note: "bare dash" },
+  { value: "-𐒠", accepted: true, note: "U+104A0 OSMANYA ZERO, astral Nd" },
   { value: "-x", accepted: false, note: "flag" },
   { value: "--flagish", accepted: false, note: "long flag" },
   { value: "-1a", accepted: false, note: "trailing non-digit" },
+  // Nd, not N: every other rejection row here is non-numeric, so widening
+  // `\p{Nd}` to `\p{N}` would break parity while keeping the table green.
+  // CPython 3.11.15 rejects both against `^-\d+$|^-\d*\.\d+$`.
+  { value: "-²", accepted: false, note: "U+00B2 category No, not Nd" },
+  { value: "-½", accepted: false, note: "U+00BD category No, not Nd" },
+  { value: "-Ⅳ", accepted: false, note: "U+2163 category Nl, not Nd" },
 ];
 
-/** Unicode-decimal values the helper, the CLI and the adapter must all accept. */
+/**
+ * Unicode-decimal values the helper, the CLI and the adapter must all accept.
+ * Kept in sync by hand with the inline list in tests/unit/adapter.test.js —
+ * adding a value in only one place makes it look covered at all three levels.
+ */
 const UNICODE_ACCEPTED_VALUES = ["-١", "-१", "-١.٥"];
 
 void test("split dash-leading values match argparse", () => {
@@ -1142,8 +1153,11 @@ void test("split dash-leading values match argparse", () => {
 
 // INTENTIONAL DIVERGENCE — PR 8 divergence #1, not a defect.
 // `argparse` accepts a dash-leading token containing a space as a positional;
-// this port rejects it. Both implementations reject the input overall. Asserted
-// explicitly so a later reader does not "fix" the rejection into a regression.
+// this port rejects it. Verified against CPython 3.11.15: `-x y` is accepted as
+// a value there. Both implementations reject the input overall, though this test
+// pins only the helper — the CLI surface is pinned separately by the
+// dash-leading exit-2 case above. Asserted explicitly so a later reader does not
+// "fix" the rejection into a regression.
 void test("a dash-leading token containing a space is rejected", () => {
   assert.equal(isAcceptedSplitValue("-x y"), false);
 });
