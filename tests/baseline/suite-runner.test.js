@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { computeBuildId } from "../build-id.js";
 
 const RUNNER = fileURLToPath(new URL("../run-node-suites.js", import.meta.url));
 
@@ -40,6 +41,15 @@ function fakeRoot(t, shape) {
     const target = join(root, relative);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, contents, "utf8");
+  }
+  if (
+    Object.keys(shape.files).some((relative) => relative.startsWith("src/"))
+  ) {
+    writeFileSync(
+      join(root, "tsconfig.json"),
+      '{"compilerOptions":{"rootDir":"./src","outDir":"./dist"}}\n',
+      "utf8",
+    );
   }
   writeFileSync(
     join(root, "tests", "suites.json"),
@@ -164,6 +174,35 @@ void test("missing dist/cli.js", (t) => {
     r.stderr,
     /dist\/cli\.js is missing — run pnpm install --frozen-lockfile && pnpm run build/,
   );
+  assertNoRawFailure(r);
+});
+
+void test("a stale build is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "src/thing.ts": "export const a = 1;\n",
+    },
+  });
+  writeFileSync(join(root, "dist", ".build-id"), "stale\n", "utf8");
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /dist\/ is stale — run pnpm run build/);
+  assertNoRawFailure(r);
+});
+
+void test("a matching build id passes", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "src/thing.ts": "export const a = 1;\n",
+    },
+  });
+  writeFileSync(join(root, "dist", ".build-id"), computeBuildId(root), "utf8");
+  const r = runIn(root);
+  assert.equal(r.status, 0);
   assertNoRawFailure(r);
 });
 

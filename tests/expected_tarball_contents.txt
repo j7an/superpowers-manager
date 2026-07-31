@@ -19,7 +19,9 @@ dist/domain/refs.js
 dist/generated-plugin.js
 dist/git.js
 dist/hooks.js
+dist/manifest-overlay.js
 dist/provenance.js
+dist/python-json-format.js
 dist/python-json.js
 dist/python-text.js
 dist/safe-path.js

@@ -21,6 +21,7 @@
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node tests/write-build-id.js",
     "prepack": "node --input-type=module -e \"import{existsSync}from'node:fs';if(!existsSync('dist/cli.js')){console.error('error: dist/cli.js is missing — run pnpm install --frozen-lockfile && pnpm run build');process.exit(1)}\"",
     "lint": "oxlint src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/run-node-suites.js",
     "format": "prettier --write src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/run-node-suites.js",
@@ -53,6 +54,7 @@
   "files": [
     "bin/",
     "dist/",
+    "!dist/.build-id",
     "scripts/",
     "config/upstream-ref",
     ".agents/plugins/marketplace.json",

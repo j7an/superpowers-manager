@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { computeBuildId } from "./build-id.js";
 
 // The contract suite drives this runner against isolated fixture roots.
 // Production callers never set this.
@@ -29,6 +30,29 @@ if (!existsSync(join(ROOT, "dist", "cli.js"))) {
   fail(
     "dist/cli.js is missing — run pnpm install --frozen-lockfile && pnpm run build",
   );
+}
+
+// Fixture roots have no dist/ built from these sources — the contract suite
+// drives the runner against them via SPW_RUNNER_ROOT. Treat a fixture root as
+// fresh by default, or every existing contract case fails for a reason
+// unrelated to what it tests. A fixture opts in by writing dist/.build-id.
+const buildIdPath = join(ROOT, "dist", ".build-id");
+const isFixtureRoot = process.env.SPW_RUNNER_ROOT !== undefined;
+if (!isFixtureRoot || existsSync(buildIdPath)) {
+  let recorded;
+  let expected;
+  try {
+    recorded = readFileSync(buildIdPath, "utf8");
+    // Every hash input can fail — an unreadable source, a missing
+    // tsconfig.json, a permission error. All of them fail closed with the
+    // frozen line; none of them throws raw.
+    expected = computeBuildId(ROOT);
+  } catch {
+    fail("dist/ is stale — run pnpm run build");
+  }
+  if (recorded !== expected) {
+    fail("dist/ is stale — run pnpm run build");
+  }
 }
 
 /** @type {unknown} */
