@@ -16,6 +16,7 @@
     "tests/unit/domain.test.js",
     "tests/unit/generated-plugin.test.js",
     "tests/unit/hooks.test.js",
+    "tests/unit/manifest-overlay.test.js",
     "tests/unit/provenance.test.js",
     "tests/unit/python-json-format.test.js",
     "tests/unit/safe-path.test.js",
