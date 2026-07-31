@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -64,6 +64,9 @@ for (const dir of SUITE_DIRS) {
     fail(`suite directory could not be read: ${dir}`);
   }
   for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      fail(`suite entries may not be symlinks: ${dir}/${entry.name}`);
+    }
     if (entry.isDirectory()) {
       // Nested test files typecheck but never run: the runners are
       // single-level and traceability.test.js only accepts flat Node
@@ -118,17 +121,20 @@ if (missing.length > 0 || unregistered.length > 0) {
 
 // A manifest-registered suite that is a broken symlink is returned by
 // readdirSync with isDirectory() === false and passes the set comparison
-// above, so an unguarded statSync here throws a raw ENOENT with a stack —
+// above, so an unguarded lstatSync here throws a raw ENOENT with a stack —
 // verified. No errno and no stack frame may reach either stream.
 for (const suite of expected) {
   const absolute = join(ROOT, suite);
-  let isFile = false;
+  let stats;
   try {
-    isFile = statSync(absolute).isFile();
+    stats = lstatSync(absolute);
   } catch {
     fail(`suite could not be inspected: ${suite}`);
   }
-  if (!isFile) fail(`suite is not a regular file: ${suite}`);
+  if (stats.isSymbolicLink()) {
+    fail(`suite entries may not be symlinks: ${suite}`);
+  }
+  if (!stats.isFile()) fail(`suite is not a regular file: ${suite}`);
 }
 
 if (expected.length === 0) fail("tests/suites.json declares no suites");

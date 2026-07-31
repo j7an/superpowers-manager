@@ -179,10 +179,13 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // statSync guard ran.
+  // symlink guard ran rather than a follow-the-link stat throwing a raw
+  // ENOENT: lstatSync succeeds on a broken symlink (it inspects the link
+  // itself, not its target), so this is now rejected as a symlink rather
+  // than reported as uninspectable.
   assert.match(
     r.stderr,
-    /suite could not be inspected: tests\/unit\/broken\.test\.js/,
+    /suite entries may not be symlinks: tests\/unit\/broken\.test\.js/,
   );
   assertNoRawFailure(r);
 });
@@ -242,6 +245,42 @@ void test("nested non-test helper accepted", (t) => {
   });
   const r = runIn(root);
   assert.equal(r.status, 0);
+  assertNoRawFailure(r);
+});
+
+void test("a symlinked suite file is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/linked.test.js"],
+    files: { "tests/unit/real.js": PASSING_SUITE },
+  });
+  symlinkSync(
+    join(root, "tests/unit/real.js"),
+    join(root, "tests/unit/linked.test.js"),
+  );
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/linked\.test\.js/,
+  );
+  assertNoRawFailure(r);
+});
+
+void test("a symlinked suite directory is rejected rather than skipped", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "elsewhere/hidden.test.js": PASSING_SUITE,
+    },
+  });
+  symlinkSync(join(root, "elsewhere"), join(root, "tests/unit/linked"));
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/linked/,
+  );
   assertNoRawFailure(r);
 });
 
