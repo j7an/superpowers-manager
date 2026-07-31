@@ -3,6 +3,7 @@
     "tests/baseline/cli-parity.test.js",
     "tests/baseline/fixture-contract.test.js",
     "tests/baseline/generated-plugin-corpus.test.js",
+    "tests/baseline/manifest-overlay-parity.test.js",
     "tests/baseline/packaged-cli.test.js",
     "tests/baseline/selection-state.test.js",
     "tests/baseline/suite-runner.test.js",
