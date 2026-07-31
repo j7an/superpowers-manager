@@ -131,6 +131,11 @@ for (const suite of expected) {
   } catch {
     fail(`suite could not be inspected: ${suite}`);
   }
+  // Unreachable by construction, not dead: `expected` here is filtered
+  // through `discovered`, which the directory walk above populates only
+  // after rejecting every symlink at the entry level. No symlink can reach
+  // this loop today. Kept as a backstop in case discovery is ever reordered
+  // so a declared suite could bypass the walk.
   if (stats.isSymbolicLink()) {
     fail(`suite entries may not be symlinks: ${suite}`);
   }

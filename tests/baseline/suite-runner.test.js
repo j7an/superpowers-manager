@@ -179,10 +179,14 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // symlink guard ran rather than a follow-the-link stat throwing a raw
-  // ENOENT: lstatSync succeeds on a broken symlink (it inspects the link
-  // itself, not its target), so this is now rejected as a symlink rather
-  // than reported as uninspectable.
+  // directory-walk symlink guard (run-node-suites.js:67-69) ran rather than a
+  // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
+  // broken symlink (it inspects the link itself, not its target), so this is
+  // now rejected as a symlink rather than reported as uninspectable. This
+  // suite is declared via suites.json, but it is still the directory walk
+  // that catches it first — not the declared-suites branch — since the
+  // symlink appears as a directory entry before the manifest comparison ever
+  // runs.
   assert.match(
     r.stderr,
     /suite entries may not be symlinks: tests\/unit\/broken\.test\.js/,
