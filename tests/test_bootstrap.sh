@@ -89,9 +89,6 @@ assert_not_contains "tests/expected_tarball_contents.txt" "dist/hooks-cli.js"
 assert_not_contains \
   "tests/expected_tarball_contents.txt" \
   "scripts/adapters/codex/lib.sh"
-assert_contains \
-  "tests/expected_tarball_contents.txt" \
-  "scripts/adapters/codex/apply-manifest-overlay.py"
 assert_contains "tests/expected_tarball_contents.txt" "dist/hooks.js"
 assert_not_contains "tests/expected_tarball_contents.txt" "scripts/adapters/codex/materialize-hooks.py"
 assert_contains "tests/expected_tarball_contents.txt" "scripts/core/selection.sh"

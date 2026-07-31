@@ -1,5 +1,6 @@
 // @ts-check
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -49,8 +50,7 @@ async function buildWorkspace(t) {
     })}\n`,
   );
   // The fallback IS the manifest under validation. The overlay adds only
-  // `version` and `skills`
-  // (`scripts/adapters/codex/apply-manifest-overlay.py:52-53`), so `name` and
+  // `version` and `skills` (`src/manifest-overlay.ts:49-50`), so `name` and
   // `description` must be valid here or the "success" case cannot succeed.
   // `hooks` must be ABSENT: its absence is what forbids `hooks/` for a
   // fallback manifest. Declaring it — even as `{}` — is rejected by
@@ -118,6 +118,70 @@ void test("the adapter replays a multi-error failure as one record per line", as
     result.envelope.error?.message,
     "built-in generated plugin validation failed",
   );
+});
+
+// A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
+// call (src/adapter.ts:356) must surface exactly `cannot read manifest JSON
+// in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
+// and no second line. The pre-existing hook-classification read of the same
+// path (src/hooks.ts) must keep succeeding, so this exercises the read at
+// the overlay boundary specifically, not the sibling one that already
+// leaks `errno` by design (verified: `tests/unit/hooks.test.js`).
+//
+// Triggering that — succeed once, then fail on the *next* read of the same
+// path — needs Node's experimental module-mocking API, which requires
+// `--experimental-test-module-mocks` and is only reachable from a running
+// `node:test` TestContext. The shared suite runner does not set that flag
+// for the whole suite, so the mocked build runs in its own child process;
+// see `tests/unit/helpers/overlay-read-failure-child.js` for why the
+// substitution is deterministic rather than a timing race.
+void test("a manifest overlay read failure surfaces the frozen message with no errno", () => {
+  const child = fileURLToPath(
+    new URL("helpers/overlay-read-failure-child.js", import.meta.url),
+  );
+  // This test itself runs under `node --test`, which sets
+  // NODE_TEST_CONTEXT / NODE_TEST_WORKER_ID. Left in the child's env, its
+  // own `node --test` invocation below misreads itself as a nested
+  // recursive test run and silently skips executing — exit 0 having run
+  // nothing. Verified by reproduction; see the same guard in
+  // tests/run-node-suites.js. Strip both before spawning.
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_TEST_CONTEXT;
+  delete childEnv.NODE_TEST_WORKER_ID;
+  const spawned = spawnSync(
+    process.execPath,
+    ["--experimental-test-module-mocks", "--test", child],
+    { encoding: "utf8", env: childEnv },
+  );
+  assert.equal(
+    spawned.status,
+    0,
+    `child probe failed:\nstdout: ${spawned.stdout}\nstderr: ${spawned.stderr}`,
+  );
+  const resultLine = spawned.stdout
+    .split("\n")
+    .find((line) => line.startsWith("RESULT_JSON:"));
+  assert.ok(
+    resultLine,
+    `no RESULT_JSON line in child stdout: ${spawned.stdout}`,
+  );
+  const envelope = JSON.parse(resultLine.slice("RESULT_JSON:".length));
+  assert.equal(envelope.ok, false);
+  assert.equal(envelope.messages.length, 1, "expected exactly one message");
+  assert.equal(envelope.messages[0].channel, "stderr");
+  assert.match(
+    envelope.messages[0].text,
+    /^cannot read manifest JSON in .+\/\.codex-plugin\/plugin\.json$/,
+  );
+  assert.equal(envelope.error?.code, "build-failed");
+  assert.equal(
+    envelope.error?.message,
+    "failed to apply manager manifest overlay",
+  );
+  const serialized = JSON.stringify(envelope);
+  assert.doesNotMatch(serialized, /errno/i);
+  assert.doesNotMatch(serialized, /ENOENT/);
+  assert.doesNotMatch(serialized, /Traceback/);
 });
 
 void test("a split dash-leading ref fails before the validator with a named-flag record", async (t) => {

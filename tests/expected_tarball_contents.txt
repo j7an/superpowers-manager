@@ -36,7 +36,6 @@ dist/workspace.js
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json
 scripts/adapters/codex/adapter
-scripts/adapters/codex/apply-manifest-overlay.py
 scripts/core/adapter.sh
 scripts/core/common.sh
 scripts/core/lifecycle.sh
