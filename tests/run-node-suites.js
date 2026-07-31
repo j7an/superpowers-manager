@@ -52,6 +52,18 @@ if (!declared.every((entry) => typeof entry === "string")) {
 }
 const expected = /** @type {string[]} */ (declared);
 
+const seen = new Set();
+const repeated = [];
+for (const name of expected) {
+  if (seen.has(name)) repeated.push(name);
+  seen.add(name);
+}
+if (repeated.length > 0) {
+  fail(
+    `tests/suites.json lists a suite more than once: ${[...new Set(repeated)].sort().join(", ")}`,
+  );
+}
+
 const discovered = [];
 for (const dir of SUITE_DIRS) {
   const absolute = join(ROOT, dir);

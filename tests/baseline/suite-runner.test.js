@@ -252,6 +252,20 @@ void test("nested non-test helper accepted", (t) => {
   assertNoRawFailure(r);
 });
 
+void test("a duplicate manifest entry is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js", "tests/unit/a.test.js"],
+    files: { "tests/unit/a.test.js": PASSING_SUITE },
+  });
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.js/,
+  );
+  assertNoRawFailure(r);
+});
+
 void test("a symlinked suite file is rejected", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/linked.test.js"],
