@@ -16,6 +16,16 @@ const { SafetyError } = await import(
 /** @param {number} depth */
 const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
+// Scope note (roadmap row :1155, reclassified): this case pins that
+// `marketplaceRootFromJson` forwards byte input to `parseStrictJson`
+// undecoded, so the fatal UTF-8 decode can reject it. It does NOT pin the
+// adoption the row was filed about. `src/strict-json.ts`'s fatal decode and
+// its `string | Uint8Array` parameter both predate the Codex-adapter port
+// byte-for-byte, so no mutation of that decode says anything about the port.
+// The behavioural half of that adoption is the adapter passing raw `Buffer`
+// stdout at `src/adapter.ts:536`, `:741`, and `:830`-`:856` instead of a
+// lossily decoded string; a regression there stays green here and needs an
+// adapter-boundary test, not another case in this file.
 void test("marketplace reader rejects invalid UTF-8 bytes", () => {
   assert.throws(
     () =>
@@ -98,6 +108,18 @@ void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => 
   }
 });
 
+void test("an empty installed array reports absent", () => {
+  assert.equal(
+    installedListingHas(
+      Buffer.from('{"installed":[]}', "utf8"),
+      "installed",
+      "pluginId",
+      "superpowers@superpowers-manager",
+    ),
+    false,
+  );
+});
+
 void test("CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix", () => {
   assert.equal(
     marketplaceRootFromJson(
@@ -152,6 +174,16 @@ void test("CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix", () => 
       raw,
     );
   }
+});
+
+void test("an empty marketplaces array yields no root", () => {
+  assert.equal(
+    marketplaceRootFromJson(
+      Buffer.from('{"marketplaces":[]}', "utf8"),
+      "superpowers-manager",
+    ),
+    "",
+  );
 });
 
 void test("CODEX-JSON-VERSION-01 active version reader complete matrix", () => {

@@ -534,6 +534,11 @@ RUN_RC=0
 [ ! -f "$RUN_RESULT" ]
 [ "$(spw_json_get "$RUN_RESULT.response" "operation")" = inspect ]
 [ "$(spw_json_get "$RUN_RESULT.response" "error.code")" = inspect-failed ]
+# The failure must name the shell-oracle root /.codex. Asserting only that the
+# operation failed would also pass if empty HOME were rejected outright, or if
+# it resolved against the current directory.
+[ "$(spw_json_get "$RUN_RESULT.response" "error.message")" = \
+  "cannot inspect active Codex plugin fingerprint under /.codex/plugins/cache/superpowers-manager/superpowers/$empty_home_version" ]
 if grep -Fq 'error: invalid adapter response:' "$RUN_STDERR"; then
   echo "an empty HOME must produce a controlled fingerprint failure" >&2
   exit 1

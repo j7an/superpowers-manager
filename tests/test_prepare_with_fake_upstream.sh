@@ -1306,6 +1306,7 @@ EOF
 chmod +x "$seam_bin/node"
 : > "$seam_log"
 
+seam_rc=0
 SUPERPOWERS_REF=hooks-outside-path \
   SUPERPOWERS_UPSTREAM_URL="$upstream" \
   SUPERPOWERS_CACHE_DIR="$seam_root/cache" \
@@ -1315,7 +1316,15 @@ SUPERPOWERS_REF=hooks-outside-path \
   NODE_OPTIONS="--require $seam_root/absent-preload.cjs" \
   NODE_PATH="$seam_root" \
   PATH="$seam_bin:$PATH" \
-  sh "$root/scripts/prepare" >"$seam_root/prepare.out" 2>"$seam_root/prepare.err"
+  sh "$root/scripts/prepare" >"$seam_root/prepare.out" 2>"$seam_root/prepare.err" \
+  || seam_rc=$?
+# Capture the status instead of letting errexit abort here: a scrub regression
+# makes this run fail, and the diagnostics below are the only way to tell why.
+if [ "$seam_rc" -ne 0 ]; then
+  echo "adapter seam guard prepare run failed with status $seam_rc" >&2
+  cat "$seam_root/prepare.err" >&2
+  exit 1
+fi
 
 # The shim must have seen the hook invocation at all.
 grep -Fq 'NODE_OPTIONS=' "$seam_log" || {

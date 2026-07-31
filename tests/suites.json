@@ -1,0 +1,26 @@
+{
+  "suites": [
+    "tests/baseline/cli-parity.test.js",
+    "tests/baseline/fixture-contract.test.js",
+    "tests/baseline/generated-plugin-corpus.test.js",
+    "tests/baseline/packaged-cli.test.js",
+    "tests/baseline/selection-state.test.js",
+    "tests/baseline/suite-runner.test.js",
+    "tests/baseline/traceability.test.js",
+    "tests/bin/units.test.js",
+    "tests/unit/adapter-protocol.test.js",
+    "tests/unit/adapter.test.js",
+    "tests/unit/atomic.test.js",
+    "tests/unit/codex-json.test.js",
+    "tests/unit/codex-state.test.js",
+    "tests/unit/domain.test.js",
+    "tests/unit/generated-plugin.test.js",
+    "tests/unit/hooks.test.js",
+    "tests/unit/provenance.test.js",
+    "tests/unit/safe-path.test.js",
+    "tests/unit/selection.test.js",
+    "tests/unit/strict-json.test.js",
+    "tests/unit/upstream.test.js",
+    "tests/unit/workspace.test.js"
+  ]
+}
