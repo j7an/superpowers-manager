@@ -228,15 +228,22 @@ void test("last-wins replaces in place, keeping the first key's position", () =>
 });
 
 void test("an upstream object cannot forge the number brand", () => {
-  // The defect this brand exists to prevent: a structural predicate would
-  // classify the inner object as a number token and re-emit it as `123`.
-  const value = parseStrictJsonPreservingNumbers(
-    '{"future":{"rawNumber":"123","source":"123"}}',
-    { duplicateKeys: "last-wins", nonStandardConstants: "reject" },
-  );
-  const [[, inner]] = entriesOf(value);
-  assert.equal(isRawNumber(inner), false);
-  assert.ok(isRawObject(inner));
+  // The defect this brand exists to prevent: a structural predicate such as
+  // `"source" in value` or `typeof value.source === "string"` would classify
+  // an ordinary object that merely happens to carry a `source` property as a
+  // RawNumber and re-emit it as a bare number token, corrupting the value.
+  // Note this object is hand-built, not parsed: the parser always wraps a
+  // parsed `{...}` as a RawObject (its forged keys would land inside
+  // `.entries`, never as own properties), so parsed input can never exercise
+  // this discriminator — only a directly-constructed lookalike can.
+  const forged = { source: "123" };
+  assert.equal(isRawNumber(forged), false);
+
+  const genuine = parseStrictJsonPreservingNumbers("123", {
+    duplicateKeys: "last-wins",
+    nonStandardConstants: "reject",
+  });
+  assert.ok(isRawNumber(genuine));
 });
 
 void test("the value parser is unchanged and still coerces", () => {
