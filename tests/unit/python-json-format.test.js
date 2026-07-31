@@ -7,6 +7,11 @@ const { escapeNonAscii, formatPythonNumber } = await import(
   new URL("../../dist/python-json-format.js", import.meta.url).href
 );
 
+/** @type {typeof import("../../src/safety-error.js")} */
+const { SafetyError } = await import(
+  new URL("../../dist/safety-error.js", import.meta.url).href
+);
+
 // Every expected value below was produced by CPython 3.11 `json.dumps`, not by
 // reading the implementation. They are the contract, so they are exact literals.
 const NUMBERS = [
@@ -51,7 +56,39 @@ void test("formatPythonNumber reproduces CPython json.dumps", () => {
 void test("formatPythonNumber rejects values that overflow to infinity", () => {
   // CPython raises ValueError under allow_nan=False; JSON.stringify would
   // silently emit null, substituting data rather than refusing it.
-  assert.throws(() => formatPythonNumber("2e308"), /out of range/);
+  assert.throws(
+    () => formatPythonNumber("2e308"),
+    (error) => {
+      assert.ok(error instanceof SafetyError, "expected a SafetyError");
+      assert.match(error.message, /out of range/);
+      assert.equal(error.module, "manifest-overlay");
+      return true;
+    },
+  );
+});
+
+void test("formatPythonNumber rejects literal non-finite tokens", () => {
+  // NaN/Infinity/-Infinity contain no `.` or `e`/`E`, so without an explicit
+  // guard they fall into the integer branch and are echoed back verbatim —
+  // invalid JSON, and the opposite of what allow_nan=False does. A reader
+  // running a non-standard-constants accept profile can hand this function
+  // exactly these three raw tokens, so the guard lives here rather than only
+  // in the caller.
+  for (const raw of ["NaN", "Infinity", "-Infinity"]) {
+    assert.throws(
+      () => formatPythonNumber(raw),
+      (error) => {
+        assert.ok(
+          error instanceof SafetyError,
+          `expected a SafetyError for ${raw}`,
+        );
+        assert.match(error.message, /out of range/);
+        assert.equal(error.module, "manifest-overlay");
+        return true;
+      },
+      `input ${raw}`,
+    );
+  }
 });
 
 void test("escapeNonAscii matches ensure_ascii, including astral pairs", () => {

@@ -10,7 +10,22 @@ import { SafetyError } from "./safety-error.js";
  * leading `+` are already forbidden.
  */
 export function formatPythonNumber(raw: string): string {
-  if (!/[.eE]/.test(raw)) return raw === "-0" ? "0" : raw;
+  if (!/[.eE]/.test(raw)) {
+    // NaN/Infinity/-Infinity contain no `.` or `e`/`E`, so they would
+    // otherwise fall into the "emit verbatim" integer branch and echo back
+    // as invalid JSON. A reader running a non-standard-constants accept
+    // profile (see src/strict-json.ts) can hand this function exactly these
+    // three tokens as a raw number source, so this function must reject them
+    // itself rather than assume its caller already did. CPython's
+    // `json.dump(..., allow_nan=False)` raises ValueError for all three.
+    if (raw === "NaN" || raw === "Infinity" || raw === "-Infinity") {
+      throw new SafetyError(
+        "manifest-overlay",
+        `JSON number out of range: ${raw}`,
+      );
+    }
+    return raw === "-0" ? "0" : raw;
+  }
   const value = Number(raw);
   if (!Number.isFinite(value)) {
     throw new SafetyError(
