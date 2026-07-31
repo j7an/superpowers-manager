@@ -16,45 +16,70 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const TSCONFIG = join(ROOT, "tests", "tsconfig.json");
-const FROZEN_MESSAGE =
-  "error: repo TypeScript compiler missing — run pnpm install --frozen-lockfile";
+const DEFAULT_TSC = join(ROOT, "node_modules", ".bin", "tsc");
 
 /**
- * Mirrors test_js_types() from tests/test_node_tooling.sh: resolve the
- * TypeScript compiler from the SPW_TSC seam, fail closed with the frozen
- * message if it is not an executable file, otherwise run it against
- * tests/tsconfig.json.
- * @param {string} tscBin
- * @returns {{ ok: true, status: number | null } | { ok: false, message: string }}
+ * Mirrors `tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"` from
+ * tests/test_node_tooling.sh: the container harness overrides the compiler
+ * path through this environment variable; production runs fall back to the
+ * repo-local binary.
+ * @returns {string}
  */
-function runJsTypecheck(tscBin) {
+function resolveTscBin() {
+  return process.env.SPW_TSC || DEFAULT_TSC;
+}
+
+/**
+ * Mirrors test_js_types() from tests/test_node_tooling.sh: fail closed if
+ * the resolved compiler is not an executable file, otherwise run it against
+ * tests/tsconfig.json.
+ * @returns {{ ok: true, status: number | null } | { ok: false }}
+ */
+function runJsTypecheck() {
+  const tscBin = resolveTscBin();
   try {
     accessSync(tscBin, constants.X_OK);
   } catch {
-    return { ok: false, message: FROZEN_MESSAGE };
+    return { ok: false };
   }
   const result = spawnSync(tscBin, ["-p", TSCONFIG], { encoding: "utf8" });
   return { ok: true, status: result.status };
 }
 
-void test("SPW_TSC pointing at a missing binary fails closed without invoking tsc", (t) => {
-  const scratch = mkdtempSync(join(tmpdir(), "spw-node-tooling-"));
-  t.after(() => rmSync(scratch, { recursive: true, force: true }));
-  // Deliberately never created — the seam the container harness uses to
-  // override the compiler path, pointed at nothing.
-  const missingBin = join(scratch, "tsc");
+/**
+ * @param {import('node:test').TestContext} t
+ * @param {string | undefined} value
+ */
+function withSpwTsc(t, value) {
+  const previous = process.env.SPW_TSC;
+  if (value === undefined) delete process.env.SPW_TSC;
+  else process.env.SPW_TSC = value;
+  t.after(() => {
+    if (previous === undefined) delete process.env.SPW_TSC;
+    else process.env.SPW_TSC = previous;
+  });
+}
 
-  const outcome = runJsTypecheck(missingBin);
+void test("SPW_TSC unset resolves the default repo compiler and exits 0", (t) => {
+  withSpwTsc(t, undefined);
 
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.ok ? undefined : outcome.message, FROZEN_MESSAGE);
-});
-
-void test("SPW_TSC pointing at the real compiler exits 0 against tests/tsconfig.json", () => {
-  const realTsc = join(ROOT, "node_modules", ".bin", "tsc");
-
-  const outcome = runJsTypecheck(realTsc);
+  const outcome = runJsTypecheck();
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.ok ? outcome.status : -1, 0);
+});
+
+void test("SPW_TSC pointing at a missing binary overrides the default and fails closed without invoking tsc", (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "spw-node-tooling-"));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  // Deliberately never created. The real default compiler
+  // (node_modules/.bin/tsc) is still present and valid at this point, so a
+  // failure here can only mean SPW_TSC was actually read and preferred over
+  // it — proof the override seam is live, not incidentally bypassed.
+  const missingBin = join(scratch, "tsc");
+  withSpwTsc(t, missingBin);
+
+  const outcome = runJsTypecheck();
+
+  assert.equal(outcome.ok, false);
 });

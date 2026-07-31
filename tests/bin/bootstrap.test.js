@@ -4,7 +4,7 @@
 // inventory this file maps to 1:1).
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,20 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 /** @param {string} relPath */
 function read(relPath) {
   return readFileSync(join(ROOT, relPath), "utf8");
+}
+
+/**
+ * Mirrors assert_file()'s `[ ! -f "$root/$path" ]`: a directory (or other
+ * non-regular entry) at the path must fail, the same way the shell's `-f`
+ * test would. `existsSync` alone is `test -e` and is weaker.
+ * @param {string} relPath
+ */
+function isRegularFile(relPath) {
+  try {
+    return statSync(join(ROOT, relPath)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 // --- inventory items 1-7, 9: file-presence assertions -----------------
@@ -29,11 +43,7 @@ void test("bootstrap: expected repository files are present", () => {
     "src/validate-generated-plugin-cli.ts",
     "scripts/core/validate-adapter-response.py",
   ]) {
-    assert.equal(
-      existsSync(join(ROOT, relPath)),
-      true,
-      `missing file: ${relPath}`,
-    );
+    assert.equal(isRegularFile(relPath), true, `missing file: ${relPath}`);
   }
 });
 
