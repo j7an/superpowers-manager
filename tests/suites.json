@@ -10,6 +10,7 @@
     "tests/baseline/traceability.test.js",
     "tests/bin/bootstrap.test.js",
     "tests/bin/node-tooling.test.js",
+    "tests/bin/npm-pack-contents.test.js",
     "tests/bin/units.test.js",
     "tests/unit/adapter-protocol.test.js",
     "tests/unit/adapter.test.js",
