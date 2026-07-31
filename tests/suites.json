@@ -17,6 +17,7 @@
     "tests/unit/generated-plugin.test.js",
     "tests/unit/hooks.test.js",
     "tests/unit/provenance.test.js",
+    "tests/unit/python-json-format.test.js",
     "tests/unit/safe-path.test.js",
     "tests/unit/selection.test.js",
     "tests/unit/strict-json.test.js",
