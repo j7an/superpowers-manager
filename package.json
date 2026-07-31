@@ -18,7 +18,7 @@
   ],
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "node --input-type=module -e \"import{existsSync}from'node:fs';if(!existsSync('dist/cli.js')){console.error('error: dist/cli.js is missing — run pnpm install --frozen-lockfile && pnpm run build');process.exit(1)}\"",
