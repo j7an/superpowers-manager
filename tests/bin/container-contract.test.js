@@ -39,6 +39,54 @@ const LOCKFILE_PATH = join(ROOT, "tests", "container", "package-lock.json");
 const GITIGNORE_PATH = join(ROOT, ".gitignore");
 const DOCKERIGNORE_PATH = join(ROOT, ".dockerignore");
 
+/**
+ * Read the configuration `tsc` actually resolves for tests/tsconfig.json.
+ *
+ * Asserts the *effective* value rather than the file's text: --showConfig
+ * applies `extends`, fills defaults, resolves duplicate keys last-wins, and
+ * emits tsc's own canonical lowercase spelling. That is why the retired
+ * inventory item 21 — a negative `!includes('"Node16"')` substring test — is
+ * gone: a config whose effective module resolves to Node16 by any route,
+ * including a duplicate key, now fails the positive assertions below.
+ *
+ * Resolves the compiler by explicit path rather than through PATH. Inside the
+ * acceptance container, PATH is prefixed with
+ * /opt/spw-test-tools/node_modules/.bin, which carries `codex` and not `tsc`
+ * (tests/container/Dockerfile).
+ * @returns {Record<string, unknown>}
+ */
+function readEffectiveTsconfig() {
+  const tscBin = join(ROOT, "node_modules", ".bin", "tsc");
+  const result = spawnSync(tscBin, ["--showConfig", "-p", TSCONFIG_PATH], {
+    encoding: "utf8",
+  });
+  if (result.error !== undefined) {
+    assert.fail(
+      "could not run the repo TypeScript compiler — run pnpm install --frozen-lockfile",
+    );
+  }
+  if (result.status !== 0) {
+    assert.fail(
+      `tsc --showConfig exited ${result.status} for ${TSCONFIG_PATH}`,
+    );
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(result.stdout);
+  } catch {
+    assert.fail(`tsc --showConfig did not emit JSON for ${TSCONFIG_PATH}`);
+  }
+  const options = /** @type {{compilerOptions?: unknown}} */ (parsed)
+    .compilerOptions;
+  if (typeof options !== "object" || options === null) {
+    assert.fail(
+      `tsc --showConfig emitted no compilerOptions object for ${TSCONFIG_PATH}`,
+    );
+  }
+  return /** @type {Record<string, unknown>} */ (options);
+}
+
 /** @param {string} path */
 function isExecutable(path) {
   try {
@@ -934,20 +982,21 @@ void test("container-contract", async (t) => {
     },
   );
 
-  // --- inventory items 19-21: tests/tsconfig.json -----------------------
+  // --- inventory items 19-20: tests/tsconfig.json (item 21 retired) ------
+  // Item 21 was a negative `!includes('"Node16"')` substring check. It is
+  // retired rather than renumbered: asserting the effective compiler config
+  // subsumes it, because a duplicate "module" key resolving to Node16 fails
+  // the positive assertions below. See the inventory for the retirement note.
 
-  const tsconfig = readFileSync(TSCONFIG_PATH, "utf8");
+  const effectiveTsconfig = readEffectiveTsconfig();
 
-  await t.test('tsconfig declares "module": "NodeNext"', () => {
-    assert.ok(tsconfig.includes('"module": "NodeNext"'));
+  await t.test('tsconfig resolves "module" to NodeNext', () => {
+    assert.equal(String(effectiveTsconfig.module).toLowerCase(), "nodenext");
   });
-  await t.test('tsconfig declares "moduleResolution": "NodeNext"', () => {
-    assert.ok(tsconfig.includes('"moduleResolution": "NodeNext"'));
-  });
-  await t.test("tsconfig does not model a Node16 module system", () => {
-    assert.ok(
-      !tsconfig.includes('"Node16"'),
-      "tsconfig must model the declared Node 24+ runtime with NodeNext",
+  await t.test('tsconfig resolves "moduleResolution" to NodeNext', () => {
+    assert.equal(
+      String(effectiveTsconfig.moduleResolution).toLowerCase(),
+      "nodenext",
     );
   });
 
