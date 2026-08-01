@@ -341,6 +341,59 @@ void test("a symlinked suite directory is rejected rather than skipped", (t) => 
   assertNoRawFailure(r);
 });
 
+void test("a symlink nested inside a suite subdirectory is rejected even when its name does not end in .test.js", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/helpers/keep.js": "module.exports = {};\n",
+    },
+  });
+  const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(
+    join(outside, "linked.js"),
+    "OUT-OF-TREE CODE EXECUTED\n",
+    "utf8",
+  );
+  symlinkSync(
+    join(outside, "linked.js"),
+    join(root, "tests/unit/helpers/linked.js"),
+  );
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/helpers\/linked\.js/,
+  );
+  assertNoRawFailure(r);
+});
+
+void test("a symlink nested inside a suite subdirectory pointing at a directory is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/helpers/keep.js": "module.exports = {};\n",
+    },
+  });
+  const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  mkdirSync(join(outside, "sub"), { recursive: true });
+  writeFileSync(join(outside, "sub", "hidden.js"), "", "utf8");
+  symlinkSync(
+    join(outside, "sub"),
+    join(root, "tests/unit/helpers/linked-dir"),
+  );
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/helpers\/linked-dir/,
+  );
+  assertNoRawFailure(r);
+});
+
 void test("unreadable nested directory fails closed without leaking errno", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.js"],

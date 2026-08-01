@@ -2,7 +2,7 @@
 // @ts-check
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeBuildId } from "./build-id.js";
 
@@ -107,21 +107,38 @@ for (const dir of SUITE_DIRS) {
       // Nested test files typecheck but never run: the runners are
       // single-level and traceability.test.js only accepts flat Node
       // selectors. Nested non-test helpers are supported.
-      /** @type {string[]} */
+      const nestedRoot = join(absolute, entry.name);
+      /** @type {import("node:fs").Dirent[]} */
       let nested;
       try {
-        nested = readdirSync(join(absolute, entry.name), {
+        nested = readdirSync(nestedRoot, {
           recursive: true,
-        }).map((name) => String(name));
+          withFileTypes: true,
+        });
       } catch {
         // Unguarded, an unreadable subdirectory throws here and puts the raw
         // EACCES text plus a stack on stderr — the same leak the sibling
         // readdirSync above is wrapped to prevent.
         fail(`suite subdirectory could not be read: ${dir}/${entry.name}`);
       }
+      // Name-independent: a nested symlink is rejected regardless of what
+      // it is named, not only when it happens to end in .test.js. Node does
+      // not recurse *through* a symlinked directory when walking
+      // recursively, so the symlink itself always surfaces here as its own
+      // entry with isSymbolicLink() true.
+      for (const nestedEntry of nested) {
+        if (nestedEntry.isSymbolicLink()) {
+          const fullPath = join(nestedEntry.parentPath, nestedEntry.name);
+          fail(
+            `suite entries may not be symlinks: ${relative(ROOT, fullPath)}`,
+          );
+        }
+      }
       const offenders = nested
-        .filter((name) => name.endsWith(".test.js"))
-        .map((name) => `${dir}/${entry.name}/${name}`)
+        .filter((nestedEntry) => nestedEntry.name.endsWith(".test.js"))
+        .map((nestedEntry) =>
+          relative(ROOT, join(nestedEntry.parentPath, nestedEntry.name)),
+        )
         .sort();
       if (offenders.length > 0) {
         fail(
