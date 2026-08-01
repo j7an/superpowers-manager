@@ -28,7 +28,10 @@ dropped.
    set, falling back to `$root/node_modules/.bin/tsc` otherwise. The port's
    `resolveTscBin()` reads `process.env.SPW_TSC` directly (mirroring the
    shell's `${SPW_TSC:-...}` parameter expansion), not a function argument.
-   Both cases 1 and 2 are exercised through this live seam: case 2's test
+   The deleted shell driver supported this override; the port preserves the
+   seam, but no in-repo caller sets `SPW_TSC` today — only this test file's
+   own save/restore helper does, to drive both branches below. Both cases 1
+   and 2 are exercised through this live seam: case 2's test
    unsets `SPW_TSC` (proving the default-path fallback resolves and runs the
    real compiler), and case 1's test sets `SPW_TSC` to a path that does not
    exist while the real default compiler is still present and valid — the

@@ -19,10 +19,11 @@ const TSCONFIG = join(ROOT, "tests", "tsconfig.json");
 const DEFAULT_TSC = join(ROOT, "node_modules", ".bin", "tsc");
 
 /**
- * Mirrors `tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"` from
- * tests/test_node_tooling.sh: the container harness overrides the compiler
- * path through this environment variable; production runs fall back to the
- * repo-local binary.
+ * Mirrors `tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"` from the
+ * deleted tests/test_node_tooling.sh: that shell driver supported overriding
+ * the compiler path through this environment variable, and this port
+ * preserves the seam. No in-repo caller sets `SPW_TSC` today — the two tests
+ * below exercise both branches by setting and unsetting it directly.
  * @returns {string}
  */
 function resolveTscBin() {

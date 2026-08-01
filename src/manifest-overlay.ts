@@ -19,8 +19,12 @@ const OVERLAY_PROFILE: StrictJsonProfile = {
  *
  * Byte-for-byte equivalent to the CPython implementation this replaces:
  * `json.dump(data, f, indent=2, allow_nan=False)` plus a trailing newline.
- * The round-trip contract and the evidence for it live in
- * `docs/superpowers/specs/2026-07-30-pr10-overlay-port-design.md`.
+ * The byte-parity evidence lives in
+ * `tests/baseline/manifest-overlay-parity.test.js` (tracked as
+ * `MANIFEST-READER-OVERLAY-01` in `docs/baseline/traceability.md`) against
+ * the fixtures under `tests/fixtures/baseline/overlay-parity/`. Known,
+ * deliberate divergences from strict byte parity are recorded in
+ * `tests/fixtures/baseline/overlay-parity/divergent/README.md`.
  */
 export function applyManifestOverlay(
   source: string,

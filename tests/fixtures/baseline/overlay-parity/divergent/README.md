@@ -13,9 +13,10 @@ CPython's limit defends against (a denial-of-service on unbounded
 int-to-string/string-to-int conversion), the port **accepts** this file and
 reproduces its digits byte-for-byte.
 
-This is an intentional, spec-recorded widening of accepted input, not a
-parity gap: `docs/superpowers/specs/2026-07-30-pr10-overlay-port-design.md`.
-The parity test in
+This is an intentional widening of accepted input, not a parity gap, for the
+reason stated above: the port's `formatPythonNumber` never performs the
+integer conversion CPython's digit limit defends against, so the limit has
+nothing to reject. The parity test in
 `tests/baseline/manifest-overlay-parity.test.js` asserts only that the port
 accepts this file — it does not compare the output against the oracle,
 because the oracle never produces one.
