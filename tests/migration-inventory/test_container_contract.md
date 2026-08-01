@@ -58,9 +58,23 @@ that block.
 
 ## `tests/tsconfig.json` assertions (`:62-67`)
 
-19. Contains the substring `"module": "NodeNext"`.
-20. Contains the substring `"moduleResolution": "NodeNext"`.
-21. Does **not** contain the substring `"Node16"`.
+19. Resolves `"module"` to `NodeNext`, compared against the effective
+    configuration reported by `tsc --showConfig` rather than the file's text.
+20. Resolves `"moduleResolution"` to `NodeNext`, same method.
+21. **RETIRED 2026-08-01 — number deliberately not reused.** Originally: "Does
+    **not** contain the substring `"Node16"`." Retired when items 19-20 moved
+    from raw-text substring matching to the effective configuration. A
+    `tsconfig.json` whose effective `module` resolves to Node16 by any route —
+    including the duplicate-key last-wins case this negative check existed to
+    catch — now fails item 19, so the check has nothing left to catch. The old
+    check was also case-sensitive where `tsc` is not (verified on TypeScript
+    7.0.2: `Node16`, `node16`, `NODE16`, and `nOdE16` all compile), so it
+    could be bypassed by spelling alone. Numbering 22-172 is unchanged: this
+    inventory is referenced by 16 range comments in
+    `tests/bin/container-contract.test.js`, and renumbering 151 items to
+    delete one would produce a large diff of pure arithmetic across the very
+    artifact whose purpose is detecting undeclared count changes. This is a
+    deliberate 1:1 divergence from the deleted shell driver.
 
 ## `tests/container.sh` literal-text assertions (`:68-74`)
 
@@ -352,13 +366,14 @@ it).
 ## Cardinality
 
 - Shell original: **172** assertions (6 preconditions, 7 Dockerfile
-  literal-text, 5 package/lockfile, 3 tsconfig, 7 container.sh literal-text,
-  5 gitignore/dockerignore, 4 hooks-list-rpc.py file, 3 `--inside`
-  structural, 75 `validate_probe!` structural (items 41-115), 27
-  `validate_hooks_rpc!` protocol-gate (items 116-142), 10 probe
+  literal-text, 5 package/lockfile, 2 tsconfig (item 21 retired — see above),
+  7 container.sh literal-text, 5 gitignore/dockerignore, 4 hooks-list-rpc.py
+  file, 3 `--inside` structural, 75 `validate_probe!` structural (items
+  41-115), 27 `validate_hooks_rpc!` protocol-gate (items 116-142), 10 probe
   semantic-mutation fixtures, 20 RPC semantic-mutation fixtures).
-- Port (`tests/bin/container-contract.test.js`): 173 assertions (172
-  1:1-mapped to the shell, plus 1 strictly-additive port-only check — see
+- Port (`tests/bin/container-contract.test.js`): 172 assertions (**171 live
+  of 172 numbered** — item 21 retired, its number not reused — 1:1-mapped
+  to the shell, plus 1 strictly-additive port-only check — see
   the note under item 87 below), grouped into `node:test` subtests by
   section for readability. Items expressed as loops over a literal-string
   array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
@@ -373,6 +388,7 @@ it).
   the shell's failure-attribution granularity (the thrown message names
   the specific missing element) without claiming a separate `t.test` per
   array entry.
-- Reconciliation: 1:1 for all 172 shell items, no merges, no drops, plus 1
-  additional port-only assertion (see item 87's note) that is strictly
-  additive and outside the 1:1 mapping.
+- Reconciliation: 1:1 for 171 of 172 shell items, no merges and no drops;
+  item 21 is a **deliberate retirement**, not a drop — items 19-20 subsume
+  it (see the note at item 21) — plus 1 additional port-only assertion (see
+  item 87's note) that is strictly additive and outside the 1:1 mapping.

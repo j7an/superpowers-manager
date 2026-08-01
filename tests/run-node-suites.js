@@ -40,15 +40,29 @@ const buildIdPath = join(ROOT, "dist", ".build-id");
 const isFixtureRoot = process.env.SPW_RUNNER_ROOT !== undefined;
 if (!isFixtureRoot || existsSync(buildIdPath)) {
   let recorded;
-  let expected;
   try {
     recorded = readFileSync(buildIdPath, "utf8");
-    // Every hash input can fail — an unreadable source, a missing
-    // tsconfig.json, a permission error. All of them fail closed with the
-    // frozen line; none of them throws raw.
+  } catch {
+    // dist/.build-id is absent or unreadable: dist/ was never built, or was
+    // built by a postbuild predating the digest. `pnpm run build` is the
+    // correct remedy here.
+    fail("dist/ is stale — run pnpm run build");
+  }
+  let expected;
+  try {
     expected = computeBuildId(ROOT);
   } catch {
-    fail("dist/ is stale — run pnpm run build");
+    // NOT staleness, and `pnpm run build` cannot fix it. Six causes reach
+    // here (tests/build-id.js:70, :76, :78, :38, :47, :55) — an unreadable
+    // src/, an unreadable source file, a missing tsconfig.json, and an
+    // unresolvable TypeScript install — and only the last is fixed by
+    // `pnpm install --frozen-lockfile`. Naming any single remedy would
+    // reintroduce the wrong-cause defect this split exists to fix, so name
+    // the candidate inputs and prescribe nothing. Do not merge this back
+    // into the readFileSync try above.
+    fail(
+      "cannot compute the expected build id for dist/ — one of src/, tsconfig.json, or node_modules/typescript could not be read or is malformed",
+    );
   }
   if (recorded !== expected) {
     fail("dist/ is stale — run pnpm run build");
