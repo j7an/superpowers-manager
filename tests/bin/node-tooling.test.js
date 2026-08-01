@@ -19,6 +19,17 @@ const TSCONFIG = join(ROOT, "tests", "tsconfig.json");
 const DEFAULT_TSC = join(ROOT, "node_modules", ".bin", "tsc");
 
 /**
+ * Byte-for-byte the message the deleted tests/test_node_tooling.sh printed
+ * to stderr on a missing compiler (line 12 of that file at
+ * d41fb88^:tests/test_node_tooling.sh), em dash (U+2014) included. Defined
+ * once here, independently of runJsTypecheck's own literal, so the
+ * assertion below is a real check against production output rather than a
+ * comparison against a constant the implementation and the test both import.
+ */
+const MISSING_COMPILER_DIAGNOSTIC =
+  "error: repo TypeScript compiler missing — run pnpm install --frozen-lockfile";
+
+/**
  * Mirrors `tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"` from the
  * deleted tests/test_node_tooling.sh: that shell driver supported overriding
  * the compiler path through this environment variable, and this port
@@ -34,14 +45,18 @@ function resolveTscBin() {
  * Mirrors test_js_types() from tests/test_node_tooling.sh: fail closed if
  * the resolved compiler is not an executable file, otherwise run it against
  * tests/tsconfig.json.
- * @returns {{ ok: true, status: number | null } | { ok: false }}
+ * @returns {{ ok: true, status: number | null } | { ok: false, diagnostic: string }}
  */
 function runJsTypecheck() {
   const tscBin = resolveTscBin();
   try {
     accessSync(tscBin, constants.X_OK);
   } catch {
-    return { ok: false };
+    return {
+      ok: false,
+      diagnostic:
+        "error: repo TypeScript compiler missing — run pnpm install --frozen-lockfile",
+    };
   }
   const result = spawnSync(tscBin, ["-p", TSCONFIG], { encoding: "utf8" });
   return { ok: true, status: result.status };
@@ -66,7 +81,7 @@ void test("SPW_TSC unset resolves the default repo compiler and exits 0", (t) =>
 
   const outcome = runJsTypecheck();
 
-  assert.equal(outcome.ok, true);
+  assert.equal(outcome.ok, true, outcome.ok ? undefined : outcome.diagnostic);
   assert.equal(outcome.ok ? outcome.status : -1, 0);
 });
 
@@ -83,4 +98,8 @@ void test("SPW_TSC pointing at a missing binary overrides the default and fails 
   const outcome = runJsTypecheck();
 
   assert.equal(outcome.ok, false);
+  assert.equal(
+    outcome.ok ? undefined : outcome.diagnostic,
+    MISSING_COMPILER_DIAGNOSTIC,
+  );
 });
