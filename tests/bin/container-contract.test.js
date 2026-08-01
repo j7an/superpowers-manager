@@ -249,6 +249,11 @@ function validateHookResponseAssertion(probe, name, terminal) {
     "manager_hooks = [",
     terminal,
   ];
+  assert.equal(
+    requiredGate.length,
+    10,
+    "requiredGate lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   requireOrderedSource(
     body,
     requiredGate,
@@ -338,6 +343,11 @@ function validateProbe(probe) {
     provenanceRead,
     manifestRead,
   ];
+  assert.equal(
+    bindingSequence.length,
+    9,
+    "bindingSequence lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   {
     let cursor = -1;
     for (const statement of bindingSequence) {
@@ -399,6 +409,11 @@ function validateProbe(probe) {
     "run_manager uninstall",
     'assert_marketplace_root "$package"',
   ];
+  assert.equal(
+    requiredAbSteps.length,
+    15,
+    "requiredAbSteps lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   for (const text of requiredAbSteps) {
     if (!probe.includes(text)) {
       throw new ContractViolation(`missing manager A/B step: ${text}`);
@@ -479,6 +494,11 @@ function validateProbe(probe) {
     "$HOME/.codex/hooks.state",
     "$HOME/.codex/requirements.toml",
   ];
+  assert.equal(
+    hookContract.length,
+    18,
+    "hookContract lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   for (const text of hookContract) {
     if (!probe.includes(text)) {
       throw new ContractViolation(`missing hook acceptance contract: ${text}`);
@@ -530,6 +550,11 @@ function validateProbe(probe) {
     'if actual.get("enabled") is not True:',
     'if actual.get("isManaged") is not False:',
   ];
+  assert.equal(
+    activeFields.length,
+    5,
+    "activeFields lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   for (const text of activeFields) {
     if (!activeBody.includes(text)) {
       throw new ContractViolation(
@@ -546,6 +571,11 @@ function validateProbe(probe) {
     'plugin_id_types = allowed_types(hooks_response, properties["pluginId"])',
     'if plugin_id_types != {"string", "null"}:',
   ];
+  assert.equal(
+    schemaGates.length,
+    5,
+    "schemaGates lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   requireOrderedSource(
     schemaBody,
     schemaGates,
@@ -678,6 +708,11 @@ function validateProbe(probe) {
     "final_plugins=$(run_codex plugin list --json)",
     "final_marketplaces=$(run_codex plugin marketplace list --json)",
   ];
+  assert.equal(
+    lifecycle.length,
+    51,
+    "lifecycle lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   requireOrderedLifecycle(probe, lifecycle);
 }
 
@@ -713,6 +748,11 @@ function validateHooksRpc(hooksRpc) {
     'fail("app-server stdout pipe was not created")',
     "selector.register(process.stdout, selectors.EVENT_READ)",
   ];
+  assert.equal(
+    required.length,
+    26,
+    "required (validateHooksRpc) lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   for (const text of required) {
     if (!hooksRpc.includes(text)) {
       throw new ContractViolation(`RPC helper missing protocol gate: ${text}`);
@@ -728,6 +768,11 @@ function validateHooksRpc(hooksRpc) {
     "response = receive(process, selector, 1)",
     "Path(response_name).write_text(",
   ];
+  assert.equal(
+    handshake.length,
+    7,
+    "handshake lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
   requireOrderedSource(
     hooksRpc,
     handshake,
@@ -1084,6 +1129,11 @@ void test("container-contract", async (t) => {
       'cat "$hooks_stderr"',
     ),
   };
+  assert.equal(
+    Object.keys(probeMutations).length,
+    10,
+    "probeMutations lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
 
   for (const [name, mutated] of Object.entries(probeMutations)) {
     await t.test(`probe semantic mutation is rejected: ${name}`, () => {
@@ -1182,6 +1232,11 @@ void test("container-contract", async (t) => {
       "if False:",
     ),
   };
+  assert.equal(
+    Object.keys(rpcMutations).length,
+    20,
+    "rpcMutations lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+  );
 
   for (const [name, mutated] of Object.entries(rpcMutations)) {
     await t.test(`RPC helper semantic mutation is rejected: ${name}`, () => {

@@ -156,6 +156,11 @@ void test("npm-pack-contents", async (t) => {
     "shape-two-entry-object.json": { first: packed, second: packed },
     "shape-non-object-entry.json": [null],
   };
+  assert.equal(
+    Object.keys(malformedShapes).length,
+    5,
+    "malformedShapes lost or gained a case — update tests/migration-inventory/npm-pack-contents.md",
+  );
 
   for (const [name, report] of Object.entries(malformedShapes)) {
     const fixturePath = join(scratch, name);
@@ -202,6 +207,11 @@ void test("npm-pack-contents", async (t) => {
     ["plugins/superpowers/*", "plugins/superpowers/skills/foo.md"],
     ["docs/superpowers", "docs/superpowers/notes.md"],
   ]);
+  assert.equal(
+    FORBIDDEN_PATH_FIXTURES.length,
+    6,
+    "FORBIDDEN_PATH_FIXTURES lost or gained a case — update tests/migration-inventory/npm-pack-contents.md",
+  );
 
   for (const [category, path] of FORBIDDEN_PATH_FIXTURES) {
     await t.test(

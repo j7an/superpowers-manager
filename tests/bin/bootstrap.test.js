@@ -32,17 +32,24 @@ function isRegularFile(relPath) {
 
 // --- inventory items 1-7, 9: file-presence assertions -----------------
 
+const EXPECTED_FILES = [
+  ".gitignore",
+  "config/upstream-ref",
+  ".agents/plugins/marketplace.json",
+  "plugins/superpowers/.codex-plugin/plugin.template.json",
+  "scripts/adapters/codex/adapter",
+  "src/generated-plugin.ts",
+  "src/validate-generated-plugin-cli.ts",
+  "scripts/core/validate-adapter-response.py",
+];
+assert.equal(
+  EXPECTED_FILES.length,
+  8,
+  "EXPECTED_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
+);
+
 void test("bootstrap: expected repository files are present", () => {
-  for (const relPath of [
-    ".gitignore",
-    "config/upstream-ref",
-    ".agents/plugins/marketplace.json",
-    "plugins/superpowers/.codex-plugin/plugin.template.json",
-    "scripts/adapters/codex/adapter",
-    "src/generated-plugin.ts",
-    "src/validate-generated-plugin-cli.ts",
-    "scripts/core/validate-adapter-response.py",
-  ]) {
+  for (const relPath of EXPECTED_FILES) {
     assert.equal(isRegularFile(relPath), true, `missing file: ${relPath}`);
   }
 });
@@ -219,6 +226,11 @@ const textContentCases = [
     false,
   ],
 ];
+assert.equal(
+  textContentCases.length,
+  76,
+  "textContentCases lost or gained a case — update tests/migration-inventory/bootstrap.md",
+);
 
 void test("bootstrap: text-content assertions", () => {
   for (const [relPath, text, shouldContain] of textContentCases) {
@@ -271,6 +283,11 @@ const REQUIRED_PRE = [
   "zero npm secrets",
   "before approving publication",
 ];
+assert.equal(
+  REQUIRED_PRE.length,
+  5,
+  "REQUIRED_PRE lost or gained a case — update tests/migration-inventory/bootstrap.md",
+);
 
 const REQUIRED_POST = [
   "npm provenance",
@@ -278,6 +295,11 @@ const REQUIRED_POST = [
   "published version and source SHA",
   "after publication",
 ];
+assert.equal(
+  REQUIRED_POST.length,
+  4,
+  "REQUIRED_POST lost or gained a case — update tests/migration-inventory/bootstrap.md",
+);
 
 /** @param {string} document */
 function assertReleaseVerificationSections(document) {
