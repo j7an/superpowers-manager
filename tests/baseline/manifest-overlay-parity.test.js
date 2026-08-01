@@ -30,12 +30,44 @@ void test("BASELINE CASE: MANIFEST-READER-OVERLAY-01 byte parity with the Python
   }
 });
 
+// Committed map from fixture file name to the complete message
+// applyManifestOverlay must throw for it. Three entries pin CPython-oracle
+// wording the parity test above already establishes as byte-identical
+// (non-standard-constant, nesting-limit, non-object). `float-overflow.json`
+// pins this port's own wording: no committed CPython oracle output
+// constrains that message (see the corpus reject test's stale-label defect,
+// fixed here), so this is the port recording its own current behavior, not
+// matching an oracle byte for byte.
+/** @type {Record<string, string>} */
+const EXPECTED_REJECT_MESSAGES = {
+  "constant-nan.json": `invalid manifest JSON in ${PATH}: non-standard numeric constant: NaN`,
+  "float-overflow.json": `JSON number out of range in ${PATH}: 2e308`,
+  "nesting-257.json": `JSON nesting exceeds limit in ${PATH}`,
+  "non-object.json": `manifest must be a JSON object: ${PATH}`,
+};
+
 void test("BASELINE CASE: MANIFEST-READER-OVERLAY-01 rejections match the oracle", () => {
   const names = readdirSync(join(CORPUS, "reject")).sort();
   assert.ok(names.length > 0, "rejection corpus is empty");
   for (const name of names) {
     const source = readFileSync(join(CORPUS, "reject", name), "utf8");
-    assert.throws(() => applyManifestOverlay(source, VERSION, PATH), name);
+    const expected = EXPECTED_REJECT_MESSAGES[name];
+    // A fixture added to the corpus without a pinned message here must fail,
+    // not silently pass — that silent pass is exactly the defect this test
+    // previously had via assert.throws(fn, name), where the fixture's own
+    // filename was mistaken for a matcher instead of a failure label.
+    assert.ok(
+      expected !== undefined,
+      `no expected message pinned in EXPECTED_REJECT_MESSAGES for ${name}`,
+    );
+    assert.throws(
+      () => applyManifestOverlay(source, VERSION, PATH),
+      (error) => {
+        assert.ok(error instanceof Error, `expected an Error for ${name}`);
+        assert.equal(error.message, expected, name);
+        return true;
+      },
+    );
   }
 });
 

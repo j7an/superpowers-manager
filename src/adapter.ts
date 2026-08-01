@@ -379,9 +379,13 @@ async function runBuild(
             candidateManifest,
           );
         } catch (cause) {
-          // The overlay's own messages are already the frozen CPython wording
-          // and already name the path — emit as-is, with no added prefix. A
-          // prefix here would contradict this PR's no-visible-change claim.
+          // applyManifestOverlay's own messages already name the manifest
+          // path — three are the frozen CPython wording, and the fourth (the
+          // numeric-overflow diagnostic, which has no CPython oracle wording
+          // to match) now carries the path via its own rewrap in
+          // src/manifest-overlay.ts. Emit as-is, with no added prefix — a
+          // prefix here would double up the path these messages already
+          // name.
           log.appendText("stderr", oneLine(cause));
           fail("build-failed", "failed to apply manager manifest overlay");
         }

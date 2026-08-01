@@ -52,7 +52,36 @@ export function applyManifestOverlay(
   );
   setMember(entries, "version", version);
   setMember(entries, "skills", "./skills/");
-  return `${emitObject(entries, 0)}\n`;
+  try {
+    return `${emitObject(entries, 0)}\n`;
+  } catch (cause) {
+    throw rewrapNumberOutOfRange(cause, path);
+  }
+}
+
+// formatPythonNumber (src/python-json-format.ts) has no notion of a manifest
+// path — it is a general CPython-`json.dump`-equivalent number formatter,
+// exercised on its own in tests/unit/python-json-format.test.js — so it
+// throws a bare `JSON number out of range: ${raw}`. That left the operator
+// with no indication of which manifest produced the diagnostic, unlike every
+// other overlay failure. This rewrap adds the path without touching
+// formatPythonNumber's own contract, and is scoped to exactly this message so
+// it cannot swallow or reword any other overlay throw.
+const NUMBER_OUT_OF_RANGE_PREFIX = "JSON number out of range: ";
+
+function rewrapNumberOutOfRange(cause: unknown, path: string): unknown {
+  if (
+    cause instanceof SafetyError &&
+    cause.message.startsWith(NUMBER_OUT_OF_RANGE_PREFIX)
+  ) {
+    const raw = cause.message.slice(NUMBER_OUT_OF_RANGE_PREFIX.length);
+    return new SafetyError(
+      "manifest-overlay",
+      `JSON number out of range in ${path}: ${raw}`,
+      { cause },
+    );
+  }
+  return cause;
 }
 
 function setMember(

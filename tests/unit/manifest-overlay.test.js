@@ -114,6 +114,25 @@ void test("nesting beyond 256 is rejected with the complete message", () => {
   );
 });
 
+void test("an out-of-range numeric literal is rejected with the complete message, naming the path", () => {
+  // Only the numeric-overflow guard in src/python-json-format.ts (roughly
+  // :33) is reachable through applyManifestOverlay: the sibling literal
+  // guard for NaN/Infinity/-Infinity (roughly :24) can only fire when a
+  // caller parses with `nonStandardConstants: "accept"`, and
+  // OVERLAY_PROFILE rejects those tokens at the parser before they ever
+  // become a raw number source — see src/strict-json.ts's
+  // parseNonStandardConstant. That case is covered directly against
+  // formatPythonNumber in tests/unit/python-json-format.test.js instead.
+  assert.throws(
+    () => overlay('{"a":2e308}'),
+    (error) => {
+      assert.ok(error instanceof Error, "expected an Error");
+      assert.equal(error.message, `JSON number out of range in ${PATH}: 2e308`);
+      return true;
+    },
+  );
+});
+
 void test("a malformed manifest reports line and column", () => {
   assert.throws(
     () => overlay('{\n  "a": ,\n}'),
