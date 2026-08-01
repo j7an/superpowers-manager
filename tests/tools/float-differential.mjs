@@ -29,6 +29,10 @@ const { formatPythonNumber } = await import(
 const DEFAULT_SEED = 0x9e3779b97f4a7c15n;
 const DEFAULT_CASES = 200_000;
 
+/**
+ * @param {string[]} argv
+ * @returns {{ seed: bigint, cases: number }}
+ */
 function parseArgs(argv) {
   let seed = DEFAULT_SEED;
   let cases = DEFAULT_CASES;
@@ -42,8 +46,11 @@ function parseArgs(argv) {
 
 const MASK64 = (1n << 64n) - 1n;
 
-/** splitmix64 — used only to derive two well-mixed 64-bit words for
- * xorshift128+ from a single seed. Not itself the generator. */
+/**
+ * splitmix64 — used only to derive two well-mixed 64-bit words for
+ * xorshift128+ from a single seed. Not itself the generator.
+ * @param {bigint} seed
+ */
 function makeSplitMix64(seed) {
   let state = seed & MASK64;
   return function next() {
@@ -56,8 +63,11 @@ function makeSplitMix64(seed) {
   };
 }
 
-/** Seeded xorshift128+. `Math.random()` cannot be seeded, and this run must
- * be reproducible from the seed recorded in the roadmap. */
+/**
+ * Seeded xorshift128+. `Math.random()` cannot be seeded, and this run must
+ * be reproducible from the seed recorded in the roadmap.
+ * @param {bigint} seed
+ */
 function makeXorshift128Plus(seed) {
   const seedNext = makeSplitMix64(seed);
   let s0 = seedNext();
