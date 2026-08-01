@@ -50,6 +50,17 @@ function fakeRoot(t, shape) {
       '{"compilerOptions":{"rootDir":"./src","outDir":"./dist"}}\n',
       "utf8",
     );
+    // computeBuildId folds the resolved compiler version into the digest,
+    // so any fixture root it is called against needs a resolvable
+    // node_modules/typescript/package.json. The version value itself is a
+    // fixture literal this test defines for itself, not a claim about the
+    // real installed compiler.
+    mkdirSync(join(root, "node_modules", "typescript"), { recursive: true });
+    writeFileSync(
+      join(root, "node_modules", "typescript", "package.json"),
+      JSON.stringify({ name: "typescript", version: "0.0.0-fixture" }),
+      "utf8",
+    );
   }
   writeFileSync(
     join(root, "tests", "suites.json"),
@@ -204,6 +215,55 @@ void test("a matching build id passes", (t) => {
   const r = runIn(root);
   assert.equal(r.status, 0);
   assertNoRawFailure(r);
+});
+
+/**
+ * Build a minimal root for exercising computeBuildId directly, independent
+ * of the full run-node-suites.js contract that fakeRoot() sets up.
+ * @param {import("node:test").TestContext} t
+ * @param {{files: Record<string, string>, tsconfig?: string, typescriptVersion?: string}} shape
+ */
+function buildIdRoot(t, shape) {
+  const root = mkdtempSync(join(tmpdir(), "spw-build-id-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const [relative, contents] of Object.entries(shape.files)) {
+    const target = join(root, "src", relative);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents, "utf8");
+  }
+  writeFileSync(
+    join(root, "tsconfig.json"),
+    shape.tsconfig ?? '{"compilerOptions":{}}\n',
+    "utf8",
+  );
+  mkdirSync(join(root, "node_modules", "typescript"), { recursive: true });
+  writeFileSync(
+    join(root, "node_modules", "typescript", "package.json"),
+    JSON.stringify({
+      name: "typescript",
+      version: shape.typescriptVersion ?? "0.0.0-fixture",
+    }),
+    "utf8",
+  );
+  return root;
+}
+
+void test("distinct source trees never collide to the same build id", (t) => {
+  // Tree A: a single file whose contents happen to be another file's name.
+  // Tree B: two empty files named after both sides of that same string.
+  // Unframed concatenation of (name, contents) pairs folds these to the
+  // same byte stream; framing each record with its length must keep them
+  // apart.
+  const treeA = buildIdRoot(t, { files: { "a.ts": "b.ts" } });
+  const treeB = buildIdRoot(t, { files: { "a.ts": "", "b.ts": "" } });
+  assert.notEqual(computeBuildId(treeA), computeBuildId(treeB));
+});
+
+void test("a different resolved compiler version changes the build id", (t) => {
+  const files = { "a.ts": "export const a = 1;\n" };
+  const rootV1 = buildIdRoot(t, { files, typescriptVersion: "1.2.3" });
+  const rootV2 = buildIdRoot(t, { files, typescriptVersion: "9.9.9" });
+  assert.notEqual(computeBuildId(rootV1), computeBuildId(rootV2));
 });
 
 void test("broken symlink suite", (t) => {
