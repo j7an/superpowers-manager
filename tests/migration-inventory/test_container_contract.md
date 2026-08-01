@@ -179,10 +179,28 @@ that block.
     `Codex hooks/list protocol changed`; `ClientRequest.json`;
     `v2/HooksListResponse.json`; `"hooks/list"`; `"source"`; `"enabled"`;
     `"isManaged"`; `"trustStatus"`; `"pluginId"`; `"plugin"`; `"untrusted"`;
-    `"hooks": {}`; `"hooks": "./hooks/hooks-codex.json"`; `sh
-    "${PLUGIN_ROOT}/hooks/session-start-codex"`;
-    `/tmp/superpowers-manager-hook-sentinel`; `$HOME/.codex/hooks.state`;
-    `$HOME/.codex/requirements.toml`.
+    `"hooks": {}`; `"hooks": "./hooks/hooks-codex.json"`; item 87
+    (below); `/tmp/superpowers-manager-hook-sentinel`;
+    `$HOME/.codex/hooks.state`; `$HOME/.codex/requirements.toml`.
+
+    **Item 87, corrected 2026-07-31 (review Finding 1):** the Ruby
+    literal at `:385` is `'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`
+    — a Ruby **single-quoted** string, where `\"` is not an escape
+    sequence. The required text therefore carries two literal backslash
+    characters: `sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"`. This
+    guards the escaped-quote spelling written into the upstream
+    `hooks-codex.json` JSON fixture at `codex-offline-probe.sh:588`. An
+    earlier revision of this inventory (and the port) recorded the
+    *unescaped* spelling (`sh "${PLUGIN_ROOT}/hooks/session-start-codex"`,
+    which happens to also appear at `:229` inside
+    `assert_active_hooks_fixture`'s expected-config Python literal) as if
+    it were item 87 — both spellings exist in the probe, so the port was
+    green, but the wrong line was being guarded and `:588` was unguarded.
+    The port now requires the correct backslash-bearing string as item 87,
+    **plus** the unescaped spelling as a 173rd, strictly-additive,
+    port-only assertion (it has no shell counterpart — the shell never
+    guarded `:229` — and is outside the 172 1:1 count), so both fixtures
+    stay covered.
 91. The probe contains the substring `probe_cwd=$(pwd -P)` (resolves its
     real working directory).
 92. The probe does **not** invoke the synthetic hook script directly — no
@@ -339,10 +357,21 @@ it).
   structural, 75 `validate_probe!` structural (items 41-115), 27
   `validate_hooks_rpc!` protocol-gate (items 116-142), 10 probe
   semantic-mutation fixtures, 20 RPC semantic-mutation fixtures).
-- Port (`tests/bin/container-contract.test.js`): 172 assertions 1:1-mapped
-  to the shell, grouped into `node:test` subtests by section for
-  readability. Items expressed as loops over a literal-string array in the
-  shell (e.g. 51-65, 73-90, 116-141) are ported as loops over the same
-  array with one `assert.ok`/`t.test` per element, preserving independent
-  failure attribution.
-- Reconciliation: 1:1 for all 172 items, no merges, no drops.
+- Port (`tests/bin/container-contract.test.js`): 173 assertions (172
+  1:1-mapped to the shell, plus 1 strictly-additive port-only check — see
+  the note under item 87 below), grouped into `node:test` subtests by
+  section for readability. Items expressed as loops over a literal-string
+  array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
+  the same array inside `validateProbe`/`validateHooksRpc`, one `throw` per
+  missing element (`:396-397`, `:465-466`, `:692-693` in the shipped
+  file). Each such loop is exercised through a single
+  `assert.doesNotThrow(() => validateProbe(...))` /
+  `assert.doesNotThrow(() => validateHooksRpc(...))` subtest — the loop
+  itself short-circuits on the first missing element, exactly as the
+  Ruby `.each { |text| raise ... unless ... }` loops did. This preserves
+  the shell's failure-attribution granularity (the thrown message names
+  the specific missing element) without claiming a separate `t.test` per
+  array entry.
+- Reconciliation: 1:1 for all 172 shell items, no merges, no drops, plus 1
+  additional port-only assertion (see item 87's note) that is strictly
+  additive and outside the 1:1 mapping.

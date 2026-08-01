@@ -54,6 +54,19 @@ function arraysEqual(a, b) {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+/**
+ * Mirrors Ruby's `raise "..."` (a deliberate `RuntimeError`, distinct from
+ * e.g. `NoMethodError`/`TypeError`). The shell driver's `rescue
+ * RuntimeError; next` only treated a deliberate raise as "the validator
+ * correctly rejected this mutation" — any other exception class escaped
+ * and failed the driver. The mutation-rejection tests below assert
+ * `instanceof ContractViolation` rather than accepting any `throw`, so an
+ * accidental bug in a hand-translated validator (a stray `TypeError` from
+ * indexing `undefined`, say) still fails the test instead of being
+ * miscounted as a successful rejection.
+ */
+class ContractViolation extends Error {}
+
 // --- Ruby-to-JS structural helpers (mirror the shell driver's embedded
 // Ruby helper functions of the same name, :117-193) --------------------
 
@@ -101,7 +114,7 @@ function functionBody(source, name) {
   const startRe = new RegExp(`^${escaped}\\(\\) \\{\\n`, "m");
   const match = startRe.exec(source);
   if (!match) {
-    throw new Error(`offline probe must define ${name}`);
+    throw new ContractViolation(`offline probe must define ${name}`);
   }
   const rest = source.slice(match.index + match[0].length);
   let body = "";
@@ -120,7 +133,9 @@ function functionBody(source, name) {
     const delimiterMatch = raw.match(/<<['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/);
     if (delimiterMatch) heredoc = delimiterMatch[1];
   }
-  throw new Error(`offline probe has unterminated function ${name}`);
+  throw new ContractViolation(
+    `offline probe has unterminated function ${name}`,
+  );
 }
 
 /**
@@ -154,10 +169,12 @@ function topLevelShellLines(source) {
     if (delimiterMatch) heredoc = delimiterMatch[1];
   }
   if (heredoc !== null) {
-    throw new Error("unterminated top-level heredoc in offline probe");
+    throw new ContractViolation(
+      "unterminated top-level heredoc in offline probe",
+    );
   }
   if (inFunction) {
-    throw new Error("unterminated function in offline probe");
+    throw new ContractViolation("unterminated function in offline probe");
   }
   return lines;
 }
@@ -172,7 +189,7 @@ function requireOrderedSource(source, expected, error) {
   let cursor = -1;
   for (const statement of expected) {
     const index = source.indexOf(statement, cursor + 1);
-    if (index === -1) throw new Error(error);
+    if (index === -1) throw new ContractViolation(error);
     cursor = index;
   }
 }
@@ -190,7 +207,7 @@ function requireOrderedLifecycle(source, expected) {
       (line, candidate) => candidate > cursor && line === statement,
     );
     if (index === -1) {
-      throw new Error(
+      throw new ContractViolation(
         `manager A/B lifecycle is missing or reordered: ${statement}`,
       );
     }
@@ -204,7 +221,7 @@ function requireOrderedLifecycle(source, expected) {
   for (const [statement, count] of expectedCounts) {
     const actualCount = actual.filter((line) => line === statement).length;
     if (actualCount !== count) {
-      throw new Error(
+      throw new ContractViolation(
         `manager A/B lifecycle must execute exactly ${count} time(s): ${statement}`,
       );
     }
@@ -244,12 +261,16 @@ function validateHookResponseAssertion(probe, name, terminal) {
 /** @param {string} probe */
 function validateProbe(probe) {
   if (/^\s*codex\s+plugin\s+/m.test(probe)) {
-    throw new Error("offline probe Codex calls must use the timeout wrapper");
+    throw new ContractViolation(
+      "offline probe Codex calls must use the timeout wrapper",
+    );
   }
 
   const runCodexLines = activeLines(functionBody(probe, "run_codex"));
   if (!arraysEqual(runCodexLines, ['"$timeout_bin" 30 codex "$@"'])) {
-    throw new Error("run_codex must route through the selected timeout binary");
+    throw new ContractViolation(
+      "run_codex must route through the selected timeout binary",
+    );
   }
 
   const runManagerLines = activeLines(functionBody(probe, "run_manager"));
@@ -262,7 +283,7 @@ function validateProbe(probe) {
     '"$package/bin/superpowers-manager.js" "$@"',
   ];
   if (!arraysEqual(runManagerLines, expectedManagerLines)) {
-    throw new Error(
+    throw new ContractViolation(
       "run_manager must route through the local package with isolated manager state",
     );
   }
@@ -272,7 +293,7 @@ function validateProbe(probe) {
     /^\s*python3 -S - "\$listing" "\$expected_root" "\$expected_version" "\$expected_commit" "\$unexpected_commit" <<'PY'\n([\s\S]*?)^PY\n?(?![\s\S])/m;
   const pythonBlockMatch = pythonBlockRe.exec(fingerprintBody);
   if (!pythonBlockMatch) {
-    throw new Error(
+    throw new ContractViolation(
       "fingerprint helper must pass the active-version root to Python",
     );
   }
@@ -285,7 +306,7 @@ function validateProbe(probe) {
     'expected_root="$HOME/.codex/plugins/cache/superpowers-manager/superpowers/$expected_version"',
   ];
   if (!arraysEqual(activeLines(prefix), expectedPrefix)) {
-    throw new Error(
+    throw new ContractViolation(
       "fingerprint helper must derive its exact cache root from expected_version",
     );
   }
@@ -298,7 +319,7 @@ function validateProbe(probe) {
       [activeRootLine],
     )
   ) {
-    throw new Error(
+    throw new ContractViolation(
       "fingerprint helper must resolve exactly one active root from root_arg",
     );
   }
@@ -324,7 +345,7 @@ function validateProbe(probe) {
         (line, candidate) => candidate > cursor && line === statement,
       );
       if (index === -1) {
-        throw new Error(
+        throw new ContractViolation(
           "fingerprint helper must bind active-root reads to Codex's reported version",
         );
       }
@@ -337,7 +358,7 @@ function validateProbe(probe) {
       [provenanceRead],
     )
   ) {
-    throw new Error(
+    throw new ContractViolation(
       "fingerprint helper must read provenance only from the active root",
     );
   }
@@ -347,7 +368,7 @@ function validateProbe(probe) {
       [manifestRead],
     )
   ) {
-    throw new Error(
+    throw new ContractViolation(
       "fingerprint helper must read the manifest only from the active root",
     );
   }
@@ -356,7 +377,7 @@ function validateProbe(probe) {
       (line) => line === "pass" || /^if\s+(?:False|0)\s*:/.test(line),
     )
   ) {
-    throw new Error(
+    throw new ContractViolation(
       "fingerprint helper must not hide active-root checks in a no-op block",
     );
   }
@@ -380,11 +401,13 @@ function validateProbe(probe) {
   ];
   for (const text of requiredAbSteps) {
     if (!probe.includes(text)) {
-      throw new Error(`missing manager A/B step: ${text}`);
+      throw new ContractViolation(`missing manager A/B step: ${text}`);
     }
   }
   if (!probe.includes("reload_listing=$(run_codex plugin list --json)")) {
-    throw new Error("reload opportunity must use real Codex plugin inspection");
+    throw new ContractViolation(
+      "reload opportunity must use real Codex plugin inspection",
+    );
   }
   if (
     /find\s+.*(?:superpowers-manager|\.superpowers-upstream\.json)/.test(
@@ -392,20 +415,24 @@ function validateProbe(probe) {
     ) ||
     probe.includes("search_root.rglob")
   ) {
-    throw new Error("offline probe must not sweep retained cache paths");
+    throw new ContractViolation(
+      "offline probe must not sweep retained cache paths",
+    );
   }
   if (probe.includes("install_plugin_and_assert_active")) {
-    throw new Error("old generic install helper must be replaced");
+    throw new ContractViolation("old generic install helper must be replaced");
   }
   if (probe.includes('assert_marketplace_root "$moved"')) {
-    throw new Error("old moved-marketplace assertion must be replaced");
+    throw new ContractViolation(
+      "old moved-marketplace assertion must be replaced",
+    );
   }
   if (
     !/final_plugins=\$\(run_codex plugin list --json\)[\s\S]*final_marketplaces=\$\(run_codex plugin marketplace list --json\)/.test(
       probe,
     )
   ) {
-    throw new Error(
+    throw new ContractViolation(
       "offline probe must capture both final listings before absence assertions",
     );
   }
@@ -414,13 +441,17 @@ function validateProbe(probe) {
     'run_codex app-server generate-json-schema --out "$schema_root"';
   const rpcInvocation = '"$package/tests/container/hooks-list-rpc.py"';
   if (!probe.includes(schemaGeneration)) {
-    throw new Error("offline probe must generate the app-server schema");
+    throw new ContractViolation(
+      "offline probe must generate the app-server schema",
+    );
   }
   if (!(
     probe.includes('"$timeout_bin" 30 python3 -S \\') &&
     probe.includes(rpcInvocation)
   )) {
-    throw new Error("offline probe must invoke the bounded hooks/list helper");
+    throw new ContractViolation(
+      "offline probe must invoke the bounded hooks/list helper",
+    );
   }
 
   const hookContract = [
@@ -438,27 +469,47 @@ function validateProbe(probe) {
     '"untrusted"',
     '"hooks": {}',
     '"hooks": "./hooks/hooks-codex.json"',
-    'sh "${PLUGIN_ROOT}/hooks/session-start-codex"',
+    // The Ruby source's literal here was single-quoted
+    // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
+    // single-quoted strings `\"` is not an escape sequence, so the
+    // required text carries literal backslashes and guards the JSON
+    // heredoc's escaped-quote spelling at codex-offline-probe.sh:588.
+    'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
     "$HOME/.codex/requirements.toml",
   ];
   for (const text of hookContract) {
     if (!probe.includes(text)) {
-      throw new Error(`missing hook acceptance contract: ${text}`);
+      throw new ContractViolation(`missing hook acceptance contract: ${text}`);
     }
   }
+  // Port-only, strictly additive: the shell driver never guarded the
+  // unescaped spelling at :229 (assert_active_hooks_fixture's expected
+  // Python dict literal). Both spellings must be present so a change
+  // that drops either fixture is caught.
+  if (!probe.includes('sh "${PLUGIN_ROOT}/hooks/session-start-codex"')) {
+    throw new ContractViolation(
+      'missing hook acceptance contract (unescaped spelling): sh "${PLUGIN_ROOT}/hooks/session-start-codex"',
+    );
+  }
   if (!probe.includes("probe_cwd=$(pwd -P)")) {
-    throw new Error("offline probe must resolve its real working directory");
+    throw new ContractViolation(
+      "offline probe must resolve its real working directory",
+    );
   }
   if (/(?:^|\s)session-start-codex(?:\s|$)/m.test(probe)) {
-    throw new Error("offline probe must not invoke the synthetic hook");
+    throw new ContractViolation(
+      "offline probe must not invoke the synthetic hook",
+    );
   }
   if (probe.includes("--dangerously-bypass-hook-trust")) {
-    throw new Error("offline probe must not enable hook trust bypasses");
+    throw new ContractViolation(
+      "offline probe must not enable hook trust bypasses",
+    );
   }
   if (/\brun_codex\s+(?:e|exec)\b/.test(probe)) {
-    throw new Error("offline probe must not make model calls");
+    throw new ContractViolation("offline probe must not make model calls");
   }
 
   validateHookResponseAssertion(
@@ -481,7 +532,9 @@ function validateProbe(probe) {
   ];
   for (const text of activeFields) {
     if (!activeBody.includes(text)) {
-      throw new Error(`active hook assertion missing exact metadata: ${text}`);
+      throw new ContractViolation(
+        `active hook assertion missing exact metadata: ${text}`,
+      );
     }
   }
 
@@ -512,7 +565,7 @@ function validateProbe(probe) {
     "fi",
   ];
   if (!arraysEqual(captureLines, expectedCaptureLines)) {
-    throw new Error(
+    throw new ContractViolation(
       "capture_hooks_response must emit captured app-server stderr only on RPC failure",
     );
   }
@@ -531,7 +584,7 @@ function validateProbe(probe) {
       if (line === mutation) indices.push(index);
     });
     if (indices.length !== 1) {
-      throw new Error(
+      throw new ContractViolation(
         `manager mutation must execute exactly once: ${mutation}`,
       );
     }
@@ -540,7 +593,7 @@ function validateProbe(probe) {
       topLevel[index - 1] === "hook_state_before=$(snapshot_hook_state)" &&
       topLevel[index + 1] === "hook_state_after=$(snapshot_hook_state)"
     )) {
-      throw new Error(
+      throw new ContractViolation(
         `manager mutation must be immediately bracketed by hook-state snapshots: ${mutation}`,
       );
     }
@@ -551,13 +604,15 @@ function validateProbe(probe) {
       'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"',
   ).length;
   if (unchangedCount !== managerMutations.length) {
-    throw new Error("every manager mutation must compare hook-state snapshots");
+    throw new ContractViolation(
+      "every manager mutation must compare hook-state snapshots",
+    );
   }
   const requirementsCount = topLevel.filter(
     (line) => line === "assert_requirements_unchanged",
   ).length;
   if (requirementsCount < managerMutations.length) {
-    throw new Error(
+    throw new ContractViolation(
       "requirements.toml must remain unchanged across manager mutations",
     );
   }
@@ -565,7 +620,7 @@ function validateProbe(probe) {
     (line) => line === "assert_sentinel_absent",
   ).length;
   if (sentinelCount < 5) {
-    throw new Error(
+    throw new ContractViolation(
       "synthetic hook sentinel must be checked after every acceptance phase",
     );
   }
@@ -660,7 +715,7 @@ function validateHooksRpc(hooksRpc) {
   ];
   for (const text of required) {
     if (!hooksRpc.includes(text)) {
-      throw new Error(`RPC helper missing protocol gate: ${text}`);
+      throw new ContractViolation(`RPC helper missing protocol gate: ${text}`);
     }
   }
 
@@ -689,7 +744,7 @@ function validateRunnerInsideBranch(runner) {
     /^if \[ "\$\{1:-\}" = "--inside" \]; then\n([\s\S]*?)^fi\n\nmode="\$\{1:-suite\}"/m;
   const insideMatch = insideRe.exec(runner);
   if (!insideMatch) {
-    throw new Error(
+    throw new ContractViolation(
       "runner must define the --inside branch before host-side mode dispatch",
     );
   }
@@ -718,14 +773,14 @@ function validateRunnerInsideBranch(runner) {
     dispatchIndex === -1 ||
     !(guardIndex < modeIndex && modeIndex < dispatchIndex)
   ) {
-    throw new Error(
+    throw new ContractViolation(
       "--inside must reject UIDs other than 10001 before selecting or dispatching the acceptance mode",
     );
   }
   const suiteRe =
     /suite\)\s+sh tests\/run\.sh\s+exec sh tests\/container\/codex-offline-probe\.sh\s+;;/;
   if (!suiteRe.test(runner)) {
-    throw new Error(
+    throw new ContractViolation(
       "suite mode must run the inner suite and then the offline Codex probe",
     );
   }
@@ -845,7 +900,10 @@ void test("container-contract", async (t) => {
     assert.ok(tsconfig.includes('"moduleResolution": "NodeNext"'));
   });
   await t.test("tsconfig does not model a Node16 module system", () => {
-    assert.ok(!tsconfig.includes('"Node16"'));
+    assert.ok(
+      !tsconfig.includes('"Node16"'),
+      "tsconfig must model the declared Node 24+ runtime with NodeNext",
+    );
   });
 
   // --- inventory items 22-28: tests/container.sh literal-text ----------
@@ -935,7 +993,18 @@ void test("container-contract", async (t) => {
       ["-S", "-c", "import ast, sys; ast.parse(sys.stdin.read())"],
       { input: hooksRpc, encoding: "utf8" },
     );
-    assert.equal(result.status, 0, result.stderr ?? "");
+    if (result.error) {
+      assert.fail(
+        "python3 -S could not be run — is python3 installed and on PATH?",
+      );
+    }
+    assert.equal(
+      result.status,
+      0,
+      result.stderr
+        ? `hooks-list-rpc.py failed to parse as Python: ${result.stderr}`
+        : "hooks-list-rpc.py failed to parse as Python (no stderr captured)",
+    );
   });
 
   // --- inventory items 38-40: runner --inside structural check ---------
@@ -1023,7 +1092,7 @@ void test("container-contract", async (t) => {
         probe,
         `mutation fixture made no change: ${name}`,
       );
-      assert.throws(() => validateProbe(mutated));
+      assert.throws(() => validateProbe(mutated), ContractViolation);
     });
   }
 
@@ -1121,7 +1190,7 @@ void test("container-contract", async (t) => {
         hooksRpc,
         `mutation fixture made no change: ${name}`,
       );
-      assert.throws(() => validateHooksRpc(mutated));
+      assert.throws(() => validateHooksRpc(mutated), ContractViolation);
     });
   }
 });
