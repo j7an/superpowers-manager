@@ -66,6 +66,15 @@ function packRealReport(scratchDir) {
     cwd: ROOT,
     encoding: "utf8",
   });
+  // Mirrors the shell driver's `command -v npm` precondition
+  // (tests/test_npm_pack_contents.sh:9): name what broke without letting
+  // the raw spawn error (which carries an ENOENT-shaped message) reach the
+  // assertion output.
+  if (result.error) {
+    assert.fail(
+      "npm pack --dry-run --json could not be run — is npm installed and on PATH?",
+    );
+  }
   assert.equal(
     result.status,
     0,
@@ -169,44 +178,53 @@ void test("npm-pack-contents", async (t) => {
       (file) => file.path,
     );
     for (const path of paths) {
-      const parts = path.split("/");
       assert.equal(
-        parts.includes("selection.json"),
-        false,
-        `forbidden selection.json path: ${path}`,
-      );
-      assert.equal(
-        parts.some((part) => part.startsWith("superpowers-manager.pin.")),
-        false,
-        `forbidden pin-file path: ${path}`,
-      );
-      assert.equal(
-        parts.includes(".git"),
-        false,
-        `forbidden .git path: ${path}`,
-      );
-      assert.equal(
-        parts.includes(".cache"),
-        false,
-        `forbidden .cache path: ${path}`,
-      );
-      const isForbiddenPluginsPath =
-        path.startsWith("plugins/superpowers/") &&
-        path !== "plugins/superpowers/.codex-plugin/plugin.template.json";
-      assert.equal(
-        isForbiddenPluginsPath,
-        false,
-        `forbidden plugins/superpowers/* path: ${path}`,
-      );
-      const isForbiddenDocsPath =
-        path === "docs/superpowers" || path.startsWith("docs/superpowers/");
-      assert.equal(
-        isForbiddenDocsPath,
-        false,
-        `forbidden docs/superpowers path: ${path}`,
+        forbiddenPathCategory(path),
+        null,
+        `forbidden path (${forbiddenPathCategory(path)}): ${path}`,
       );
     }
   });
+
+  // The real pack currently contains zero matches in any of the six
+  // categories above, so that check alone can never go RED for a
+  // mistranslated predicate (e.g. `includes` where the shell used
+  // `startsWith`, or a missing `parts` split). This synthetic fixture is
+  // not present in the original shell driver — it exists solely to make
+  // each category's predicate independently falsifiable. See
+  // tests/migration-inventory/npm-pack-contents.md for the discriminating
+  // rationale.
+  const FORBIDDEN_PATH_FIXTURES = /** @type {const} */ ([
+    ["selection.json", "some/dir/selection.json"],
+    ["pin-file", "some/dir/superpowers-manager.pin.deadbeef"],
+    [".git", "some/.git/config"],
+    [".cache", "some/.cache/thing"],
+    ["plugins/superpowers/*", "plugins/superpowers/skills/foo.md"],
+    ["docs/superpowers", "docs/superpowers/notes.md"],
+  ]);
+
+  for (const [category, path] of FORBIDDEN_PATH_FIXTURES) {
+    await t.test(
+      `forbidden-path category "${category}" rejects a synthetic matching path (${path})`,
+      () => {
+        assert.equal(forbiddenPathCategory(path), category);
+      },
+    );
+  }
+
+  // The allowed carve-out must not be misclassified as forbidden by the
+  // plugins/superpowers/* predicate's boundary.
+  await t.test(
+    "the plugins/superpowers/* exception path is not itself forbidden",
+    () => {
+      assert.equal(
+        forbiddenPathCategory(
+          "plugins/superpowers/.codex-plugin/plugin.template.json",
+        ),
+        null,
+      );
+    },
+  );
 
   // --- inventory items 20-25: identity tampering is rejected -------------
 
@@ -262,6 +280,11 @@ void test("npm-pack-contents", async (t) => {
         encoding: "utf8",
       });
 
+      if (result.error) {
+        assert.fail(
+          "distless npm pack --dry-run --json could not be run — is npm installed and on PATH?",
+        );
+      }
       assert.notEqual(result.status, 0, "distless npm pack must fail");
       assert.match(result.stderr ?? "", /dist\/cli\.js is missing/);
     },
@@ -271,4 +294,31 @@ void test("npm-pack-contents", async (t) => {
 /** @param {string} value */
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Mirrors the six forbidden-path checks in the embedded Python at
+ * tests/test_npm_pack_contents.sh:78-94. Returns the name of the first
+ * forbidden category a path matches, or `null` if it matches none.
+ * Extracted as its own function (rather than inlined per-path assertions)
+ * so both the real-pack check and the synthetic discriminating fixture
+ * below exercise the exact same predicate.
+ * @param {string} path
+ * @returns {string | null}
+ */
+function forbiddenPathCategory(path) {
+  const parts = path.split("/");
+  if (parts.includes("selection.json")) return "selection.json";
+  if (parts.some((part) => part.startsWith("superpowers-manager.pin.")))
+    return "pin-file";
+  if (parts.includes(".git")) return ".git";
+  if (parts.includes(".cache")) return ".cache";
+  if (
+    path.startsWith("plugins/superpowers/") &&
+    path !== "plugins/superpowers/.codex-plugin/plugin.template.json"
+  )
+    return "plugins/superpowers/*";
+  if (path === "docs/superpowers" || path.startsWith("docs/superpowers/"))
+    return "docs/superpowers";
+  return null;
 }

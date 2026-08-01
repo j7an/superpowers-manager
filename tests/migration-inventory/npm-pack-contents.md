@@ -79,6 +79,29 @@ inventoried separately:
 19. No packed path equals `"docs/superpowers"` or starts with
     `"docs/superpowers/"`.
 
+**Review addendum (2026-07-31, Finding 1):** the real pack currently
+contains zero matches in any of these six categories, so items 14-19 alone
+can never go RED for a mistranslated predicate — a substring check where the
+shell used a segment check, a dropped `parts.split("/")`, or a wrong
+prefix/equality boundary would pass silently forever. The port therefore
+extracts the six checks into one `forbiddenPathCategory(path)` function,
+used both by the real-pack check (items 14-19, unchanged) and by a new
+synthetic discriminating fixture — one deliberately forbidden path per
+category, asserted to be classified into that category, plus one assertion
+that the `plugins/superpowers/*` exception path itself is *not* classified
+as forbidden. This synthetic fixture has **no counterpart in the original
+shell driver** (the shell never runs `assert_pack_contents.sh`'s Python
+against anything but the real pack for this check), so it does not change
+the 1:1 cardinality count in the "Cardinality" section below; it is
+additional port-only coverage that makes the six real-pack predicates
+independently falsifiable. Mutation-tested 2026-07-31: mutating the
+`pin-file` predicate from a per-segment `startsWith` check to a whole-path
+`startsWith` check drove the `"pin-file"` synthetic assertion RED (and only
+that one); mutating the `.git` predicate from `parts.includes(".git")` to
+`path === ".git"` (i.e. dropping the `parts` split) drove the `".git"`
+synthetic assertion RED (and only that one). Both were restored and
+reconfirmed GREEN.
+
 ## Identity-tampering rejection assertions (`:97-130`)
 
 `assert_rejected_identity` copies the real one-element-array report,
@@ -107,12 +130,31 @@ A scratch directory receives only a copy of the real `package.json` (no
 Line 148 (`echo "test_npm_pack_contents: OK"`) is driver-completion output,
 not an assertion.
 
+**Review addendum (2026-07-31, Finding 2):** the shell driver's `command -v
+npm` precondition (`:9`) fails closed with `error: npm is required for this
+test` before anything else runs. The port's two `spawnSync("npm", ...)`
+call sites (in `packRealReport`, and in the dist-less prepack test) now
+check `result.error` and `assert.fail` with a clear diagnostic
+(`"... could not be run — is npm installed and on PATH?"`) before touching
+`result.status`/`result.stderr`, instead of letting a `null !== 0`
+comparison with an empty message reach the test report. Confirmed by
+running the same `spawnSync` call with `PATH` pointed at a directory
+containing no `npm`: `result.error.code` is `"ENOENT"` and `result.status`
+is `null` — exactly the case the new guard intercepts before any raw
+ENOENT-shaped text can reach stdout/stderr.
+
 ## Cardinality
 
 - Shell original: **27** assertions (3 shape-acceptance, 10
   malformed-shape-rejection, 6 forbidden-path-category, 6
   identity-tampering-rejection, 2 dist-less-prepack).
-- Port (`tests/bin/npm-pack-contents.test.js`): 27 assertions, one
-  `node:test` `assert.*` call per numbered item above, grouped into
-  `node:test` subtests by fixture/scenario for readability.
-- Reconciliation: 1:1, no merges, no drops.
+- Port (`tests/bin/npm-pack-contents.test.js`): 27 assertions 1:1-mapped to
+  the shell, one `node:test` `assert.*` call per numbered item above,
+  grouped into `node:test` subtests by fixture/scenario for readability,
+  **plus** 7 port-only assertions added 2026-07-31 in response to review
+  Finding 1 (6 synthetic per-category discriminating checks + 1
+  exception-boundary check) that have no shell counterpart and are outside
+  the 1:1 mapping.
+- Reconciliation: 1:1 for all 27 original items, no merges, no drops. The 7
+  additional port-only assertions are strictly additive test coverage, not
+  a reconciliation of any shell assertion.
