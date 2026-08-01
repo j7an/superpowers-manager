@@ -363,8 +363,9 @@ it).
   section for readability. Items expressed as loops over a literal-string
   array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
   the same array inside `validateProbe`/`validateHooksRpc`, one `throw` per
-  missing element (`:396-397`, `:465-466`, `:692-693` in the shipped
-  file). Each such loop is exercised through a single
+  missing element (the loop bodies' `throw new ContractViolation(...)`
+  statements are at `:404`, `:484`, and `:718` in the shipped file). Each
+  such loop is exercised through a single
   `assert.doesNotThrow(() => validateProbe(...))` /
   `assert.doesNotThrow(() => validateHooksRpc(...))` subtest — the loop
   itself short-circuits on the first missing element, exactly as the
