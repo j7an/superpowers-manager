@@ -100,22 +100,34 @@ void test("serializer preserves envelope shape and rejects unsafe values", () =>
   });
 
   for (const operation of ["bad\nop", "bad\u0085op", "bad\ud800op"]) {
-    assert.throws(() =>
-      serializeEnvelope(successResult(operation, {}, []).envelope),
+    assert.throws(
+      () => serializeEnvelope(successResult(operation, {}, []).envelope),
+      {
+        message:
+          "protocol strings must not contain terminal control characters",
+      },
     );
   }
   assert.doesNotThrow(() =>
     serializeEnvelope(successResult("build😀", {}, []).envelope),
   );
-  assert.throws(() =>
-    serializeEnvelope(
-      successResult("build", { value: Number.NaN }, []).envelope,
-    ),
+  assert.throws(
+    () =>
+      serializeEnvelope(
+        successResult("build", { value: Number.NaN }, []).envelope,
+      ),
+    { message: "protocol JSON must not contain non-finite numbers" },
   );
-  assert.throws(() =>
-    serializeEnvelope(
-      successResult("build", {}, [{ channel: "stderr", text: "bad\tmessage" }])
-        .envelope,
-    ),
+  // Note the message: a tab in a message record is rejected as an invalid
+  // record, not as a control character. The bare assert.throws this replaces
+  // could not tell the two apart, so it passed whichever fired.
+  assert.throws(
+    () =>
+      serializeEnvelope(
+        successResult("build", {}, [
+          { channel: "stderr", text: "bad\tmessage" },
+        ]).envelope,
+      ),
+    { message: "invalid message record at line 1" },
   );
 });

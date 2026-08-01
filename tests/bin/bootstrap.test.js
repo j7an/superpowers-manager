@@ -387,13 +387,21 @@ and zero npm secrets before approving publication.
 `;
 
 void test("bootstrap: a swapped-sections fixture is rejected", () => {
-  assert.throws(() =>
-    assertReleaseVerificationSections(SWAPPED_SECTIONS_FIXTURE),
+  assert.throws(
+    () => assertReleaseVerificationSections(SWAPPED_SECTIONS_FIXTURE),
+    {
+      message:
+        "Pre-publication approval must precede Post-publication verification",
+    },
   );
 });
 
 void test("bootstrap: a misplaced-evidence fixture is rejected", () => {
-  assert.throws(() =>
-    assertReleaseVerificationSections(MISPLACED_EVIDENCE_FIXTURE),
+  // The REQUIRED_PRE loop (:313) fires before the REQUIRED_POST loop (:318),
+  // and "frozen tag and source SHA" is the first REQUIRED_PRE entry (:280)
+  // absent from this fixture's pre-publication body. Verified by execution.
+  assert.throws(
+    () => assertReleaseVerificationSections(MISPLACED_EVIDENCE_FIXTURE),
+    { message: "missing pre-publication evidence: frozen tag and source SHA" },
   );
 });
