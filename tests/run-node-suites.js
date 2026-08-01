@@ -52,16 +52,16 @@ if (!isFixtureRoot || existsSync(buildIdPath)) {
   try {
     expected = computeBuildId(ROOT);
   } catch {
-    // NOT staleness, and `pnpm run build` cannot fix it. Four causes reach
-    // here (tests/build-id.js:70, :76, :78, :79) — an unreadable src/, an
-    // unreadable source file, a missing tsconfig.json, and an unresolvable
-    // TypeScript install — and only the last is fixed by `pnpm install
-    // --frozen-lockfile`. Naming any single remedy would reintroduce the
-    // wrong-cause defect this split exists to fix, so name the candidate
-    // inputs and prescribe nothing. Do not merge this back into the
-    // readFileSync try above.
+    // NOT staleness, and `pnpm run build` cannot fix it. Six causes reach
+    // here (tests/build-id.js:70, :76, :78, :38, :47, :55) — an unreadable
+    // src/, an unreadable source file, a missing tsconfig.json, and an
+    // unresolvable TypeScript install — and only the last is fixed by
+    // `pnpm install --frozen-lockfile`. Naming any single remedy would
+    // reintroduce the wrong-cause defect this split exists to fix, so name
+    // the candidate inputs and prescribe nothing. Do not merge this back
+    // into the readFileSync try above.
     fail(
-      "cannot compute the expected build id for dist/ — one of src/, tsconfig.json, or node_modules/typescript could not be read",
+      "cannot compute the expected build id for dist/ — one of src/, tsconfig.json, or node_modules/typescript could not be read or is malformed",
     );
   }
   if (recorded !== expected) {

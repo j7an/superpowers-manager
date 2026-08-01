@@ -81,10 +81,10 @@ Codex below describe the product integration, not a required agent harness.
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the
   error — a message, a RegExp, an error class, or an object. Never a bare call
-  and never a string. **Why:** `node:assert` reads a string second argument as
-  the failure *label* and an absent one as no constraint, so either form
-  passes on any error. One such call left PR 10's entire rejection corpus
-  asserting nothing through several reviews.
+  and never a string in that position. **Why:** `node:assert` reads a string
+  second argument as the failure *label* and an absent one as no constraint,
+  so either form passes on any error. One such call left PR 10's entire
+  rejection corpus asserting nothing through several reviews.
 - Run `git diff --check` before completion.
 
 ## Workflows and Dependencies

@@ -43,11 +43,12 @@ const DOCKERIGNORE_PATH = join(ROOT, ".dockerignore");
  * Read the configuration `tsc` actually resolves for tests/tsconfig.json.
  *
  * Asserts the *effective* value rather than the file's text: --showConfig
- * applies `extends`, fills defaults, resolves duplicate keys last-wins, and
- * emits tsc's own canonical lowercase spelling. That is why the retired
- * inventory item 21 — a negative `!includes('"Node16"')` substring test — is
- * gone: a config whose effective module resolves to Node16 by any route,
- * including a duplicate key, now fails the positive assertions below.
+ * applies `extends`, resolves implied options, resolves duplicate keys
+ * last-wins, and emits tsc's own canonical lowercase spelling. That is why
+ * the retired inventory item 21 — a negative `!includes('"Node16"')`
+ * substring test — is gone: a config whose effective module resolves to
+ * Node16 by any route, including a duplicate key, now fails the positive
+ * assertions below.
  *
  * Resolves the compiler by explicit path rather than through PATH. Inside the
  * acceptance container, PATH is prefixed with
