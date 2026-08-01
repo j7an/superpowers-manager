@@ -59,6 +59,10 @@ Codex below describe the product integration, not a required agent harness.
 ## Testing
 
 - Run the closest targeted test while iterating.
+- Run `pnpm run check:static` (format, lint, build, typecheck — about 4s)
+  before submitting. `pnpm run check` adds the full suite (~85s) and cannot
+  run concurrently with other work. **Why:** three of PR 10's six remediation
+  tasks needed an extra fix round, and every one was a trivial static failure.
 - Before the host suite, run:
 
   ```sh
@@ -75,6 +79,12 @@ Codex below describe the product integration, not a required agent harness.
   developer's or runner's real Codex state.
 - Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
+- Every `assert.throws`/`assert.rejects` names a matcher that constrains the
+  error — a message, a RegExp, an error class, or an object. Never a bare call
+  and never a string. **Why:** `node:assert` reads a string second argument as
+  the failure *label* and an absent one as no constraint, so either form
+  passes on any error. One such call left PR 10's entire rejection corpus
+  asserting nothing through several reviews.
 - Run `git diff --check` before completion.
 
 ## Workflows and Dependencies
