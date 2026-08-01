@@ -353,6 +353,14 @@ async function runBuild(
 
         let source: string;
         try {
+          // Safe to decode as utf8 without a fatal check here: `readManifest`
+          // above (candidateManifest, ~:335) already read these exact bytes
+          // through `parseStrictJson`, which decodes with a fatal
+          // `TextDecoder("utf-8")` (src/strict-json.ts:105) and throws on
+          // invalid UTF-8 before this line ever runs. That guarantee is a
+          // property of this call ordering, not of this line — if a future
+          // change let the overlay read run before `readManifest`, invalid
+          // UTF-8 could silently decode to U+FFFD here.
           source = await readFile(candidateManifest, "utf8");
         } catch {
           // Deliberately drops the cause. The Python interpolated the raw
