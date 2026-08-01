@@ -184,6 +184,98 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
   assert.doesNotMatch(serialized, /Traceback/);
 });
 
+// The real TOCTOU: `readManifest` (src/hooks.ts:113) validates the candidate
+// manifest fatally for hook classification; the overlay's own read
+// (src/adapter.ts, ~:360) reads the same path again afterward. Between those
+// two reads, `tests/unit/helpers/manifest-toctou-child.js` replaces the file
+// on disk with genuinely invalid UTF-8 bytes, so the second read observes
+// different bytes than the first one validated. Before the fix, the second
+// read decoded leniently (U+FFFD replacement) and the corrupted manifest was
+// written back with the run reporting success — see the finding in PR #52.
+// This needs the same experimental-module-mocking child-process setup as the
+// read-failure case above, for the same reason.
+void test("a manifest overlay read fails closed when the file changes between the two reads", () => {
+  const child = fileURLToPath(
+    new URL("helpers/manifest-toctou-child.js", import.meta.url),
+  );
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_TEST_CONTEXT;
+  delete childEnv.NODE_TEST_WORKER_ID;
+  const spawned = spawnSync(
+    process.execPath,
+    ["--experimental-test-module-mocks", "--test", child],
+    { encoding: "utf8", env: childEnv },
+  );
+  assert.equal(
+    spawned.status,
+    0,
+    `child probe failed:\nstdout: ${spawned.stdout}\nstderr: ${spawned.stderr}`,
+  );
+  const lines = spawned.stdout.split("\n");
+  const resultLine = lines.find((line) => line.startsWith("RESULT_JSON:"));
+  assert.ok(
+    resultLine,
+    `no RESULT_JSON line in child stdout: ${spawned.stdout}`,
+  );
+  const bytesLine = lines.find((line) =>
+    line.startsWith("MANIFEST_BYTES_BASE64:"),
+  );
+  assert.ok(
+    bytesLine,
+    `no MANIFEST_BYTES_BASE64 line in child stdout: ${spawned.stdout}`,
+  );
+
+  const envelope = JSON.parse(resultLine.slice("RESULT_JSON:".length));
+  assert.equal(envelope.ok, false);
+  assert.equal(envelope.messages.length, 1, "expected exactly one message");
+  assert.equal(envelope.messages[0].channel, "stderr");
+  assert.match(
+    envelope.messages[0].text,
+    /^cannot read manifest JSON in .+\/\.codex-plugin\/plugin\.json$/,
+  );
+  assert.equal(envelope.error?.code, "build-failed");
+  assert.equal(
+    envelope.error?.message,
+    "failed to apply manager manifest overlay",
+  );
+  const serialized = JSON.stringify(envelope);
+  assert.doesNotMatch(serialized, /errno/i);
+  assert.doesNotMatch(serialized, /ENOENT/);
+  assert.doesNotMatch(serialized, /Traceback/);
+
+  // The manifest on disk must still be exactly the corrupted bytes the child
+  // wrote between the two reads: the run must not have decoded them
+  // leniently, overlaid them, and written a "successful" replacement
+  // (U+FFFD) manifest back. Note a lenient `.toString("utf8")` comparison
+  // would not distinguish those two cases \u2014 decoding either one leniently
+  // produces the U+FFFD character, since decoding is exactly the lossy step
+  // under test. The byte-exact comparison below, and the fatal re-decode
+  // after it, use the raw bytes instead.
+  const finalBytes = Buffer.from(
+    bytesLine.slice("MANIFEST_BYTES_BASE64:".length),
+    "base64",
+  );
+  // Reconstructed independently of the child's fixture, matching its exact
+  // construction (validText + single corrupted byte at the "zz" placeholder)
+  // \u2014 see tests/unit/helpers/manifest-toctou-child.js.
+  const expectedValidText = `${JSON.stringify({
+    name: "superpowers",
+    description: "zz",
+  })}\n`;
+  const expectedCorruptedBytes = Buffer.from(expectedValidText, "utf8");
+  expectedCorruptedBytes[expectedValidText.indexOf("zz")] = 0xff;
+  assert.deepEqual(
+    finalBytes,
+    expectedCorruptedBytes,
+    "manifest on disk must be exactly the bytes corrupted between the two reads \u2014 unwritten, not repaired",
+  );
+  assert.throws(
+    () => new TextDecoder("utf-8", { fatal: true }).decode(finalBytes),
+    TypeError,
+    "manifest on disk must still be invalid UTF-8 (unwritten, not repaired)",
+  );
+});
+
 void test("a split dash-leading ref fails before the validator with a named-flag record", async (t) => {
   const workspace = await buildWorkspace(t);
   const result = await runAdapter(
