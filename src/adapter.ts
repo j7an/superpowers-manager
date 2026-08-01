@@ -1,7 +1,15 @@
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
-import { access, copyFile, mkdir, realpath, stat } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  readFile,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import {
@@ -28,6 +36,7 @@ import {
   readManifest,
   type ManifestSource,
 } from "./hooks.js";
+import { applyManifestOverlay } from "./manifest-overlay.js";
 import { readCodexBuildSource } from "./provenance.js";
 import type { JsonValue } from "./strict-json.js";
 import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.js";
@@ -192,17 +201,6 @@ async function listingCommand(
   return result;
 }
 
-async function pythonCommand(
-  log: AdapterMessageLog,
-  args: readonly string[],
-  env: NodeJS.ProcessEnv,
-): Promise<CommandResult> {
-  const result = await runCommand("python3", args, env);
-  log.appendBytes("stdout", result.stdout);
-  log.appendBytes("stderr", result.stderr);
-  return result;
-}
-
 async function executable(path: string): Promise<boolean> {
   try {
     await access(path, constants.X_OK);
@@ -353,22 +351,52 @@ async function runBuild(
           fail("build-failed", "failed to prepare upstream Codex hooks");
         }
 
-        let overlay: CommandResult;
+        let source: string;
         try {
-          overlay = await pythonCommand(
-            log,
-            [
-              "-S",
-              join(root, "scripts/adapters/codex/apply-manifest-overlay.py"),
-              candidateManifest,
-              flags["--manager-version"],
-            ],
-            env,
-          );
+          // Decoded fatally, not leniently: the file can change between this read and `readManifest`'s read above.
+          const rawManifestBytes = await readFile(candidateManifest);
+          source = new TextDecoder("utf-8", {
+            fatal: true,
+            ignoreBOM: true,
+          }).decode(rawManifestBytes);
         } catch {
+          // Deliberately drops the cause. The Python interpolated the raw
+          // OSError here (apply-manifest-overlay.py:42), putting
+          // "[Errno 2] No such file or directory" on the operator's stream.
+          // The prefix is preserved; the errno leak is not.
+          log.appendText(
+            "stderr",
+            `cannot read manifest JSON in ${candidateManifest}`,
+          );
           fail("build-failed", "failed to apply manager manifest overlay");
         }
-        if (commandFailed(overlay)) {
+
+        let overlaid: string;
+        try {
+          overlaid = applyManifestOverlay(
+            source,
+            flags["--manager-version"],
+            candidateManifest,
+          );
+        } catch (cause) {
+          // applyManifestOverlay's own messages already name the manifest
+          // path — three are the frozen CPython wording, and the fourth (the
+          // numeric-overflow diagnostic, which has no CPython oracle wording
+          // to match) now carries the path via its own rewrap in
+          // src/manifest-overlay.ts. Emit as-is, with no added prefix — a
+          // prefix here would double up the path these messages already
+          // name.
+          log.appendText("stderr", oneLine(cause));
+          fail("build-failed", "failed to apply manager manifest overlay");
+        }
+
+        try {
+          await writeFile(candidateManifest, overlaid, "utf8");
+        } catch {
+          log.appendText(
+            "stderr",
+            `cannot write manifest JSON in ${candidateManifest}`,
+          );
           fail("build-failed", "failed to apply manager manifest overlay");
         }
         try {
@@ -456,7 +484,7 @@ async function runBuild(
         }
         if (errors.length > 0) {
           // appendBytes, not appendText: one record per line, matching what
-          // pythonCommand wrote from the subprocess streams.
+          // mutationCommand writes from the subprocess streams.
           const text =
             "Generated plugin validation failed:\n" +
             errors.map((error) => `- ${error}\n`).join("");

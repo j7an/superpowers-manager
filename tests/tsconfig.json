@@ -10,5 +10,14 @@
     "target": "ES2024",
     "types": ["node"]
   },
-  "include": ["../bin/**/*.js", "bin/**/*.js", "unit/**/*.js", "baseline/**/*.js", "run-node-suites.js"]
+  "include": [
+    "../bin/**/*.js",
+    "bin/**/*.js",
+    "unit/**/*.js",
+    "baseline/**/*.js",
+    "run-node-suites.js",
+    "build-id.js",
+    "write-build-id.js",
+    "tools/**/*.mjs"
+  ]
 }

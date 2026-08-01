@@ -65,7 +65,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `MANIFEST-READER-INSTALLED-01` | `tests/unit/codex-state.test.js::MANIFEST-READER-INSTALLED-01 installed manifest complete matrix` | `tests/fixtures/baseline/manifests/installed-manager-version.json` |
 | `MANIFEST-READER-UPSTREAM-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: MANIFEST-READER-UPSTREAM-01 upstream manifest reader profile` | `tests/fixtures/baseline/manifests/upstream-no-hooks.json` |
 | `MANIFEST-READER-MATERIALIZE-01` | `tests/unit/hooks.test.js::MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix` | `tests/fixtures/baseline/manifests/candidate-non-standard-constant.json` |
-| `MANIFEST-READER-OVERLAY-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: MANIFEST-READER-OVERLAY-01 manifest overlay profile` | `tests/fixtures/baseline/manifests/candidate-unknown-field.json` |
+| `MANIFEST-READER-OVERLAY-01` | `tests/baseline/manifest-overlay-parity.test.js::BASELINE CASE: MANIFEST-READER-OVERLAY-01 byte parity with the Python oracle` | `tests/fixtures/baseline/overlay-parity/input/unknown-field.json` |
 | `MANIFEST-READER-VALIDATOR-01` | `tests/baseline/generated-plugin-corpus.test.js::MANIFEST-READER-VALIDATOR-01 candidate validator profile` | `tests/fixtures/baseline/manifests/candidate-duplicate-key.json` |
 | `CODEX-JSON-ARRAY-01` | `tests/unit/codex-json.test.js::CODEX-JSON-ARRAY-01 installed listing reader complete matrix` | — |
 | `CODEX-JSON-MARKETPLACE-01` | `tests/unit/codex-json.test.js::CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix` | — |

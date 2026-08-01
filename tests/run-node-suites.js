@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // @ts-check
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { computeBuildId } from "./build-id.js";
 
 // The contract suite drives this runner against isolated fixture roots.
 // Production callers never set this.
@@ -31,6 +32,29 @@ if (!existsSync(join(ROOT, "dist", "cli.js"))) {
   );
 }
 
+// Fixture roots have no dist/ built from these sources — the contract suite
+// drives the runner against them via SPW_RUNNER_ROOT. Treat a fixture root as
+// fresh by default, or every existing contract case fails for a reason
+// unrelated to what it tests. A fixture opts in by writing dist/.build-id.
+const buildIdPath = join(ROOT, "dist", ".build-id");
+const isFixtureRoot = process.env.SPW_RUNNER_ROOT !== undefined;
+if (!isFixtureRoot || existsSync(buildIdPath)) {
+  let recorded;
+  let expected;
+  try {
+    recorded = readFileSync(buildIdPath, "utf8");
+    // Every hash input can fail — an unreadable source, a missing
+    // tsconfig.json, a permission error. All of them fail closed with the
+    // frozen line; none of them throws raw.
+    expected = computeBuildId(ROOT);
+  } catch {
+    fail("dist/ is stale — run pnpm run build");
+  }
+  if (recorded !== expected) {
+    fail("dist/ is stale — run pnpm run build");
+  }
+}
+
 /** @type {unknown} */
 let parsed;
 try {
@@ -52,6 +76,18 @@ if (!declared.every((entry) => typeof entry === "string")) {
 }
 const expected = /** @type {string[]} */ (declared);
 
+const seen = new Set();
+const repeated = [];
+for (const name of expected) {
+  if (seen.has(name)) repeated.push(name);
+  seen.add(name);
+}
+if (repeated.length > 0) {
+  fail(
+    `tests/suites.json lists a suite more than once: ${[...new Set(repeated)].sort().join(", ")}`,
+  );
+}
+
 const discovered = [];
 for (const dir of SUITE_DIRS) {
   const absolute = join(ROOT, dir);
@@ -64,25 +100,45 @@ for (const dir of SUITE_DIRS) {
     fail(`suite directory could not be read: ${dir}`);
   }
   for (const entry of entries) {
+    if (entry.isSymbolicLink()) {
+      fail(`suite entries may not be symlinks: ${dir}/${entry.name}`);
+    }
     if (entry.isDirectory()) {
       // Nested test files typecheck but never run: the runners are
       // single-level and traceability.test.js only accepts flat Node
       // selectors. Nested non-test helpers are supported.
-      /** @type {string[]} */
+      const nestedRoot = join(absolute, entry.name);
+      /** @type {import("node:fs").Dirent[]} */
       let nested;
       try {
-        nested = readdirSync(join(absolute, entry.name), {
+        nested = readdirSync(nestedRoot, {
           recursive: true,
-        }).map((name) => String(name));
+          withFileTypes: true,
+        });
       } catch {
         // Unguarded, an unreadable subdirectory throws here and puts the raw
         // EACCES text plus a stack on stderr — the same leak the sibling
         // readdirSync above is wrapped to prevent.
         fail(`suite subdirectory could not be read: ${dir}/${entry.name}`);
       }
+      // Name-independent: a nested symlink is rejected regardless of what
+      // it is named, not only when it happens to end in .test.js. Node does
+      // not recurse *through* a symlinked directory when walking
+      // recursively, so the symlink itself always surfaces here as its own
+      // entry with isSymbolicLink() true.
+      for (const nestedEntry of nested) {
+        if (nestedEntry.isSymbolicLink()) {
+          const fullPath = join(nestedEntry.parentPath, nestedEntry.name);
+          fail(
+            `suite entries may not be symlinks: ${relative(ROOT, fullPath)}`,
+          );
+        }
+      }
       const offenders = nested
-        .filter((name) => name.endsWith(".test.js"))
-        .map((name) => `${dir}/${entry.name}/${name}`)
+        .filter((nestedEntry) => nestedEntry.name.endsWith(".test.js"))
+        .map((nestedEntry) =>
+          relative(ROOT, join(nestedEntry.parentPath, nestedEntry.name)),
+        )
         .sort();
       if (offenders.length > 0) {
         fail(
@@ -118,17 +174,25 @@ if (missing.length > 0 || unregistered.length > 0) {
 
 // A manifest-registered suite that is a broken symlink is returned by
 // readdirSync with isDirectory() === false and passes the set comparison
-// above, so an unguarded statSync here throws a raw ENOENT with a stack —
+// above, so an unguarded lstatSync here throws a raw ENOENT with a stack —
 // verified. No errno and no stack frame may reach either stream.
 for (const suite of expected) {
   const absolute = join(ROOT, suite);
-  let isFile = false;
+  let stats;
   try {
-    isFile = statSync(absolute).isFile();
+    stats = lstatSync(absolute);
   } catch {
     fail(`suite could not be inspected: ${suite}`);
   }
-  if (!isFile) fail(`suite is not a regular file: ${suite}`);
+  // Unreachable by construction, not dead: `expected` here is filtered
+  // through `discovered`, which the directory walk above populates only
+  // after rejecting every symlink at the entry level. No symlink can reach
+  // this loop today. Kept as a backstop in case discovery is ever reordered
+  // so a declared suite could bypass the walk.
+  if (stats.isSymbolicLink()) {
+    fail(`suite entries may not be symlinks: ${suite}`);
+  }
+  if (!stats.isFile()) fail(`suite is not a regular file: ${suite}`);
 }
 
 if (expected.length === 0) fail("tests/suites.json declares no suites");

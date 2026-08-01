@@ -100,7 +100,7 @@ pnpm run check
 sh tests/run.sh
 sh tests/container.sh
 npm pack --dry-run --json
-sh tests/test_npm_pack_contents.sh
+node --test tests/bin/npm-pack-contents.test.js
 git diff --check
 ```
 

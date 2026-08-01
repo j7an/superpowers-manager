@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { computeBuildId } from "../build-id.js";
 
 const RUNNER = fileURLToPath(new URL("../run-node-suites.js", import.meta.url));
 
@@ -40,6 +41,26 @@ function fakeRoot(t, shape) {
     const target = join(root, relative);
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, contents, "utf8");
+  }
+  if (
+    Object.keys(shape.files).some((relative) => relative.startsWith("src/"))
+  ) {
+    writeFileSync(
+      join(root, "tsconfig.json"),
+      '{"compilerOptions":{"rootDir":"./src","outDir":"./dist"}}\n',
+      "utf8",
+    );
+    // computeBuildId folds the resolved compiler version into the digest,
+    // so any fixture root it is called against needs a resolvable
+    // node_modules/typescript/package.json. The version value itself is a
+    // fixture literal this test defines for itself, not a claim about the
+    // real installed compiler.
+    mkdirSync(join(root, "node_modules", "typescript"), { recursive: true });
+    writeFileSync(
+      join(root, "node_modules", "typescript", "package.json"),
+      JSON.stringify({ name: "typescript", version: "0.0.0-fixture" }),
+      "utf8",
+    );
   }
   writeFileSync(
     join(root, "tests", "suites.json"),
@@ -167,6 +188,84 @@ void test("missing dist/cli.js", (t) => {
   assertNoRawFailure(r);
 });
 
+void test("a stale build is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "src/thing.ts": "export const a = 1;\n",
+    },
+  });
+  writeFileSync(join(root, "dist", ".build-id"), "stale\n", "utf8");
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /dist\/ is stale — run pnpm run build/);
+  assertNoRawFailure(r);
+});
+
+void test("a matching build id passes", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "src/thing.ts": "export const a = 1;\n",
+    },
+  });
+  writeFileSync(join(root, "dist", ".build-id"), computeBuildId(root), "utf8");
+  const r = runIn(root);
+  assert.equal(r.status, 0);
+  assertNoRawFailure(r);
+});
+
+/**
+ * Build a minimal root for exercising computeBuildId directly, independent
+ * of the full run-node-suites.js contract that fakeRoot() sets up.
+ * @param {import("node:test").TestContext} t
+ * @param {{files: Record<string, string>, tsconfig?: string, typescriptVersion?: string}} shape
+ */
+function buildIdRoot(t, shape) {
+  const root = mkdtempSync(join(tmpdir(), "spw-build-id-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const [relative, contents] of Object.entries(shape.files)) {
+    const target = join(root, "src", relative);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents, "utf8");
+  }
+  writeFileSync(
+    join(root, "tsconfig.json"),
+    shape.tsconfig ?? '{"compilerOptions":{}}\n',
+    "utf8",
+  );
+  mkdirSync(join(root, "node_modules", "typescript"), { recursive: true });
+  writeFileSync(
+    join(root, "node_modules", "typescript", "package.json"),
+    JSON.stringify({
+      name: "typescript",
+      version: shape.typescriptVersion ?? "0.0.0-fixture",
+    }),
+    "utf8",
+  );
+  return root;
+}
+
+void test("distinct source trees never collide to the same build id", (t) => {
+  // Tree A: a single file whose contents happen to be another file's name.
+  // Tree B: two empty files named after both sides of that same string.
+  // Unframed concatenation of (name, contents) pairs folds these to the
+  // same byte stream; framing each record with its length must keep them
+  // apart.
+  const treeA = buildIdRoot(t, { files: { "a.ts": "b.ts" } });
+  const treeB = buildIdRoot(t, { files: { "a.ts": "", "b.ts": "" } });
+  assert.notEqual(computeBuildId(treeA), computeBuildId(treeB));
+});
+
+void test("a different resolved compiler version changes the build id", (t) => {
+  const files = { "a.ts": "export const a = 1;\n" };
+  const rootV1 = buildIdRoot(t, { files, typescriptVersion: "1.2.3" });
+  const rootV2 = buildIdRoot(t, { files, typescriptVersion: "9.9.9" });
+  assert.notEqual(computeBuildId(rootV1), computeBuildId(rootV2));
+});
+
 void test("broken symlink suite", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/broken.test.js"],
@@ -179,10 +278,17 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // statSync guard ran.
+  // directory-walk symlink guard (run-node-suites.js:67-69) ran rather than a
+  // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
+  // broken symlink (it inspects the link itself, not its target), so this is
+  // now rejected as a symlink rather than reported as uninspectable. This
+  // suite is declared via suites.json, but it is still the directory walk
+  // that catches it first — not the declared-suites branch — since the
+  // symlink appears as a directory entry before the manifest comparison ever
+  // runs.
   assert.match(
     r.stderr,
-    /suite could not be inspected: tests\/unit\/broken\.test\.js/,
+    /suite entries may not be symlinks: tests\/unit\/broken\.test\.js/,
   );
   assertNoRawFailure(r);
 });
@@ -242,6 +348,109 @@ void test("nested non-test helper accepted", (t) => {
   });
   const r = runIn(root);
   assert.equal(r.status, 0);
+  assertNoRawFailure(r);
+});
+
+void test("a duplicate manifest entry is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js", "tests/unit/a.test.js"],
+    files: { "tests/unit/a.test.js": PASSING_SUITE },
+  });
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.js/,
+  );
+  assertNoRawFailure(r);
+});
+
+void test("a symlinked suite file is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/linked.test.js"],
+    files: { "tests/unit/real.js": PASSING_SUITE },
+  });
+  symlinkSync(
+    join(root, "tests/unit/real.js"),
+    join(root, "tests/unit/linked.test.js"),
+  );
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/linked\.test\.js/,
+  );
+  assertNoRawFailure(r);
+});
+
+void test("a symlinked suite directory is rejected rather than skipped", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "elsewhere/hidden.test.js": PASSING_SUITE,
+    },
+  });
+  symlinkSync(join(root, "elsewhere"), join(root, "tests/unit/linked"));
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/linked/,
+  );
+  assertNoRawFailure(r);
+});
+
+void test("a symlink nested inside a suite subdirectory is rejected even when its name does not end in .test.js", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/helpers/keep.js": "module.exports = {};\n",
+    },
+  });
+  const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(
+    join(outside, "linked.js"),
+    "OUT-OF-TREE CODE EXECUTED\n",
+    "utf8",
+  );
+  symlinkSync(
+    join(outside, "linked.js"),
+    join(root, "tests/unit/helpers/linked.js"),
+  );
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/helpers\/linked\.js/,
+  );
+  assertNoRawFailure(r);
+});
+
+void test("a symlink nested inside a suite subdirectory pointing at a directory is rejected", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "tests/unit/helpers/keep.js": "module.exports = {};\n",
+    },
+  });
+  const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  mkdirSync(join(outside, "sub"), { recursive: true });
+  writeFileSync(join(outside, "sub", "hidden.js"), "", "utf8");
+  symlinkSync(
+    join(outside, "sub"),
+    join(root, "tests/unit/helpers/linked-dir"),
+  );
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  assert.match(
+    r.stderr,
+    /suite entries may not be symlinks: tests\/unit\/helpers\/linked-dir/,
+  );
   assertNoRawFailure(r);
 });
 

@@ -19,7 +19,9 @@ dist/domain/refs.js
 dist/generated-plugin.js
 dist/git.js
 dist/hooks.js
+dist/manifest-overlay.js
 dist/provenance.js
+dist/python-json-format.js
 dist/python-json.js
 dist/python-text.js
 dist/safe-path.js
@@ -36,7 +38,6 @@ dist/workspace.js
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json
 scripts/adapters/codex/adapter
-scripts/adapters/codex/apply-manifest-overlay.py
 scripts/core/adapter.sh
 scripts/core/common.sh
 scripts/core/lifecycle.sh

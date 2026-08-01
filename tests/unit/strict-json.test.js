@@ -7,9 +7,12 @@ const { SafetyError } = await import(
   new URL("../../dist/safety-error.js", import.meta.url).href
 );
 /** @type {typeof import("../../src/strict-json.js")} */
-const { parseStrictJson } = await import(
-  new URL("../../dist/strict-json.js", import.meta.url).href
-);
+const {
+  parseStrictJson,
+  parseStrictJsonPreservingNumbers,
+  isRawNumber,
+  isRawObject,
+} = await import(new URL("../../dist/strict-json.js", import.meta.url).href);
 
 /** @type {import("../../src/strict-json.js").StrictJsonProfile} */
 const reject = { duplicateKeys: "reject", nonStandardConstants: "reject" };
@@ -174,4 +177,81 @@ void test("__proto__ is an own enumerable data property without prototype mutati
   assert.equal("value" in descriptor, true);
   assert.deepEqual(descriptor.value, { polluted: true });
   assert.equal(Object.getPrototypeOf(parsed), Object.prototype);
+});
+
+/** @param {import("../../src/strict-json.js").RawJsonValue} value */
+const entriesOf = (value) => {
+  assert.ok(isRawObject(value));
+  return value.entries;
+};
+/** @param {import("../../src/strict-json.js").RawJsonValue} value */
+const sourcesOf = (value) =>
+  entriesOf(value).map(([key, child]) => {
+    assert.ok(isRawNumber(child));
+    return [key, child.source];
+  });
+
+void test("preserving parser keeps the source text of every number", () => {
+  const value = parseStrictJsonPreservingNumbers(
+    '{"big":9007199254740993,"f":1.50,"e":1e2,"neg":-0}',
+    { duplicateKeys: "last-wins", nonStandardConstants: "reject" },
+  );
+  assert.deepEqual(sourcesOf(value), [
+    ["big", "9007199254740993"],
+    ["f", "1.50"],
+    ["e", "1e2"],
+    ["neg", "-0"],
+  ]);
+});
+
+void test("key order survives, including integer-like keys", () => {
+  // A plain JS object would reorder these to 1,2,z,a.
+  const value = parseStrictJsonPreservingNumbers('{"z":0,"2":2,"1":1,"a":3}', {
+    duplicateKeys: "last-wins",
+    nonStandardConstants: "reject",
+  });
+  assert.deepEqual(
+    entriesOf(value).map(([key]) => key),
+    ["z", "2", "1", "a"],
+  );
+});
+
+void test("last-wins replaces in place, keeping the first key's position", () => {
+  const value = parseStrictJsonPreservingNumbers('{"a":1,"b":2,"a":3}', {
+    duplicateKeys: "last-wins",
+    nonStandardConstants: "reject",
+  });
+  assert.deepEqual(sourcesOf(value), [
+    ["a", "3"],
+    ["b", "2"],
+  ]);
+});
+
+void test("an upstream object cannot forge the number brand", () => {
+  // The defect this brand exists to prevent: a structural predicate such as
+  // `"source" in value` or `typeof value.source === "string"` would classify
+  // an ordinary object that merely happens to carry a `source` property as a
+  // RawNumber and re-emit it as a bare number token, corrupting the value.
+  // Note this object is hand-built, not parsed: the parser always wraps a
+  // parsed `{...}` as a RawObject (its forged keys would land inside
+  // `.entries`, never as own properties), so parsed input can never exercise
+  // this discriminator — only a directly-constructed lookalike can.
+  const forged = { source: "123" };
+  assert.equal(isRawNumber(forged), false);
+
+  const genuine = parseStrictJsonPreservingNumbers("123", {
+    duplicateKeys: "last-wins",
+    nonStandardConstants: "reject",
+  });
+  assert.ok(isRawNumber(genuine));
+});
+
+void test("the value parser is unchanged and still coerces", () => {
+  assert.deepEqual(
+    parseStrictJson('{"big":9007199254740993}', {
+      duplicateKeys: "reject",
+      nonStandardConstants: "reject",
+    }),
+    { big: 9007199254740992 },
+  );
 });
