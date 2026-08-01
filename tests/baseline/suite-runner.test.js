@@ -217,6 +217,28 @@ void test("a matching build id passes", (t) => {
   assertNoRawFailure(r);
 });
 
+void test("a build id that cannot be computed is not reported as staleness", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.js"],
+    files: {
+      "tests/unit/a.test.js": PASSING_SUITE,
+      "src/thing.ts": "export const a = 1;\n",
+    },
+  });
+  writeFileSync(join(root, "dist", ".build-id"), "irrelevant\n", "utf8");
+  // `root` is fakeRoot's mkdtempSync temp directory (:31) and nothing else.
+  // Never derive this path from ROOT, process.cwd(), or import.meta — this
+  // rmSync would then delete the repository's own node_modules.
+  rmSync(join(root, "node_modules"), { recursive: true, force: true });
+
+  const r = runIn(root);
+
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /cannot compute the expected build id/);
+  assert.doesNotMatch(r.stderr, /dist\/ is stale/);
+  assertNoRawFailure(r);
+});
+
 /**
  * Build a minimal root for exercising computeBuildId directly, independent
  * of the full run-node-suites.js contract that fakeRoot() sets up.
