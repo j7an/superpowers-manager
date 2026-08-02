@@ -109,3 +109,53 @@ export function actionPinPair(block, target) {
   }
   return pair;
 }
+
+const PIN_CANDIDATE = /[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+@[0-9A-Fa-f]+/;
+// POSIX [[:space:]] plus [[:punct:]] — ASCII 33-47, 58-64, 91-96, 123-126.
+const PIN_BOUNDARY = /[\s\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/;
+
+/**
+ * Report every line containing a literal 40-hex action pin.
+ *
+ * Ported 1:1 from `find_literal_action_pin_snapshots` in
+ * tests/lib/action-pin-assertions.sh. At most one finding per line, matching
+ * awk's `next`.
+ *
+ * @param {string[]} paths files to scan
+ * @returns {string[]} entries shaped `${path}:${lineNumber}:${line}`
+ */
+export function findLiteralActionPinSnapshots(paths) {
+  /** @type {string[]} */
+  const findings = [];
+
+  for (const path of paths) {
+    const lines = readFileSync(path, "utf8").split("\n");
+    if (lines.at(-1) === "") {
+      lines.pop();
+    }
+
+    lines.forEach((line, index) => {
+      let remaining = line;
+      for (;;) {
+        const match = PIN_CANDIDATE.exec(remaining);
+        if (match === null) {
+          return;
+        }
+        const candidate = match[0];
+        const suffix = remaining.slice(match.index + candidate.length);
+        const sha = candidate.slice(candidate.indexOf("@") + 1);
+        const delimiter = suffix.slice(0, 1);
+        if (
+          sha.length === 40 &&
+          (delimiter === "" || PIN_BOUNDARY.test(delimiter))
+        ) {
+          findings.push(`${path}:${index + 1}:${line}`);
+          return;
+        }
+        remaining = suffix;
+      }
+    });
+  }
+
+  return findings;
+}

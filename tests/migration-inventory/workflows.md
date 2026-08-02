@@ -175,9 +175,16 @@ they test ordering or anchoring.
 
 ### `test_literal_action_pin_detector` — literal-pin detector (`:486-537`)
 
+Ported to `findLiteralActionPinSnapshots` in `tests/bin/workflow-support.js`,
+exercised by `tests/bin/action-pins.test.js`.
+
 Positive fixtures: eight literal-pin-shaped lines written to `source_file`
 are each detected by `find_literal_action_pin_snapshots` at their correct
-`file:line:content`. (`:494-521`)
+`file:line:content`. (`:494-521`) Ported as one `assert.deepEqual` over the
+full `DETECTOR_POSITIVE_LINES` array against the whole expected
+`path:line:content` block ("literal pin detector reports every embedded-pin
+form"), which subsumes all eight per-fixture claims below — nothing is
+dropped; see "Cardinality" below.
 
 17. `assert_contains`-embedded fixture (`plain`) is detected.
 18. Unquoted `uses:` fixture (`full`) is detected.
@@ -189,12 +196,58 @@ are each detected by `find_literal_action_pin_snapshots` at their correct
 24. Semicolon-terminated fixture (`semicolon`) is detected.
 
 Negative fixtures: none of four non-pin-shaped lines written to
-`negative_file` triggers a false positive. (`:523-534`)
+`negative_file` triggers a false positive. (`:523-534`) Ported as one
+`assert.deepEqual(findLiteralActionPinSnapshots([file]), [])` over the whole
+`DETECTOR_NEGATIVE_LINES` array ("literal pin detector accepts the negative
+fixtures").
 
-25. A `HEAD_SHA=<sha>` assignment (not a `uses:` line) is not flagged.
-26. A 39-character short-SHA `uses:` line is not flagged.
-27. A 41-character long-SHA `uses:` line is not flagged.
-28. A non-SHA version ref (`@v7`) `uses:` line is not flagged.
+25. A `HEAD_SHA=<sha>` assignment (not a `uses:` line) is not flagged. Rejected
+    because the whole `owner/repo@hex` shape never matches — this fixture
+    exercises neither the SHA-length check nor the boundary check.
+26. A 39-character short-SHA `uses:` line is not flagged. **Does not
+    discriminate** the boundary check (`delimiter ~ /[[:space:][:punct:]]/`,
+    awk `:75`): the run of hex digits is only 39 characters long, so
+    `length(sha) == 40` alone already rejects it regardless of what follows.
+27. A 41-character long-SHA `uses:` line is not flagged. **Does not
+    discriminate** the boundary check either, for the mirror reason: `match`
+    is greedy, so the full 41-character hex run is captured as the candidate
+    SHA, and `length(sha) == 40` alone already rejects it. (Same property gap
+    noted in the brief's own hint — the length test does the rejecting here,
+    not the boundary test.)
+28. A non-SHA version ref (`@v7`) `uses:` line is not flagged, because `v` is
+    not a hex digit, so `[0-9A-Fa-f]+` never matches at that position and the
+    whole candidate shape fails — this exercises neither length nor boundary.
+
+**Discovered gap in the shell corpus (not a port defect).** Mutation-testing
+the port against all 12 shell-derived fixtures above (items 17-28) showed
+that **none of them discriminates either of the two properties a naive port
+of `find_literal_action_pin_snapshots` could silently lose**: the boundary
+check (delimiter must be empty, whitespace, or punctuation; awk `:75`) and
+"one finding per line" (awk's `next` at `:76`, which a `break`-instead-of-
+`return` port would violate). For the boundary check: disabling it entirely
+(accepting any delimiter once `length(sha) == 40`) left all 20
+then-existing tests GREEN — items 26-27 above are rejected purely by the
+length check, as noted, never reaching the boundary test. For one-finding-
+per-line: letting the scan continue past the first per-line match (instead
+of returning) also left all 20 tests GREEN, because no shell fixture places
+two independently valid pins on the same line. This means **the original
+shell driver never exercised either property** — `test_literal_action_pin_detector`
+has run since this file was written without ever constructing a case that
+tells a correct implementation apart from a broken one on these two axes.
+The migration did not lose this coverage; porting is what revealed it was
+never there. Two port-only fixtures (see "Port-only assertions" below) close
+the gap. Each was proven discriminating by breaking the corresponding line
+in `tests/bin/workflow-support.js`, observing that fixture (and only that
+one) go RED, and restoring the correct behavior by editing the file back:
+- Boundary check: breaking it turned "literal pin detector port-only: a sha
+  immediately followed by a non-hex letter is not a boundary and is
+  rejected" RED with `AssertionError [ERR_ASSERTION]: Expected values to be
+  strictly deep-equal: ... - []` (actual had one finding), while all other
+  21 tests, including items 17-28's ports, stayed GREEN.
+- One-finding-per-line: breaking it turned "literal pin detector port-only:
+  two valid pins on one line still produce exactly one finding" RED with the
+  same line duplicated in `actual` (length 2) against an `expected` of
+  length 1, while all other 21 tests stayed GREEN.
 
 ### `test_workflow_pin_source_policy` — source policy (`:539-550`)
 
@@ -441,6 +494,37 @@ the reconciliation arithmetic in "Cardinality" below.
    bare reference is never counted at all) drove only this fixture RED;
    restoring the original order turned it GREEN again. Port-only — it has
    no shell counterpart. (`tests/bin/action-pins.test.js`)
+5. **Boundary check: a SHA immediately followed by a non-hex letter, with no
+   intervening whitespace or punctuation, is rejected.**
+   `findLiteralActionPinSnapshots` requires the character right after a
+   40-hex candidate to be absent, whitespace, or POSIX punctuation
+   (`PIN_BOUNDARY`, mirroring awk `:75`). No shell fixture discriminates
+   this (see the "Discovered gap" note under `test_literal_action_pin_detector`
+   above): the shell's 39- and 41-character SHA fixtures (items 26-27,
+   `:523-534`) are both rejected by the SHA-length check alone, before the
+   boundary check is ever reached. This fixture uses a full 40-character SHA
+   immediately followed by the letter `z` (non-hex, non-punctuation,
+   non-whitespace) instead. Mutation-tested 2026-08-02: disabling the
+   boundary check (accepting any delimiter once `length(sha) === 40`) drove
+   only this fixture RED (`AssertionError [ERR_ASSERTION]: Expected values
+   to be strictly deep-equal: ... - []`, actual had one unwanted finding);
+   restoring the check turned it GREEN again, with all other 21 fixtures
+   unaffected throughout. Port-only — it has no shell counterpart.
+   (`tests/bin/action-pins.test.js`)
+6. **One finding per line: two independently valid pins on the same line
+   still produce exactly one finding.** `findLiteralActionPinSnapshots`
+   `return`s out of the per-line scan as soon as it reports a finding,
+   matching awk's `next` (`:76`), rather than continuing to scan the same
+   line for further candidates. No shell fixture discriminates this: none of
+   the shell's eight positive fixtures (items 17-24, `:494-521`) places two
+   valid pins on one line. This fixture uses one line with two distinct
+   valid `actions/checkout@<sha>` references. Mutation-tested 2026-08-02:
+   letting the scan continue past the first per-line match instead of
+   returning drove only this fixture RED (the same line duplicated in
+   `actual`, length 2, against an `expected` of length 1); restoring the
+   early return turned it GREEN again, with all other 21 fixtures unaffected
+   throughout. Port-only — it has no shell counterpart.
+   (`tests/bin/action-pins.test.js`)
 
 ## Cardinality
 
@@ -463,4 +547,15 @@ the reconciliation arithmetic in "Cardinality" below.
   named merge, no drops; the 3 additional port-only fixtures are strictly
   additive coverage for a gap discovered in the shell corpus, not a
   reconciliation of any shell assertion.
+- Literal-pin detector port (`tests/bin/action-pins.test.js`): 2 `node:test`
+  cases 1:1-reconciling the 12 shell assertions (8 positive-form fixtures
+  bundled into one `assert.deepEqual` over the full expected output block,
+  plus 4 negative fixtures bundled into one emptiness `assert.deepEqual`) —
+  **plus** 2 port-only discriminating fixtures (boundary check, one-finding-
+  per-line; items 5-6 in "Port-only assertions" above) that have no shell
+  counterpart and are outside the 1:1 mapping. Reconciliation: 1:1 for all
+  12 original literal-pin-detector items via the two fixture-bundle merges,
+  no drops; the 2 additional port-only fixtures are strictly additive
+  coverage for a gap discovered in the shell corpus, not a reconciliation of
+  any shell assertion.
 - Port: filled in at Task 10.
