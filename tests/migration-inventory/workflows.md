@@ -1006,3 +1006,207 @@ the reconciliation arithmetic in "Cardinality" below.
   the source-policy non-empty-scan guard (`test_workflow_pin_source_policy`
   above, `:195-198`). Recorded here, outside the 100/45 arithmetic above,
   rather than silently folded into it.
+
+## Mutation proof
+
+Task 11's sweep. Design §5 requires mutation proof (break → RED → restore →
+GREEN, both outcomes reported) for every negative, ordering-sensitive, or
+isolation-sensitive assertion. Derived from this inventory and design §5
+directly, not from the task brief's list, which is the floor: two entries
+below (item 43, and the `checkout < acceptance` half of the ordering chain)
+were found in that derivation and are not named in the brief or in design §5.
+Tasks 1, 5, 6, 7, 8, and 10 already proved a subset of these inline; those
+are cited, not repeated. Every mutation in this section was applied to a
+tracked file, observed RED, then restored by **editing the file back**
+(never `git checkout --`), and `git diff --stat` was empty for every touched
+file immediately after restoration. Every probe file (throwaway `.sh`/`.py`/
+`.mjs` fixtures, the throwaway `codex-compatibility.yml`) was deleted, never
+committed, and confirmed absent from `git status` after removal.
+
+### Derived matrix
+
+| # | Entry (citation) | Mutation applied | Expected RED |
+|---|---|---|---|
+| 1 | Item 6, `action pin rejected: floating tag instead of a sha` (`tests/bin/action-pins.test.js` `REJECTED_PIN_BLOCKS`) | Ref changed from `@v4.99.0` to the agreeing `@${SHA_ONE}` | `assert.throws` → Missing expected exception |
+| 2 | Item 7, `uppercase sha` | SHA lowercased (`UPPERCASE_SHA.toLowerCase()`) | same |
+| 3 | Item 8, `39-character sha` | SHA padded to 40 (`SHORT_SHA` → `SHA_ONE`) | same |
+| 4 | Item 9, `41-character sha` | SHA trimmed to 40 (`LONG_SHA` → `SHA_ONE`) | same |
+| 5 | Item 10, `missing version comment` | `# v4.99.0` appended | same |
+| 6 | Item 11, `truncated version comment` | `# v4` expanded to `# v4.99.0` | same |
+| 7 | Item 12, `near-miss target must not satisfy the exact target` | `OSV_NEAR` replaced with `OSV_EXACT` | same |
+| 8 | Item 13, `disagreeing shas` | second line's SHA/version made to agree with the first | same |
+| 9 | Item 14, `sha alongside an unquoted floating tag` | `@v7` replaced with the agreeing SHA | same |
+| 10 | Item 15, `sha alongside a single-quoted floating tag` | same, single-quoted | same |
+| 11 | Item 16, `sha alongside a double-quoted floating tag` | same, double-quoted | same |
+| 12 | Item 25, `DETECTOR_NEGATIVE_LINES[0]` (`HEAD_SHA=<sha>`) | prefixed to `uses: actions/checkout@<sha>` | `assert.deepEqual(..., [])` → one unwanted finding |
+| 13 | Item 26, `DETECTOR_NEGATIVE_LINES[1]` (39-hex) | padded to 40 | same |
+| 14 | Item 27, `DETECTOR_NEGATIVE_LINES[2]` (41-hex) | trimmed to 40 | same |
+| 15 | Item 28, `DETECTOR_NEGATIVE_LINES[3]` (`@v7`) | `v7` replaced with a 40-hex SHA | same |
+| 16 | Item 94, `the stable-semver check rejects a prerelease` | `STABLE_SEMVER` widened with an optional `(-[0-9A-Za-z.-]+)?` suffix | Missing expected exception |
+| 17 | Item 83, `assertNoForbidden` — value path, alternative `--provenance` | alternative removed from `FORBIDDEN_PUBLISH_CONFIG` | probe value no longer throws |
+| 18 | Item 83 — value path, alternative `npm_config_provenance` | same pattern | same |
+| 19 | Item 83 — value path, alternative `npm(?:[_ -]?token)` | same pattern (probe text `npm_token`) | same |
+| 20 | Item 83 — **key** path, alternative `node_auth_token` | `assertNoForbidden(key, ...)` recursion call removed; probe `{ NODE_AUTH_TOKEN: "harmless-value" }` (harmless value) | probe no longer throws |
+| 21 | Item 83 — value path, alternative `npm-bootstrap` | alternative removed | probe value no longer throws |
+| 22 | Item 83 — value path, alternative `superpowers-wrapper` | alternative removed | same |
+| 23 | Item 83 — value path, alternative `--tag next` | alternative removed | same |
+| 24 | Item 45, `jobs.keys === ["test", "toolchain"]` | real `ci.yml`'s `jobs:` block reordered so `toolchain` precedes `test` | `assert.deepEqual` → `['toolchain','test']` vs `['test','toolchain']` |
+| 25 | Item 55, `harden < checkout` (half of `:102-104`) | real `ci.yml` `test` job: Harden-runner and Checkout steps swapped | "expected harden runner, checkout, and container acceptance in that order" |
+| 26 | Item 56, `checkout < acceptance` (other half of `:102-104`) — **found in this task's derivation, not in the brief or design §5's list** | real `ci.yml` `test` job: container-acceptance step moved before checkout (harden left first) | same message, isolating the other half of the chain |
+| 27 | Item 70, six-step toolchain order | real `ci.yml` `toolchain` job: `pnpm run check` moved above `corepack enable`/`pnpm install --frozen-lockfile` | `assert.deepEqual` against sorted copy → `[0,1,2,4,5,3]` vs `[0,1,2,3,4,5]` |
+| 28 | Item 43, `codex-compatibility.yml` does **not** exist — **found in this task's derivation, not in the brief or design §5's list** | throwaway `.github/workflows/codex-compatibility.yml` created | "blocking mode must not create codex-compatibility.yml" |
+| 29 | Item 29, source-policy extension filter — `.sh` | literal pin planted in throwaway `tests/tmp-policy-probe.sh` | `assert.deepEqual(..., [])` → one unwanted finding, naming that file |
+| 30 | Item 29 — `.py` | literal pin planted in throwaway `tests/lib/tmp-policy-probe.py` | same |
+| 31 | Item 29 — `.mjs` | literal pin planted in throwaway `tests/builders/nested/tmp-policy-probe.mjs` | same |
+
+All 31 mutations produced the expected RED and were restored to a clean
+`git diff`; see "Evidence" below for the actual assertion messages and the
+GREEN confirmation after each restore.
+
+**Already proven inline by earlier tasks — cited, not repeated:**
+
+| Entry | Where proven |
+|---|---|
+| Items 46, 59, 60 — the three `continue-on-error` negatives (`jobs.test`, the acceptance step, `jobs.toolchain`) | `test_ci_workflow` section above, "Named divergence: `expect_hash` / `fetch` scaffolding is not numbered" — true-positive proof for all three, dated 2026-08-02 |
+| Item 52 — the forbidden `codex-spike` invocation check | same paragraph — reinstating `sh tests/container.sh codex-spike` |
+| Item 39 — the shared-pin agreement check (brief-only, not in design §5's list) | `test_workflow_pin_contracts` section above, "Never a literal SHA" — mutated `security.yml`'s pin, RED `shared-workflows pins disagree across callers` |
+| Item 83, value path, alternative `npm publish` | `test_release_workflow` section above, negative #3 — planted `extra-note: npm publish` in the real `release.yml` |
+| Item 73 — `!Object.hasOwn(release, "true")` | `test_release_workflow` section above, negative #1 |
+| Item 93 — decoy sibling rejection | `test_tag_release_workflow` section above, "Proven discriminating 2026-08-02" |
+| Items 97, 98 — malformed/duplicate external-pin manifest entries | "Reinstated on controller adjudication" section above |
+| Items 99, 100 — duplicate/missing bump-options block | same section, Task 8 |
+| Item 29's `.js` extension + the source-policy non-empty-scan guard | `test_workflow_pin_source_policy` section above |
+| Port-only fixtures (anchored prefix, quote-close boundary, reference-count ordering, boundary check, one-finding-per-line) | "Discovered gap" notes under `test_action_pin_helper` and `test_literal_action_pin_detector`, and "Port-only assertions" below |
+
+### Evidence
+
+**Pin-matcher rejections (rows 1-11).** Each `REJECTED_PIN_BLOCKS` entry was
+mutated in place, run singly via
+`node --import ./tests/assert-matcher-gate.js --test --test-name-pattern="<name>" tests/bin/action-pins.test.js`,
+observed RED, edited back, and reconfirmed GREEN. Every mutation produced the
+identical failure shape:
+
+```
+AssertionError [ERR_ASSERTION]: Missing expected exception.
+    ...
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /expected agreeing semantic action pins/,
+    operator: 'throws',
+```
+
+After the full sweep and final restoration, `git diff --stat
+tests/bin/action-pins.test.js` was empty and the file's own suite ran
+22/22 GREEN.
+
+**Detector negatives (rows 12-15).** Each `DETECTOR_NEGATIVE_LINES` entry was
+mutated one at a time (the other three left untouched), run via
+`--test-name-pattern="literal pin detector accepts the negative fixtures"`.
+Each drove the same `assert.deepEqual` RED, e.g. for item 25:
+
+```
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
++ [
++   '.../non-literal-pins.sh:1:uses: actions/checkout@000...0001'
++ ]
+- []
+```
+
+Restored to the original four-line array; `git diff --stat` empty; suite
+22/22 GREEN.
+
+**Semver-prerelease regression (row 16).** Widening `STABLE_SEMVER` to accept
+an optional prerelease suffix drove "the stable-semver check rejects a
+prerelease" RED with `Missing expected exception`, `expected:
+/not stable semver/`. Restored; `git diff --stat tests/bin/workflows.test.js`
+empty; single-test rerun GREEN.
+
+**`assertNoForbidden` (rows 17-23).** Each alternative was removed from
+`FORBIDDEN_PUBLISH_CONFIG` in `tests/bin/workflow-support.js` in turn (one at
+a time; every other alternative left intact), and a standalone probe
+(`node --input-type=module -e "..."` importing `assertNoForbidden` directly)
+called the function with a value or key containing exactly that alternative's
+text, asserting a throw. Before each mutation the probe passed (throws as
+expected); after, it failed with:
+
+```
+AssertionError [ERR_ASSERTION]: Missing expected exception.
+    ...
+    expected: /forbidden publish configuration/,
+    operator: 'throws',
+```
+
+Row 20 (the key path) instead disabled the `assertNoForbidden(key, ...)`
+recursion call (`workflow-support.js:305`) and probed
+`{ NODE_AUTH_TOKEN: "harmless-value" }` — a value that itself matches no
+alternative, so only key-recursion could make it throw. Before the mutation
+it threw (key recursion is load-bearing); after, `Missing expected
+exception`. Each of the 7 mutations was restored immediately after its own
+RED observation; `git diff --stat tests/bin/workflow-support.js` was empty
+after every restore, and after the whole sweep both
+`tests/bin/workflows.test.js` and `tests/bin/action-pins.test.js` ran
+45/45 GREEN together.
+
+**Ordering (rows 24-27).** All four mutations were applied to the real,
+tracked `.github/workflows/ci.yml`, one at a time, each restored by editing
+the file back before the next was applied. `git diff --stat
+.github/workflows/ci.yml` was empty after every restoration; the full
+`tests/bin/workflows.test.js` suite ran 23/23 GREEN after the final one.
+
+- Row 24 (jobs order): `assert.deepEqual(Object.keys(jobs), ['test',
+  'toolchain'])` failed with `actual: [ 'toolchain', 'test' ]`.
+- Row 25 (harden<checkout): `assert.ok(hardenIndex < checkoutIndex &&
+  checkoutIndex < acceptance.index)` failed with "expected harden runner,
+  checkout, and container acceptance in that order".
+- Row 26 (checkout<acceptance): moving only the acceptance step ahead of
+  checkout, with harden still first, reproduced the identical failure
+  message from the other side of the `&&` — proving the single combined
+  `assert.ok` actually depends on both relations, not only the one row 25
+  exercises. This is the "found beyond the brief" entry: neither the task
+  brief nor design §5 names this half of the chain separately, but the
+  inventory's own counting rules (`:102-104`, items 55-56) treat
+  `harden<checkout` and `checkout<acceptance` as two independently named
+  claims, so both need independent mutation proof.
+- Row 27 (toolchain order): `assert.deepEqual(order, [...order].sort(...))`
+  failed with `actual: [ 0, 1, 2, 4, 5, 3 ]` against expected `[ 0, 1, 2, 3,
+  4, 5 ]`.
+
+**Codex-compatibility.yml non-existence (row 28) — found in this task's
+derivation.** Neither the brief nor design §5 names item 43
+(`ci.yml exists and blocking mode creates no compatibility workflow`)
+as requiring mutation proof, but it is unambiguously a negative repository-
+content assertion under design §5's general principle ("mutation proof for
+every negative … assertion"). Creating a throwaway, untracked
+`.github/workflows/codex-compatibility.yml` drove the test RED with
+`AssertionError [ERR_ASSERTION]: blocking mode must not create
+codex-compatibility.yml`. The file was untracked, so it was removed with
+`rm`, never `git checkout --`; `git status -sb .github/workflows/` showed
+nothing afterward, and the suite re-ran GREEN.
+
+**Source-policy extension filter (rows 29-31).** The `.js` extension was
+already proven in an earlier task (`tmp-policy-probe.js`, recorded above
+under `test_workflow_pin_source_policy`); this task closes the remaining
+three enumerated `POLICY_EXTENSIONS` elements, each at a different depth
+under `tests/`, each removed by `rm` (never `git checkout --`, since each was
+untracked) immediately after its RED was observed:
+
+- `.sh` at `tests/tmp-policy-probe.sh` (depth 1): RED named
+  `tests/tmp-policy-probe.sh:3:# uses: actions/checkout@000...0001 # v7.0.0`.
+- `.py` at `tests/lib/tmp-policy-probe.py` (depth 2): RED named
+  `tests/lib/tmp-policy-probe.py:3:PIN = "actions/checkout@000...0001"`.
+- `.mjs` at `tests/builders/nested/tmp-policy-probe.mjs` (depth 3, a
+  directory created for the probe and removed with it): RED named
+  `tests/builders/nested/tmp-policy-probe.mjs:2:export const pin =
+  "actions/checkout@000...0001";`.
+
+After each removal, "no test source embeds a literal action pin snapshot"
+re-ran GREEN, and `git status -sb tests/` showed nothing outstanding.
+
+### Post-sweep state
+
+After all 31 mutations were applied, observed RED, and restored:
+`git status -sb` reported a clean tree (only the branch line), and `git
+diff --stat` was empty repository-wide — confirmed both immediately after
+each individual restoration and once more after the complete sweep.
