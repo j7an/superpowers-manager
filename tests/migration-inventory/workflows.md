@@ -45,16 +45,34 @@ shape:
   treated the same way as the four named Ruby helpers: its own `if …
   return 1` is the mechanism, not an extra assertion. Each of its 11 call
   sites (items 6-11, 13-16, and the near-miss at item 12) is one assertion.
-- **The following raises/guards are excluded as scaffolding**: they validate
-  the Ruby/Python helper scripts' own CLI arguments or the test's own
-  hardcoded fixtures, are never triggered by any call this file actually
-  makes, and assert nothing about repository/workflow content: the top-level
-  `case domain` dispatch guards (`:323-324`, `:328-329`, `:333`);
-  `check_inventory`'s "workflow path outside root" guard (`:247`);
-  `collect_external_targets`'s "expected string at path.uses" type guard
-  (`:218`); `load_expected_external_pins`'s malformed-line and
-  duplicate-entry guards (`:235-237`, `:240`); `extract_bump_options`'s
-  "duplicated"/"missing" guards (`:632`, `:646`).
+- **Repository-content-vs-harness-input discriminator (controller
+  adjudication, 2026-08-02).** A guard counts as an assertion if it makes a
+  claim about repository content — a workflow YAML file under
+  `.github/workflows/`, or a tracked fixture literal in this file that a
+  maintainer edits by hand — even when the check happens inside a nested
+  helper. A guard is scaffolding only if it validates the harness's own
+  inputs (the embedded Ruby/Python scripts' own argv, or an internal
+  invariant already guaranteed by the caller) and can never be triggered by
+  anything checked into the repository. Applying that discriminator:
+  - **Excluded as harness self-defense (upheld):** `collect_external_targets`'s
+    "expected string at path.uses" type guard (`:218`) — directly analogous
+    to `expect_hash`'s named-scaffolding type guard; `check_inventory`'s
+    "workflow path outside root" guard (`:247`) — the caller always builds
+    these paths from a glob rooted at `root`, so this is an internal
+    invariant, never an externally-triggerable claim; the top-level
+    `case domain` CLI dispatch guards (`:323-324`, `:328-329`, `:333`) —
+    validate the embedded script's own argv, never triggered by any call
+    this file makes.
+  - **Reinstated as repository-content assertions (items 97-100, added on
+    controller adjudication after this document's initial derivation):**
+    `load_expected_external_pins`'s malformed-line (`:235-237`) and
+    duplicate-entry (`:240`) guards parse the hardcoded external-pin
+    manifest literal written in `write_expected_external_pins`
+    (`:422-431`) — tracked source a maintainer edits by hand, so a
+    malformed or duplicated row is a real, catchable defect in this file,
+    not an unreachable defensive branch. `extract_bump_options`'s
+    "duplicated" (`:632`) and "missing" (`:646`) guards parse the real
+    `tag-release.yml` — unambiguously repository content.
 - **Compound `unless A && B raise` at `:102-104`** is counted as 2 (items
   55-56): two independently named order relations (`harden_index <
   checkout_index`, `checkout_index < acceptance_index`) joined by one `&&`.
@@ -262,6 +280,49 @@ Ruby `check_release`, invoked `:576`, defined in the heredoc at `:258-316`:
 96. `package.json`'s `version` is a stable (non-prerelease) semver string.
     (`:722-725`)
 
+### Reinstated on controller adjudication — pin inventory and tag-release.yml
+
+Numbers 97-100 were reinstated after this document's initial derivation
+excluded them as harness self-defense; see the "Repository-content-vs-
+harness-input discriminator" note in "Counting rules applied" above.
+Appended here rather than inserted into their logical subsections above, per
+the stable-numbering rule: later tasks match by citation, never by position.
+
+97. **Malformed external-pin manifest line is rejected.** `load_expected_external_pins`
+    raises `malformed external-pin manifest line <n>: ...` when a manifest
+    line does not split into exactly two non-empty tab-separated fields.
+    Exercised against the hardcoded manifest literal in
+    `write_expected_external_pins` (`:422-431`) — tracked repository source
+    a maintainer edits directly, so a dropped tab or added blank field there
+    is a real defect this driver catches today. Belongs to the pin-inventory
+    subgroup (`test_workflow_pin_contracts`, `:434-484`). (`:235-237`)
+98. **Duplicate external-pin manifest entry is rejected.** `load_expected_external_pins`
+    raises `duplicate external-pin manifest entry` if any two manifest rows
+    are identical after parsing. Same tracked-literal reasoning as item 97.
+    Belongs to the pin-inventory subgroup. (`:240`)
+99. **Duplicate `bump` options block in `tag-release.yml` is rejected.**
+    `extract_bump_options`, while walking the real `tag-release.yml` YAML
+    text, raises `Tag Release bump options are duplicated` if the
+    `on.workflow_dispatch.inputs.bump.options` key path is encountered a
+    second time. Parses `tag-release.yml` directly — genuine repository
+    content. Belongs to the tag-release.yml subgroup
+    (`test_tag_release_workflow`, `:581-729`). (`:632`)
+100. **Missing `bump` options block in `tag-release.yml` is rejected.**
+    `extract_bump_options` raises `Tag Release bump options are missing` if
+    the `on.workflow_dispatch.inputs.bump.options` key path is never
+    encountered while walking the real `tag-release.yml` text. **Load-bearing
+    for the port:** without this guard, a `tag-release.yml` that lost its
+    `bump.options` block entirely yields no options list, and the caller
+    (`assert_supported_bump_options`, item 92) would have nothing to compare
+    against — a naive port that only asserts "options equal
+    `[auto, patch, minor, major]`" can pass vacuously on `undefined`/`null`
+    depending on how the comparison is written. **Whoever fills this entry
+    in at Task 8 must write an assertion that a `tag-release.yml` fixture
+    lacking the `bump.options` block fails distinctly and non-vacuously —
+    not rely on item 92's exact-options comparison alone to catch both
+    "missing" and "present but wrong."** Belongs to the tag-release.yml
+    subgroup. (`:646`)
+
 ## Port-only assertions (outside the 1:1 mapping)
 
 None yet. This section exists per the brief's skeleton and follows
@@ -271,9 +332,11 @@ the reconciliation arithmetic in "Cardinality" below.
 
 ## Cardinality
 
-- Shell original: **96** assertions.
+- Shell original: **100** assertions.
 - Subgroup totals: action-pin matcher **16**; literal-pin detector **12**;
-  source policy **1**; pin inventory **12**; ci.yml **30**; release.yml
-  **12**; tag-release.yml **13**. Sum: 16 + 12 + 1 + 12 + 30 + 12 + 13 = 96,
-  matching the total above.
+  source policy **1**; pin inventory **14** (12 derived initially + items
+  97-98 reinstated on controller adjudication); ci.yml **30**; release.yml
+  **12**; tag-release.yml **15** (13 derived initially + items 99-100
+  reinstated on controller adjudication). Sum check:
+  16 + 12 + 1 + 14 + 30 + 12 + 15 = 100, matching the total above.
 - Port: filled in at Task 10.
