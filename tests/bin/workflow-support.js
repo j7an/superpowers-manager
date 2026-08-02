@@ -11,13 +11,28 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
 /**
+ * Parse a GitHub Actions workflow document from its YAML source text.
+ *
+ * This is the only function in the repository that calls `yaml`'s `parse`
+ * directly. Callers that need to construct a document from a string (rather
+ * than reading it from a file) go through this wrapper instead of importing
+ * `yaml` themselves, so `yaml` stays imported in exactly one file.
+ *
+ * @param {string} source YAML document text
+ * @returns {any} the parsed document
+ */
+export function parseWorkflow(source) {
+  return parse(source);
+}
+
+/**
  * Parse a GitHub Actions workflow file.
  *
  * @param {string} path absolute path to a .yml/.yaml file
  * @returns {any} the parsed document
  */
 export function loadWorkflow(path) {
-  return parse(readFileSync(path, "utf8"));
+  return parseWorkflow(readFileSync(path, "utf8"));
 }
 
 const PIN_SHA = /^[0-9a-f]{40}$/;

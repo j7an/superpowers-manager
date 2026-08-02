@@ -20,6 +20,7 @@ import {
   collectExternalTargets,
   findLiteralActionPinSnapshots,
   loadWorkflow,
+  parseWorkflow,
   uniqueRunStepIndex,
   uniqueStepTargetIndex,
   usesTarget,
@@ -447,5 +448,252 @@ void test("the forbidden-publish detector rejects a planted violation", () => {
         "workflow",
       ),
     /forbidden publish configuration/,
+  );
+});
+
+// --- inventory items 84-96, 99-100: the tag-release workflow contract ---
+const EXPECTED_BUMP_OPTIONS = ["auto", "patch", "minor", "major"];
+const STABLE_SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+
+/**
+ * @param {unknown} document parsed workflow
+ * @returns {string[]}
+ */
+function bumpOptions(document) {
+  const inputs = requireMapping(
+    requireMapping(requireMapping(document, "workflow").on, "on")
+      .workflow_dispatch,
+    "on.workflow_dispatch",
+  ).inputs;
+  const bump = requireMapping(
+    requireMapping(inputs, "on.workflow_dispatch.inputs").bump,
+    "on.workflow_dispatch.inputs.bump",
+  );
+  assert.ok(
+    Array.isArray(bump.options),
+    "expected on.workflow_dispatch.inputs.bump.options to be a sequence",
+  );
+  return bump.options;
+}
+
+/**
+ * @param {unknown} document
+ * @returns {void}
+ */
+function assertSupportedBumpOptions(document) {
+  const options = bumpOptions(document);
+  if (
+    options.length !== EXPECTED_BUMP_OPTIONS.length ||
+    options.some((option, index) => option !== EXPECTED_BUMP_OPTIONS[index])
+  ) {
+    throw new Error(
+      `Tag Release bump options must be exactly ${JSON.stringify(EXPECTED_BUMP_OPTIONS)}, got ${JSON.stringify(options)}`,
+    );
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {string}
+ */
+function parseStableSemver(value, label) {
+  if (typeof value !== "string" || !STABLE_SEMVER.test(value)) {
+    throw new Error(`${label} is not stable semver: ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+void test("tag-release.yml wires the shared tag-release workflow", () => {
+  const tagRelease = requireMapping(
+    loadWorkflow(join(WORKFLOW_DIR, "tag-release.yml")),
+    "tag-release",
+  );
+
+  const on = requireMapping(tagRelease.on, "on");
+  assert.ok(
+    Object.hasOwn(on, "workflow_dispatch"),
+    "tag-release.yml must be manually dispatchable",
+  );
+
+  const tagJob = requireMapping(
+    requireMapping(tagRelease.jobs, "jobs").tag,
+    "jobs.tag",
+  );
+  const withBlock = requireMapping(tagJob.with, "jobs.tag.with");
+  assert.equal(withBlock.bump, "${{ inputs.bump }}");
+  assert.equal(withBlock["tag-prefix"], "v");
+
+  const secrets = requireMapping(tagJob.secrets, "jobs.tag.secrets");
+  assert.equal(
+    secrets.RELEASE_BOT_PRIVATE_KEY,
+    "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}",
+  );
+});
+
+void test("tag-release.yml offers exactly the supported bump options", () => {
+  const tagRelease = loadWorkflow(join(WORKFLOW_DIR, "tag-release.yml"));
+  assert.deepEqual(bumpOptions(tagRelease), EXPECTED_BUMP_OPTIONS);
+  assert.doesNotThrow(() => assertSupportedBumpOptions(tagRelease));
+});
+
+void test("the bump-option check reads `bump`, not a decoy sibling input", () => {
+  // Ported 1:1 from tests/test_workflows.sh:665-692. The shell's decoy
+  // guarded a hand-rolled indentation walker; the port's path addressing
+  // makes the same mistake differently reachable, not unreachable —
+  // tag-release.yml has exactly one input today, so a mistyped path only
+  // fails by luck. See the design doc, section 3.5.1.
+  const decoy = parseWorkflow(
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      unrelated:",
+      "        type: choice",
+      "        options:",
+      "          - auto",
+      "          - patch",
+      "          - minor",
+      "          - major",
+      "      bump:",
+      "        type: choice",
+      "        options:",
+      "          - auto",
+      "          - patch",
+      "          - minor",
+      "          - major",
+      "          - prerelease",
+      "",
+    ].join("\n"),
+  );
+
+  assert.deepEqual(bumpOptions(decoy), [
+    ...EXPECTED_BUMP_OPTIONS,
+    "prerelease",
+  ]);
+  assert.throws(
+    () => assertSupportedBumpOptions(decoy),
+    /Tag Release bump options must be exactly/,
+  );
+});
+
+void test("the bump-option check reports a missing options block distinctly from a wrong one (items 99-100)", () => {
+  // Item 100 (tests/test_workflows.sh:646): extract_bump_options raises
+  // "Tag Release bump options are missing" when the
+  // on.workflow_dispatch.inputs.bump.options path is never found. A naive
+  // port that only compares the returned options against
+  // EXPECTED_BUMP_OPTIONS could pass this vacuously on undefined/null,
+  // depending on how the comparison is written — bumpOptions's own
+  // `Array.isArray` guard exists precisely so "missing" throws before any
+  // such comparison runs, with a message that cannot be confused with a
+  // present-but-wrong-options failure.
+  const missingOptions = parseWorkflow(
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      bump:",
+      "        type: choice",
+      "",
+    ].join("\n"),
+  );
+  assert.throws(
+    () => bumpOptions(missingOptions),
+    /expected on\.workflow_dispatch\.inputs\.bump\.options to be a sequence/,
+  );
+
+  // The "present but wrong" counterpart (tests/test_workflows.sh:650-657):
+  // options exist as a sequence, but not the expected four values. This
+  // must fail with a distinct message from the "missing" case above, so a
+  // single wrong-shaped error cannot satisfy both regexes.
+  const wrongOptions = parseWorkflow(
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      bump:",
+      "        type: choice",
+      "        options:",
+      "          - auto",
+      "          - patch",
+      "",
+    ].join("\n"),
+  );
+  assert.throws(
+    () => assertSupportedBumpOptions(wrongOptions),
+    /Tag Release bump options must be exactly/,
+  );
+});
+
+void test("a duplicated bump options block is rejected while parsing, distinctly from missing or wrong (item 99)", () => {
+  // Item 99 (tests/test_workflows.sh:632): extract_bump_options raised
+  // "Tag Release bump options are duplicated" when its indentation walker
+  // encountered the on.workflow_dispatch.inputs.bump.options key path a
+  // second time. Under a real YAML parser, two `options:` keys in the
+  // same `bump:` mapping is not walker ambiguity, it is a malformed
+  // document — `yaml`'s default strict-mode parser rejects duplicate
+  // mapping keys outright. The claim ("a duplicated options block in
+  // tag-release.yml is caught, not silently resolved to one of the two
+  // values") survives; the layer that catches it moved from this file's
+  // own walker into the parser it now delegates to.
+  assert.throws(
+    () =>
+      parseWorkflow(
+        [
+          "on:",
+          "  workflow_dispatch:",
+          "    inputs:",
+          "      bump:",
+          "        options:",
+          "          - auto",
+          "          - patch",
+          "        options:",
+          "          - minor",
+          "          - major",
+          "",
+        ].join("\n"),
+      ),
+    /Map keys must be unique/,
+  );
+
+  // Control: the same shape with the duplication removed must NOT throw,
+  // proving the assertion above fires because of the duplicate key and not
+  // because of anything else about the fixture's structure.
+  assert.doesNotThrow(() =>
+    parseWorkflow(
+      [
+        "on:",
+        "  workflow_dispatch:",
+        "    inputs:",
+        "      bump:",
+        "        options:",
+        "          - auto",
+        "          - patch",
+        "",
+      ].join("\n"),
+    ),
+  );
+});
+
+void test(".version-bump.json declares the package.json version field", () => {
+  const bump = JSON.parse(
+    readFileSync(join(ROOT, ".version-bump.json"), "utf8"),
+  );
+  assert.deepEqual(bump, {
+    files: [{ path: "package.json", field: "version" }],
+  });
+});
+
+void test("package.json carries the manager name and a stable semver version", () => {
+  const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  assert.equal(manifest.name, "superpowers-manager");
+  // Shape only. The literal version is the release workflow's to move.
+  parseStableSemver(manifest.version, "package.json version");
+});
+
+void test("the stable-semver check rejects a prerelease", () => {
+  assert.throws(
+    () => parseStableSemver("1.2.3-beta.1", "test version"),
+    /not stable semver/,
   );
 });

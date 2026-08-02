@@ -513,6 +513,21 @@ with the same `/i` flag as the Ruby original.
 
 ### `test_tag_release_workflow` — tag-release.yml (`:581-729`)
 
+Ported to eight cases in `tests/bin/workflows.test.js` — "tag-release.yml
+wires the shared tag-release workflow", "tag-release.yml offers exactly the
+supported bump options", "the bump-option check reads `bump`, not a decoy
+sibling input", "the bump-option check reports a missing options block
+distinctly from a wrong one (items 99-100)", "a duplicated bump options block
+is rejected while parsing, distinctly from missing or wrong (item 99)",
+".version-bump.json declares the package.json version field", "package.json
+carries the manager name and a stable semver version", and "the
+stable-semver check rejects a prerelease" — using `requireMapping` (local to
+`workflows.test.js`, already added in the ci.yml task) plus `parseWorkflow`,
+added to `tests/bin/workflow-support.js` in this task so a fixture can be
+constructed directly from a YAML string rather than only read from a file
+(`loadWorkflow` now delegates to it: `parseWorkflow(readFileSync(path,
+"utf8"))`).
+
 84. `.github/workflows/tag-release.yml` exists. (`:586`)
 85. `.version-bump.json` exists. (`:587`)
 86. `package.json` exists. (`:588`)
@@ -538,6 +553,39 @@ with the same `/i` flag as the Ruby original.
 95. `package.json`'s `name == "superpowers-manager"`. (`:717-720`)
 96. `package.json`'s `version` is a stable (non-prerelease) semver string.
     (`:722-725`)
+
+**Named divergence — `tag-prefix: "v"`.** The shell's `grep -Fq`
+asserted that the *source text* contains explicit quotes; the port asserts the
+parsed value `"v"`. `tag-prefix: v` and `tag-prefix: "v"` are the same input to
+the reusable workflow, so the quoting is not contractual. The assertion
+survives; what it addresses changed.
+
+**Named divergence — the Python heredoc.** `tests/test_workflows.sh:595-726`
+ran a `python3` heredoc for this section's `.version-bump.json`, bump-option,
+decoy, semver, and `package.json` entries. The port implements them in
+JavaScript and spawns no interpreter. `python3` remains installed — other
+consumers need it until PR 11.5 — but nothing in this driver's port requires
+it. The roadmap's scope for PR 11.1 names Ruby only, so this is recorded
+explicitly rather than left as an unnoticed side effect.
+
+**The decoy entry is a 1:1 port, not a retirement.** Its mechanism (a
+hand-rolled indentation walker that could match the wrong `options:`) is gone,
+but its property — that the check reads `inputs.bump` and not a sibling — is
+unchanged, and under path addressing it is guarded only by `tag-release.yml`
+currently having a single input. See the design doc, section 3.5.1.
+
+Proven discriminating 2026-08-02: changing `bumpOptions` to read
+`inputs.unrelated` instead of `inputs.bump` drove three cases RED — "tag-release.yml
+offers exactly the supported bump options", "the bump-option check reads
+`bump`, not a decoy sibling input" (`AssertionError [ERR_ASSERTION]: Expected
+values to be strictly deep-equal: + actual - expected ... [ 'auto', 'patch',
+'minor', 'major', - 'prerelease' ]` — the mutated lookup now resolves the
+decoy's `unrelated` input, whose 4 options lack `prerelease`, against the
+expectation built from the real `bump` input's 5), and "the bump-option check
+reports a missing options block distinctly from a wrong one (items 99-100)" —
+while "a duplicated bump options block is rejected while parsing…" (item 99)
+and the `.version-bump.json`/`package.json` cases stayed unaffected; restoring
+`.bump` turned all three GREEN again (23/23), with a clean `git diff`.
 
 ### Reinstated on controller adjudication — pin inventory and tag-release.yml
 
@@ -612,6 +660,30 @@ the stable-numbering rule: later tasks match by citation, never by position.
     second time. Parses `tag-release.yml` directly — genuine repository
     content. Belongs to the tag-release.yml subgroup
     (`test_tag_release_workflow`, `:581-729`). (`:632`)
+
+    **Ported (Task 8, 2026-08-02).** The shell's mechanism (an indentation
+    walker that raises if it revisits the same key path) does not exist in
+    the port: `tag-release.yml` is parsed by the `yaml` devDependency, and a
+    real YAML mapping cannot contain two `options:` keys under one `bump:`
+    without being a malformed document in the first place — `yaml`'s
+    default strict-mode parser rejects duplicate mapping keys at parse time.
+    The underlying claim ("a duplicated `bump.options` block in
+    `tag-release.yml` is caught, not silently resolved to one of the two
+    values") survives; the layer that catches it moved from this file's own
+    walker into the parser it now delegates to. Ported as "a duplicated bump
+    options block is rejected while parsing, distinctly from missing or
+    wrong (item 99)" in `tests/bin/workflows.test.js`, asserting
+    `parseWorkflow(fixture)` throws matching `/Map keys must be unique/` for
+    a `bump:` fragment with two `options:` siblings, alongside a control
+    assertion that the same fragment with the duplication removed does
+    **not** throw (proving the failure is caused by the duplicate key, not
+    by anything else about the fixture's shape). Proven discriminating
+    2026-08-02: temporarily changing `parseWorkflow` to call `parse(source,
+    { uniqueKeys: false })` drove only this case RED with `AssertionError
+    [ERR_ASSERTION]: Missing expected exception`, while all other 22 cases
+    in the file stayed GREEN; restoring `parseWorkflow` to its original body
+    (`return parse(source)`) turned it GREEN again (23/23), with a clean
+    `git diff`.
 100. **Missing `bump` options block in `tag-release.yml` is rejected.**
     `extract_bump_options` raises `Tag Release bump options are missing` if
     the `on.workflow_dispatch.inputs.bump.options` key path is never
@@ -627,6 +699,52 @@ the stable-numbering rule: later tasks match by citation, never by position.
     not rely on item 92's exact-options comparison alone to catch both
     "missing" and "present but wrong."** Belongs to the tag-release.yml
     subgroup. (`:646`)
+
+    **Ported (Task 8, 2026-08-02) — the load-bearing entry.** `bumpOptions`
+    in `tests/bin/workflows.test.js` asserts `Array.isArray(bump.options)`
+    with the message "expected on.workflow_dispatch.inputs.bump.options to
+    be a sequence" *before* any comparison against
+    `EXPECTED_BUMP_OPTIONS` runs, so a `tag-release.yml` fixture that lost
+    its `bump.options` block entirely (`bump.options` is `undefined`) throws
+    that message rather than falling through to
+    `assertSupportedBumpOptions`'s "present but wrong" comparison — the two
+    failure modes are guarded by two different assertions with two
+    non-overlapping regexes (`/expected
+    on\.workflow_dispatch\.inputs\.bump\.options to be a sequence/` for
+    missing, `/Tag Release bump options must be exactly/` for wrong), so a
+    single wrong-shaped error cannot satisfy both. Ported as "the
+    bump-option check reports a missing options block distinctly from a
+    wrong one (items 99-100)" in `tests/bin/workflows.test.js`, which
+    constructs one fixture with a `bump:` mapping that has no `options:` key
+    (asserting `bumpOptions` throws the missing-shaped message) and a
+    second fixture with a two-option `bump.options` (asserting
+    `assertSupportedBumpOptions` throws the wrong-shaped message).
+
+    Proven discriminating 2026-08-02, three ways:
+    1. Removing the `Array.isArray` guard entirely (`return bump.options ??
+       []`) drove only the missing-options half RED with `AssertionError
+       [ERR_ASSERTION]: Missing expected exception` — this is exactly the
+       vacuity failure mode this entry exists to prevent: without the guard,
+       a missing `options:` block silently becomes `[]`, and only a
+       *comparison-shaped* assertion downstream would ever notice, if it
+       noticed at all.
+    2. Removing `assertSupportedBumpOptions`'s comparison (leaving it call
+       `bumpOptions` and return, never throwing) drove the wrong-options
+       half RED with the same `Missing expected exception` message, and
+       also drove "the bump-option check reads `bump`, not a decoy sibling
+       input" (item 93) RED for the same reason — both assertions depend on
+       the same comparison logic.
+    3. Deleting the real `tag-release.yml`'s `bump.options` block (five
+       lines, restored by hand afterward — `git diff` confirmed empty)
+       drove "tag-release.yml offers exactly the supported bump options"
+       RED with the identical missing-shaped message (`AssertionError
+       [ERR_ASSERTION]: expected on.workflow_dispatch.inputs.bump.options to
+       be a sequence`), proving the guard fires against genuine repository
+       content, not only against a synthetic fixture.
+
+    All three mutations were restored by hand (never `git checkout --`);
+    the suite returned to 23/23 GREEN after each, and `git diff` on
+    `.github/workflows/tag-release.yml` was empty after restoration.
 
 ## Port-only assertions (outside the 1:1 mapping)
 
