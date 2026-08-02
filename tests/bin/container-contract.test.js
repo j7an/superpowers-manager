@@ -1,6 +1,6 @@
 // @ts-check
 // Ported from tests/test_container_contract.sh (see
-// tests/migration-inventory/test_container_contract.md for the numbered
+// tests/migration-inventory/container-contract.md for the numbered
 // assertion inventory this file maps to 1:1).
 //
 // The shell driver never invokes Docker, a real container, or the real
@@ -301,7 +301,7 @@ function validateHookResponseAssertion(probe, name, terminal) {
   assert.equal(
     requiredGate.length,
     10,
-    "requiredGate lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "requiredGate lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   requireOrderedSource(
     body,
@@ -395,7 +395,7 @@ function validateProbe(probe) {
   assert.equal(
     bindingSequence.length,
     9,
-    "bindingSequence lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "bindingSequence lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   {
     let cursor = -1;
@@ -461,7 +461,7 @@ function validateProbe(probe) {
   assert.equal(
     requiredAbSteps.length,
     15,
-    "requiredAbSteps lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "requiredAbSteps lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   for (const text of requiredAbSteps) {
     if (!probe.includes(text)) {
@@ -546,7 +546,7 @@ function validateProbe(probe) {
   assert.equal(
     hookContract.length,
     18,
-    "hookContract lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "hookContract lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   for (const text of hookContract) {
     if (!probe.includes(text)) {
@@ -602,7 +602,7 @@ function validateProbe(probe) {
   assert.equal(
     activeFields.length,
     5,
-    "activeFields lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "activeFields lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   for (const text of activeFields) {
     if (!activeBody.includes(text)) {
@@ -623,7 +623,7 @@ function validateProbe(probe) {
   assert.equal(
     schemaGates.length,
     5,
-    "schemaGates lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "schemaGates lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   requireOrderedSource(
     schemaBody,
@@ -760,7 +760,7 @@ function validateProbe(probe) {
   assert.equal(
     lifecycle.length,
     51,
-    "lifecycle lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "lifecycle lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   requireOrderedLifecycle(probe, lifecycle);
 }
@@ -800,7 +800,7 @@ function validateHooksRpc(hooksRpc) {
   assert.equal(
     required.length,
     26,
-    "required (validateHooksRpc) lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "required (validateHooksRpc) lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   for (const text of required) {
     if (!hooksRpc.includes(text)) {
@@ -820,7 +820,7 @@ function validateHooksRpc(hooksRpc) {
   assert.equal(
     handshake.length,
     7,
-    "handshake lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "handshake lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   requireOrderedSource(
     hooksRpc,
@@ -938,6 +938,51 @@ void test("container-contract", async (t) => {
   await t.test("Dockerfile builds the package", () => {
     assert.ok(dockerfile.includes("pnpm run build"));
   });
+
+  await t.test(
+    "Dockerfile installs exactly the expected system packages",
+    () => {
+      const dockerfile = readFileSync(DOCKERFILE_PATH, "utf8");
+
+      // Join every backslash-continued line into one logical line first, so a
+      // package added on a SECOND continuation line cannot hide. The first
+      // draft of this assertion captured only the first physical line after
+      // `--no-install-recommends`, which meant `curl \` on the next line was
+      // invisible while the assertion still claimed "exact set". Corrected
+      // 2026-08-02 after review.
+      const logicalLines = dockerfile.replace(/\\\n\s*/g, " ").split("\n");
+
+      const installLines = logicalLines.filter((line) =>
+        line.includes("apt-get install"),
+      );
+      assert.equal(
+        installLines.length,
+        1,
+        "expected exactly one apt-get install command in the Dockerfile",
+      );
+
+      // The logical line is `RUN apt-get update && apt-get install -y
+      // --no-install-recommends <packages> && rm -rf …`. Take everything after
+      // the flags and stop at the next `&&` command boundary.
+      const afterFlags = installLines[0].split("--no-install-recommends")[1];
+      assert.ok(
+        afterFlags !== undefined,
+        "apt-get install command lost its --no-install-recommends flag",
+      );
+
+      const packages = afterFlags
+        .split("&&")[0]
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .sort();
+      assert.deepEqual(
+        packages,
+        ["ca-certificates", "git", "python3"],
+        "the container's system package set changed — every entry is a supply-chain and toolchain commitment",
+      );
+    },
+  );
 
   // --- inventory items 14-18: container tool package/lockfile ----------
 
@@ -1182,7 +1227,7 @@ void test("container-contract", async (t) => {
   assert.equal(
     Object.keys(probeMutations).length,
     10,
-    "probeMutations lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "probeMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
 
   for (const [name, mutated] of Object.entries(probeMutations)) {
@@ -1285,7 +1330,7 @@ void test("container-contract", async (t) => {
   assert.equal(
     Object.keys(rpcMutations).length,
     20,
-    "rpcMutations lost or gained a case — update tests/migration-inventory/test_container_contract.md",
+    "rpcMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
 
   for (const [name, mutated] of Object.entries(rpcMutations)) {

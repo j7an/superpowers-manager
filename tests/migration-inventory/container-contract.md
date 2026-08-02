@@ -363,6 +363,15 @@ it).
 171. `missing hooks response presence gate` is rejected.
 172. `missing result gate` is rejected.
 
+174. **The Dockerfile installs exactly `ca-certificates git python3`.** Added by
+    PR 11.1 (2026-08-02) as the gate for the Ruby retirement. The Dockerfile's
+    `apt-get install` line was previously unasserted — items 7-13 cover the base
+    image, user, corepack, install, and build lines but not the package set — so
+    removing `ruby` would have broken no test, and re-adding it would have broken
+    none either. Asserted as an exact sorted set rather than as "does not contain
+    ruby", because the latter is an enumeration of one known-bad value.
+    Port-only; outside the 1:1 mapping.
+
 ## Cardinality
 
 - Shell original: **172** assertions (6 preconditions, 7 Dockerfile
@@ -371,10 +380,10 @@ it).
   file, 3 `--inside` structural, 75 `validate_probe!` structural (items
   41-115), 27 `validate_hooks_rpc!` protocol-gate (items 116-142), 10 probe
   semantic-mutation fixtures, 20 RPC semantic-mutation fixtures).
-- Port (`tests/bin/container-contract.test.js`): 172 assertions (**171 live
+- Port (`tests/bin/container-contract.test.js`): 173 assertions (**171 live
   of 172 numbered** — item 21 retired, its number not reused — 1:1-mapped
-  to the shell, plus 1 strictly-additive port-only check — see
-  the note under item 87 below), grouped into `node:test` subtests by
+  to the shell, plus 2 strictly-additive port-only checks — see
+  the note under item 87 and item 174 above), grouped into `node:test` subtests by
   section for readability. Items expressed as loops over a literal-string
   array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
   the same array inside `validateProbe`/`validateHooksRpc`, one `throw` per
@@ -390,5 +399,6 @@ it).
   array entry.
 - Reconciliation: 1:1 for 171 of 172 shell items, no merges and no drops;
   item 21 is a **deliberate retirement**, not a drop — items 19-20 subsume
-  it (see the note at item 21) — plus 1 additional port-only assertion (see
-  item 87's note) that is strictly additive and outside the 1:1 mapping.
+  it (see the note at item 21) — plus 2 additional port-only assertions (see
+  item 87's note and item 174) that are strictly additive and outside the 1:1
+  mapping.
