@@ -540,7 +540,17 @@ void test("tag-release.yml wires the shared tag-release workflow", () => {
 
 void test("tag-release.yml offers exactly the supported bump options", () => {
   const tagRelease = loadWorkflow(join(WORKFLOW_DIR, "tag-release.yml"));
-  assert.deepEqual(bumpOptions(tagRelease), EXPECTED_BUMP_OPTIONS);
+  // This is the 1:1 port of the shell's `assert_supported_bump_options`
+  // (item 92). `assertSupportedBumpOptions` throws unless the options are
+  // exactly EXPECTED_BUMP_OPTIONS, so not throwing IS the assertion.
+  //
+  // Do NOT also assert `deepEqual(bumpOptions(tagRelease),
+  // EXPECTED_BUMP_OPTIONS)` here. That line was present until 2026-08-02 and
+  // was removed by the final whole-branch review: it establishes exactly the
+  // condition under which this call throws, so with it present this
+  // assertion could never fail. Same shape already removed at the pin loop
+  // above for the same reason — and the same defect class this whole PR
+  // exists to eliminate, which is precisely why it must not survive here.
   assert.doesNotThrow(() => assertSupportedBumpOptions(tagRelease));
 });
 

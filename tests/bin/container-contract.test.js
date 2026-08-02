@@ -961,20 +961,33 @@ void test("container-contract", async (t) => {
         "expected exactly one apt-get install command in the Dockerfile",
       );
 
-      // The logical line is `RUN apt-get update && apt-get install -y
-      // --no-install-recommends <packages> && rm -rf …`. Take everything after
-      // the flags and stop at the next `&&` command boundary.
-      const afterFlags = installLines[0].split("--no-install-recommends")[1];
+      // `--no-install-recommends` is its own contract, asserted separately
+      // rather than used as the parse boundary. Using it as the boundary
+      // would only see packages written AFTER it, so
+      // `apt-get install -y ruby --no-install-recommends` would install ruby
+      // and still pass. Found by the final whole-branch review, 2026-08-02.
       assert.ok(
-        afterFlags !== undefined,
+        installLines[0].includes("--no-install-recommends"),
         "apt-get install command lost its --no-install-recommends flag",
       );
 
-      const packages = afterFlags
+      // The logical line is `RUN apt-get update && apt-get install -y
+      // --no-install-recommends <packages> && rm -rf …`. Slice from after
+      // `apt-get install`, stop at the next `&&` command boundary, and drop
+      // flag tokens wherever they appear — so a package is caught whether it
+      // is written before or after the flags, and on any continuation line.
+      const afterInstall = installLines[0].split("apt-get install")[1];
+      assert.ok(
+        afterInstall !== undefined,
+        "expected an `apt-get install` command in the Dockerfile",
+      );
+
+      const packages = afterInstall
         .split("&&")[0]
         .trim()
         .split(/\s+/)
         .filter(Boolean)
+        .filter((token) => !token.startsWith("-"))
         .sort();
       assert.deepEqual(
         packages,
