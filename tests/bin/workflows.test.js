@@ -16,11 +16,13 @@ import { fileURLToPath } from "node:url";
 
 import {
   actionPinPair,
+  assertNoForbidden,
   collectExternalTargets,
   findLiteralActionPinSnapshots,
   loadWorkflow,
   uniqueRunStepIndex,
   uniqueStepTargetIndex,
+  usesTarget,
 } from "./workflow-support.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -350,5 +352,100 @@ void test("ci.yml exists and blocking mode creates no compatibility workflow", (
   assert.ok(
     !existsSync(join(WORKFLOW_DIR, "codex-compatibility.yml")),
     "blocking mode must not create codex-compatibility.yml",
+  );
+});
+
+// --- inventory items 72-83: the release workflow contract --------------
+const EXPECTED_VERIFY_COMMAND = `attempt=1
+for delay in 0 30 60 90 120 150; do
+  if [ "$delay" -gt 0 ]; then
+    echo "npx verification attempt \${attempt}/6: sleeping \${delay}s"
+    sleep "$delay"
+  else
+    echo "npx verification attempt \${attempt}/6: checking before sleep"
+  fi
+  cache="\${RUNNER_TEMP:-/tmp}/superpowers-manager-npx-\${GITHUB_RUN_ID:-local}-\${GITHUB_RUN_ATTEMPT:-1}-\${attempt}"
+  if actual=$(npm_config_cache="$cache" npx --yes "\${PACKAGE}@\${VERSION}" --version); then
+    if [ "$actual" = "$VERSION" ]; then
+      echo "npx resolved \${PACKAGE}@\${VERSION}"
+      exit 0
+    fi
+    echo "::error::npx resolved \${PACKAGE}@\${VERSION} with unexpected version \${actual}" >&2
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+done
+echo "::error::npx verification failed after 6 attempts" >&2
+exit 1
+`;
+
+void test("release.yml triggers only on version tags", () => {
+  const release = requireMapping(
+    loadWorkflow(join(WORKFLOW_DIR, "release.yml")),
+    "release",
+  );
+
+  assert.ok(
+    Object.hasOwn(release, "on"),
+    "expected the string key `on` — YAML 1.2 does not coerce it",
+  );
+  assert.ok(
+    !Object.hasOwn(release, "true"),
+    "found a boolean `true` key: the parser is applying YAML 1.1 coercion",
+  );
+
+  const push = requireMapping(requireMapping(release.on, "on").push, "on.push");
+  assert.deepEqual(push.tags, ["v*.*.*"]);
+});
+
+void test("release.yml publish job delegates to the shared workflow", () => {
+  const release = requireMapping(
+    loadWorkflow(join(WORKFLOW_DIR, "release.yml")),
+    "release",
+  );
+  const publish = requireMapping(
+    requireMapping(release.jobs, "jobs").publish,
+    "jobs.publish",
+  );
+
+  assert.equal(
+    usesTarget(publish.uses, "jobs.publish.uses"),
+    "j7an/shared-workflows/.github/workflows/publish-npm.yml",
+  );
+
+  const permissions = requireMapping(
+    publish.permissions,
+    "jobs.publish.permissions",
+  );
+  assert.equal(permissions.contents, "write");
+  assert.equal(permissions["id-token"], "write");
+
+  const withBlock = requireMapping(publish.with, "jobs.publish.with");
+  assert.equal(withBlock.tag, "${{ github.ref_name }}");
+  assert.equal(withBlock["package-name"], "superpowers-manager");
+  assert.equal(
+    withBlock["test-command"],
+    "corepack enable && pnpm install --frozen-lockfile && pnpm run build && sh tests/container.sh",
+  );
+  assert.equal(
+    withBlock["pack-contents-script"],
+    "tests/assert_pack_contents.sh",
+  );
+  assert.equal(withBlock["verify-command"], EXPECTED_VERIFY_COMMAND);
+});
+
+void test("release.yml contains no forbidden publish configuration", () => {
+  const release = loadWorkflow(join(WORKFLOW_DIR, "release.yml"));
+  assert.doesNotThrow(() => assertNoForbidden(release, "workflow"));
+});
+
+void test("the forbidden-publish detector rejects a planted violation", () => {
+  assert.throws(
+    () =>
+      assertNoForbidden(
+        { jobs: { publish: { run: "npm publish" } } },
+        "workflow",
+      ),
+    /forbidden publish configuration/,
   );
 });

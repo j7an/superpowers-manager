@@ -418,6 +418,16 @@ own message, then was restored the same way.
 
 ### `test_release_workflow` — release.yml (`:569-579`)
 
+Ported to four cases in `tests/bin/workflows.test.js` — "release.yml
+triggers only on version tags", "release.yml publish job delegates to the
+shared workflow", "release.yml contains no forbidden publish
+configuration", and the port-only "the forbidden-publish detector rejects
+a planted violation" — using `requireMapping` (local to
+`workflows.test.js`) plus `usesTarget` (already exported from
+`tests/bin/workflow-support.js`) and `assertNoForbidden`, added to
+`tests/bin/workflow-support.js` in this task as a 1:1 port of Ruby's
+`assert_no_forbidden` (`:197-210`).
+
 72. `.github/workflows/release.yml` exists. (`:573`)
 
 Ruby `check_release`, invoked `:576`, defined in the heredoc at `:258-316`:
@@ -444,6 +454,62 @@ Ruby `check_release`, invoked `:576`, defined in the heredoc at `:258-316`:
     `npm_config_provenance`, an `npm`/token variant, `node_auth_token`,
     `npm-bootstrap`, `superpowers-wrapper`, `npm publish`, or `--tag next`)
     appears anywhere in the release workflow. (`:197-210`, called `:315`)
+
+**Named divergence: the `on` key.** The shell selected across both `"on"` and
+boolean `true` (`tests/test_workflows.sh:260`) because Ruby's Psych is
+YAML 1.1. The port asserts the string key is present and the boolean key
+absent. The original's "exactly one active on mapping" assertion is preserved
+in that stronger form.
+
+**Port-only assertion (outside the 1:1 mapping): the forbidden-publish
+detector rejects a planted violation.** `assert_no_forbidden` returning
+silently is otherwise indistinguishable from it never inspecting anything.
+
+**Negative-assertion proof (RED then GREEN, every mutation restored
+bit-identical per `git diff --stat`).** Three release.yml-specific
+negatives were proven, each in both directions — node-absence (does the
+guard fire before the negative can pass vacuously?) and true-positive
+(does the negative itself catch a real violation?):
+
+1. **`!Object.hasOwn(release, "true")` (`:260-261`).**
+   - True-positive: added a literal top-level `true: 1` key to
+     `.github/workflows/release.yml`. RED: `AssertionError
+     [ERR_ASSERTION]: found a boolean \`true\` key: the parser is applying
+     YAML 1.1 coercion`. Restored by hand; `git diff --stat` empty; suite
+     GREEN (15/15).
+   - Node-absence: renamed the top-level `on:` key to `onx:`. RED:
+     `AssertionError [ERR_ASSERTION]: expected the string key \`on\` —
+     YAML 1.2 does not coerce it` — the preceding positive assertion fires
+     first, so the `true`-key negative is never reached vacuously. Restored
+     by hand; `git diff --stat` empty; suite GREEN (15/15).
+2. **`with.verify-command` exact-string equality (`:281-303`).** Deleted a
+   single leading space from the `if [ "$actual" = "$VERSION" ]; then` line
+   inside `.github/workflows/release.yml`'s `verify-command:` block. RED:
+   `AssertionError [ERR_ASSERTION]: Expected values to be strictly equal`,
+   diff showing the missing space on that exact line. Restored by hand
+   (never `git checkout --`); `git diff --stat` empty; suite GREEN (15/15).
+   This proves the literal block scalar round-trips byte-for-byte through
+   `yaml`, including its trailing newline — the one property a parser swap
+   would silently break. (This is a positive equality assertion, not a
+   negative one, but it is the brief's named "sharp edge" so it is recorded
+   here alongside the negatives.)
+3. **`assert_no_forbidden` over the whole document (`:315`).**
+   - True-positive: added `extra-note: npm publish` under
+     `jobs.publish.with` in the real `.github/workflows/release.yml`. RED:
+     `Error: forbidden publish configuration at
+     workflow.jobs.publish.with.extra-note: "npm publish"`, thrown from
+     inside `assertNoForbidden`'s recursion and surfaced by
+     `assert.doesNotThrow`. Restored by hand; `git diff --stat` empty;
+     suite GREEN (15/15).
+   - Non-vacuity: the synthetic planted-violation test (item above) proves
+     `assertNoForbidden` itself throws given forbidden content, rather than
+     `assert.doesNotThrow` passing merely because nothing was ever
+     inspected — the failure mode a parser or traversal regression would
+     produce silently.
+
+Combined, these prove the detector both inspects real repository content
+and actually recognizes the forbidden pattern, in the same alternation and
+with the same `/i` flag as the Ruby original.
 
 ### `test_tag_release_workflow` — tag-release.yml (`:581-729`)
 

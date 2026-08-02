@@ -263,3 +263,39 @@ export function uniqueRunStepIndex(steps, command) {
   }
   return matches[0];
 }
+
+const FORBIDDEN_PUBLISH_CONFIG =
+  /--provenance|npm_config_provenance|npm(?:[_ -]?token)|node_auth_token|npm-bootstrap|superpowers-wrapper|npm publish|--tag next/i;
+
+/**
+ * Throw if any key or string value carries forbidden publish configuration.
+ *
+ * Ported 1:1 from `assert_no_forbidden` (tests/test_workflows.sh:197-210),
+ * including its recursion over mapping keys as well as values.
+ *
+ * @param {unknown} value
+ * @param {string} [path]
+ * @returns {void}
+ */
+export function assertNoForbidden(value, path = "workflow") {
+  if (Array.isArray(value)) {
+    value.forEach((child, index) =>
+      assertNoForbidden(child, `${path}[${index}]`),
+    );
+    return;
+  }
+
+  if (value !== null && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      assertNoForbidden(key, `${path}.<key>`);
+      assertNoForbidden(child, `${path}.${key}`);
+    }
+    return;
+  }
+
+  if (typeof value === "string" && FORBIDDEN_PUBLISH_CONFIG.test(value)) {
+    throw new Error(
+      `forbidden publish configuration at ${path}: ${JSON.stringify(value)}`,
+    );
+  }
+}
