@@ -448,8 +448,18 @@ Ruby `check_release`, invoked `:576`, defined in the heredoc at `:258-316`:
 81. `jobs.publish.with.pack-contents-script == "tests/assert_pack_contents.sh"`.
     (`:312-314`, key `pack-contents-script`)
 82. `jobs.publish.with.verify-command` equals the exact expected
-    six-attempt-retry npx-verification script. (`:312-314`, key
-    `verify-command`)
+    six-attempt-retry npx-verification script, compared as one exact string
+    including its trailing newline — no trim, no whitespace normalization,
+    no line-count comparison. (`:281-303`, the `<<~'SH'` heredoc's own
+    definition; reached via the `expected_with` loop at `:312-314`)
+
+    Citation note: items 78-81 above cite the generic loop location
+    `:312-314` rather than each key's own line in the `expected_with` hash.
+    Item 82 cites `:281-303` because the heredoc body is where this
+    assertion's content actually lives, and it is the one entry whose exact
+    text is the contract. Corrected 2026-08-02 after Task 7's review flagged
+    the generic citation — citations are this inventory's matching key, so an
+    imprecise one misdirects a later reader silently.
 83. No forbidden publish-configuration string (`--provenance`,
     `npm_config_provenance`, an `npm`/token variant, `node_auth_token`,
     `npm-bootstrap`, `superpowers-wrapper`, `npm publish`, or `--tag next`)

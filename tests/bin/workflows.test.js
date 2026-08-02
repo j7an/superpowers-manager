@@ -437,6 +437,13 @@ void test("release.yml publish job delegates to the shared workflow", () => {
 
 void test("release.yml contains no forbidden publish configuration", () => {
   const release = loadWorkflow(join(WORKFLOW_DIR, "release.yml"));
+  // Establish the document is a mapping BEFORE asserting nothing forbidden
+  // is in it. `assertNoForbidden` returns without throwing on null/undefined
+  // — neither matches its object, array, or string branch — so without this
+  // guard the assertion below would pass vacuously against an empty parse.
+  // Same rule this suite enforces everywhere: a negative assertion must
+  // first establish the node it negates about exists.
+  requireMapping(release, "workflow");
   assert.doesNotThrow(() => assertNoForbidden(release, "workflow"));
 });
 
