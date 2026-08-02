@@ -8,6 +8,7 @@
     "tests/baseline/selection-state.test.js",
     "tests/baseline/suite-runner.test.js",
     "tests/baseline/traceability.test.js",
+    "tests/bin/assert-matcher-gate.test.js",
     "tests/bin/bootstrap.test.js",
     "tests/bin/container-contract.test.js",
     "tests/bin/node-tooling.test.js",
