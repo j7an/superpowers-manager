@@ -458,10 +458,56 @@ the stable-numbering rule: later tasks match by citation, never by position.
     a maintainer edits directly, so a dropped tab or added blank field there
     is a real defect this driver catches today. Belongs to the pin-inventory
     subgroup (`test_workflow_pin_contracts`, `:434-484`). (`:235-237`)
+
+    **Ported (Task 5, controller-flagged gap closed 2026-08-02) — option
+    (a).** The shell's mechanism (parse a tab-separated manifest *file*,
+    raise on a line that doesn't split into exactly two non-empty fields)
+    does not exist in the port: `EXPECTED_EXTERNAL_PINS` in
+    `tests/bin/workflows.test.js` is a JS array literal, not text parsed
+    from a file, so there is no line to malform. The underlying **claim**
+    survives unchanged, though: every entry must still have exactly two
+    non-empty fields, and `@ts-check` does not enforce this —
+    `EXPECTED_EXTERNAL_PINS` infers as `string[][]`, not a fixed-length
+    tuple type, so a maintainer-introduced row with the wrong field count
+    or an empty field passes typechecking silently. Ported as
+    "external-pin manifest fixture entries are well-formed (item 97)",
+    asserting `entry.length === 2` and that both fields are non-empty
+    strings, for every row. Proven discriminating 2026-08-02: shrinking one
+    entry to `[".github/workflows/ci.yml"]` (one field) drove this test RED
+    with `EXPECTED_EXTERNAL_PINS[2] must have exactly two fields (path,
+    target), got 1`; blanking a field to `["...", ""]` instead drove it RED
+    with `EXPECTED_EXTERNAL_PINS[2] has an empty or non-string field`; all
+    other cases in the file stayed unaffected by the assertion itself
+    (collateral RED occurred in the two pin-matching tests, since the
+    mutated row also stopped matching a real workflow file — expected, not
+    a defect in this assertion). Restored by editing the file back; GREEN
+    confirmed after each restoration.
 98. **Duplicate external-pin manifest entry is rejected.** `load_expected_external_pins`
     raises `duplicate external-pin manifest entry` if any two manifest rows
     are identical after parsing. Same tracked-literal reasoning as item 97.
     Belongs to the pin-inventory subgroup. (`:240`)
+
+    **Ported (Task 5, controller-flagged gap closed 2026-08-02) — option
+    (a).** Same mechanism change as item 97 (array literal, not a parsed
+    manifest file), but the claim is directly portable and was called out
+    explicitly as such: a maintainer can still copy-paste a duplicate
+    `(workflow, target)` row into `EXPECTED_EXTERNAL_PINS`, and nothing
+    catches it structurally. Ported as "external-pin manifest fixture has
+    no duplicate entries (item 98)", asserting
+    `new Set(serialized).size === serialized.length` over the
+    tab-joined rows. Proven discriminating 2026-08-02: replacing the
+    `actions/setup-node` row with a second `actions/checkout` row (keeping
+    the array at 8 entries, so the separate `EXPECTED_EXTERNAL_PINS.length
+    === 8` self-check stayed green and did not mask this assertion) drove
+    this test RED with `EXPECTED_EXTERNAL_PINS contains a duplicate
+    (workflow, target) entry` (`7 !== 8`, the deduplicated-set size against
+    the row count); restored by editing the file back; GREEN confirmed.
+
+    **Pin-inventory subgroup count reconciled:** items 30-41 (12) + 97-98
+    (2) = **14**, matching the subgroup total recorded in "Cardinality"
+    below. Items 99-100 remain unaddressed by Task 5 — they belong to the
+    `test_tag_release_workflow` subgroup (`:581-729`), owned by the task
+    that ports `tag-release.yml`.
 99. **Duplicate `bump` options block in `tag-release.yml` is rejected.**
     `extract_bump_options`, while walking the real `tag-release.yml` YAML
     text, raises `Tag Release bump options are duplicated` if the

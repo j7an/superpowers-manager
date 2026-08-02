@@ -76,6 +76,42 @@ assert.equal(
   "EXPECTED_EXTERNAL_PINS lost or gained a case — update tests/migration-inventory/workflows.md",
 );
 
+// --- inventory items 97-98: manifest-fixture shape guards --------------
+// The shell's `load_expected_external_pins` parsed a tab-separated manifest
+// *file* and raised on a malformed line (item 97) or a duplicate row
+// (item 98) — both are claims about tracked repository content
+// (`write_expected_external_pins`, a maintainer-edited literal), reinstated
+// on controller adjudication. The port has no manifest text to malform —
+// EXPECTED_EXTERNAL_PINS is a JS array literal, not parsed from a file — but
+// both underlying claims still apply to that literal, and @ts-check does not
+// catch either defect: the array is inferred as `string[][]`, not a
+// fixed-length tuple type, so a row with the wrong field count or an empty
+// field passes typechecking silently.
+void test("external-pin manifest fixture entries are well-formed (item 97)", () => {
+  for (const [index, entry] of EXPECTED_EXTERNAL_PINS.entries()) {
+    assert.equal(
+      entry.length,
+      2,
+      `EXPECTED_EXTERNAL_PINS[${index}] must have exactly two fields (path, target), got ${entry.length}`,
+    );
+    for (const field of entry) {
+      assert.ok(
+        typeof field === "string" && field.length > 0,
+        `EXPECTED_EXTERNAL_PINS[${index}] has an empty or non-string field`,
+      );
+    }
+  }
+});
+
+void test("external-pin manifest fixture has no duplicate entries (item 98)", () => {
+  const serialized = EXPECTED_EXTERNAL_PINS.map((pair) => pair.join("\t"));
+  assert.equal(
+    new Set(serialized).size,
+    serialized.length,
+    "EXPECTED_EXTERNAL_PINS contains a duplicate (workflow, target) entry",
+  );
+});
+
 function workflowFiles() {
   return readdirSync(WORKFLOW_DIR)
     .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
