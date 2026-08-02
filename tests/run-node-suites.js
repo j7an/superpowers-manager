@@ -220,13 +220,36 @@ const ordered = [...expected].sort();
 // test run and silently skips executing every file — exit 0 having run
 // nothing, the exact silent pass this runner exists to prevent. Verified by
 // reproduction. Strip both before spawning.
+// Resolved as a sibling of this file, never against ROOT: SPW_RUNNER_ROOT
+// redirects ROOT into a fixture's temp directory, where no gate exists.
+const gateUrl = new URL("./assert-matcher-gate.js", import.meta.url);
+try {
+  // A caught import, not an existence probe. Absent, unreadable, and
+  // syntactically broken are three different failures and all three must
+  // reach the same controlled diagnostic — an existence probe passes the last
+  // two through to the child, which dies with a raw errno and a stack. Loading
+  // it here is harmless: this process makes no assertions.
+  await import(gateUrl.href);
+} catch {
+  // A silently absent gate is the exact failure mode this gate exists to
+  // detect. Report it as its own diagnostic; never re-emit the caught error,
+  // whose text carries errno and a stack.
+  fail(
+    "the assert matcher gate could not be loaded — tests/assert-matcher-gate.js must sit beside this runner and be readable",
+  );
+}
+
 const childEnv = { ...process.env };
 delete childEnv.NODE_TEST_CONTEXT;
 delete childEnv.NODE_TEST_WORKER_ID;
-const result = spawnSync(process.execPath, ["--test", ...ordered], {
-  cwd: ROOT,
-  stdio: "inherit",
-  env: childEnv,
-});
+const result = spawnSync(
+  process.execPath,
+  ["--import", gateUrl.href, "--test", ...ordered],
+  {
+    cwd: ROOT,
+    stdio: "inherit",
+    env: childEnv,
+  },
+);
 if (result.error) fail("could not start the Node test runner");
 process.exit(result.status ?? 1);

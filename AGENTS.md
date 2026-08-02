@@ -80,8 +80,11 @@ Codex below describe the product integration, not a required agent harness.
 - Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the
-  error — a message, a RegExp, an error class, or an object. Never a bare call
-  and never a string in that position. **Why:** `node:assert` reads a string
+  error — a RegExp, an error class, an object matcher, or a validation
+  function that returns true. Never a bare call and never a string in that
+  position. This is enforced by `tests/assert-matcher-gate.js`, which the
+  suite runner loads into every suite, so a violation fails the test that
+  contains it. **Why:** `node:assert` reads a string
   second argument as the failure *label* and an absent one as no constraint,
   so either form passes on any error. One such call left PR 10's entire
   rejection corpus asserting nothing through several reviews.
