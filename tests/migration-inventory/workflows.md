@@ -251,11 +251,45 @@ one) go RED, and restoring the correct behavior by editing the file back:
 
 ### `test_workflow_pin_source_policy` — source policy (`:539-550`)
 
+Ported to the "no test source embeds a literal action pin snapshot" case in
+`tests/bin/workflows.test.js`, using `findLiteralActionPinSnapshots` from
+`tests/bin/workflow-support.js`.
+
 29. No literal (un-parameterized) SHA-pinned `uses:`-shaped string exists
     anywhere in `tests/*.sh`, `tests/*.py`, `tests/lib/*.sh`, or
     `tests/lib/*.py`. (`:540-548`)
 
+**Named divergence — scan scope widened.** The shell scanned `tests/*.sh`,
+`tests/*.py`, `tests/lib/*.sh`, `tests/lib/*.py` — four non-recursive globs
+that exclude JavaScript. Porting the driver to JS would have moved the
+repository's densest collection of SHA-shaped fixtures (in
+`tests/bin/action-pins.test.js`, added by Tasks 3-4) outside its own policy.
+The port scans `tests/` recursively for `.sh`, `.py`, `.js`, and `.mjs`: a
+strict superset. The design doc measured this on 2026-08-02, before Tasks 3
+and 4 existed, at 65 files with zero findings. Re-measured on 2026-08-02
+after those tasks landed their SHA-shaped fixtures: **68 files, zero
+findings** — those fixtures construct SHA-shaped strings via
+`padStart`/`repeat` rather than embedding literal 40-hex pins, so the
+widened scan still passes. Verified empirically by running the port's own
+test (`tests/bin/workflows.test.js`, "no test source embeds a literal
+action pin snapshot") — GREEN — and by planting a literal 40-hex pin in a
+throwaway `tests/bin/tmp-policy-probe.js`, confirming it goes RED naming
+that file, then removing the probe and confirming GREEN again. Scope
+deliberately stops at `tests/`; `src/` and `bin/` are product code and this
+is a test-snapshot policy. The port also asserts the scan matched at least
+one file, because an empty file list would otherwise pass the policy while
+scanning nothing — proven discriminating by forcing the scan to return `[]`
+and observing the guard's own message fire, distinctly from the "no
+findings" assertion below it.
+
 ### `test_workflow_pin_contracts` — pin inventory (`:434-484`)
+
+Ported to three cases in `tests/bin/workflows.test.js` — "external action
+inventory matches the workflows", "every inventoried pin is a semantic
+40-hex pin", and "all shared-workflows pins agree with one another" — built
+on the `EXPECTED_EXTERNAL_PINS` fixture (the port's carrier for the 8-row
+manifest) and `collectExternalTargets`, added to
+`tests/bin/workflow-support.js` in this task.
 
 30. The set of external (`uses:`) action targets discovered by scanning
     every `.github/workflows/*.yml`/`*.yaml` file exactly matches the
@@ -282,6 +316,30 @@ one) go RED, and restoring the correct behavior by editing the file back:
     the same SHA+version pair. (`:459-470`)
 40. Exactly 8 manifest rows were processed. (`:473-477`)
 41. Exactly 5 of those rows target `j7an/shared-workflows/*`. (`:478-482`)
+
+**Port shape note (items 31-38).** The shell calls `action_pin_pair` once
+per manifest row inside one loop, and each row's non-throwing resolution is
+one assertion (items 31-38). The port's "every inventoried pin is a
+semantic 40-hex pin" case iterates `EXPECTED_EXTERNAL_PINS` with one
+`assert.doesNotThrow` per row inside a `for` loop, preserving the 1:1
+per-row shape rather than merging it into a single combined assertion, so
+items 31-38 map onto eight distinct assertion sites in the port — no merge,
+no drop. Per Task 5's brief: `actionPinPair` already throws unless the
+reference is a 40-hex lowercase SHA with an agreeing semver comment, so
+*not throwing is the assertion* — no `assert.match(pair.sha,
+/^[0-9a-f]{40}$/)` is added, since the function already rejects everything
+that pattern would catch and such a check could never fail.
+
+**Never a literal SHA.** Items 39 and 41 assert *agreement* among the
+`j7an/shared-workflows/*` pins and their count, never the current SHA value
+— the SHA is Dependabot's to move, and naming it would red-light this test
+on the next unrelated bump. Verified: mutating the real
+`.github/workflows/security.yml` pin to a different (still validly
+40-hex-pinned) SHA+version drove "all shared-workflows pins agree with one
+another" RED with `shared-workflows pins disagree across callers` while the
+other four cases in the file stayed GREEN; restoring the file (by editing
+it back to the original pin, not `git checkout --`) turned it GREEN again
+with a clean `git diff`.
 
 ### `test_ci_workflow` — ci.yml (`:552-567`)
 

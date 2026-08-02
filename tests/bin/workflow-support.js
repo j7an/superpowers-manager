@@ -159,3 +159,53 @@ export function findLiteralActionPinSnapshots(paths) {
 
   return findings;
 }
+
+/**
+ * Extract the action target from a `uses:` value, dropping any `@ref`.
+ *
+ * @param {unknown} value
+ * @param {string} path diagnostic path for the error message
+ * @returns {string}
+ */
+export function usesTarget(value, path) {
+  if (typeof value !== "string") {
+    throw new TypeError(`expected string at ${path}, got ${typeof value}`);
+  }
+  return value.split("@")[0];
+}
+
+/**
+ * Collect every external (non `./`) action target in a parsed document.
+ *
+ * Ported 1:1 from `collect_external_targets` in the shell driver's Ruby
+ * checker (tests/test_workflows.sh:212-230).
+ *
+ * @param {unknown} value parsed workflow or subtree
+ * @param {string} path diagnostic path
+ * @returns {string[]}
+ */
+export function collectExternalTargets(value, path) {
+  /** @type {string[]} */
+  const targets = [];
+
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => {
+      targets.push(...collectExternalTargets(child, `${path}[${index}]`));
+    });
+    return targets;
+  }
+
+  if (value !== null && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "uses") {
+        const target = usesTarget(child, `${path}.uses`);
+        if (!String(child).startsWith("./")) {
+          targets.push(target);
+        }
+      }
+      targets.push(...collectExternalTargets(child, `${path}.${key}`));
+    }
+  }
+
+  return targets;
+}
