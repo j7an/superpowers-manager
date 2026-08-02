@@ -36,7 +36,8 @@
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "7.0.2001",
     "prettier": "^3.9.6",
-    "typescript": "~7.0.2"
+    "typescript": "~7.0.2",
+    "yaml": "^2.9.0"
   },
   "repository": {
     "type": "git",
