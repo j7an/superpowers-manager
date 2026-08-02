@@ -209,3 +209,57 @@ export function collectExternalTargets(value, path) {
 
   return targets;
 }
+
+/**
+ * Index of the single step whose `uses:` names `target`.
+ *
+ * Ported 1:1 from `unique_step_target_index` (tests/test_workflows.sh:32-43).
+ *
+ * @param {unknown[]} steps
+ * @param {string} target
+ * @returns {number}
+ */
+export function uniqueStepTargetIndex(steps, target) {
+  /** @type {number[]} */
+  const matches = [];
+  steps.forEach((step, index) => {
+    if (step === null || typeof step !== "object") return;
+    const uses = /** @type {Record<string, unknown>} */ (step).uses;
+    if (typeof uses !== "string") return;
+    if (usesTarget(uses, `steps[${index}].uses`) === target) {
+      matches.push(index);
+    }
+  });
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected exactly one step using ${JSON.stringify(target)}, found ${matches.length}`,
+    );
+  }
+  return matches[0];
+}
+
+/**
+ * Index of the single step whose `run:` equals `command` exactly.
+ *
+ * Ported 1:1 from `unique_run_step_index` (tests/test_workflows.sh:45-54).
+ *
+ * @param {unknown[]} steps
+ * @param {string} command
+ * @returns {number}
+ */
+export function uniqueRunStepIndex(steps, command) {
+  /** @type {number[]} */
+  const matches = [];
+  steps.forEach((step, index) => {
+    if (step === null || typeof step !== "object") return;
+    if (/** @type {Record<string, unknown>} */ (step).run === command) {
+      matches.push(index);
+    }
+  });
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected exactly one run step ${JSON.stringify(command)}, found ${matches.length}`,
+    );
+  }
+  return matches[0];
+}

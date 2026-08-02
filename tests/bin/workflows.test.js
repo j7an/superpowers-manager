@@ -9,7 +9,7 @@
 // section 3.1 for that decision and its evidence.
 
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,8 @@ import {
   collectExternalTargets,
   findLiteralActionPinSnapshots,
   loadWorkflow,
+  uniqueRunStepIndex,
+  uniqueStepTargetIndex,
 } from "./workflow-support.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -193,4 +195,160 @@ void test("no test source embeds a literal action pin snapshot", () => {
   );
 
   assert.deepEqual(findLiteralActionPinSnapshots(scanned), []);
+});
+
+// --- inventory items 42-71: the CI workflow contract -------------------
+
+/**
+ * Assert a value is a non-null object and return it narrowed.
+ *
+ * The Ruby original raised on a non-mapping; JS optional chaining would
+ * yield `undefined` and let a following negative assertion pass trivially.
+ *
+ * @param {unknown} value
+ * @param {string} path
+ * @returns {Record<string, any>}
+ */
+function requireMapping(value, path) {
+  assert.ok(
+    value !== null && typeof value === "object" && !Array.isArray(value),
+    `expected a mapping at ${path}`,
+  );
+  return /** @type {Record<string, any>} */ (value);
+}
+
+void test("ci.yml declares the expected top-level contract", () => {
+  const ci = requireMapping(loadWorkflow(join(WORKFLOW_DIR, "ci.yml")), "ci");
+
+  assert.deepEqual(ci.permissions, {});
+  const jobs = requireMapping(ci.jobs, "jobs");
+  assert.deepEqual(Object.keys(jobs), ["test", "toolchain"]);
+});
+
+void test("ci.yml `test` job runs the container acceptance suite in order", () => {
+  const ci = requireMapping(loadWorkflow(join(WORKFLOW_DIR, "ci.yml")), "ci");
+  const jobs = requireMapping(ci.jobs, "jobs");
+  const testJob = requireMapping(jobs.test, "jobs.test");
+
+  assert.ok(
+    !Object.hasOwn(testJob, "continue-on-error"),
+    "jobs.test must not use continue-on-error",
+  );
+  assert.equal(testJob["runs-on"], "ubuntu-latest");
+  assert.equal(
+    requireMapping(testJob.permissions, "jobs.test.permissions").contents,
+    "read",
+  );
+
+  const steps = testJob.steps;
+  assert.ok(Array.isArray(steps), "expected jobs.test.steps to be an array");
+
+  const hardenIndex = uniqueStepTargetIndex(
+    steps,
+    "step-security/harden-runner",
+  );
+  const checkoutIndex = uniqueStepTargetIndex(steps, "actions/checkout");
+
+  /** @type {{ index: number, command: string }[]} */
+  const containerInvocations = [];
+  steps.forEach((step, index) => {
+    if (step === null || typeof step !== "object") return;
+    if (typeof step.run !== "string") return;
+    for (const line of step.run.split("\n")) {
+      const words = line.trim().split(/\s+/).filter(Boolean);
+      if (words[0] !== "sh" || words[1] !== "tests/container.sh") continue;
+      containerInvocations.push({ index, command: words.join(" ") });
+    }
+  });
+
+  assert.ok(
+    !containerInvocations.some(
+      (entry) => entry.command === "sh tests/container.sh codex-spike",
+    ),
+    "retired codex-spike container invocation is forbidden",
+  );
+  assert.equal(
+    containerInvocations.length,
+    1,
+    "expected exactly one tests/container.sh invocation",
+  );
+
+  const acceptance = containerInvocations[0];
+  assert.equal(acceptance.command, "sh tests/container.sh");
+  assert.ok(
+    hardenIndex < checkoutIndex && checkoutIndex < acceptance.index,
+    "expected harden runner, checkout, and container acceptance in that order",
+  );
+
+  const harden = requireMapping(steps[hardenIndex], "harden runner step");
+  assert.equal(
+    requireMapping(harden.with, "harden runner step.with")["egress-policy"],
+    "audit",
+  );
+
+  const checkout = requireMapping(steps[checkoutIndex], "checkout step");
+  assert.equal(
+    requireMapping(checkout.with, "checkout step.with")["persist-credentials"],
+    false,
+  );
+
+  const acceptanceStep = requireMapping(
+    steps[acceptance.index],
+    "container acceptance step",
+  );
+  assert.ok(
+    !Object.hasOwn(acceptanceStep, "continue-on-error"),
+    "container acceptance step must not use continue-on-error",
+  );
+});
+
+void test("ci.yml `toolchain` job runs the checks in order", () => {
+  const ci = requireMapping(loadWorkflow(join(WORKFLOW_DIR, "ci.yml")), "ci");
+  const jobs = requireMapping(ci.jobs, "jobs");
+  const toolchain = requireMapping(jobs.toolchain, "jobs.toolchain");
+
+  assert.ok(
+    !Object.hasOwn(toolchain, "continue-on-error"),
+    "jobs.toolchain must not use continue-on-error",
+  );
+  assert.equal(toolchain["runs-on"], "ubuntu-latest");
+  assert.equal(
+    requireMapping(toolchain.permissions, "jobs.toolchain.permissions")
+      .contents,
+    "read",
+  );
+
+  const steps = toolchain.steps;
+  assert.ok(
+    Array.isArray(steps),
+    "expected jobs.toolchain.steps to be an array",
+  );
+
+  const order = [
+    uniqueStepTargetIndex(steps, "step-security/harden-runner"),
+    uniqueStepTargetIndex(steps, "actions/checkout"),
+    uniqueStepTargetIndex(steps, "actions/setup-node"),
+    uniqueRunStepIndex(steps, "corepack enable"),
+    uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile"),
+    uniqueRunStepIndex(steps, "pnpm run check"),
+  ];
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    "toolchain steps are out of order",
+  );
+
+  const setupNode = requireMapping(steps[order[2]], "setup-node step");
+  assert.equal(
+    requireMapping(setupNode.with, "setup-node step.with")["node-version"],
+    "24",
+  );
+});
+
+void test("ci.yml exists and blocking mode creates no compatibility workflow", () => {
+  assert.ok(existsSync(join(WORKFLOW_DIR, "ci.yml")));
+  assert.ok(
+    !existsSync(join(WORKFLOW_DIR, "codex-compatibility.yml")),
+    "blocking mode must not create codex-compatibility.yml",
+  );
 });

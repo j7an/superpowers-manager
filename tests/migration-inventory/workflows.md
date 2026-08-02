@@ -343,6 +343,15 @@ with a clean `git diff`.
 
 ### `test_ci_workflow` — ci.yml (`:552-567`)
 
+Ported to four cases in `tests/bin/workflows.test.js` — "ci.yml declares the
+expected top-level contract", "ci.yml `test` job runs the container
+acceptance suite in order", "ci.yml `toolchain` job runs the checks in
+order", and "ci.yml exists and blocking mode creates no compatibility
+workflow" — using `requireMapping` (local to `workflows.test.js`) plus
+`uniqueStepTargetIndex` and `uniqueRunStepIndex`, both added to
+`tests/bin/workflow-support.js` in this task as 1:1 ports of Ruby's
+`unique_step_target_index` (`:32-43`) and `unique_run_step_index` (`:45-54`).
+
 42. `.github/workflows/ci.yml` exists. (`:557`)
 43. `.github/workflows/codex-compatibility.yml` does **not** exist
     (blocking-mode invariant). (`:558-561`)
@@ -384,6 +393,28 @@ Ruby `check_ci`, invoked `:564`, defined in the heredoc at `:56-195`:
     check) appear in that ascending order. (`:167-183`)
 71. The `actions/setup-node` step's `with.node-version == "24"`.
     (`:186-194`)
+
+**Named divergence: `expect_hash` / `fetch` scaffolding is not numbered.**
+The Ruby checker's `expect_hash`, `fetch`, `expect_equal`, and `uses_target`
+are type guards and comparison helpers, not assertions — matching this
+document's existing rule that setup is "not assertions, and … not
+numbered." The port replaces them with `requireMapping` plus `node:assert`.
+`requireMapping` is load-bearing rather than cosmetic: Ruby's `fetch` raised
+on a missing key, whereas JS optional chaining yields `undefined` and would
+let every negative assertion in this section pass trivially. Proven for four
+such negatives (items 46, 52, 59, 60 — `:64`, `:92-94`, `:129`, `:132`): in
+each case, mutating `.github/workflows/ci.yml` so the node the negative
+depends on does not exist (renaming `jobs.test`/`jobs.toolchain`, or
+deleting the container-acceptance step) drove the corresponding
+`node:test` case RED with a `requireMapping`/count-check failure message
+(`expected a mapping at jobs.test`, `expected a mapping at jobs.toolchain`,
+or `expected exactly one tests/container.sh invocation`) rather than a
+silently-passing negative; restoring the file by hand (never `git checkout
+--`) turned it GREEN again with a clean `git diff`. Each negative was also
+proven to catch a true positive: setting `continue-on-error: true` on
+`jobs.test`, `jobs.toolchain`, or the acceptance step, or reinstating `sh
+tests/container.sh codex-spike`, drove the same case RED with the negative's
+own message, then was restored the same way.
 
 ### `test_release_workflow` — release.yml (`:569-579`)
 
