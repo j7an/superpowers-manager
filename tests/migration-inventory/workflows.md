@@ -887,4 +887,122 @@ the reconciliation arithmetic in "Cardinality" below.
   no drops; the 2 additional port-only fixtures are strictly additive
   coverage for a gap discovered in the shell corpus, not a reconciliation of
   any shell assertion.
-- Port: filled in at Task 10.
+- Source-policy port (`tests/bin/workflows.test.js:186-201`): 1 `node:test`
+  case ("no test source embeds a literal action pin snapshot")
+  1:1-reconciling the 1 shell assertion (item 29) via
+  `assert.deepEqual(findLiteralActionPinSnapshots(scanned), [])` (`:200`) —
+  **plus** one port-only non-empty-scan guard embedded in the same case
+  (`:195-198`) that has no shell counterpart (documented under
+  `test_workflow_pin_source_policy` above, not added to the numbered
+  "Port-only assertions" list below). Reconciliation: 1:1, no drop.
+- Pin-inventory port (`tests/bin/workflows.test.js:78-82,95-181`): 5
+  `node:test` cases plus one top-level fixture self-check (outside any
+  `test()`, executed at module load) 1:1-reconciling all 14 shell
+  assertions (items 30-41, 97-98), no merges: item 30 → "external action
+  inventory matches the workflows" (`:130-143`); items 31-38 (one
+  `assert.doesNotThrow` per manifest row inside a `for` loop, preserving
+  the shell's per-row shape — see "Port shape note (items 31-38)" above) →
+  "every inventoried pin is a semantic 40-hex pin" (`:145-159`); item 39 →
+  the agreement loop inside "all shared-workflows pins agree with one
+  another" (`:174-180`); item 40 → the top-level
+  `assert.equal(EXPECTED_EXTERNAL_PINS.length, 8, …)` (`:78-82`); item 41 →
+  `assert.equal(shared.length, 5, …)` inside the same case (`:165-169`);
+  item 97 → "external-pin manifest fixture entries are well-formed (item
+  97)" (`:95-109`); item 98 → "external-pin manifest fixture has no
+  duplicate entries (item 98)" (`:111-118`). Reconciliation: 1:1 for all
+  14, no merges, no drops.
+- ci.yml port (`tests/bin/workflows.test.js:223-357`): 4 `node:test` cases
+  1:1-reconciling all 30 shell assertions (items 42-71), no merges: items
+  42-43 → "ci.yml exists and blocking mode creates no compatibility
+  workflow" (`:351-357`); items 44-45 → "ci.yml declares the expected
+  top-level contract" (`:223-229`); items 46-59 → "ci.yml `test` job runs
+  the container acceptance suite in order" (`:231-306`); items 60-71 →
+  "ci.yml `toolchain` job runs the checks in order" (`:308-349`). Items
+  55-56 both cite the port's single `assert.ok(hardenIndex < checkoutIndex
+  && checkoutIndex < acceptance.index)` (`:281-284`) — this mirrors, rather
+  than merges, the shell's own single `unless … && … raise` (`:102-104`)
+  that the counting rules split into two named claims; both sides express
+  the compound in one construct, so no additional merge is recorded here.
+  Reconciliation: 1:1 for all 30, no merges, no drops.
+- release.yml port (`tests/bin/workflows.test.js:383-459`): 3 `node:test`
+  cases plus 1 port-only case, 1:1-reconciling all 12 shell assertions
+  (items 72-83): item 72 (`.github/workflows/release.yml` exists) is
+  checked only implicitly, by `loadWorkflow`'s `readFileSync` throwing
+  `ENOENT` inside "release.yml triggers only on version tags"
+  (`:384-387`) — unlike item 42 (ci.yml), there is no explicit
+  `existsSync` call; recorded here as a mechanism divergence, not a drop,
+  since a missing file still fails the case. Items 73-74 → "release.yml
+  triggers only on version tags" (`:383-400`; item 73 spans the two
+  assertions at `:389-396`, see "Named divergence: the `on` key" above;
+  item 74 at `:399`). Items 75-82 → "release.yml publish job delegates to
+  the shared workflow" (`:402-436`), one `assert.equal` per item: 75
+  `:412-415`, 76 `:421`, 77 `:422`, 78 `:425`, 79 `:426`, 80 `:427-430`, 81
+  `:431-434`, 82 `:435`. Item 83 → "release.yml contains no forbidden
+  publish configuration" (`:438-448`). Port-only: "the forbidden-publish
+  detector rejects a planted violation" (`:450-459`), documented under
+  `test_release_workflow` above but not yet added to the numbered
+  "Port-only assertions" list below. Reconciliation: 1:1 for all 12, no
+  merges, no drops.
+- tag-release.yml port (`tests/bin/workflows.test.js:514-706`): 8
+  `node:test` cases 1:1-reconciling all 15 shell assertions (items 84-96,
+  99-100), no merges: items 84, 87-90 → "tag-release.yml wires the shared
+  tag-release workflow" (`:514-539`; item 84 implicit via `loadWorkflow` at
+  `:515-518`, the same implicit-existence divergence as release.yml above;
+  87 `:521-524`, 88 `:531`, 89 `:532`, 90 `:535-538`). Item 91 →
+  ".version-bump.json declares the package.json version field"
+  (`:685-692`; item 85, `.version-bump.json` exists, is the same implicit
+  `readFileSync` divergence, at `:686-687`). Item 92 → "tag-release.yml
+  offers exactly the supported bump options" (`:541-545`). Item 93 → "the
+  bump-option check reads `bump`, not a decoy sibling input" (`:547-585`).
+  Item 94 → "the stable-semver check rejects a prerelease" (`:701-706`).
+  Items 95-96 → "package.json carries the manager name and a stable
+  semver version" (`:694-699`; item 86, `package.json` exists, is the same
+  implicit divergence, at `:695`). Item 99 → "a duplicated bump options
+  block is rejected while parsing, distinctly from missing or wrong (item
+  99)" (`:635-683`). Item 100 → "the bump-option check reports a missing
+  options block distinctly from a wrong one (items 99-100)" (`:587-633`).
+  Reconciliation: 1:1 for all 15, no merges, no drops.
+- **Port total: 45 `node:test` cases** — 22 in
+  `tests/bin/action-pins.test.js` (action-pin matcher and literal-pin
+  detector) and 23 in `tests/bin/workflows.test.js` (source policy, pin
+  inventory, ci.yml, release.yml, tag-release.yml) — plus the one
+  top-level pin-inventory fixture self-check (`:78-82`) that runs outside
+  any `test()`, matching the total above with no numbered entry left
+  without a port location. Reconciliation: 1:1 for all 100 original
+  entries except three recorded merges (all read directly from the
+  source, not carried forward from any earlier draft): items 1-2 (2:1 —
+  the unquoted accepted-block pair comparison and its
+  `assert_action_pin` both subsumed by one `assert.deepEqual`; see "Named
+  merge" above), items 17-24 (8:1 — the positive literal-pin fixtures
+  bundled into one `assert.deepEqual`), and items 25-28 (4:1 — the
+  negative fixtures bundled into one emptiness `assert.deepEqual`; both
+  already recorded in the "Literal-pin detector port" bullet above). No
+  retirements.
+- Named divergences, each documented in full in its own subsection above:
+  the `on` key representation (release.yml, "Named divergence: the `on`
+  key"); `tag-prefix` quoting (tag-release.yml, "Named divergence —
+  `tag-prefix: "v"`"); the pin matcher's return-value carrier (action-pin
+  matcher, "Named divergence — return-value carrier"); the source-policy
+  scan scope (source policy, "Named divergence — scan scope widened");
+  the Python heredoc's replacement (tag-release.yml, "Named divergence —
+  the Python heredoc"). One further mechanism divergence was found while
+  deriving this reconciliation and is recorded above rather than renamed
+  as a sixth "Named divergence": items 72, 84, 85, and 86 (file-existence
+  checks for `release.yml`, `tag-release.yml`, `.version-bump.json`, and
+  `package.json`) are enforced only implicitly, by the relevant loader's
+  `readFileSync` throwing `ENOENT`, rather than by an explicit
+  `existsSync` call as item 42 (`ci.yml`) has. The claim is still
+  enforced — a missing file fails the case — so this is a mechanism
+  divergence, not a drop.
+- Port-only assertions live in their own table, outside this arithmetic:
+  the six items numbered in "Port-only assertions" below (the YAML 1.2
+  canary; the anchored-prefix-match, quote-close-boundary, and
+  reference-count-ordering action-pin fixtures; and the
+  literal-pin-detector boundary and one-finding-per-line fixtures) —
+  **plus two more port-only assertions that exist in the port but are
+  documented in prose within their own subsections rather than added to
+  that numbered list**: the forbidden-publish detector's
+  planted-violation case (`test_release_workflow` above, `:450-459`) and
+  the source-policy non-empty-scan guard (`test_workflow_pin_source_policy`
+  above, `:195-198`). Recorded here, outside the 100/45 arithmetic above,
+  rather than silently folded into it.
