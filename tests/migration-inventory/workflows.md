@@ -325,10 +325,26 @@ the stable-numbering rule: later tasks match by citation, never by position.
 
 ## Port-only assertions (outside the 1:1 mapping)
 
-None yet. This section exists per the brief's skeleton and follows
+This section exists per the brief's skeleton and follows
 `npm-pack-contents.md`'s convention: entries a later porting task adds here
 have no shell counterpart, are additive test coverage, and are excluded from
 the reconciliation arithmetic in "Cardinality" below.
+
+1. **Workflow documents parse under YAML 1.2, keeping `on` a string key.**
+   The shell had no equivalent assertion; it instead *worked around* the
+   opposite behaviour, selecting across both `"on"` and boolean `true`
+   (`on_keys = ["on", true].select { ... }`, `tests/test_workflows.sh:260`)
+   because Ruby's Psych is YAML 1.1 and coerces the `on:` key to a boolean.
+   The port reads `.github/workflows/ci.yml` with the `yaml` devDependency
+   (YAML 1.2), asserts `Object.hasOwn(ci, "on")` is true and positively
+   asserts `Object.hasOwn(ci, "true")` is false, so the inherited workaround
+   becomes an executable, falsifiable statement that fires loudly if the
+   parser is ever swapped for a YAML-1.1 one. Verified against the real
+   file on 2026-08-02: `Object.keys(parse(ci))` is
+   `["name","on","concurrency","permissions","jobs"]`. Mutation-tested:
+   inverting the negation on the `"true"`-key check reproduces the failure
+   this assertion exists to catch. Port-only — it has no shell counterpart
+   and is outside the 1:1 mapping. (`tests/bin/workflows.test.js`)
 
 ## Cardinality
 

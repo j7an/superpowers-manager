@@ -14,6 +14,7 @@
     "tests/bin/node-tooling.test.js",
     "tests/bin/npm-pack-contents.test.js",
     "tests/bin/units.test.js",
+    "tests/bin/workflows.test.js",
     "tests/unit/adapter-protocol.test.js",
     "tests/unit/adapter.test.js",
     "tests/unit/atomic.test.js",
