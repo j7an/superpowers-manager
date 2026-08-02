@@ -94,6 +94,9 @@ shape:
 
 ### `test_action_pin_helper` — action-pin matcher (`:347-419`)
 
+Ported to `actionPinPair` in `tests/bin/workflow-support.js`, exercised by
+`tests/bin/action-pins.test.js`.
+
 1. Unquoted `uses: <target>@<sha>` with an agreeing `# vX.Y.Z` comment
    resolves to the expected `<sha>\t<version>` pair via `action_pin_pair`.
    (`:355-362`)
@@ -109,18 +112,66 @@ shape:
 7. An uppercase-hex SHA is rejected. (`:382-383`)
 8. A 39-character (short) SHA is rejected. (`:384-385`)
 9. A 41-character (long) SHA is rejected. (`:386-387`)
-10. A pin with no trailing `# vX.Y.Z` comment is rejected. (`:388-389`)
+10. A reference with no trailing `# vX.Y.Z` comment makes the reference
+    count and the valid-pin count disagree, and the call throws.
+    (`:388-389`) **Does not discriminate** the `reference_count++`-before-
+    the-`" # "`-check ordering: this fixture has exactly one reference, so
+    both orderings of the counter throw (just via different branches of the
+    guard). The ordering property is discriminated only by the port-only
+    "reference-count ordering" fixture below, which uses two references —
+    see "Discovered gap" below.
 11. A pin whose comment is not a full `vMAJOR.MINOR.PATCH` (`# v4`) is
     rejected. (`:390-391`)
-12. A near-miss target string that differs from the exact target only by
-    punctuation is not treated as a match (no false positive from
-    substring/prefix matching). (`:393-396`)
+12. A different target string (differing from the exact target only by
+    punctuation, at the same length) is rejected. (`:393-396`) **Does not
+    discriminate** anchored-prefix matching: the near-miss string is not a
+    substring of the exact target at any offset, so an anchored and an
+    unanchored match reject it identically — this asserts exact-target
+    matching, not position. The anchoring property is discriminated only by
+    the port-only "anchored prefix match" fixture below — see "Discovered
+    gap" below.
 13. Two lines for the same target with disagreeing SHA and version comment
     are rejected. (`:398-401`)
 14. One valid pin plus one non-SHA (`@v7`) reference to the same target,
     unquoted, is rejected. (`:403-406`)
 15. Same as 14, with the invalid line single-quoted. (`:408-411`)
 16. Same as 14, with the invalid line double-quoted. (`:413-416`)
+
+**Named merge (items 1-2).** The shell makes two assertions about the same
+unquoted block: `:355-362` compares the returned pair against
+`printf '%s\t%s'`, and `:363` calls `assert_action_pin`, which is
+`action_pin_pair "$1" "$2" >/dev/null` — a strictly weaker form of the same
+call. The port's single `assert.deepEqual(actionPinPair(block, TARGET), …)`
+("action pin accepted: unquoted") subsumes both, so items 1 and 2 map to one
+port assertion. The port is *stronger* than the source overall because it
+applies that same `deepEqual` to the single- and double-quoted blocks (items
+3-4) where the shell only called `assert_action_pin`. Nothing is dropped;
+see "Cardinality" below.
+
+**Named divergence — return-value carrier.** The awk emitted a single
+tab-joined string (`sha \t comment`) because awk has one output channel; the
+shell compared it against `printf '%s\t%s'`. The port returns
+`{ sha, version }`. Same assertion content, different (JS-idiomatic)
+carrier.
+
+**Discovered gap in the shell corpus (not a port defect).** Mutation-testing
+the port against all 16 shell-derived fixtures above (items 1-16) showed
+that none of them discriminates any of the three properties a naive port of
+`action_pin_pair` could silently lose: the anchored prefix match
+(`index(line, target "@") != 1`, awk `:20`), the quote-close boundary
+(`substr(ref, length(ref), 1) != quote`, awk `:33`), or the
+`reference_count++`-before-`" # "`-check ordering (awk `:23` vs `:25-28`).
+For each property, breaking it in the port left all 16 fixtures GREEN;
+restoring the correct behavior and instead probing with a purpose-built
+two-line or embedded-target case turned the corresponding new fixture RED.
+This means the **original shell driver never exercised these three
+properties either** — `test_action_pin_helper` has run since this file was
+written without ever constructing a case that could tell a correct
+implementation from a broken one on these three axes. The migration did not
+lose this coverage; porting is what revealed it was never there. Three
+port-only fixtures (below) close the gap; item 10 and item 12 above are
+amended to say so precisely rather than repeat the (inaccurate) claim that
+they test ordering or anchoring.
 
 ### `test_literal_action_pin_detector` — literal-pin detector (`:486-537`)
 
@@ -346,6 +397,51 @@ the reconciliation arithmetic in "Cardinality" below.
    this assertion exists to catch. Port-only — it has no shell counterpart
    and is outside the 1:1 mapping. (`tests/bin/workflows.test.js`)
 
+2. **Anchored prefix match: a target embedded mid-line, not at the start, is
+   rejected.** `actionPinPair` requires `line.indexOf(target + "@") === 0`
+   after prefix/quote stripping — a target that merely *contains* the sought
+   target string, but does not begin with it, must not match. No shell
+   fixture discriminates this (see the "Discovered gap" note under
+   `test_action_pin_helper` above): the shell's own near-miss fixture
+   (item 12, `:393-396`) uses a target that is not a substring of the line
+   at any offset, so it cannot tell an anchored check apart from an
+   unanchored one. This fixture uses `prefix-actions/checkout@<sha>` against
+   target `actions/checkout` instead. Mutation-tested 2026-08-02: replacing
+   the anchored `indexOf(...) === 0` check with an unanchored
+   "find `target@` anywhere and re-slice from that offset" implementation
+   drove only this fixture RED (`AssertionError: Missing expected
+   exception`); restoring the anchored check turned it GREEN again, with
+   all other fixtures unaffected throughout. Port-only — it has no shell
+   counterpart. (`tests/bin/action-pins.test.js`)
+3. **Quote-close boundary: a reference opened with one quote and apparently
+   closed with a different quote is rejected.** `actionPinPair` requires the
+   character immediately before the `" # "` separator to equal the opening
+   quote when the line opened with `'` or `"`. No shell fixture
+   discriminates this — none of the shell's quoted fixtures (items 3-4,
+   15-16) constructs a mismatched-quote line. This fixture opens with `'`
+   and reaches `" # "` with a trailing `"` instead. Mutation-tested
+   2026-08-02: disabling the closing-quote comparison (unconditionally
+   stripping the last character without checking it matches the opening
+   quote) drove only this fixture RED; restoring the check turned it GREEN
+   again. Port-only — it has no shell counterpart.
+   (`tests/bin/action-pins.test.js`)
+4. **Reference-count ordering: a bare reference alongside a valid one to the
+   same target forces a count disagreement.** `actionPinPair` increments
+   `referenceCount` for every anchored match *before* checking for the
+   `" # "` separator, so a same-target reference with no version comment
+   still counts as a reference (just not a valid pin), forcing
+   `validCount !== referenceCount`. No shell fixture discriminates this: the
+   shell's own single-bare-reference fixture (item 10, `:388-389`) throws
+   under either ordering, because with exactly one reference,
+   `referenceCount === 0` triggers the same throw as
+   `validCount !== referenceCount` would. This fixture uses two references —
+   one valid, one bare — to the same target, which only a same-target
+   full-vs-bare count mismatch can catch. Mutation-tested 2026-08-02: moving
+   the `referenceCount += 1` increment to after the separator check (so a
+   bare reference is never counted at all) drove only this fixture RED;
+   restoring the original order turned it GREEN again. Port-only — it has
+   no shell counterpart. (`tests/bin/action-pins.test.js`)
+
 ## Cardinality
 
 - Shell original: **100** assertions.
@@ -355,4 +451,16 @@ the reconciliation arithmetic in "Cardinality" below.
   **12**; tag-release.yml **15** (13 derived initially + items 99-100
   reinstated on controller adjudication). Sum check:
   16 + 12 + 1 + 14 + 30 + 12 + 15 = 100, matching the total above.
+- Action-pin matcher port (`tests/bin/action-pins.test.js`): 15 `node:test`
+  cases 1:1-reconciling the 16 shell assertions (3 accepted-form + 1
+  agreeing-duplicate + 11 rejected cases), via one 2:1 merge — items 1-2
+  both exercise the unquoted accepted block and are subsumed by the port's
+  single `assert.deepEqual` case (see "Named merge" above) — **plus** 3
+  port-only discriminating fixtures (anchored prefix match, quote-close
+  boundary, reference-count ordering; items 2-4 in "Port-only assertions"
+  above) that have no shell counterpart and are outside the 1:1 mapping.
+  Reconciliation: 1:1 for all 16 original action-pin items via the one
+  named merge, no drops; the 3 additional port-only fixtures are strictly
+  additive coverage for a gap discovered in the shell corpus, not a
+  reconciliation of any shell assertion.
 - Port: filled in at Task 10.
