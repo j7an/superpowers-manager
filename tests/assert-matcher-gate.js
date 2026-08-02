@@ -57,9 +57,10 @@ function enforce(target, name) {
   slot[name] = wrapper;
 }
 
-// Both module objects are patched: 30 test files import "node:assert/strict"
-// and one imports "node:assert". Patching the strict default also covers
-// `assert.strict.throws`, which is the same function object.
+// Both module objects are patched. Patching the strict default also covers
+// `assert.strict.throws`, which is the same function object. Namespace
+// bindings (`import * as assert from "node:assert"`) are covered separately,
+// below, via `syncBuiltinESMExports()`.
 /** @type {("throws" | "rejects")[]} */
 const GUARDED = ["throws", "rejects"];
 for (const target of [strict, loose]) {

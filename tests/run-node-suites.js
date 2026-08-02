@@ -213,13 +213,6 @@ if (expected.length === 0) fail("tests/suites.json declares no suites");
 
 const ordered = [...expected].sort();
 
-// A caller that itself runs under `node --test` (this runner is one such
-// caller, since it is registered in its own manifest) has NODE_TEST_CONTEXT
-// / NODE_TEST_WORKER_ID set in its process.env. Left in the child's env, the
-// inner `node --test` invocation below misreads itself as a nested recursive
-// test run and silently skips executing every file — exit 0 having run
-// nothing, the exact silent pass this runner exists to prevent. Verified by
-// reproduction. Strip both before spawning.
 // Resolved as a sibling of this file, never against ROOT: SPW_RUNNER_ROOT
 // redirects ROOT into a fixture's temp directory, where no gate exists.
 const gateUrl = new URL("./assert-matcher-gate.js", import.meta.url);
@@ -235,10 +228,17 @@ try {
   // detect. Report it as its own diagnostic; never re-emit the caught error,
   // whose text carries errno and a stack.
   fail(
-    "the assert matcher gate could not be loaded — tests/assert-matcher-gate.js must sit beside this runner and be readable",
+    "the assert matcher gate could not be loaded — tests/assert-matcher-gate.js must sit beside this runner, be readable, and evaluate cleanly",
   );
 }
 
+// A caller that itself runs under `node --test` (this runner is one such
+// caller, since it is registered in its own manifest) has NODE_TEST_CONTEXT
+// / NODE_TEST_WORKER_ID set in its process.env. Left in the child's env, the
+// inner `node --test` invocation below misreads itself as a nested recursive
+// test run and silently skips executing every file — exit 0 having run
+// nothing, the exact silent pass this runner exists to prevent. Verified by
+// reproduction. Strip both before spawning.
 const childEnv = { ...process.env };
 delete childEnv.NODE_TEST_CONTEXT;
 delete childEnv.NODE_TEST_WORKER_ID;

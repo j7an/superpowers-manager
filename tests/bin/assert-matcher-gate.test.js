@@ -182,9 +182,12 @@ void test("the runner gates a vacuous matcher in a suite it runs", (t) => {
 
 void test("the runner leaves a constraining matcher alone", (t) => {
   // The control. Without it, a gate that rejects everything passes the suite.
+  // Exit 0 alone does not distinguish that from a fixture root where
+  // `node --test` executed zero files, so also assert the suite actually ran.
   const root = fakeRoot(t, CONSTRAINED_SUITE);
   const r = runIn(RUNNER, root);
   assert.equal(r.status, 0);
+  assert.match(r.stdout, /pass 1/);
 });
 
 void test("the runner fails closed when the gate module is unreadable", (t) => {

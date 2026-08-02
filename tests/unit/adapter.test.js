@@ -15,6 +15,11 @@ const { runAdapter } = await import(
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 const SOURCE = "https://example.invalid/superpowers.git";
+// Sibling of tests/assert-matcher-gate.js, from this file's own location —
+// never a repo-root constant. The nested `--test` spawns below get `--import`
+// on argv, not via NODE_OPTIONS, so it does not propagate from this parent
+// process and must be passed explicitly.
+const GATE_URL = new URL("../assert-matcher-gate.js", import.meta.url).href;
 
 /**
  * Build the upstream root, candidate root, and fallback manifest `build`
@@ -150,7 +155,7 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
   delete childEnv.NODE_TEST_WORKER_ID;
   const spawned = spawnSync(
     process.execPath,
-    ["--experimental-test-module-mocks", "--test", child],
+    ["--import", GATE_URL, "--experimental-test-module-mocks", "--test", child],
     { encoding: "utf8", env: childEnv },
   );
   assert.equal(
@@ -203,7 +208,7 @@ void test("a manifest overlay read fails closed when the file changes between th
   delete childEnv.NODE_TEST_WORKER_ID;
   const spawned = spawnSync(
     process.execPath,
-    ["--experimental-test-module-mocks", "--test", child],
+    ["--import", GATE_URL, "--experimental-test-module-mocks", "--test", child],
     { encoding: "utf8", env: childEnv },
   );
   assert.equal(
