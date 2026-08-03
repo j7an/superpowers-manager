@@ -88,6 +88,11 @@ Codex below describe the product integration, not a required agent harness.
   second argument as the failure *label* and an absent one as no constraint,
   so either form passes on any error. One such call left PR 10's entire
   rejection corpus asserting nothing through several reviews.
+- Each migration inventory under `tests/migration-inventory/` carries region
+  markers and a machine-readable `json inventory` declaration block, enforced
+  by `tests/bin/migration-inventory.test.js`. **Why:** prose reconciliation let
+  a duplicate-looking item number and an undocumented numbering gap survive two
+  reviews.
 - Run `git diff --check` before completion.
 
 ## Workflows and Dependencies
