@@ -21,5 +21,6 @@ RUN corepack enable \
 
 ENV HOME=/home/spw
 ENV PATH=/opt/spw-test-tools/node_modules/.bin:$PATH
+ENV SPW_CONTAINER=1
 USER spw
 ENTRYPOINT ["sh", "tests/container.sh", "--inside"]
