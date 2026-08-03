@@ -244,7 +244,8 @@ are `:671` and `:680`.
 60. Stdout contains `manager updated` (`:502`). Port: `:777`.
 61. The invocation TMPDIR is left empty (`:503`,
     `assert_install_tmp_empty`). Port: `:779`, helper at `:293`. **Scope
-    narrowed — see the note below.**
+    narrowed twice — see the note below, and the further narrowing the
+    mutation proof's row 13a records.**
 62. The Codex log holds no `marketplace remove` (`:504-506`). Port: `:782`.
 63. The Codex log holds no `plugin remove superpowers@superpowers-manager`
     (`:507-509`). Port: `:786`.
@@ -349,7 +350,8 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 92. Install fails (`:654`). Port: `:1053`.
 93. Output contains `fingerprint is not detectable` (`:655`). Port: `:1059`.
 94. The invocation TMPDIR is left empty (`:656`). Port: `:1061`. Same scope
-    narrowing as item 61.
+    narrowing as item 61, including the further narrowing the mutation proof's
+    row 13a records.
 95. Output does **not** contain `manager updated` (`:657-659`). Port:
     `:1064`. Non-vacuous: item 93 proves the output carries the subject's
     verification diagnostics.
@@ -377,6 +379,9 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 103. Install fails (`:694`). Port: `:1120`.
 104. Output contains `fingerprint inspection` (`:695`). Port: `:1126`.
+     **Narrowed — see the mutation proof's row 8:** the fixture's own stderr
+     line carries this needle too, so the assertion proves the string appears,
+     not that the subject produced it.
 105. Output does **not** contain `fingerprint is not detectable` (`:696`,
      first grep of the rule-8 `||` chain). Port: `:1129`.
 106. Output does **not** contain `manager updated` (`:697`, second grep of
@@ -551,16 +556,307 @@ Item 41 extends the shell's install-path provenance check to the update path.
 
 ## Mutation proof
 
-Not yet performed. The formal Decision-5 sweep for this port — inject the
-violation into the fixture, observe which assertions turn RED, and adjudicate
-every guard that stays GREEN — is a separate task in this PR series, and its
-injection matrix, divergences, adjudications, and coverage ledger will be
-recorded in this section. The `uninstall-commands.md:403-614` sweep is the
-model.
+Task 8's sweep, run 2026-08-03. Design Decision 5: **inject the violation into
+the fixture, not into the assertion**, then observe which assertions turn RED.
+A guard that stays GREEN under an injection that genuinely violates it is not
+proven — it is a boundary guard, and it is adjudicated below rather than
+"proved" by breaking its own text.
 
-One targeted observation was made while writing the port, and is recorded here
-because it justifies a structural choice rather than an assertion: removing
-`clearLogs(c)` from the scenario-3c port turns item 84 RED with
+Every mutation was applied to a tracked file, run with
+`node --test tests/bin/install-commands.test.js`, observed, then restored by
+**editing the file back** (never `git checkout --`). `git diff --stat` was
+empty and the suite re-ran 32/32 GREEN after every restore. No assertion text
+in `tests/bin/install-commands.test.js` was changed except at the ordering
+sites (rows O1-O3), which the subject alone controls and which therefore have
+no fixture-side lever.
+
+Two rows edit `tests/bin/install-commands.test.js` without touching an
+assertion, and are called out so no reader mistakes them for manufactured
+REDs. Row 14 short-circuits `prepareGeneratedTree` (`:210`), a
+fixture-precondition helper, to model a lost precondition — the same technique
+the "Preconditions" section above used for `clearLogs`. Rows O1-O3 are the
+ordering exception.
+
+**Restore discipline within a family.** Rows 1-1e share one injection point
+(the `spuriousMutation` block in `runCodex`) and were run as a family with
+`INSTALL_DEFAULTS.spuriousMutation` held at `true` throughout, changing only
+the payload string between runs; each run therefore also re-verifies that the
+previous payload's sites returned GREEN, and a full 32/32 GREEN verification
+followed the family's restore. Row 13a produced no RED, so it was converted
+in place into row 13b rather than restored and re-verified between the two.
+Every other row was restored and re-verified GREEN on its own.
+
+The task brief names eight injections. That list is the floor: rows 1b-1e, 4,
+5, 6, 10, 13b, and 14 were derived from this inventory's own negative and
+port-only assertion sets, and they carry items and guards the brief's eight do
+not reach. Rows 8, 13a, 1c, 5 and 14 diverge from the brief's prediction
+table; each divergence is recorded under "Divergences" below, because a
+divergence is the finding, not noise.
+
+**Case abbreviations** below are the port's `test(` order: c1 source guards,
+c2 packaged-root, c3 prepare, c4 unsupported-update-fast-path,
+c5 unsupported-direct-install, c6 malformed-update-control,
+c7 failed-update-control, c8 needs-prepare-drift, c9 needs-install,
+c10 fresh-gate, c11 legacy-identity, c12 mixed-identity,
+c13 built-in-validation, c14 additional-validator, c15 fresh-install,
+c16 current-reconciled, c17 matching-fingerprint-other-root,
+c18 symlink-same-root, c19 different-registered-root, c20 update-read-only,
+c21 update-rejects-mixed, c22 marketplace-add-fails,
+c23 malformed-marketplace-listing, c24 plugin-add-noop, c25 stale-fingerprint,
+c26 missing-fingerprint-hint, c27 fingerprint-inspect-fails,
+c28 fingerprint-inspect-malformed, c29 remove-add, c30 invalid-refresh-mode,
+c31 install-remediation, c32 update-remediation.
+
+**The brief's case numbering is not this one.** It merges c11 and c12 (they
+share one helper) into a single case, so from c13 onward its numbers run one
+lower: its "case 21" is c22, its "cases 23, 25" are c24 and c26, its "case 24"
+is c25, its "cases 26, 27" are c27 and c28, and its "cases 14, 23" are c15 and
+c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
+
+### Injection matrix
+
+| Row | Injection (file, exact edit) | Observed RED — item @ port line |
+|---|---|---|
+| 1 | `lifecycle-config.js`: `INSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin add superpowers@spurious` into every Codex call's log | items 19 (`:533`), 21 (`:548`), 24 (`:562`), 27 (`:575`), 32 (`:613`), 38 (`:662`), 44 (`:393` via `:671`), 50 (`:393` via `:680`), 53 (`:708`), 56 (`:730`), 81 (`:955`), 85 (`:992`), 117 (`:1209`) — all 13 `assertNoCodexMutation` sites — plus item 91 (`:1039`); 14/32 cases |
+| 1b | payload → `plugin marketplace remove openai-curated` | row 1's 14 sites, plus items 62 (`:782`), 72 (`:886`), 77 (`:922`), 115 (`:1188`) |
+| 1c | payload → `plugin remove superpowers@superpowers-manager` | row 1's 14 sites, plus items 63 (`:786`), 74 (`:891`), 78 (`:926`), and c29's `assertOrder` (`:1177`) as an injection artifact — see Divergences |
+| 1d | payload → `plugin marketplace add /spurious-root` | row 1's 14 sites, plus item 71 (`:882`) |
+| 1e | payload → `plugin marketplace list openai-curated`, which matches neither `CODEX_MUTATION` nor `PARSE_ABORT_MUTATION` | items 64 (`:790`) and 115 (`:1188`), and nothing else |
+| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:490`), 43 (`:387` via `:671`), 49 (`:387` via `:680`), 80 (`:947`), 84 (`:986`) |
+| 3 | `install-fakes.js` `runAdapter`: `if (joined.startsWith("build ")) log("adapter.log", "inspect --view update-control")` | item 13 (`:485`), and only that |
+| 4 | `install-fakes.js` `runAdapter`: extra `log("codex.log", "plugin list --json")` on every adapter call | item 15 (`:497`), and only that |
+| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:383` via `:671`), 2 (`:383` via `:680`), 7 (`:483`), 14 (`:607`), 18 (`:631`), 31 (`:312` via `:946`), 33 (`:982`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) |
+| 6 | `install-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only 3, 4, 9, 11, 12, 13, 15, 20, 21, 22, 32, 34, 38 — all 13 `assertNoCodexMutation` emptiness guards, at `:393` (×2), `:533`, `:548`, `:562`, `:575`, `:613`, `:662`, `:708`, `:730`, `:955`, `:992`, `:1209` — plus port-only 35 (`:1016`), 36 (`:1038`), item 73 (`:877`), and all five `assertOrder` sites (`:767`, `:817`, `:849`, `:912`, `:1177`) on "needle never appears" |
+| 7 | `install-fakes.js` `runAdapter`: the observable `update-control-count` frozen at `1` while the real count moves to a shadow file, so the `managed-then-unsupported` flip is unchanged and only the counter stops advancing | items 30 (`:598`), 33 (`:625`), 37 (`:660`) |
+| 8 | `install-fakes.js` `runAdapter`: the codex-home existence condition dropped from the fingerprint intercept | item 109 (`:1154`) in c28 only — see Divergences |
+| 9 | `install-fakes.js` `runCodex`: the `marketplaceAdd === "fail"` branch's `process.exit(1)` → `process.exit(0)`, so the add reports success without registering | item 86 (`:1006`), c22 only |
+| 10 | `install-fakes.js` `runCodex`: the `marketplaceAdd === "fail"` branch logs `plugin add superpowers@superpowers-manager` before exiting 1, modelling a subject that proceeds past the failure | item 89 (`:1017`), and only that |
+| 11 | `install-fakes.js` `runCodex`: `if (CONFIG.pluginAdd === "noop") process.exit(0);` deleted, so a `noop` add really refreshes | items 92 (`:1053`), 100 (`:1102`) |
+| 12 | `install-fakes.js` `runCodex`: the `pluginAdd === "stale"` branch condition → `"stale-disabled"`, so the real commit is written | item 96 (`:1077`) |
+| 13a | `install-fakes.js` `runAdapter`: writes `spw-sidecar-leak` into `$TMPDIR` | **none — 32/32 GREEN.** See Divergences |
+| 13b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 61 (`:294` via `:779`), 94 (`:294` via `:1061`) — both `assertTmpEmpty` ports |
+| 14 | `install-commands.test.js`: `prepareGeneratedTree` (`:210`) short-circuited to a no-op, so the generated-tree precondition is lost at all of its call sites | port-only 8 (`:519`), 10 (`:546`), 17 (`:623`), 19 (`:658`), 25 (`:809`), 27 (`:841`) — all six `assertNoPrepareRan` guards — plus item 79 (`:944`). The injection added one line, so the runner reported each of these one higher; the numbers here are against the restored file |
+| O1 | first adjacent needle pair swapped at each of the five `assertOrder` sites, plus `buildLine < secondControlLine` → `>` and `lastOwnership < lastControl` → `>` | items 31 (`:608`), 34 (`:632`), 58 (`:767`), 66 (`:817`), 69 (`:849`), 75 (`:912`), 112 (`:1177`) |
+| O2 | second adjacent pair swapped at the same five sites, plus `lastControl < installLine` → `>` | items 35 (`:636`), 59 (`:767`), 67 (`:817`), 70 (`:849`), 76 (`:912`), 113 (`:1177`) |
+| O3 | third adjacent pair swapped at the four-needle site | item 114 (`:1177`) |
+| P1 | no tracked file touched: a `node` probe applied the source-guard and packaged-root predicates to the real file contents and to in-memory regression copies | predicates `true` on the real inputs, `false` on every regression copy — see adjudication D |
+
+Row 1's `plugin add superpowers@spurious` payload deliberately names no real
+fixture resource, so it can only be caught by a guard that rejects *any*
+Codex mutation; rows 1b-1e reuse that single injection point with
+resource-specific payloads to isolate the resource-specific negatives. Row 2's
+`install --package-root /spurious` follows the same discipline on the adapter
+side: it lies inside the class `ADAPTER_MUTATION` names (`^install `) while
+matching none of the exact-line positives, which is what makes its RED set
+exactly those five items.
+
+**The eight ordering sites, reconciled with the brief.** The brief names
+"cases 8, 9 (two assertions), 14, 16, 18, 28, and the build-before-second-inspect
+check". There are exactly eight ordering *sites* in the port — c8's one
+comparison, c9's two, and five `assertOrder` calls — carrying fourteen
+inventory *items*, because rule 9 maps two or three ordering claims onto each
+`assertOrder`. The brief's enumeration names c8 and "the
+build-before-second-inspect check" as separate entries although they are the
+same site, and omits the `assertOrder` in c16. Rows O1-O3 mutate all eight
+sites and turn all fourteen items RED.
+
+**Why O1 and O2 batch across cases.** Each row mutates several sites at once,
+but never two sites in the same case, so `node:test` reports each mutation as
+its own case failure at its own port line — the same attribution a
+one-site-at-a-time sweep would produce. Batching two sites into one case would
+have shadowed the second, and was not done.
+
+### Divergences from the brief's prediction table
+
+**Row 13a — predicted RED at every `assert_install_tmp_empty` port; observed
+32/32 GREEN.** `scripts/install:38-45` creates its workspace under the
+inherited `TMPDIR`, installs a removal trap on it (`:42`), and then
+*re-exports* `TMPDIR` to point at that workspace; `scripts/prepare:35-36` and
+`scripts/probe:22-23` do the same for their own workspaces. An adapter sidecar
+written to `$TMPDIR` therefore lands inside a workspace the subject itself
+sweeps up. Row 13b — writing to `$TMPDIR/..`, which is the invocation TMPDIR
+`runScript` handed the subject — is RED at both ports. Consequence for what
+items 61 and 94 claim: they assert the *invocation* TMPDIR is left empty,
+which catches a leaked workspace or a sidecar dropped beside it. They do
+**not** assert that the adapter created no temporary files at all. That is
+narrower than the brief assumed, it is narrower again than the per-case
+narrowing already recorded at `:255-263`, and forward pointers are carried at
+both items. Identical in mechanism to `uninstall-commands.md:473-485`.
+
+**Row 8 — predicted RED at the brief's cases 26 and 27 (c27 and c28); observed
+RED only in c28, and at a positive rather than a negative.** Dropping the
+codex-home condition makes the fingerprint intercept fire at
+`scripts/probe:33` — before any install — instead of at
+`spw_verify_installed_fingerprint`. In c28 (`fingerprintInspect: "malformed"`)
+the subject then dies with a bare `error: invalid adapter response: Expecting
+property name enclosed in double quotes: line 1 column 2 (char 1)`, which
+carries no fingerprint context, so item 108 (`invalid adapter response`,
+`:1152`) stayed GREEN and item 109 (`fingerprint inspection`, `:1154`) went
+RED. That is the fake's own comment (`install-fakes.js:270-273`) proved live.
+
+c27 (`fingerprintInspect: "fail"`) stayed GREEN, and an out-of-band probe —
+one case reproduced outside the suite, touching no tracked file — shows why.
+Its whole captured output under the injection is:
+
+```
+Note: remove or disable conflicting Superpowers providers yourself before relying on manager skills.
+fingerprint inspection failed in adapter fixture
+error: invalid adapter response: Expecting value: line 1 column 1 (char 0)
+```
+
+The only text carrying item 104's needle is the **fixture's own stderr line**,
+not the subject's diagnostic. `grep -rn 'fingerprint inspection' scripts/ src/`
+returns exactly two sites, `scripts/core/lifecycle.sh:92` and `:96`, both
+inside `spw_verify_installed_fingerprint` — so in the baseline the needle has
+two possible sources and item 104 cannot tell them apart. **Item 104 is
+therefore narrower than it reads**: it proves the string appears, not that the
+subject produced it. Faithful to the shell, which grepped the same combined
+capture; recorded, not changed, with a forward pointer at item 104. Items 103,
+105 and 106 were unaffected.
+
+**Row 1c — an injection artifact, recorded so it is not read as evidence.**
+The payload `plugin remove superpowers@superpowers-manager` is itself one of
+c29's `assertOrder` needles, so `firstIndex` found the injected line at index 1
+and the call failed "out of order" at `:1177`. That RED says nothing about
+item 113, which is proven by row O2 instead. No other row's payload collides
+with a needle.
+
+**Row 5 — the hoisted non-vacuity guards shadowed the negatives they protect,
+which is them working.** Items 13 and 14 (prepare's adapter-log negatives)
+stayed GREEN because port-only 7 (`:483`) fires six lines earlier; items 80 and
+84 stayed GREEN behind port-only 31 (`:946`) and 33 (`:982`). Each of those
+four negatives is proven independently by rows 2 and 3.
+
+**Row 14 — two findings beyond the six guards it was aimed at.** Item 79
+(`:944`, `manager is current`) also turned RED, confirming live the claim at
+`:450-457` that item 79 doubles as scenario 3b's precondition pin. And c21
+(scenario 3c) stayed GREEN under the same lost precondition, confirming the
+same passage's statement that 3c's `current` precondition *cannot* be pinned
+from its output — `scripts/update:11` rejects the mixed identity state before
+the status `case` is reached, so nothing in 3c's output distinguishes the
+branch it took.
+
+**Row 6 — a property worth stating.** Beyond the emptiness guards, all five
+`assertOrder` sites turned RED on `"…" never appears in the log`, which is
+`assertOrder`'s missing-needle-is-an-error contract
+(`lifecycle-fixture.js:348-365`) exercised for real. An `assertOrder` call can
+therefore not pass on a log that never carried its needles.
+
+**Rows 9, 11 and 12 matched their predictions** (the brief's cases 21; 23 and
+25; and 24 respectively), landing on each case's exit-status assertion.
+**Rows 1, 7 and 13b matched exactly.**
+
+### Adjudication: guards no injection turned RED
+
+Each entry records **(1)** why the violation is unreachable at that point in
+that scenario and **(2)** what future change would make it reachable. Form
+follows `bin-dispatch.md:27-36`.
+
+**A — items 95 (`:1064`), 99 (`:1089`), 106 (`:1133`) and 111 (`:1160`),
+"output does not contain `manager updated`".** *(1)* Structurally shadowed by
+each case's own exit-status assertion. `scripts/core/lifecycle.sh:103` prints
+the banner and immediately `return 0`s, and `scripts/install:57-59` exits 1
+only when that function returns non-zero — so under the current subject,
+printing `manager updated` *is* exiting 0. Every fixture toggle that makes the
+banner appear therefore makes `status === 0` too, and each of the four cases
+asserts `status !== 0` first: row 11 drove c24 and c26 RED at items 92 and 100,
+and row 12 drove c25 RED at item 96, in each instance shadowing the banner
+negative. No fixture-side lever can decouple them. This is stated for the four
+cases checked, not as a claim about every possible fixture. *(2)* Reachable
+exactly when that coupling breaks: if the banner moved above the
+fingerprint-match test at `lifecycle.sh:101-104`, or were emitted from an
+`EXIT` trap, or `scripts/install` grew a step after `:57-59` that can fail.
+That is a real regression class the exit-status assertions do not catch, which
+is why all four negatives are kept rather than folded into items 92, 96, 100
+and 104.
+
+**B — item 18 (`:528`), "output does not contain `manager is current`".**
+*(1)* Same coupling, on the update side. `scripts/update:17-21` runs
+`spw_require_managed_update_control` *before* `echo "manager is current"`, and
+the `current)` branch has no step after the echo that can fail — so printing
+the banner entails exit 0, which item 16 (`:516`) asserts against and would
+report first. Under c4's `updateControl: "unsupported"` the gate rejects before
+the echo; under any toggle that lets the gate pass, item 16 fires. *(2)*
+Reachable if the echo moved above `spw_require_managed_update_control`, if the
+banner were emitted from a trap, or if a failing step were added after it.
+Item 17 (`:521`) already proves `out` carries the subject's diagnostics, so
+item 18 is not vacuous — only shadowed.
+
+**C — items 105 (`:1129`) and 110 (`:1156`), "output does not contain
+`fingerprint is not detectable`".** *(1)* The two states are mutually
+exclusive in the subject. `spw_verify_installed_fingerprint` returns at
+`lifecycle.sh:92` when the inspection fails and at `:96` when its result
+cannot be parsed; the `not detectable` message at `:117` is reachable only
+after a *successful* inspection that yielded an empty fingerprint. The
+`fingerprintInspect` config surface offers exactly `ok | fail | malformed`, and
+`fail`/`malformed` both land on the early returns, so no value of it can
+produce both. A fixture *could* be made to emit the failure diagnostic on
+stderr and a valid empty-fingerprint envelope on stdout at once, which would
+turn item 105 RED — that manufacture is deliberately not performed, because it
+would prove only that the fixture can print two contradictory things, not that
+the subject reported unverifiable state as absence. *(2)* Reachable when the
+subject can reach `:117` after a failed or unparseable inspection — for
+example if the early returns at `:92`/`:96` became warnings, or if a future
+adapter reported inspection failure inside an `ok: true` envelope with an
+empty `fingerprint`. Either change satisfies every earlier assertion in c27
+and c28 and is caught only by items 105 and 110.
+
+**D — items 1-6 (`:417`, `:423`, `:431`), item 12 (`:467`) and port-only 5
+(`:437`), the source-tree and packaged-root guards.** *(1)* Their subjects are
+the repository's own `scripts/` tree (read from `ROOT`) and the packaged root
+copied from it. There is no fixture in the path: the only mutation that
+violates any of them is an edit to the production tree, which this task is
+scoped out of. Row P1 therefore probed the predicates without touching a
+tracked file, applying them in memory to the real contents of
+`scripts/install` and to regression copies. Results: each of the four
+forbidden literals is absent from the real file (`true`) and detected in a copy
+carrying it (`false`); the `app-server` line predicate is `true` on the real
+file, `false` on a copy with a bare `codex app-server` line, and `true` again
+on a copy where that line is commented — so the comment exemption at `:432` is
+live rather than an accident. Item 12's predicate is `true` for the real
+package root and `false` for a scratch root with
+`scripts/adapters/codex/validate-generated-plugin.py` planted. Item 1's catch
+branch was probed separately: `readFileSync` on a mode-`000` scratch file does
+throw, so the `assert.fail` at `:417` is live code and not dead — no file in
+`scripts/` is unreadable today, which is why the scan never enters it.
+Port-only 5 (`scanned > 0`) is unreachable while `scripts/` holds any file.
+*(2)* Reachable the moment someone lands the corresponding edit for real:
+adding one of the four hook-trust literals to a production script, invoking
+`codex app-server` outside a comment, repackaging the Python validator, making
+a script in `scripts/` unreadable, or emptying `scripts/` entirely. Two
+caveats worth recording: `grep -rn app-server scripts/` returns nothing today,
+so item 6's *positive* half (a commented mention staying legal) is exercised
+only by row P1's probe, never by real content; and the recursive scan reads
+whatever `scripts/` contains at run time, so it needs no maintenance when
+files are added.
+
+### Coverage ledger
+
+**Classes covered by this pass:** every negative, ordering, and cardinality
+assertion in the mapped inventory (64 of the 124 items), and 29 of the 41
+port-only assertions — every non-vacuity guard, every `assertNoCodexMutation`
+emptiness guard, every `assertNoPrepareRan` precondition guard, and port-only
+5 and 7. Mapped **positives** (the remaining 60 items) and the twelve
+exit-status/provenance port-only positives (port-only 6, 16, 23, 24, 26, 28,
+29, 30, 37, 39, 40, 41) were **not** classified in this pass; several of them
+turned RED incidentally (items 65, 68, 73, 79, 86, 92, 96, 100, 109, 120, 124
+and port-only 7, 14, 18), but no claim is made about the class as a whole.
+
+Proven RED by injection: items 13, 14, 15, 19, 21, 24, 27, 30, 31, 32, 33, 34,
+35, 37, 38, 43, 44, 49, 50, 53, 56, 58, 59, 61, 62, 63, 64, 66, 67, 69, 70, 71,
+72, 74, 75, 76, 77, 78, 80, 81, 84, 85, 89, 91, 94, 112, 113, 114, 115, 117,
+and port-only 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21,
+22, 25, 27, 31, 32, 33, 34, 35, 36, 38.
+
+Adjudicated GREEN with both required parts: items 1, 2, 3, 4, 5, 6, 12, 18, 95,
+99, 105, 106, 110, 111, and port-only 5.
+
+No RED in this section was produced by editing an assertion's text outside rows
+O1-O3.
+
+**Prior observation, retained.** One targeted observation was made while
+writing the port, and justifies a structural choice rather than an assertion:
+removing `clearLogs(c)` from the scenario-3c port turns item 84 RED with
 `build --upstream-root …` as the sole offender, confirming that the log
 truncation `reset` performed is load-bearing and not decorative.
 
