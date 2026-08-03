@@ -13,6 +13,8 @@ the port unless a merge is called out.
 
 ## File-presence and negative-existence assertions (`:34-45`)
 
+<!-- inventory:mapped:start -->
+
 1. `.gitignore` exists
 2. `config/upstream-ref` exists
 3. `.agents/plugins/marketplace.json` exists
@@ -137,7 +139,28 @@ same real file and the same two fixture strings.
     each section's body carries the *other* section's required phrases) is
     rejected by the same validation logic.
 
+<!-- inventory:mapped:end -->
+
+## Port-only assertions (outside the 1:1 mapping)
+
+<!-- inventory:port-only:start -->
+
+1. An unreadable path passed to `read()` (e.g. a renamed or deleted file) is
+   reported as `bootstrap inventory file could not be read: <path>`, never as
+   a raw `ENOENT` with a stack. Port-only — no shell counterpart;
+   `tests/test_bootstrap.sh`'s `assert_file` had no such guard.
+
+<!-- inventory:port-only:end -->
+
 ## Cardinality
+
+```json inventory
+{
+  "shellOriginal": 99,
+  "portOnly": 1,
+  "ports": { "tests/bin/bootstrap.test.js": 11 }
+}
+```
 
 - Shell original: **99** assertions (85 flat `assert_*` calls at
   `tests/test_bootstrap.sh:34-124`, plus 14 assertions in the embedded Python
@@ -145,12 +168,15 @@ same real file and the same two fixture strings.
   exactly-one-section checks, 1 ordering check, 5 pre-publication phrase
   checks, 4 post-publication phrase checks, and 2 negative-fixture rejection
   checks).
-- Port (`tests/bin/bootstrap.test.js`): 99 assertions, one `node:test` case
-  per numbered item above (items 1-85 grouped into `node:test` subtests by
-  source file for readability; each retains its own `assert.*` call so a
-  single dropped check still fails independently).
-- Reconciliation: 1:1, no merges, no drops. Item 8's parenthetical exists
-  only to document that this is *not* the overlay-`.py` assertion the brief
-  says was already removed in Task 6 (that one, at former line ~94 of an
-  earlier revision, referenced a different path and is absent from this
-  file as read).
+- Port (`tests/bin/bootstrap.test.js`): 99 assertions 1:1-mapped to the shell,
+  one `node:test` case per numbered item above (items 1-85 grouped into
+  `node:test` subtests by source file for readability; each retains its own
+  `assert.*` call so a single dropped check still fails independently),
+  **plus** 1 port-only assertion (the unreadable-path guard added in Task 4)
+  that has no shell counterpart and is outside the 1:1 mapping.
+- Reconciliation: 1:1 for all 99 original items, no merges, no drops. Item 8's
+  parenthetical exists only to document that this is *not* the overlay-`.py`
+  assertion the brief says was already removed in Task 6 (that one, at former
+  line ~94 of an earlier revision, referenced a different path and is absent
+  from this file as read). The 1 additional port-only assertion is strictly
+  additive test coverage, not a reconciliation of any shell assertion.

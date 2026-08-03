@@ -26,6 +26,8 @@ those lines.
 
 ## Shape-acceptance assertions (`:11-36`)
 
+<!-- inventory:mapped:start -->
+
 1. `npm pack --dry-run --json` output for the real package, fed to
    `assert_pack_contents.sh` unmodified, exits 0 (`:11-13`) — this is the
    only case that validates the *actual* current tarball contents against
@@ -127,6 +129,8 @@ A scratch directory receives only a copy of the real `package.json` (no
 27. That failing run's stderr contains the literal text
     `dist/cli.js is missing`.
 
+<!-- inventory:mapped:end -->
+
 Line 148 (`echo "test_npm_pack_contents: OK"`) is driver-completion output,
 not an assertion.
 
@@ -143,6 +147,33 @@ containing no `npm`: `result.error.code` is `"ENOENT"` and `result.status`
 is `null` — exactly the case the new guard intercepts before any raw
 ENOENT-shaped text can reach stdout/stderr.
 
+## Port-only assertions (outside the 1:1 mapping)
+
+<!-- inventory:port-only:start -->
+
+1. Synthetic fixture `some/dir/selection.json` is classified into the
+   `"selection.json"` forbidden-path category by `forbiddenPathCategory()`.
+   Port-only — no shell counterpart; added 2026-07-31 (Finding 1) to make
+   the category's predicate independently falsifiable (see the addendum
+   under item 19 above).
+2. Synthetic fixture `some/dir/superpowers-manager.pin.deadbeef` is
+   classified into the `"pin-file"` forbidden-path category. Port-only —
+   same rationale as item 1.
+3. Synthetic fixture `some/.git/config` is classified into the `".git"`
+   forbidden-path category. Port-only — same rationale as item 1.
+4. Synthetic fixture `some/.cache/thing` is classified into the `".cache"`
+   forbidden-path category. Port-only — same rationale as item 1.
+5. Synthetic fixture `plugins/superpowers/skills/foo.md` is classified into
+   the `"plugins/superpowers/*"` forbidden-path category. Port-only — same
+   rationale as item 1.
+6. Synthetic fixture `docs/superpowers/notes.md` is classified into the
+   `"docs/superpowers"` forbidden-path category. Port-only — same rationale
+   as item 1.
+7. The allowed exception path
+   `plugins/superpowers/.codex-plugin/plugin.template.json` is asserted
+   **not** classified as forbidden by `forbiddenPathCategory()` — the
+   boundary check for the `plugins/superpowers/*` carve-out. Port-only —
+   added 2026-07-31 (Finding 1) alongside items 1-6 above.
 8. **The published package declares zero runtime dependencies.** Asserted as
    `Object.keys(manifest.dependencies ?? {})` deep-equal to `[]`, so an absent
    key and an empty object both pass and any added entry fails. Added by
@@ -153,7 +184,17 @@ ENOENT-shaped text can reach stdout/stderr.
    which is a different file with a different contract.
    Port-only — it has no shell counterpart and is outside the 1:1 mapping.
 
+<!-- inventory:port-only:end -->
+
 ## Cardinality
+
+```json inventory
+{
+  "shellOriginal": 27,
+  "portOnly": 8,
+  "ports": { "tests/bin/npm-pack-contents.test.js": 2 }
+}
+```
 
 - Shell original: **27** assertions (3 shape-acceptance, 10
   malformed-shape-rejection, 6 forbidden-path-category, 6

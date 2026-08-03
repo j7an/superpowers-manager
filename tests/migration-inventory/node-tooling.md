@@ -9,6 +9,8 @@ dropped.
 
 ## Test cases and assertions
 
+<!-- inventory:mapped:start -->
+
 1. **Missing compiler binary fails closed and reports the remedy.** When
    `${SPW_TSC:-$root/node_modules/.bin/tsc}` is not an executable file, the
    driver prints `error: repo TypeScript compiler missing — run pnpm install
@@ -53,13 +55,24 @@ false to equal true`.
    proof the override is live, not merely mentioned in a comment or test
    title.
 
+<!-- inventory:mapped:end -->
+
 ## Cardinality
 
-- Shell original: 3 behavioral assertions (missing-binary diagnostic text,
-  missing-binary fail-closed exit, successful-typecheck path), each
-  parameterized by the `SPW_TSC` seam (item 3 above is a property of both
-  test cases, not a fourth independent assertion). The diagnostic text and
-  the fail-closed exit are two separate assertions of item 1's single shell
+```json inventory
+{
+  "shellOriginal": 3,
+  "portOnly": 0,
+  "ports": { "tests/bin/node-tooling.test.js": 2 }
+}
+```
+
+- Shell original: **3** assertions (3 behavioral assertions (missing-binary
+  diagnostic text, missing-binary fail-closed exit, successful-typecheck
+  path), each parameterized by the `SPW_TSC` seam (item 3 above is a
+  property of both test cases, not a fourth independent assertion)). The
+  diagnostic text and the fail-closed exit are two separate assertions of
+  item 1's single shell
   branch (`tests/test_node_tooling.sh:11-14` both prints and exits), raised
   from 2 to 3 on 2026-08-01 when the message check was restored (see item
   1's history above).

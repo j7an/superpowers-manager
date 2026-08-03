@@ -24,6 +24,8 @@ that block.
 
 ## File-existence and executable-bit preconditions (`:14-19`)
 
+<!-- inventory:mapped:start -->
+
 1. `tests/container/Dockerfile` exists.
 2. `tests/container.sh` is executable.
 3. `tests/container/package.json` exists.
@@ -214,7 +216,8 @@ that block.
     **plus** the unescaped spelling as a 173rd, strictly-additive,
     port-only assertion (it has no shell counterpart — the shell never
     guarded `:229` — and is outside the 172 1:1 count), so both fixtures
-    stay covered.
+    stay covered. That port-only check is now numbered entry 1 under
+    "Port-only assertions (outside the 1:1 mapping)" below.
 91. The probe contains the substring `probe_cwd=$(pwd -P)` (resolves its
     real working directory).
 92. The probe does **not** invoke the synthetic hook script directly — no
@@ -363,16 +366,40 @@ it).
 171. `missing hooks response presence gate` is rejected.
 172. `missing result gate` is rejected.
 
-174. **The Dockerfile installs exactly `ca-certificates git python3`.** Added by
-    PR 11.1 (2026-08-02) as the gate for the Ruby retirement. The Dockerfile's
-    `apt-get install` line was previously unasserted — items 7-13 cover the base
-    image, user, corepack, install, and build lines but not the package set — so
-    removing `ruby` would have broken no test, and re-adding it would have broken
-    none either. Asserted as an exact sorted set rather than as "does not contain
-    ruby", because the latter is an enumeration of one known-bad value.
-    Port-only; outside the 1:1 mapping.
+<!-- inventory:mapped:end -->
+
+## Port-only assertions (outside the 1:1 mapping)
+
+<!-- inventory:port-only:start -->
+
+1. The probe contains the unescaped spelling
+   `sh "${PLUGIN_ROOT}/hooks/session-start-codex"` (no backslashes) — the
+   expected-config Python literal spelling used inside
+   `assert_active_hooks_fixture` at `:229`. Distinct from item 87, which
+   guards the escaped-quote spelling written at `:588`. Port-only — the
+   shell never guarded `:229`; added 2026-07-31 when review Finding 1
+   corrected item 87 to require the correct backslash-bearing string (see
+   the note under item 87 above), so both fixtures stay covered.
+2. **The Dockerfile installs exactly `ca-certificates git python3`.** Added by
+   PR 11.1 (2026-08-02) as the gate for the Ruby retirement. The Dockerfile's
+   `apt-get install` line was previously unasserted — items 7-13 cover the base
+   image, user, corepack, install, and build lines but not the package set — so
+   removing `ruby` would have broken no test, and re-adding it would have broken
+   none either. Asserted as an exact sorted set rather than as "does not contain
+   ruby", because the latter is an enumeration of one known-bad value.
+   Port-only; outside the 1:1 mapping.
+
+<!-- inventory:port-only:end -->
 
 ## Cardinality
+
+```json inventory
+{
+  "shellOriginal": 172,
+  "portOnly": 2,
+  "ports": { "tests/bin/container-contract.test.js": 1 }
+}
+```
 
 - Shell original: **172** assertions (6 preconditions, 7 Dockerfile
   literal-text, 5 package/lockfile, 2 tsconfig (item 21 retired — see above),
@@ -383,7 +410,7 @@ it).
 - Port (`tests/bin/container-contract.test.js`): 173 assertions (**171 live
   of 172 numbered** — item 21 retired, its number not reused — 1:1-mapped
   to the shell, plus 2 strictly-additive port-only checks — see
-  the note under item 87 and item 174 above), grouped into `node:test` subtests by
+  the note under item 87 and port-only entries 1-2 below), grouped into `node:test` subtests by
   section for readability. Items expressed as loops over a literal-string
   array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
   the same array inside `validateProbe`/`validateHooksRpc`, one `throw` per
@@ -400,5 +427,5 @@ it).
 - Reconciliation: 1:1 for 171 of 172 shell items, no merges and no drops;
   item 21 is a **deliberate retirement**, not a drop — items 19-20 subsume
   it (see the note at item 21) — plus 2 additional port-only assertions (see
-  item 87's note and item 174) that are strictly additive and outside the 1:1
-  mapping.
+  item 87's note and port-only entries 1-2 below) that are strictly additive
+  and outside the 1:1 mapping.

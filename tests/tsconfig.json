@@ -19,6 +19,7 @@
     "build-id.js",
     "write-build-id.js",
     "assert-matcher-gate.js",
+    "tools/**/*.js",
     "tools/**/*.mjs"
   ]
 }
