@@ -180,12 +180,19 @@ function updateControlCount(c) {
 }
 
 /**
- * Reconstructs the needs-install precondition the shell driver inherited from
- * the scenario above it: by :394 and :406 the shared `$pkg` already held a
- * valid generated tree, left behind by the successful prepare inside :383.
- * `reset` cleared Codex state but never the package root, so probe reported
- * "needs install" rather than "needs prepare". Under per-case isolation that
- * state has to be built, and running prepare is how the driver built it.
+ * Reconstructs the generated-tree precondition the shell driver inherited from
+ * the scenario above it. `scripts/core/status.sh:15-16` returns "needs prepare"
+ * whenever the package root carries no `.superpowers-upstream.json`, and
+ * lifecycle-fixture.js:48-59 copies only `plugin.template.json` into the
+ * snapshot — so a fresh `c.pkg` always probes as "needs prepare". In the shell
+ * the prepare at :325 (and again inside the install at :383) left a valid
+ * generated tree in the shared `$pkg`, and `reset` cleared Codex state but
+ * never the package root. Every scenario from :340 to :416 therefore reached
+ * the subject with that tree present, probing as "needs install" — or, once
+ * `seed_installed_current` also populates the cache, as "current".
+ *
+ * Under per-case isolation that state has to be built, and running prepare is
+ * exactly how the driver built it.
  *
  * prepare never inspects update control (proved by the case at :321-336), so
  * this leaves `update-control-count` untouched and the later count assertions
@@ -198,11 +205,38 @@ async function prepareGeneratedTree(c) {
   assert.equal(
     result.status,
     0,
-    `fixture: prepare must succeed to establish needs-install state:\n${result.stdout}${result.stderr}`,
+    `fixture: prepare must succeed to establish the generated tree:\n${result.stdout}${result.stderr}`,
+  );
+  // The provenance file is the exact input status.sh reads, and it is also what
+  // decides which branch `seedInstalledCurrent` takes.
+  assert.ok(
+    existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
+    "fixture: prepare did not leave generated provenance in the package root",
   );
   assert.ok(
     !existsSync(join(c.state, "update-control-count")),
     "fixture: prepare must not have inspected update control",
+  );
+}
+
+/**
+ * Port-only precondition guard, not a ported assertion.
+ *
+ * `scripts/prepare` is the only thing that prints "prepared <ref> at <commit>",
+ * and `scripts/install:23-25` runs it only on the needs-prepare branch. Its
+ * absence is therefore direct evidence that the subject took the needs-install
+ * or current branch — the path the shell driver put it on. Without this guard a
+ * lost precondition is invisible: the case still exits non-zero and still
+ * carries the gate message, because scripts/install:54 emits the same string
+ * from a different branch. That is precisely how the case at :338-347 passed
+ * while never entering the update fast path at all.
+ * @param {string} out
+ * @returns {void}
+ */
+function assertNoPrepareRan(out) {
+  assert.ok(
+    !out.includes("prepared "),
+    `the subject re-ran prepare, so it took the needs-prepare branch instead of the branch this case exists to cover:\n${out}`,
   );
 }
 
@@ -356,18 +390,28 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("unsupported update control blocks the update fast path (:338-347)", async () => {
     const c = installCase({ config: { updateControl: "unsupported" } });
+    // The generated tree the shell inherited from the prepare at :325. Without
+    // it the package root probes as "needs prepare", `seed_installed_current`
+    // is inert, and `scripts/update` never reaches its `current)` branch — the
+    // only branch that can print "manager is current" — so the negative below
+    // could not fail.
+    await prepareGeneratedTree(c);
     seedInstalledCurrent(c); // :341
     const result = await runScript(c, "update");
     const out = result.stdout + result.stderr;
     // :344
     assert.notEqual(result.status, 0, `expected update to fail:\n${out}`);
+    // Precondition: probe reported "current", so the gate below is the update
+    // fast path's gate and not scripts/install:54 reached via needs-prepare.
+    assertNoPrepareRan(out);
     // :345
     assert.ok(
       out.includes("adapter cannot guarantee manager-controlled updates"),
       out,
     );
     // :346 — non-vacuous: the assertion above proves `out` carries the
-    // subject's diagnostics.
+    // subject's diagnostics, and the precondition guard proves the branch that
+    // prints this string was actually entered.
     assert.ok(
       !out.includes("manager is current"),
       "an unsupported adapter must not report the manager as current",
@@ -378,13 +422,15 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("unsupported update control blocks a direct install (:349-352)", async () => {
     const c = installCase({ config: { updateControl: "unsupported" } });
+    // The shell reached this gate on the needs-install path: `reset` cleared
+    // the Codex cache but left the generated tree from :325 in $pkg.
+    await prepareGeneratedTree(c);
     const result = await runScript(c, "install");
+    const out = result.stdout + result.stderr;
     // :351
-    assert.notEqual(
-      result.status,
-      0,
-      `expected install to fail:\n${result.stdout}${result.stderr}`,
-    );
+    assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
+    // Precondition: the prepare-less install path the shell covered here.
+    assertNoPrepareRan(out);
     // :352
     assertNoCodexMutation(readLog(c.codexLog));
   });
@@ -460,6 +506,8 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :398 — captured stdout only, and `set -e` made a non-zero exit fatal.
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    // Precondition: this is the needs-install path the case is named for.
+    assertNoPrepareRan(result.stdout);
     // :399
     assert.equal(updateControlCount(c), 2);
     // :400-404
@@ -484,13 +532,17 @@ void describe("install commands", { concurrency: true }, () => {
     });
     await prepareGeneratedTree(c);
     const result = await runScript(c, "install");
+    const out = result.stdout + result.stderr;
     // :411-414 — probe saw `managed`; only the second, fresh inspection sees
     // `unsupported`, and it is the one that must stop the install.
     assert.notEqual(
       result.status,
       0,
-      `install must reject capability drift before adapter install:\n${result.stdout}${result.stderr}`,
+      `install must reject capability drift before adapter install:\n${out}`,
     );
+    // Precondition: the needs-install gate, which is what distinguishes this
+    // case from the needs-prepare drift case at :377-392.
+    assertNoPrepareRan(out);
     // :415
     assert.equal(updateControlCount(c), 2);
     // :416
