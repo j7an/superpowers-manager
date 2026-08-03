@@ -14,6 +14,7 @@
     "tests/bin/container-contract.test.js",
     "tests/bin/node-tooling.test.js",
     "tests/bin/npm-pack-contents.test.js",
+    "tests/bin/tooling-coverage.test.js",
     "tests/bin/units.test.js",
     "tests/bin/workflows.test.js",
     "tests/unit/adapter-protocol.test.js",
