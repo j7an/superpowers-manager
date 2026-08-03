@@ -334,6 +334,11 @@ void describe("uninstall commands", { concurrency: true }, () => {
       ),
       result.stdout,
     );
+    // DELIBERATE version literal. `0.1.1` is not a dependency pin that moves on
+    // someone else's schedule: it is user-facing guidance owned in-repo at
+    // scripts/core/lifecycle.sh:52,77, naming the last superpowers-wrapper
+    // release that can uninstall legacy state. The exact text is the contract,
+    // so assert it exactly. Repeated verbatim in the mixed-state case below.
     assert.ok(
       hasLine(result.stdout, "Run: npx superpowers-wrapper@0.1.1 uninstall"),
       result.stdout,
