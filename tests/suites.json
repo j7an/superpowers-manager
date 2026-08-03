@@ -12,6 +12,7 @@
     "tests/bin/assert-matcher-gate.test.js",
     "tests/bin/bootstrap.test.js",
     "tests/bin/container-contract.test.js",
+    "tests/bin/migration-inventory.test.js",
     "tests/bin/node-tooling.test.js",
     "tests/bin/npm-pack-contents.test.js",
     "tests/bin/tooling-coverage.test.js",

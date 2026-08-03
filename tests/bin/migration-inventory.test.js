@@ -1,0 +1,351 @@
+// @ts-check
+// Makes each migration inventory's reconciliation executable. Guards two
+// deletion modes the existing per-cluster TABLE.length assertions cannot see:
+// a numbered inventory entry removed, and a whole test( call site removed.
+// A fixture-table row removed is still the TABLE.length guards' job.
+//
+// An assert deleted from inside a surviving test body is NOT caught here.
+// That is per-entry accounting, deliberately out of scope — it needs a
+// markdown-parsing harness, and runtime counting would not catch it either.
+
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const INVENTORY_DIR = join(ROOT, "tests", "migration-inventory");
+
+const DECLARATION = /^```json inventory\n([\s\S]*?)\n```$/gm;
+const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
+const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
+const TEST_IMPORT = /^import test from "node:test";$/m;
+
+/**
+ * Lines between a marker pair. Regions are stated, never inferred from
+ * headings: workflows.md carries a legitimate prose enumeration at column 0
+ * (`:484`, `:495`, `:506`) that heading inference reads as entries 1-3. That
+ * enumeration sits *inside* the mapped span, so position alone cannot exclude
+ * it — see `mappedLinesOf` and the `inventory:ignore` kind.
+ * @param {string[]} lines
+ * @param {string} kind
+ * @param {string} name
+ * @returns {{ start: number, end: number, lines: string[] } | null}
+ */
+function region(lines, kind, name) {
+  const open = lines.filter(
+    (l) => l.trim() === `<!-- inventory:${kind}:start -->`,
+  );
+  const close = lines.filter(
+    (l) => l.trim() === `<!-- inventory:${kind}:end -->`,
+  );
+  assert.ok(
+    open.length === close.length && open.length <= 1,
+    `${name}: unbalanced or repeated inventory:${kind} markers (${open.length} start, ${close.length} end)`,
+  );
+  if (open.length === 0) return null;
+  const start = lines.findIndex(
+    (l) => l.trim() === `<!-- inventory:${kind}:start -->`,
+  );
+  const end = lines.findIndex(
+    (l) => l.trim() === `<!-- inventory:${kind}:end -->`,
+  );
+  assert.ok(
+    end > start,
+    `${name}: inventory:${kind} end marker precedes its start`,
+  );
+  return { start, end, lines: lines.slice(start + 1, end) };
+}
+
+/**
+ * The two regions must be disjoint. Checking each marker kind independently
+ * lets an interleaved `port-only:start` sit inside the mapped region, which
+ * would count its entries twice.
+ * @param {{ start: number, end: number } | null} a
+ * @param {{ start: number, end: number } | null} b
+ * @param {string} name
+ */
+function assertDisjoint(a, b, name) {
+  if (a === null || b === null) return;
+  assert.ok(
+    a.end < b.start || b.end < a.start,
+    `${name}: the mapped and port-only regions overlap or nest — mapped [${a.start}, ${a.end}], port-only [${b.start}, ${b.end}]`,
+  );
+}
+
+/**
+ * The mapped region's lines with a nested `inventory:ignore` span removed.
+ *
+ * Needed because workflows.md's mutation-proof narrative sits between entries
+ * `83.` and `84.`, and its "1. 2. 3." list is at column 0. A single mapped pair
+ * cannot exclude it by position, and relocating the prose would divorce the
+ * proof from the entries it documents.
+ *
+ * The exclusion cannot silently swallow a real entry, because
+ * `assertExactlyOneThrough` compares the mapped numbers to `[1..shellOriginal]`
+ * — and `shellOriginal` comes from the JSON declaration block, which no ignore
+ * span can reach.
+ *
+ * Do NOT weaken that to a no-gaps check. A no-gaps test catches only interior
+ * holes. Measured 2026-08-03 on workflows.md: swallowing entry `84.` yields
+ * `gaps=[84]` (caught either way), but swallowing the tail `95.`-`100.` yields
+ * `mapped=94, max=94, gaps=[]` — silently GREEN under contiguity alone, RED
+ * against `[1..100]`. The ignore span and the `shellOriginal` equality are a
+ * matched pair.
+ * @param {{ start: number, end: number, lines: string[] }} outer
+ * @param {{ start: number, end: number, lines: string[] } | null} inner
+ * @param {string} name
+ * @returns {string[]}
+ */
+function mappedLinesOf(outer, inner, name) {
+  if (inner === null) return outer.lines;
+  assert.ok(
+    inner.start > outer.start && inner.end < outer.end,
+    `${name}: the inventory:ignore span must nest strictly inside the mapped region — ignore [${inner.start}, ${inner.end}], mapped [${outer.start}, ${outer.end}]`,
+  );
+  return outer.lines.filter((_, offset) => {
+    const absolute = outer.start + 1 + offset;
+    return absolute < inner.start || absolute > inner.end;
+  });
+}
+
+/**
+ * Entry numbers in a region, ranges expanded inclusively. Range headings are
+ * load-bearing: container-contract.md uses `51-65.`, `73-90.`, `97-101.`, and
+ * `116-141.` for bundled items.
+ * @param {string[]} lines
+ * @param {string} label
+ * @returns {number[]}
+ */
+function entryNumbers(lines, label) {
+  const found = [];
+  for (const line of lines) {
+    const match = ENTRY.exec(line);
+    if (match === null) continue;
+    const start = Number(match[1]);
+    const end = match[2] === undefined ? start : Number(match[2]);
+    assert.ok(end >= start, `${label}: descending range heading: ${line}`);
+    for (let n = start; n <= end; n += 1) found.push(n);
+  }
+  return found;
+}
+
+/**
+ * @param {number[]} numbers
+ * @param {number} expected
+ * @param {string} label
+ */
+function assertExactlyOneThrough(numbers, expected, label) {
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const duplicates = sorted.filter((n, i) => i > 0 && n === sorted[i - 1]);
+  assert.deepEqual(duplicates, [], `${label}: duplicate entry numbers`);
+  assert.deepEqual(
+    sorted,
+    Array.from({ length: expected }, (_, i) => i + 1),
+    `${label}: entry numbers must be exactly 1..${expected}`,
+  );
+}
+
+/**
+ * Remove line comments, block comments, and string/template literal contents,
+ * replacing each literal with an empty pair so surrounding syntax survives.
+ *
+ * Not a full JavaScript lexer: it does not track regex-literal context. That is
+ * acceptable because a mis-strip yields a wrong count and therefore RED — it
+ * cannot manufacture a false green. Verified 2026-08-02 across every file in
+ * tests/bin/: only assert-matcher-gate.test.js changes (10 unstripped, 8
+ * stripped, two `test(` occurrences living inside string fixtures), and no
+ * inventoried file's count moves.
+ * @param {string} source
+ * @returns {string}
+ */
+function stripInert(source) {
+  let out = "";
+  let index = 0;
+  const length = source.length;
+  while (index < length) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === "/" && next === "/") {
+      while (index < length && source[index] !== "\n") index += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      index += 2;
+      while (
+        index < length &&
+        !(source[index] === "*" && source[index + 1] === "/")
+      ) {
+        index += 1;
+      }
+      index += 2;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      const quote = char;
+      index += 1;
+      while (index < length && source[index] !== quote) {
+        if (source[index] === "\\") index += 1;
+        index += 1;
+      }
+      index += 1;
+      out += '""';
+      continue;
+    }
+    out += char;
+    index += 1;
+  }
+  return out;
+}
+
+/**
+ * Static test( call sites: `test(` not preceded by an identifier character or a
+ * dot, counted AFTER comments and string/template contents are stripped.
+ * Counts `void test(` at any indentation, including inside a loop; excludes
+ * `t.test(`, `subtest(`, and any `test(` in a comment or string.
+ *
+ * A STATIC count, not the runtime case count — three call sites in
+ * action-pins.test.js iterate fixture tables, so its 8 sites produce 22 runtime
+ * cases.
+ * @param {string} source
+ * @returns {number}
+ */
+function testCallSites(source) {
+  return (stripInert(source).match(/(?<![A-Za-z0-9_$.])test\(/g) ?? []).length;
+}
+
+const inventories = readdirSync(INVENTORY_DIR)
+  .filter((name) => name.endsWith(".md"))
+  .sort();
+
+// Discovery by glob, not by list: a new inventory with no declaration block
+// fails rather than being silently unchecked. An empty directory would make
+// the whole suite vacuous.
+assert.ok(
+  inventories.length > 0,
+  "no migration inventories were discovered — glob discovery is broken",
+);
+
+for (const name of inventories) {
+  void test(`migration inventory reconciles: ${name}`, () => {
+    const source = readFileSync(join(INVENTORY_DIR, name), "utf8");
+    const lines = source.split("\n");
+
+    const declarationMatches = [...source.matchAll(DECLARATION)];
+    assert.equal(
+      declarationMatches.length,
+      1,
+      `${name}: expected exactly one \`json inventory\` declaration block, found ${declarationMatches.length}`,
+    );
+    /** @type {unknown} */
+    let parsed;
+    try {
+      parsed = JSON.parse(declarationMatches[0][1]);
+    } catch {
+      return assert.fail(`${name}: the json inventory block is not valid JSON`);
+    }
+
+    assert.ok(
+      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed),
+      `${name}: the json inventory block must be an object`,
+    );
+    /** @type {{ shellOriginal: unknown, portOnly: unknown, ports: unknown }} */
+    const declared = /** @type {any} */ (parsed);
+    assert.ok(
+      Number.isInteger(declared.shellOriginal) &&
+        /** @type {number} */ (declared.shellOriginal) > 0,
+      `${name}: shellOriginal must be a positive integer`,
+    );
+    assert.ok(
+      Number.isInteger(declared.portOnly) &&
+        /** @type {number} */ (declared.portOnly) >= 0,
+      `${name}: portOnly must be a non-negative integer`,
+    );
+    // Explicit, not `?? {}`: a scalar or array `ports` must be named as the
+    // fault it is, rather than degrading into an empty-entries diagnostic that
+    // points somewhere else.
+    assert.ok(
+      typeof declared.ports === "object" &&
+        declared.ports !== null &&
+        !Array.isArray(declared.ports),
+      `${name}: ports must be an object`,
+    );
+    const portEntries = Object.entries(
+      /** @type {Record<string, unknown>} */ (declared.ports),
+    );
+    assert.ok(
+      portEntries.length > 0,
+      `${name}: ports must name at least one port file`,
+    );
+    const shellOriginal = /** @type {number} */ (declared.shellOriginal);
+    const portOnlyCount = /** @type {number} */ (declared.portOnly);
+
+    const mapped = region(lines, "mapped", name);
+    assert.ok(mapped !== null, `${name}: missing inventory:mapped markers`);
+    const portOnly = region(lines, "port-only", name);
+    assertDisjoint(mapped, portOnly, name);
+    const ignored = region(lines, "ignore", name);
+
+    assertExactlyOneThrough(
+      entryNumbers(mappedLinesOf(mapped, ignored, name), `${name} mapped`),
+      shellOriginal,
+      `${name} mapped region`,
+    );
+
+    if (portOnlyCount > 0) {
+      assert.ok(
+        portOnly !== null,
+        `${name}: portOnly is ${portOnlyCount} but there are no inventory:port-only markers`,
+      );
+      assertExactlyOneThrough(
+        entryNumbers(portOnly.lines, `${name} port-only`),
+        portOnlyCount,
+        `${name} port-only region`,
+      );
+    } else {
+      assert.equal(
+        portOnly,
+        null,
+        `${name}: portOnly is 0 but inventory:port-only markers are present`,
+      );
+    }
+
+    for (const [portPath, expectedSites] of portEntries) {
+      assert.ok(
+        Number.isInteger(expectedSites) &&
+          /** @type {number} */ (expectedSites) > 0,
+        `${name}: ${portPath} must declare a positive static call-site count`,
+      );
+      let portSource;
+      try {
+        portSource = readFileSync(join(ROOT, portPath), "utf8");
+      } catch {
+        return assert.fail(`${name}: port file could not be read: ${portPath}`);
+      }
+      // The counter recognizes one binding form. An aliased import or a
+      // describe/it style would be invisible to it, so require the form and
+      // fail closed rather than miscount. All 31 suite files use it.
+      assert.ok(
+        TEST_IMPORT.test(portSource),
+        `${name}: ${portPath} must import the runner as \`import test from "node:test";\` for the call-site count to be meaningful`,
+      );
+      assert.equal(
+        testCallSites(portSource),
+        expectedSites,
+        `${name}: ${portPath} static test( call-site count disagrees with the declaration`,
+      );
+    }
+
+    const proseMatch = PROSE_TOTAL.exec(source);
+    assert.ok(
+      proseMatch !== null,
+      `${name}: Cardinality is missing the anchored "- Shell original: **N** assertions" line`,
+    );
+    assert.equal(
+      Number(proseMatch[1]),
+      shellOriginal,
+      `${name}: the Cardinality prose total disagrees with the declaration block`,
+    );
+  });
+}
