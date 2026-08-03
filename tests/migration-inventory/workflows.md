@@ -97,6 +97,8 @@ shape:
 Ported to `actionPinPair` in `tests/bin/workflow-support.js`, exercised by
 `tests/bin/action-pins.test.js`.
 
+<!-- inventory:mapped:start -->
+
 1. Unquoted `uses: <target>@<sha>` with an agreeing `# vX.Y.Z` comment
    resolves to the expected `<sha>\t<version>` pair via `action_pin_pair`.
    (`:355-362`)
@@ -475,6 +477,8 @@ in that stronger form.
 detector rejects a planted violation.** `assert_no_forbidden` returning
 silently is otherwise indistinguishable from it never inspecting anything.
 
+<!-- inventory:ignore:start -->
+
 **Negative-assertion proof (RED then GREEN, every mutation restored
 bit-identical per `git diff --stat`).** Three release.yml-specific
 negatives were proven, each in both directions — node-absence (does the
@@ -520,6 +524,8 @@ guard fire before the negative can pass vacuously?) and true-positive
 Combined, these prove the detector both inspects real repository content
 and actually recognizes the forbidden pattern, in the same alternation and
 with the same `/i` flag as the Ruby original.
+
+<!-- inventory:ignore:end -->
 
 ### `test_tag_release_workflow` — tag-release.yml (`:581-729`)
 
@@ -756,12 +762,16 @@ the stable-numbering rule: later tasks match by citation, never by position.
     the suite returned to 23/23 GREEN after each, and `git diff` on
     `.github/workflows/tag-release.yml` was empty after restoration.
 
+<!-- inventory:mapped:end -->
+
 ## Port-only assertions (outside the 1:1 mapping)
 
 This section exists per the brief's skeleton and follows
 `npm-pack-contents.md`'s convention: entries a later porting task adds here
 have no shell counterpart, are additive test coverage, and are excluded from
 the reconciliation arithmetic in "Cardinality" below.
+
+<!-- inventory:port-only:start -->
 
 1. **Workflow documents parse under YAML 1.2, keeping `on` a string key.**
    The shell had no equivalent assertion; it instead *worked around* the
@@ -855,7 +865,20 @@ the reconciliation arithmetic in "Cardinality" below.
    throughout. Port-only — it has no shell counterpart.
    (`tests/bin/action-pins.test.js`)
 
+<!-- inventory:port-only:end -->
+
 ## Cardinality
+
+```json inventory
+{
+  "shellOriginal": 100,
+  "portOnly": 6,
+  "ports": {
+    "tests/bin/action-pins.test.js": 8,
+    "tests/bin/workflows.test.js": 23
+  }
+}
+```
 
 - Shell original: **100** assertions.
 - Subgroup totals: action-pin matcher **16**; literal-pin detector **12**;
@@ -962,13 +985,21 @@ the reconciliation arithmetic in "Cardinality" below.
   99)" (`:635-683`). Item 100 → "the bump-option check reports a missing
   options block distinctly from a wrong one (items 99-100)" (`:587-633`).
   Reconciliation: 1:1 for all 15, no merges, no drops.
-- **Port total: 45 `node:test` cases** — 22 in
+- **Port total: 45 `node:test` cases at runtime** — 22 executed from
   `tests/bin/action-pins.test.js` (action-pin matcher and literal-pin
-  detector) and 23 in `tests/bin/workflows.test.js` (source policy, pin
+  detector) and 23 from `tests/bin/workflows.test.js` (source policy, pin
   inventory, ci.yml, release.yml, tag-release.yml) — plus the one
   top-level pin-inventory fixture self-check (`:78-82`) that runs outside
   any `test()`, matching the total above with no numbered entry left
-  without a port location. Reconciliation: 1:1 for all 100 original
+  without a port location. **45 is a runtime case count, not a static
+  `test(` call-site count:** `action-pins.test.js` has only **8** static
+  `test(` call sites — three of them (`:52`, `:155`, `:200`) iterate
+  fixture tables and each generate several runtime cases, expanding to the
+  22 above — while `workflows.test.js`'s **23** static call sites are 1:1
+  with its 23 runtime cases. The `json inventory` block above records
+  these static counts (8 and 23) under `ports`, per the checker's
+  static-coupling contract; this bullet's 45/22/23 figures describe
+  runtime behavior and are unchanged. Reconciliation: 1:1 for all 100 original
   entries except three recorded merges (all read directly from the
   source, not carried forward from any earlier draft): items 1-2 (2:1 —
   the unquoted accepted-block pair comparison and its

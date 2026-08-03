@@ -13,6 +13,8 @@ the port unless a merge is called out.
 
 ## File-presence and negative-existence assertions (`:34-45`)
 
+<!-- inventory:mapped:start -->
+
 1. `.gitignore` exists
 2. `config/upstream-ref` exists
 3. `.agents/plugins/marketplace.json` exists
@@ -137,7 +139,17 @@ same real file and the same two fixture strings.
     each section's body carries the *other* section's required phrases) is
     rejected by the same validation logic.
 
+<!-- inventory:mapped:end -->
+
 ## Cardinality
+
+```json inventory
+{
+  "shellOriginal": 99,
+  "portOnly": 0,
+  "ports": { "tests/bin/bootstrap.test.js": 10 }
+}
+```
 
 - Shell original: **99** assertions (85 flat `assert_*` calls at
   `tests/test_bootstrap.sh:34-124`, plus 14 assertions in the embedded Python
