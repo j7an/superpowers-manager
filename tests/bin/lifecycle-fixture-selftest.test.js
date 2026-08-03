@@ -3,7 +3,7 @@
 // Deleted in Task 2 once the uninstall port exercises the same paths.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   SCRATCH,
@@ -13,6 +13,7 @@ import {
   firstIndex,
   lastIndex,
   readLog,
+  runScript,
 } from "./lifecycle-fixture.js";
 
 /** @typedef {import("./lifecycle-fixture.js").CaseEnv} CaseEnv */
@@ -123,4 +124,92 @@ void test("HOME is case-local, so production cannot read real selection state", 
     `home escapes the scratch tree: ${c.home}`,
   );
   assert.notEqual(c.home, process.env.HOME);
+});
+
+const PLUGIN_PRESENT =
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager"}],"available":[]}';
+const MARKETPLACE_PRESENT =
+  '{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"/y"}]}';
+
+/**
+ * @param {Record<string, unknown>} config
+ * @param {{ plugins?: string, marketplaces?: string }} [seed]
+ */
+function uninstallCase(config, seed = {}) {
+  const c = createCase({ fakes: "uninstall", config });
+  writeFileSync(
+    join(c.state, "plugin_list.json"),
+    `${seed.plugins ?? PLUGIN_PRESENT}\n`,
+  );
+  writeFileSync(
+    join(c.state, "marketplace_list.json"),
+    `${seed.marketplaces ?? MARKETPLACE_PRESENT}\n`,
+  );
+  return c;
+}
+
+void test("a clean uninstall removes both owned resources and succeeds", async () => {
+  const c = uninstallCase({});
+  const result = await runScript(c, "uninstall");
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const log = readLog(c.codexLog);
+  assert.ok(
+    log.some((l) =>
+      l.includes("plugin remove superpowers@superpowers-manager"),
+    ),
+    "plugin remove was never issued",
+  );
+  assert.ok(
+    log.some((l) =>
+      l.includes("plugin marketplace remove superpowers-manager"),
+    ),
+    "marketplace remove was never issued",
+  );
+  assert.match(result.stdout, /uninstall complete/);
+});
+
+void test("the adapter fake execs the real adapter for ownership inspection", async () => {
+  const c = uninstallCase({});
+  await runScript(c, "uninstall");
+  const log = readLog(c.adapterLog);
+  assert.ok(
+    log.some((l) => l === "inspect --view ownership"),
+    `real adapter was never reached: ${log.join(" | ")}`,
+  );
+});
+
+void test("the fake re-validates its config as defence in depth", async () => {
+  // createCase validates eagerly, so reach past it to prove the fake also
+  // refuses a bad config on its own. Write the file directly.
+  const c = uninstallCase({});
+  writeFileSync(
+    join(c.state, "config.json"),
+    `${JSON.stringify({ pluginRemoveTypo: "noop" })}\n`,
+  );
+  const result = await runScript(c, "uninstall");
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unknown fixture config key: pluginRemoveTypo/);
+});
+
+// The concurrency proof. Asserting that `{ concurrency: true }` is set proves
+// nothing — the option reads as set whether or not bodies actually overlap.
+// This measures overlap instead. Measured on Node v24.18.0: four spawnSync
+// subtests take 1.31s while four awaited async spawns take 0.36s, so a
+// regression to spawnSync fails here rather than silently serialising.
+void test("runScript bodies actually overlap under concurrency", async () => {
+  const cases = [0, 1, 2, 3].map(() => uninstallCase({}));
+  const started = Date.now();
+  const single = await (async () => {
+    const t0 = Date.now();
+    await runScript(uninstallCase({}), "uninstall");
+    return Date.now() - t0;
+  })();
+  const t1 = Date.now();
+  await Promise.all(cases.map((c) => runScript(c, "uninstall")));
+  const together = Date.now() - t1;
+  assert.ok(
+    together < single * 3,
+    `four concurrent runs took ${together}ms against a ${single}ms single run — ` +
+      `they are not overlapping (total elapsed ${Date.now() - started}ms)`,
+  );
 });
