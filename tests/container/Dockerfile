@@ -22,5 +22,11 @@ RUN corepack enable \
 ENV HOME=/home/spw
 ENV PATH=/opt/spw-test-tools/node_modules/.bin:$PATH
 ENV SPW_CONTAINER=1
+# tests/container.sh mounts /tmp as a dedicated, size-limited tmpfs that is
+# discarded with the container. Naming it here makes the scratch location an
+# explicit part of the image contract: suites resolve ${TMPDIR:?} rather than
+# hardcoding /tmp, and tests/bin/dispatch-fixture.js refuses to run without it.
+# Removing this line turns the container suite red, which is the intended guard.
+ENV TMPDIR=/tmp
 USER spw
 ENTRYPOINT ["sh", "tests/container.sh", "--inside"]
