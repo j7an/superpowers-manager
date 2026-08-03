@@ -143,6 +143,16 @@ containing no `npm`: `result.error.code` is `"ENOENT"` and `result.status`
 is `null` — exactly the case the new guard intercepts before any raw
 ENOENT-shaped text can reach stdout/stderr.
 
+8. **The published package declares zero runtime dependencies.** Asserted as
+   `Object.keys(manifest.dependencies ?? {})` deep-equal to `[]`, so an absent
+   key and an empty object both pass and any added entry fails. Added by
+   PR 11.1 (2026-08-02) alongside the `yaml` devDependency: that dependency's
+   justification is that it is dev-only, and before this assertion no test
+   constrained the **root** manifest's runtime dependency set.
+   `container-contract.test.js:950` constrains `tests/container/package.json`,
+   which is a different file with a different contract.
+   Port-only — it has no shell counterpart and is outside the 1:1 mapping.
+
 ## Cardinality
 
 - Shell original: **27** assertions (3 shape-acceptance, 10
@@ -151,10 +161,10 @@ ENOENT-shaped text can reach stdout/stderr.
 - Port (`tests/bin/npm-pack-contents.test.js`): 27 assertions 1:1-mapped to
   the shell, one `node:test` `assert.*` call per numbered item above,
   grouped into `node:test` subtests by fixture/scenario for readability,
-  **plus** 7 port-only assertions added 2026-07-31 in response to review
-  Finding 1 (6 synthetic per-category discriminating checks + 1
-  exception-boundary check) that have no shell counterpart and are outside
-  the 1:1 mapping.
-- Reconciliation: 1:1 for all 27 original items, no merges, no drops. The 7
+  **plus** 8 port-only assertions (6 synthetic per-category discriminating
+  checks + 1 exception-boundary check added 2026-07-31 in response to review
+  Finding 1, + 1 zero-runtime-dependency check added 2026-08-02 by PR 11.1)
+  that have no shell counterpart and are outside the 1:1 mapping.
+- Reconciliation: 1:1 for all 27 original items, no merges, no drops. The 8
   additional port-only assertions are strictly additive test coverage, not
   a reconciliation of any shell assertion.

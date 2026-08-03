@@ -301,6 +301,25 @@ void test("npm-pack-contents", async (t) => {
   );
 });
 
+// --- port-only assertion (outside the 1:1 shell mapping) ----------------
+// The published package declares zero runtime dependencies. Asserted as a
+// count so that both an absent `dependencies` key and an empty object pass,
+// and any added entry fails. This is about the ROOT manifest;
+// tests/container/package.json has its own, different dependency contract
+// asserted in container-contract.test.js. See
+// docs/superpowers/specs/2026-08-02-pr11.1-workflow-driver-migration-design.md
+// section 3.7 — PR 11.1 added the first devDependency that is a library
+// rather than a tool, and this is the guard that keeps it dev-only.
+void test("package.json declares zero runtime dependencies", () => {
+  const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const runtimeDependencies = Object.keys(manifest.dependencies ?? {});
+  assert.deepEqual(
+    runtimeDependencies,
+    [],
+    "package.json gained a runtime dependency — the manager ships with none by design",
+  );
+});
+
 /** @param {string} value */
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
