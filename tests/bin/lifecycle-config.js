@@ -9,11 +9,19 @@
 /** @type {Record<string, Rule>} */
 export const UNINSTALL_SCHEMA = {
   updateControl: ["managed", "unsupported"],
-  pluginRemove: ["ok", "noop", "missing-installed"],
+  pluginRemove: ["ok", "missing-installed"],
   marketplaceRemove: ["ok", "fail"],
   pluginListRc: "integer",
   marketplaceListRc: "integer",
   spuriousMutation: "boolean",
+  // `removesMutateState: false` ports the shell driver's `remove_noop` marker,
+  // which is deliberately GLOBAL: tests/test_uninstall_commands.sh:71 gates the
+  // marketplace mutation on the same marker as the plugin mutation, and :399
+  // comments it "removes are logged but do not mutate the fixtures" — plural.
+  // It is a separate key precisely so the global scope is visible at the call
+  // site; folding it back into `pluginRemove` would read plugin-specific while
+  // behaving globally.
+  removesMutateState: "boolean",
 };
 
 export const UNINSTALL_DEFAULTS = {
@@ -23,6 +31,7 @@ export const UNINSTALL_DEFAULTS = {
   pluginListRc: 0,
   marketplaceListRc: 0,
   spuriousMutation: false,
+  removesMutateState: true,
 };
 
 /** @type {Record<string, Rule>} */

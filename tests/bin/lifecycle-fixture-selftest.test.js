@@ -1,6 +1,6 @@
 // @ts-check
 // Temporary: proves the fixture builder before either port depends on it.
-// Deleted in Task 2 once the uninstall port exercises the same paths.
+// Deleted in Task 3 once the uninstall port exercises the same paths.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -65,12 +65,12 @@ void test("the fake upstream exposes one annotated release tag", () => {
 void test("the fake config is written where the fakes will read it", () => {
   const c = createCase({
     fakes: "uninstall",
-    config: { pluginRemove: "noop" },
+    config: { removesMutateState: false },
   });
   const written = JSON.parse(
     readFileSync(join(c.state, "config.json"), "utf8"),
   );
-  assert.equal(written.pluginRemove, "noop");
+  assert.equal(written.removesMutateState, false);
 });
 
 void test("firstIndex and lastIndex are distinct, not aliases", () => {

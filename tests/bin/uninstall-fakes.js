@@ -106,7 +106,7 @@ function runCodex() {
     process.exit(/** @type {number} */ (CONFIG.marketplaceListRc));
   }
   if (a === "plugin" && b === "remove") {
-    if (CONFIG.pluginRemove === "noop") process.exit(0);
+    if (!CONFIG.removesMutateState) process.exit(0);
     if (CONFIG.pluginRemove === "missing-installed") {
       writeJson("plugin_list.json", { available: [] });
       process.exit(0);
@@ -123,7 +123,7 @@ function runCodex() {
       process.stderr.write("marketplace remove exploded\n");
       process.exit(1);
     }
-    if (CONFIG.pluginRemove !== "noop") {
+    if (CONFIG.removesMutateState) {
       const data = readJson("marketplace_list.json");
       data.marketplaces = data.marketplaces.filter(
         (/** @type {{name?: string}} */ item) => item.name !== ARGS[3],

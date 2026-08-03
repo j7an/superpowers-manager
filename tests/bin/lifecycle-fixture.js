@@ -216,12 +216,6 @@ export function createCase(options) {
 }
 
 /**
- * @param {CaseEnv} caseEnv
- * @param {"install" | "update" | "prepare" | "uninstall"} script
- * @param {{ env?: Record<string, string>, path?: string }} [options]
- * @returns {{ status: number, stdout: string, stderr: string }}
- */
-/**
  * MUST be awaited. `{ concurrency: true }` parallelises subtests only when
  * their bodies yield to the event loop; a synchronous body runs to completion
  * before the next one starts. Measured: four spawnSync subtests take 1.31s,
