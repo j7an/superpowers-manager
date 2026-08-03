@@ -265,6 +265,17 @@ function runAdapter() {
       );
       process.exit(1);
     }
+
+    // Fail closed, restoring the shell fake's `*) unknown update-control
+    // fixture; exit 99` branch (test_install_commands.sh:203-206 at
+    // 81c2de1a). Without it an unhandled updateControl value falls through to
+    // the real adapter at the delegation below, so a fixture misconfiguration
+    // reads as a subject result instead of a fixture fault. The schema
+    // enumeration is not a substitute: it is a list, not a structure.
+    process.stderr.write(
+      `fixture: unknown update-control value: ${updateControl}\n`,
+    );
+    process.exit(99);
   }
 
   // The fingerprint intercept is conditioned on the plugin cache existing.
