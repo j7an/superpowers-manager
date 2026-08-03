@@ -37,7 +37,7 @@ folded silently into the six above:
   (`:150-156`). Each helper body is exactly one rule-3 negative guard, so this
   is rule 3 applied at the point of use: one assertion per invocation, zero at
   the definition. Counting the definitions instead would report 4 assertions
-  for 34 distinct scenario-level claims. `line_of` (`:158-160`) is a value
+  for 23 distinct scenario-level claims. `line_of` (`:158-160`) is a value
   extractor, not an assertion, and is not counted.
 - **Rule 8 — a negative guard whose condition is a `||` chain of N
   independent `grep` tests counts N, not 1.** Rules 2 and 3 conflict at
@@ -58,7 +58,7 @@ its item 1. This driver has no guarded-precondition form, so rule 5
 contributes 0 here and the loop contributes 0 under rule 4. Both readings, for
 the record: **83** excluding them, **100** if the 17 loop/assignment
 resolutions were counted. Decision: **excluded**, following the
-`bin-dispatch.md:10` precedent for the unguarded form.
+`test_bin_dispatch.sh:10` precedent for the unguarded form.
 
 ## Assertion inventory
 
@@ -152,7 +152,8 @@ anywhere else — every other scenario set it in the shell too.
 
 24. The invocation TMPDIR is left empty — no leaked workspace or adapter
     sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:393`, helper at
-    `:159`. **Scope narrowed — see the note below.**
+    `:159`. **Scope narrowed twice — see the note below, and the further
+    narrowing the mutation proof's row 6a records.**
 
 **TMPDIR scope narrowing (items 24 and 45).** The shell created
 `$uninstall_tmp` once at `:20-21` and never cleared it in `reset`
@@ -196,8 +197,9 @@ design than the shell had; it is not proposed here.
 **Item 35 adjudication: inherited-inert.** The port is faithful — the shell
 assertion at `:286-289` was equally inert, and porting it unchanged was the
 right call — but it is not a live check, and recording it as merely
-"non-vacuous" would be false. It gets the same two-part treatment
-`bin-dispatch.md:27-36` gives a contested item, because that is what this is.
+"non-vacuous" would be false. It gets the same two-part treatment this file's
+adjudication section applies to every contested item, because that is what
+this is.
 
 *(1) Why the violation is unreachable here.* The needle `other@x` appears in no
 fixture in the port. The only plugin ids any fixture defines are
@@ -252,7 +254,8 @@ entry exists so no reader mistakes item 35 for a live check in the meantime.
 
 44. Uninstall fails (`:319`, `expect_fail`). Port: `:499`.
 45. The invocation TMPDIR is left empty (`:320`). Port: `:505`, helper at
-    `:159`. Same scope narrowing as item 24.
+    `:159`. Same scope narrowing as item 24, including the further narrowing
+    the mutation proof's row 6a records.
 46. The adapter log holds no `uninstall --` line — the adapter uninstall must
     not run when ownership inspection fails (`:321-325`). Port: `:507`,
     helper at `:150`.
@@ -510,8 +513,9 @@ shadowed. Recorded for completeness; the case set matches the prediction.
 ### Adjudication: guards no injection turned RED
 
 Each entry records **(1)** why the violation is unreachable at that point in
-that scenario and **(2)** what future change would make it reachable. Form
-follows `bin-dispatch.md:27-36`.
+that scenario and **(2)** what future change would make it reachable. This
+two-part form is introduced here; `bin-dispatch.md:27-36` is the
+counting-decision adjudication it generalises.
 
 **A — item 9, "the Codex log is empty" (c3, `:279`).** *(1)* The case strips
 PATH to a directory holding only `dirname`, and `scripts/uninstall:10` runs
@@ -538,10 +542,17 @@ node:test aborts the case at its first failure. D8 confirms the mechanism is
 not an artifact of *where* the corruption is injected: appending a non-JSON
 line after an intact envelope yields the same whole-output replacement
 (`Extra data: line 2 column 1`), because the subject parses the adapter
-response as one strict JSON document. Any fixture corruption that produces the
-forbidden text also destroys the controlled diagnostic item 12 requires, so
-the two cannot be separated from the fixture side. The same argument covers
-item 80 in c18, where D7 aborts the run at the ownership inspect and item 76
+response as one strict JSON document. Any fixture corruption **of the
+adapter's stdout envelope** that produces the forbidden text also destroys the
+controlled diagnostic item 12 requires, so the two cannot be separated by that
+class of injection. A separate fixture lever does exist and is deliberately
+declined: item 12 is an exact-line match (`hasLine`, `:302`) while item 13 is
+a substring match (`:308`) over the same `stdout + stderr` capture (`:292`),
+so a fake writing the forbidden text to **stderr** would redden item 13 while
+item 12 still passes. That manufacture is refused for the item-35 reason — it
+would prove only that a fixture can print a string it planted, not that the
+subject emitted a protocol complaint. The same argument covers item 80 in
+c18, where D7 aborts the run at the ownership inspect and item 76
 (`:690`) fires first. *(2)* Independently reachable when the subject can emit
 *both* the controlled diagnostic and a protocol complaint in one run — for
 example if `spw_inspect_ownership` grew a second, stricter parse of an already
@@ -555,13 +566,17 @@ caught only by items 13 and 80.
 print the final success banner also makes it exit 0, and both cases assert
 `status !== 0` first: row 2b drove c18 RED at item 75 (`:683`), and row 3 drove
 c17 RED at item 70 (`:653`), in both instances shadowing the banner negative.
-No fixture toggle can decouple the banner from the exit status, because
-`scripts/uninstall:34` prints the banner only once
+No change to the **subject's own output stream** can decouple the banner from
+the exit status, because `scripts/uninstall:34` prints the banner only once
 `spw_verify_uninstalled_resources` (`:30`) has passed under `set -eu`, and the
 only statement after it (`:35`, an informational `echo`) cannot fail —
-reaching the banner *is* exiting 0. *(2)* Reachable exactly when that coupling
-breaks: if the banner moves above `spw_verify_uninstalled_resources`
-(`scripts/uninstall:30`), or is emitted from an `EXIT` trap, or the script
+reaching the banner *is* exiting 0. The same declined fixture lever as in
+adjudication B applies: both cases assert over `stdout + stderr` (`:651`,
+`:681`), so a fake writing `uninstall complete` to stderr would redden items
+74 and 79 without proving anything about the subject. *(2)* Reachable exactly
+when that coupling breaks: if the banner moves above
+`spw_verify_uninstalled_resources` (`scripts/uninstall:30`), or is emitted
+from an `EXIT` trap, or the script
 prints it and then exits non-zero from a later step. That is a real regression
 class, and the exit-status assertions alone do not catch it — which is why
 both negatives are kept rather than folded into items 70 and 75.
@@ -601,17 +616,25 @@ would be caught on the next suite run.
 
 ### Coverage ledger
 
-Every negative, ordering, and cardinality assertion in the port is accounted
-for. Proven RED by injection: items 5, 14, 20, 21, 24, 27, 28, 29, 30, 33, 34,
-36, 40, 44, 45, 46, 47, 49, 50, 52, 53, 55, 56, 57, 59, 60, 63, 64, 67, 69,
-70, 75, 82, 83, and all 20 port-only guards — rows D5-D6 for the fourteen
+**Classes covered by this pass:** every negative, ordering, and cardinality
+assertion in the port. Proven RED by injection: items 5, 14, 20, 21, 24, 27,
+28, 29, 30, 33, 34, 36, 40, 45, 46, 47, 49, 50, 52, 53, 56, 57, 59, 60, 63,
+64, 67, 83, and all 20 port-only guards — rows D5-D6 for the fourteen
 non-vacuity guards (port-only items 7-20), and row D7 for the six
 `status === 0` assertions (port-only items 1-6), which went RED at `:241`,
 `:320`, `:354`, `:387`, `:455`, and `:481` under the protocol corruption.
-Adjudicated GREEN with both required parts: items 1, 2, 9,
-13, 35, 74, 79, 80. No assertion in the file is left unclassified, and no RED
-in this section was produced by editing an assertion's text outside rows
-O1-O3.
+
+Adjudicated GREEN with both required parts: items 1, 2, 9, 13, 35, 74, 79, 80.
+
+**Not classified:** the 41 remaining mapped items, which are positives — 3, 4,
+6, 7, 8, 10, 11, 12, 15, 16, 17, 18, 19, 22, 23, 25, 26, 31, 32, 37, 38, 39,
+41, 42, 43, 48, 51, 54, 58, 61, 62, 65, 66, 68, 71, 72, 73, 76, 77, 78, 81. No
+claim is made about that class. Six mapped positives did turn RED
+incidentally — items 44 (`:499`), 55 (`:560`), 69 (`:645`), 70 (`:653`), 75
+(`:683`) and 82 (`:701`) — which is recorded as observation, not as coverage.
+
+No RED in this section was produced by editing an assertion's text outside
+rows O1-O3.
 
 ## Cardinality
 

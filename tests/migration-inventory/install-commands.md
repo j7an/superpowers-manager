@@ -684,7 +684,7 @@ items 61 and 94 claim: they assert the *invocation* TMPDIR is left empty,
 which catches a leaked workspace or a sidecar dropped beside it. They do
 **not** assert that the adapter created no temporary files at all. That is
 narrower than the brief assumed, it is narrower again than the per-case
-narrowing already recorded at `:255-263`, and forward pointers are carried at
+narrowing already recorded at `:256-264`, and forward pointers are carried at
 both items. Identical in mechanism to `uninstall-commands.md:473-485`.
 
 **Row 8 — predicted RED at the brief's cases 26 and 27 (c27 and c28); observed
@@ -733,7 +733,8 @@ and `:1177`. It is harmless because the injected line is appended on *every*
 Codex call, starting with probe's `plugin list --json`, so `firstIndex`
 (`lifecycle-fixture.js:319-321`) resolves that needle *earlier* than the real
 `plugin marketplace list` line rather than later, and every following needle
-still comes after it — the pairwise check at `:358-363` is unaffected. Row 1e
+still comes after it — the pairwise check at `lifecycle-fixture.js:358-364` is
+unaffected. Row 1e
 produced no RED at any of the three sites, which is the observed confirmation.
 
 **Row 5 — the hoisted non-vacuity guards shadowed the negatives they protect,
@@ -764,8 +765,9 @@ therefore not pass on a log that never carried its needles.
 ### Adjudication: guards no injection turned RED
 
 Each entry records **(1)** why the violation is unreachable at that point in
-that scenario and **(2)** what future change would make it reachable. Form
-follows `bin-dispatch.md:27-36`.
+that scenario and **(2)** what future change would make it reachable. This
+two-part form is introduced here; `bin-dispatch.md:27-36` is the
+counting-decision adjudication it generalises.
 
 **A — items 95 (`:1064`), 99 (`:1089`), 106 (`:1133`) and 111 (`:1160`),
 "output does not contain `manager updated`".** *(1)* Structurally shadowed by
@@ -866,7 +868,7 @@ guard.
 **Classes covered by this pass:** every negative, ordering, and cardinality
 assertion in the mapped inventory (64 of the 124 items), and 29 of the 41
 port-only assertions — every non-vacuity guard (port-only 1-5, 7, 9, 11-15, 18,
-20-22, 31-36, 38, the set named at `:486-490`) and every `assertNoPrepareRan`
+20-22, 31-36, 38, the set named at `:494-498`) and every `assertNoPrepareRan`
 precondition guard (port-only 8, 10, 17, 19, 25, 27).
 
 **Not classified:** the remaining 60 mapped items, which are positives, and the
