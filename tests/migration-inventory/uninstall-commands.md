@@ -400,6 +400,219 @@ empty log there is a fixture fault, never a legitimate state.
 
 <!-- inventory:port-only:end -->
 
+## Mutation proof
+
+Task 4's sweep, run 2026-08-03. Design Decision 5: **inject the violation into
+the fixture, not into the assertion**, then observe which assertions turn RED.
+A guard that stays GREEN under an injection that genuinely violates it is not
+proven — it is a boundary guard, and it is adjudicated below rather than
+"proved" by breaking its own text.
+
+Every mutation was applied to a tracked file, run with
+`node --test tests/bin/uninstall-commands.test.js`, observed, then restored by
+**editing the file back** (never `git checkout --`). `git diff --stat` was
+empty and the suite re-ran 18/18 GREEN after every restore. No assertion text
+in `tests/bin/uninstall-commands.test.js` was changed except at the three
+ordering sites, which the subject alone controls and which therefore have no
+fixture-side lever (rows O1-O3).
+
+The task brief names six injections. That list is the floor: rows D1b-D8 were
+derived from this inventory's own negative-assertion set, and they carry six
+items and all twenty port-only guards that the brief's six do not reach. Rows
+6a, 2a, and 5 diverge from the brief's prediction table; each divergence is
+recorded under "Divergences" below, because a divergence is the finding, not
+noise.
+
+**Case abbreviations** below are the port's `test(` order: c2 recovery, c3
+missing-python3, c4 missing-Codex, c5 legacy-only, c6 mixed, c7 both-present,
+c8 plugin-absent, c9 both-absent, c10 plugin-list-fails,
+c11 malformed-plugin-list, c12 malformed-plugin-entry,
+c13 marketplace-list-fails, c14 malformed-marketplace-entry,
+c15 malformed-marketplace-list, c16 remove-noop, c17 verify-after-drift,
+c18 marketplace-remove-fails.
+
+### Injection matrix
+
+| Row | Injection (file, exact edit) | Observed RED — item @ port line |
+|---|---|---|
+| 1 | `lifecycle-config.js`: `UNINSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin remove superpowers@spurious` into every Codex call's log | items 14 (`:322`), 40 (`:483`), 47 (`:512`), 50 (`:530`), 53 (`:548`), 57 (`:571`), 60 (`:589`), 64 (`:612`) — all 8 `assertNoRemoves` sites, 8/18 cases |
+| 2a | `uninstall-fakes.js:124`: the `marketplaceRemove === "fail"` branch's `process.exit(1)` → `process.exit(0)`, stderr kept | item 82 (`:701`), c18 only |
+| 2b | `uninstall-fakes.js:122`: branch condition `"fail"` → `"fail-disabled"`, so the failure path never fires and the remove genuinely succeeds | item 75 (`:683`), c18 only |
+| 3 | `uninstall-fakes.js`: `plugin remove` branch prefixed with `writeJson("plugin_list.json", { installed: [], available: [] }); process.exit(0);` — verify-after always sees the plugin absent | items 69 (`:645`), 70 (`:653`) |
+| 4 | `uninstall-fakes.js` `runAdapter`: log `inspect --view ownership` only on its first occurrence — the verify-after re-inspect is dropped from the log | items 27 (`:402`), 67 (`:635`) |
+| 5 | `uninstall-fakes.js`: both list branches `process.exit(CONFIG.pluginListRc / marketplaceListRc)` → `process.exit(0)` — a failed ownership query no longer aborts | items 44 (`:499`), 55 (`:560`) |
+| 6a | `uninstall-fakes.js` `runAdapter`: write `spw-sidecar-leak` into `$TMPDIR` | **none — 18/18 GREEN.** See Divergences |
+| 6b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 24 (`:393`), 45 (`:505`) — both `assertTmpEmpty` ports |
+| O1 | `uninstall-commands.test.js:422`: `firstInspect < uninstallAt` → `>` | item 29 (`:422`), "ownership inspect must precede adapter uninstall" |
+| O2 | `uninstall-commands.test.js:426`: `uninstallAt < lastInspect` → `>` | item 30 (`:426`), "ownership re-inspect must follow adapter uninstall" |
+| O3 | `uninstall-commands.test.js:433`: the two `assertOrder` needles swapped | item 33 (`:433`), `assertOrder` "out of order" |
+| D1b | injection 1 with the payload string changed to `plugin remove superpowers@superpowers-wrapper` | item 20 (`:362`) in c6, plus the 8 row-1 sites |
+| D1c | payload `plugin marketplace remove superpowers-wrapper` | item 21 (`:366`) in c6, plus the 8 row-1 sites |
+| D1d | payload `plugin marketplace remove openai-curated` | items 34 (`:442`) in c7 and 83 (`:718`) in c18, plus the 8 row-1 sites |
+| D1e | payload `plugin remove superpowers@superpowers-manager` | item 36 (`:461`) in c8, plus the 8 row-1 sites |
+| D2 | `uninstall-fakes.js` `runAdapter`: extra `log("adapter.log", "uninstall --spurious")` on every adapter call | items 46 (`:507`), 49 (`:525`), 52 (`:543`), 56 (`:566`), 59 (`:584`), 63 (`:607`) — all 6 `assertNoAdapterUninstall` sites, and only those |
+| D3 | same, payload `uninstall --plugin-present true --marketplace-present true` | item 28 (`:406`) in c7, plus the 6 D2 sites |
+| D4 | same, payload `inspect --view update-control` | item 5 (`:250`) in c2, and only that |
+| D5 | `uninstall-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only items 7-14, the `assertNoRemoves` emptiness guards, at `:322`, `:483`, `:512`, `:530`, `:548`, `:571`, `:589`, `:612` |
+| D6 | `uninstall-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only items 15-20, the `assertNoAdapterUninstall` emptiness guards, at `:507`, `:525`, `:543`, `:566`, `:584`, `:607` |
+| D7 | `uninstall-fakes.js`: `process.stdout.write("not a protocol envelope\n")` before the real adapter delegation | item 12 (`:302`) and 11 other cases; items 13 and 80 shadowed — see adjudication B |
+| D8 | same line written **after** the delegation, so the envelope is intact and only trailing data is added | identical shape (`Extra data: line 2 column 1`); items 13 and 80 still shadowed |
+| P1 | no tracked file touched: a `node --input-type=module` probe applied items 1-2's predicates to in-memory regression copies of `scripts/uninstall` and `scripts/core/lifecycle.sh` | predicate `true` on the real files, `false` on both regression copies — see adjudication E |
+
+Row 1's `plugin remove superpowers@spurious` payload deliberately names no
+real fixture resource, so it can only be caught by a guard that rejects *any*
+remove; D1b-D1e reuse that single injection point with resource-specific
+payloads to isolate the resource-specific negatives. D2's
+`uninstall --spurious` follows the same discipline on the adapter side: it
+lies inside the class `assertNoAdapterUninstall` names (`uninstall --`) while
+matching none of the exact-line positives, which is what makes its RED set
+exactly the six guards and nothing else.
+
+### Divergences from the brief's prediction table
+
+**Row 6a — predicted RED at every `assert_uninstall_tmp_empty` port; observed
+18/18 GREEN.** `scripts/uninstall:12-21` creates its workspace under the
+inherited `TMPDIR`, installs a removal trap on it (`:16`), and then
+*re-exports* `TMPDIR` to point at that workspace. An adapter sidecar written
+to `$TMPDIR` therefore lands inside the subject's own workspace and is swept
+up by the subject's trap. Row 6b — writing to `$TMPDIR/..`, which is the
+invocation TMPDIR `runScript` handed the subject — is RED at both ports.
+Consequence for what items 24 and 45 claim: they assert the *invocation*
+TMPDIR is left empty, which catches a leaked workspace or a sidecar dropped
+beside it. They do **not** assert that the adapter created no temporary files
+at all, because anything the adapter writes into the workspace is legitimately
+cleaned by the trap. That is narrower than the brief assumed and is recorded
+here so no later reader over-reads the assertion.
+
+**Row 2a — predicted RED "at case 18"; observed RED at item 82, not at the
+exit-status assertion.** Making the marketplace remove exit 0 while leaving
+the fixture unmutated does not make uninstall succeed: verify-after re-queries,
+finds the marketplace still registered, and fails with `error: owned
+marketplace resource is still registered after removal`. Item 75
+(`status !== 0`) stayed GREEN. Only row 2b — disabling the failure branch so
+the remove genuinely succeeds — reaches item 75. The finding: item 82's exact
+message is the discriminator for a marketplace remove that *lies* about
+succeeding; the exit-status assertion alone would not have noticed.
+
+**Row 5 — predicted RED "at cases 10, 13"; the cases match, but the failing
+assertion does not.** Both went RED at their exit-status assertions (items 44
+and 55), which precede the `assertNoAdapterUninstall` guards the row was aimed
+at; node:test aborts a case at its first failing assertion, so items 46 and 56
+never ran. Those six guards are proven instead by derived row D2, which
+violates them without disturbing anything asserted earlier.
+
+**Row 3 — predicted RED at cases 16 and 17; both went RED, at items 69 and
+70.** c17 failed at its exit-status assertion (item 70), so items 73-74 were
+shadowed. Recorded for completeness; the case set matches the prediction.
+
+**Row 4** matched its prediction exactly (items 27 and 67).
+
+### Adjudication: guards no injection turned RED
+
+Each entry records **(1)** why the violation is unreachable at that point in
+that scenario and **(2)** what future change would make it reachable. Form
+follows `bin-dispatch.md:27-36`.
+
+**A — item 9, "the Codex log is empty" (c3, `:279`).** *(1)* The case strips
+PATH to a directory holding only `dirname`, and `scripts/uninstall:10` runs
+`spw_require_command python3` before the workspace, the adapter, or Codex is
+touched. The only writer to `codex.log` is `runCodex` in `uninstall-fakes.js`,
+and that process never starts, so no fixture toggle in the file — including
+`spuriousMutation`, whose payload is emitted from inside `runCodex` — can
+execute. Confirmed empirically: c3 stayed GREEN under rows 1 and D1b-D1e,
+which turn every other Codex-log negative RED. *(2)* Reachable the moment
+`scripts/uninstall` moves `spw_require_command python3` below the workspace or
+adapter setup, or a shared lifecycle helper consults Codex during requirement
+checking — which is precisely the regression the assertion guards. It would
+also become reachable if `runScript` or `createCase` ever pre-seeded a
+`codex.log`; today neither does.
+
+**B — items 13 (`:308`) and 80 (`:713`), "output does not contain
+`error: invalid adapter response:`".** *(1)* Not vacuous and not inert — but
+structurally shadowed. Rows D7 and D8 do produce the violation: under D7 the
+c4 failure message, which is the port's `out` variable dumped verbatim, reads
+`error: invalid adapter response: Expecting value: line 1 column 1 (char 0)`
+and nothing else, so item 13's condition is demonstrably false in that run.
+The reported failure is item 12 (`:302`), asserted six lines earlier, because
+node:test aborts the case at its first failure. D8 confirms the mechanism is
+not an artifact of *where* the corruption is injected: appending a non-JSON
+line after an intact envelope yields the same whole-output replacement
+(`Extra data: line 2 column 1`), because the subject parses the adapter
+response as one strict JSON document. Any fixture corruption that produces the
+forbidden text also destroys the controlled diagnostic item 12 requires, so
+the two cannot be separated from the fixture side. The same argument covers
+item 80 in c18, where D7 aborts the run at the ownership inspect and item 76
+(`:690`) fires first. *(2)* Independently reachable when the subject can emit
+*both* the controlled diagnostic and a protocol complaint in one run — for
+example if `spw_inspect_ownership` grew a second, stricter parse of an already
+reported response, or if the adapter began writing its envelope and a
+non-envelope diagnostic to the same stream on a path that still satisfies
+item 12. Either change satisfies every earlier assertion in the case and is
+caught only by items 13 and 80.
+
+**C — items 74 (`:672`) and 79 (`:708`), "output does not contain
+`uninstall complete`".** *(1)* Every fixture injection that makes the subject
+print the final success banner also makes it exit 0, and both cases assert
+`status !== 0` first: row 2b drove c18 RED at item 75 (`:683`), and row 3 drove
+c17 RED at item 70 (`:653`), in both instances shadowing the banner negative.
+No fixture toggle can decouple the banner from the exit status, because
+`scripts/uninstall:34` prints the banner only once
+`spw_verify_uninstalled_resources` (`:30`) has passed under `set -eu`, and the
+only statement after it (`:35`, an informational `echo`) cannot fail —
+reaching the banner *is* exiting 0. *(2)* Reachable exactly when that coupling
+breaks: if the banner moves above `spw_verify_uninstalled_resources`
+(`scripts/uninstall:30`), or is emitted from an `EXIT` trap, or the script
+prints it and then exits non-zero from a later step. That is a real regression
+class, and the exit-status assertions alone do not catch it — which is why
+both negatives are kept rather than folded into items 70 and 75.
+
+**D — item 35 (`:446`), "the adapter log never names `other@x`":
+inherited-inert.** The adjudication of record is the one already written at
+item 35's entry above; this pass confirms it rather than restating it, and
+adds one observation. A payload injection could trivially turn item 35 RED —
+D2's mechanism with the literal `other@x` — but doing so would prove only that
+`has()` matches a string the fixture itself planted. No *subject* behavior,
+correct or broken, can put `other@x` into the adapter log while the fixture
+set defines only `superpowers@superpowers-manager`,
+`superpowers@superpowers-wrapper`, `openai-curated`, `superpowers-manager`,
+and `superpowers-wrapper`. That gap between "an injection can redden it" and
+"a regression can redden it" is exactly the inertness item 35's entry records,
+and manufacturing the former would obscure it. Reachability conditions are
+unchanged from that entry: add an unrelated third-party provider to a fixture,
+or change `spw_adapter_uninstall` to pass resource identities instead of
+booleans. Contrast item 34, reddened for real by row D1d because
+`openai-curated` is a string a real fixture supplies.
+
+**E — items 1 (`:208`) and 2 (`:217`), the source guards.** *(1)* Their
+subjects are `scripts/uninstall` and `scripts/core/lifecycle.sh` themselves,
+read from `ROOT`. There is no fixture in the path: the only mutation that
+violates either is an edit to the production tree, which this task is scoped
+out of. Row P1 therefore probed the predicates without touching a tracked
+file, applying them in memory to the real file contents and to a regression
+copy — a copy of `scripts/uninstall` with
+`. "$root/scripts/adapters/codex/lib.sh"` appended to its source block, and a
+copy of `scripts/core/lifecycle.sh` carrying an `SPW_PLUGIN_ID` default. Both
+predicates returned `true` on the real files and `false` on the regression
+copies, so neither is vacuous. *(2)* Reachable the moment someone lands either
+edit for real — sourcing the Codex adapter library from the public
+`scripts/uninstall`, or naming a Codex-owned identifier in shared lifecycle
+code. Both are the exact regressions the guards were written against, and both
+would be caught on the next suite run.
+
+### Coverage ledger
+
+Every negative, ordering, and cardinality assertion in the port is accounted
+for. Proven RED by injection: items 5, 14, 20, 21, 24, 27, 28, 29, 30, 33, 34,
+36, 40, 44, 45, 46, 47, 49, 50, 52, 53, 55, 56, 57, 59, 60, 63, 64, 67, 69,
+70, 75, 82, 83, and all 20 port-only guards — rows D5-D6 for the fourteen
+non-vacuity guards (port-only items 7-20), and row D7 for the six
+`status === 0` assertions (port-only items 1-6), which went RED at `:241`,
+`:320`, `:354`, `:387`, `:455`, and `:481` under the protocol corruption.
+Adjudicated GREEN with both required parts: items 1, 2, 9,
+13, 35, 74, 79, 80. No assertion in the file is left unclassified, and no RED
+in this section was produced by editing an assertion's text outside rows
+O1-O3.
+
 ## Cardinality
 
 ```json inventory
