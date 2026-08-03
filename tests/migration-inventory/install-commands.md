@@ -386,7 +386,10 @@ narrowing recorded at `uninstall-commands.md:157-170`.
      first grep of the rule-8 `||` chain). Port: `:1129`.
 106. Output does **not** contain `manager updated` (`:697`, second grep of
      the same chain). Port: `:1133`. Items 105-106 are non-vacuous because
-     item 104 proves the output carries the subject's diagnostics.
+     item 104 proves `out` is non-empty — but, per the narrowing recorded at
+     item 104, that emptiness guard rests on the fixture's own stderr being in
+     the capture, so item 104 is **not** evidence that `out` carries the
+     subject's diagnostic stream.
 
 ### Scenario 8b — malformed fingerprint inspection output (`:702-716`)
 
@@ -587,7 +590,7 @@ in place into row 13b rather than restored and re-verified between the two.
 Every other row was restored and re-verified GREEN on its own.
 
 The task brief names eight injections. That list is the floor: rows 1b-1e, 4,
-5, 6, 10, 13b, and 14 were derived from this inventory's own negative and
+5, 6, 10, 13b, 14, and 15 were derived from this inventory's own negative and
 port-only assertion sets, and they carry items and guards the brief's eight do
 not reach. Rows 8, 13a, 1c, 5 and 14 diverge from the brief's prediction
 table; each divergence is recorded under "Divergences" below, because a
@@ -636,6 +639,7 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 | 13a | `install-fakes.js` `runAdapter`: writes `spw-sidecar-leak` into `$TMPDIR` | **none — 32/32 GREEN.** See Divergences |
 | 13b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 61 (`:294` via `:779`), 94 (`:294` via `:1061`) — both `assertTmpEmpty` ports |
 | 14 | `install-commands.test.js`: `prepareGeneratedTree` (`:210`) short-circuited to a no-op, so the generated-tree precondition is lost at all of its call sites | port-only 8 (`:519`), 10 (`:546`), 17 (`:623`), 19 (`:658`), 25 (`:809`), 27 (`:841`) — all six `assertNoPrepareRan` guards — plus item 79 (`:944`). The injection added one line, so the runner reported each of these one higher; the numbers here are against the restored file |
+| 15 | `lifecycle-fixture.js` `buildSnapshot` (`:42-61`): `scripts/adapters/codex/validate-generated-plugin.py` planted in the snapshot every per-case package root is copied from (`:188`) | item 12 (`:467`), and only that |
 | O1 | first adjacent needle pair swapped at each of the five `assertOrder` sites, plus `buildLine < secondControlLine` → `>` and `lastOwnership < lastControl` → `>` | items 31 (`:608`), 34 (`:632`), 58 (`:767`), 66 (`:817`), 69 (`:849`), 75 (`:912`), 112 (`:1177`) |
 | O2 | second adjacent pair swapped at the same five sites, plus `lastControl < installLine` → `>` | items 35 (`:636`), 59 (`:767`), 67 (`:817`), 70 (`:849`), 76 (`:912`), 113 (`:1177`) |
 | O3 | third adjacent pair swapped at the four-needle site | item 114 (`:1177`) |
@@ -718,8 +722,19 @@ capture; recorded, not changed, with a forward pointer at item 104. Items 103,
 The payload `plugin remove superpowers@superpowers-manager` is itself one of
 c29's `assertOrder` needles, so `firstIndex` found the injected line at index 1
 and the call failed "out of order" at `:1177`. That RED says nothing about
-item 113, which is proven by row O2 instead. No other row's payload collides
-with a needle.
+item 113, which is proven by row O2 instead.
+
+No other row's payload collides with a needle **in a way that perturbs
+first-occurrence order**. One benign collision exists and is named here so the
+reader is not relying on a broader claim than was checked: row 1e's payload
+`plugin marketplace list openai-curated` contains the needle
+`plugin marketplace list` used by the `assertOrder` calls at `:767`, `:817`,
+and `:1177`. It is harmless because the injected line is appended on *every*
+Codex call, starting with probe's `plugin list --json`, so `firstIndex`
+(`lifecycle-fixture.js:319-321`) resolves that needle *earlier* than the real
+`plugin marketplace list` line rather than later, and every following needle
+still comes after it — the pairwise check at `:358-363` is unaffected. Row 1e
+produced no RED at any of the three sites, which is the observed confirmation.
 
 **Row 5 — the hoisted non-vacuity guards shadowed the negatives they protect,
 which is them working.** Items 13 and 14 (prepare's adapter-log negatives)
@@ -754,16 +769,24 @@ follows `bin-dispatch.md:27-36`.
 
 **A — items 95 (`:1064`), 99 (`:1089`), 106 (`:1133`) and 111 (`:1160`),
 "output does not contain `manager updated`".** *(1)* Structurally shadowed by
-each case's own exit-status assertion. `scripts/core/lifecycle.sh:103` prints
-the banner and immediately `return 0`s, and `scripts/install:57-59` exits 1
-only when that function returns non-zero — so under the current subject,
-printing `manager updated` *is* exiting 0. Every fixture toggle that makes the
-banner appear therefore makes `status === 0` too, and each of the four cases
-asserts `status !== 0` first: row 11 drove c24 and c26 RED at items 92 and 100,
-and row 12 drove c25 RED at item 96, in each instance shadowing the banner
-negative. No fixture-side lever can decouple them. This is stated for the four
-cases checked, not as a claim about every possible fixture. *(2)* Reachable
-exactly when that coupling breaks: if the banner moved above the
+each case's own exit-status assertion. `scripts/core/lifecycle.sh:102` prints
+the banner and `:103` immediately `return 0`s, and `scripts/install:57-59`
+exits 1 only when that function returns non-zero — so when the **subject**
+prints `manager updated`, it is exiting 0. Every config toggle that makes the
+subject print the banner therefore makes `status === 0` too, and each of the
+four cases asserts `status !== 0` first: row 11 drove c24 and c26 RED at items
+92 and 100, and row 12 drove c25 RED at item 96, in each instance shadowing
+the banner negative.
+
+A fixture-side lever nevertheless exists, and adjudication C's disposition
+applies here too: a fake writing `manager updated` to **stderr** would turn all
+four RED while `status !== 0` still holds, because each case asserts over
+`result.stdout + result.stderr` (`:1051`, `:1075`, `:1118`, `:1144`) and
+fixture stderr reaches that capture — `install-fakes.js:282` is the same
+mechanism row 8 exercised. That manufacture is deliberately not performed,
+because it would prove only that a fixture can print the banner, not that the
+subject reported success while failing. *(2)* Reachable, by the subject rather
+than a fixture, exactly when the coupling breaks: if the banner moved above the
 fingerprint-match test at `lifecycle.sh:101-104`, or were emitted from an
 `EXIT` trap, or `scripts/install` grew a step after `:57-59` that can fail.
 That is a real regression class the exit-status assertions do not catch, which
@@ -773,10 +796,14 @@ and 104.
 **B — item 18 (`:528`), "output does not contain `manager is current`".**
 *(1)* Same coupling, on the update side. `scripts/update:17-21` runs
 `spw_require_managed_update_control` *before* `echo "manager is current"`, and
-the `current)` branch has no step after the echo that can fail — so printing
-the banner entails exit 0, which item 16 (`:516`) asserts against and would
-report first. Under c4's `updateControl: "unsupported"` the gate rejects before
-the echo; under any toggle that lets the gate pass, item 16 fires. *(2)*
+the `current)` branch has no step after the echo that can fail — so when the
+**subject** prints the banner it is exiting 0, which item 16 (`:516`) asserts
+against and would report first. Under c4's `updateControl: "unsupported"` the
+gate rejects before the echo; under any toggle that lets the gate pass, item 16
+fires. The same declined fixture lever as in adjudication A applies here: c4
+asserts over `result.stdout + result.stderr` (`:514`), so a fake writing
+`manager is current` to stderr would turn item 18 RED without proving anything
+about the subject. *(2)*
 Reachable if the echo moved above `spw_require_managed_update_control`, if the
 banner were emitted from a trap, or if a failing step were added after it.
 Item 17 (`:521`) already proves `out` carries the subject's diagnostics, so
@@ -786,7 +813,7 @@ item 18 is not vacuous — only shadowed.
 `fingerprint is not detectable`".** *(1)* The two states are mutually
 exclusive in the subject. `spw_verify_installed_fingerprint` returns at
 `lifecycle.sh:92` when the inspection fails and at `:96` when its result
-cannot be parsed; the `not detectable` message at `:117` is reachable only
+cannot be parsed; the `not detectable` message at `:118` is reachable only
 after a *successful* inspection that yielded an empty fingerprint. The
 `fingerprintInspect` config surface offers exactly `ok | fail | malformed`, and
 `fail`/`malformed` both land on the early returns, so no value of it can
@@ -801,55 +828,61 @@ adapter reported inspection failure inside an `ok: true` envelope with an
 empty `fingerprint`. Either change satisfies every earlier assertion in c27
 and c28 and is caught only by items 105 and 110.
 
-**D — items 1-6 (`:417`, `:423`, `:431`), item 12 (`:467`) and port-only 5
-(`:437`), the source-tree and packaged-root guards.** *(1)* Their subjects are
-the repository's own `scripts/` tree (read from `ROOT`) and the packaged root
-copied from it. There is no fixture in the path: the only mutation that
-violates any of them is an edit to the production tree, which this task is
-scoped out of. Row P1 therefore probed the predicates without touching a
-tracked file, applying them in memory to the real contents of
-`scripts/install` and to regression copies. Results: each of the four
-forbidden literals is absent from the real file (`true`) and detected in a copy
-carrying it (`false`); the `app-server` line predicate is `true` on the real
-file, `false` on a copy with a bare `codex app-server` line, and `true` again
-on a copy where that line is commented — so the comment exemption at `:432` is
-live rather than an accident. Item 12's predicate is `true` for the real
-package root and `false` for a scratch root with
-`scripts/adapters/codex/validate-generated-plugin.py` planted. Item 1's catch
-branch was probed separately: `readFileSync` on a mode-`000` scratch file does
-throw, so the `assert.fail` at `:417` is live code and not dead — no file in
-`scripts/` is unreadable today, which is why the scan never enters it.
-Port-only 5 (`scanned > 0`) is unreachable while `scripts/` holds any file.
-*(2)* Reachable the moment someone lands the corresponding edit for real:
-adding one of the four hook-trust literals to a production script, invoking
-`codex app-server` outside a comment, repackaging the Python validator, making
-a script in `scripts/` unreadable, or emptying `scripts/` entirely. Two
-caveats worth recording: `grep -rn app-server scripts/` returns nothing today,
-so item 6's *positive* half (a commented mention staying legal) is exercised
-only by row P1's probe, never by real content; and the recursive scan reads
-whatever `scripts/` contains at run time, so it needs no maintenance when
-files are added.
+**D — items 1-6 (`:417`, `:423`, `:431`) and port-only 5 (`:437`), the
+source-tree guards.** *(1)* Their subject is the repository's own `scripts/`
+tree, read from `ROOT` at `:403` — **not** a per-case package root. There is no
+fixture in the path for these six items: the only mutation that violates any of
+them is an edit to the production tree, which this task is scoped out of. Row
+P1 therefore probed the predicates without touching a tracked file, applying
+them in memory to the real contents of `scripts/install` and to regression
+copies. Results: each of the four forbidden literals is absent from the real
+file (`true`) and detected in a copy carrying it (`false`); the `app-server`
+line predicate is `true` on the real file, `false` on a copy with a bare
+`codex app-server` line, and `true` again on a copy where that line is
+commented — so the comment exemption at `:432` is live rather than an accident.
+Item 1's catch branch was probed separately: `readFileSync` on a mode-`000`
+scratch file does throw, so the `assert.fail` at `:417` is live code and not
+dead — no file in `scripts/` is unreadable today, which is why the scan never
+enters it. Port-only 5 (`scanned > 0`) is unreachable while `scripts/` holds
+any file. *(2)* Reachable the moment someone lands the corresponding edit for
+real: adding one of the four hook-trust literals to a production script,
+invoking `codex app-server` outside a comment, making a script in `scripts/`
+unreadable, or emptying `scripts/` entirely. Two caveats worth recording:
+`grep -rn app-server scripts/` returns nothing today, so item 6's *positive*
+half (a commented mention staying legal) is exercised only by row P1's probe,
+never by real content; and the recursive scan reads whatever `scripts/`
+contains at run time, so it needs no maintenance when files are added.
+
+**Item 12 is deliberately not adjudicated here.** Unlike items 1-6 it reads
+`c.pkg` (`:467-472`), a fixture-built snapshot (`lifecycle-fixture.js:188`,
+copied from `buildSnapshot` at `:42-61`), so it does have a fixture lever.
+Row 15 pulls it: planting
+`scripts/adapters/codex/validate-generated-plugin.py` in the snapshot turns
+item 12 RED at `:467` and nothing else. It is a proven guard, not a boundary
+guard.
 
 ### Coverage ledger
 
 **Classes covered by this pass:** every negative, ordering, and cardinality
 assertion in the mapped inventory (64 of the 124 items), and 29 of the 41
-port-only assertions — every non-vacuity guard, every `assertNoCodexMutation`
-emptiness guard, every `assertNoPrepareRan` precondition guard, and port-only
-5 and 7. Mapped **positives** (the remaining 60 items) and the twelve
-exit-status/provenance port-only positives (port-only 6, 16, 23, 24, 26, 28,
-29, 30, 37, 39, 40, 41) were **not** classified in this pass; several of them
-turned RED incidentally (items 65, 68, 73, 79, 86, 92, 96, 100, 109, 120, 124
-and port-only 7, 14, 18), but no claim is made about the class as a whole.
+port-only assertions — every non-vacuity guard (port-only 1-5, 7, 9, 11-15, 18,
+20-22, 31-36, 38, the set named at `:486-490`) and every `assertNoPrepareRan`
+precondition guard (port-only 8, 10, 17, 19, 25, 27).
 
-Proven RED by injection: items 13, 14, 15, 19, 21, 24, 27, 30, 31, 32, 33, 34,
-35, 37, 38, 43, 44, 49, 50, 53, 56, 58, 59, 61, 62, 63, 64, 66, 67, 69, 70, 71,
-72, 74, 75, 76, 77, 78, 80, 81, 84, 85, 89, 91, 94, 112, 113, 114, 115, 117,
+**Not classified:** the remaining 60 mapped items, which are positives, and the
+twelve exit-status and provenance port-only positives — port-only 6, 16, 23,
+24, 26, 28, 29, 30, 37, 39, 40, 41. No claim is made about either class. Eleven
+mapped positives did turn RED incidentally (items 65, 68, 73, 79, 86, 92, 96,
+100, 109, 120, 124), which is recorded as observation, not as coverage.
+
+Proven RED by injection: items 12, 13, 14, 15, 19, 21, 24, 27, 30, 31, 32, 33,
+34, 35, 37, 38, 43, 44, 49, 50, 53, 56, 58, 59, 61, 62, 63, 64, 66, 67, 69, 70,
+71, 72, 74, 75, 76, 77, 78, 80, 81, 84, 85, 89, 91, 94, 112, 113, 114, 115, 117,
 and port-only 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21,
 22, 25, 27, 31, 32, 33, 34, 35, 36, 38.
 
-Adjudicated GREEN with both required parts: items 1, 2, 3, 4, 5, 6, 12, 18, 95,
-99, 105, 106, 110, 111, and port-only 5.
+Adjudicated GREEN with both required parts: items 1, 2, 3, 4, 5, 6, 18, 95, 99,
+105, 106, 110, 111, and port-only 5.
 
 No RED in this section was produced by editing an assertion's text outside rows
 O1-O3.

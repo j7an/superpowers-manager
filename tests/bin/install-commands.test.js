@@ -1124,8 +1124,8 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :695
     assert.ok(out.includes("fingerprint inspection"), out);
-    // :696-700 — two independent greps sharing one diagnostic block.
-    // Non-vacuous: :695 proves `out` carries the subject's diagnostics.
+    // :696-700 — two independent greps. :695 proves `out` is non-empty, not
+    // that the subject wrote it (the fake's stderr carries that needle too).
     assert.ok(
       !out.includes("fingerprint is not detectable"),
       `unverifiable fingerprint state must not be reported as absence:\n${out}`,
