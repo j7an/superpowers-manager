@@ -11,9 +11,18 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-/** @param {string} relPath */
+/**
+ * A missing or unreadable path here must not surface as a raw ENOENT with a
+ * stack frame. Same shape as run-node-suites.js's lstatSync guard: report the
+ * path, never re-emit the caught error, which carries errno and a stack.
+ * @param {string} relPath
+ */
 function read(relPath) {
-  return readFileSync(join(ROOT, relPath), "utf8");
+  try {
+    return readFileSync(join(ROOT, relPath), "utf8");
+  } catch {
+    throw new Error(`bootstrap inventory file could not be read: ${relPath}`);
+  }
 }
 
 /**
@@ -241,6 +250,24 @@ void test("bootstrap: text-content assertions", () => {
       `${relPath}: ${shouldContain ? "missing" : "unexpected"} text: ${text}`,
     );
   }
+});
+
+// The guard exists because the text-content loop calls read() on paths from a
+// literal table; a renamed or deleted file used to produce a raw ENOENT with a
+// stack instead of naming the path.
+void test("bootstrap: an unreadable path is reported by name, without errno or a stack", () => {
+  assert.throws(
+    () => read("no/such/file/in/this/repository.md"),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.equal(
+        error.message,
+        "bootstrap inventory file could not be read: no/such/file/in/this/repository.md",
+      );
+      assert.ok(!/ENOENT|errno/.test(error.message));
+      return true;
+    },
+  );
 });
 
 // --- inventory items 86-99: structural release-section assertions ------
