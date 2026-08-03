@@ -15,21 +15,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-// ${TMPDIR:?} with no fallback: os.tmpdir() would silently substitute /tmp when
-// TMPDIR is unset, which is the hardcoded path the hermetic-test rule forbids.
-// An unset TMPDIR must fail loudly here.
-const TMPDIR = process.env.TMPDIR;
-if (TMPDIR === undefined || TMPDIR === "") {
-  throw new Error(
-    "TMPDIR must be set — this fixture will not fall back to /tmp",
-  );
-}
-const SCRATCH = mkdtempSync(join(TMPDIR, "spw-dispatch-"));
+// Matches every other suite's convention (e.g. action-pins.test.js,
+// node-tooling.test.js): os.tmpdir() honors TMPDIR when set, and
+// mkdtempSync supplies the uniqueness that makes this hermetic.
+const SCRATCH = mkdtempSync(join(tmpdir(), "spw-dispatch-"));
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });

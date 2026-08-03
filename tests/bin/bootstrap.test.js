@@ -264,7 +264,6 @@ void test("bootstrap: an unreadable path is reported by name, without errno or a
         error.message,
         "bootstrap inventory file could not be read: no/such/file/in/this/repository.md",
       );
-      assert.ok(!/ENOENT|errno/.test(error.message));
       return true;
     },
   );

@@ -153,7 +153,9 @@ function assertExactlyOneThrough(numbers, expected, label) {
  *
  * Not a full JavaScript lexer: it does not track regex-literal context. That is
  * acceptable because a mis-strip yields a wrong count and therefore RED — it
- * cannot manufacture a false green. Verified 2026-08-02 across every file in
+ * cannot manufacture a false green, except by exact compensation (e.g. a
+ * regex literal containing `test(` inflating the count by exactly the amount
+ * a real deletion decreased it). Verified 2026-08-02 across every file in
  * tests/bin/: only assert-matcher-gate.test.js changes (10 unstripped, 8
  * stripped, two `test(` occurrences living inside string fixtures), and no
  * inventoried file's count moves.

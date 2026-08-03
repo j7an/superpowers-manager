@@ -94,7 +94,7 @@ void test("a stray flag fails with usage and dispatches nothing", () => {
   assert.deepEqual(result.log, []);
 });
 
-// --- inventory items 24-27: --help and --version ---------------------------
+// --- inventory items 24-28: --help and --version ---------------------------
 
 void test("--help exits 0 with usage on stdout and empty stderr", () => {
   const result = runDispatch({ tools: ALL_TOOLS, args: ["--help"] });
@@ -119,7 +119,7 @@ void test("--version through a symlink resolves, as npm and npx invoke bins", ()
   assert.equal(result.stdout.trim(), "9.9.9-test");
 });
 
-// --- inventory items 28-29: exit-code propagation ---------------------------
+// --- inventory item 29: exit-code propagation --------------------------------
 
 void test("a script's exit code propagates unchanged", () => {
   const result = runDispatch({
@@ -130,7 +130,7 @@ void test("a script's exit code propagates unchanged", () => {
   assert.equal(result.status, 42);
 });
 
-// --- inventory items 30-32: env passthrough ---------------------------------
+// --- inventory items 30-31: env passthrough ---------------------------------
 
 void test("SUPERPOWERS_* env vars reach the dispatched script", () => {
   const result = runDispatch({
@@ -149,7 +149,7 @@ void test("SUPERPOWERS_* env vars reach the dispatched script", () => {
   ]);
 });
 
-// --- inventory items 33-36: preflight, git absent ---------------------------
+// --- inventory items 32-34: preflight, git absent ---------------------------
 
 void test("missing git fails before dispatch and names the tool", () => {
   const result = runDispatch({
@@ -161,7 +161,7 @@ void test("missing git fails before dispatch and names the tool", () => {
   assert.deepEqual(result.log, []);
 });
 
-// --- inventory items 37-40: invalid pin syntax precedes preflight ----------
+// --- inventory items 35-37: invalid pin syntax precedes preflight ----------
 
 void test("an invalid pin ref is a usage error decided before any tool lookup", () => {
   // git and python3 are both absent; if preflight ran first, this would fail
@@ -179,7 +179,7 @@ void test("an invalid pin ref is a usage error decided before any tool lookup", 
   assert.deepEqual(result.log, []);
 });
 
-// --- inventory items 41-44: commands that need no git -----------------------
+// --- inventory items 38-40: commands that need no git -----------------------
 
 /** @type {Array<[string, string]>} */
 const NO_GIT_CASES = [
@@ -199,7 +199,7 @@ for (const [command, expected] of NO_GIT_CASES) {
   });
 }
 
-// --- inventory item 45: unpin needs no python --------------------------------
+// --- inventory item 41: unpin needs no python --------------------------------
 
 void test("`unpin` dispatches with python3 absent from PATH", () => {
   const result = runDispatch({
@@ -210,7 +210,7 @@ void test("`unpin` dispatches with python3 absent from PATH", () => {
   assert.deepEqual(result.log, ["unpin  ref="]);
 });
 
-// --- inventory items 46-49: codex required for probe and install ------------
+// --- inventory items 42-47: codex required for probe and install ------------
 
 void test("missing codex blocks `probe` before dispatch and names the tool", () => {
   const result = runDispatch({
@@ -238,7 +238,7 @@ void test("missing codex blocks `install` before dispatch and names the tool", (
   assert.deepEqual(result.log, []);
 });
 
-// --- inventory items 50-51: commands that need no codex ----------------------
+// --- inventory items 48-51: commands that need no codex ----------------------
 
 /** @type {Array<[string[], string]>} */
 const NO_CODEX_CASES = [

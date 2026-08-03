@@ -16,6 +16,11 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const TOOL_BIN = join(ROOT, "node_modules", ".bin");
 
+// SOURCE_EXTENSIONS is itself a hand-maintained enumeration — the fifth this
+// file's header comment disclaims. A file that is both in a new, unlisted
+// directory AND has an extension outside this list (e.g. tools/x.mts,
+// tools/x.jsx) is invisible to all four legs; either condition alone is
+// caught. Known, accepted gap — not fixed here.
 const SOURCE_EXTENSIONS = [".js", ".mjs", ".cjs", ".ts"];
 const JAVASCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs"];
 
