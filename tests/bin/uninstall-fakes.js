@@ -23,7 +23,7 @@ const STATE = /** @type {string} */ (process.env.SPW_FIXTURE_STATE);
 /**
  * Loads and re-validates the per-case config. `createCase` already validated
  * it eagerly; this is defence in depth, and it is what makes a hand-written
- * config.json (as the defence-in-depth self-test writes) fail closed too.
+ * config.json (as tests/bin/lifecycle-fixture.test.js writes) fail closed too.
  * The schema lives in lifecycle-config.js so exactly one definition governs
  * both the eager check and this one.
  * @returns {Record<string, unknown>}
