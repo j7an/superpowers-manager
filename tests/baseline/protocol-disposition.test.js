@@ -17,10 +17,6 @@ import test from "node:test";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DISPOSITION = join(ROOT, "docs", "baseline", "protocol-disposition.md");
-// Declared here rather than in the assertion that reads it: the two
-// traceability cross-checks that consume it land in the next change, and the
-// path belongs with its siblings above.
-// oxlint-disable-next-line no-unused-vars
 const TRACEABILITY = join(ROOT, "docs", "baseline", "traceability.md");
 
 const SUITES = [
@@ -134,6 +130,45 @@ function dispositionRows() {
   return rows;
 }
 
+/**
+ * Behavior ID to the PATH half of its traceability selector. Deliberately
+ * ignores the selector: the selector-level guarantee already belongs to
+ * TRACEABILITY-TESTS-01, and a second weaker copy of it here would be a
+ * liability rather than a defence.
+ * @returns {Map<string, string>}
+ */
+function traceabilityPaths() {
+  const lines = readFileSync(TRACEABILITY, "utf8").split("\n");
+  const headerIndex = lines.findIndex((line) =>
+    /^\|\s*Behavior ID\s*\|\s*Exact test case\s*\|\s*Fixture \/ builder\s*\|$/.test(
+      line,
+    ),
+  );
+  assert.notEqual(headerIndex, -1, "the traceability table header is missing");
+  /** @type {Map<string, string>} */
+  const paths = new Map();
+  for (
+    let index = headerIndex + 2;
+    /^\|.*\|$/.test(lines[index] || "");
+    index += 1
+  ) {
+    const fields = markdownCells(lines[index]);
+    assert.equal(
+      fields.length,
+      3,
+      `traceability row must have three fields: ${lines[index]}`,
+    );
+    const id = uncode(fields[0]);
+    const testCase = uncode(fields[1]);
+    const separator = testCase.indexOf("::");
+    assert.ok(separator > 0, `${id} test case must use PATH::SELECTOR`);
+    assert.equal(paths.has(id), false, `duplicate traceability row: ${id}`);
+    paths.set(id, testCase.slice(0, separator));
+  }
+  assert.ok(paths.size > 0, "traceability has no rows");
+  return paths;
+}
+
 void test("PROTOCOL-DISPOSITION-SET-01 the table covers exactly the frozen 29", () => {
   const ids = dispositionRows().map((row) => row.id);
   const seen = new Set();
@@ -208,5 +243,62 @@ void test("PROTOCOL-DISPOSITION-VALUES-01 every row is well formed", () => {
       true,
       `${id}: remap target is not a file: ${target}`,
     );
+  }
+});
+
+void test("PROTOCOL-DISPOSITION-REMAP-01 every remap sits at its owning suite or its declared target", () => {
+  const paths = traceabilityPaths();
+  const remaps = dispositionRows().filter((row) => row.disposition === "remap");
+  // Fail closed: an all-retire table would make this test iterate nothing and
+  // report success. If adjudication genuinely produced zero remaps, escalate —
+  // do not delete this guard.
+  assert.ok(
+    remaps.length > 0,
+    "no remap rows: this assertion would iterate nothing",
+  );
+  for (const { id, suite, target } of remaps) {
+    const actual = paths.get(id);
+    assert.ok(
+      actual !== undefined,
+      `${id} is a remap but has no traceability row`,
+    );
+    assert.ok(
+      actual === suite || actual === target,
+      `${id} traceability path must be its owning suite (${suite}) or its declared target (${target}), found: ${actual}`,
+    );
+  }
+});
+
+void test("PROTOCOL-DISPOSITION-RETIRE-01 a retire is present exactly while its owning suite exists", () => {
+  const paths = traceabilityPaths();
+  const retires = dispositionRows().filter(
+    (row) => row.disposition === "retire",
+  );
+  // Fail closed, as above.
+  assert.ok(
+    retires.length > 0,
+    "no retire rows: this assertion would iterate nothing",
+  );
+  for (const { id, suite } of retires) {
+    const suiteExists = existsSync(join(ROOT, suite));
+    assert.equal(
+      paths.has(id),
+      suiteExists,
+      suiteExists
+        ? `${id} was retired from traceability.md while its owning suite ${suite} still exists — retirement follows deletion, it does not precede it`
+        : `${id} remains in traceability.md but its owning suite ${suite} is gone — the retirement was never carried out`,
+    );
+    // The biconditional alone cannot see a wrong Owning suite: both protocol
+    // suites exist, so swapping .py for .sh leaves both sides unchanged. Remap
+    // rows are already pinned by REMAP-01's disjunction; without this, retire
+    // rows would be the only ones whose declared owner is unconstrained, and
+    // the column that justifies the retirement could name the wrong artifact.
+    if (paths.has(id)) {
+      assert.equal(
+        paths.get(id),
+        suite,
+        `${id}: declared owning suite ${suite} disagrees with its traceability path ${paths.get(id)}`,
+      );
+    }
   }
 });
