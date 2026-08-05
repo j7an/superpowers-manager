@@ -483,3 +483,30 @@ void test("install rejects an invalid-UTF-8 marketplace listing without mutating
     "plugin marketplace list --json",
   ]);
 });
+
+// Row 2 (PR 11.4): the synthesized launch failure used to return an empty
+// stderr buffer, making ENOEXEC/EMFILE/ENOMEM indistinguishable from Codex
+// exiting non-zero. The errno is a bounded, validated token, so the convention
+// permits interpolating it — unlike a free-form error message.
+void test("a Codex launch failure names the executable and its errno", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const unrunnable = join(sandbox.base, "unrunnable");
+  // +x with non-executable content: passes the X_OK availability check, then
+  // fails at exec with ENOEXEC.
+  await writeFile(unrunnable, "\x7fELF not a real program\n", { mode: 0o755 });
+
+  const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({ SUPERPOWERS_CODEX: unrunnable }),
+  });
+
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.ok(
+    result.envelope.messages.some(
+      (message) =>
+        message.channel === "stderr" &&
+        message.text === `cannot launch Codex command ${unrunnable}: ENOEXEC`,
+    ),
+    `no launch diagnostic in: ${JSON.stringify(result.envelope.messages)}`,
+  );
+});

@@ -158,11 +158,22 @@ function mapCodexLaunchFailure(
   if (code === "ENOENT" || code === "EACCES") {
     fail("command-not-found", `required Codex command not found: ${codexBin}`);
   }
+  // The errno is a bounded, enumerable, path-free token — not the cause's
+  // message — so the no-interpolation rule does not reach it. The shape guard
+  // is what keeps that true: an unvalidated String(cause.code) would be
+  // free-form again on a stream the protocol constrains.
+  const detail = /^E[A-Z0-9]+$/.test(code) ? `: ${code}` : "";
   return {
     status: 1,
     signal: null,
     stdout: Buffer.alloc(0),
-    stderr: Buffer.alloc(0),
+    // Trailing newline matches how a real process writes stderr; appendBytes
+    // (src/adapter-protocol.ts:121) splits on newlines and terminates the
+    // final chunk at end-of-buffer either way.
+    stderr: Buffer.from(
+      `cannot launch Codex command ${codexBin}${detail}\n`,
+      "utf8",
+    ),
   };
 }
 
