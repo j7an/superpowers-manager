@@ -147,7 +147,7 @@ function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;
 }
 
-function mapCodexLaunchFailure(
+export function mapCodexLaunchFailure(
   cause: unknown,
   codexBin: string,
 ): CommandResult {

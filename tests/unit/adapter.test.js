@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/adapter.js")} */
-const { runAdapter } = await import(
+const { runAdapter, mapCodexLaunchFailure } = await import(
   new URL("../../dist/adapter.js", import.meta.url).href
 );
 
@@ -486,27 +486,62 @@ void test("install rejects an invalid-UTF-8 marketplace listing without mutating
 
 // Row 2 (PR 11.4): the synthesized launch failure used to return an empty
 // stderr buffer, making ENOEXEC/EMFILE/ENOMEM indistinguishable from Codex
-// exiting non-zero. The errno is a bounded, validated token, so the convention
-// permits interpolating it — unlike a free-form error message.
-void test("a Codex launch failure names the executable and its errno", async (t) => {
-  const sandbox = await codexSandbox(t);
-  const unrunnable = join(sandbox.base, "unrunnable");
-  // +x with non-executable content: passes the X_OK availability check, then
-  // fails at exec with ENOEXEC.
-  await writeFile(unrunnable, "\x7fELF not a real program\n", { mode: 0o755 });
+// exiting non-zero. This is a unit test of the mapping itself, not an
+// integration test through a real spawn: the errno path cannot be provoked
+// hermetically. On Linux, glibc's execvp falls back to running /bin/sh when
+// the kernel returns ENOEXEC, so the spawn succeeds (exit 127) and
+// mapCodexLaunchFailure is never reached; on both platforms every other
+// candidate errno (ELOOP, ENAMETOOLONG, ...) fails the X_OK availability
+// check first and is peeled into command-not-found before a real spawn ever
+// happens. So the branch-through-the-envelope property — that this text
+// actually reaches `messages` via `log.appendBytes` — is exercised by
+// calling the mapping directly and is not covered end-to-end by any test.
+void test("mapCodexLaunchFailure carries a validated errno, guards free-form codes, and still peels off ENOENT/EACCES", () => {
+  const codexBin = "/opt/fake/codex";
 
-  const result = await runAdapter(["inspect", "--view", "fingerprint"], {
-    root: PACKAGE_ROOT,
-    env: sandbox.env({ SUPERPOWERS_CODEX: unrunnable }),
-  });
+  for (const code of ["ENOEXEC", "EMFILE"]) {
+    const result = mapCodexLaunchFailure({ code }, codexBin);
+    assert.equal(result.status, 1);
+    assert.equal(result.signal, null);
+    assert.deepStrictEqual(result.stdout, Buffer.alloc(0));
+    assert.deepStrictEqual(
+      result.stderr,
+      Buffer.from(`cannot launch Codex command ${codexBin}: ${code}\n`, "utf8"),
+    );
+  }
 
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  assert.ok(
-    result.envelope.messages.some(
-      (message) =>
-        message.channel === "stderr" &&
-        message.text === `cannot launch Codex command ${unrunnable}: ENOEXEC`,
-    ),
-    `no launch diagnostic in: ${JSON.stringify(result.envelope.messages)}`,
-  );
+  // The shape guard's proof: a free-form code (not /^E[A-Z0-9]+$/) and a
+  // non-string code are both omitted rather than interpolated, leaving no
+  // dangling colon.
+  for (const cause of [
+    { code: "no such file or directory" },
+    { code: 12 },
+    new Error("boom"),
+  ]) {
+    const result = mapCodexLaunchFailure(cause, codexBin);
+    assert.deepStrictEqual(
+      result.stderr,
+      Buffer.from(`cannot launch Codex command ${codexBin}\n`, "utf8"),
+    );
+  }
+
+  // ENOENT/EACCES keep their existing routing: fail("command-not-found", ...)
+  // throws an AdapterFailure (an Error subclass carrying `code` and
+  // `message`), verified by reading src/adapter.ts's `fail` and
+  // `AdapterFailure` directly rather than guessed.
+  for (const code of ["ENOENT", "EACCES"]) {
+    assert.throws(
+      () => mapCodexLaunchFailure({ code }, codexBin),
+      (error) => {
+        const failure = /** @type {{ code?: unknown; message?: unknown }} */ (
+          error
+        );
+        return (
+          error instanceof Error &&
+          failure.code === "command-not-found" &&
+          failure.message === `required Codex command not found: ${codexBin}`
+        );
+      },
+    );
+  }
 });
