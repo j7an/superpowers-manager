@@ -17,6 +17,26 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const INVENTORY_DIR = join(ROOT, "tests", "migration-inventory");
 
+// Declared, never derived. A glob is a query over mutable state and it empties
+// exactly when the deletion it should catch happens — the failure instance this
+// series has already hit twice. Adding or removing an inventory, or changing
+// which port files one covers, requires editing this map in the same reviewed
+// commit as the file itself.
+/** @type {Record<string, string[]>} */
+const DECLARED = {
+  "bin-dispatch.md": ["tests/bin/bin-dispatch.test.js"],
+  "bootstrap.md": ["tests/bin/bootstrap.test.js"],
+  "container-contract.md": ["tests/bin/container-contract.test.js"],
+  "install-commands.md": ["tests/bin/install-commands.test.js"],
+  "node-tooling.md": ["tests/bin/node-tooling.test.js"],
+  "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.js"],
+  "uninstall-commands.md": ["tests/bin/uninstall-commands.test.js"],
+  "workflows.md": [
+    "tests/bin/action-pins.test.js",
+    "tests/bin/workflows.test.js",
+  ],
+};
+
 const DECLARATION = /^```json inventory\n([\s\S]*?)\n```$/gm;
 const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
 const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
@@ -221,12 +241,14 @@ const inventories = readdirSync(INVENTORY_DIR)
   .filter((name) => name.endsWith(".md"))
   .sort();
 
-// Discovery by glob, not by list: a new inventory with no declaration block
-// fails rather than being silently unchecked. An empty directory would make
-// the whole suite vacuous.
-assert.ok(
-  inventories.length > 0,
-  "no migration inventories were discovered — glob discovery is broken",
+// The glob still runs — it is what sees an undeclared file appear. What it
+// cannot see on its own is a file disappearing, because iterating one fewer
+// item is not an error. Comparing it against the declared list catches both
+// directions.
+assert.deepEqual(
+  inventories,
+  Object.keys(DECLARED).sort(),
+  "the migration-inventory directory disagrees with the declared inventory list",
 );
 
 for (const name of inventories) {
@@ -279,6 +301,13 @@ for (const name of inventories) {
     assert.ok(
       portEntries.length > 0,
       `${name}: ports must name at least one port file`,
+    );
+    // Binds the SET of port files, not just their contents. Without this, deleting
+    // a `ports` entry removes that port file's call-site guard and stays green.
+    assert.deepEqual(
+      portEntries.map(([portPath]) => portPath).sort(),
+      [...DECLARED[name]].sort(),
+      `${name}: the declaration's port files disagree with the declared port map`,
     );
     const shellOriginal = /** @type {number} */ (declared.shellOriginal);
     const portOnlyCount = /** @type {number} */ (declared.portOnly);
