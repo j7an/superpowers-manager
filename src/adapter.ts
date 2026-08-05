@@ -147,6 +147,11 @@ function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;
 }
 
+// Exported only so its unit test can reach it. No integration test can cover
+// it: on Linux glibc, `execvp`'s ENOEXEC falls back to `/bin/sh`, so the spawn
+// still succeeds, and every other candidate errno is already peeled off by an
+// `X_OK` check or the `ENOENT`/`EACCES` branch. See the test's own comment
+// for the full analysis.
 export function mapCodexLaunchFailure(
   cause: unknown,
   codexBin: string,

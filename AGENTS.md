@@ -52,7 +52,10 @@ Codex below describe the product integration, not a required agent harness.
   stream the adapter protocol constrains. Reader wrappers already frozen by
   tests (`src/manifest-overlay.ts`, `src/selection-store.ts`,
   `src/generated-plugin.ts`) keep their wording; enumerate the frozen strings
-  before changing any of them.
+  before changing any of them. Re-emitting a subordinate module's own
+  diagnostic onto that stream is the sanctioned form of interpolation, but
+  only because it obliges the callee to own every failure reachable on that
+  path — never add such a site without confirming the callee still does.
 
 ## Development Workflow
 

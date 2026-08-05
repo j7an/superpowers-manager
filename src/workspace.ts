@@ -59,6 +59,9 @@ export interface WorkspaceOptions {
   readonly cleanup?: (path: string) => Promise<void>;
   // Presence is the suppression signal: suppression cannot be requested
   // without saying where the report goes.
+  // Must be synchronous: the call site below does not await it, so an async
+  // implementation's rejection would become an unhandled rejection instead
+  // of a visible failure.
   readonly onCleanupFailure?: (path: string) => void;
 }
 
