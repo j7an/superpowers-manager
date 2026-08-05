@@ -145,19 +145,6 @@ void test("withWorkspace preserves the callback error when cleanup fails", async
   );
 });
 
-void test("withWorkspace surfaces a cleanup failure when the callback succeeds", async (t) => {
-  const parent = await sandbox(t);
-  const cleanupFailure = new Error("cleanup failed");
-  await assert.rejects(
-    withWorkspace(parent, "work-", async () => 42, {
-      cleanup: async () => {
-        throw cleanupFailure;
-      },
-    }),
-    (error) => error === cleanupFailure,
-  );
-});
-
 void test("withWorkspace can preserve a successful callback result when cleanup fails", async (t) => {
   const parent = await sandbox(t);
   const cleanupFailure = new Error("cleanup failed");
@@ -187,7 +174,7 @@ void test("withWorkspace throws the cleanup failure when no reporter is supplied
   );
 });
 
-void test("withWorkspace preserves the callback error when ignored cleanup also fails", async (t) => {
+void test("withWorkspace preserves the callback error when a reported cleanup also fails", async (t) => {
   const parent = await sandbox(t);
   const callbackFailure = new Error("callback failed");
   const cleanupFailure = new Error("cleanup failed");
@@ -211,11 +198,13 @@ void test("withWorkspace preserves the callback error when ignored cleanup also 
 
 // The capability tests above prove `onCleanupFailure` works. This one proves
 // the adapter wires it: `src/adapter.ts` passes a reporter at every operation
-// (five call sites, `:514` `:657` `:729` `:814` `:923`), because a workspace it
-// never wrote to failing to be removed must not discard an otherwise successful
-// result — but must not vanish silently either. The fake Codex makes the
-// temporary directory's parent read-only while it runs, so the adapter's own
-// cleanup really fails; this is the only end-to-end cleanup failure in the repo.
+// (five call sites;
+// `grep -n "onCleanupFailure: reportOrphanedWorkspace" src/adapter.ts`),
+// because a workspace it never wrote to failing to be removed must not discard
+// an otherwise successful result — but must not vanish silently either. The
+// fake Codex makes the temporary directory's parent read-only while it runs, so
+// the adapter's own cleanup really fails; this is the only end-to-end cleanup
+// failure in the repo.
 void test("an adapter operation keeps its result when workspace cleanup fails", async (t) => {
   const base = await mkdtemp(join(tmpdir(), "spw-adapter-cleanup-"));
   const temporary = join(base, "tmp");
