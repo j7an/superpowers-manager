@@ -161,13 +161,30 @@ void test("withWorkspace surfaces a cleanup failure when the callback succeeds",
 void test("withWorkspace can preserve a successful callback result when cleanup fails", async (t) => {
   const parent = await sandbox(t);
   const cleanupFailure = new Error("cleanup failed");
+  /** @type {string[]} */
+  const reported = [];
   const result = await withWorkspace(parent, "work-", async () => 42, {
     cleanup: async () => {
       throw cleanupFailure;
     },
-    cleanupFailure: "ignore",
+    onCleanupFailure: (path) => reported.push(path),
   });
   assert.equal(result, 42);
+  assert.equal(reported.length, 1);
+  assert.ok(reported[0].startsWith(join(parent, "work-")));
+});
+
+void test("withWorkspace throws the cleanup failure when no reporter is supplied", async (t) => {
+  const parent = await sandbox(t);
+  const cleanupFailure = new Error("cleanup failed");
+  await assert.rejects(
+    withWorkspace(parent, "work-", async () => 42, {
+      cleanup: async () => {
+        throw cleanupFailure;
+      },
+    }),
+    (error) => error === cleanupFailure,
+  );
 });
 
 void test("withWorkspace preserves the callback error when ignored cleanup also fails", async (t) => {
@@ -185,20 +202,20 @@ void test("withWorkspace preserves the callback error when ignored cleanup also 
         cleanup: async () => {
           throw cleanupFailure;
         },
-        cleanupFailure: "ignore",
+        onCleanupFailure: () => {},
       },
     ),
     (error) => error === callbackFailure,
   );
 });
 
-// The capability tests above prove `cleanupFailure: "ignore"` works. This one
-// proves the adapter still passes it: `src/adapter.ts` opts every operation out
-// of cleanup-failure propagation (five call sites, `:478` `:621` `:693` `:778`
-// `:887`), because a workspace it never wrote to failing to be removed must not
-// discard an otherwise successful result. The fake Codex makes the temporary
-// directory's parent read-only while it runs, so the adapter's own cleanup
-// really fails.
+// The capability tests above prove `onCleanupFailure` works. This one proves
+// the adapter wires it: `src/adapter.ts` passes a reporter at every operation
+// (five call sites, `:514` `:657` `:729` `:814` `:923`), because a workspace it
+// never wrote to failing to be removed must not discard an otherwise successful
+// result — but must not vanish silently either. The fake Codex makes the
+// temporary directory's parent read-only while it runs, so the adapter's own
+// cleanup really fails; this is the only end-to-end cleanup failure in the repo.
 void test("an adapter operation keeps its result when workspace cleanup fails", async (t) => {
   const base = await mkdtemp(join(tmpdir(), "spw-adapter-cleanup-"));
   const temporary = join(base, "tmp");
@@ -226,6 +243,14 @@ void test("an adapter operation keeps its result when workspace cleanup fails", 
     },
   );
 
+  // Read the orphan first: its path is what the report must name, so knowing it
+  // here makes the message an exact equality rather than a pattern. This also
+  // remains the guard against a vacuous pass — if the read-only parent had not
+  // actually blocked removal there would be nothing left to find.
+  const leftover = await readdir(temporary);
+  assert.deepStrictEqual(leftover.length, 1, leftover.join(", "));
+  assert.match(leftover[0] ?? "", /^superpowers-manager\.adapter-uninstall\./);
+
   assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
   assert.deepStrictEqual(result.envelope.messages, [
     {
@@ -233,11 +258,9 @@ void test("an adapter operation keeps its result when workspace cleanup fails", 
       text: "removed plugin superpowers@superpowers-manager",
     },
     { channel: "stdout", text: "marketplace not registered; skipping" },
+    {
+      channel: "stderr",
+      text: `cannot remove workspace ${join(temporary, leftover[0] ?? "")}`,
+    },
   ]);
-  // Guard against a vacuous pass: if the read-only parent had not actually
-  // blocked removal there would be nothing left to find, and the assertions
-  // above would say nothing about cleanup-failure adoption.
-  const leftover = await readdir(temporary);
-  assert.deepStrictEqual(leftover.length, 1, leftover.join(", "));
-  assert.match(leftover[0] ?? "", /^superpowers-manager\.adapter-uninstall\./);
 });

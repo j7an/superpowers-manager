@@ -40,7 +40,7 @@ import { applyManifestOverlay } from "./manifest-overlay.js";
 import { readCodexBuildSource } from "./provenance.js";
 import type { JsonValue } from "./strict-json.js";
 import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.js";
-import { withWorkspace } from "./workspace.js";
+import { withWorkspace, workspaceRemovalFailure } from "./workspace.js";
 
 const PLUGIN_ID = "superpowers@superpowers-manager";
 const MARKETPLACE_NAME = "superpowers-manager";
@@ -176,6 +176,14 @@ async function runCodexCommand(
   } catch (cause) {
     return mapCodexLaunchFailure(cause, codexBin);
   }
+}
+
+function reportOrphanedWorkspace(
+  log: AdapterMessageLog,
+): (path: string) => void {
+  return (path) => {
+    log.appendText("stderr", workspaceRemovalFailure(path));
+  };
 }
 
 async function mutationCommand(
@@ -503,7 +511,7 @@ async function runBuild(
         );
         return {};
       },
-      { cleanupFailure: "ignore" },
+      { onCleanupFailure: reportOrphanedWorkspace(log) },
     );
   } catch (cause) {
     if (!entered) {
@@ -646,7 +654,7 @@ async function runInstall(
           },
         };
       },
-      { cleanupFailure: "ignore" },
+      { onCleanupFailure: reportOrphanedWorkspace(log) },
     );
   } catch (cause) {
     if (!entered) {
@@ -718,7 +726,7 @@ async function runUninstall(
         }
         return {};
       },
-      { cleanupFailure: "ignore" },
+      { onCleanupFailure: reportOrphanedWorkspace(log) },
     );
   } catch (cause) {
     if (!entered) {
@@ -803,7 +811,7 @@ async function runInspect(
           }
           return { view: "fingerprint", fingerprint };
         },
-        { cleanupFailure: "ignore" },
+        { onCleanupFailure: reportOrphanedWorkspace(log) },
       );
     } catch (cause) {
       if (!entered) {
@@ -912,7 +920,7 @@ async function runInspect(
                 : "neither",
           };
         },
-        { cleanupFailure: "ignore" },
+        { onCleanupFailure: reportOrphanedWorkspace(log) },
       );
     } catch (cause) {
       if (!entered) {
