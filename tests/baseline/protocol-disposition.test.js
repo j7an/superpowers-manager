@@ -232,6 +232,16 @@ void test("PROTOCOL-DISPOSITION-VALUES-01 every row is well formed", () => {
       false,
       `${id}: a remap target must not be a protocol suite — ${target} is deleted by PR 11.5`,
     );
+    // "Exists and is a file under tests/" admits tests/suites.json and every
+    // fixture. The target names where the behavior's coverage lands, so it must
+    // be a runnable test file — the same shapes TRACEABILITY-TESTS-01 resolves.
+    // Without this the wrong target survives until PR 11.5 moves the row and
+    // TRACEABILITY-TESTS-01 rejects it there, far from the edit that caused it.
+    assert.match(
+      target,
+      /^tests\/(?:baseline|unit)\/[^/]+\.test\.js$/,
+      `${id}: a remap target must be a runnable test file under tests/baseline/ or tests/unit/, found: ${target}`,
+    );
     const absolute = join(ROOT, target);
     assert.equal(
       existsSync(absolute),
