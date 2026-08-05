@@ -88,6 +88,37 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
   }
 });
 
+// Convention pin (PR 11.4): a reader emits a hand-written message naming its
+// input and never interpolates the caught error. Exact equality is the point —
+// a `match` on a prefix would pass with strict-json's wording or an errno still
+// appended, which is the failure this pins.
+void test("readManifest diagnostics name the manifest and carry no reader vocabulary or errno", async (t) => {
+  const directory = await sandbox(t);
+  const file = join(directory, "manifest.json");
+  const absent = join(directory, "absent.json");
+
+  await assert.rejects(readManifest(absent), (error) => {
+    assert.ok(error instanceof SafetyError);
+    assert.equal(error.message, `cannot read manifest JSON in ${absent}`);
+    return true;
+  });
+
+  // Parse-branch inputs only. `[]` is deliberately excluded: it parses
+  // successfully and reaches the separate "must be a JSON object" branch.
+  for (const input of [
+    Buffer.from('{"padding":NaN}'),
+    Buffer.from(`{"padding":${nested(256)}}`),
+    Uint8Array.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xc3, 0x28]),
+  ]) {
+    await writeFile(file, input);
+    await assert.rejects(readManifest(file), (error) => {
+      assert.ok(error instanceof SafetyError);
+      assert.equal(error.message, `invalid manifest JSON in ${file}`);
+      return true;
+    });
+  }
+});
+
 void test("classifyHooks rejects hooks in a fallback manifest", async (t) => {
   const root = await sandbox(t);
   await seedUpstream(root);

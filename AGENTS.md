@@ -44,6 +44,15 @@ Codex below describe the product integration, not a required agent harness.
 - Mutate only `superpowers@superpowers-manager` and the `superpowers-manager`
   marketplace. Never remove another provider automatically.
 - Keep `scripts/probe` read-only.
+- On the product path, a reader that catches a failure emits a hand-written
+  message naming the input; it never interpolates the caught error's message.
+  A bounded, validated token — an exit status, a symbolic errno — may be
+  interpolated; a free-form stream or error message may not. **Why:** an
+  interpolated cause puts raw filesystem text, and sometimes a stack, on a
+  stream the adapter protocol constrains. Reader wrappers already frozen by
+  tests (`src/manifest-overlay.ts`, `src/selection-store.ts`,
+  `src/generated-plugin.ts`) keep their wording; enumerate the frozen strings
+  before changing any of them.
 
 ## Development Workflow
 
