@@ -40,7 +40,7 @@ import { applyManifestOverlay } from "./manifest-overlay.js";
 import { readCodexBuildSource } from "./provenance.js";
 import type { JsonValue } from "./strict-json.js";
 import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.js";
-import { withWorkspace } from "./workspace.js";
+import { withWorkspace, workspaceRemovalFailure } from "./workspace.js";
 
 const PLUGIN_ID = "superpowers@superpowers-manager";
 const MARKETPLACE_NAME = "superpowers-manager";
@@ -147,7 +147,12 @@ function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;
 }
 
-function mapCodexLaunchFailure(
+// Exported only so its unit test can reach it. No integration test can cover
+// it: on Linux glibc, `execvp`'s ENOEXEC falls back to `/bin/sh`, so the spawn
+// still succeeds, and every other candidate errno is already peeled off by an
+// `X_OK` check or the `ENOENT`/`EACCES` branch. See the test's own comment
+// for the full analysis.
+export function mapCodexLaunchFailure(
   cause: unknown,
   codexBin: string,
 ): CommandResult {
@@ -158,11 +163,22 @@ function mapCodexLaunchFailure(
   if (code === "ENOENT" || code === "EACCES") {
     fail("command-not-found", `required Codex command not found: ${codexBin}`);
   }
+  // The errno is a bounded, enumerable, path-free token — not the cause's
+  // message — so the no-interpolation rule does not reach it. The shape guard
+  // is what keeps that true: an unvalidated String(cause.code) would be
+  // free-form again on a stream the protocol constrains.
+  const detail = /^E[A-Z0-9]+$/.test(code) ? `: ${code}` : "";
   return {
     status: 1,
     signal: null,
     stdout: Buffer.alloc(0),
-    stderr: Buffer.alloc(0),
+    // Trailing newline matches how a real process writes stderr; appendBytes
+    // (src/adapter-protocol.ts:121) splits on newlines and terminates the
+    // final chunk at end-of-buffer either way.
+    stderr: Buffer.from(
+      `cannot launch Codex command ${codexBin}${detail}\n`,
+      "utf8",
+    ),
   };
 }
 
@@ -176,6 +192,14 @@ async function runCodexCommand(
   } catch (cause) {
     return mapCodexLaunchFailure(cause, codexBin);
   }
+}
+
+function reportOrphanedWorkspace(
+  log: AdapterMessageLog,
+): (path: string) => void {
+  return (path) => {
+    log.appendText("stderr", workspaceRemovalFailure(path));
+  };
 }
 
 async function mutationCommand(
@@ -503,7 +527,7 @@ async function runBuild(
         );
         return {};
       },
-      { cleanupFailure: "ignore" },
+      { onCleanupFailure: reportOrphanedWorkspace(log) },
     );
   } catch (cause) {
     if (!entered) {
@@ -646,7 +670,7 @@ async function runInstall(
           },
         };
       },
-      { cleanupFailure: "ignore" },
+      { onCleanupFailure: reportOrphanedWorkspace(log) },
     );
   } catch (cause) {
     if (!entered) {
@@ -718,7 +742,7 @@ async function runUninstall(
         }
         return {};
       },
-      { cleanupFailure: "ignore" },
+      { onCleanupFailure: reportOrphanedWorkspace(log) },
     );
   } catch (cause) {
     if (!entered) {
@@ -803,7 +827,7 @@ async function runInspect(
           }
           return { view: "fingerprint", fingerprint };
         },
-        { cleanupFailure: "ignore" },
+        { onCleanupFailure: reportOrphanedWorkspace(log) },
       );
     } catch (cause) {
       if (!entered) {
@@ -912,7 +936,7 @@ async function runInspect(
                 : "neither",
           };
         },
-        { cleanupFailure: "ignore" },
+        { onCleanupFailure: reportOrphanedWorkspace(log) },
       );
     } catch (cause) {
       if (!entered) {

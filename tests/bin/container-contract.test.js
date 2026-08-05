@@ -1154,9 +1154,7 @@ void test("container-contract", async (t) => {
     assert.equal(
       result.status,
       0,
-      result.stderr
-        ? `hooks-list-rpc.py failed to parse as Python: ${result.stderr}`
-        : "hooks-list-rpc.py failed to parse as Python (no stderr captured)",
+      "hooks-list-rpc.py failed to parse as Python",
     );
   });
 

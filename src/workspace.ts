@@ -12,11 +12,17 @@ type ManagedSignal = keyof typeof signalStatuses;
 let exiting = false;
 const handlers = new Map<ManagedSignal, () => void>();
 
+// One phrasing for one condition. The adapter re-emits this for a suppressed
+// failure, so a change here must not leave two wordings for the same event.
+export function workspaceRemovalFailure(path: string): string {
+  return `cannot remove workspace ${path}`;
+}
+
 async function cleanup(path: string): Promise<void> {
   try {
     await rm(path, { recursive: true, force: true });
   } catch (cause) {
-    throw new SafetyError("workspace", `cannot remove workspace ${path}`, {
+    throw new SafetyError("workspace", workspaceRemovalFailure(path), {
       cause,
     });
   }
@@ -51,7 +57,12 @@ function deregisterCoordinator(): void {
 
 export interface WorkspaceOptions {
   readonly cleanup?: (path: string) => Promise<void>;
-  readonly cleanupFailure?: "ignore";
+  // Presence is the suppression signal: suppression cannot be requested
+  // without saying where the report goes.
+  // Must be synchronous: the call site below does not await it, so an async
+  // implementation's rejection would become an unhandled rejection instead
+  // of a visible failure.
+  readonly onCleanupFailure?: (path: string) => void;
 }
 
 export async function withWorkspace<T>(
@@ -82,9 +93,9 @@ export async function withWorkspace<T>(
     try {
       await remove(workspace);
     } catch (cleanupError) {
-      if (failed || options.cleanupFailure !== "ignore") {
-        throw failed ? callbackError : cleanupError;
-      }
+      if (failed) throw callbackError;
+      if (options.onCleanupFailure === undefined) throw cleanupError;
+      options.onCleanupFailure(workspace);
     }
     if (failed) throw callbackError;
     return result;

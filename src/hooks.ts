@@ -52,10 +52,6 @@ function ownedPathError(
   return hookError(`${label} escapes or could not be resolved: ${path}`, cause);
 }
 
-function detail(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
 // Every safe-path call goes through here. Calling classifyPathNoFollow
 // directly would let a SafetyError with module "safe-path" escape to the CLI,
 // breaking the promise that this module owns its diagnostics.
@@ -116,20 +112,21 @@ export async function readManifest(
   let bytes: Uint8Array;
   try {
     bytes = await readFile(path);
-  } catch (cause) {
-    throw hookError(
-      `cannot read manifest JSON in ${path}: ${detail(cause)}`,
-      cause,
-    );
+  } catch {
+    // Deliberately drops the cause on both branches. `detail(cause)` on the
+    // read branch surfaced a raw errno (`ENOENT: … open '<path>'`), which the
+    // `hook classification failed:` site in src/adapter.ts re-emits onto the
+    // protocol stream; the parse branch surfaced strict-json's own wording
+    // under a prefix src/manifest-overlay.ts also uses with CPython wording.
+    // Same text as the `cannot read manifest JSON in` site in
+    // src/adapter.ts.
+    throw hookError(`cannot read manifest JSON in ${path}`);
   }
   let parsed: JsonValue;
   try {
     parsed = parseStrictJson(bytes, MANIFEST_PROFILE);
-  } catch (cause) {
-    throw hookError(
-      `invalid manifest JSON in ${path}: ${detail(cause)}`,
-      cause,
-    );
+  } catch {
+    throw hookError(`invalid manifest JSON in ${path}`);
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw hookError(`manifest must be a JSON object: ${path}`);
