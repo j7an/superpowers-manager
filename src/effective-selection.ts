@@ -1,6 +1,11 @@
 // `selectionError` already exists at src/selection.ts:41 and tags errors with
 // module "selection". Import it rather than defining a second one.
-import { selectionError } from "./selection.js";
+import {
+  normalizeSaved,
+  selectionError,
+  type NormalizedSavedSelection,
+} from "./selection.js";
+import { readSelectionState } from "./selection-store.js";
 
 function requireAbsolute(value: string, variable: string): string {
   if (!value.startsWith("/")) {
@@ -31,4 +36,13 @@ export function selectionConfigDir(env: NodeJS.ProcessEnv): string {
 
 export function selectionStatePath(env: NodeJS.ProcessEnv): string {
   return `${selectionConfigDir(env)}/selection.json`;
+}
+
+// Composes exactly what selection-state-cli.ts:39 composes. The shell wrote a
+// normalized document to a mktemp file and read five fields back with five
+// python3 invocations; in-process this is one call.
+export async function loadSavedSelection(
+  env: NodeJS.ProcessEnv,
+): Promise<NormalizedSavedSelection> {
+  return normalizeSaved(await readSelectionState(selectionStatePath(env)));
 }
