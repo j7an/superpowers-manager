@@ -1,14 +1,17 @@
+import { rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { SafetyError } from "./safety-error.js";
 
-const active = new Set<string>();
-const signalStatuses = {
-  SIGHUP: 129,
-  SIGINT: 130,
-  SIGTERM: 143,
-} as const;
-type ManagedSignal = keyof typeof signalStatuses;
+const MANAGED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
+type ManagedSignal = (typeof MANAGED_SIGNALS)[number];
+
+// Each active workspace carries its caller's failure reporter, so the signal
+// path reports through the same destination as the normal path. Previously the
+// signal path called the module-private cleanup and swallowed the rejection in
+// Promise.allSettled, so a signal-time failure was silent — suppression with no
+// destination, which is the state PR 11.4 removed from the normal path.
+const active = new Map<string, ((path: string) => void) | undefined>();
 let exiting = false;
 const handlers = new Map<ManagedSignal, () => void>();
 
@@ -28,21 +31,37 @@ async function cleanup(path: string): Promise<void> {
   }
 }
 
-async function cleanupForSignal(status: number): Promise<never> {
-  if (exiting) await new Promise<never>(() => {});
+// Synchronous by contract. An `await` here would yield to the event loop with
+// the listeners still registered, and every signal arriving during that window
+// would be consumed and discarded — an uninterruptible process, which is worse
+// than the leak the handler exists to prevent. Being synchronous means the
+// handler cannot be re-entered, so the window does not exist.
+function cleanupForSignal(signal: ManagedSignal): void {
+  if (exiting) return;
   exiting = true;
-  await Promise.allSettled([...active].map(cleanup));
-  process.exit(status);
+  for (const [path, report] of active) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch {
+      // Same destination as the normal path. The diagnostic is hand-written and
+      // names the workspace; the caught cause is not interpolated.
+      if (report) report(path);
+      else process.stderr.write(`${workspaceRemovalFailure(path)}\n`);
+    }
+  }
+  active.clear();
+  // Remove only the listeners this coordinator registered, then re-raise so the
+  // default disposition terminates the process by the signal.
+  for (const [managed, handler] of handlers) process.off(managed, handler);
+  handlers.clear();
+  process.kill(process.pid, signal);
 }
 
 function registerCoordinator(): void {
   if (handlers.size > 0) return;
-  for (const [signal, status] of Object.entries(signalStatuses) as [
-    ManagedSignal,
-    number,
-  ][]) {
+  for (const signal of MANAGED_SIGNALS) {
     const handler = () => {
-      void cleanupForSignal(status);
+      cleanupForSignal(signal);
     };
     handlers.set(signal, handler);
     process.on(signal, handler);
@@ -78,7 +97,7 @@ export async function withWorkspace<T>(
   } catch (cause) {
     throw new SafetyError("workspace", "cannot create workspace", { cause });
   }
-  active.add(workspace);
+  active.set(workspace, options.onCleanupFailure);
   registerCoordinator();
   try {
     let result!: T;

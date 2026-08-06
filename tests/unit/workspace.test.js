@@ -1,6 +1,7 @@
 // @ts-check
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { chmodSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -34,26 +35,35 @@ const FAKE_CODEX = fileURLToPath(
 /** @param {import("node:test").TestContext} t */
 async function sandbox(t) {
   const directory = await mkdtemp(join(tmpdir(), "spw-workspace-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  t.after(async () => {
+    // The failure child chmods its own parent to 0o500 to force a removal
+    // failure; without restoring it first, this cleanup would itself fail.
+    chmodSync(directory, 0o700);
+    await rm(directory, { recursive: true, force: true });
+  });
   return directory;
 }
 
 /**
- * @param {string} parent
+ * Spawns a workspace-signal helper child, waits for it to announce
+ * `expectedPaths` workspace paths over stdout, signals it, and resolves once
+ * the child has closed.
+ *
+ * @param {string} script
+ * @param {readonly string[]} args
  * @param {NodeJS.Signals} signal
+ * @param {number} expectedPaths
  */
-async function signalChild(parent, signal) {
-  const child = spawn(
-    process.execPath,
-    ["tests/unit/helpers/workspace-signal-child.js", parent],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-  let output = "";
+async function spawnSignalChild(script, args, signal, expectedPaths) {
+  const child = spawn(process.execPath, [script, ...args], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
   const announcedPaths = await new Promise((resolve, reject) => {
     child.stdout.on("data", (chunk) => {
-      output += chunk;
-      const paths = output.split("\n").filter(Boolean);
-      if (paths.length === 3) resolve(paths);
+      stdout += chunk;
+      const paths = stdout.split("\n").filter(Boolean);
+      if (paths.length === expectedPaths) resolve(paths);
     });
     child.once("error", reject);
     child.once("exit", (code, childSignal) => {
@@ -67,7 +77,32 @@ async function signalChild(parent, signal) {
       resolve({ code, signal: childSignal });
     });
   });
-  return { announcedPaths, result };
+  return { announcedPaths, result, stdout };
+}
+
+/**
+ * @param {string} parent
+ * @param {NodeJS.Signals} signal
+ */
+async function signalChild(parent, signal) {
+  return spawnSignalChild(
+    "tests/unit/helpers/workspace-signal-child.js",
+    [parent],
+    signal,
+    3,
+  );
+}
+
+/**
+ * @param {string} parent
+ */
+async function signalFailureChild(parent) {
+  return spawnSignalChild(
+    "tests/unit/helpers/workspace-signal-failure-child.js",
+    [parent],
+    "SIGTERM",
+    1,
+  );
 }
 
 void test("FS-CLEANUP-01 withWorkspace returns a value and removes its directory", async (t) => {
@@ -101,27 +136,39 @@ void test("FS-CLEANUP-01 withWorkspace cleans up after callback failure", async 
 });
 
 void test("REF-CLEANUP-01 / REF-PIN-CLEANUP-01 signals clean only active workspaces", async (t) => {
-  /** @type {[NodeJS.Signals, number][]} */
-  const signals = [
-    ["SIGHUP", 129],
-    ["SIGINT", 130],
-    ["SIGTERM", 143],
-  ];
-  for (const [signal, status] of signals) {
+  /** @type {NodeJS.Signals[]} */
+  const signals = ["SIGHUP", "SIGINT", "SIGTERM"];
+  for (const signal of signals) {
     await t.test(signal, async () => {
       const parent = await sandbox(t);
       const sibling = join(parent, "sibling");
       await writeFile(sibling, "keep");
       const { announcedPaths, result } = await signalChild(parent, signal);
 
-      assert.equal(result.code, status);
-      assert.equal(result.signal, null);
+      // D4: cleanup is synchronous, then the handler deregisters itself and
+      // re-raises, so the process dies BY the signal. `$?` in a POSIX shell is
+      // still 128+N; waitpid consumers now see WIFSIGNALED rather than a
+      // normal exit numbered 143.
+      assert.equal(result.signal, signal);
+      assert.equal(result.code, null);
       for (const workspace of announcedPaths) {
         await assert.rejects(stat(workspace), { code: "ENOENT" });
       }
       assert.equal(await readFile(sibling, "utf8"), "keep");
     });
   }
+});
+
+void test("a signal-path cleanup failure reports through onCleanupFailure", async (t) => {
+  // Permission checks do not apply to root, so the failure cannot be staged.
+  if (process.getuid?.() === 0) {
+    t.skip("cleanup cannot be made to fail as root");
+    return;
+  }
+  const parent = await sandbox(t);
+  const { announcedPaths, result, stdout } = await signalFailureChild(parent);
+  assert.equal(result.signal, "SIGTERM");
+  assert.match(stdout, new RegExp(`^reported:${announcedPaths[0]}$`, "m"));
 });
 
 void test("withWorkspace preserves the callback error when cleanup fails", async (t) => {
