@@ -45,6 +45,23 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   "update",
   "uninstall",
 ];
+
+export type DispatchMode = "spawn" | "in-process";
+
+// The PR 11.5 migration state, in production code because `preflight` reads it:
+// a POSIX shell is required only while a command is still spawned. Each slice
+// flips entries to "in-process"; when none remain, `buildSpawn`,
+// `discoverShell`, and this table are deleted together.
+const DISPATCH: Record<Subcommand, DispatchMode> = {
+  pin: "spawn",
+  "track-latest": "spawn",
+  unpin: "spawn",
+  prepare: "spawn",
+  probe: "spawn",
+  install: "spawn",
+  update: "spawn",
+  uninstall: "spawn",
+};
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git", "python3"],
   "track-latest": ["python3"],
@@ -198,16 +215,21 @@ function preflight(
       );
     }
   }
-  const shell = discoverShell(env, platform);
-  if (!shell) {
-    errors.push(
-      platform === "win32"
-        ? "no POSIX shell found — install Git for Windows (provides bash) or use WSL2"
-        : "required command not found: sh",
-    );
+  let shell = "";
+  if (DISPATCH[cmd] === "spawn") {
+    const discovered = discoverShell(env, platform);
+    if (!discovered) {
+      errors.push(
+        platform === "win32"
+          ? "no POSIX shell found — install Git for Windows (provides bash) or use WSL2"
+          : "required command not found: sh",
+      );
+    } else {
+      shell = discovered;
+    }
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, shell: shell! };
+  return { ok: true, shell };
 }
 
 // POSIX executes the script directly (#!/bin/sh shebang); Windows cannot
@@ -318,6 +340,7 @@ export {
   buildSpawn,
   usage,
   main,
+  DISPATCH,
 };
 
 if (isMain(import.meta.filename, process.argv[1])) main();

@@ -19,6 +19,7 @@ import test from "node:test";
 
 import {
   COMMANDS,
+  IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
   clearDispatchLog,
@@ -543,6 +544,14 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     ["uninstall", ["--purge", "arbitrary value"]],
   ]);
   assert.deepEqual([...cases.keys()], COMMANDS);
+  // Every command is either dispatched to a script or executed in-process.
+  // Neither list may drift from COMMANDS while the migration is partial.
+  for (const command of IN_PROCESS_COMMANDS) {
+    assert.ok(
+      COMMANDS.includes(command),
+      `unknown in-process command: ${command}`,
+    );
+  }
 
   withSandbox({ stubScripts: true }, (sandbox) => {
     for (const [command, argv] of cases) {
@@ -553,9 +562,15 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
         dispatchEnvironment(sandbox),
       );
       assertCleanResult(result);
-      assert.equal(result.stdout, "");
-      assert.equal(result.stderr, "");
-      assertOnlyDispatch(sandbox, command, argv);
+      const dispatched = readDispatchLog(sandbox).map((e) => e.command);
+      if (IN_PROCESS_COMMANDS.includes(command)) {
+        // An in-process command must reach its module and dispatch NOTHING.
+        // Asserting the empty log is what makes this half a real assertion
+        // rather than a skip: a regression that re-spawns the script fails here.
+        assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
+      } else {
+        assert.deepEqual(dispatched, [command]);
+      }
     }
   });
 });

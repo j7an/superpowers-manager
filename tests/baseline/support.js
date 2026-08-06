@@ -91,6 +91,14 @@ const COMMANDS = [
   "update",
   "uninstall",
 ];
+// Derived, never restated. A second hand-maintained list can agree with itself
+// while disagreeing with the code it describes.
+const { DISPATCH } = await import(
+  new URL("../../dist/cli.js", import.meta.url).href
+);
+const IN_PROCESS_COMMANDS = COMMANDS.filter(
+  (command) => DISPATCH[command] === "in-process",
+);
 const PASSTHROUGH_VARIABLES = [
   "SUPERPOWERS_REF",
   "SUPERPOWERS_UPSTREAM_URL",
@@ -399,6 +407,7 @@ PY
 function installDispatchStubs(sandbox) {
   registeredRoot(sandbox);
   for (const command of COMMANDS) {
+    if (IN_PROCESS_COMMANDS.includes(command)) continue;
     const script = join(sandbox.pkg, "scripts", command);
     writeFileSync(script, dispatchStub(command), "utf8");
     chmodSync(script, 0o755);
@@ -629,6 +638,7 @@ function fixturePath(...parts) {
 
 export {
   COMMANDS,
+  IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
   clearDispatchLog,
