@@ -3,9 +3,12 @@
 import {
   normalizeSaved,
   selectionError,
+  validateSource,
   type NormalizedSavedSelection,
 } from "./selection.js";
 import { readSelectionState } from "./selection-store.js";
+import { readConfigRef, resolveRef } from "./upstream.js";
+import { COMMIT_RE } from "./domain/refs.js";
 
 function requireAbsolute(value: string, variable: string): string {
   if (!value.startsWith("/")) {
@@ -45,4 +48,100 @@ export async function loadSavedSelection(
   env: NodeJS.ProcessEnv,
 ): Promise<NormalizedSavedSelection> {
   return normalizeSaved(await readSelectionState(selectionStatePath(env)));
+}
+
+export interface EffectiveSelection {
+  readonly selectionOrigin: "environment" | "user-config" | "package-default";
+  readonly selectionMode: "override" | "pinned" | "track-latest" | "default";
+  readonly upstreamSourceOrigin:
+    "environment" | "user-config" | "package-default";
+  readonly effectiveSource: string;
+  readonly requestedRef: string;
+  readonly resolvedRef: string;
+  readonly desiredCommit: string;
+  readonly resolutionKind: string;
+  readonly saved: NormalizedSavedSelection;
+}
+
+const UPSTREAM_URL_DEFAULT = "https://github.com/obra/superpowers";
+
+// Ports the env > saved > package-default precedence ladder from
+// scripts/core/selection.sh:88-162. validateSource runs before any ref
+// resolution (test_probe.sh:520): a credential-bearing source must fail
+// before Git is ever invoked.
+export async function computeEffectiveSelection(
+  root: string,
+  env: NodeJS.ProcessEnv,
+): Promise<EffectiveSelection> {
+  const saved = await loadSavedSelection(env);
+
+  let upstreamSourceOrigin: EffectiveSelection["upstreamSourceOrigin"];
+  let effectiveSource: string;
+  if (env.SUPERPOWERS_UPSTREAM_URL) {
+    upstreamSourceOrigin = "environment";
+    effectiveSource = env.SUPERPOWERS_UPSTREAM_URL;
+  } else if (saved.saved_mode !== "none") {
+    upstreamSourceOrigin = "user-config";
+    effectiveSource = saved.saved_source;
+  } else {
+    upstreamSourceOrigin = "package-default";
+    effectiveSource = UPSTREAM_URL_DEFAULT;
+  }
+
+  // Before any Git access. test_probe.sh:520 pins this ordering.
+  validateSource(effectiveSource);
+
+  let selectionOrigin: EffectiveSelection["selectionOrigin"];
+  let selectionMode: EffectiveSelection["selectionMode"];
+  let requestedRef: string;
+  let usesSavedPin = false;
+  if (env.SUPERPOWERS_REF) {
+    selectionOrigin = "environment";
+    selectionMode = "override";
+    requestedRef = env.SUPERPOWERS_REF;
+  } else if (saved.saved_mode === "pinned") {
+    selectionOrigin = "user-config";
+    selectionMode = "pinned";
+    requestedRef = saved.saved_requested_ref;
+    usesSavedPin = true;
+  } else if (saved.saved_mode === "track-latest") {
+    selectionOrigin = "user-config";
+    selectionMode = "track-latest";
+    requestedRef = "latest-release";
+  } else {
+    selectionOrigin = "package-default";
+    selectionMode = "default";
+    requestedRef = await readConfigRef(root, env);
+  }
+
+  if (usesSavedPin) {
+    return {
+      selectionOrigin,
+      selectionMode,
+      upstreamSourceOrigin,
+      effectiveSource,
+      requestedRef,
+      resolvedRef: saved.saved_resolved_ref,
+      desiredCommit: saved.saved_commit,
+      resolutionKind: COMMIT_RE.test(saved.saved_requested_ref)
+        ? "raw-commit"
+        : "tag",
+      saved,
+    };
+  }
+
+  const resolution = await resolveRef(effectiveSource, requestedRef);
+  // `Resolution` (src/upstream.ts:28-32) is { kind, ref, commit } — the
+  // resolved ref field is named `ref`, not `resolvedRef`.
+  return {
+    selectionOrigin,
+    selectionMode,
+    upstreamSourceOrigin,
+    effectiveSource,
+    requestedRef,
+    resolvedRef: resolution.ref,
+    desiredCommit: resolution.commit,
+    resolutionKind: resolution.kind,
+    saved,
+  };
 }

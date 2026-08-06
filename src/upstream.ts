@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   COMMIT_INPUT_RE,
   compareStable,
@@ -33,6 +34,24 @@ export interface Resolution {
 
 function upstreamError(message: string): SafetyError {
   return new SafetyError("upstream", message);
+}
+
+// Mirrors scripts/core/upstream.sh:6-13: SUPERPOWERS_REF wins; otherwise the
+// first line of config/upstream-ref with trailing whitespace stripped.
+// The diagnostic names the path and does not interpolate the caught cause.
+export async function readConfigRef(
+  root: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
+  if (env.SUPERPOWERS_REF) return env.SUPERPOWERS_REF;
+  const path = join(root, "config", "upstream-ref");
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    throw upstreamError(`cannot read packaged upstream ref ${path}`);
+  }
+  return (text.split("\n")[0] ?? "").replace(/\s+$/, "");
 }
 
 // Signal termination carries `status: null`, and `null !== 0`, so this one

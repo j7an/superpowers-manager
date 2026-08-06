@@ -12,10 +12,14 @@ import test from "node:test";
 // implicit `any`. Load the built module dynamically while typing it against
 // its `src/` source instead.
 /** @type {typeof import("../../src/effective-selection.js")} */
-const { selectionConfigDir, selectionStatePath, loadSavedSelection } =
-  await import(
-    new URL("../../dist/effective-selection.js", import.meta.url).href
-  );
+const {
+  selectionConfigDir,
+  selectionStatePath,
+  loadSavedSelection,
+  computeEffectiveSelection,
+} = await import(
+  new URL("../../dist/effective-selection.js", import.meta.url).href
+);
 
 void test("selection config dir honours SUPERPOWERS_CONFIG_DIR first", () => {
   assert.equal(
@@ -80,8 +84,10 @@ void test("the state path appends selection.json to the config dir", () => {
 // pending promise and `finally` then runs rmSync immediately, deleting the
 // fixture before the callback has read it.
 /**
+ * @template T
  * @param {string | null} contents
- * @param {(env: NodeJS.ProcessEnv) => Promise<import("../../src/selection.js").NormalizedSavedSelection>} fn
+ * @param {(env: NodeJS.ProcessEnv) => Promise<T>} fn
+ * @returns {Promise<T>}
  */
 async function withConfigDir(contents, fn) {
   const root = mkdtempSync(join(tmpdir(), "spw-effsel-"));
@@ -123,5 +129,64 @@ void test("an invalid saved record rejects rather than defaulting to none", asyn
   await assert.rejects(
     () => withConfigDir("{ not json", (env) => loadSavedSelection(env)),
     (error) => error instanceof Error && error.message.length > 0,
+  );
+});
+
+const PINNED = JSON.stringify({
+  schema_version: 1,
+  mode: "pinned",
+  source: "https://example.invalid/upstream",
+  requested_ref: "v1.2.3",
+  resolved_ref: "v1.2.3",
+  commit: "a".repeat(40),
+});
+
+void test("a saved pin short-circuits resolution and reports tag kind", async () => {
+  const selection = await withConfigDir(PINNED, (env) =>
+    computeEffectiveSelection("/unused", env),
+  );
+  assert.equal(selection.selectionOrigin, "user-config");
+  assert.equal(selection.selectionMode, "pinned");
+  assert.equal(selection.upstreamSourceOrigin, "user-config");
+  assert.equal(selection.desiredCommit, "a".repeat(40));
+  assert.equal(selection.resolutionKind, "tag");
+});
+
+void test("a saved raw-commit pin reports raw-commit kind", async () => {
+  const record = JSON.stringify({
+    schema_version: 1,
+    mode: "pinned",
+    source: "https://example.invalid/upstream",
+    requested_ref: "b".repeat(40),
+    resolved_ref: "b".repeat(40),
+    commit: "b".repeat(40),
+  });
+  const selection = await withConfigDir(record, (env) =>
+    computeEffectiveSelection("/unused", env),
+  );
+  assert.equal(selection.resolutionKind, "raw-commit");
+});
+
+void test("source validation precedes ref resolution", async () => {
+  // The fixture MUST be non-pinned. A saved pin sets usesSavedPin and returns
+  // before resolveRef is ever reached, so the ordering could not regress
+  // observably and the mutation proof in Step 5 could not turn RED.
+  //
+  // With mode "track-latest", requestedRef becomes "latest-release" and
+  // resolveRef WOULD run. A credential-bearing source must be rejected first.
+  const TRACK_LATEST = JSON.stringify({
+    schema_version: 1,
+    mode: "track-latest",
+    source: "https://example.invalid/upstream",
+  });
+  await assert.rejects(
+    () =>
+      withConfigDir(TRACK_LATEST, (env) =>
+        computeEffectiveSelection("/unused", {
+          ...env,
+          SUPERPOWERS_UPSTREAM_URL: "https://token@example.invalid/upstream",
+        }),
+      ),
+    /HTTP\(S\) source must not include userinfo/,
   );
 });
