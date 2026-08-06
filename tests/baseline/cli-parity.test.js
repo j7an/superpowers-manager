@@ -19,6 +19,7 @@ import test from "node:test";
 
 import {
   COMMANDS,
+  DISPATCH,
   IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
@@ -544,14 +545,13 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     ["uninstall", ["--purge", "arbitrary value"]],
   ]);
   assert.deepEqual([...cases.keys()], COMMANDS);
-  // Every command is either dispatched to a script or executed in-process.
-  // Neither list may drift from COMMANDS while the migration is partial.
-  for (const command of IN_PROCESS_COMMANDS) {
-    assert.ok(
-      COMMANDS.includes(command),
-      `unknown in-process command: ${command}`,
-    );
-  }
+  // The production DISPATCH keys and the test-side COMMANDS list must agree
+  // as sets in both directions. COMMANDS is hand-maintained while DISPATCH is
+  // keyed by the production Subcommand union, so either one can gain or lose
+  // an entry the other doesn't have; a one-directional `includes` check
+  // cannot catch that because IN_PROCESS_COMMANDS is filtered from COMMANDS
+  // by construction and is therefore always a subset of it.
+  assert.deepEqual(Object.keys(DISPATCH).sort(), [...COMMANDS].sort());
 
   withSandbox({ stubScripts: true }, (sandbox) => {
     for (const [command, argv] of cases) {
@@ -561,15 +561,20 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
         [command, ...argv],
         dispatchEnvironment(sandbox),
       );
-      assertCleanResult(result);
-      const dispatched = readDispatchLog(sandbox).map((e) => e.command);
       if (IN_PROCESS_COMMANDS.includes(command)) {
         // An in-process command must reach its module and dispatch NOTHING.
-        // Asserting the empty log is what makes this half a real assertion
-        // rather than a skip: a regression that re-spawns the script fails here.
+        // Every command's scripts/<command> is stubbed with a regression
+        // detector (support.js's regressionStub): it logs the invocation and
+        // exits non-zero, so a regression that re-spawns the script fails
+        // both assertCleanResult below and this empty-dispatch-log check.
+        assertCleanResult(result);
+        const dispatched = readDispatchLog(sandbox).map((e) => e.command);
         assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
       } else {
-        assert.deepEqual(dispatched, [command]);
+        assertCleanResult(result);
+        assert.equal(result.stdout, "");
+        assert.equal(result.stderr, "");
+        assertOnlyDispatch(sandbox, command, argv);
       }
     }
   });

@@ -27,8 +27,14 @@ type UsageErrorParseResult = {
 type ParseResult =
   RunParseResult | HelpParseResult | VersionParseResult | UsageErrorParseResult;
 
+// The success variant is keyed by dispatch mode so the compiler — not a
+// runtime check — enforces that `shell` exists only where it was actually
+// discovered. A later slice that flips a `DISPATCH` entry before wiring its
+// in-process handler cannot reach `pf.shell` by accident.
 type PreflightResult =
-  { ok: true; shell: string } | { ok: false; errors: string[] };
+  | { ok: true; dispatch: "spawn"; shell: string }
+  | { ok: true; dispatch: "in-process" }
+  | { ok: false; errors: string[] };
 
 type SpawnDescriptor = {
   file: string;
@@ -215,21 +221,21 @@ function preflight(
       );
     }
   }
-  let shell = "";
-  if (DISPATCH[cmd] === "spawn") {
-    const discovered = discoverShell(env, platform);
-    if (!discovered) {
-      errors.push(
-        platform === "win32"
-          ? "no POSIX shell found — install Git for Windows (provides bash) or use WSL2"
-          : "required command not found: sh",
-      );
-    } else {
-      shell = discovered;
-    }
+  if (DISPATCH[cmd] !== "spawn") {
+    if (errors.length) return { ok: false, errors };
+    return { ok: true, dispatch: "in-process" };
+  }
+  const shell = discoverShell(env, platform);
+  if (!shell) {
+    errors.push(
+      platform === "win32"
+        ? "no POSIX shell found — install Git for Windows (provides bash) or use WSL2"
+        : "required command not found: sh",
+    );
+    return { ok: false, errors };
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, shell };
+  return { ok: true, dispatch: "spawn", shell };
 }
 
 // POSIX executes the script directly (#!/bin/sh shebang); Windows cannot
@@ -303,6 +309,13 @@ function main(): never {
   const pf = preflight(parsed.cmd, process.env, process.platform);
   if (!pf.ok) {
     for (const e of pf.errors) console.error(`error: ${e}`);
+    process.exit(1);
+  }
+  if (pf.dispatch === "in-process") {
+    // Unreachable while every DISPATCH entry is "spawn": no command has an
+    // in-process handler registered yet. A later slice adds one alongside
+    // the DISPATCH flip that makes this branch reachable.
+    console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
     process.exit(1);
   }
   const script = path.join(root, "scripts", parsed.cmd);

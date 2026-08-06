@@ -403,13 +403,42 @@ PY
 `;
 }
 
+// An in-process command must never reach scripts/<command>. If routing
+// regresses and spawns it anyway, this stub must be caught two ways: it logs
+// the invocation (so the empty-dispatch-log assertion fails) and it exits
+// non-zero unconditionally, ignoring SPW_BASELINE_DELEGATE_EXIT (so
+// assertCleanResult also fails). A correctly routed in-process command never
+// invokes this file, so its presence is inert.
+/** @param {string} command */
+function regressionStub(command) {
+  return `#!/bin/sh
+set -eu
+
+python3 - ${JSON.stringify(command)} "$@" <<'PY'
+import json
+import os
+import sys
+
+command, *arguments = sys.argv[1:]
+log_path = os.environ["SPW_BASELINE_DISPATCH_LOG"]
+record = {"command": command, "argv": arguments}
+with open(log_path, "a", encoding="utf-8") as handle:
+    json.dump(record, handle, allow_nan=False, separators=(",", ":"))
+    handle.write("\\n")
+raise SystemExit(1)
+PY
+`;
+}
+
 /** @param {Sandbox} sandbox */
 function installDispatchStubs(sandbox) {
   registeredRoot(sandbox);
   for (const command of COMMANDS) {
-    if (IN_PROCESS_COMMANDS.includes(command)) continue;
     const script = join(sandbox.pkg, "scripts", command);
-    writeFileSync(script, dispatchStub(command), "utf8");
+    const stub = IN_PROCESS_COMMANDS.includes(command)
+      ? regressionStub(command)
+      : dispatchStub(command);
+    writeFileSync(script, stub, "utf8");
     chmodSync(script, 0o755);
   }
 }
@@ -638,6 +667,7 @@ function fixturePath(...parts) {
 
 export {
   COMMANDS,
+  DISPATCH,
   IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
