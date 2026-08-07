@@ -44,6 +44,112 @@ const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
 const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
 const TEST_IMPORT = /^import test from "node:test";$/m;
 
+// Cardinal words this project's inventories have actually used for a stated
+// count (bin-dispatch.md's "two", selection-state.md's "six",
+// ref-resolution.md's "seven" and, before its fix-round correction, "nine").
+// Bounded at twenty: every inventory's merge/retirement count observed so
+// far is well under ten, and a count needing a word beyond this list is a
+// sign the file should say the digit instead, not a gap to close here.
+/** @type {Record<string, number>} */
+const WORD_NUMBERS = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+};
+const NUMBER_TOKEN = `(\\d+|${Object.keys(WORD_NUMBERS).join("|")})`;
+
+// Anchored to the two exact declared-count phrasings that have each drifted
+// from their own file's marker count once already (Tasks 7, 8, and 9's
+// review rounds) — not a general-purpose prose parser. Each phrasing pairs a
+// stated number with a specific noun phrase directly behind it
+// ("N recorded merges", "N retired items"); nothing that merely mentions
+// "retired" or "merged" elsewhere (e.g. "bin-dispatch.md's retired items",
+// which names no count) can match, because there is no number token
+// immediately before the phrase.
+const RECORDED_MERGES_RE = new RegExp(
+  `\\b${NUMBER_TOKEN}\\s+recorded merges\\b`,
+  "gi",
+);
+const RETIRED_ITEMS_RE = new RegExp(
+  `\\*{0,2}${NUMBER_TOKEN}\\s+retired items\\*{0,2}`,
+  "gi",
+);
+
+// Declared, never derived — same philosophy as DECLARED above, and for the
+// same reason: a predicate ("skip any file with zero markers") would also
+// match a file that *lost* its markers, silently passing exactly the
+// deletion this checker exists to catch. workflows.md is named here, alone,
+// because it records its merges by prose item-range enumeration
+// ("items 1-2", "items 17-24", "items 25-28") and never adopted the
+// `**Merged**` bold-marker convention the other three phrase-bearing files
+// use — its "three recorded merges" is not machine-checkable in this form,
+// not a defect. Remove this entry if workflows.md ever adopts the marker.
+const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
+
+/**
+ * @param {string} token digits or one of WORD_NUMBERS's keys, any case
+ * @returns {number}
+ */
+function parseStatedCount(token) {
+  if (/^\d+$/.test(token)) return Number(token);
+  const found = WORD_NUMBERS[token.toLowerCase()];
+  assert.ok(found !== undefined, `unrecognized count word: ${token}`);
+  return found;
+}
+
+/**
+ * Asserts every occurrence of `countRe` in `source` (a stated "N <phrase>")
+ * agrees with the file's own count of `markerRe` (its bold per-item marker
+ * for the same concept, e.g. `**Merged**`). Both regexes must be global.
+ * Skipped entirely for a name in `exempt` — see
+ * STATED_COUNT_MARKER_CHECK_EXEMPT.
+ * @param {string} source
+ * @param {RegExp} countRe
+ * @param {RegExp} markerRe
+ * @param {string} phraseLabel
+ * @param {string} name
+ * @param {ReadonlySet<string>} exempt
+ */
+function assertStatedCountMatchesMarkers(
+  source,
+  countRe,
+  markerRe,
+  phraseLabel,
+  name,
+  exempt,
+) {
+  if (exempt.has(name)) return;
+  const stated = [...source.matchAll(countRe)];
+  if (stated.length === 0) return;
+  const actual = [...source.matchAll(markerRe)].length;
+  for (const match of stated) {
+    const claimed = parseStatedCount(match[1]);
+    assert.equal(
+      claimed,
+      actual,
+      `${name}: states "${match[0].trim()}" (${phraseLabel}) but the file has ${actual} bold marker(s) for it`,
+    );
+  }
+}
+
 /**
  * Lines between a marker pair. Regions are stated, never inferred from
  * headings: workflows.md carries a legitimate prose enumeration at column 0
@@ -379,6 +485,27 @@ for (const name of inventories) {
       Number(proseMatch[1]),
       shellOriginal,
       `${name}: the Cardinality prose total disagrees with the declaration block`,
+    );
+
+    // Three fix rounds in a row (Tasks 7, 8, and 9) shipped a prose count of
+    // this exact shape that disagreed with the file's own bold markers, and
+    // the gate above cannot see it: shellOriginal/portOnly/ports/1..N never
+    // touch this sentence. This does.
+    assertStatedCountMatchesMarkers(
+      source,
+      RECORDED_MERGES_RE,
+      /\*\*merged\*\*/gi,
+      "recorded merges",
+      name,
+      STATED_COUNT_MARKER_CHECK_EXEMPT,
+    );
+    assertStatedCountMatchesMarkers(
+      source,
+      RETIRED_ITEMS_RE,
+      /\*\*retired\*\*/gi,
+      "retired items",
+      name,
+      STATED_COUNT_MARKER_CHECK_EXEMPT,
     );
   });
 }
