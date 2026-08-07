@@ -105,6 +105,41 @@ const RETIRED_ITEMS_RE = new RegExp(
 // not a defect. Remove this entry if workflows.md ever adopts the marker.
 const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
 
+// Anchored to the literal shorthand punctuation an inventory uses to restate
+// its own divergence arithmetic in one place (e.g. "+5/-7/net-2") — not to
+// any specific file's wording, so it needs no phrase-specific exemption list
+// and cannot be defeated by rephrasing. Unlike RECORDED_MERGES_RE/
+// RETIRED_ITEMS_RE, which each check a stated count against the file's own
+// bold-marker count (an external ground truth), this checks the shorthand's
+// three numbers against each other: it cannot know whether either +N or -M
+// is itself correct, only whether the stated net is the *arithmetic
+// consequence* of the other two, wherever this exact shape appears. That is
+// enough to catch a total that contradicts its own inputs — the failure
+// mode a fourth consecutive inventory shipped (see selection-commands.md's
+// fix history: "+8/-9/net-2" stood next to a correct "Net: ... = -2"
+// derivation two paragraphs earlier, and no existing check compared them).
+const NET_ARITHMETIC_RE = /\+(\d+)\/-(\d+)\/net(-?\d+)/g;
+
+/**
+ * Asserts every occurrence of the "+N/-M/netK" shorthand in `source` is
+ * self-consistent (N - M === K), independent of whether N or M themselves
+ * are correct.
+ * @param {string} source
+ * @param {string} name
+ */
+function assertNetArithmeticSelfConsistent(source, name) {
+  for (const match of source.matchAll(NET_ARITHMETIC_RE)) {
+    const additions = Number(match[1]);
+    const subtractions = Number(match[2]);
+    const claimedNet = Number(match[3]);
+    assert.equal(
+      additions - subtractions,
+      claimedNet,
+      `${name}: states "${match[0]}" but ${additions} - ${subtractions} = ${additions - subtractions}, not ${claimedNet}`,
+    );
+  }
+}
+
 /**
  * @param {string} token digits or one of WORD_NUMBERS's keys, any case
  * @returns {number}
@@ -508,5 +543,7 @@ for (const name of inventories) {
       name,
       STATED_COUNT_MARKER_CHECK_EXEMPT,
     );
+
+    assertNetArithmeticSelfConsistent(source, name);
   });
 }
