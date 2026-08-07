@@ -108,7 +108,10 @@ const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
 // Anchored to the literal shorthand punctuation an inventory uses to restate
 // its own divergence arithmetic in one place (e.g. "+5/-7/net-2") — not to
 // any specific file's wording, so it needs no phrase-specific exemption list
-// and cannot be defeated by rephrasing. Unlike RECORDED_MERGES_RE/
+// and rewording the surrounding sentence cannot defeat it. It is still an
+// anchor on punctuation, not a general parser: a spelled-out "+5 / -7 /
+// net -2" produces no match at all, so this catches drift in the shorthand
+// itself, not every way the same arithmetic could be phrased. Unlike RECORDED_MERGES_RE/
 // RETIRED_ITEMS_RE, which each check a stated count against the file's own
 // bold-marker count (an external ground truth), this checks the shorthand's
 // three numbers against each other: it cannot know whether either +N or -M

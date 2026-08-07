@@ -307,7 +307,7 @@ property — it has no port here.
     this cluster the cited unit test does not exercise (it always sets an
     explicit URL).
 74. An existing record of an unrecognized `schema_version` fails the
-    track-latest attempt with status 1 (`:449`). Port: `:980`. Not retired
+    track-latest attempt with status 1 (`:449`). Port: `:990`. Not retired
     against `tests/unit/commands-track-latest.test.js`'s "track-latest
     refuses to overwrite a corrupt saved record" (`:67-92`): that test's
     fixture is `{ not json` and asserts `error: invalid JSON in ${state}:
@@ -315,7 +315,13 @@ property — it has no port here.
     the `schema_version must equal integer 1` branch this item's fixture
     (`schema_version: 2`, otherwise well-formed JSON) actually reaches. Ported
     instead, symmetric with pin's own newer-schema guard (items 64-66 above).
-75. The unrecognized-schema bytes are unchanged (`:450`). Port: `:981`.
+    The port also asserts the diagnostic itself (`:991`,
+    `error: schema_version must equal integer 1`, read from a real run of
+    this exact fixture) — a strictly-stronger check with no shell
+    counterpart (the shell asserted no message for this cluster either), and
+    the empirical proof of the branch claim above, kept as evidence once
+    tests/test_selection_commands.sh itself is gone.
+75. The unrecognized-schema bytes are unchanged (`:450`). Port: `:992`.
 76. track-latest with an extra argument fails with usage status 2 (`:455`).
     **Retired**: `tests/unit/commands-track-latest.test.js`'s "track-latest
     rejects extra arguments with exit 2" (`:94-109`) exercises the identical
@@ -328,23 +334,23 @@ property — it has no port here.
     packaged fallback, plus a note for each active override
     (`SUPERPOWERS_REF`, `SUPERPOWERS_UPSTREAM_URL`) (`:466-468`). **Merged**
     into one exact-text `assert.equal`
-    (`tests/baseline/selection-commands.test.js:1005-1010`), strictly
+    (`tests/baseline/selection-commands.test.js:1016-1021`), strictly
     stronger than three separate `grep -Fxq`/`grep -Fq` checks — it also
     proves nothing else was printed.
-80. The selection state file is actually removed (`:469`). Port: `:1013`.
+80. The selection state file is actually removed (`:469`). Port: `:1024`.
 81. A sibling file in the same directory is untouched by the removal
-    (`:470`). Port: `:1014`.
+    (`:470`). Port: `:1025`.
 82. With no existing selection, unpin prints the "no saved upstream
-    selection" message naming the same fallback (`:473`). Port: `:1028`.
-83. The sibling file remains untouched (`:474`). Port: `:1029`.
+    selection" message naming the same fallback (`:473`). Port: `:1039`.
+83. The sibling file remains untouched (`:474`). Port: `:1040`.
 84. unpin refuses a symlinked state path, bundling the exit status, the
     diagnostic, and the proof that the path is still a symlink afterward
     (`:492`, one `assert_unpin_refuses` call). Port:
-    `:1035-1061` (`assertUnpinRefuses`'s definition), called at `:1064`.
-85. The same, for a directory (`:495`). Port: `:1035-1061`, called at
-    `:1068`.
-86. The same, for a named pipe (`:498`). Port: `:1035-1061`, called at
-    `:1072`.
+    `:1046-1072` (`assertUnpinRefuses`'s definition), called at `:1075`.
+85. The same, for a directory (`:495`). Port: `:1046-1072`, called at
+    `:1079`.
+86. The same, for a named pipe (`:498`). Port: `:1046-1072`, called at
+    `:1083`.
 87. unpin with an extra argument fails with usage status 2 (`:504`).
     **Retired**: `CLI-USAGE-01`'s `["unpin", "extra"]` case (`:613-614`)
     exercises the identical `parseArgs` boundary and diagnostic.
@@ -380,8 +386,8 @@ property — it has no port here.
   retired, each with a citation to the pre-existing coverage (either
   `tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01`/`CLI-PIN-REF-01`, or
   `tests/unit/commands-track-latest.test.js`) that already supersedes it, or
-  to a structural guarantee (`parseArgs`'s ordering, or the absence of any
-  `child_process` call in `runTrackLatest`) that makes a runtime check
-  unnecessary — unlike `bin-dispatch.md`'s retired items, none of these
-  lost a live shell subject; each simply has nothing left to prove that
-  isn't already proven elsewhere or true by construction. 75 + 12 = 87.
+  to a structural guarantee (`parseArgs`'s ordering, for items 5-6) that
+  makes a runtime check unnecessary — unlike `bin-dispatch.md`'s retired
+  items, none of these lost a live shell subject; each simply has nothing
+  left to prove that isn't already proven elsewhere or true by construction.
+  75 + 12 = 87.

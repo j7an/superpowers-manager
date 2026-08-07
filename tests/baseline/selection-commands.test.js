@@ -970,14 +970,25 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // fixture shape, already ported for pin at :909-919 above. Unlike pin's
   // guards, this one has no "no Git process ran" companion check: runTrackLatest
   // never invokes Git at all (see this file's header comment), so there is
-  // no observable Git-invocation count for a fixture to prove absent.
+  // no observable Git-invocation count for a fixture to prove absent. The
+  // shell asserted no message either, so the status/bytes checks alone are
+  // honest parity — but this `assert.match` earns its place anyway: it is
+  // the empirical proof that this fixture actually reaches
+  // `validateRecord`'s `schema_version must equal integer 1` branch
+  // (src/selection.ts:198), not the JSON-parse-failure branch
+  // tests/unit/commands-track-latest.test.js's "refuses to overwrite a
+  // corrupt saved record" exercises — the exact distinction Important 1's
+  // retirement citation got wrong, made self-evident here once
+  // tests/test_selection_commands.sh itself is gone.
   {
     const newerBytes =
       '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}';
     const { statePath, ctx } = freshContext("track-newer", {});
     writeFileSync(statePath, newerBytes, "utf8");
-    const status = await runTrackLatest([], { ...ctx, stderr: makeCapture() });
+    const errCtx = { ...ctx, stderr: makeCapture() };
+    const status = await runTrackLatest([], errCtx);
     assert.equal(status, 1); // :449
+    assert.match(errCtx.stderr.text(), /schema_version must equal integer 1/);
     assert.equal(readFileSync(statePath, "utf8"), newerBytes); // :450
   }
 });
