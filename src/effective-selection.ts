@@ -63,7 +63,7 @@ export interface EffectiveSelection {
   readonly saved: NormalizedSavedSelection;
 }
 
-const UPSTREAM_URL_DEFAULT = "https://github.com/obra/superpowers";
+export const UPSTREAM_URL_DEFAULT = "https://github.com/obra/superpowers";
 
 // Ports the env > saved > package-default precedence ladder from
 // scripts/core/selection.sh:88-162. validateSource runs before any ref

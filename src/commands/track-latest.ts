@@ -1,12 +1,11 @@
 import {
   selectionStatePath,
   loadSavedSelection,
+  UPSTREAM_URL_DEFAULT,
 } from "../effective-selection.js";
 import { validateSource } from "../selection.js";
 import { writeSelectionState } from "../selection-store.js";
 import type { CommandContext } from "./context.js";
-
-const UPSTREAM_URL_DEFAULT = "https://github.com/obra/superpowers";
 
 export async function runTrackLatest(
   argv: readonly string[],
@@ -17,9 +16,14 @@ export async function runTrackLatest(
     return 2;
   }
   try {
-    // Read first. scripts/track-latest:20-21 read the existing record before
-    // writing so a corrupt one fails closed rather than being silently
-    // replaced. "We overwrite it anyway" is the reasoning that removes it.
+    // Read first. This is a deliberate redundant boundary check, not the
+    // enforcing guard: writeSelectionState below already refuses to
+    // overwrite a corrupt existing record on its own (src/selection-store.ts
+    // readSelectionState under "Invalid existing state must block
+    // overwrite", plus validateRecord immediately after). Calling
+    // loadSavedSelection here preserves scripts/track-latest:20-21's
+    // read-then-write shape, so this command stays fail-closed on its own
+    // terms rather than solely by depending on the store's internals.
     await loadSavedSelection(ctx.env);
     const source = ctx.env.SUPERPOWERS_UPSTREAM_URL || UPSTREAM_URL_DEFAULT;
     validateSource(source);

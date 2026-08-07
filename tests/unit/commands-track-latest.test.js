@@ -79,6 +79,13 @@ void test("track-latest refuses to overwrite a corrupt saved record", async () =
       stderr: err.stream,
     });
     assert.equal(status, 1);
+    // src/selection-store.ts's JSON-parse-failure translation is one of
+    // AGENTS.md's frozen reader wordings; pin it rather than leaving `err`
+    // captured but unchecked.
+    assert.equal(
+      err.text(),
+      `error: invalid JSON in ${state}: line 1 column 3: Expecting property name enclosed in double quotes\n`,
+    );
     // The corrupt bytes survive: a fail-closed read must not have overwritten.
     assert.equal(readFileSync(state, "utf8"), "{ not json");
   });

@@ -7,12 +7,22 @@ import type { CommandContext } from "./context.js";
 const NOT_REGULAR =
   "selection state path is not a regular file; remove it manually after inspecting";
 
-// Runs every step that can throw or fail closed, and returns either the exit
-// code for a decided-in-try outcome (a diagnostic already written to stderr)
-// or the data the success path needs to compose its stdout message.
-async function attemptUnpin(
-  ctx: CommandContext,
-): Promise<number | { removed: boolean; fallback: string }> {
+// Every decided-in-attempt outcome, success or failure, carries its message
+// or data as plain returned values rather than writing to a stream directly.
+// That is the point of this shape: attemptUnpin performs no I/O writes of its
+// own, so nothing inside runUnpin's try (below) can raise EPIPE — there is
+// nothing left in there that writes.
+type UnpinOutcome =
+  | { readonly status: 1; readonly message: string }
+  | {
+      readonly status: 0;
+      readonly removed: boolean;
+      readonly fallback: string;
+    };
+
+// Runs every step that can throw or fail closed, returning the outcome as
+// data instead of writing it — see UnpinOutcome above for why.
+async function attemptUnpin(ctx: CommandContext): Promise<UnpinOutcome> {
   const statePath = selectionStatePath(ctx.env);
   // The packaged fallback ignores an active SUPERPOWERS_REF: scripts/unpin:12
   // cleared it deliberately so the reported value is the packaged one.
@@ -39,14 +49,15 @@ async function attemptUnpin(
   const info = await inspect(statePath);
   if (info !== null) {
     if (!info.isFile()) {
-      ctx.stderr.write(`error: ${NOT_REGULAR}: ${statePath}\n`);
-      return 1;
+      return { status: 1, message: `${NOT_REGULAR}: ${statePath}` };
     }
     try {
       await unlink(statePath);
     } catch {
-      ctx.stderr.write(`error: cannot remove selection state: ${statePath}\n`);
-      return 1;
+      return {
+        status: 1,
+        message: `cannot remove selection state: ${statePath}`,
+      };
     }
     removed = true;
   }
@@ -54,13 +65,13 @@ async function attemptUnpin(
   // Same classification on the verification read: an EACCES here must not be
   // read as "successfully absent".
   if ((await inspect(statePath)) !== null) {
-    ctx.stderr.write(
-      `error: selection state remains after removal attempt: ${statePath}\n`,
-    );
-    return 1;
+    return {
+      status: 1,
+      message: `selection state remains after removal attempt: ${statePath}`,
+    };
   }
 
-  return { removed, fallback };
+  return { status: 0, removed, fallback };
 }
 
 export async function runUnpin(
@@ -71,23 +82,27 @@ export async function runUnpin(
     ctx.stderr.write("error: usage: superpowers-manager unpin\n");
     return 2;
   }
-  let outcome: number | { removed: boolean; fallback: string };
+  let outcome: UnpinOutcome;
   try {
     outcome = await attemptUnpin(ctx);
   } catch (cause) {
     // Every throw reachable here is a hand-written SafetyError from
     // selectionStatePath, readConfigRef, or inspect() inside attemptUnpin —
     // re-emitting a subordinate module's own diagnostic is the sanctioned
-    // form of interpolation (see AGENTS.md's diagnostics convention). The try
-    // ends here, before the stdout writes below: an EPIPE from one of those
-    // writes must never be caught and relabelled as one of those modules'
-    // own diagnostics.
+    // form of interpolation (see AGENTS.md's diagnostics convention).
+    // attemptUnpin performs no writes of its own (see UnpinOutcome above),
+    // so this catch cannot also be reached by an EPIPE from a write this
+    // function made itself — the write below runs only after this try/catch
+    // has already resolved.
     ctx.stderr.write(
       `error: ${cause instanceof Error ? cause.message : String(cause)}\n`,
     );
     return 1;
   }
-  if (typeof outcome === "number") return outcome;
+  if (outcome.status === 1) {
+    ctx.stderr.write(`error: ${outcome.message}\n`);
+    return 1;
+  }
   const { removed, fallback } = outcome;
   ctx.stdout.write(
     removed

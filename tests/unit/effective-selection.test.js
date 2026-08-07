@@ -2,10 +2,8 @@
 // @ts-check
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import test from "node:test";
+import { withConfigDir } from "./helpers/command-harness.js";
 
 // A static import from `dist/` fails the `typecheck:js` gate: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
@@ -79,29 +77,6 @@ void test("the state path appends selection.json to the config dir", () => {
     "/explicit/selection.json",
   );
 });
-
-// MUST be async with `return await`. A synchronous `return fn(...)` hands back a
-// pending promise and `finally` then runs rmSync immediately, deleting the
-// fixture before the callback has read it.
-/**
- * @template T
- * @param {string | null} contents
- * @param {(env: NodeJS.ProcessEnv) => Promise<T>} fn
- * @returns {Promise<T>}
- */
-async function withConfigDir(contents, fn) {
-  const root = mkdtempSync(join(tmpdir(), "spw-effsel-"));
-  try {
-    const dir = join(root, "config");
-    mkdirSync(dir, { recursive: true });
-    if (contents !== null) {
-      writeFileSync(join(dir, "selection.json"), contents, "utf8");
-    }
-    return await fn({ SUPERPOWERS_CONFIG_DIR: dir });
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
 
 void test("an absent selection file normalizes to mode none", async () => {
   const saved = await withConfigDir(null, (env) => loadSavedSelection(env));

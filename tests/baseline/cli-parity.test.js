@@ -703,6 +703,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
           SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
         });
         assertCleanResult(result);
+        assert.equal(result.stderr, "");
         assert.deepEqual(readDispatchLog(sandbox), []);
       });
       continue;
