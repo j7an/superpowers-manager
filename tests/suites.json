@@ -6,6 +6,7 @@
     "tests/baseline/manifest-overlay-parity.test.js",
     "tests/baseline/packaged-cli.test.js",
     "tests/baseline/protocol-disposition.test.js",
+    "tests/baseline/selection-location.test.js",
     "tests/baseline/selection-state.test.js",
     "tests/baseline/suite-runner.test.js",
     "tests/baseline/traceability.test.js",
