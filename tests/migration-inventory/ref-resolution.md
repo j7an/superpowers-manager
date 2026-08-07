@@ -278,7 +278,7 @@ generated script against the still-live shell source, the same technique
   (`REF-LATEST-STABLE-01`, `REF-GENERIC-FALLBACK-01`, `REF-SOURCE-PROOF-01`,
   `REF-CLEANUP-01`), one ordinary case for the no-stable-tags cluster, and one
   ordinary case for the combined Node-preload-scrub cluster — carrying 35 of
-  the 39 shell items mapped (nine recorded merges, at items 18, 22, 24, 27,
+  the 39 shell items mapped (seven recorded merges, at items 18, 22, 24, 27,
   28, 32, and 35, each a negative guard or a redundant retry loop subsumed by
   a stronger check that follows it, same precedent as `bin-dispatch.md` item
   15) and 4 retired (items 3, 4, 6, and 7). 35 mapped + 4 retired = 39. No
