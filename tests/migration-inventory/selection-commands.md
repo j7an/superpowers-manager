@@ -303,11 +303,11 @@ property — it has no port here.
     citation.
 73. With `SUPERPOWERS_UPSTREAM_URL` set to the empty string, the saved
     `source` defaults to the official upstream (`:441`). Port:
-    `tests/baseline/selection-commands.test.js:964` — the one behavior in
+    `tests/baseline/selection-commands.test.js:971` — the one behavior in
     this cluster the cited unit test does not exercise (it always sets an
     explicit URL).
 74. An existing record of an unrecognized `schema_version` fails the
-    track-latest attempt with status 1 (`:449`). Port: `:990`. Not retired
+    track-latest attempt with status 1 (`:449`). Port: `:996`. Not retired
     against `tests/unit/commands-track-latest.test.js`'s "track-latest
     refuses to overwrite a corrupt saved record" (`:67-92`): that test's
     fixture is `{ not json` and asserts `error: invalid JSON in ${state}:
@@ -315,13 +315,13 @@ property — it has no port here.
     the `schema_version must equal integer 1` branch this item's fixture
     (`schema_version: 2`, otherwise well-formed JSON) actually reaches. Ported
     instead, symmetric with pin's own newer-schema guard (items 64-66 above).
-    The port also asserts the diagnostic itself (`:991`,
+    The port also asserts the diagnostic itself (`:998`,
     `error: schema_version must equal integer 1`, read from a real run of
     this exact fixture) — a strictly-stronger check with no shell
     counterpart (the shell asserted no message for this cluster either), and
     the empirical proof of the branch claim above, kept as evidence once
     tests/test_selection_commands.sh itself is gone.
-75. The unrecognized-schema bytes are unchanged (`:450`). Port: `:992`.
+75. The unrecognized-schema bytes are unchanged (`:450`). Port: `:999`.
 76. track-latest with an extra argument fails with usage status 2 (`:455`).
     **Retired**: `tests/unit/commands-track-latest.test.js`'s "track-latest
     rejects extra arguments with exit 2" (`:94-109`) exercises the identical
@@ -334,23 +334,23 @@ property — it has no port here.
     packaged fallback, plus a note for each active override
     (`SUPERPOWERS_REF`, `SUPERPOWERS_UPSTREAM_URL`) (`:466-468`). **Merged**
     into one exact-text `assert.equal`
-    (`tests/baseline/selection-commands.test.js:1016-1021`), strictly
+    (`tests/baseline/selection-commands.test.js:1023-1028`), strictly
     stronger than three separate `grep -Fxq`/`grep -Fq` checks — it also
     proves nothing else was printed.
-80. The selection state file is actually removed (`:469`). Port: `:1024`.
+80. The selection state file is actually removed (`:469`). Port: `:1031`.
 81. A sibling file in the same directory is untouched by the removal
-    (`:470`). Port: `:1025`.
+    (`:470`). Port: `:1032`.
 82. With no existing selection, unpin prints the "no saved upstream
-    selection" message naming the same fallback (`:473`). Port: `:1039`.
-83. The sibling file remains untouched (`:474`). Port: `:1040`.
+    selection" message naming the same fallback (`:473`). Port: `:1046`.
+83. The sibling file remains untouched (`:474`). Port: `:1047`.
 84. unpin refuses a symlinked state path, bundling the exit status, the
     diagnostic, and the proof that the path is still a symlink afterward
     (`:492`, one `assert_unpin_refuses` call). Port:
-    `:1046-1072` (`assertUnpinRefuses`'s definition), called at `:1075`.
-85. The same, for a directory (`:495`). Port: `:1046-1072`, called at
-    `:1079`.
-86. The same, for a named pipe (`:498`). Port: `:1046-1072`, called at
-    `:1083`.
+    `:1053-1079` (`assertUnpinRefuses`'s definition), called at `:1082`.
+85. The same, for a directory (`:495`). Port: `:1053-1079`, called at
+    `:1086`.
+86. The same, for a named pipe (`:498`). Port: `:1053-1079`, called at
+    `:1090`.
 87. unpin with an extra argument fails with usage status 2 (`:504`).
     **Retired**: `CLI-USAGE-01`'s `["unpin", "extra"]` case (`:613-614`)
     exercises the identical `parseArgs` boundary and diagnostic.

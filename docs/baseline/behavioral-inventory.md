@@ -109,7 +109,7 @@ Track-latest bytes:
 | `REF-PIN-SOURCE-01` | Public `pin` resolves exact tags only from the selected source’s tag namespace, peels annotated tags, normalizes raw commit input to lowercase, and saves the proven identity and source. |
 | `REF-SOURCE-PROOF-01` | Exact-commit proof uses an invocation-private repository, cannot be satisfied by an object already in the persistent cache, and accepts only a commit object supplied by the selected source. |
 | `REF-CLEANUP-01` | An interrupted exact-fetch source-proof removes only its invocation-owned proof repository and preserves sibling workspace content. |
-| `REF-PIN-CLEANUP-01` | An interrupted public `pin` raw-commit proof removes only its invocation-owned verifier repository, preserves sibling content and prior selection state, and reports signal status 143. |
+| `REF-PIN-CLEANUP-01` | An interrupted public `pin` raw-commit proof removes only its invocation-owned verifier repository, preserves sibling content and prior selection state, and the process dies by the interrupting signal rather than exiting with a numeric status. |
 
 ## Canonical generated provenance
 

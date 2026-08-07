@@ -40,10 +40,11 @@ It never removes the legacy provider automatically.
 ## Requirements and platforms
 
 Superpowers Manager requires Node 24+. `git`, Python 3, and a POSIX `sh` are
-needed by `prepare`, `probe`, `install`, `update`, and `uninstall`; the
-in-process `pin`, `track-latest`, and `unpin` commands need none of Python or
-`sh`, and only `pin` needs `git` (see `docs/baseline/behavioral-inventory.md`'s
-`CLI-PREFLIGHT-01` for the exact per-command breakdown). Codex CLI is required
+needed by `prepare`, `probe`, `install`, and `update`; `uninstall` needs
+Python 3 and `sh` but not `git`; the in-process `pin`, `track-latest`, and
+`unpin` commands need none of Python or `sh`, and only `pin` needs `git` (see
+`docs/baseline/behavioral-inventory.md`'s `CLI-PREFLIGHT-01` for the exact
+per-command breakdown). Codex CLI is required
 for `probe`, `install`, `update`, and `uninstall`; `prepare`, `pin`,
 `track-latest`, and `unpin` do not require it. Codex is the only supported
 integration today.
