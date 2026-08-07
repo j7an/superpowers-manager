@@ -126,10 +126,16 @@ either regex — the same structural guarantee that already retired
    citation: `CLI-PIN-REF-01` asserts the identical diagnostic text
    (`:710-711`).
 5. No early Git invocation occurs for a malformed ref (`:110`). **Retired**:
-   structurally guaranteed by `src/cli.ts`'s ordering (`parseArgs` returns
-   before `preflight`/dispatch), which `CLI-USAGE-01`'s
-   `readDispatchLog(sandbox)` deepEqual `[]` check (`:625`) already verifies
-   for the same code path.
+   structurally guaranteed by `src/cli.ts`'s ordering alone — `parseArgs`
+   (`:305`) returns a `"usage-error"` result that `main()` exits on at
+   `:322-326`, strictly before `preflight` is ever reached at `:327` — not by
+   `CLI-USAGE-01`'s `readDispatchLog(sandbox)` deepEqual `[]` check (`:625`).
+   That log records script *dispatch*, and `pin` is in-process now, so it
+   would read empty on a **successful** pin too; it is not evidence that no
+   Git process ran. The port keeps the observable-Git-invocation technique
+   (a fake `git` that logs its own invocations) for the three pre-Git guards
+   that do reach real work (items 61-69 below); here, "no Git process ran"
+   is unasserted, resting on the ordering guarantee alone.
 6. Saved state is unchanged after a malformed-ref attempt (`:111`).
    **Retired**, same rationale as item 5: no handler capable of writing state
    is ever reached.
@@ -137,94 +143,101 @@ either regex — the same structural guarantee that already retired
 ### `REF-PIN-SOURCE-01` exact tag and raw commit pins prove selected source (`:114-281`)
 
 7. Pinning `v1.0.0` prints the confirmation naming the resolved ref and
-   commit (`:117`). Port: `tests/baseline/selection-commands.test.js:346-349`.
+   commit (`:117`). Port: `tests/baseline/selection-commands.test.js:443-446`.
 8-12. The saved record's `mode`, `source`, `requested_ref`, `resolved_ref`,
    and `commit` all match the exact-tag pin (`:118-122`). **Merged** into one
-   `assert.deepEqual` (`:360-367`), strictly stronger than five separate
+   `assert.deepEqual` (`:457-464`), strictly stronger than five separate
    field checks — it also proves no unexpected field survived.
 13. The saved `requested_ref` for the annotated pre-release tag equals the
-    tag itself (`:125`). Port: `:375`.
+    tag itself (`:125`). Port: `:472`.
 14. The saved `resolved_ref` for the annotated pre-release tag equals the tag
-    itself (`:126`). Port: `:376`.
+    itself (`:126`). Port: `:473`.
 15. The saved `commit` for the annotated pre-release tag is the tag's peeled
-    commit, not the tag object (`:127`). Port: `:377`.
+    commit, not the tag object (`:127`). Port: `:474`.
 16. A mixed-case 40-hex raw commit's saved `requested_ref` is lowercased
-    (`:133`). Port: `:396`.
-17. The saved `resolved_ref` is likewise lowercased (`:134`). Port: `:397`.
-18. The saved `commit` is likewise lowercased (`:135`). Port: `:398`.
+    (`:133`). Port: `:493`.
+17. The saved `resolved_ref` is likewise lowercased (`:134`). Port: `:494`.
+18. The saved `commit` is likewise lowercased (`:135`). Port: `:495`.
 19. The raw-commit verification workspace's parent holds nothing after a
-    successful pin (`:136`). Port: `:399` (`assertWorkspaceParentEmpty`).
+    successful pin (`:136`). Port: `:496` (`assertWorkspaceParentEmpty`).
 20-21. A relative local source's saved `source` (the raw env value, not the
     resolved absolute path) and `commit` are correct for a raw-commit pin
-    (`:148-149`). Port: `:427-428` (first loop iteration).
+    (`:148-149`). Port: `:524-525` (first loop iteration).
 22-23. The same, for a dash-prefixed local source (`:160-161`). Port:
-    `:427-428` (second loop iteration).
+    `:524-525` (second loop iteration).
 24-25. The same two fields for a relative local source, exact-tag pin
-    (`:173-174`). Port: `:441-442` (first loop iteration).
-26-27. The same, dash-prefixed, exact-tag pin (`:184-185`). Port: `:441-442`
+    (`:173-174`). Port: `:538-539` (first loop iteration).
+26-27. The same, dash-prefixed, exact-tag pin (`:184-185`). Port: `:538-539`
     (second loop iteration).
 28. Six malformed ref shapes (`1.2.3`, `v1.2`, `v1.2.3+build.4`,
     `latest-release`, `main`, a truncated commit) each fail with usage status
     2 (`:188`, `assert_pin_usage_failure`'s one call site). **Retired**:
-    `CLI-PIN-REF-01`'s `refused` array covers the identical
-    `TAG_RE`/`COMMIT_INPUT_RE` boundary with an overlapping and larger set of
-    inputs (`v01.2.3`/`v1.02.3`/`v1.2.03` for the numeric grammar,
-    `v1.2.3+build` for the build-metadata rejection, `latest-release` and
-    `main` verbatim, and a 39-hex-character commit for the truncation case).
+    `CLI-PIN-REF-01`'s `refused` array covers the same anchored
+    `TAG_RE`/`COMMIT_INPUT_RE` boundary, with a literal or near-literal
+    counterpart for five of the six: `1.2.3` verbatim, `v1.2.3+build` for the
+    build-metadata rejection, `latest-release` and `main` verbatim, and a
+    39-hex-character commit for the truncation case. The sixth, `v1.2`
+    (missing its patch component), has no literal counterpart there — the
+    closest entries (`v01.2.3`/`v1.02.3`/`v1.2.03`) test leading zeros within
+    a full three-component tag, not a missing component. `v1.2`'s rejection
+    rests on the same anchored-regex structural guarantee
+    (`SEMVER_BASE_SOURCE` requires all three numeric components) rather than
+    on a covered example, so the risk of this retirement is low but not the
+    same "literal counterpart" claim as the other five.
 29. A branch named like a tag (`v9.9.9`) fails the exact-tag pin with status
-    1 (`:196`). Port: `tests/baseline/selection-commands.test.js:457`.
+    1 (`:196`). Port: `tests/baseline/selection-commands.test.js:554`.
 30. The failure names the ref: `upstream tag not found: v9.9.9` (`:197`).
-    Port: `:458`.
+    Port: `:555`.
 31. Saved state is unchanged after the branch-like-tag failure (`:198`). Port:
-    `:459`.
+    `:556`.
 32. An unreachable upstream source fails the exact-tag pin with status 1
-    (`:204`). Port: `:481`.
+    (`:204`). Port: `:578`.
 33. The failure names the ref: `cannot query exact upstream tag v1.0.0`
-    (`:205`). Port: `:482-485`.
-34. Saved state is unchanged (`:206`). Port: `:486`.
+    (`:205`). Port: `:579-582`.
+34. Saved state is unchanged (`:206`). Port: `:583`.
 35. A commit absent from the source fails the raw-commit pin with status 1
-    (`:214`). Port: `:497`.
+    (`:214`). Port: `:594`.
 36. The failure names the reason: `source cannot supply requested commit`
-    (`:215`). Port: `:498-501`.
-37. Saved state is unchanged (`:216`). Port: `:502`.
+    (`:215`). Port: `:595-598`.
+37. Saved state is unchanged (`:216`). Port: `:599`.
 38. The raw-commit verification workspace's parent is empty after the
-    unavailable-object failure (`:217`). Port: `:503`.
+    unavailable-object failure (`:217`). Port: `:600`.
 39-42. A blob object is rejected (status 1, message, state unchanged,
-    workspace-parent empty) (`:224-227`). Port: `:513-516`.
+    workspace-parent empty) (`:224-227`). Port: `:610-613`.
 43-46. An annotated tag object is rejected, the same four checks (`:234-237`).
-    Port: `:526-529`.
+    Port: `:623-626`.
 47-50. A simulated transport failure at the raw-commit fetch step (status 1,
     message naming the source, state unchanged, workspace-parent empty)
-    (`:257-260`). Port: `:559-567`.
+    (`:257-260`). Port: `:640-648`.
 51. The raw verifier (`verifyRawCommit`), called directly and below pin's own
     public source validation, rejects a transport failure (`:272`,
     `assert.rejects`'s own throw is the port of the bare `rc -eq 1` check).
-    Port: `:594-610`.
+    Port: `:664-682`.
 52. The rejection's message uses the redacted source display rather than the
     raw credential-bearing URL (`:273`, an `if`-shaped negative guard). Port:
-    `:602-606`.
+    `:672-675`.
 53. The rejection's message never contains the raw credential (`:278`, a
-    positive guard whose success is the failure). Port: `:607`.
+    positive guard whose success is the failure). Port: `:676-679`.
 
 ### `REF-PIN-CLEANUP-01` interrupted pin proof cleans only its workspace (`:283-340`)
 
 54. The interrupted raw-commit fetch must actually reach the signal fixture
     before the signal is sent, or the interruption proves nothing (`:325`,
     the embedded Python fixture's readiness guard). Port:
-    `tests/baseline/selection-commands.test.js:731-737` (`waitForMarker` plus
+    `tests/baseline/selection-commands.test.js:802-807` (`waitForMarker` plus
     the `assert.fail` on timeout).
 55. The interrupted child's exit status is non-zero (`:333`, `if [ "$rc" -ne
     143 ]`). **Merged** into the port's `assert.equal(result.signal,
-    "SIGTERM")` / `assert.equal(result.code, null)` (`:753-754`), strictly
+    "SIGTERM")` / `assert.equal(result.code, null)` (`:824-825`), strictly
     stronger — it asserts the exact cause of death, not merely a non-zero
     exit, the same precedent `ref-resolution.md` item 28 already applies to
     `fetchExactCommit`'s own signal-interruption case.
 56. The sibling file's content is untouched by the interruption (`:338`).
-    Port: `:758` (`assertOnlySiblingKept`).
+    Port: `:829` (`assertOnlySiblingKept`).
 57. The interrupted verification workspace holds exactly the one sibling
-    (`:339`). Port: `:758` (same call, second half of the pairing).
+    (`:339`). Port: `:829` (same call, second half of the pairing).
 58. Saved state is unchanged by the interruption (`:340`,
-    `assert_state_unchanged "$before"`). Port: `:766` — the assertion this
+    `assert_state_unchanged "$before"`). Port: `:837` — the assertion this
     behavior ID exists to prove distinctly from `REF-CLEANUP-01`: ported here
     against an absent "before" (this fixture's config directory starts
     empty, so a completed pin WOULD have created `selection.json`) rather
@@ -245,10 +258,10 @@ runs, strictly earlier than the write.
 59. A conflicting write injected during `ls-remote` (malformed bytes, or a
     schema the port does not understand) makes the pin attempt fail with
     status 1, for both conflict shapes (`:368`, looped). Port:
-    `tests/baseline/selection-commands.test.js:815`.
+    `tests/baseline/selection-commands.test.js:872`.
 60. The conflicting write survives untouched — not silently overwritten by
     the pin attempt's own proposed record — for both conflict shapes
-    (`:373`, looped). Port: `:816`.
+    (`:373`, looped). Port: `:873`.
 
 ### Pre-Git fail-closed guards (`:376-416`)
 
@@ -257,18 +270,18 @@ existing state of an unrecognized schema, and a credential-bearing source
 each fail before any Git process runs at all — not merely that they fail.
 
 61. A malformed existing selection record fails the pin attempt with status 1
-    (`:393`). Port: `tests/baseline/selection-commands.test.js:861`.
-62. No Git process is invoked (`:394`). Port: `:862`.
-63. The malformed bytes are unchanged (`:395`). Port: `:863`.
+    (`:393`). Port: `tests/baseline/selection-commands.test.js:904`.
+62. No Git process is invoked (`:394`). Port: `:905`.
+63. The malformed bytes are unchanged (`:395`). Port: `:906`.
 64. An existing record of an unrecognized `schema_version` fails the pin
-    attempt with status 1 (`:404`). Port: `:873`.
-65. No Git process is invoked (`:405`). Port: `:874`.
-66. The unrecognized-schema bytes are unchanged (`:406`). Port: `:875`.
+    attempt with status 1 (`:404`). Port: `:916`.
+65. No Git process is invoked (`:405`). Port: `:917`.
+66. The unrecognized-schema bytes are unchanged (`:406`). Port: `:918`.
 67. A credential-bearing `SUPERPOWERS_UPSTREAM_URL` fails the pin attempt
-    with status 1 (`:414`). Port: `:906`.
+    with status 1 (`:414`). Port: `:935`.
 68. The failure names the reason: `HTTP(S) source must not include userinfo`
-    (`:415`). Port: `:907-910`.
-69. No Git process is invoked (`:416`). Port: `:911`.
+    (`:415`). Port: `:936-939`.
+69. No Git process is invoked (`:416`). Port: `:940`.
 
 ### track-latest source capture and guards (`:418-455`)
 
@@ -290,18 +303,19 @@ property — it has no port here.
     citation.
 73. With no `SUPERPOWERS_UPSTREAM_URL` at all, the saved `source` defaults to
     the official upstream (`:441`). Port:
-    `tests/baseline/selection-commands.test.js:932` — the one behavior in
+    `tests/baseline/selection-commands.test.js:964` — the one behavior in
     this cluster the cited unit test does not exercise (it always sets an
     explicit URL).
 74. An existing record of an unrecognized `schema_version` fails the
-    track-latest attempt with status 1 (`:449`). **Retired**:
-    `tests/unit/commands-track-latest.test.js`'s "track-latest refuses to
-    overwrite a corrupt saved record" (`:67-92`) exercises the same
-    `validateRecord`/`schema_version` guard (a different fixture — malformed
-    JSON rather than an unrecognized schema — but the identical code path and
-    identical outcome).
-75. The unrecognized-schema bytes are unchanged (`:450`). **Retired**, same
-    citation.
+    track-latest attempt with status 1 (`:449`). Port: `:980`. Not retired
+    against `tests/unit/commands-track-latest.test.js`'s "track-latest
+    refuses to overwrite a corrupt saved record" (`:67-92`): that test's
+    fixture is `{ not json` and asserts `error: invalid JSON in ${state}:
+    line 1 column 3: …` — `validateRecord`'s JSON-*parse*-failure branch, not
+    the `schema_version must equal integer 1` branch this item's fixture
+    (`schema_version: 2`, otherwise well-formed JSON) actually reaches. Ported
+    instead, symmetric with pin's own newer-schema guard (items 64-66 above).
+75. The unrecognized-schema bytes are unchanged (`:450`). Port: `:981`.
 76. track-latest with an extra argument fails with usage status 2 (`:455`).
     **Retired**: `tests/unit/commands-track-latest.test.js`'s "track-latest
     rejects extra arguments with exit 2" (`:94-109`) exercises the identical
@@ -314,23 +328,23 @@ property — it has no port here.
     packaged fallback, plus a note for each active override
     (`SUPERPOWERS_REF`, `SUPERPOWERS_UPSTREAM_URL`) (`:466-468`). **Merged**
     into one exact-text `assert.equal`
-    (`tests/baseline/selection-commands.test.js:955-960`), strictly stronger
-    than three separate `grep -Fxq`/`grep -Fq` checks — it also proves
-    nothing else was printed.
-80. The selection state file is actually removed (`:469`). Port: `:963`.
+    (`tests/baseline/selection-commands.test.js:1005-1010`), strictly
+    stronger than three separate `grep -Fxq`/`grep -Fq` checks — it also
+    proves nothing else was printed.
+80. The selection state file is actually removed (`:469`). Port: `:1013`.
 81. A sibling file in the same directory is untouched by the removal
-    (`:470`). Port: `:964`.
+    (`:470`). Port: `:1014`.
 82. With no existing selection, unpin prints the "no saved upstream
-    selection" message naming the same fallback (`:473`). Port: `:977`.
-83. The sibling file remains untouched (`:474`). Port: `:979`.
+    selection" message naming the same fallback (`:473`). Port: `:1028`.
+83. The sibling file remains untouched (`:474`). Port: `:1029`.
 84. unpin refuses a symlinked state path, bundling the exit status, the
     diagnostic, and the proof that the path is still a symlink afterward
     (`:492`, one `assert_unpin_refuses` call). Port:
-    `:991-1002` (`assertUnpinRefuses("symlink")`).
-85. The same, for a directory (`:495`). Port: `:991-1005`
-    (`assertUnpinRefuses("directory")`).
-86. The same, for a named pipe (`:498`). Port: `:991-1008`
-    (`assertUnpinRefuses("special")`).
+    `:1035-1061` (`assertUnpinRefuses`'s definition), called at `:1064`.
+85. The same, for a directory (`:495`). Port: `:1035-1061`, called at
+    `:1068`.
+86. The same, for a named pipe (`:498`). Port: `:1035-1061`, called at
+    `:1072`.
 87. unpin with an extra argument fails with usage status 2 (`:504`).
     **Retired**: `CLI-USAGE-01`'s `["unpin", "extra"]` case (`:613-614`)
     exercises the identical `parseArgs` boundary and diagnostic.
@@ -351,18 +365,18 @@ property — it has no port here.
   `REF-PIN-SOURCE-01`, 5 `REF-PIN-CLEANUP-01`, 2 revalidation, 9 pre-Git
   guards, 7 track-latest, 11 `FS-SELECTION-UNPIN-TYPES-01`; sum:
   6+47+5+2+9+7+11 = 87). See "Divergences from the derived 89" above for the
-  full +8/-9/net-2 derivation from the mechanical 89.
+  full +5/-7/net-2 derivation from the mechanical 89.
 - Port (`tests/baseline/selection-commands.test.js`): 6 static `test(` call
   sites — the three named behavior-ID cases (`REF-PIN-SOURCE-01`,
   `REF-PIN-CLEANUP-01`, `FS-SELECTION-UNPIN-TYPES-01`) plus three unregistered
   cases (the writer's revalidation-under-race proof, the pre-Git fail-closed
-  guards, and track-latest's official-default source) — carrying 73 of the 87
-  shell items mapped (3 recorded merges: items 8-12 combined into one
-  `assert.deepEqual`, item 55 combined into the signal/code assertion, and
-  items 77-79 combined into one exact-text equality). The rest are
-  **14 retired items** (1-6, 28, 70-72, 74-76, 87). 73 mapped + 14 retired
-  = 87.
-- Reconciliation: 73 of 87 shell items are mapped into the port; 14 are
+  guards, and track-latest's official-default source plus its own
+  newer-schema guard) — carrying 75 of the 87 shell items mapped (3 recorded
+  merges: items 8-12 combined into one `assert.deepEqual`, item 55 combined
+  into the signal/code assertion, and items 77-79 combined into one
+  exact-text equality). The rest are **12 retired items** (1-6, 28, 70-72,
+  76, 87). 75 mapped + 12 retired = 87.
+- Reconciliation: 75 of 87 shell items are mapped into the port; 12 are
   retired, each with a citation to the pre-existing coverage (either
   `tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01`/`CLI-PIN-REF-01`, or
   `tests/unit/commands-track-latest.test.js`) that already supersedes it, or
@@ -370,4 +384,4 @@ property — it has no port here.
   `child_process` call in `runTrackLatest`) that makes a runtime check
   unnecessary — unlike `bin-dispatch.md`'s retired items, none of these
   lost a live shell subject; each simply has nothing left to prove that
-  isn't already proven elsewhere or true by construction. 73 + 14 = 87.
+  isn't already proven elsewhere or true by construction. 75 + 12 = 87.

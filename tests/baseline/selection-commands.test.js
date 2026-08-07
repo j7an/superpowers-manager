@@ -132,6 +132,103 @@ function realGitPath() {
   return path;
 }
 
+// Every fake-git fixture below reaches its runtime-varying values (the real
+// git path, a log path, a conflicting state path and payload) only through
+// these environment variables at run time, never through string
+// interpolation into the generated shell — the same convention
+// FAKE_GIT_PIN_SIGNAL_MARKER_VAR/FAKE_GIT_PIN_SIGNAL_REAL_VAR already follow
+// for the signal fixture further down.
+const FAKE_GIT_REAL_VAR = "SPW_FAKE_GIT_REAL";
+
+// Falls through to the real `git` for everything except a `fetch`
+// invocation, which it fails with a fixed diagnostic. Shared by the
+// raw-commit transport-failure case (:239-260) and the redacted-display
+// direct-call case (:262-281) — both need the exact same fixture.
+const FAKE_GIT_TRANSPORT_FAILURE_BODY = [
+  "#!/bin/sh",
+  'case " $* " in',
+  "  *' fetch '*) echo 'simulated transport failure' >&2; exit 1 ;;",
+  `  *) exec "$${FAKE_GIT_REAL_VAR}" "$@" ;;`,
+  "esac",
+  "",
+].join("\n");
+
+const FAKE_GIT_LOG_VAR = "SPW_FAKE_GIT_LOG";
+
+// Logs every invocation's argv, then always falls through to the real git.
+// Shared by both pre-Git fail-closed guards (malformed/newer existing state
+// via attemptWithExistingState, and the credential-bearing-source case) to
+// prove zero Git invocations occurred.
+const FAKE_GIT_LOG_AND_FORWARD_BODY = [
+  "#!/bin/sh",
+  `printf '%s\\n' "$*" >> "$${FAKE_GIT_LOG_VAR}"`,
+  `exec "$${FAKE_GIT_REAL_VAR}" "$@"`,
+  "",
+].join("\n");
+
+const FAKE_GIT_RACE_STATE_PATH_VAR = "SPW_FAKE_GIT_RACE_STATE_PATH";
+const FAKE_GIT_RACE_BYTES_VAR = "SPW_FAKE_GIT_RACE_BYTES";
+
+// Injects a conflicting write into the saved-state path the instant
+// `ls-remote` runs — strictly before src/commands/pin.ts's attemptPin
+// reaches its own write — then falls through to the real git. The payload
+// travels as an env var, not as a JSON-escaped shell literal: an env var
+// value needs no shell quoting at all (execFile never invokes a shell —
+// src/git.ts's runGit passes `shell: false`), where a JSON escaper used in a
+// quoting position is only safe for as long as nobody adds a `$`, backtick,
+// or backslash to the payload.
+const FAKE_GIT_RACE_BODY = [
+  "#!/bin/sh",
+  'case " $* " in',
+  "  *' ls-remote '*)",
+  `    printf '%s' "$${FAKE_GIT_RACE_BYTES_VAR}" > "$${FAKE_GIT_RACE_STATE_PATH_VAR}"`,
+  "    ;;",
+  "esac",
+  `exec "$${FAKE_GIT_REAL_VAR}" "$@"`,
+  "",
+].join("\n");
+
+/**
+ * Writes a fake `git` executable at `dir/git` with the given POSIX sh body.
+ * @param {string} dir
+ * @param {string} body
+ * @returns {string} the fake git's path
+ */
+function installFakeGit(dir, body) {
+  const gitPath = join(dir, "git");
+  writeFileSync(gitPath, body, "utf8");
+  chmodSync(gitPath, 0o755);
+  return gitPath;
+}
+
+/**
+ * Runs `fn` with `dir` prepended to PATH and each entry of `envVars` set on
+ * `process.env`, restoring every mutated variable (PATH included) afterward.
+ * @template T
+ * @param {string} dir
+ * @param {Record<string, string>} envVars
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withFakeGitPath(dir, envVars, fn) {
+  const keys = ["PATH", ...Object.keys(envVars)];
+  /** @type {Record<string, string | undefined>} */
+  const previous = {};
+  for (const key of keys) previous[key] = process.env[key];
+  process.env.PATH = `${dir}:${process.env.PATH ?? ""}`;
+  for (const [key, value] of Object.entries(envVars)) {
+    process.env[key] = value;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
 /**
  * A real upstream repository shaped exactly like
  * tests/test_selection_commands.sh:19-34's inline setup: a lightweight
@@ -532,30 +629,14 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     // Raw-commit transport (fetch) failure. :239-260
     {
       const fakeBin = mkdtempSync(join(SCRATCH, "fetch-failure-bin-"));
-      const gitPath = join(fakeBin, "git");
-      writeFileSync(
-        gitPath,
-        [
-          "#!/bin/sh",
-          'case " $* " in',
-          "  *' fetch '*) echo 'simulated transport failure' >&2; exit 1 ;;",
-          `  *) exec "${realGitPath()}" "$@" ;;`,
-          "esac",
-          "",
-        ].join("\n"),
-        "utf8",
-      );
-      chmodSync(gitPath, 0o755);
+      installFakeGit(fakeBin, FAKE_GIT_TRANSPORT_FAILURE_BODY);
       const rawTmp = mkdtempSync(join(SCRATCH, "raw-transport-"));
       const failCtx = { ...ctx, stderr: makeCapture() };
-      const previousPath = process.env.PATH ?? "";
-      process.env.PATH = `${fakeBin}:${previousPath}`;
-      let status;
-      try {
-        status = await withTmpdir(rawTmp, () => runPin([headCommit], failCtx));
-      } finally {
-        process.env.PATH = previousPath;
-      }
+      const status = await withFakeGitPath(
+        fakeBin,
+        { [FAKE_GIT_REAL_VAR]: realGitPath() },
+        () => withTmpdir(rawTmp, () => runPin([headCommit], failCtx)),
+      );
       assert.equal(status, 1); // :257
       assert.ok(
         failCtx.stderr
@@ -575,42 +656,32 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
   // debug trace, not a check of pin/unpin behavior, so it has no port here.)
   {
     const fakeBin = mkdtempSync(join(SCRATCH, "redact-bin-"));
-    const gitPath = join(fakeBin, "git");
-    writeFileSync(
-      gitPath,
-      [
-        "#!/bin/sh",
-        'case " $* " in',
-        "  *' fetch '*) echo 'simulated transport failure' >&2; exit 1 ;;",
-        `  *) exec "${realGitPath()}" "$@" ;;`,
-        "esac",
-        "",
-      ].join("\n"),
-      "utf8",
+    installFakeGit(fakeBin, FAKE_GIT_TRANSPORT_FAILURE_BODY);
+    await withFakeGitPath(
+      fakeBin,
+      { [FAKE_GIT_REAL_VAR]: realGitPath() },
+      async () => {
+        await assert.rejects(
+          verifyRawCommit(
+            "https://token@example.invalid/repo",
+            headCommit,
+            SCRATCH,
+          ),
+          (/** @type {unknown} */ error) => {
+            assert.ok(error instanceof Error);
+            assert.equal(
+              error.message,
+              "cannot fetch requested commit from <redacted-source>",
+            ); // :272-277
+            assert.equal(
+              error.message.includes("token@example.invalid"),
+              false,
+            ); // :278-281
+            return true;
+          },
+        );
+      },
     );
-    chmodSync(gitPath, 0o755);
-    const previousPath = process.env.PATH ?? "";
-    process.env.PATH = `${fakeBin}:${previousPath}`;
-    try {
-      await assert.rejects(
-        verifyRawCommit(
-          "https://token@example.invalid/repo",
-          headCommit,
-          SCRATCH,
-        ),
-        (/** @type {unknown} */ error) => {
-          assert.ok(error instanceof Error);
-          assert.equal(
-            error.message,
-            "cannot fetch requested commit from <redacted-source>",
-          ); // :272-277
-          assert.equal(error.message.includes("token@example.invalid"), false); // :278-281
-          return true;
-        },
-      );
-    } finally {
-      process.env.PATH = previousPath;
-    }
   }
 });
 
@@ -787,31 +858,17 @@ void test("pin's writer revalidates saved state after Git verification and rejec
         ? "{changed during verification"
         : '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}';
     const fakeBin = mkdtempSync(join(SCRATCH, `race-bin-${conflict}-`));
-    const gitPath = join(fakeBin, "git");
-    writeFileSync(
-      gitPath,
-      [
-        "#!/bin/sh",
-        'case " $* " in',
-        "  *' ls-remote '*)",
-        `    printf '%s' ${JSON.stringify(conflictBytes)} > "${statePath}"`,
-        "    ;;",
-        "esac",
-        `exec "${realGitPath()}" "$@"`,
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-    chmodSync(gitPath, 0o755);
-    const previousPath = process.env.PATH ?? "";
-    process.env.PATH = `${fakeBin}:${previousPath}`;
+    installFakeGit(fakeBin, FAKE_GIT_RACE_BODY);
     const errCtx = { ...ctx, stderr: makeCapture() };
-    let status;
-    try {
-      status = await runPin(["v1.0.0"], errCtx);
-    } finally {
-      process.env.PATH = previousPath;
-    }
+    const status = await withFakeGitPath(
+      fakeBin,
+      {
+        [FAKE_GIT_REAL_VAR]: realGitPath(),
+        [FAKE_GIT_RACE_STATE_PATH_VAR]: statePath,
+        [FAKE_GIT_RACE_BYTES_VAR]: conflictBytes,
+      },
+      () => runPin(["v1.0.0"], errCtx),
+    );
     assert.equal(status, 1); // :368
     assert.equal(readFileSync(statePath, "utf8"), conflictBytes); // :373 — the conflicting write survives untouched
   }
@@ -831,26 +888,12 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
     writeFileSync(statePath, existingBytes, "utf8");
     const gitLog = join(configDir, "git.log");
     const guardBin = mkdtempSync(join(SCRATCH, "state-guard-bin-"));
-    const gitPath = join(guardBin, "git");
-    writeFileSync(
-      gitPath,
-      [
-        "#!/bin/sh",
-        `printf '%s\\n' "$*" >> "${gitLog}"`,
-        `exec "${realGitPath()}" "$@"`,
-        "",
-      ].join("\n"),
-      "utf8",
+    installFakeGit(guardBin, FAKE_GIT_LOG_AND_FORWARD_BODY);
+    const status = await withFakeGitPath(
+      guardBin,
+      { [FAKE_GIT_REAL_VAR]: realGitPath(), [FAKE_GIT_LOG_VAR]: gitLog },
+      () => runPin(["v1.0.0"], { ...ctx, stderr: makeCapture() }),
     );
-    chmodSync(gitPath, 0o755);
-    const previousPath = process.env.PATH ?? "";
-    process.env.PATH = `${guardBin}:${previousPath}`;
-    let status;
-    try {
-      status = await runPin(["v1.0.0"], { ...ctx, stderr: makeCapture() });
-    } finally {
-      process.env.PATH = previousPath;
-    }
     return { status, gitLog, statePath };
   }
 
@@ -882,27 +925,13 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
     });
     const gitLog = join(configDir, "git.log");
     const guardBin = mkdtempSync(join(SCRATCH, "state-guard-bin-source-"));
-    const gitPath = join(guardBin, "git");
-    writeFileSync(
-      gitPath,
-      [
-        "#!/bin/sh",
-        `printf '%s\\n' "$*" >> "${gitLog}"`,
-        `exec "${realGitPath()}" "$@"`,
-        "",
-      ].join("\n"),
-      "utf8",
-    );
-    chmodSync(gitPath, 0o755);
-    const previousPath = process.env.PATH ?? "";
-    process.env.PATH = `${guardBin}:${previousPath}`;
+    installFakeGit(guardBin, FAKE_GIT_LOG_AND_FORWARD_BODY);
     const errCtx = { ...ctx, stderr: makeCapture() };
-    let status;
-    try {
-      status = await runPin(["v1.0.0"], errCtx);
-    } finally {
-      process.env.PATH = previousPath;
-    }
+    const status = await withFakeGitPath(
+      guardBin,
+      { [FAKE_GIT_REAL_VAR]: realGitPath(), [FAKE_GIT_LOG_VAR]: gitLog },
+      () => runPin(["v1.0.0"], errCtx),
+    );
     assert.equal(status, 1); // :414
     assert.match(
       errCtx.stderr.text(),
@@ -912,28 +941,45 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
   }
 });
 
-void test("track-latest defaults its saved source to the official upstream when no override is set", async () => {
+void test("track-latest defaults its saved source to the official upstream, and fails closed on an existing record of an unrecognized schema", async () => {
   // tests/test_selection_commands.sh:437-441. The explicit-source write
-  // (:429-435), the corrupt/incompatible-existing-state guard (:443-450),
-  // and the extra-argument usage error (:452-455) are already exercised by
-  // tests/unit/commands-track-latest.test.js's "track-latest writes the
-  // record and prints one line", "track-latest refuses to overwrite a
-  // corrupt saved record", and "track-latest rejects extra arguments with
-  // exit 2" — the same validateRecord/schema_version guard and the same
-  // usage-error path this file's own retirement note above already covers.
-  // The one behavior those unit tests do not exercise is the true
-  // package-default source (no SUPERPOWERS_UPSTREAM_URL at all), which this
-  // repository's shell driver only reached by stripping PATH down to a
-  // Git-less stub (:420-428) — moot now that runTrackLatest never spawns a
-  // process to begin with (see this file's header comment).
-  const { statePath, ctx } = freshContext("track-official", {});
-  const status = await runTrackLatest([], ctx);
-  assert.equal(status, 0);
-  const saved = await readSelectionState(statePath);
-  if (saved === null || saved.mode !== "track-latest") {
-    throw new Error("expected a track-latest record");
+  // (:429-435) and the extra-argument usage error (:452-455) are already
+  // exercised by tests/unit/commands-track-latest.test.js's "track-latest
+  // writes the record and prints one line" and "track-latest rejects extra
+  // arguments with exit 2" — the same code paths this file's own retirement
+  // note above already covers. The one behavior that unit suite does not
+  // exercise is the true package-default source (no
+  // SUPERPOWERS_UPSTREAM_URL at all), which this repository's shell driver
+  // only reached by stripping PATH down to a Git-less stub (:420-428) — moot
+  // now that runTrackLatest never spawns a process to begin with (see this
+  // file's header comment).
+  {
+    const { statePath, ctx } = freshContext("track-official", {});
+    const status = await runTrackLatest([], ctx);
+    assert.equal(status, 0);
+    const saved = await readSelectionState(statePath);
+    if (saved === null || saved.mode !== "track-latest") {
+      throw new Error("expected a track-latest record");
+    }
+    assert.equal(saved.source, UPSTREAM_URL_DEFAULT); // :441
   }
-  assert.equal(saved.source, UPSTREAM_URL_DEFAULT); // :441
+
+  // An existing record of an unrecognized schema_version fails the
+  // track-latest attempt with status 1 and leaves the bytes unchanged
+  // (:443-450) — the same validateRecord/schema_version guard, and the same
+  // fixture shape, already ported for pin at :909-919 above. Unlike pin's
+  // guards, this one has no "no Git process ran" companion check: runTrackLatest
+  // never invokes Git at all (see this file's header comment), so there is
+  // no observable Git-invocation count for a fixture to prove absent.
+  {
+    const newerBytes =
+      '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}';
+    const { statePath, ctx } = freshContext("track-newer", {});
+    writeFileSync(statePath, newerBytes, "utf8");
+    const status = await runTrackLatest([], { ...ctx, stderr: makeCapture() });
+    assert.equal(status, 1); // :449
+    assert.equal(readFileSync(statePath, "utf8"), newerBytes); // :450
+  }
 });
 
 void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async () => {
