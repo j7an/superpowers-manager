@@ -76,9 +76,9 @@ the port unless a merge is called out.
 53. `tests/expected_tarball_contents.txt` contains `dist/hooks.js`
 54. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/materialize-hooks.py`
 55. `tests/expected_tarball_contents.txt` contains `scripts/core/selection.sh`
-56. `tests/expected_tarball_contents.txt` contains `scripts/pin`
-57. `tests/expected_tarball_contents.txt` contains `scripts/track-latest`
-58. `tests/expected_tarball_contents.txt` contains `scripts/unpin`
+56. `tests/expected_tarball_contents.txt` does not contain `scripts/pin`
+57. `tests/expected_tarball_contents.txt` does not contain `scripts/track-latest`
+58. `tests/expected_tarball_contents.txt` does not contain `scripts/unpin`
 59. `RELEASING.md` contains `` Ensure `main` is green (`sh tests/container.sh`) ``
 60. `RELEASING.md` contains `sh tests/container.sh`
 61. `RELEASING.md` contains `pnpm install --frozen-lockfile`

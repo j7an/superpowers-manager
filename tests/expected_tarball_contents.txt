@@ -52,10 +52,7 @@ scripts/core/status.sh
 scripts/core/upstream.sh
 scripts/core/validate-adapter-response.py
 scripts/install
-scripts/pin
 scripts/prepare
 scripts/probe
-scripts/track-latest
 scripts/uninstall
-scripts/unpin
 scripts/update

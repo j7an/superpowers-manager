@@ -30,10 +30,10 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-ENV-PASSTHROUGH-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-01 ten SUPERPOWERS variables pass through` | — |
 | `CLI-ENV-PREPARE-PATHS-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: CLI-ENV-PREPARE-PATHS-01 relative prepare paths use invocation cwd` | — |
 | `CLI-ENV-INSTALLED-DEFAULTS-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
-| `SEL-LOCATION-01` | `tests/test_selection_state.sh::# BASELINE CASE: SEL-LOCATION-01 selection location chain and fail-closed bases` | — |
-| `SEL-PRECEDENCE-REF-01` | `tests/test_selection_state.sh::# BASELINE CASE: SEL-PRECEDENCE-REF-01 complete ref precedence` | — |
+| `SEL-LOCATION-01` | `tests/baseline/selection-location.test.js::SEL-LOCATION-01 selection location chain and fail-closed bases` | — |
+| `SEL-PRECEDENCE-REF-01` | `tests/baseline/selection-location.test.js::SEL-PRECEDENCE-REF-01 complete ref precedence` | — |
 | `SEL-PRECEDENCE-SOURCE-01` | `tests/baseline/cli-parity.test.js::SEL-PRECEDENCE-SOURCE-01 source precedence is independent` | `tests/fixtures/baseline/selection/track-latest.json` |
-| `SEL-PRECEDENCE-VALIDATE-01` | `tests/test_selection_state.sh::# BASELINE CASE: SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution` | — |
+| `SEL-PRECEDENCE-VALIDATE-01` | `tests/baseline/selection-location.test.js::SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution` | — |
 | `SEL-SCHEMA-MODES-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-MODES-01 read normalizes absent, pinned, and track-latest state` | `tests/fixtures/baseline/selection/track-latest.json` |
 | `SEL-SCHEMA-KEYS-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-KEYS-01 read rejects unknown, missing, and inconsistent fields` | `tests/fixtures/baseline/selection/unknown-key.json` |
 | `SEL-SCHEMA-REFS-01` | `tests/baseline/selection-state.test.js::SEL-SCHEMA-REFS-01 read rejects empty, multiline, and invalid ref strings` | — |
@@ -45,12 +45,12 @@ selectors or intentionally update the inventory, test, and this map together.
 | `SEL-BYTES-DIRECTORY-01` | `tests/baseline/selection-state.test.js::SEL-BYTES-DIRECTORY-01 the writer creates a private directory and a canonical private file` | — |
 | `SEL-BYTES-DIRECTORY-PRESERVE-01` | `tests/baseline/selection-state.test.js::SEL-BYTES-DIRECTORY-PRESERVE-01 the writer preserves an existing directory mode` | — |
 | `REF-PINNABLE-01` | `tests/baseline/cli-parity.test.js::CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only` | — |
-| `REF-GENERIC-FALLBACK-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup` | — |
-| `REF-LATEST-STABLE-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-LATEST-STABLE-01 numeric stable release selection and peeling` | — |
-| `REF-PIN-SOURCE-01` | `tests/test_selection_commands.sh::# BASELINE CASE: REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source` | — |
-| `REF-SOURCE-PROOF-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-SOURCE-PROOF-01 selected source must supply a commit object` | — |
-| `REF-CLEANUP-01` | `tests/test_ref_resolution.sh::# BASELINE CASE: REF-CLEANUP-01 interrupted source proof cleans only its workspace` | — |
-| `REF-PIN-CLEANUP-01` | `tests/test_selection_commands.sh::# BASELINE CASE: REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace` | — |
+| `REF-GENERIC-FALLBACK-01` | `tests/baseline/ref-resolution.test.js::REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup` | — |
+| `REF-LATEST-STABLE-01` | `tests/baseline/ref-resolution.test.js::REF-LATEST-STABLE-01 numeric stable release selection and peeling` | — |
+| `REF-PIN-SOURCE-01` | `tests/baseline/selection-commands.test.js::REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source` | — |
+| `REF-SOURCE-PROOF-01` | `tests/baseline/ref-resolution.test.js::REF-SOURCE-PROOF-01 selected source must supply a commit object` | — |
+| `REF-CLEANUP-01` | `tests/baseline/ref-resolution.test.js::REF-CLEANUP-01 interrupted source proof cleans only its workspace` | — |
+| `REF-PIN-CLEANUP-01` | `tests/baseline/selection-commands.test.js::REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace` | — |
 | `PROVENANCE-BYTES-01` | `tests/baseline/cli-parity.test.js::PROVENANCE-BYTES-01 prepare writes canonical provenance bytes` | `tests/fixtures/baseline/provenance/valid-commit.json` |
 | `SEL-READER-DUPLICATES-01` | `tests/baseline/selection-state.test.js::SEL-READER-DUPLICATES-01 read rejects duplicate JSON keys` | `tests/fixtures/baseline/selection/duplicate-key.json` |
 | `SEL-READER-CONSTANTS-01` | `tests/baseline/selection-state.test.js::SEL-READER-CONSTANTS-01 read rejects non-object documents and non-standard constants` | `tests/fixtures/baseline/selection/non-standard-constant.json` |
@@ -110,7 +110,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `FS-SELECTION-CONCURRENT-01` | `tests/baseline/selection-state.test.js::FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete valid record` | — |
 | `FS-SELECTION-POST-REPLACE-01` | `tests/unit/selection.test.js::FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode` | — |
 | `FS-SELECTION-TYPES-01` | `tests/baseline/selection-state.test.js::FS-SELECTION-TYPES-01 the writer rejects unexpected state and parent path types` | — |
-| `FS-SELECTION-UNPIN-TYPES-01` | `tests/test_selection_commands.sh::# BASELINE CASE: FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types` | — |
+| `FS-SELECTION-UNPIN-TYPES-01` | `tests/baseline/selection-commands.test.js::FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types` | — |
 | `SEL-READER-PARENT-01` | `tests/baseline/selection-state.test.js::SEL-READER-PARENT-01 read rejects absent state below a symlinked config directory` | — |
 | `PREPARE-VALIDATE-01` | `tests/baseline/cli-parity.test.js::PREPARE-VALIDATE-01 validation completes before activation` | `tests/builders/baseline-scenario.sh` |
 | `PREPARE-DETERMINISTIC-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
