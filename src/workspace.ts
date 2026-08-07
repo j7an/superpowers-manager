@@ -6,11 +6,16 @@ import { SafetyError } from "./safety-error.js";
 const MANAGED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
 type ManagedSignal = (typeof MANAGED_SIGNALS)[number];
 
-// Each active workspace carries its caller's failure reporter, so the signal
-// path reports through the same destination as the normal path. Previously the
-// signal path called the module-private cleanup and swallowed the rejection in
-// Promise.allSettled, so a signal-time failure was silent — suppression with no
-// destination, which is the state PR 11.4 removed from the normal path.
+// Each active workspace carries its caller's failure reporter. The signal
+// path still invokes it, for parity with the normal path, but a signal death
+// never builds a result envelope (see src/adapter-protocol.ts), so a report
+// that only lands in the adapter's buffered log would never become
+// observable — the signal path therefore also writes the hand-written
+// diagnostic straight to process.stderr, unconditionally; that raw write is
+// the only thing actually visible to a caller. Previously the signal path
+// called the module-private cleanup and swallowed the rejection in
+// Promise.allSettled, so a signal-time failure was silent entirely — this is
+// the state PR 11.4 removed from the normal path.
 const active = new Map<string, ((path: string) => void) | undefined>();
 let exiting = false;
 const handlers = new Map<ManagedSignal, () => void>();
@@ -43,10 +48,27 @@ function cleanupForSignal(signal: ManagedSignal): void {
     try {
       rmSync(path, { recursive: true, force: true });
     } catch {
-      // Same destination as the normal path. The diagnostic is hand-written and
-      // names the workspace; the caught cause is not interpolated.
-      if (report) report(path);
-      else process.stderr.write(`${workspaceRemovalFailure(path)}\n`);
+      // The reporter is invoked for parity with the normal path, but nothing
+      // ever reads it back here — no envelope is built before the process
+      // dies — so the diagnostic is also written straight to stderr,
+      // unconditionally; that write is the only thing actually observable.
+      // The diagnostic is hand-written and names the workspace; the caught
+      // cause is not interpolated.
+      //
+      // Reporting is guarded: if either call throws — plausibly EPIPE after
+      // SIGHUP, when the process on the other end of the pipe is already
+      // gone — the exception must not escape this loop, or the remaining
+      // workspaces' cleanup, deregistration, and the re-raise below never run.
+      try {
+        if (report) report(path);
+        // Node documents pipe writes as asynchronous on some platforms
+        // (notably macOS); a saturated pipe could drop this write. Small
+        // buffers like this one are written inline, which is why the
+        // covering test observes it reliably.
+        process.stderr.write(`${workspaceRemovalFailure(path)}\n`);
+      } catch {
+        // See above: a reporting failure must not block cleanup/re-raise.
+      }
     }
   }
   active.clear();

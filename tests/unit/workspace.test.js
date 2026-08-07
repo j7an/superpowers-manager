@@ -18,7 +18,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/workspace.js")} */
-const { withWorkspace } = await import(
+const { withWorkspace, workspaceRemovalFailure } = await import(
   new URL("../../dist/workspace.js", import.meta.url).href
 );
 
@@ -37,8 +37,15 @@ async function sandbox(t) {
   const directory = await mkdtemp(join(tmpdir(), "spw-workspace-"));
   t.after(async () => {
     // The failure child chmods its own parent to 0o500 to force a removal
-    // failure; without restoring it first, this cleanup would itself fail.
-    chmodSync(directory, 0o700);
+    // failure; without restoring it first, this cleanup would itself fail. If
+    // the chmod itself throws (e.g. the directory is already gone), the `rm`
+    // below must still run rather than leak the temp tree.
+    try {
+      chmodSync(directory, 0o700);
+    } catch {
+      // Best-effort: `rm` below is the real cleanup and tolerates a missing
+      // or already-writable directory either way.
+    }
     await rm(directory, { recursive: true, force: true });
   });
   return directory;
@@ -59,6 +66,10 @@ async function spawnSignalChild(script, args, signal, expectedPaths) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stdout = "";
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
   const announcedPaths = await new Promise((resolve, reject) => {
     child.stdout.on("data", (chunk) => {
       stdout += chunk;
@@ -77,7 +88,7 @@ async function spawnSignalChild(script, args, signal, expectedPaths) {
       resolve({ code, signal: childSignal });
     });
   });
-  return { announcedPaths, result, stdout };
+  return { announcedPaths, result, stdout, stderr };
 }
 
 /**
@@ -159,16 +170,29 @@ void test("REF-CLEANUP-01 / REF-PIN-CLEANUP-01 signals clean only active workspa
   }
 });
 
-void test("a signal-path cleanup failure reports through onCleanupFailure", async (t) => {
+void test("a signal-path cleanup failure reports through onCleanupFailure and stderr", async (t) => {
   // Permission checks do not apply to root, so the failure cannot be staged.
   if (process.getuid?.() === 0) {
     t.skip("cleanup cannot be made to fail as root");
     return;
   }
   const parent = await sandbox(t);
-  const { announcedPaths, result, stdout } = await signalFailureChild(parent);
+  const { announcedPaths, result, stdout, stderr } =
+    await signalFailureChild(parent);
   assert.equal(result.signal, "SIGTERM");
-  assert.match(stdout, new RegExp(`^reported:${announcedPaths[0]}$`, "m"));
+  assert.equal(result.code, null);
+  const workspace = announcedPaths[0];
+  if (workspace === undefined) throw new Error("workspace was not announced");
+  // Exact membership, not a RegExp built from the path: `mkdtemp` output can
+  // contain characters that are regex metacharacters (e.g. `.`), which would
+  // make a pattern built from the path match more than the path.
+  assert.ok(stdout.split("\n").includes(`reported:${workspace}`));
+  // The caller's reporter (proven above) is not the observable failure path:
+  // no result envelope is ever built before the process dies by the signal,
+  // so a report that only reached a buffered adapter log would be lost. The
+  // signal path also writes the hand-written diagnostic straight to stderr,
+  // unconditionally, which is what a real caller can actually see.
+  assert.ok(stderr.split("\n").includes(workspaceRemovalFailure(workspace)));
 });
 
 void test("withWorkspace preserves the callback error when cleanup fails", async (t) => {
