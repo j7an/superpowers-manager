@@ -183,7 +183,7 @@ export function makePackageRoot(kind) {
 /**
  * @typedef {object} DispatchOptions
  * @property {string[]} tools tools present on PATH. `sh` and `node` are always
- *   added — src/cli.ts:244-250 resolves `sh` as a required tool, so its
+ *   added — src/cli.ts:246-254 resolves `sh` as a required tool, so its
  *   presence is itself under test and must be stated, not assumed absent. Set
  *   `omitShell` to state its absence instead.
  * @property {string[]} args argv passed to the bin

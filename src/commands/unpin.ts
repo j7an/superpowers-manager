@@ -1,4 +1,5 @@
 import { lstat, unlink } from "node:fs/promises";
+import { oneLine } from "../cli-arguments.js";
 import { selectionStatePath } from "../effective-selection.js";
 import { selectionError } from "../selection.js";
 import { readConfigRef } from "../upstream.js";
@@ -94,9 +95,7 @@ export async function runUnpin(
     // so this catch cannot also be reached by an EPIPE from a write this
     // function made itself — the write below runs only after this try/catch
     // has already resolved.
-    ctx.stderr.write(
-      `error: ${cause instanceof Error ? cause.message : String(cause)}\n`,
-    );
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
   if (outcome.status === 1) {

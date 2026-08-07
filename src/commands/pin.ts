@@ -1,4 +1,5 @@
 import { tmpdir } from "node:os";
+import { oneLine } from "../cli-arguments.js";
 import { isTagRef, normalizeCommitInput } from "../domain/refs.js";
 import {
   loadSavedSelection,
@@ -88,13 +89,14 @@ export async function runPin(
     // used at :219 for `ls-remote` and :262 for `init`), so raw git output can
     // reach ctx.stderr through this catch. Not a regression — scripts/pin
     // piped git's output into its own error text the same way — but `pin` is
-    // the first in-process command able to surface it. attemptPin performs no
-    // writes of its own (see above), so this catch cannot also be reached by
-    // an EPIPE from a write this function made itself — the write below runs
-    // only after this try/catch has already resolved.
-    ctx.stderr.write(
-      `error: ${cause instanceof Error ? cause.message : String(cause)}\n`,
-    );
+    // the first in-process command able to surface it. oneLine() collapses
+    // that spliced output to one line, containing the harm to one line of
+    // git text rather than the arbitrarily many the shell original allowed.
+    // attemptPin performs no writes of its own (see above), so this catch
+    // cannot also be reached by an EPIPE from a write this function made
+    // itself — the write below runs only after this try/catch has already
+    // resolved.
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
   ctx.stdout.write(

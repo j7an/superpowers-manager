@@ -301,8 +301,8 @@ property — it has no port here.
 71. The saved `mode` is `track-latest` (`:434`). **Retired**, same citation.
 72. The saved `source` equals the explicit URL (`:435`). **Retired**, same
     citation.
-73. With no `SUPERPOWERS_UPSTREAM_URL` at all, the saved `source` defaults to
-    the official upstream (`:441`). Port:
+73. With `SUPERPOWERS_UPSTREAM_URL` set to the empty string, the saved
+    `source` defaults to the official upstream (`:441`). Port:
     `tests/baseline/selection-commands.test.js:964` — the one behavior in
     this cluster the cited unit test does not exercise (it always sets an
     explicit URL).

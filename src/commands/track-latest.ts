@@ -1,3 +1,4 @@
+import { oneLine } from "../cli-arguments.js";
 import {
   selectionStatePath,
   loadSavedSelection,
@@ -43,9 +44,7 @@ export async function runTrackLatest(
     // diagnostics convention). The try ends here, before the stdout write
     // below: an EPIPE from that write must never be caught and relabelled
     // as one of those modules' own diagnostics.
-    ctx.stderr.write(
-      `error: ${cause instanceof Error ? cause.message : String(cause)}\n`,
-    );
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
   ctx.stdout.write("saved upstream selection: latest stable release\n");

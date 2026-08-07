@@ -949,13 +949,19 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // writes the record and prints one line" and "track-latest rejects extra
   // arguments with exit 2" — the same code paths this file's own retirement
   // note above already covers. The one behavior that unit suite does not
-  // exercise is the true package-default source (no
-  // SUPERPOWERS_UPSTREAM_URL at all), which this repository's shell driver
+  // exercise is the true package-default source (SUPERPOWERS_UPSTREAM_URL
+  // set to the empty string, matching runTrackLatest's `||` fallback — see
+  // src/commands/track-latest.ts:31 — not the variable left absent, which
+  // the shell's own `${VAR:-default}` treats identically but this project
+  // otherwise treats presence-vs-emptiness as distinct, e.g.
+  // src/effective-selection.ts:20-28), which this repository's shell driver
   // only reached by stripping PATH down to a Git-less stub (:420-428) — moot
   // now that runTrackLatest never spawns a process to begin with (see this
   // file's header comment).
   {
-    const { statePath, ctx } = freshContext("track-official", {});
+    const { statePath, ctx } = freshContext("track-official", {
+      SUPERPOWERS_UPSTREAM_URL: "",
+    });
     const status = await runTrackLatest([], ctx);
     assert.equal(status, 0);
     const saved = await readSelectionState(statePath);

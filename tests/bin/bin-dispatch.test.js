@@ -270,7 +270,7 @@ void test("`unpin` succeeds in-process with git absent from PATH", () => {
 // --- inventory item 41: unpin needs no shell, python, codex, or git ---------
 //
 // unpin's in-process flip (PR 11.5) made every one of these properties true
-// at once, since DISPATCH-gated preflight (src/cli.ts:240) no longer
+// at once, since DISPATCH-gated preflight (src/cli.ts:242) no longer
 // discovers a shell for it either. The two cases below cover the property
 // item 41 actually protects — success, not a specific dispatch-log line —
 // plus a new sibling for `sh` absent, which was previously unwriteable
