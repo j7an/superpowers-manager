@@ -1,6 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { oneLine } from "./cli-arguments.js";
+import type { CommandContext } from "./commands/context.js";
+import { runPin } from "./commands/pin.js";
+import { runTrackLatest } from "./commands/track-latest.js";
+import { runUnpin } from "./commands/unpin.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
 
 type Subcommand =
@@ -27,8 +32,14 @@ type UsageErrorParseResult = {
 type ParseResult =
   RunParseResult | HelpParseResult | VersionParseResult | UsageErrorParseResult;
 
+// The success variant is keyed by dispatch mode so the compiler — not a
+// runtime check — enforces that `shell` exists only where it was actually
+// discovered. A later slice that flips a `DISPATCH` entry before wiring its
+// in-process handler cannot reach `pf.shell` by accident.
 type PreflightResult =
-  { ok: true; shell: string } | { ok: false; errors: string[] };
+  | { ok: true; dispatch: "spawn"; shell: string }
+  | { ok: true; dispatch: "in-process" }
+  | { ok: false; errors: string[] };
 
 type SpawnDescriptor = {
   file: string;
@@ -45,9 +56,39 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   "update",
   "uninstall",
 ];
+
+export type DispatchMode = "spawn" | "in-process";
+
+// The PR 11.5 migration state, in production code because `preflight` reads it:
+// a POSIX shell is required only while a command is still spawned. Each slice
+// flips entries to "in-process"; when none remain, `buildSpawn`,
+// `discoverShell`, and this table are deleted together.
+const DISPATCH: Record<Subcommand, DispatchMode> = {
+  pin: "in-process",
+  "track-latest": "in-process",
+  unpin: "in-process",
+  prepare: "spawn",
+  probe: "spawn",
+  install: "spawn",
+  update: "spawn",
+  uninstall: "spawn",
+};
+
+// Registry of in-process handlers, keyed by the DISPATCH entries above that
+// read "in-process". A later slice adds an entry here alongside each flip.
+const IN_PROCESS_HANDLERS: {
+  readonly [K in Subcommand]?: (
+    argv: string[],
+    ctx: CommandContext,
+  ) => Promise<number>;
+} = {
+  pin: runPin,
+  "track-latest": runTrackLatest,
+  unpin: runUnpin,
+};
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
-  pin: ["git", "python3"],
-  "track-latest": ["python3"],
+  pin: ["git"],
+  "track-latest": [],
   unpin: [],
   prepare: ["git", "python3"],
   probe: ["git", "python3", "codex"],
@@ -173,7 +214,8 @@ function commandRequirements(): Record<Subcommand, string[]> {
 }
 
 // Tool preflight; never touches Codex state. Requirements are specific to the
-// selected command, while a POSIX shell remains mandatory for every command.
+// selected command; a POSIX shell is required only for commands the DISPATCH
+// gate still spawns, not for in-process commands.
 function preflight(
   cmd: Subcommand,
   env: NodeJS.ProcessEnv,
@@ -198,6 +240,10 @@ function preflight(
       );
     }
   }
+  if (DISPATCH[cmd] !== "spawn") {
+    if (errors.length) return { ok: false, errors };
+    return { ok: true, dispatch: "in-process" };
+  }
   const shell = discoverShell(env, platform);
   if (!shell) {
     errors.push(
@@ -205,9 +251,10 @@ function preflight(
         ? "no POSIX shell found — install Git for Windows (provides bash) or use WSL2"
         : "required command not found: sh",
     );
+    return { ok: false, errors };
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, shell: shell! };
+  return { ok: true, dispatch: "spawn", shell };
 }
 
 // POSIX executes the script directly (#!/bin/sh shebang); Windows cannot
@@ -255,7 +302,7 @@ function usage(): string {
   ].join("\n");
 }
 
-function main(): never {
+async function main(): Promise<never> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {
     console.log(usage());
@@ -282,6 +329,32 @@ function main(): never {
   if (!pf.ok) {
     for (const e of pf.errors) console.error(`error: ${e}`);
     process.exit(1);
+  }
+  if (pf.dispatch === "in-process") {
+    const handler = IN_PROCESS_HANDLERS[parsed.cmd];
+    if (!handler) {
+      console.error(
+        `error: no in-process handler registered for: ${parsed.cmd}`,
+      );
+      process.exit(1);
+    }
+    const ctx: CommandContext = {
+      root,
+      env: process.env,
+      stdout: process.stdout,
+      stderr: process.stderr,
+    };
+    let status: number;
+    try {
+      status = await handler(parsed.args, ctx);
+    } catch (cause) {
+      // Belt-and-suspenders: every registered handler already catches its own
+      // failures and returns a status code (see src/commands/unpin.ts). This
+      // re-emits a subordinate module's own diagnostic if one somehow escapes.
+      console.error(`error: ${oneLine(cause)}`);
+      process.exit(1);
+    }
+    process.exit(status);
   }
   const script = path.join(root, "scripts", parsed.cmd);
   if (!fs.existsSync(script)) {
@@ -318,6 +391,12 @@ export {
   buildSpawn,
   usage,
   main,
+  DISPATCH,
 };
 
-if (isMain(import.meta.filename, process.argv[1])) main();
+if (isMain(import.meta.filename, process.argv[1])) {
+  main().catch((cause: unknown) => {
+    console.error(`error: ${oneLine(cause)}`);
+    process.exit(1);
+  });
+}

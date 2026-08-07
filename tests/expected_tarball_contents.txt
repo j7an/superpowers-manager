@@ -14,8 +14,13 @@ dist/cli-arguments.js
 dist/cli.js
 dist/codex-json.js
 dist/codex-state.js
+dist/commands/context.js
+dist/commands/pin.js
+dist/commands/track-latest.js
+dist/commands/unpin.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
+dist/effective-selection.js
 dist/generated-plugin.js
 dist/git.js
 dist/hooks.js
@@ -47,10 +52,7 @@ scripts/core/status.sh
 scripts/core/upstream.sh
 scripts/core/validate-adapter-response.py
 scripts/install
-scripts/pin
 scripts/prepare
 scripts/probe
-scripts/track-latest
 scripts/uninstall
-scripts/unpin
 scripts/update

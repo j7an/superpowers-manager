@@ -19,6 +19,8 @@ import test from "node:test";
 
 import {
   COMMANDS,
+  DISPATCH,
+  IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
   clearDispatchLog,
@@ -533,7 +535,7 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
 
 void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   const cases = new Map([
-    ["pin", ["v6.1.1"]],
+    ["pin", ["v1.0.0"]],
     ["track-latest", []],
     ["unpin", []],
     ["prepare", ["--candidate", "arbitrary value"]],
@@ -543,19 +545,48 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     ["uninstall", ["--purge", "arbitrary value"]],
   ]);
   assert.deepEqual([...cases.keys()], COMMANDS);
+  // The production DISPATCH keys and the test-side COMMANDS list must agree
+  // as sets in both directions. COMMANDS is hand-maintained while DISPATCH is
+  // keyed by the production Subcommand union, so either one can gain or lose
+  // an entry the other doesn't have; a one-directional `includes` check
+  // cannot catch that because IN_PROCESS_COMMANDS is filtered from COMMANDS
+  // by construction and is therefore always a subset of it.
+  assert.deepEqual(Object.keys(DISPATCH).sort(), [...COMMANDS].sort());
 
   withSandbox({ stubScripts: true }, (sandbox) => {
+    // `pin` is the first in-process command whose success genuinely depends
+    // on resolving against its source (track-latest/unpin never touch git):
+    // it needs a real, reachable upstream, so this test grows a local one
+    // rather than resolving against the package default and touching the
+    // network. `v1.0.0` replaces the arbitrary `v6.1.1` used for pin's argv
+    // elsewhere in this suite, since it is the tag this scenario actually
+    // has.
+    const upstream = createReleaseRepo(sandbox);
     for (const [command, argv] of cases) {
       clearDispatchLog(sandbox);
-      const result = runCli(
-        sandbox,
-        [command, ...argv],
-        dispatchEnvironment(sandbox),
-      );
-      assertCleanResult(result);
-      assert.equal(result.stdout, "");
-      assert.equal(result.stderr, "");
-      assertOnlyDispatch(sandbox, command, argv);
+      const overrides =
+        command === "pin"
+          ? {
+              ...dispatchEnvironment(sandbox),
+              SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+            }
+          : dispatchEnvironment(sandbox);
+      const result = runCli(sandbox, [command, ...argv], overrides);
+      if (IN_PROCESS_COMMANDS.includes(command)) {
+        // An in-process command must reach its module and dispatch NOTHING.
+        // Every command's scripts/<command> is stubbed with a regression
+        // detector (support.js's regressionStub): it logs the invocation and
+        // exits non-zero, so a regression that re-spawns the script fails
+        // both assertCleanResult below and this empty-dispatch-log check.
+        assertCleanResult(result);
+        const dispatched = readDispatchLog(sandbox).map((e) => e.command);
+        assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
+      } else {
+        assertCleanResult(result);
+        assert.equal(result.stdout, "");
+        assert.equal(result.stderr, "");
+        assertOnlyDispatch(sandbox, command, argv);
+      }
     }
   });
 });
@@ -624,15 +655,46 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
   ];
 
   withSandbox({ stubScripts: true }, (sandbox) => {
+    // `pin` is in-process now (PR 11.5, Task 7): an accepted ref never
+    // reaches scripts/pin, and its resolution genuinely runs rather than
+    // hitting the trivial dispatch stub every other command in this suite
+    // still gets. This loop can therefore no longer assert a clean dispatch
+    // for every accepted value — two of them
+    // (`0123456789abcdef0123456789abcdef01234567` and its uppercase
+    // sibling) are arbitrary 40-hex literals not constructible in any
+    // fixture (no buildable repository can contain a commit with that exact
+    // SHA), so genuine resolution success is not just unbuilt here, it is
+    // impossible to assert honestly. What this loop still proves, and the
+    // only thing it ever proved before the flip (the shell-era dispatch
+    // stub short-circuited real resolution too), is the syntax boundary
+    // itself: `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate lets these argv
+    // shapes reach real work, in contrast to every entry in `refused` below,
+    // which is rejected before any tool lookup or dispatch.
+    // `SUPERPOWERS_UPSTREAM_URL` is pinned to a definitely-absent local path
+    // so that real work fails fast — never touching the network — no
+    // matter which accepted value is tried. With that source, resolution is
+    // deterministic for every accepted value: tags fail inside
+    // resolveExactTag (src/upstream.ts's `runGit(["ls-remote", ...])`
+    // against a nonexistent path), 40-hex values fail inside
+    // verifyRawCommit's fetch, and runPin's catch (src/commands/pin.ts)
+    // returns 1 unconditionally either way — so `status === 1` is provable
+    // and strictly stronger than merely "not a usage error": it also catches
+    // a signal-killed child, which `spawnSync` reports as `status: null`
+    // (`notEqual(null, 2)` would have passed that silently).
+    const noSuchUpstream = join(sandbox.root, "no-such-upstream");
     for (const ref of accepted) {
       clearDispatchLog(sandbox);
-      const result = runCli(
-        sandbox,
-        ["pin", ref],
-        dispatchEnvironment(sandbox),
+      const result = runCli(sandbox, ["pin", ref], {
+        ...dispatchEnvironment(sandbox),
+        SUPERPOWERS_UPSTREAM_URL: noSuchUpstream,
+      });
+      assertCleanResult(result, 1);
+      assert.ok(
+        !result.stderr.includes(
+          "pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit",
+        ),
       );
-      assertCleanResult(result);
-      assertOnlyDispatch(sandbox, "pin", [ref]);
+      assert.deepEqual(readDispatchLog(sandbox), []);
     }
     for (const ref of refused) {
       clearDispatchLog(sandbox);
@@ -655,19 +717,39 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   const requirements = new Map([
-    ["pin", ["git", "python3", "sh"]],
-    ["track-latest", ["python3", "sh"]],
-    ["unpin", ["sh"]],
+    ["pin", ["git"]],
+    ["track-latest", []],
+    ["unpin", []],
     ["prepare", ["git", "python3", "sh"]],
     ["probe", ["git", "python3", "codex", "sh"]],
     ["install", ["git", "python3", "codex", "sh"]],
     ["update", ["git", "python3", "codex", "sh"]],
     ["uninstall", ["python3", "codex", "sh"]],
   ]);
+  // Every tool any command in `requirements` can require. Used below to give
+  // the empty-requirements rows (`track-latest`, `unpin`) a real assertion
+  // instead of a `for` loop over `[]` that runs zero iterations.
+  const ALL_REQUIRED_TOOLS = [...new Set([...requirements.values()].flat())];
   /** @type {Record<string, string[]>} */
   const argsFor = { pin: ["v1.2.3"] };
 
   for (const [command, tools] of requirements) {
+    if (tools.length === 0) {
+      // No preflight requirement to violate individually: assert the
+      // positive instead — this command still succeeds once every tool any
+      // *other* command needs is removed from PATH, proving its own
+      // requirement list is genuinely empty rather than merely undeclared.
+      withSandbox({ stubScripts: true }, (sandbox) => {
+        for (const tool of ALL_REQUIRED_TOOLS) removeTool(sandbox, tool);
+        const result = runCli(sandbox, [command, ...(argsFor[command] || [])], {
+          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+        });
+        assertCleanResult(result);
+        assert.equal(result.stderr, "");
+        assert.deepEqual(readDispatchLog(sandbox), []);
+      });
+      continue;
+    }
     for (const tool of tools) {
       withSandbox({ stubScripts: true }, (sandbox) => {
         if (tools.includes("codex") && tool !== "codex") writeNoopTool(sandbox);

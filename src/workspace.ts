@@ -1,14 +1,22 @@
+import { rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { SafetyError } from "./safety-error.js";
 
-const active = new Set<string>();
-const signalStatuses = {
-  SIGHUP: 129,
-  SIGINT: 130,
-  SIGTERM: 143,
-} as const;
-type ManagedSignal = keyof typeof signalStatuses;
+const MANAGED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
+type ManagedSignal = (typeof MANAGED_SIGNALS)[number];
+
+// Each active workspace carries its caller's failure reporter. The signal
+// path still invokes it, for parity with the normal path, but a signal death
+// never builds a result envelope (see src/adapter-protocol.ts), so a report
+// that only lands in the adapter's buffered log would never become
+// observable — the signal path therefore also writes the hand-written
+// diagnostic straight to process.stderr, unconditionally; that raw write is
+// the only thing actually visible to a caller. Previously the signal path
+// called the module-private cleanup and swallowed the rejection in
+// Promise.allSettled, so a signal-time failure was silent entirely — this is
+// the state PR 11.4 removed from the normal path.
+const active = new Map<string, ((path: string) => void) | undefined>();
 let exiting = false;
 const handlers = new Map<ManagedSignal, () => void>();
 
@@ -28,21 +36,54 @@ async function cleanup(path: string): Promise<void> {
   }
 }
 
-async function cleanupForSignal(status: number): Promise<never> {
-  if (exiting) await new Promise<never>(() => {});
+// Synchronous by contract. An `await` here would yield to the event loop with
+// the listeners still registered, and every signal arriving during that window
+// would be consumed and discarded — an uninterruptible process, which is worse
+// than the leak the handler exists to prevent. Being synchronous means the
+// handler cannot be re-entered, so the window does not exist.
+function cleanupForSignal(signal: ManagedSignal): void {
+  if (exiting) return;
   exiting = true;
-  await Promise.allSettled([...active].map(cleanup));
-  process.exit(status);
+  for (const [path, report] of active) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch {
+      // The reporter is invoked for parity with the normal path, but nothing
+      // ever reads it back here — no envelope is built before the process
+      // dies — so the diagnostic is also written straight to stderr,
+      // unconditionally; that write is the only thing actually observable.
+      // The diagnostic is hand-written and names the workspace; the caught
+      // cause is not interpolated.
+      //
+      // Reporting is guarded: if either call throws — plausibly EPIPE after
+      // SIGHUP, when the process on the other end of the pipe is already
+      // gone — the exception must not escape this loop, or the remaining
+      // workspaces' cleanup, deregistration, and the re-raise below never run.
+      try {
+        if (report) report(path);
+        // Node documents pipe writes as asynchronous on some platforms
+        // (notably macOS); a saturated pipe could drop this write. Small
+        // buffers like this one are written inline, which is why the
+        // covering test observes it reliably.
+        process.stderr.write(`${workspaceRemovalFailure(path)}\n`);
+      } catch {
+        // See above: a reporting failure must not block cleanup/re-raise.
+      }
+    }
+  }
+  active.clear();
+  // Remove only the listeners this coordinator registered, then re-raise so the
+  // default disposition terminates the process by the signal.
+  for (const [managed, handler] of handlers) process.off(managed, handler);
+  handlers.clear();
+  process.kill(process.pid, signal);
 }
 
 function registerCoordinator(): void {
   if (handlers.size > 0) return;
-  for (const [signal, status] of Object.entries(signalStatuses) as [
-    ManagedSignal,
-    number,
-  ][]) {
+  for (const signal of MANAGED_SIGNALS) {
     const handler = () => {
-      void cleanupForSignal(status);
+      cleanupForSignal(signal);
     };
     handlers.set(signal, handler);
     process.on(signal, handler);
@@ -78,7 +119,7 @@ export async function withWorkspace<T>(
   } catch (cause) {
     throw new SafetyError("workspace", "cannot create workspace", { cause });
   }
-  active.add(workspace);
+  active.set(workspace, options.onCleanupFailure);
   registerCoordinator();
   try {
     let result!: T;

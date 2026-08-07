@@ -16,10 +16,10 @@ compatibility facts, not a recommendation to make every parser identical.
 | `CLI-MODE-HELP-01` | `--help` and `-h` are standalone help modes. Even when Git, Python, Codex, and the POSIX shell are unavailable, they write the complete usage text to stdout, write nothing to stderr, perform no preflight or dispatch, and exit 0. |
 | `CLI-MODE-VERSION-01` | `--version` is a standalone version mode. It reads the current package version, writes that value plus one newline to stdout, writes nothing to stderr, performs no dispatch, and exits 0. |
 | `CLI-MODE-DEFAULT-01` | No arguments is the third distinct mode and is exactly equivalent to dispatching `update` with no arguments. |
-| `CLI-COMMANDS-01` | The eight named subcommands are `pin`, `track-latest`, `unpin`, `prepare`, `probe`, `install`, `update`, and `uninstall`. Except for CLI-owned arity and pin-ref checks, remaining arguments pass through unchanged to the selected script. |
+| `CLI-COMMANDS-01` | The eight named subcommands are `pin`, `track-latest`, `unpin`, `prepare`, `probe`, `install`, `update`, and `uninstall`. `pin`, `track-latest`, and `unpin` run in-process; the other five are spawned as scripts. Except for CLI-owned arity and pin-ref checks, remaining arguments pass through unchanged to the in-process handler or the spawned script, whichever the command selects. |
 | `CLI-USAGE-01` | Unknown commands, stray top-level flags, invalid `pin` arity/ref syntax, and extra arguments to `track-latest` or `unpin` are usage errors. They do not dispatch, print `error: ...` followed by usage, and exit 2. |
-| `CLI-PREFLIGHT-01` | Preflight is command-specific and completes before dispatch: `pin` needs Git and Python; `track-latest` needs Python; `unpin` has no extra tool; `prepare` needs Git and Python; `probe`, `install`, and `update` need Git, Python, and Codex; `uninstall` needs Python and Codex. Every command also needs a POSIX shell. Missing requirements exit 1 without dispatch. |
-| `CLI-CHILD-STATUS-01` | After successful preflight, the delegated script inherits stdio and environment; its numeric exit status is the CLI exit status. Spawn failure or a signal-only result is normalized to exit 1. |
+| `CLI-PREFLIGHT-01` | Preflight is command-specific and completes before dispatch: `pin` needs Git; `track-latest` and `unpin` have no extra tool; `prepare` needs Git and Python; `probe`, `install`, and `update` need Git, Python, and Codex; `uninstall` needs Python and Codex. A POSIX shell is additionally required only for the five spawned commands (`prepare`, `probe`, `install`, `update`, `uninstall`); `pin`, `track-latest`, and `unpin` run in-process and need no shell. Missing requirements exit 1 without dispatch. |
+| `CLI-CHILD-STATUS-01` | After successful preflight, each of the five spawned commands (`prepare`, `probe`, `install`, `update`, `uninstall`) delegates to a script that inherits stdio and environment; its numeric exit status is the CLI exit status, and spawn failure or a signal-only result is normalized to exit 1. `pin`, `track-latest`, and `unpin` run in-process instead: their handler's own returned exit code is the CLI exit status directly, with no child process, spawn, or signal involved. |
 
 ## Environment and location
 
@@ -109,7 +109,7 @@ Track-latest bytes:
 | `REF-PIN-SOURCE-01` | Public `pin` resolves exact tags only from the selected source’s tag namespace, peels annotated tags, normalizes raw commit input to lowercase, and saves the proven identity and source. |
 | `REF-SOURCE-PROOF-01` | Exact-commit proof uses an invocation-private repository, cannot be satisfied by an object already in the persistent cache, and accepts only a commit object supplied by the selected source. |
 | `REF-CLEANUP-01` | An interrupted exact-fetch source-proof removes only its invocation-owned proof repository and preserves sibling workspace content. |
-| `REF-PIN-CLEANUP-01` | An interrupted public `pin` raw-commit proof removes only its invocation-owned verifier repository, preserves sibling content and prior selection state, and reports signal status 143. |
+| `REF-PIN-CLEANUP-01` | An interrupted public `pin` raw-commit proof removes only its invocation-owned verifier repository, preserves sibling content and prior selection state, and the process dies by the interrupting signal rather than exiting with a numeric status. |
 
 ## Canonical generated provenance
 

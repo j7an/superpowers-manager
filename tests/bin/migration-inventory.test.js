@@ -30,6 +30,9 @@ const DECLARED = {
   "install-commands.md": ["tests/bin/install-commands.test.js"],
   "node-tooling.md": ["tests/bin/node-tooling.test.js"],
   "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.js"],
+  "ref-resolution.md": ["tests/baseline/ref-resolution.test.js"],
+  "selection-commands.md": ["tests/baseline/selection-commands.test.js"],
+  "selection-state.md": ["tests/baseline/selection-location.test.js"],
   "uninstall-commands.md": ["tests/bin/uninstall-commands.test.js"],
   "workflows.md": [
     "tests/bin/action-pins.test.js",
@@ -41,6 +44,150 @@ const DECLARATION = /^```json inventory\n([\s\S]*?)\n```$/gm;
 const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
 const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
 const TEST_IMPORT = /^import test from "node:test";$/m;
+
+// Cardinal words this project's inventories have actually used for a stated
+// count (bin-dispatch.md's "two", selection-state.md's "six",
+// ref-resolution.md's "seven" and, before its fix-round correction, "nine").
+// Bounded at twenty: every inventory's merge/retirement count observed so
+// far is well under ten, and a count needing a word beyond this list is a
+// sign the file should say the digit instead, not a gap to close here.
+/** @type {Record<string, number>} */
+const WORD_NUMBERS = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+};
+const NUMBER_TOKEN = `(\\d+|${Object.keys(WORD_NUMBERS).join("|")})`;
+
+// Anchored to the two exact declared-count phrasings that have each drifted
+// from their own file's marker count once already (Tasks 7, 8, and 9's
+// review rounds) — not a general-purpose prose parser. Each phrasing pairs a
+// stated number with a specific noun phrase directly behind it
+// ("N recorded merges", "N retired items"); nothing that merely mentions
+// "retired" or "merged" elsewhere (e.g. "bin-dispatch.md's retired items",
+// which names no count) can match, because there is no number token
+// immediately before the phrase.
+const RECORDED_MERGES_RE = new RegExp(
+  `\\b${NUMBER_TOKEN}\\s+recorded merges\\b`,
+  "gi",
+);
+const RETIRED_ITEMS_RE = new RegExp(
+  `\\*{0,2}${NUMBER_TOKEN}\\s+retired items\\*{0,2}`,
+  "gi",
+);
+
+// Declared, never derived — same philosophy as DECLARED above, and for the
+// same reason: a predicate ("skip any file with zero markers") would also
+// match a file that *lost* its markers, silently passing exactly the
+// deletion this checker exists to catch. workflows.md is named here, alone,
+// because it records its merges by prose item-range enumeration
+// ("items 1-2", "items 17-24", "items 25-28") and never adopted the
+// `**Merged**` bold-marker convention the other three phrase-bearing files
+// use — its "three recorded merges" is not machine-checkable in this form,
+// not a defect. Remove this entry if workflows.md ever adopts the marker.
+const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
+
+// Anchored to the literal shorthand punctuation an inventory uses to restate
+// its own divergence arithmetic in one place (e.g. "+5/-7/net-2") — not to
+// any specific file's wording, so it needs no phrase-specific exemption list
+// and rewording the surrounding sentence cannot defeat it. It is still an
+// anchor on punctuation, not a general parser: a spelled-out "+5 / -7 /
+// net -2" produces no match at all, so this catches drift in the shorthand
+// itself, not every way the same arithmetic could be phrased. Unlike RECORDED_MERGES_RE/
+// RETIRED_ITEMS_RE, which each check a stated count against the file's own
+// bold-marker count (an external ground truth), this checks the shorthand's
+// three numbers against each other: it cannot know whether either +N or -M
+// is itself correct, only whether the stated net is the *arithmetic
+// consequence* of the other two, wherever this exact shape appears. That is
+// enough to catch a total that contradicts its own inputs — the failure
+// mode a fourth consecutive inventory shipped (see selection-commands.md's
+// fix history: "+8/-9/net-2" stood next to a correct "Net: ... = -2"
+// derivation two paragraphs earlier, and no existing check compared them).
+const NET_ARITHMETIC_RE = /\+(\d+)\/-(\d+)\/net(-?\d+)/g;
+
+/**
+ * Asserts every occurrence of the "+N/-M/netK" shorthand in `source` is
+ * self-consistent (N - M === K), independent of whether N or M themselves
+ * are correct.
+ * @param {string} source
+ * @param {string} name
+ */
+function assertNetArithmeticSelfConsistent(source, name) {
+  for (const match of source.matchAll(NET_ARITHMETIC_RE)) {
+    const additions = Number(match[1]);
+    const subtractions = Number(match[2]);
+    const claimedNet = Number(match[3]);
+    assert.equal(
+      additions - subtractions,
+      claimedNet,
+      `${name}: states "${match[0]}" but ${additions} - ${subtractions} = ${additions - subtractions}, not ${claimedNet}`,
+    );
+  }
+}
+
+/**
+ * @param {string} token digits or one of WORD_NUMBERS's keys, any case
+ * @returns {number}
+ */
+function parseStatedCount(token) {
+  if (/^\d+$/.test(token)) return Number(token);
+  const found = WORD_NUMBERS[token.toLowerCase()];
+  assert.ok(found !== undefined, `unrecognized count word: ${token}`);
+  return found;
+}
+
+/**
+ * Asserts every occurrence of `countRe` in `source` (a stated "N <phrase>")
+ * agrees with the file's own count of `markerRe` (its bold per-item marker
+ * for the same concept, e.g. `**Merged**`). Both regexes must be global.
+ * Skipped entirely for a name in `exempt` — see
+ * STATED_COUNT_MARKER_CHECK_EXEMPT.
+ * @param {string} source
+ * @param {RegExp} countRe
+ * @param {RegExp} markerRe
+ * @param {string} phraseLabel
+ * @param {string} name
+ * @param {ReadonlySet<string>} exempt
+ */
+function assertStatedCountMatchesMarkers(
+  source,
+  countRe,
+  markerRe,
+  phraseLabel,
+  name,
+  exempt,
+) {
+  if (exempt.has(name)) return;
+  const stated = [...source.matchAll(countRe)];
+  if (stated.length === 0) return;
+  const actual = [...source.matchAll(markerRe)].length;
+  for (const match of stated) {
+    const claimed = parseStatedCount(match[1]);
+    assert.equal(
+      claimed,
+      actual,
+      `${name}: states "${match[0].trim()}" (${phraseLabel}) but the file has ${actual} bold marker(s) for it`,
+    );
+  }
+}
 
 /**
  * Lines between a marker pair. Regions are stated, never inferred from
@@ -378,5 +525,28 @@ for (const name of inventories) {
       shellOriginal,
       `${name}: the Cardinality prose total disagrees with the declaration block`,
     );
+
+    // Three fix rounds in a row (Tasks 7, 8, and 9) shipped a prose count of
+    // this exact shape that disagreed with the file's own bold markers, and
+    // the gate above cannot see it: shellOriginal/portOnly/ports/1..N never
+    // touch this sentence. This does.
+    assertStatedCountMatchesMarkers(
+      source,
+      RECORDED_MERGES_RE,
+      /\*\*merged\*\*/gi,
+      "recorded merges",
+      name,
+      STATED_COUNT_MARKER_CHECK_EXEMPT,
+    );
+    assertStatedCountMatchesMarkers(
+      source,
+      RETIRED_ITEMS_RE,
+      /\*\*retired\*\*/gi,
+      "retired items",
+      name,
+      STATED_COUNT_MARKER_CHECK_EXEMPT,
+    );
+
+    assertNetArithmeticSelfConsistent(source, name);
   });
 }

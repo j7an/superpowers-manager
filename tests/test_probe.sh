@@ -483,7 +483,7 @@ update_control'
   (
     cd "$tmpdir"
     SUPERPOWERS_CONFIG_DIR="$dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
-      /bin/sh "$pkg/scripts/track-latest" >/dev/null
+      node "$pkg/dist/cli.js" track-latest >/dev/null
   )
   : > "$adapter_log"
   : > "$git_log"

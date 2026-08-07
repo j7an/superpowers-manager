@@ -710,7 +710,7 @@ dash_config="$tmpdir/dash-config"
 (
   cd "$tmpdir"
   SUPERPOWERS_CONFIG_DIR="$dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
-    sh "$root/scripts/track-latest" >/dev/null
+    node "$root/bin/superpowers-manager.js" track-latest >/dev/null
 )
 : > "$git_log"
 (
