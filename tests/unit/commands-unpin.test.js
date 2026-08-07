@@ -2,18 +2,10 @@
 // @ts-check
 
 import assert from "node:assert/strict";
-import {
-  chmodSync,
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  symlinkSync,
-  existsSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, writeFileSync, symlinkSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { capture, withPackage } from "./helpers/command-harness.js";
 
 // A static import from `dist/` fails the `typecheck:js` gate: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
@@ -24,39 +16,6 @@ import test from "node:test";
 const { runUnpin } = await import(
   new URL("../../dist/commands/unpin.js", import.meta.url).href
 );
-
-function capture() {
-  /** @type {string[]} */
-  const chunks = [];
-  return {
-    stream: /** @type {any} */ ({
-      write: (/** @type {string} */ s) => {
-        chunks.push(s);
-        return true;
-      },
-    }),
-    text: () => chunks.join(""),
-  };
-}
-
-// async + `return await` for the same reason as withConfigDir: a bare
-// `return fn(root)` deletes the fixture before the callback resolves.
-/** @param {(root: string) => Promise<void>} fn */
-async function withPackage(fn) {
-  const root = mkdtempSync(join(tmpdir(), "spw-unpin-"));
-  try {
-    mkdirSync(join(root, "pkg", "config"), { recursive: true });
-    writeFileSync(
-      join(root, "pkg", "config", "upstream-ref"),
-      "v6.1.1\n",
-      "utf8",
-    );
-    mkdirSync(join(root, "config"), { recursive: true });
-    return await fn(root);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
 
 void test("unpin removes an existing selection and names the packaged fallback", async () => {
   await withPackage(async (root) => {

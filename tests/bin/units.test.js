@@ -76,7 +76,7 @@ assert.strictEqual(bin.parseArgs(["--porcelain"]).kind, "usage-error");
 
 const requirements = bin.commandRequirements();
 assert.deepStrictEqual(requirements.pin, ["git", "python3"]);
-assert.deepStrictEqual(requirements["track-latest"], ["python3"]);
+assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
 assert.deepStrictEqual(requirements.uninstall, ["python3", "codex"]);
 

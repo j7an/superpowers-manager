@@ -676,7 +676,7 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   const requirements = new Map([
     ["pin", ["git", "python3", "sh"]],
-    ["track-latest", ["python3", "sh"]],
+    ["track-latest", []],
     ["unpin", []],
     ["prepare", ["git", "python3", "sh"]],
     ["probe", ["git", "python3", "codex", "sh"]],
@@ -684,10 +684,29 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
     ["update", ["git", "python3", "codex", "sh"]],
     ["uninstall", ["python3", "codex", "sh"]],
   ]);
+  // Every tool any command in `requirements` can require. Used below to give
+  // the empty-requirements rows (`track-latest`, `unpin`) a real assertion
+  // instead of a `for` loop over `[]` that runs zero iterations.
+  const ALL_REQUIRED_TOOLS = [...new Set([...requirements.values()].flat())];
   /** @type {Record<string, string[]>} */
   const argsFor = { pin: ["v1.2.3"] };
 
   for (const [command, tools] of requirements) {
+    if (tools.length === 0) {
+      // No preflight requirement to violate individually: assert the
+      // positive instead — this command still succeeds once every tool any
+      // *other* command needs is removed from PATH, proving its own
+      // requirement list is genuinely empty rather than merely undeclared.
+      withSandbox({ stubScripts: true }, (sandbox) => {
+        for (const tool of ALL_REQUIRED_TOOLS) removeTool(sandbox, tool);
+        const result = runCli(sandbox, [command, ...(argsFor[command] || [])], {
+          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+        });
+        assertCleanResult(result);
+        assert.deepEqual(readDispatchLog(sandbox), []);
+      });
+      continue;
+    }
     for (const tool of tools) {
       withSandbox({ stubScripts: true }, (sandbox) => {
         if (tools.includes("codex") && tool !== "codex") writeNoopTool(sandbox);
