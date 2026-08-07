@@ -66,23 +66,35 @@ port has no direct JS counterpart for this item — the guarantee is structural
 ### Routing: each subcommand reaches its script with its args (`:71-103`)
 
 7. `probe --porcelain` → logs `probe --porcelain ref=` (`:73-74`). Port:
-   `:73`, `ROUTING_CASES[0]`.
+   `:77`, `ROUTING_CASES[0]`.
 8. `prepare --ref test` → logs `prepare --ref test ref=` (`:76-78`). Port:
-   `:73`, `ROUTING_CASES[1]`.
-9. `pin v6.1.1` → logs `pin v6.1.1 ref=` (`:80-82`). Port: `:73`,
+   `:77`, `ROUTING_CASES[1]`.
+9. `pin v6.1.1` → logs `pin v6.1.1 ref=` (`:80-82`). Port: `:77`,
    `ROUTING_CASES[2]`.
-10. `track-latest` → logs `track-latest  ref=` (`:84-86`). Port: `:73`,
+10. `track-latest` → logs `track-latest  ref=` (`:84-86`). Port: `:77`,
     `ROUTING_CASES[3]`.
-11. `unpin` → logs `unpin  ref=` (`:88-90`). Port: `:73`, `ROUTING_CASES[4]`.
+11. `unpin` → logs `unpin  ref=` (`:88-90`). **Retired** (PR 11.5): `unpin`
+    flipped to an in-process command (`src/cli.ts` `DISPATCH.unpin`), so it
+    never invokes `scripts/unpin` and never logs to the dispatch log — the
+    condition this item asserted can no longer occur, in either direction.
+    `unpin` was removed from `ROUTING_CASES`; the analogous in-process
+    property ("succeeds without ever reaching its script") is covered by
+    `tests/bin/bin-dispatch.test.js:81` and recorded as port-only item 21,
+    since it is a different property than "reaches its script with its
+    args".
 12. `install --dry-run` → logs `install --dry-run ref=` (`:92-94`). Port:
-    `:73`, `ROUTING_CASES[5]`.
+    `:77`, `ROUTING_CASES[4]`. **Index updated** (PR 11.5) from
+    `ROUTING_CASES[5]` to `[4]`: the table shrank by one when `unpin`
+    (formerly index 4) was removed — see item 11's retirement note.
 13. `uninstall --purge` → logs `uninstall --purge ref=` (`:96-98`). Port:
-    `:73`, `ROUTING_CASES[6]`.
+    `:77`, `ROUTING_CASES[5]`. **Index updated** (PR 11.5) from
+    `ROUTING_CASES[6]` to `[5]`, same cause as item 12.
 14. A bare invocation routes to `update` → logs `update  ref=` (`:101-103`).
-    Port: `:73`, `ROUTING_CASES[7]`.
+    Port: `:77`, `ROUTING_CASES[6]`. **Index updated** (PR 11.5) from
+    `ROUTING_CASES[7]` to `[6]`, same cause as item 12.
 
 Each of items 7-14 is one `grep -Fqx` in the shell. The port's per-case
-`assert.equal(result.status, 0)` at `:72` has no shell counterpart (the shell
+`assert.equal(result.status, 0)` at `:76` has no shell counterpart (the shell
 never explicitly checked routing's exit status — see port-only entries 2-9)
 and is not counted here.
 
@@ -90,46 +102,46 @@ and is not counted here.
 
 15. Running `bogus` must not succeed (`:107-109`, `if run_bin bogus; then
     echo ...; exit 1; fi`). **Merged** into the port's single
-    `assert.equal(result.status, 2)` at `:81`, which is strictly stronger
+    `assert.equal(result.status, 2)` at `:93`, which is strictly stronger
     (equal to 2 implies not equal to 0) and therefore subsumes this guard —
     no separate JS assertion exists for it.
 16. Exit status is `2` for the unknown subcommand `bogus` (`:110-111`). Port:
-    `:81`.
-17. Stderr contains `unknown subcommand: bogus` (`:112`). Port: `:82`.
-18. Stderr contains `usage:` (`:113`). Port: `:83`.
-19. The dispatch log is empty — nothing was dispatched (`:114`). Port: `:84`.
+    `:93`.
+17. Stderr contains `unknown subcommand: bogus` (`:112`). Port: `:94`.
+18. Stderr contains `usage:` (`:113`). Port: `:95`.
+19. The dispatch log is empty — nothing was dispatched (`:114`). Port: `:96`.
 
 ### A stray flag must not fall through to update (`:116-122`)
 
 20. Exit status is `2` for the stray flag `--porcelain` (`:118-119`). Port:
-    `:91`.
-21. Stderr contains `unknown subcommand: --porcelain` (`:120`). Port: `:92`.
-22. Stderr contains `usage:` (`:121`). Port: `:93`.
-23. The dispatch log is empty (`:122`, bare `[ ! -s "$log" ]`). Port: `:94`.
+    `:103`.
+21. Stderr contains `unknown subcommand: --porcelain` (`:120`). Port: `:104`.
+22. Stderr contains `usage:` (`:121`). Port: `:105`.
+23. The dispatch log is empty (`:122`, bare `[ ! -s "$log" ]`). Port: `:106`.
 
 ### `--help` and `--version` (`:124-136`)
 
-24. Exit status is `0` for `--help` (`:125-126`). Port: `:101`.
-25. Stdout contains `usage:` for `--help` (`:127`). Port: `:102`.
+24. Exit status is `0` for `--help` (`:125-126`). Port: `:113`.
+25. Stdout contains `usage:` for `--help` (`:127`). Port: `:114`.
 26. Stderr is empty for `--help` (`:128`, bare `[ ! -s "$tmpdir/help-err" ]`).
-    Port: `:103`.
-27. `--version` prints exactly `9.9.9-test` (`:129-130`). Port: `:109`.
+    Port: `:115`.
+27. `--version` prints exactly `9.9.9-test` (`:129-130`). Port: `:120`.
 28. `--version` through a symlinked bin (as npm/npx invoke bins) prints
-    exactly `9.9.9-test` (`:133-136`). Port: `:119`.
+    exactly `9.9.9-test` (`:133-136`). Port: `:130`.
 
 ### Exit-code propagation (`:138-145`)
 
 29. A script's exit code (`42`) propagates unchanged through `probe`
-    (`:144-145`). Port: `:130`.
+    (`:144-145`). Port: `:142`.
 
 ### Env passthrough (`:147-154`)
 
 30. `SUPERPOWERS_REF=abc123` reaches the dispatched script: log line
-    `update  ref=abc123` (`:153`). Port: `:146-149` (**merged** — see item
+    `update  ref=abc123` (`:153`). Port: `:158-161` (**merged** — see item
     31).
 31. `SUPERPOWERS_VALIDATOR=/tmp/custom-validator.py` reaches the dispatched
     script: log line `update validator=/tmp/custom-validator.py` (`:154`).
-    Port: `:146-149`. Items 30-31 are two separate `grep -Fqx` calls in the
+    Port: `:158-161`. Items 30-31 are two separate `grep -Fqx` calls in the
     shell; the port asserts both lines in one `assert.deepEqual` over the
     full two-line log array, so both shell assertions map onto one JS
     assertion.
@@ -137,50 +149,64 @@ and is not counted here.
 ### Preflight: missing git fails before any dispatch, names the tool (`:156-162`)
 
 32. Exit status is `1` when `git` is absent from `PATH` (`:160`). Port:
-    `:159`.
+    `:171`.
 33. Stderr contains `required command not found: git` (`:161`). Port:
-    `:160`.
+    `:172`.
 34. The dispatch log is empty — preflight failure must not dispatch (`:162`).
-    Port: `:161`.
+    Port: `:173`.
 
 ### Invalid pin syntax precedes preflight (`:164-172`)
 
 35. Exit status is `2` for `pin main` (an invalid ref) (`:168`). Port:
-    `:173`.
+    `:185`.
 36. Stderr contains
     `pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit`
-    (`:169-170`). Port: `:174-178`.
+    (`:169-170`). Port: `:186-190`.
 37. The dispatch log is empty — an invalid pin ref must not dispatch
-    (`:171`). Port: `:179`.
+    (`:171`). Port: `:191`.
 
 ### Commands that need no git (`:174-178`)
 
 38. `track-latest` dispatches with `git` absent from `PATH` (loop iteration
-    1). Port: `:198`, `NO_GIT_CASES[0]`.
+    1). Port: `:213`, `NO_GIT_CASES[0]`.
 39. `unpin` dispatches with `git` absent from `PATH` (loop iteration 2).
-    Port: `:198`, `NO_GIT_CASES[1]`.
+    **Retired** (PR 11.5): `unpin` is now in-process and never logs to the
+    dispatch log, so "dispatches ... and logs `unpin  ref=`" can no longer
+    occur. `unpin` was removed from `NO_GIT_CASES`; the analogous in-process
+    property ("succeeds with `git` absent") is covered by
+    `tests/bin/bin-dispatch.test.js:217` and recorded as port-only item 22.
 40. `uninstall` dispatches with `git` absent from `PATH` (loop iteration 3).
-    Port: `:198`, `NO_GIT_CASES[2]`.
+    Port: `:213`, `NO_GIT_CASES[1]`. **Index updated** (PR 11.5) from
+    `NO_GIT_CASES[2]` to `[1]`: the table shrank by one when `unpin`
+    (formerly index 1) was removed — see item 39's retirement note.
 
 ### Missing python does not block unpin (`:181-186`)
 
-41. `unpin` dispatches with `python3` absent from `PATH` (`:182-185`). Port:
-    `:210`.
+41. `unpin` dispatches with `python3` absent from `PATH` (`:182-185`).
+    **Retired** (PR 11.5): `unpin` is now in-process and never logs to the
+    dispatch log, so "dispatches ... and logs `unpin  ref=`" can no longer
+    occur. The analogous in-process property ("succeeds with `python3`
+    absent" — the property this item actually protects) is covered by
+    `tests/bin/bin-dispatch.test.js:235` and recorded as port-only item 23.
+    That test also gains a sibling covering `sh` absent
+    (`tests/bin/bin-dispatch.test.js:244`, port-only items 25-26), a property
+    the shell could never test at all: the shell driver itself required `sh`
+    to run.
 
 ### codex required for probe and install (`:188-205`)
 
 42. Exit status is `1` when `codex` is absent and `probe` is run (`:198`,
-    bare `[ "$rc" -eq 1 ]`). Port: `:226`.
+    bare `[ "$rc" -eq 1 ]`). Port: `:267`.
 43. Stderr contains `required command not found: codex` for `probe` (`:199`).
-    Port: `:227`.
+    Port: `:268`.
 44. The dispatch log is empty — missing codex must not dispatch `probe`
-    (`:200`). Port: `:228`.
+    (`:200`). Port: `:269`.
 45. Exit status is `1` when `codex` is absent and `install` is run (`:203`,
-    bare `[ "$rc" -eq 1 ]`). Port: `:236`.
+    bare `[ "$rc" -eq 1 ]`). Port: `:277`.
 46. Stderr contains `required command not found: codex` for `install`
-    (`:204`). Port: `:237`.
+    (`:204`). Port: `:278`.
 47. The dispatch log is empty — missing codex must not dispatch `install`
-    (`:205`). Port: `:238`. The shell proves this with a `probe` override
+    (`:205`). Port: `:279`. The shell proves this with a `probe` override
     that logs unconditionally before its own logic runs (`:191-196`,
     `"probe ran"`), so "did not dispatch" is proven rather than assumed. The
     port's `install` case takes no `scripts` override and runs against the
@@ -190,7 +216,7 @@ and is not counted here.
     makes the assertion load-bearing here too: if `install` were mistakenly
     dispatched despite the missing-codex preflight, the default stub would
     still append to the log, and `assert.deepEqual(result.log, [])` at
-    `:238` would catch it. It is sound; it is just less visually obvious
+    `:279` would catch it. It is sound; it is just less visually obvious
     than the probe case's explicit override, because the "logs
     unconditionally" property comes from the shared fixture rather than
     from a per-case script.
@@ -198,14 +224,20 @@ and is not counted here.
 ### Commands that need no codex (`:207-215`)
 
 48. `pin v6.1.1` dispatches with `codex` absent from `PATH` (`:208-209`,
-    standalone, not part of the shell's `for` loop). Port: `:255`,
+    standalone, not part of the shell's `for` loop). Port: `:299`,
     `NO_CODEX_CASES[0]`.
 49. `track-latest` dispatches with `codex` absent from `PATH` (shell loop
-    iteration 1). Port: `:255`, `NO_CODEX_CASES[1]`.
+    iteration 1). Port: `:299`, `NO_CODEX_CASES[1]`.
 50. `unpin` dispatches with `codex` absent from `PATH` (shell loop iteration
-    2). Port: `:255`, `NO_CODEX_CASES[2]`.
+    2). **Retired** (PR 11.5): `unpin` is now in-process and never logs to
+    the dispatch log, so "dispatches ... and logs `unpin  ref=`" can no
+    longer occur. `unpin` was removed from `NO_CODEX_CASES`; the analogous
+    in-process property ("succeeds with `codex` absent") is covered by
+    `tests/bin/bin-dispatch.test.js:303` and recorded as port-only item 24.
 51. `prepare` dispatches with `codex` absent from `PATH` (shell loop
-    iteration 3). Port: `:255`, `NO_CODEX_CASES[3]`.
+    iteration 3). Port: `:299`, `NO_CODEX_CASES[2]`. **Index updated**
+    (PR 11.5) from `NO_CODEX_CASES[3]` to `[2]`: the table shrank by one when
+    `unpin` (formerly index 2) was removed — see item 50's retirement note.
 
 The shell's standalone `pin` assertion (item 48) and its 3-iteration `for`
 loop (items 49-51) are ported as one 4-case data-driven loop
@@ -215,8 +247,8 @@ per-case behavior asserted is identical; only the JS structuring differs.
 ### Missing script file: diagnostic, non-zero exit (`:217-222`)
 
 52. Exit status is `1` when `scripts/uninstall` is missing (`:220`, bare
-    `[ "$rc" -eq 1 ]`). Port: `:267`.
-53. Stderr contains `missing script` (`:221`). Port: `:268`.
+    `[ "$rc" -eq 1 ]`). Port: `:317`.
+53. Stderr contains `missing script` (`:221`). Port: `:318`.
 
 <!-- inventory:mapped:end -->
 
@@ -231,60 +263,101 @@ item 1, a structural safety net with no shell analogue at all.
 
 <!-- inventory:port-only:start -->
 
-1. `ROUTING_CASES.length === 8` (`:63-67`), asserted once at module load,
+1. `ROUTING_CASES.length === 7` (`:67-71`), asserted once at module load,
    before any `test(` runs. Port-only — the shell has no array to check the
    length of; this guards against a routing case silently added to or
    removed from the fixture table without a matching update to this
    inventory's item count for 7-14, the same "silent deletion" failure mode
    `tests/bin/migration-inventory.test.js`'s own docstring names for
-   `test(` call sites.
-2. Routing case `probe --porcelain`: `result.status === 0` (`:72`,
+   `test(` call sites. **Updated** (PR 11.5): the length dropped from 8 to 7
+   when `unpin` was removed from the table (see item 11's retirement note);
+   the guard itself, and its rationale, are unchanged.
+2. Routing case `probe --porcelain`: `result.status === 0` (`:76`,
    `ROUTING_CASES[0]`). Port-only — the shell's `run_bin probe --porcelain
    >/dev/null` at `:73` has no explicit exit-status test.
-3. Routing case `prepare --ref test`: `result.status === 0` (`:72`,
+3. Routing case `prepare --ref test`: `result.status === 0` (`:76`,
    `ROUTING_CASES[1]`). Port-only — same rationale as item 2.
-4. Routing case `pin v6.1.1`: `result.status === 0` (`:72`,
+4. Routing case `pin v6.1.1`: `result.status === 0` (`:76`,
    `ROUTING_CASES[2]`). Port-only — same rationale as item 2.
-5. Routing case `track-latest`: `result.status === 0` (`:72`,
+5. Routing case `track-latest`: `result.status === 0` (`:76`,
    `ROUTING_CASES[3]`). Port-only — same rationale as item 2.
-6. Routing case `unpin`: `result.status === 0` (`:72`, `ROUTING_CASES[4]`).
-   Port-only — same rationale as item 2.
-7. Routing case `install --dry-run`: `result.status === 0` (`:72`,
-   `ROUTING_CASES[5]`). Port-only — same rationale as item 2.
-8. Routing case `uninstall --purge`: `result.status === 0` (`:72`,
-   `ROUTING_CASES[6]`). Port-only — same rationale as item 2.
-9. Routing case bare invocation (`update`): `result.status === 0` (`:72`,
-   `ROUTING_CASES[7]`). Port-only — same rationale as item 2.
-10. `--version` (no symlink): `result.status === 0` (`:108`). Port-only —
+6. Routing case `unpin`: `result.status === 0`. **Relocated** (PR 11.5):
+   `unpin` left `ROUTING_CASES` (see item 11's retirement note) for its own
+   standalone case, `tests/bin/bin-dispatch.test.js:83`. Same underlying
+   property (`unpin` succeeds); same rationale as item 2, just no longer a
+   loop iteration.
+7. Routing case `install --dry-run`: `result.status === 0` (`:76`,
+   `ROUTING_CASES[4]`). Port-only — same rationale as item 2. **Index
+   updated** (PR 11.5) from `ROUTING_CASES[5]` to `[4]`: the table shrank by
+   one when `unpin` (formerly index 4) was removed.
+8. Routing case `uninstall --purge`: `result.status === 0` (`:76`,
+   `ROUTING_CASES[5]`). Port-only — same rationale as item 2. **Index
+   updated** (PR 11.5) from `ROUTING_CASES[6]` to `[5]`, same cause as item 7.
+9. Routing case bare invocation (`update`): `result.status === 0` (`:76`,
+   `ROUTING_CASES[6]`). Port-only — same rationale as item 2. **Index
+   updated** (PR 11.5) from `ROUTING_CASES[7]` to `[6]`, same cause as item 7.
+10. `--version` (no symlink): `result.status === 0` (`:120`). Port-only —
     the shell's `version_out=$(run_bin --version)` at `:129` has no explicit
     exit-status test (command substitution failure would trip `set -e`
     implicitly, but nothing at the counted-assertion granularity checks it).
-11. `--version` through a symlink: `result.status === 0` (`:118`). Port-only
+11. `--version` through a symlink: `result.status === 0` (`:130`). Port-only
     — same rationale as item 10, for the shell's `:135` symlinked
     invocation.
-12. Env passthrough: `result.status === 0` (`:145`). Port-only — the
+12. Env passthrough: `result.status === 0` (`:157`). Port-only — the
     shell's bare env-prefixed invocation at `:149-152` has no explicit
     exit-status test.
-13. `NO_GIT_CASES` iteration `track-latest`: `result.status === 0` (`:197`).
+13. `NO_GIT_CASES` iteration `track-latest`: `result.status === 0` (`:212`).
     Port-only — the shell's `for` loop body at `:174-178` is a bare
     `run_bin "$cmd" >/dev/null` with no explicit exit-status test.
-14. `NO_GIT_CASES` iteration `unpin`: `result.status === 0` (`:197`).
+14. `unpin` succeeds with `git` absent: `result.status === 0`.
+    **Relocated** (PR 11.5): `unpin` left `NO_GIT_CASES` (see item 39's
+    retirement note) for its own standalone case,
+    `tests/bin/bin-dispatch.test.js:222`. Same underlying property; same
+    rationale as item 13, just no longer a loop iteration.
+15. `NO_GIT_CASES` iteration `uninstall`: `result.status === 0` (`:212`).
     Port-only — same rationale as item 13.
-15. `NO_GIT_CASES` iteration `uninstall`: `result.status === 0` (`:197`).
-    Port-only — same rationale as item 13.
-16. Missing-python `unpin`: `result.status === 0` (`:209`). Port-only — the
-    shell's bare `run_bin unpin >/dev/null` at `:184` has no explicit
-    exit-status test.
-17. `NO_CODEX_CASES` iteration `pin v6.1.1`: `result.status === 0` (`:254`).
+16. `unpin` succeeds in-process with `python3` absent: `result.status === 0`
+    (`:240`). **Relocated** (PR 11.5) from a bare `run_bin unpin >/dev/null`
+    at shell `:184`; the property is unchanged ("succeeds with `python3`
+    absent" — see item 41's retirement note) and only the JS site's shape
+    changed, from checking dispatched log content to checking success
+    directly.
+17. `NO_CODEX_CASES` iteration `pin v6.1.1`: `result.status === 0` (`:298`).
     Port-only — the shell's standalone `run_bin pin v6.1.1 >/dev/null` at
     `:208` has no explicit exit-status test.
 18. `NO_CODEX_CASES` iteration `track-latest`: `result.status === 0`
-    (`:254`). Port-only — the shell's `for` loop body at `:210-214` is a
+    (`:298`). Port-only — the shell's `for` loop body at `:210-214` is a
     bare `run_bin "$cmd" >/dev/null` with no explicit exit-status test.
-19. `NO_CODEX_CASES` iteration `unpin`: `result.status === 0` (`:254`).
-    Port-only — same rationale as item 18.
-20. `NO_CODEX_CASES` iteration `prepare`: `result.status === 0` (`:254`).
-    Port-only — same rationale as item 18.
+19. `unpin` succeeds with `codex` absent: `result.status === 0`.
+    **Relocated** (PR 11.5): `unpin` left `NO_CODEX_CASES` (see item 50's
+    retirement note) for its own standalone case,
+    `tests/bin/bin-dispatch.test.js:305`. Same underlying property; same
+    rationale as item 17, just no longer a loop iteration.
+20. `NO_CODEX_CASES` iteration `prepare`: `result.status === 0` (`:298`).
+    Port-only — same rationale as item 17.
+21. **New** (PR 11.5). Routing case `unpin`: `result.log` is empty
+    (`tests/bin/bin-dispatch.test.js:86`). Port-only, with no shell
+    counterpart of any kind: the shell's mechanism for this case always
+    dispatched to `scripts/unpin` and logged something, so "successfully ran
+    without ever dispatching" was not an expressible property. If routing
+    regressed and dispatched `scripts/unpin` anyway, the shared
+    `loggingStub` would append a line here, catching it.
+22. **New** (PR 11.5). `unpin` with `git` absent: `result.log` is empty
+    (`:223`). Port-only, same rationale as item 21.
+23. **New** (PR 11.5). `unpin` with `python3` absent: `result.log` is empty
+    (`:241`). Port-only, same rationale as item 21.
+24. **New** (PR 11.5). `unpin` with `codex` absent: `result.log` is empty
+    (`:306`). Port-only, same rationale as item 21.
+25. **New** (PR 11.5). `unpin` succeeds with no POSIX shell on `PATH`:
+    `result.status === 0` (`:250`). Port-only, with no shell counterpart of
+    any kind: the shell driver itself required `sh` to execute at all, so
+    "no POSIX shell on PATH" could never be exercised through it. Also newly
+    *writable* through this fixture only after `dispatch-fixture.js` gained
+    the `omitShell` opt-out (`sh` was previously symlinked onto every case's
+    `PATH` unconditionally).
+26. **New** (PR 11.5). `unpin` succeeds with no POSIX shell on `PATH`:
+    `result.log` is empty (`:251`). Port-only, same rationale as items 21
+    and 25.
 
 <!-- inventory:port-only:end -->
 
@@ -293,8 +366,8 @@ item 1, a structural safety net with no shell analogue at all.
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 20,
-  "ports": { "tests/bin/bin-dispatch.test.js": 18 }
+  "portOnly": 26,
+  "ports": { "tests/bin/bin-dispatch.test.js": 22 }
 }
 ```
 
@@ -304,17 +377,28 @@ item 1, a structural safety net with no shell analogue at all.
   passthrough, 3 missing-git, 3 invalid-pin, 3 no-git loop, 1 no-python
   unpin, 3 probe-missing-codex, 3 install-missing-codex, 1
   pin-without-codex, 3 no-codex loop, 2 missing-script; sum:
-  1+2+3+8+5+4+3+1+1+1+2+3+3+3+1+3+3+1+3+2 = 53).
-- Port (`tests/bin/bin-dispatch.test.js`): 18 static `test(` call sites (3 of
-  them data-driven loops — `ROUTING_CASES` ×8, `NO_GIT_CASES` ×3,
-  `NO_CODEX_CASES` ×4 — expanding to 30 runtime cases), carrying 53
-  assertions 1:1-mapped to the shell (two recorded merges: item 15 into the
-  port's `:81` `status === 2` check, and items 30-31 into the port's
-  `:146-149` two-line `assert.deepEqual`), plus 20 port-only assertions (all
-  additive `result.status === 0` checks the shell left implicit under
-  `set -e`, plus one structural array-length guard) with no shell
-  counterpart.
-- Reconciliation: 1:1 for all 53 shell items, two merges (noted above), no
-  drops. The 20 port-only assertions are strictly additive test coverage —
-  not a reconciliation of any shell assertion — and are excluded from the
-  53/53 arithmetic above.
+  1+2+3+8+5+4+3+1+1+1+2+3+3+3+1+3+3+1+3+2 = 53). This count is historical —
+  it describes the deleted shell script as it stood at the time it was
+  ported — and does not change when the port's own structure changes.
+- Port (`tests/bin/bin-dispatch.test.js`): 22 static `test(` call sites (3 of
+  them data-driven loops — `ROUTING_CASES` ×7, `NO_GIT_CASES` ×2,
+  `NO_CODEX_CASES` ×3, each one smaller than before PR 11.5 flipped `unpin` to
+  in-process and removed it from all three tables — expanding to 31 runtime
+  cases), carrying 49 of the 53 shell assertions 1:1-mapped (two recorded
+  merges: item 15 into the port's `:93` `status === 2` check, and items 30-31
+  into the port's `:158-161` two-line `assert.deepEqual`), plus **4 retired
+  items** (11, 39, 41, 50 — each one asserted that `unpin` "dispatches ... and
+  logs `unpin  ref=`"; PR 11.5's in-process flip means `unpin` never invokes
+  `scripts/unpin` and never logs to the dispatch log, so that specific
+  condition can no longer occur in either direction, and no JS assertion
+  enforces it any more; see each item's retirement note for the analogous
+  in-process property and where it is now tested), plus 26 port-only
+  assertions (22 additive `result.status === 0` / `result.log` checks the
+  shell left implicit under `set -e` or that have no shell counterpart at
+  all, plus one structural array-length guard) with no shell counterpart.
+- Reconciliation: 1:1 for 49 of the 53 shell items, two merges (noted above),
+  4 retirements (noted above) — not drops, since a retirement is recorded
+  with its own note explaining why no replacement assertion is possible,
+  rather than silently disappearing. The 26 port-only assertions are
+  strictly additive test coverage — not a reconciliation of any shell
+  assertion — and are excluded from the 49/53 arithmetic above.

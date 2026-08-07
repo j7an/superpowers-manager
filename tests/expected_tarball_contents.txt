@@ -14,6 +14,8 @@ dist/cli-arguments.js
 dist/cli.js
 dist/codex-json.js
 dist/codex-state.js
+dist/commands/context.js
+dist/commands/unpin.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
 dist/effective-selection.js

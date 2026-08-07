@@ -86,6 +86,14 @@ function buildPackageRoot(kind) {
     join(ROOT, "bin", "superpowers-manager.js"),
     join(root, "bin", "superpowers-manager.js"),
   );
+  // In-process commands (e.g. unpin) resolve the packaged upstream ref from
+  // <root>/config/upstream-ref via src/upstream.ts's readConfigRef. Copy the
+  // real file so the fixture cannot drift from the shipped default.
+  mkdirSync(join(root, "config"), { recursive: true });
+  cpSync(
+    join(ROOT, "config", "upstream-ref"),
+    join(root, "config", "upstream-ref"),
+  );
   for (const command of DISPATCH_COMMANDS) {
     writeExecutable(join(root, "scripts"), command, loggingStub(command));
   }
@@ -119,13 +127,18 @@ export function makePackageRoot(kind) {
  * @typedef {object} DispatchOptions
  * @property {string[]} tools tools present on PATH. `sh` and `node` are always
  *   added — src/cli.ts:206 resolves `sh` as a required tool, so its presence is
- *   itself under test and must be stated, not assumed absent.
+ *   itself under test and must be stated, not assumed absent. Set `omitShell`
+ *   to state its absence instead.
  * @property {string[]} args argv passed to the bin
  * @property {Record<string, string>} [env] extra environment variables
  * @property {Record<string, string>} [scripts] scripts/<name> bodies to override
  * @property {string[]} [missingScripts] scripts/<name> files to remove
  * @property {string} [packageRoot] defaults to PACKAGE_ROOT
  * @property {boolean} [viaSymlink] invoke through a symlink to the bin, as npx does
+ * @property {boolean} [omitShell] skip the always-on `sh` symlink so a case can
+ *   state that no POSIX shell is on PATH, rather than have it assumed absent.
+ *   Scoped to the one case that needs it — every other case keeps `sh` present
+ *   by default so its presence remains stated, not assumed.
  */
 
 /**
@@ -139,11 +152,20 @@ export function runDispatch(options) {
   for (const tool of options.tools) {
     writeExecutable(fakeBin, tool, "#!/bin/sh\nexit 0\n");
   }
-  symlinkSync("/bin/sh", join(fakeBin, "sh"));
+  if (!options.omitShell) symlinkSync("/bin/sh", join(fakeBin, "sh"));
   symlinkSync(process.execPath, join(fakeBin, "node"));
 
   const logPath = join(caseDir, "dispatch.log");
   writeFileSync(logPath, "");
+
+  // In-process commands (e.g. unpin) resolve their selection-state path via
+  // src/effective-selection.ts's selectionConfigDir, which requires
+  // SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME, or HOME. None of those are ever
+  // otherwise set here, so every case gets a private, empty config dir —
+  // mirroring SPW_DISPATCH_LOG's always-set pattern — rather than each
+  // in-process case having to supply one itself.
+  const configDir = join(caseDir, "config");
+  mkdirSync(configDir, { recursive: true });
 
   let packageRoot = options.packageRoot ?? PACKAGE_ROOT;
   if (options.scripts || options.missingScripts) {
@@ -172,6 +194,7 @@ export function runDispatch(options) {
     env: {
       PATH: fakeBin,
       SPW_DISPATCH_LOG: logPath,
+      SUPERPOWERS_CONFIG_DIR: configDir,
       ...options.env,
     },
   });

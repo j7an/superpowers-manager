@@ -1,6 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { oneLine } from "./cli-arguments.js";
+import type { CommandContext } from "./commands/context.js";
+import { runUnpin } from "./commands/unpin.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
 
 type Subcommand =
@@ -61,12 +64,23 @@ export type DispatchMode = "spawn" | "in-process";
 const DISPATCH: Record<Subcommand, DispatchMode> = {
   pin: "spawn",
   "track-latest": "spawn",
-  unpin: "spawn",
+  unpin: "in-process",
   prepare: "spawn",
   probe: "spawn",
   install: "spawn",
   update: "spawn",
   uninstall: "spawn",
+};
+
+// Registry of in-process handlers, keyed by the DISPATCH entries above that
+// read "in-process". A later slice adds an entry here alongside each flip.
+const IN_PROCESS_HANDLERS: {
+  readonly [K in Subcommand]?: (
+    argv: string[],
+    ctx: CommandContext,
+  ) => Promise<number>;
+} = {
+  unpin: runUnpin,
 };
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git", "python3"],
@@ -283,7 +297,7 @@ function usage(): string {
   ].join("\n");
 }
 
-function main(): never {
+async function main(): Promise<never> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.kind === "help") {
     console.log(usage());
@@ -312,11 +326,30 @@ function main(): never {
     process.exit(1);
   }
   if (pf.dispatch === "in-process") {
-    // Unreachable while every DISPATCH entry is "spawn": no command has an
-    // in-process handler registered yet. A later slice adds one alongside
-    // the DISPATCH flip that makes this branch reachable.
-    console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
-    process.exit(1);
+    const handler = IN_PROCESS_HANDLERS[parsed.cmd];
+    if (!handler) {
+      console.error(
+        `error: no in-process handler registered for: ${parsed.cmd}`,
+      );
+      process.exit(1);
+    }
+    const ctx: CommandContext = {
+      root,
+      env: process.env,
+      stdout: process.stdout,
+      stderr: process.stderr,
+    };
+    let status: number;
+    try {
+      status = await handler(parsed.args, ctx);
+    } catch (cause) {
+      // Belt-and-suspenders: every registered handler already catches its own
+      // failures and returns a status code (see src/commands/unpin.ts). This
+      // re-emits a subordinate module's own diagnostic if one somehow escapes.
+      console.error(`error: ${oneLine(cause)}`);
+      process.exit(1);
+    }
+    process.exit(status);
   }
   const script = path.join(root, "scripts", parsed.cmd);
   if (!fs.existsSync(script)) {
@@ -356,4 +389,9 @@ export {
   DISPATCH,
 };
 
-if (isMain(import.meta.filename, process.argv[1])) main();
+if (isMain(import.meta.filename, process.argv[1])) {
+  main().catch((cause: unknown) => {
+    console.error(`error: ${oneLine(cause)}`);
+    process.exit(1);
+  });
+}

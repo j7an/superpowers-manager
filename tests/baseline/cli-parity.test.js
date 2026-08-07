@@ -677,7 +677,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   const requirements = new Map([
     ["pin", ["git", "python3", "sh"]],
     ["track-latest", ["python3", "sh"]],
-    ["unpin", ["sh"]],
+    ["unpin", []],
     ["prepare", ["git", "python3", "sh"]],
     ["probe", ["git", "python3", "codex", "sh"]],
     ["install", ["git", "python3", "codex", "sh"]],
