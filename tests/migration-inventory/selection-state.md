@@ -127,12 +127,14 @@ referenced again after this block. It exercises
     2)` at `tests/baseline/selection-location.test.js:427`, which is strictly
     stronger and subsumes this guard, same precedent as `bin-dispatch.md`
     item 15. No TypeScript counterpart exists for `spw_usage_error` itself:
-    it is reachable in production only from `scripts/pin`, `scripts/unpin`,
-    and `scripts/track-latest`, none of which `src/cli.ts`'s `DISPATCH`
-    reaches any more (all three flipped to in-process TypeScript by earlier
-    tasks in this slice — their own usage-error diagnostics now come from
-    `src/cli.ts`'s `parseArgs`, already covered by `bin-dispatch.md` items
-    35-37). The shell file itself is unchanged and still live source for
+    it was reachable in production only from `scripts/pin`, `scripts/unpin`,
+    and `scripts/track-latest`, before those three flipped to in-process
+    TypeScript by earlier tasks in this slice, after which none of them
+    reached `spw_usage_error` through `src/cli.ts`'s `DISPATCH` any more
+    (their own usage-error diagnostics now come from `src/cli.ts`'s
+    `parseArgs`, already covered by `bin-dispatch.md` items 35-37; Task 10b
+    then deleted all three shell files outright — see the note below).
+    `scripts/core/common.sh` itself is unchanged and still live source for
     other shell tests, so the port runs it directly via a generated script
     (`tests/baseline/selection-location.test.js`'s `runShellScript`).
     Note for slice 4 (not this slice's work): Task 10b deleted
