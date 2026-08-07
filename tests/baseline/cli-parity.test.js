@@ -535,7 +535,7 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
 
 void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   const cases = new Map([
-    ["pin", ["v6.1.1"]],
+    ["pin", ["v1.0.0"]],
     ["track-latest", []],
     ["unpin", []],
     ["prepare", ["--candidate", "arbitrary value"]],
@@ -554,13 +554,24 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   assert.deepEqual(Object.keys(DISPATCH).sort(), [...COMMANDS].sort());
 
   withSandbox({ stubScripts: true }, (sandbox) => {
+    // `pin` is the first in-process command whose success genuinely depends
+    // on resolving against its source (track-latest/unpin never touch git):
+    // it needs a real, reachable upstream, so this test grows a local one
+    // rather than resolving against the package default and touching the
+    // network. `v1.0.0` replaces the arbitrary `v6.1.1` used for pin's argv
+    // elsewhere in this suite, since it is the tag this scenario actually
+    // has.
+    const upstream = createReleaseRepo(sandbox);
     for (const [command, argv] of cases) {
       clearDispatchLog(sandbox);
-      const result = runCli(
-        sandbox,
-        [command, ...argv],
-        dispatchEnvironment(sandbox),
-      );
+      const overrides =
+        command === "pin"
+          ? {
+              ...dispatchEnvironment(sandbox),
+              SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+            }
+          : dispatchEnvironment(sandbox);
+      const result = runCli(sandbox, [command, ...argv], overrides);
       if (IN_PROCESS_COMMANDS.includes(command)) {
         // An in-process command must reach its module and dispatch NOTHING.
         // Every command's scripts/<command> is stubbed with a regression
@@ -644,15 +655,37 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
   ];
 
   withSandbox({ stubScripts: true }, (sandbox) => {
+    // `pin` is in-process now (PR 11.5, Task 7): an accepted ref never
+    // reaches scripts/pin, and its resolution genuinely runs rather than
+    // hitting the trivial dispatch stub every other command in this suite
+    // still gets. This loop can therefore no longer assert a clean dispatch
+    // for every accepted value — two of them
+    // (`0123456789abcdef0123456789abcdef01234567` and its uppercase
+    // sibling) are arbitrary 40-hex literals that cannot exist as a real
+    // commit's SHA in any repository, so genuine resolution success is not
+    // just unbuilt here, it is impossible in principle. What this loop
+    // still proves, and the only thing it ever proved before the flip (the
+    // shell-era dispatch stub short-circuited real resolution too), is the
+    // syntax boundary itself: `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate
+    // lets these argv shapes reach real work, in contrast to every entry in
+    // `refused` below, which is rejected before any tool lookup or dispatch.
+    // `SUPERPOWERS_UPSTREAM_URL` is pinned to a definitely-absent local path
+    // so that real work fails fast — never touching the network — no
+    // matter which accepted value is tried.
+    const noSuchUpstream = join(sandbox.root, "no-such-upstream");
     for (const ref of accepted) {
       clearDispatchLog(sandbox);
-      const result = runCli(
-        sandbox,
-        ["pin", ref],
-        dispatchEnvironment(sandbox),
+      const result = runCli(sandbox, ["pin", ref], {
+        ...dispatchEnvironment(sandbox),
+        SUPERPOWERS_UPSTREAM_URL: noSuchUpstream,
+      });
+      assert.notEqual(result.status, 2);
+      assert.ok(
+        !result.stderr.includes(
+          "pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit",
+        ),
       );
-      assertCleanResult(result);
-      assertOnlyDispatch(sandbox, "pin", [ref]);
+      assert.deepEqual(readDispatchLog(sandbox), []);
     }
     for (const ref of refused) {
       clearDispatchLog(sandbox);
@@ -675,7 +708,7 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   const requirements = new Map([
-    ["pin", ["git", "python3", "sh"]],
+    ["pin", ["git"]],
     ["track-latest", []],
     ["unpin", []],
     ["prepare", ["git", "python3", "sh"]],

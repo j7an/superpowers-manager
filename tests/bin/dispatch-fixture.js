@@ -6,6 +6,8 @@
 // rather than inheriting it from a mutation twenty lines earlier.
 
 import {
+  accessSync,
+  constants,
   cpSync,
   mkdirSync,
   mkdtempSync,
@@ -16,7 +18,7 @@ import {
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -28,6 +30,72 @@ const SCRATCH = mkdtempSync(join(tmpdir(), "spw-dispatch-"));
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });
+
+// Resolves a real, functioning host tool by name, searching this process's
+// own (ambient, unrestricted) PATH — never a case's fakeBin, which only ever
+// contains "exit 0" stubs. Mirrors tests/baseline/support.js's
+// hostExecutable, kept as its own small copy here rather than imported: that
+// module's version also special-cases `python3`, which nothing in this file
+// needs.
+/** @param {string} name */
+function hostExecutable(name) {
+  for (const dir of (process.env.PATH || "").split(delimiter)) {
+    if (!dir) continue;
+    const candidate = join(dir, name);
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Keep looking through the host PATH used only to build this fixture.
+    }
+  }
+  throw new Error(`host tool not found on PATH: ${name}`);
+}
+
+// `pin` (unlike every other in-process command flipped so far) shells out to
+// a real `git` to resolve its requested ref (src/upstream.ts's
+// resolveExactTag/verifyRawCommit): the "exit 0" stubs every other case in
+// this file uses for preflight-only tool checks cannot make that resolution
+// succeed, no matter what pin is asked to resolve. A pin dispatch case that
+// needs to actually succeed therefore gets its own PATH, containing nothing
+// but a real, functioning `git` — proving `codex`/`python3` absence for free,
+// since they are not on it either — plus a real local upstream repository
+// (tests/builders/baseline-scenario.sh's `git-release-repo`, which tags
+// `v1.0.0`) for that git to resolve against. This stays hermetic: the
+// upstream is a filesystem path, never a network URL, and it is built once,
+// via this test process's own ambient environment (real `git`/`sh`, not a
+// case's fakeBin), exactly as tests/baseline/support.js's
+// createReleaseRepo/runScenario build the same scenario for the baseline
+// suite.
+const GIT_ONLY_BIN = mkdtempSync(join(SCRATCH, "git-only-"));
+symlinkSync(hostExecutable("git"), join(GIT_ONLY_BIN, "git"));
+
+const PIN_UPSTREAM = join(SCRATCH, "pin-upstream");
+{
+  const built = spawnSync(
+    "sh",
+    [
+      join(ROOT, "tests", "builders", "baseline-scenario.sh"),
+      "git-release-repo",
+      PIN_UPSTREAM,
+    ],
+    { encoding: "utf8" },
+  );
+  if (built.status !== 0) {
+    throw new Error(
+      `cannot build the pin dispatch fixture's upstream repository: ${built.stderr}`,
+    );
+  }
+}
+/**
+ * Env overrides for a `pin` dispatch case that needs real git resolution to
+ * succeed: a PATH containing only a real `git`, and a real local upstream
+ * with a `v1.0.0` tag. See GIT_ONLY_BIN/PIN_UPSTREAM above for why.
+ * @returns {{ PATH: string, SUPERPOWERS_UPSTREAM_URL: string }}
+ */
+export function pinUpstreamEnv() {
+  return { PATH: GIT_ONLY_BIN, SUPERPOWERS_UPSTREAM_URL: PIN_UPSTREAM };
+}
 
 /** The subcommands the real bin dispatches to. */
 export const DISPATCH_COMMANDS = [

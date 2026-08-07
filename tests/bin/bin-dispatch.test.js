@@ -11,7 +11,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makePackageRoot, runDispatch } from "./dispatch-fixture.js";
+import {
+  makePackageRoot,
+  pinUpstreamEnv,
+  runDispatch,
+} from "./dispatch-fixture.js";
 
 const ALL_TOOLS = ["git", "python3", "codex"];
 
@@ -49,24 +53,24 @@ void test("a dist/cli.js that throws keeps its real error and is not relabelled"
 
 // --- inventory items 7-14: routing ----------------------------------------
 
-// `track-latest` (formerly item 10) and `unpin` (formerly item 11) are no
-// longer in this table: PR 11.5 flipped both to in-process commands
-// (src/cli.ts DISPATCH), so neither ever reaches its `scripts/<name>` and
-// neither ever logs to the dispatch log. See the retirement notes for items
-// 10 and 11 in tests/migration-inventory/bin-dispatch.md and the dedicated
-// in-process routing cases just below this loop.
+// `track-latest` (formerly item 10), `unpin` (formerly item 11), and `pin`
+// (formerly item 9) are no longer in this table: PR 11.5 flipped all three to
+// in-process commands (src/cli.ts DISPATCH), so none of them ever reaches its
+// `scripts/<name>` and none of them ever logs to the dispatch log. See the
+// retirement notes for items 9, 10, and 11 in
+// tests/migration-inventory/bin-dispatch.md and the dedicated in-process
+// routing cases just below this loop.
 /** @type {Array<[string[], string]>} */
 const ROUTING_CASES = [
   [["probe", "--porcelain"], "probe --porcelain ref="],
   [["prepare", "--ref", "test"], "prepare --ref test ref="],
-  [["pin", "v6.1.1"], "pin v6.1.1 ref="],
   [["install", "--dry-run"], "install --dry-run ref="],
   [["uninstall", "--purge"], "uninstall --purge ref="],
   [[], "update  ref="],
 ];
 assert.equal(
   ROUTING_CASES.length,
-  6,
+  5,
   "ROUTING_CASES lost or gained a case — update tests/migration-inventory/bin-dispatch.md",
 );
 
@@ -90,6 +94,18 @@ void test("routing: `unpin` succeeds in-process and never reaches its script", (
   const result = runDispatch({ tools: ALL_TOOLS, args: ["unpin"] });
   assert.equal(result.status, 0);
   // If routing regressed and dispatched scripts/unpin anyway, the shared
+  // loggingStub would have appended a line here.
+  assert.deepEqual(result.log, []);
+});
+
+void test("routing: `pin` succeeds in-process and never reaches its script", () => {
+  const result = runDispatch({
+    tools: [],
+    args: ["pin", "v1.0.0"],
+    env: pinUpstreamEnv(),
+  });
+  assert.equal(result.status, 0);
+  // If routing regressed and dispatched scripts/pin anyway, the shared
   // loggingStub would have appended a line here.
   assert.deepEqual(result.log, []);
 });
@@ -175,6 +191,23 @@ void test("missing git fails before dispatch and names the tool", () => {
   const result = runDispatch({
     tools: ["python3", "codex"],
     args: ["install"],
+  });
+  assert.equal(result.status, 1);
+  assert.ok(result.stderr.includes("required command not found: git"));
+  assert.deepEqual(result.log, []);
+});
+
+// New (PR 11.5, Task 7): the generic case above uses `install` — a command
+// that has always required `git`. `pin` becoming in-process
+// (`COMMAND_REQUIREMENTS.pin`, src/cli.ts) drops it from `["git",
+// "python3"]` to `["git"]`, so this is the regression net for that specific
+// row: `git` must still be required for `pin` even though `python3` no
+// longer is (see the `python3`-absent case in the "commands that need no
+// git" section below).
+void test("`pin` fails preflight when git is absent from PATH", () => {
+  const result = runDispatch({
+    tools: ["python3", "codex"],
+    args: ["pin", "v1.0.0"],
   });
   assert.equal(result.status, 1);
   assert.ok(result.stderr.includes("required command not found: git"));
@@ -284,6 +317,27 @@ void test("`track-latest` succeeds in-process with python3 and no POSIX shell on
   assert.deepEqual(result.log, []);
 });
 
+// New (PR 11.5, Task 7). `pin`, unlike `track-latest`/`unpin`, still requires
+// `git` after its in-process flip — its own resolution shells out to it —
+// so it has no analogue of the two "needs no git" cases above. It does drop
+// `python3` (`COMMAND_REQUIREMENTS.pin` moves from `["git", "python3"]` to
+// `["git"]`), which is a wholly new property: the shell's `scripts/pin`
+// genuinely required `python3` (`spw_require_command python3`,
+// `scripts/pin:17`), so no shell counterpart to "succeeds with `python3`
+// absent" ever existed for `pin`, matching `track-latest`'s case just above
+// rather than `unpin`'s. This needs real git resolution to succeed, unlike
+// every other case in this file, hence `pinUpstreamEnv()` in place of a
+// `tools` list.
+void test("`pin` succeeds in-process with python3 absent from PATH", () => {
+  const result = runDispatch({
+    tools: [],
+    args: ["pin", "v1.0.0"],
+    env: pinUpstreamEnv(),
+  });
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.log, []);
+});
+
 // --- inventory items 42-47: codex required for probe and install ------------
 
 void test("missing codex blocks `probe` before dispatch and names the tool", () => {
@@ -314,16 +368,14 @@ void test("missing codex blocks `install` before dispatch and names the tool", (
 
 // --- inventory items 48-51: commands that need no codex ----------------------
 
-// `track-latest` (formerly item 49) and `unpin` (formerly item 50) are no
-// longer in this table: both are in-process now and never log to the
-// dispatch log regardless of `codex`'s presence. See the retirement notes
-// for items 49 and 50 in tests/migration-inventory/bin-dispatch.md and the
-// dedicated cases just below this loop.
+// `track-latest` (formerly item 49), `unpin` (formerly item 50), and `pin`
+// (formerly item 48) are no longer in this table: all three are in-process
+// now and never log to the dispatch log regardless of `codex`'s presence.
+// See the retirement notes for items 48, 49, and 50 in
+// tests/migration-inventory/bin-dispatch.md and the dedicated cases just
+// below this loop.
 /** @type {Array<[string[], string]>} */
-const NO_CODEX_CASES = [
-  [["pin", "v6.1.1"], "pin v6.1.1 ref="],
-  [["prepare"], "prepare  ref="],
-];
+const NO_CODEX_CASES = [[["prepare"], "prepare  ref="]];
 
 for (const [args, expected] of NO_CODEX_CASES) {
   void test(`\`${args.join(" ")}\` dispatches with codex absent from PATH`, () => {
@@ -344,6 +396,16 @@ void test("`track-latest` succeeds in-process with codex absent from PATH", () =
 
 void test("`unpin` succeeds in-process with codex absent from PATH", () => {
   const result = runDispatch({ tools: ["git", "python3"], args: ["unpin"] });
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.log, []);
+});
+
+void test("`pin` succeeds in-process with codex absent from PATH", () => {
+  const result = runDispatch({
+    tools: [],
+    args: ["pin", "v1.0.0"],
+    env: pinUpstreamEnv(),
+  });
   assert.equal(result.status, 0);
   assert.deepEqual(result.log, []);
 });

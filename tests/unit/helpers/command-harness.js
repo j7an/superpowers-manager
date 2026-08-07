@@ -4,9 +4,16 @@
 // (e.g. track-latest, pin) do not redefine copies that could quietly drift
 // from one another.
 
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  createSandbox,
+  destroySandbox,
+  runScenario,
+} from "../../baseline/support.js";
 
 /**
  * A minimal writable-stream stand-in that records every chunk written to it,
@@ -77,5 +84,63 @@ export async function withConfigDir(contents, fn) {
     return await fn({ SUPERPOWERS_CONFIG_DIR: dir });
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// MUST be async with `return await`, for the same reason as withPackage and
+// withConfigDir above: a synchronous `return fn(...)` would let destroySandbox
+// run before the callback has actually read the sandbox.
+//
+// `pin` (unlike unpin/track-latest) shells out to a real `git` to resolve its
+// requested ref (src/upstream.ts's resolveExactTag/verifyRawCommit), so its
+// tests need a real, reachable source rather than a stubbed one. Building it
+// via tests/baseline/support.js's createSandbox/runScenario — the same
+// machinery the baseline CLI-parity suite already uses for this exact
+// scenario (tests/baseline/cli-parity.test.js's createReleaseRepo) — keeps
+// this hermetic: the "upstream" is a local filesystem path, never a network
+// URL, and the sandbox's own real `git` (linked from the host once, at
+// sandbox-creation time) is what builds it.
+/**
+ * A real local git repository (tests/builders/baseline-scenario.sh's
+ * `git-release-repo` scenario, which tags `v1.0.0`) plus a package root and
+ * config dir suitable for a `runPin` call, all under one disposable sandbox.
+ * @template T
+ * @param {(fixture: {
+ *   pkgRoot: string,
+ *   configDir: string,
+ *   upstream: string,
+ *   tagCommit: string,
+ * }) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export async function withGitUpstream(fn) {
+  const sandbox = createSandbox();
+  try {
+    const upstream = join(sandbox.root, "upstream");
+    const built = runScenario(sandbox, "git-release-repo", upstream);
+    assert.equal(
+      built.status,
+      0,
+      `git-release-repo scenario failed: ${built.stderr}`,
+    );
+    const revList = spawnSync(
+      join(sandbox.bin, "git"),
+      ["-C", upstream, "rev-list", "-n", "1", "v1.0.0"],
+      { encoding: "utf8", env: { PATH: sandbox.bin } },
+    );
+    assert.equal(
+      revList.status,
+      0,
+      `cannot read back the v1.0.0 tag commit: ${revList.stderr}`,
+    );
+    const tagCommit = revList.stdout.trim();
+    return await fn({
+      pkgRoot: sandbox.pkg,
+      configDir: sandbox.config,
+      upstream,
+      tagCommit,
+    });
+  } finally {
+    destroySandbox(sandbox);
   }
 }

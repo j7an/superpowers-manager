@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { oneLine } from "./cli-arguments.js";
 import type { CommandContext } from "./commands/context.js";
+import { runPin } from "./commands/pin.js";
 import { runTrackLatest } from "./commands/track-latest.js";
 import { runUnpin } from "./commands/unpin.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
@@ -63,7 +64,7 @@ export type DispatchMode = "spawn" | "in-process";
 // flips entries to "in-process"; when none remain, `buildSpawn`,
 // `discoverShell`, and this table are deleted together.
 const DISPATCH: Record<Subcommand, DispatchMode> = {
-  pin: "spawn",
+  pin: "in-process",
   "track-latest": "in-process",
   unpin: "in-process",
   prepare: "spawn",
@@ -81,11 +82,12 @@ const IN_PROCESS_HANDLERS: {
     ctx: CommandContext,
   ) => Promise<number>;
 } = {
+  pin: runPin,
   "track-latest": runTrackLatest,
   unpin: runUnpin,
 };
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
-  pin: ["git", "python3"],
+  pin: ["git"],
   "track-latest": [],
   unpin: [],
   prepare: ["git", "python3"],
