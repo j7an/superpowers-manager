@@ -11,11 +11,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  makePackageRoot,
-  pinUpstreamEnv,
-  runDispatch,
-} from "./dispatch-fixture.js";
+import { makePackageRoot, runDispatch } from "./dispatch-fixture.js";
 
 const ALL_TOOLS = ["git", "python3", "codex"];
 
@@ -100,9 +96,9 @@ void test("routing: `unpin` succeeds in-process and never reaches its script", (
 
 void test("routing: `pin` succeeds in-process and never reaches its script", () => {
   const result = runDispatch({
-    tools: [],
+    tools: ["python3", "codex"],
     args: ["pin", "v1.0.0"],
-    env: pinUpstreamEnv(),
+    pinUpstream: true,
   });
   assert.equal(result.status, 0);
   // If routing regressed and dispatched scripts/pin anyway, the shared
@@ -324,15 +320,32 @@ void test("`track-latest` succeeds in-process with python3 and no POSIX shell on
 // `["git"]`), which is a wholly new property: the shell's `scripts/pin`
 // genuinely required `python3` (`spw_require_command python3`,
 // `scripts/pin:17`), so no shell counterpart to "succeeds with `python3`
-// absent" ever existed for `pin`, matching `track-latest`'s case just above
-// rather than `unpin`'s. This needs real git resolution to succeed, unlike
-// every other case in this file, hence `pinUpstreamEnv()` in place of a
-// `tools` list.
+// absent" ever existed for `pin`. This needs real git resolution to succeed
+// (`pinUpstream: true` composes a real `git` and upstream onto `fakeBin`
+// alongside `tools`, unlike every other case in this file), and, unlike
+// `track-latest`'s combined case above, is kept as its own case so it
+// actually discriminates `python3`'s absence: `codex` stays present here,
+// and the sibling case below flips which of the two is absent.
 void test("`pin` succeeds in-process with python3 absent from PATH", () => {
   const result = runDispatch({
-    tools: [],
+    tools: ["codex"],
     args: ["pin", "v1.0.0"],
-    env: pinUpstreamEnv(),
+    pinUpstream: true,
+  });
+  assert.equal(result.status, 0);
+  assert.deepEqual(result.log, []);
+});
+
+// New (PR 11.5, Task 7). No POSIX shell counterpart exists in the shell
+// driver for `pin` either — it required `sh` unconditionally, same as every
+// other spawn-dispatched command. `python3` stays present here so this case
+// discriminates `sh`'s absence specifically, not the combination.
+void test("`pin` succeeds in-process with no POSIX shell on PATH", () => {
+  const result = runDispatch({
+    tools: ["python3", "codex"],
+    args: ["pin", "v1.0.0"],
+    pinUpstream: true,
+    omitShell: true,
   });
   assert.equal(result.status, 0);
   assert.deepEqual(result.log, []);
@@ -402,9 +415,9 @@ void test("`unpin` succeeds in-process with codex absent from PATH", () => {
 
 void test("`pin` succeeds in-process with codex absent from PATH", () => {
   const result = runDispatch({
-    tools: [],
+    tools: ["python3"],
     args: ["pin", "v1.0.0"],
-    env: pinUpstreamEnv(),
+    pinUpstream: true,
   });
   assert.equal(result.status, 0);
   assert.deepEqual(result.log, []);

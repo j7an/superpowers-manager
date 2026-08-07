@@ -82,10 +82,16 @@ export async function runPin(
     // loadSavedSelection, validateSource, resolveExactTag, verifyRawCommit,
     // or writeSelectionState — re-emitting a subordinate module's own
     // diagnostic is the sanctioned form of interpolation (see AGENTS.md's
-    // diagnostics convention). attemptPin performs no writes of its own (see
-    // above), so this catch cannot also be reached by an EPIPE from a write
-    // this function made itself — the write below runs only after this
-    // try/catch has already resolved.
+    // diagnostics convention). That does not make every such message clean:
+    // resolveExactTag's and verifyRawCommit's SafetyErrors splice git's own
+    // combined stdout+stderr into their text (src/upstream.ts's `combined()`,
+    // used at :219 for `ls-remote` and :262 for `init`), so raw git output can
+    // reach ctx.stderr through this catch. Not a regression — scripts/pin
+    // piped git's output into its own error text the same way — but `pin` is
+    // the first in-process command able to surface it. attemptPin performs no
+    // writes of its own (see above), so this catch cannot also be reached by
+    // an EPIPE from a write this function made itself — the write below runs
+    // only after this try/catch has already resolved.
     ctx.stderr.write(
       `error: ${cause instanceof Error ? cause.message : String(cause)}\n`,
     );

@@ -57,9 +57,8 @@ function hostExecutable(name) {
 // resolveExactTag/verifyRawCommit): the "exit 0" stubs every other case in
 // this file uses for preflight-only tool checks cannot make that resolution
 // succeed, no matter what pin is asked to resolve. A pin dispatch case that
-// needs to actually succeed therefore gets its own PATH, containing nothing
-// but a real, functioning `git` — proving `codex`/`python3` absence for free,
-// since they are not on it either — plus a real local upstream repository
+// needs to actually succeed therefore needs a real, functioning `git` and a
+// real local upstream repository
 // (tests/builders/baseline-scenario.sh's `git-release-repo`, which tags
 // `v1.0.0`) for that git to resolve against. This stays hermetic: the
 // upstream is a filesystem path, never a network URL, and it is built once,
@@ -67,8 +66,7 @@ function hostExecutable(name) {
 // case's fakeBin), exactly as tests/baseline/support.js's
 // createReleaseRepo/runScenario build the same scenario for the baseline
 // suite.
-const GIT_ONLY_BIN = mkdtempSync(join(SCRATCH, "git-only-"));
-symlinkSync(hostExecutable("git"), join(GIT_ONLY_BIN, "git"));
+const REAL_GIT = hostExecutable("git");
 
 const PIN_UPSTREAM = join(SCRATCH, "pin-upstream");
 {
@@ -86,15 +84,6 @@ const PIN_UPSTREAM = join(SCRATCH, "pin-upstream");
       `cannot build the pin dispatch fixture's upstream repository: ${built.stderr}`,
     );
   }
-}
-/**
- * Env overrides for a `pin` dispatch case that needs real git resolution to
- * succeed: a PATH containing only a real `git`, and a real local upstream
- * with a `v1.0.0` tag. See GIT_ONLY_BIN/PIN_UPSTREAM above for why.
- * @returns {{ PATH: string, SUPERPOWERS_UPSTREAM_URL: string }}
- */
-export function pinUpstreamEnv() {
-  return { PATH: GIT_ONLY_BIN, SUPERPOWERS_UPSTREAM_URL: PIN_UPSTREAM };
 }
 
 /** The subcommands the real bin dispatches to. */
@@ -207,6 +196,13 @@ export function makePackageRoot(kind) {
  *   state that no POSIX shell is on PATH, rather than have it assumed absent.
  *   Scoped to the one case that needs it — every other case keeps `sh` present
  *   by default so its presence remains stated, not assumed.
+ * @property {boolean} [pinUpstream] add a real, functioning `git` to `fakeBin`
+ *   (composing with `tools`, never replacing PATH) and point
+ *   SUPERPOWERS_UPSTREAM_URL at a real local upstream with a `v1.0.0` tag —
+ *   for the one command whose success genuinely depends on git actually
+ *   resolving something. `git` must not also appear in `tools` when this is
+ *   set. Every other tool's presence or absence is still stated by `tools`
+ *   exactly as the file header promises.
  */
 
 /**
@@ -219,6 +215,14 @@ export function runDispatch(options) {
   mkdirSync(fakeBin, { recursive: true });
   for (const tool of options.tools) {
     writeExecutable(fakeBin, tool, "#!/bin/sh\nexit 0\n");
+  }
+  if (options.pinUpstream) {
+    if (options.tools.includes("git")) {
+      throw new Error(
+        "pinUpstream already supplies a real git; do not also list it in tools",
+      );
+    }
+    symlinkSync(REAL_GIT, join(fakeBin, "git"));
   }
   if (!options.omitShell) symlinkSync("/bin/sh", join(fakeBin, "sh"));
   symlinkSync(process.execPath, join(fakeBin, "node"));
@@ -263,6 +267,9 @@ export function runDispatch(options) {
       PATH: fakeBin,
       SPW_DISPATCH_LOG: logPath,
       SUPERPOWERS_CONFIG_DIR: configDir,
+      ...(options.pinUpstream
+        ? { SUPERPOWERS_UPSTREAM_URL: PIN_UPSTREAM }
+        : {}),
       ...options.env,
     },
   });

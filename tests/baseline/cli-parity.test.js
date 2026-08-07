@@ -661,17 +661,26 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
     // still gets. This loop can therefore no longer assert a clean dispatch
     // for every accepted value — two of them
     // (`0123456789abcdef0123456789abcdef01234567` and its uppercase
-    // sibling) are arbitrary 40-hex literals that cannot exist as a real
-    // commit's SHA in any repository, so genuine resolution success is not
-    // just unbuilt here, it is impossible in principle. What this loop
-    // still proves, and the only thing it ever proved before the flip (the
-    // shell-era dispatch stub short-circuited real resolution too), is the
-    // syntax boundary itself: `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate
-    // lets these argv shapes reach real work, in contrast to every entry in
-    // `refused` below, which is rejected before any tool lookup or dispatch.
+    // sibling) are arbitrary 40-hex literals not constructible in any
+    // fixture (no buildable repository can contain a commit with that exact
+    // SHA), so genuine resolution success is not just unbuilt here, it is
+    // impossible to assert honestly. What this loop still proves, and the
+    // only thing it ever proved before the flip (the shell-era dispatch
+    // stub short-circuited real resolution too), is the syntax boundary
+    // itself: `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate lets these argv
+    // shapes reach real work, in contrast to every entry in `refused` below,
+    // which is rejected before any tool lookup or dispatch.
     // `SUPERPOWERS_UPSTREAM_URL` is pinned to a definitely-absent local path
     // so that real work fails fast — never touching the network — no
-    // matter which accepted value is tried.
+    // matter which accepted value is tried. With that source, resolution is
+    // deterministic for every accepted value: tags fail inside
+    // resolveExactTag (src/upstream.ts's `runGit(["ls-remote", ...])`
+    // against a nonexistent path), 40-hex values fail inside
+    // verifyRawCommit's fetch, and runPin's catch (src/commands/pin.ts)
+    // returns 1 unconditionally either way — so `status === 1` is provable
+    // and strictly stronger than merely "not a usage error": it also catches
+    // a signal-killed child, which `spawnSync` reports as `status: null`
+    // (`notEqual(null, 2)` would have passed that silently).
     const noSuchUpstream = join(sandbox.root, "no-such-upstream");
     for (const ref of accepted) {
       clearDispatchLog(sandbox);
@@ -679,7 +688,7 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
         ...dispatchEnvironment(sandbox),
         SUPERPOWERS_UPSTREAM_URL: noSuchUpstream,
       });
-      assert.notEqual(result.status, 2);
+      assertCleanResult(result, 1);
       assert.ok(
         !result.stderr.includes(
           "pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit",

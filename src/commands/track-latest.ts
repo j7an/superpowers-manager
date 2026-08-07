@@ -17,13 +17,16 @@ export async function runTrackLatest(
   }
   try {
     // Read first. This is a deliberate redundant boundary check, not the
-    // enforcing guard: writeSelectionState below already refuses to
-    // overwrite a corrupt existing record on its own (src/selection-store.ts
-    // readSelectionState under "Invalid existing state must block
-    // overwrite", plus validateRecord immediately after). Calling
-    // loadSavedSelection here preserves scripts/track-latest:20-21's
-    // read-then-write shape, so this command stays fail-closed on its own
-    // terms rather than solely by depending on the store's internals.
+    // enforcing guard: writeSelectionState below already refuses to overwrite
+    // a corrupt existing record on its own (src/selection-store.ts's
+    // writeSelectionState calls readSelectionState on the same path before
+    // writing, under "Invalid existing state must block overwrite" —
+    // readSelectionState's own readOpenedRecord/parseRecordBytes is what
+    // validates an existing record, via validateRecord at
+    // src/selection-store.ts:103). Calling loadSavedSelection here preserves
+    // scripts/track-latest:20-21's read-then-write shape, so this command
+    // stays fail-closed on its own terms rather than solely by depending on
+    // the store's internals.
     await loadSavedSelection(ctx.env);
     const source = ctx.env.SUPERPOWERS_UPSTREAM_URL || UPSTREAM_URL_DEFAULT;
     validateSource(source);
