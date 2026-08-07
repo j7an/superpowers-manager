@@ -371,18 +371,21 @@ item 1, a structural safety net with no shell analogue at all.
    `ROUTING_CASES[4]`). Port-only — same rationale as item 2. **Index
    updated** (PR 11.5, Task 7) from `ROUTING_CASES[5]` to `[4]`, same cause
    as item 7.
-10. `--version` (no symlink): `result.status === 0` (`:120`). Port-only —
-    the shell's `version_out=$(run_bin --version)` at `:129` has no explicit
-    exit-status test (command substitution failure would trip `set -e`
-    implicitly, but nothing at the counted-assertion granularity checks it).
-    This citation predates PR 11.5's in-process flips and has not been
-    re-verified against the current line numbering; left as found.
-11. `--version` through a symlink: `result.status === 0` (`:130`). Port-only
-    — same rationale as item 10, for the shell's `:135` symlinked
-    invocation. Same pre-existing-citation caveat as item 10.
-12. Env passthrough: `result.status === 0` (`:157`). Port-only — the
-    shell's bare env-prefixed invocation at `:149-152` has no explicit
-    exit-status test. Same pre-existing-citation caveat as item 10.
+10. `--version` (no symlink): `result.status === 0` (`tests/bin/bin-dispatch.test.js:140`,
+    corrected from a stale `:120` citation that predated PR 11.5's in-process
+    flips — citation predates PR 11.5, left as found until this correction).
+    Port-only — the shell's `version_out=$(run_bin --version)` at `:129` has
+    no explicit exit-status test (command substitution failure would trip
+    `set -e` implicitly, but nothing at the counted-assertion granularity
+    checks it).
+11. `--version` through a symlink: `result.status === 0`
+    (`tests/bin/bin-dispatch.test.js:150`, corrected from a stale `:130`
+    citation — same pre-existing-citation history as item 10). Port-only —
+    same rationale as item 10, for the shell's `:135` symlinked invocation.
+12. Env passthrough: `result.status === 0` (`tests/bin/bin-dispatch.test.js:177`,
+    corrected from a stale `:157` citation — same pre-existing-citation
+    history as item 10). Port-only — the shell's bare env-prefixed invocation
+    at `:149-152` has no explicit exit-status test.
 13. `NO_GIT_CASES` iteration `track-latest`: `result.status === 0`.
     **Relocated** (PR 11.5, Task 6): `track-latest` left `NO_GIT_CASES` (see
     item 38's retirement note) for its own standalone case,

@@ -198,7 +198,6 @@ test_probe_commands() {
   cp -R "$root/scripts" "$pkg/scripts"
   cp -R "$root/config" "$pkg/config"
   cp -R "$root/dist" "$pkg/dist"
-  cp -R "$root/bin" "$pkg/bin"
   cp "$root/package.json" "$pkg/package.json"
   mkdir -p "$pkg/plugins/superpowers"
 
@@ -484,7 +483,7 @@ update_control'
   (
     cd "$tmpdir"
     SUPERPOWERS_CONFIG_DIR="$dash_config" SUPERPOWERS_UPSTREAM_URL=-upstream \
-      node "$pkg/bin/superpowers-manager.js" track-latest >/dev/null
+      node "$pkg/dist/cli.js" track-latest >/dev/null
   )
   : > "$adapter_log"
   : > "$git_log"

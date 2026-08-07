@@ -12,13 +12,13 @@
 //
 // Two clusters have no TypeScript counterpart at all, because their subject
 // is shell-only infrastructure, and this task changes no production code:
-//   - scripts/core/common.sh's spw_usage_error is reachable only from
+//   - scripts/core/common.sh's spw_usage_error was reachable only from
 //     scripts/pin, scripts/unpin, and scripts/track-latest, none of which
-//     src/cli.ts's DISPATCH reaches any more (all three flipped to
-//     in-process TypeScript by earlier tasks in this slice) — but the shell
-//     files themselves are not deleted until Task 10b, and the helper is
-//     still live shell source, so it is ported here by running a small
-//     generated script (see runShellScript) against it.
+//     src/cli.ts's DISPATCH reached any more once all three flipped to
+//     in-process TypeScript by earlier tasks in this slice. Task 10b then
+//     deleted the shell files themselves, but the helper is still live shell
+//     source in scripts/core/common.sh, so it is ported here by running a
+//     small generated script (see runShellScript) against it.
 //   - scripts/core/selection.sh's spw_selection_state (the wrapper that
 //     invokes dist/selection-state-cli.js via spw_node_cli, scrubbing
 //     ambient NODE_OPTIONS/NODE_PATH and reporting a missing helper with one
@@ -412,11 +412,12 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", (t) 
   });
 
   // :63-70 scripts/core/common.sh's spw_usage_error, reachable in production
-  // only from scripts/pin|unpin|track-latest — none of which src/cli.ts's
-  // DISPATCH reaches any more (see the file header comment) — but the shell
-  // file itself is unchanged, so this runs a small generated script against
-  // it. The if-guard at :63 ("unexpectedly succeeded") is subsumed by the
-  // exact-status assertion below, matching the merge precedent at
+  // only from scripts/pin|unpin|track-latest before those three were ported
+  // to TypeScript and then deleted by Task 10b (see the file header comment)
+  // — but scripts/core/common.sh itself is unchanged and still ships, so this
+  // runs a small generated script against it. The if-guard at :63
+  // ("unexpectedly succeeded") is subsumed by the exact-status assertion
+  // below, matching the merge precedent at
   // tests/migration-inventory/bin-dispatch.md item 15.
   const usage = runShellScript(
     t,

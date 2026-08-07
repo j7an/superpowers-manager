@@ -357,12 +357,47 @@ property — it has no port here.
 
 <!-- inventory:mapped:end -->
 
+## Port-only assertions (outside the 1:1 mapping)
+
+Both items below are deliberate narrowings of `src/commands/unpin.ts` beyond
+shell parity — the plan called for both to be recorded here rather than
+folded into the mapped count above, since neither has a shell counterpart to
+map onto.
+
+<!-- inventory:port-only:start -->
+
+1. Validated-`ENOENT`-only absence check (`src/commands/unpin.ts:34-46`).
+   The shell's `[ -e "$path" ]` (`scripts/unpin`) cannot distinguish "the
+   path does not exist" from "the path exists but `stat` failed for another
+   reason" (`EACCES`, `ENOTDIR`); it reports both as `[ -e ]` false and
+   proceeds as if absent. The TypeScript `inspect` helper treats only a
+   caught error with `code === "ENOENT"` as absence and fails closed with
+   `cannot inspect selection state: <path>` on any other errno, per the
+   fail-closed rule in `AGENTS.md`. Port:
+   `tests/unit/commands-unpin.test.js:103-124` ("unpin fails closed when the
+   state path cannot be inspected", which denies read access to the
+   containing directory to force a non-`ENOENT` `lstat` failure).
+2. `unlink` vs `rm -f` TOCTOU divergence (`src/commands/unpin.ts:54-61`).
+   `scripts/unpin:21` used `rm -f`, which exits 0 even if the target
+   vanished between the preceding existence test and the removal itself —
+   `rm -f` swallows a `ENOENT` on the removal attempt. `unlink()` here is
+   unguarded against that same race: if the file disappears between the
+   `inspect` call at `:49` and the `unlink` call at `:55`, the `catch` at
+   `:56-60` reports `cannot remove selection state: <path>` and the command
+   exits 1 instead of silently succeeding. This is strictly more
+   conservative than the shell, and a real parity delta, not merely a
+   stricter re-statement of the same behavior. No test exercises the race
+   itself (it requires a concurrent second process to win a narrow window),
+   so this entry documents the divergence without a port citation.
+
+<!-- inventory:port-only:end -->
+
 ## Cardinality
 
 ```json inventory
 {
   "shellOriginal": 87,
-  "portOnly": 0,
+  "portOnly": 2,
   "ports": { "tests/baseline/selection-commands.test.js": 6 }
 }
 ```

@@ -135,6 +135,12 @@ referenced again after this block. It exercises
     35-37). The shell file itself is unchanged and still live source for
     other shell tests, so the port runs it directly via a generated script
     (`tests/baseline/selection-location.test.js`'s `runShellScript`).
+    Note for slice 4 (not this slice's work): Task 10b deleted
+    `scripts/pin`, `scripts/unpin`, and `scripts/track-latest` outright, so
+    `spw_usage_error` (`scripts/core/common.sh:9`) now has zero callers
+    anywhere in `scripts/`. `scripts/core/common.sh` still ships
+    (`tests/expected_tarball_contents.txt:47`), and removing the now-dead
+    helper is slice 4's call, not this task's.
 14. `spw_usage_error` exits `2` (`:69`). Port: `:427`.
 15. `spw_usage_error`'s stderr is exactly `error: bad arguments` (`:70`).
     Port: `:428-429` (the port asserts the full stdout/stderr shape in one

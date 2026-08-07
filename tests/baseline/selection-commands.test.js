@@ -5,8 +5,9 @@
 // PR 11.5's earlier tasks already flipped all three commands to in-process
 // TypeScript (src/cli.ts's DISPATCH, src/commands/pin.ts, unpin.ts,
 // track-latest.ts), so this port calls those handlers directly instead of
-// spawning the (still-live, not yet deleted — that is Task 10b) shell
-// scripts. Three clusters have no port here, each for a different reason:
+// spawning the shell scripts, which were still live (not yet deleted — that
+// happened in Task 10b) when this port was made. Three clusters have no
+// port here, each for a different reason:
 //   - Public argument-shape checks (no args / extra args) and the
 //     malformed-single-argument early guard (:72-112) exercise
 //     src/cli.ts's parseArgs — the TAG_RE/COMMIT_INPUT_RE gate that now runs
