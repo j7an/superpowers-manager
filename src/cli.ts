@@ -214,7 +214,8 @@ function commandRequirements(): Record<Subcommand, string[]> {
 }
 
 // Tool preflight; never touches Codex state. Requirements are specific to the
-// selected command, while a POSIX shell remains mandatory for every command.
+// selected command; a POSIX shell is required only for commands the DISPATCH
+// gate still spawns, not for in-process commands.
 function preflight(
   cmd: Subcommand,
   env: NodeJS.ProcessEnv,

@@ -39,10 +39,14 @@ It never removes the legacy provider automatically.
 
 ## Requirements and platforms
 
-Superpowers Manager requires Node 24+, `git`, Python 3, and a POSIX `sh`.
-Codex CLI is required for `probe`, `install`, `update`, and `uninstall`;
-`prepare`, `pin`, `track-latest`, and `unpin` do not require it. Codex is the
-only supported integration today.
+Superpowers Manager requires Node 24+. `git`, Python 3, and a POSIX `sh` are
+needed by `prepare`, `probe`, `install`, `update`, and `uninstall`; the
+in-process `pin`, `track-latest`, and `unpin` commands need none of Python or
+`sh`, and only `pin` needs `git` (see `docs/baseline/behavioral-inventory.md`'s
+`CLI-PREFLIGHT-01` for the exact per-command breakdown). Codex CLI is required
+for `probe`, `install`, `update`, and `uninstall`; `prepare`, `pin`,
+`track-latest`, and `unpin` do not require it. Codex is the only supported
+integration today.
 
 macOS and Linux are tested. WSL2 is supported. The native Windows path is
 untested; the launcher looks for Git Bash, `git`, and `python3`, but path
@@ -312,7 +316,6 @@ plugins/superpowers/
 scripts/
   adapters/codex/                          # Codex adapter entrypoint + validator helpers
   core/                                    # shared lifecycle, selection, provenance, and status modules
-  pin track-latest unpin                   # persistent-selection entrypoints
   prepare probe install update uninstall   # lifecycle entrypoints
 tests/                                     # hermetic suite + manual Codex probe
 .cache/upstream/                           # upstream clone cache         (gitignored)
