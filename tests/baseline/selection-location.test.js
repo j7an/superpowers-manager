@@ -71,6 +71,23 @@ const PINNED_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const RESOLVED_DEFAULT = "1".repeat(40);
 const RESOLVED_ENVIRONMENT = "2".repeat(40);
 const RESOLVED_LATEST = "9".repeat(40);
+// Hoisted beside RESOLVED_LATEST (its paired commit) so the two ends of the
+// distinct-values pairing this suite depends on — see assertEffective's
+// doc comment — are self-evident from the constants alone, not just from
+// the literals repeated at each call site.
+const RESOLVED_LATEST_TAG = "v9.9.9";
+
+// Environment variable names the generated fake `git` script (see
+// fakeResolverGitDir) reads its canned answers and its invocation log path
+// from. Threading these through the environment, rather than interpolating
+// their values into the generated shell source, means the script body below
+// is a fixed string: no test-controlled value is ever concatenated into
+// shell source, so there is nothing for shell metacharacters in a path or
+// value to corrupt.
+const FAKE_GIT_LOG_VAR = "SPW_FAKE_GIT_LOG";
+const FAKE_GIT_LATEST_COMMIT_VAR = "SPW_FAKE_GIT_LATEST_COMMIT";
+const FAKE_GIT_DEFAULT_COMMIT_VAR = "SPW_FAKE_GIT_DEFAULT_COMMIT";
+const FAKE_GIT_GENERIC_COMMIT_VAR = "SPW_FAKE_GIT_GENERIC_COMMIT";
 
 const TRACK_LATEST_RECORD = {
   schema_version: 1,
@@ -119,28 +136,67 @@ function makeConfigDir(t, raw) {
 }
 
 /**
- * Writes `body` (a POSIX sh script referring to its arguments positionally,
- * as `$1`, `$2`, ...) to a fresh temp file and runs it with `sh`, passing
- * `args` as the script's own argv. Paths and values travel as positional
- * parameters rather than through string-interpolated shell source, so
- * nothing here builds a shell command by concatenation.
+ * Sources each of `libraries` (asserted to exist first, by name, so a future
+ * deletion of one of these still-live shell files fails loudly here instead
+ * of surfacing as a confusing downstream diagnostic mismatch), then runs
+ * `body` — a POSIX sh script fragment that sees `libraries` as `$1..$N` and
+ * `args` as `$(N+1)..$(N+M)`. Everything this script's argv needs travels as
+ * a positional parameter into the generated script, rather than through
+ * string-interpolated shell source, so nothing here builds a shell command
+ * by concatenation.
  * @param {import("node:test").TestContext} t
+ * @param {readonly string[]} libraries shell files to source, in order
  * @param {string} body
  * @param {readonly string[]} args
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {import("node:child_process").SpawnSyncReturns<string>}
  */
-function runShellScript(t, body, args, env) {
+function runShellScript(t, libraries, body, args, env) {
+  for (const library of libraries) {
+    assert.ok(
+      existsSync(library),
+      `expected shell library to exist: ${library}`,
+    );
+  }
   const dir = mkdtempSync(join(tmpdir(), "spw-sel-script-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const scriptPath = join(dir, "script.sh");
-  writeFileSync(scriptPath, `#!/bin/sh\nset -eu\n${body}\n`, "utf8");
+  const sourceLines = libraries.map((_, index) => `. "$${index + 1}"`);
+  writeFileSync(
+    scriptPath,
+    `#!/bin/sh\nset -eu\n${[...sourceLines, body].join("\n")}\n`,
+    "utf8",
+  );
   chmodSync(scriptPath, 0o755);
-  return spawnSync("sh", [scriptPath, ...args], {
+  return spawnSync("sh", [scriptPath, ...libraries, ...args], {
     encoding: "utf8",
     env: env ?? process.env,
   });
 }
+
+// A fixed script body, containing no test-controlled value at all: every
+// value it needs (the log path, the three canned commits) travels through
+// the environment variables named above, read at run time by `sh` itself
+// rather than substituted into this source by JS. See fakeResolverGitDir.
+const FAKE_GIT_BODY = [
+  "#!/bin/sh",
+  `printf '%s\\n' "$*" >> "$${FAKE_GIT_LOG_VAR}"`,
+  'case "$*" in',
+  '  *"refs/tags/v*"*)',
+  `    printf '%s\\trefs/tags/${RESOLVED_LATEST_TAG}\\n' "$${FAKE_GIT_LATEST_COMMIT_VAR}"`,
+  "    ;;",
+  '  *"refs/tags/v1.2.3"*)',
+  `    printf '%s\\trefs/tags/v1.2.3\\n' "$${FAKE_GIT_DEFAULT_COMMIT_VAR}"`,
+  "    ;;",
+  "  *--tags*)",
+  "    ;;",
+  "  *)",
+  `    printf '%s\\trefs/heads/generic\\n' "$${FAKE_GIT_GENERIC_COMMIT_VAR}"`,
+  "    ;;",
+  "esac",
+  "exit 0",
+  "",
+].join("\n");
 
 /**
  * A fake `git` on its own PATH entry that answers exactly the three
@@ -155,6 +211,11 @@ function runShellScript(t, body, args, env) {
  * call issues exactly one `--tags` probe as its first step (including
  * latest-release and a direct tag hit, which need no second call), and a
  * raw-commit request short-circuits before any git call at all.
+ *
+ * The script itself (FAKE_GIT_BODY) is a fixed string; the log path and the
+ * three canned commits reach it only through withResolverEnv's environment
+ * variables at run time, never through string interpolation into this
+ * script's source.
  * @param {import("node:test").TestContext} t
  * @returns {{ dir: string, log: string }}
  */
@@ -162,26 +223,8 @@ function fakeResolverGitDir(t) {
   const dir = mkdtempSync(join(tmpdir(), "spw-fake-git-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const log = join(dir, "invocations.log");
-  const body = [
-    "#!/bin/sh",
-    `printf '%s\\n' "$*" >> ${JSON.stringify(log)}`,
-    'case "$*" in',
-    '  *"refs/tags/v*"*)',
-    `    printf '%s\\trefs/tags/v9.9.9\\n' '${RESOLVED_LATEST}'`,
-    "    ;;",
-    '  *"refs/tags/v1.2.3"*)',
-    `    printf '%s\\trefs/tags/v1.2.3\\n' '${RESOLVED_DEFAULT}'`,
-    "    ;;",
-    "  *--tags*)",
-    "    ;;",
-    "  *)",
-    `    printf '%s\\trefs/heads/generic\\n' '${RESOLVED_ENVIRONMENT}'`,
-    "    ;;",
-    "esac",
-    "exit 0",
-  ].join("\n");
   const gitPath = join(dir, "git");
-  writeFileSync(gitPath, `${body}\n`, "utf8");
+  writeFileSync(gitPath, FAKE_GIT_BODY, "utf8");
   chmodSync(gitPath, 0o755);
   return { dir, log };
 }
@@ -204,19 +247,39 @@ function resolutionCount(log) {
 }
 
 /**
- * Runs `fn` with PATH replaced by `dir` alone, restoring it afterwards.
+ * Runs `fn` with PATH replaced by `gitDir` alone (so the fake `git` written
+ * there by fakeResolverGitDir is the only one resolveRef can find) and the
+ * FAKE_GIT_*_VAR environment variables set so that fake `git`'s fixed script
+ * body can read the log path and the three canned commits at run time,
+ * restoring every mutated variable afterwards.
  * @template T
- * @param {string} dir
+ * @param {string} gitDir
+ * @param {string} log
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
  */
-async function withPath(dir, fn) {
-  const original = process.env.PATH;
-  process.env.PATH = dir;
+async function withResolverEnv(gitDir, log, fn) {
+  /** @type {Record<string, string>} */
+  const overrides = {
+    PATH: gitDir,
+    [FAKE_GIT_LOG_VAR]: log,
+    [FAKE_GIT_LATEST_COMMIT_VAR]: RESOLVED_LATEST,
+    [FAKE_GIT_DEFAULT_COMMIT_VAR]: RESOLVED_DEFAULT,
+    [FAKE_GIT_GENERIC_COMMIT_VAR]: RESOLVED_ENVIRONMENT,
+  };
+  /** @type {Record<string, string | undefined>} */
+  const original = {};
+  for (const key of Object.keys(overrides)) {
+    original[key] = process.env[key];
+    process.env[key] = overrides[key];
+  }
   try {
     return await fn();
   } finally {
-    process.env.PATH = original;
+    for (const key of Object.keys(overrides)) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
   }
 }
 
@@ -224,10 +287,15 @@ async function withPath(dir, fn) {
  * The same eight-field comparison as tests/test_selection_state.sh's
  * `assert_effective` shell helper, one property per EffectiveSelection
  * field. `assert_effective` additionally called `assert_exported_selection`
- * (a bundled `: "$VAR" ...` existence check across all nine SPW_* exports),
- * which has no port here: TypeScript's `EffectiveSelection` interface makes
- * every field non-optional, so "every field is populated" is a structural
- * compile-time guarantee rather than a runtime property to assert.
+ * (a bundled `: "$VAR" ...` existence check across all fourteen SPW_*
+ * exports), which has no port here for thirteen of the fourteen: eight map
+ * onto EffectiveSelection's own fields and five onto
+ * NormalizedSavedSelection's (src/selection.ts), and both interfaces make
+ * every field non-optional, so "these thirteen are populated" is a
+ * structural compile-time guarantee rather than a runtime property to
+ * assert. The fourteenth, SPW_SELECTION_STATE_PATH, comes from a separate
+ * function (selectionStatePath) rather than either interface, has no
+ * structural counterpart, and is not asserted anywhere in this port either.
  * @param {import("../../src/effective-selection.js").EffectiveSelection} selection
  * @param {{
  *   selectionOrigin: string,
@@ -350,9 +418,12 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", (t) 
   // it. The if-guard at :63 ("unexpectedly succeeded") is subsumed by the
   // exact-status assertion below, matching the merge precedent at
   // tests/migration-inventory/bin-dispatch.md item 15.
-  const usage = runShellScript(t, ". \"$1\"\nspw_usage_error 'bad arguments'", [
-    COMMON_SH,
-  ]);
+  const usage = runShellScript(
+    t,
+    [COMMON_SH],
+    "spw_usage_error 'bad arguments'",
+    [],
+  );
   assert.equal(usage.status, 2); // :63, :69
   assert.equal(usage.stdout, "");
   assert.equal(usage.stderr, "error: bad arguments\n"); // :70
@@ -366,7 +437,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
   // :137-144
   resetLog(log);
   const absentConfig = makeConfigDir(t, null);
-  const absentSelection = await withPath(gitDir, () =>
+  const absentSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: absentConfig,
     }),
@@ -386,7 +457,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :146-154
   resetLog(log);
-  const envOverrideSelection = await withPath(gitDir, () =>
+  const envOverrideSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: absentConfig,
       SUPERPOWERS_REF: "main",
@@ -406,7 +477,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :156-163
   resetLog(log);
-  const refOnlySelection = await withPath(gitDir, () =>
+  const refOnlySelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: absentConfig,
       SUPERPOWERS_REF: "main",
@@ -425,7 +496,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :165-172
   resetLog(log);
-  const sourceOnlySelection = await withPath(gitDir, () =>
+  const sourceOnlySelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: absentConfig,
       SUPERPOWERS_UPSTREAM_URL: ENVIRONMENT_SOURCE,
@@ -446,7 +517,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
   // independently. :176-182
   resetLog(log);
   const trackConfig = makeConfigDir(t, JSON.stringify(TRACK_LATEST_RECORD));
-  const trackSelection = await withPath(gitDir, () =>
+  const trackSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, { SUPERPOWERS_CONFIG_DIR: trackConfig }),
   );
   assertEffective(trackSelection, {
@@ -455,7 +526,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     upstreamSourceOrigin: "user-config",
     effectiveSource: SAVED_SOURCE,
     requestedRef: "latest-release",
-    resolvedRef: "v9.9.9",
+    resolvedRef: RESOLVED_LATEST_TAG,
     desiredCommit: RESOLVED_LATEST,
     resolutionKind: "latest-release",
   }); // :180-181
@@ -463,7 +534,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :184-191
   resetLog(log);
-  const trackRefOverride = await withPath(gitDir, () =>
+  const trackRefOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: trackConfig,
       SUPERPOWERS_REF: "main",
@@ -482,7 +553,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :193-200
   resetLog(log);
-  const trackSourceOverride = await withPath(gitDir, () =>
+  const trackSourceOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: trackConfig,
       SUPERPOWERS_UPSTREAM_URL: ENVIRONMENT_SOURCE,
@@ -494,14 +565,14 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     upstreamSourceOrigin: "environment",
     effectiveSource: ENVIRONMENT_SOURCE,
     requestedRef: "latest-release",
-    resolvedRef: "v9.9.9",
+    resolvedRef: RESOLVED_LATEST_TAG,
     desiredCommit: RESOLVED_LATEST,
     resolutionKind: "latest-release",
   }); // :199-200
 
   // :202-210
   resetLog(log);
-  const trackBothOverride = await withPath(gitDir, () =>
+  const trackBothOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: trackConfig,
       SUPERPOWERS_REF: "main",
@@ -523,7 +594,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
   // overridden. :213-223
   resetLog(log);
   const pinnedConfig = makeConfigDir(t, JSON.stringify(PINNED_RECORD));
-  const pinnedSelection = await withPath(gitDir, () =>
+  const pinnedSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: pinnedConfig,
     }),
@@ -545,7 +616,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :225-233
   resetLog(log);
-  const pinnedRefOverride = await withPath(gitDir, () =>
+  const pinnedRefOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: pinnedConfig,
       SUPERPOWERS_REF: "main",
@@ -565,7 +636,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :235-243
   resetLog(log);
-  const pinnedSourceOverride = await withPath(gitDir, () =>
+  const pinnedSourceOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: pinnedConfig,
       SUPERPOWERS_UPSTREAM_URL: ENVIRONMENT_SOURCE,
@@ -585,7 +656,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 
   // :245-252
   resetLog(log);
-  const pinnedBothOverride = await withPath(gitDir, () =>
+  const pinnedBothOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: pinnedConfig,
       SUPERPOWERS_REF: "main",
@@ -615,7 +686,7 @@ void test("an arbitrary environment ref and a raw-commit pin resolve without she
   // glob. :256-264
   resetLog(log);
   const absentConfig = makeConfigDir(t, null);
-  const globSelection = await withPath(gitDir, () =>
+  const globSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
       SUPERPOWERS_CONFIG_DIR: absentConfig,
       SUPERPOWERS_REF: "*",
@@ -646,7 +717,7 @@ void test("an arbitrary environment ref and a raw-commit pin resolve without she
       commit: PINNED_COMMIT,
     }),
   );
-  const rawSelection = await withPath(gitDir, () =>
+  const rawSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, { SUPERPOWERS_CONFIG_DIR: rawConfig }),
   );
   assertEffective(rawSelection, {
@@ -676,7 +747,7 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
   );
   await assert.rejects(
     () =>
-      withPath(gitDir, () =>
+      withResolverEnv(gitDir, log, () =>
         computeEffectiveSelection(pkgRoot, {
           SUPERPOWERS_CONFIG_DIR: malformedConfig,
           SUPERPOWERS_REF: "main",
@@ -697,7 +768,7 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
   const credentialSource = "https://token@example.invalid/repo";
   await assert.rejects(
     () =>
-      withPath(gitDir, () =>
+      withResolverEnv(gitDir, log, () =>
         computeEffectiveSelection(pkgRoot, {
           SUPERPOWERS_CONFIG_DIR: absentConfig,
           SUPERPOWERS_UPSTREAM_URL: credentialSource,
@@ -725,21 +796,9 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
   );
   const preloadResult = runShellScript(
     t,
-    [
-      '. "$1"',
-      '. "$2"',
-      '. "$3"',
-      '. "$4"',
-      'spw_selection_state "$5" validate-source --source="$6"',
-    ].join("\n"),
-    [
-      COMMON_SH,
-      PROVENANCE_SH,
-      UPSTREAM_SH,
-      SELECTION_SH,
-      ROOT,
-      UPSTREAM_URL_DEFAULT,
-    ],
+    [COMMON_SH, PROVENANCE_SH, UPSTREAM_SH, SELECTION_SH],
+    'spw_selection_state "$5" validate-source --source="$6"',
+    [ROOT, UPSTREAM_URL_DEFAULT],
     { ...process.env, NODE_OPTIONS: `--require=${preloadScript}` },
   );
   assert.equal(
@@ -757,21 +816,9 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
   t.after(() => rmSync(missingHelperRoot, { recursive: true, force: true }));
   const missingResult = runShellScript(
     t,
-    [
-      '. "$1"',
-      '. "$2"',
-      '. "$3"',
-      '. "$4"',
-      'spw_selection_state "$5" validate-source --source="$6"',
-    ].join("\n"),
-    [
-      COMMON_SH,
-      PROVENANCE_SH,
-      UPSTREAM_SH,
-      SELECTION_SH,
-      missingHelperRoot,
-      UPSTREAM_URL_DEFAULT,
-    ],
+    [COMMON_SH, PROVENANCE_SH, UPSTREAM_SH, SELECTION_SH],
+    'spw_selection_state "$5" validate-source --source="$6"',
+    [missingHelperRoot, UPSTREAM_URL_DEFAULT],
   );
   assert.notEqual(missingResult.status, 0); // :327
   const missingLines = missingResult.stderr.replace(/\n$/, "").split("\n");
