@@ -3,59 +3,27 @@
 // lifecycle-fixture.js execs this as either `codex` or `adapter`.
 // Replaces the shell fake codex at tests/test_uninstall_commands.sh:28-84 and
 // the recording adapter at :87-98, including their two python3 heredocs.
+//
+// PR 11.5 slice 2 extracted only the read side (config load + the two
+// listings) into lifecycle-fakes.js. The mutation branches below still call
+// process.exit(); converting them is slice 4's work, tracked in
+// tests/migration-inventory/probe.md.
 
-import {
-  appendFileSync,
-  existsSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { schemaFor, validateConfig } from "./lifecycle-config.js";
+import {
+  loadFixtureConfig,
+  logLine,
+  respondToListing,
+} from "./lifecycle-fakes.js";
 
 if (!process.env.SPW_FIXTURE_STATE) {
   process.stderr.write("fixture: SPW_FIXTURE_STATE is unset\n");
   process.exit(90);
 }
 const STATE = /** @type {string} */ (process.env.SPW_FIXTURE_STATE);
-
-/**
- * Loads and re-validates the per-case config. `createCase` already validated
- * it eagerly; this is defence in depth, and it is what makes a hand-written
- * config.json (as tests/bin/lifecycle-fixture.test.js writes) fail closed too.
- * The schema lives in lifecycle-config.js so exactly one definition governs
- * both the eager check and this one.
- * @returns {Record<string, unknown>}
- */
-function loadConfig() {
-  const { defaults } = schemaFor("uninstall");
-  let raw;
-  try {
-    raw = readFileSync(join(STATE, "config.json"), "utf8");
-  } catch {
-    process.stderr.write(
-      `fixture: cannot read ${join(STATE, "config.json")}\n`,
-    );
-    process.exit(91);
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    process.stderr.write("fixture: config.json is not valid JSON\n");
-    process.exit(92);
-  }
-  try {
-    validateConfig("uninstall", parsed);
-  } catch (error) {
-    process.stderr.write(`fixture: ${/** @type {Error} */ (error).message}\n`);
-    process.exit(93);
-  }
-  return { ...defaults, ...parsed };
-}
-
-const CONFIG = loadConfig();
+const CONFIG = loadFixtureConfig("uninstall", STATE);
 const ROLE = process.argv[2];
 const ARGS = process.argv.slice(3);
 
@@ -64,7 +32,7 @@ const ARGS = process.argv.slice(3);
  * @param {string} line
  */
 function log(name, line) {
-  appendFileSync(join(STATE, name), `${line}\n`);
+  logLine(STATE, name, line);
 }
 
 /**
@@ -95,15 +63,15 @@ function runCodex() {
   }
 
   const [a, b, c] = ARGS;
-  if (a === "plugin" && b === "list") {
-    process.stdout.write(readFileSync(join(STATE, "plugin_list.json"), "utf8"));
-    process.exit(/** @type {number} */ (CONFIG.pluginListRc));
-  }
-  if (a === "plugin" && b === "marketplace" && c === "list") {
-    process.stdout.write(
-      readFileSync(join(STATE, "marketplace_list.json"), "utf8"),
-    );
-    process.exit(/** @type {number} */ (CONFIG.marketplaceListRc));
+  if (
+    respondToListing({
+      args: ARGS,
+      state: STATE,
+      pluginListRc: /** @type {number} */ (CONFIG.pluginListRc),
+      marketplaceListRc: /** @type {number} */ (CONFIG.marketplaceListRc),
+    })
+  ) {
+    return;
   }
   if (a === "plugin" && b === "remove") {
     if (!CONFIG.removesMutateState) process.exit(0);
@@ -170,7 +138,12 @@ function runAdapter() {
   process.exit(result.status ?? 97);
 }
 
-if (ROLE === "codex") runCodex();
+if (CONFIG.__failed) {
+  // loadFixtureConfig already set the exit code and wrote the diagnostic.
+  // Reaching runCodex/runAdapter here would run fake logic against defaults
+  // instead of the config the case actually asked for, so this replicates
+  // the hard-exit-before-any-mutation behaviour the old loadConfig() had.
+} else if (ROLE === "codex") runCodex();
 else if (ROLE === "adapter") runAdapter();
 else {
   process.stderr.write(`fixture: unknown role: ${String(ROLE)}\n`);

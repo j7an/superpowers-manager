@@ -168,7 +168,7 @@ function writeFakeBin(dir, name, modulePath, role) {
 
 /**
  * @param {object} options
- * @param {"install" | "uninstall"} options.fakes
+ * @param {"install" | "uninstall" | "probe"} options.fakes
  * @param {Record<string, unknown>} [options.config]
  * @returns {CaseEnv}
  */
