@@ -101,7 +101,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `GENERATED-HOOKS-DEFAULT-LAYOUT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DEFAULT-01 absent and empty-array default discovery` | `tests/fixtures/baseline/generated-tree/default-hooks.txt` |
 | `GENERATED-HOOKS-DECLARED-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DECLARED-01 declared path and inline hook forms` | `tests/fixtures/baseline/generated-tree/declared-hooks.txt` |
 | `FS-ATOMIC-01` | `tests/baseline/cli-parity.test.js::FS-ATOMIC-01 failed prepare preserves the previous generated tree` | `tests/builders/baseline-scenario.sh` |
-| `FS-ATOMIC-SWAP-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: FS-ATOMIC-SWAP-01 failed activation restores the prior tree` | — |
+| `FS-ATOMIC-SWAP-01` | `tests/unit/atomic.test.js::FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree` | — |
 | `FS-CLEANUP-01` | `tests/baseline/cli-parity.test.js::FS-CLEANUP-01 interrupted state cleanup is invocation-scoped` | `tests/builders/baseline-scenario.sh` |
 | `FS-SYMLINK-01` | `tests/baseline/cli-parity.test.js::FS-SYMLINK-01 escaping and broken symlinks fail closed` | `tests/builders/baseline-scenario.sh` |
 | `FS-HOOK-CONTAINMENT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: FS-HOOK-CONTAINMENT-01 unsafe hook paths and symlinks fail closed` | — |

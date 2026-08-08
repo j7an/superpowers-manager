@@ -177,6 +177,10 @@ void test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t
   await writeFile(join(candidate, "marker"), "after");
   let calls = 0;
   const realRename = rename;
+  // The message text is part of the contract, not incidental: it is the one
+  // assertion tests/test_prepare_with_fake_upstream.sh:1199 made that this test
+  // did not, and this test is FS-ATOMIC-SWAP-01's anchor from PR 11.5 slice 3
+  // onward.
   await assert.rejects(
     atomicReplaceDir(candidate, live, {
       hooks: {
@@ -189,7 +193,11 @@ void test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t
         },
       },
     }),
-    SafetyError,
+    (error) => {
+      assert.ok(error instanceof SafetyError);
+      assert.match(error.message, /previous tree restored/);
+      return true;
+    },
   );
   assert.equal(await readFile(join(live, "marker"), "utf8"), "before");
   await assert.rejects(stat(candidate), { code: "ENOENT" });
