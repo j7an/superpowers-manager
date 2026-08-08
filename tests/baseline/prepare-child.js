@@ -1,0 +1,31 @@
+// @ts-check
+// Test-only runner. NOT a *.test.js file: tests/run-node-suites.js:15 would
+// otherwise register it as a suite.
+//
+// runPrepare is called in a child process, not in the test process, because
+// ctx.env does not govern what its dependencies actually run under: runGit
+// (src/git.ts:22) spreads process.env and never sees ctx.env, and runBuild's
+// os.tmpdir() (src/adapter.ts:319) reads process.env too. Spawning with the
+// case's environment as the child's REAL process.env is what makes PATH,
+// TMPDIR, and git configuration hermetic.
+//
+// This file holds no logic beyond that translation. Anything else belongs in
+// src/commands/prepare.ts or in the suite.
+
+/** @type {typeof import("../../src/commands/prepare.js")} */
+const { runPrepare } = await import(
+  new URL("../../dist/commands/prepare.js", import.meta.url).href
+);
+
+const root = process.argv[2];
+if (root === undefined) {
+  process.stderr.write("prepare-child: missing package root argument\n");
+  process.exit(90);
+}
+
+process.exitCode = await runPrepare(process.argv.slice(3), {
+  root,
+  env: process.env,
+  stdout: process.stdout,
+  stderr: process.stderr,
+});

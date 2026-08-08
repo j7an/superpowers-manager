@@ -2,6 +2,7 @@
 // Unit tests for the bin's pure functions. Platform and env are injected so
 // the Windows dispatch path is testable without Windows.
 import * as assert from "node:assert";
+import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 /** @type {typeof import('../../src/cli.js')} */
@@ -176,6 +177,28 @@ for (const caller of ["install", "update"]) {
   );
 }
 
+// --- scripts/prepare outlives this slice ---
+// scripts/install:25 and scripts/update:23 still execute `scripts/prepare`, so
+// deleting it breaks both commands. Two couplings keep it alive: the lifecycle
+// test fakes stub SPW_ADAPTER, a seam only scripts/core/adapter.sh honours and
+// the in-process runAdapter does not; and ~20 prepare cases in
+// tests/baseline/cli-parity.test.js are calibrated against the synthetic
+// adapter at tests/fixtures/baseline/bin/stateful-adapter rather than a real
+// build. Slice 3.4 re-derives those cases and flips dispatch; slice 3.5
+// re-bases the fakes and deletes this script. Asserting the RELATIONSHIP
+// rather than a line number keeps this stable against edits to either caller.
+assert.ok(
+  fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", "prepare")),
+  "scripts/prepare is still executed by scripts/install and scripts/update",
+);
+for (const caller of ["install", "update"]) {
+  assert.match(
+    fs.readFileSync(path.join(REPOSITORY_ROOT, "scripts", caller), "utf8"),
+    /sh "\$root\/scripts\/prepare"/,
+    `scripts/${caller} must still invoke scripts/prepare`,
+  );
+}
+
 // --- isMain supports all declared Node 24.x releases and resolves bin symlinks ---
 const entryPath = fs.realpathSync(process.argv[1]);
 assert.strictEqual(bin.isMain(entryPath, process.argv[1]), true);
@@ -204,5 +227,40 @@ assert.ok(
   "install must require codex",
 );
 assert.ok(installPf.errors.join("\n").includes("git"));
+
+// --- the baseline sandbox refuses network egress through git ---
+// PR 11.5 slice 3. The in-process prepare CLONES, so any sandbox case that
+// forgets SUPERPOWERS_UPSTREAM_URL would reach the production default at
+// src/effective-selection.ts:66. Local paths must still pass through.
+{
+  const support = await import(
+    new URL("../baseline/support.js", import.meta.url).href
+  );
+  const sandbox = support.createSandbox();
+  try {
+    for (const remote of [
+      "https://example.invalid/repo.git",
+      "http://example.invalid/repo.git",
+      "git://example.invalid/repo.git",
+      "ssh://git@example.invalid/repo.git",
+      "git@example.invalid:owner/repo.git",
+    ]) {
+      const refused = cp.spawnSync(path.join(sandbox.bin, "git"), [
+        "ls-remote",
+        remote,
+      ]);
+      assert.notStrictEqual(refused.status, 0, `${remote} must be refused`);
+      assert.match(
+        String(refused.stderr),
+        /sandbox refuses network git remote/,
+        `${remote} must be refused by the shim, not by the network`,
+      );
+    }
+    const version = cp.spawnSync(path.join(sandbox.bin, "git"), ["--version"]);
+    assert.strictEqual(version.status, 0, "local git must pass through");
+  } finally {
+    support.destroySandbox(sandbox);
+  }
+}
 
 console.log("units.test.js: OK");
