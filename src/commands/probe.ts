@@ -200,7 +200,7 @@ type Inspection =
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
-// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:986).
+// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:993).
 // That is caught here rather than in runProbe's outer catch, because the two
 // need different diagnostics -- see spec §3.3a.
 async function inspect(
@@ -342,8 +342,15 @@ export async function runProbe(
 ): Promise<number> {
   // scripts/probe:42 tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
   // flag silently produced human output. Rejecting it is a deliberate
-  // narrowing, matching the strict arity slice 1 gave unpin and track-latest,
-  // and is recorded as a port-only entry in tests/migration-inventory/probe.md.
+  // narrowing, recorded as a port-only entry in
+  // tests/migration-inventory/probe.md.
+  //
+  // This guard is NOT the production path. src/cli.ts's parseArgs rejects the
+  // same inputs first, before preflight, with the usage block the CLI's other
+  // usage errors carry — exactly the arrangement track-latest and unpin have,
+  // where the in-module check is an unreachable-from-CLI duplicate. It stays
+  // because runProbe is also called directly by tests and by any future
+  // in-process caller that has not been through parseArgs.
   const porcelain = argv.length === 1 && argv[0] === "--porcelain";
   if (!porcelain && argv.length !== 0) {
     ctx.stderr.write(PROBE_USAGE);
@@ -358,7 +365,7 @@ export async function runProbe(
     // subordinate module's own diagnostic is the sanctioned form of
     // interpolation (AGENTS.md).
     //
-    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:986) does
+    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:993) does
     // NOT reach here: inspect() catches it and converts it to a hand-written
     // message, because a rethrown cause is exactly the failure src/adapter.ts
     // declined to own and its text must never reach this stream. See §3.3a.

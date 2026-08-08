@@ -167,6 +167,22 @@ function parseArgs(argv: string[]): ParseResult {
         message: `usage: superpowers-manager ${command}`,
       };
     }
+    // Arity lives HERE, not only in src/commands/probe.ts, so `probe` gets the
+    // same shape as every other CLI-owned usage error: `error: <msg>` plus the
+    // full usage block, exit 2, decided before preflight. Leaving it to the
+    // handler alone made `probe --porcelaine` print no usage block, and made
+    // the identical input exit 1 on a machine without `codex` because preflight
+    // ran first. `PROBE_USAGE` stays as the same unreachable-from-CLI duplicate
+    // that track-latest and unpin already carry.
+    if (
+      command === "probe" &&
+      !(args.length === 0 || (args.length === 1 && args[0] === "--porcelain"))
+    ) {
+      return {
+        kind: "usage-error",
+        message: "usage: superpowers-manager probe [--porcelain]",
+      };
+    }
     return { kind: "run", cmd: command, args };
   }
   return { kind: "usage-error", message: `unknown subcommand: ${first}` };

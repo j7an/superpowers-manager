@@ -64,10 +64,13 @@ const EXPECTED_KEYS = [
   "update_control",
 ];
 
-// The one place the frozen key list is written by hand. Everything else --
-// this suite's ordering test, the baseline driver, formatPorcelain itself --
-// derives from PROBE_PORCELAIN_KEYS, so this assertion is what actually pins
-// the contract to the 17 names scripts/probe:43-59 emits.
+// EXPECTED_KEYS is the one place the frozen key list is written by hand, and
+// the ordering test below compares against it for that reason -- NOT against
+// PROBE_PORCELAIN_KEYS, which is derived from the same fields() table
+// formatPorcelain walks and so could not catch the two moving together. Do not
+// "simplify" either assertion to reuse PROBE_PORCELAIN_KEYS: this one is what
+// pins the contract to the 17 names scripts/probe:43-59 emits, and the
+// ordering one is what pins formatPorcelain's output to the same list.
 void test("the exported key list is the frozen seventeen", () => {
   assert.deepEqual([...PROBE_PORCELAIN_KEYS], EXPECTED_KEYS);
 });

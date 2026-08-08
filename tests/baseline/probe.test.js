@@ -384,6 +384,7 @@ void test("semantically invalid installed provenance falls through to the manife
   });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
   assert.match(result.stdout, new RegExp(`^installed_commit=${SHORT}$`, "m"));
   assert.match(result.stdout, /^status=current$/m);
 });
@@ -416,6 +417,7 @@ void test("no active plugin yields a null fingerprint and needs install", async 
   );
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
   assert.match(result.stdout, /^installed_commit=$/m);
   assert.match(result.stdout, /^status=needs install$/m);
 });
@@ -429,6 +431,7 @@ void test("an absent installed manifest also yields a null fingerprint", async (
   });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
   assert.match(result.stdout, /^installed_commit=$/m);
   assert.match(result.stdout, /^status=needs install$/m);
 });
@@ -439,6 +442,7 @@ void test("stale generated provenance outranks a null installed fingerprint", as
   seedCodex(c, { pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS] });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
   assert.match(
     result.stdout,
     new RegExp(`^generated_commit=${"0".repeat(40)}$`, "m"),
@@ -453,6 +457,7 @@ void test("malformed generated provenance reads as absent rather than aborting",
   seedCodex(c, { pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS] });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, /^generated_commit=$/m);
   assert.match(result.stdout, /^installed_commit=$/m);

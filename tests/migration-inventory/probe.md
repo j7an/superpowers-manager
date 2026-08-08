@@ -332,6 +332,17 @@ strict cluster above.
 
 ### `test_probe_commands`: a dash-prefixed local source (`:479-499`)
 
+**Narrowing, recorded for honesty (slice 2 fix wave).** The port's
+dash-prefixed source is `join(c.dir, "-upstream")`
+(`tests/baseline/probe.test.js:284`) — an *absolute path* whose basename
+begins with `-`. `git` therefore never receives a token it could read as an
+option, and the `--` terminator is not load-bearing in these cases. Items
+86-89 are unaffected: they assert selection mode, effective source, and
+`saved_source`, none of which depend on the terminator. Item 90, the one that
+was about `--` placement, is retired below on a structural rationale. The
+case that does put a bare relative `-upstream` on a Git command line is
+`tests/baseline/selection-commands.test.js:504-542`.
+
 86. A `track-latest` selection over a dash-prefixed source reports the
     manifest short SHA and stays current (`:494`, one
     `assert_probe_porcelain` call site). Port:
@@ -474,14 +485,29 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
 
 <!-- inventory:port-only:start -->
 
-1. Strict trailing-argument rejection (`src/commands/probe.ts:347-351`).
-   `scripts/probe:42` tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
-   flag silently produced human output and a trailing argument was ignored
-   outright. The TypeScript entry point accepts exactly `[]` or
-   `["--porcelain"]` and otherwise writes `PROBE_USAGE` and returns 2, the
-   same strict arity slice 1 gave `unpin` and `track-latest`. Port:
-   `tests/unit/commands-probe.test.js:131` ("an unrecognised argument is a
-   usage error on stderr").
+1. Strict argument rejection. `scripts/probe:42` tested only
+   `[ "${1:-}" = "--porcelain" ]`, so a typo'd flag silently produced human
+   output and a trailing argument was ignored outright. The port accepts
+   exactly `[]` or `["--porcelain"]` and otherwise emits a usage error and
+   exits 2.
+
+   **Corrected in the slice 2 fix wave.** This entry previously cited only
+   `src/commands/probe.ts:347-351` and claimed parity with the strict arity
+   slice 1 gave `unpin` and `track-latest`. That was wrong on both counts: the
+   handler-side guard writes `PROBE_USAGE` alone, with no usage block, and it
+   runs *after* preflight — so on a machine without `codex` the same input
+   exited 1, not 2. `unpin` and `track-latest` get their arity from
+   `parseArgs`. The production path is now `src/cli.ts`'s `parseArgs` `probe`
+   branch, which returns a `usage-error` before preflight and makes `main()`
+   print `error: usage: superpowers-manager probe [--porcelain]` followed by
+   the full usage block. `PROBE_USAGE` survives as the same
+   unreachable-from-CLI duplicate its two siblings carry.
+
+   Ports: `tests/bin/units.test.js` (four `parseArgs` usage-error inputs plus
+   the exact message), `tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01`
+   (two end-to-end rows, plus a standalone block with `codex` genuinely absent
+   that pins the before-preflight ordering), and
+   `tests/unit/commands-probe.test.js:131` for the handler-side duplicate.
 2. The absent invocation workspace. `assert_probe_tmp_empty`
    (`tests/test_probe.sh:377-383`) asserted that the `TMPDIR` handed to
    `scripts/probe` held nothing afterwards, which covered both probe's own

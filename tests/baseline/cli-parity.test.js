@@ -173,8 +173,10 @@ function createReleaseRepo(sandbox, name = "upstream") {
 
 /**
  * A `codex` that answers the two listing commands the in-process probe's
- * adapter views issue (`src/adapter.ts:787`, `:861`, `:873`) with empty
- * inventories, and rejects anything else. `writeNoopTool`'s `exit 0` stub is
+ * adapter views issue (`src/adapter.ts:781`, `:855`, `:867` — the argument
+ * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
+ * `tests/migration-inventory/probe.md` cite them) with empty inventories, and
+ * rejects anything else. `writeNoopTool`'s `exit 0` stub is
  * enough for a preflight lookup but not for a command that actually reads
  * Codex state: probe fails closed on its unparseable empty output.
  * @param {Sandbox} sandbox
@@ -670,6 +672,17 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
       args: ["unpin", "extra"],
       diagnostic: "usage: superpowers-manager unpin",
     },
+    // PR 11.5 slice 2. `probe`'s arity is decided in parseArgs, so a typo'd
+    // flag gets the usage block and exit 2 like every other CLI usage error.
+    // The separate block below proves it is decided before preflight.
+    {
+      args: ["probe", "--porcelaine"],
+      diagnostic: "usage: superpowers-manager probe [--porcelain]",
+    },
+    {
+      args: ["probe", "--porcelain", "extra"],
+      diagnostic: "usage: superpowers-manager probe [--porcelain]",
+    },
   ];
 
   withSandbox({ stubScripts: true }, (sandbox) => {
@@ -681,6 +694,25 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
       assert.equal(result.stderr, `error: ${diagnostic}\n${USAGE}`);
       assert.deepEqual(readDispatchLog(sandbox), []);
     }
+  });
+
+  // A `probe` usage error is decided before preflight. No SPW_ADAPTER override
+  // here, so runCli's lazy writeNoopTool never fires and `codex` — which
+  // COMMAND_REQUIREMENTS.probe still requires — is genuinely absent. If the
+  // arity check lived only in runProbe, preflight would reach it first and
+  // this would be exit 1 with the missing-codex diagnostic.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    assert.equal(existsSync(join(sandbox.bin, "codex")), false);
+    const result = runCli(sandbox, ["probe", "--porcelaine"], {
+      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+    });
+    assertCleanResult(result, 2);
+    assert.equal(result.stdout, "");
+    assert.equal(
+      result.stderr,
+      `error: usage: superpowers-manager probe [--porcelain]\n${USAGE}`,
+    );
+    assert.deepEqual(readDispatchLog(sandbox), []);
   });
 });
 
@@ -1609,7 +1641,17 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   seedCodex(c, {});
   // No generated tree is seeded, so the expected status is "needs prepare" —
   // the same state the shell version asserted after a fresh `pin`.
-  const before = snapshotTree(c.pkg);
+  //
+  // BOTH roots, not just the package. The contract names five state kinds —
+  // selection, generated, cache, adapter, Codex — and only *generated* lives
+  // under c.pkg. caseEnv puts SUPERPOWERS_CONFIG_DIR (selection) and
+  // SUPERPOWERS_INSTALLED_SEARCH_ROOT (Codex) under c.home, so a probe that
+  // wrote selection state or a cache there would have passed a c.pkg-only
+  // snapshot. tests/baseline/probe.test.js:358-359 pairs the same two roots,
+  // narrowed to c.home/.codex; c.home is used whole here so selection and any
+  // stray cache are covered too.
+  const pkgBefore = snapshotTree(c.pkg);
+  const homeBefore = snapshotTree(c.home);
   const out = capture();
   const err = capture();
   const status = await runProbe(["--porcelain"], {
@@ -1627,7 +1669,8 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   assert.match(out.text(), /^desired_commit=[0-9a-f]{40}$/m);
   assert.match(out.text(), /^status=needs prepare$/m);
   assert.equal(err.text(), "");
-  assert.deepEqual(snapshotTree(c.pkg), before);
+  assert.deepEqual(snapshotTree(c.pkg), pkgBefore, "package root");
+  assert.deepEqual(snapshotTree(c.home), homeBefore, "case HOME");
 });
 
 void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", () => {
