@@ -162,7 +162,7 @@ void test("runPrepare rejects a directory as the fallback manifest template", as
   );
 });
 
-void test("runPrepare rejects a directory as the additional validator", async () => {
+void test("runPrepare emits no errno or multi-line git text when the clone fails before reaching the additional validator", async () => {
   const dir = mkdtempSync(join(SCRATCH, "case-"));
   const template = join(dir, "template.json");
   writeFileSync(template, '{"name":"superpowers"}\n');
@@ -174,9 +174,11 @@ void test("runPrepare rejects a directory as the additional validator", async ()
   });
   const status = await runPrepare([], ctx);
   assert.equal(status, 1);
-  // The clone of a nonexistent upstream fails first, so assert only that no
-  // errno or raw git text reached the stream. The validator's own -f rejection
-  // is exercised end-to-end in tests/baseline/prepare.test.js.
+  // The clone of a nonexistent upstream fails first, so the validator's own
+  // -f branch (a directory at SUPERPOWERS_VALIDATOR) is never reached here --
+  // that predicate is exercised end-to-end in tests/baseline/prepare.test.js.
+  // This case only asserts that no errno, stack frame, or multi-line git text
+  // reached the stream.
   assert.doesNotMatch(err.text(), /ENOENT|errno|Error:|\n.*\n.*\n/);
 });
 

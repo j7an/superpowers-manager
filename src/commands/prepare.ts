@@ -518,18 +518,25 @@ export async function runPrepare(
     //   - readManifest's three hookError messages (src/hooks.ts:109-134),
     //     pinned by tests/unit/hooks.test.js:95 as carrying no reader
     //     vocabulary or errno.
-    //   - SafetyErrors from computeEffectiveSelection, gitSafeSource,
-    //     writeProvenance, and withWorkspace.
+    //   - SafetyErrors from gitSafeSource, writeProvenance, and withWorkspace.
     //
-    // TWO exceptions, both inherited and neither a regression:
-    //   1. fetchExactCommit splices git's combined stdout+stderr into its own
-    //      text (src/upstream.ts:334, :349, and proveCommit via :262), so the
-    //      PINNED path can put raw git output on this stream. scripts/prepare
-    //      piped the same text through spw_upstream_cli's
-    //      `spw_die "${_upstream_out#error: }"`. oneLine() collapses it to one
-    //      line, containing the harm to one line of git text rather than the
-    //      arbitrarily many the shell original allowed.
-    //   2. Every runGit call site in this module (fetch, clone, checkout) can
+    // FOUR exceptions, all inherited and none a regression:
+    //   1. resolveRef splices git's combined stdout+stderr into its own text
+    //      on the NON-PINNED path (src/upstream.ts:150, :175, :191), reached
+    //      via computeEffectiveSelection (src/effective-selection.ts:133).
+    //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
+    //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
+    //      by tests/unit/upstream.test.js:460-469, :471-481, and :483-501.
+    //   2. fetchExactCommit splices the same combined stdout+stderr into its
+    //      own text on the PINNED path (src/upstream.ts:334, :349, and
+    //      proveCommit via :262). This is the rarer of the two raw-git-output
+    //      paths, not the only one.
+    //   3. src/selection-store.ts:124 (same shape at :49, :86, :98)
+    //      interpolates the caught error's own message, so Node errno prose
+    //      (e.g. "EACCES: permission denied, open '<path>'") can reach this
+    //      stream. AGENTS.md explicitly grandfathers this module's wording,
+    //      so this is sanctioned behaviour -- nothing here needs fixing.
+    //   4. Every runGit call site in this module (fetch, clone, checkout) can
     //      reject instead of resolving: src/git.ts:47-51 wraps every string
     //      errno other than ENOENT in
     //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
@@ -540,6 +547,12 @@ export async function runPrepare(
     //      *spawn-level* failure -- runGit throws rather than returning a
     //      status in that case, and this outer catch is what stands between
     //      it and the stream.
+    //
+    // scripts/prepare piped comparable text through spw_upstream_cli's
+    // `spw_die "${_upstream_out#error: }"`, and oneLine() here collapses each
+    // of exceptions 1, 2, and 4 to one line, containing the harm to one line
+    // of git text rather than the arbitrarily many the shell original
+    // allowed.
     //
     // runAdapter's rethrow (src/adapter.ts:993) does NOT arrive here -- the
     // call site catches it and converts it to a hand-written message.

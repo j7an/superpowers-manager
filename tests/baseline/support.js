@@ -137,6 +137,18 @@ const PATH_ENVIRONMENT_VARIABLES = new Set([
   "SPW_BASELINE_VALIDATOR_MARKER",
 ]);
 
+/**
+ * POSIX single-quotes `value` for interpolation into a generated shell
+ * script, escaping any embedded single quote as `'\''`. Unlike
+ * `JSON.stringify`, the result is inert inside single quotes: `$`, backticks,
+ * and literal control characters cannot trigger expansion or re-encode into a
+ * different byte sequence.
+ * @param {string} value
+ */
+function shQuote(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 /** @param {string} name */
 function hostExecutable(name) {
   if (name === "node") return realpathSync(process.execPath);
@@ -468,8 +480,16 @@ function writeNoopTool(sandbox, name = "codex") {
  * once `probe` went in-process. `prepare` is worse — it clones. A gate that
  * pattern-matches test source for "sites that reach prepare" is brittle and
  * cannot see indirect reachability; this sits at the egress point instead,
- * alongside GIT_CONFIG_NOSYSTEM, the private HOME, and the private TMPDIR that
- * already make this sandbox a containment boundary.
+ * alongside GIT_CONFIG_NOSYSTEM, the private HOME, and the private TMPDIR, as
+ * best-effort egress refusal for `createSandbox` consumers -- not a
+ * containment boundary. Known gaps: the pattern list matches only `git@*:*`
+ * for SSH shorthand, so scp-style `host:path` and `user@host:path` remotes
+ * pass through unmatched; and a scheme glob only matches when the URL is the
+ * whole argument at its own position, so `-c url.https://x.insteadOf=…` (URL
+ * embedded mid-argument) and `rsync://` both slip through. This branch's own
+ * prepare driver does not rely on this shim at all -- it uses the host PATH
+ * `git` and is protected instead by prepare-fixture.js's assertion that
+ * SUPERPOWERS_UPSTREAM_URL is an absolute local path.
  *
  * Local paths are byte-identical: the shim only ADDS a rejection.
  * @param {string} bin
@@ -488,7 +508,7 @@ function writeGitEgressShim(bin) {
       "      ;;",
       "  esac",
       "done",
-      `exec ${JSON.stringify(real)} "$@"`,
+      `exec ${shQuote(real)} "$@"`,
       "",
     ].join("\n"),
     { mode: 0o755 },
