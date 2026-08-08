@@ -30,6 +30,11 @@ const DECLARED = {
   "install-commands.md": ["tests/bin/install-commands.test.js"],
   "node-tooling.md": ["tests/bin/node-tooling.test.js"],
   "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.js"],
+  "prepare.md": [
+    "tests/baseline/prepare.test.js",
+    "tests/unit/commands-prepare.test.js",
+    "tests/unit/atomic.test.js",
+  ],
   "probe.md": [
     "tests/baseline/probe.test.js",
     "tests/unit/commands-probe.test.js",
