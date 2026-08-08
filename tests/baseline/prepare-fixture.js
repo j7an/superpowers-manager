@@ -12,7 +12,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRATCH } from "../bin/lifecycle-fixture.js";
 
@@ -39,13 +39,43 @@ const IDENTITY = [
   "tag.gpgsign=false",
 ];
 
+// Hermeticity for the fixture's OWN git, not just the subject's. The IDENTITY
+// flags above cover identity and signing, but `core.excludesFile`,
+// `init.templateDir`, `core.hooksPath`, and `gc.auto` all change what this
+// repository ends up containing, so inheriting the developer's global and system
+// config makes the fixture tree machine-dependent — and cases 5 and 6 compare
+// that tree against committed layout fixtures byte-for-byte.
+//
+// It also closes the last open lead on the unexplained case-11 clone failure: a
+// machine with a low `gc.auto` would let `gc.autoDetach`'s background repack run
+// against UPSTREAM while a clone reads it, which is the right shape for a rare
+// local-clone failure.
+//
+// GIT_CONFIG_GLOBAL deliberately names a path that does not exist; git reads an
+// absent file as "no global config" rather than as an error. Same arrangement as
+// the child environment caseEnv builds below.
+const GIT_HOME = join(SCRATCH, "fixture-git-home");
+const GIT_TMP = join(SCRATCH, "fixture-git-tmp");
+mkdirSync(GIT_HOME, { recursive: true });
+mkdirSync(GIT_TMP, { recursive: true });
+const GIT_ENV = {
+  HOME: GIT_HOME,
+  PATH: process.env.PATH ?? "",
+  TMPDIR: GIT_TMP,
+  GIT_CONFIG_GLOBAL: join(GIT_HOME, "gitconfig"),
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
 /**
  * @param {string} repo
  * @param {string[]} args
  * @returns {string}
  */
 function git(repo, args) {
-  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+  const result = spawnSync("git", ["-C", repo, ...args], {
+    encoding: "utf8",
+    env: GIT_ENV,
+  });
   assert.equal(
     result.status,
     0,
@@ -55,7 +85,45 @@ function git(repo, args) {
 }
 
 /**
- * Seven branches, built once. The base commit is deliberately manifest-less so
+ * The fixture's own view of a repository, for an assertion message.
+ * src/commands/prepare.ts:330-335 names only the source when a clone fails and
+ * discards git's output by contract, so a case whose clone fails for an
+ * unexpected reason cannot say why. This does not change that contract; it adds
+ * the fixture's side of the story to the failure message. Deliberately does not
+ * go through `git()` above: every command here is expected to be able to fail.
+ * @param {string} repository
+ * @returns {string}
+ */
+export function describeRepository(repository) {
+  /** @param {string[]} args */
+  const attempt = (args) => {
+    const result = spawnSync("git", ["-C", repository, ...args], {
+      encoding: "utf8",
+      env: GIT_ENV,
+    });
+    const output = (result.stderr || result.stdout || "").trim();
+    return `  git ${args.join(" ")}: status=${result.status} ${output.replaceAll("\n", " | ")}`;
+  };
+  return [
+    `fixture repository ${repository}`,
+    attempt(["rev-parse", "HEAD"]),
+    attempt(["fsck"]),
+  ].join("\n");
+}
+
+/**
+ * The hook paths the `hooks-string-array` branch declares AND writes. Exported
+ * so the suite asserts the same two strings the fixture wrote rather than its
+ * own copy of them — the manifest value and the files on disk have to agree, and
+ * two literals in two files cannot be kept in agreement by anything.
+ */
+export const DECLARED_HOOK_PATHS = [
+  "./config/hooks-first.json",
+  "./alternate/hooks-second.json",
+];
+
+/**
+ * Eight branches, built once. The base commit is deliberately manifest-less so
  * `v5.0.0` serves GENERATED-FALLBACK-01; every other branch adds a manifest on
  * top of it.
  * @returns {string}
@@ -110,7 +178,10 @@ function buildUpstream() {
   writeFileSync(join(upstream, "README.md"), "readme\n");
   writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "code\n");
 
-  const init = spawnSync("git", ["init", upstream], { encoding: "utf8" });
+  const init = spawnSync("git", ["init", upstream], {
+    encoding: "utf8",
+    env: GIT_ENV,
+  });
   assert.equal(init.status, 0, `fixture git init failed: ${init.stderr}`);
   git(upstream, ["add", "."]);
   git(upstream, [
@@ -170,21 +241,13 @@ function buildUpstream() {
     const declared = JSON.parse(
       readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
     );
-    declared.hooks = [
-      "./config/hooks-first.json",
-      "./alternate/hooks-second.json",
-    ];
+    declared.hooks = [...DECLARED_HOOK_PATHS];
     writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
-    mkdirSync(join(upstream, "config"), { recursive: true });
-    mkdirSync(join(upstream, "alternate"), { recursive: true });
-    writeFileSync(
-      join(upstream, "config", "hooks-first.json"),
-      '{"fixture":"first"}\n',
-    );
-    writeFileSync(
-      join(upstream, "alternate", "hooks-second.json"),
-      '{"fixture":"second"}\n',
-    );
+    for (const relative of DECLARED_HOOK_PATHS) {
+      const target = join(upstream, relative);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, `${JSON.stringify({ fixture: relative })}\n`);
+    }
   });
   branchWith("manifest-no-hooks", () => {
     copyFileSync(join(MANIFESTS, "upstream-no-hooks.json"), manifest);

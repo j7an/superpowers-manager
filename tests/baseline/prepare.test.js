@@ -26,6 +26,8 @@ import {
   caseEnv,
   cloneUpstream,
   commitOf,
+  DECLARED_HOOK_PATHS,
+  describeRepository,
   prepare,
   REFS,
   UPSTREAM,
@@ -51,20 +53,26 @@ const cacheRepo = (c) => join(c.dir, "cache", "superpowers");
 /** @param {CaseEnv} c */
 const cacheManifest = (c) => join(cacheRepo(c), ".codex-plugin", "plugin.json");
 
-// An errno name always appears as a whole token — `ENOENT: no such file`,
-// `Error: EACCES`. The word boundaries are load-bearing, not cosmetic:
+// Errno names are ENUMERATED rather than matched as a pattern, because no
+// pattern over `E[A-Z]+` can tell an errno from the other two kinds of token
+// this assertion runs against:
 //
 //   - `LICENSE` is one of the four required upstream paths, and
-//     `required upstream path missing: LICENSE` legitimately names it. Without
-//     `\b`, `E[A-Z]{3,}` matches the `ENSE` inside it and the case cannot pass.
-//   - mkdtempSync draws its six-character suffix from [A-Za-z0-9], so roughly
-//     one suffix in 280 contains an `E` followed by three more capitals. Every
-//     diagnostic here names a path under such a directory, so the unanchored
-//     form carries a several-percent false-failure rate per run.
+//     `required upstream path missing: LICENSE` legitimately names it. A bare
+//     `E[A-Z]{3,}` matches the `ENSE` inside it, so case 11 cannot pass.
+//   - every diagnostic here names a path under an mkdtempSync directory, and
+//     those six-character [A-Za-z0-9] suffixes are preceded by `-` or `.` —
+//     both non-word characters. So `\bE[A-Z]{3,}\b` still matches a suffix that
+//     happens to be `E` plus five capitals: measured at 2.3e-4 per suffix, and
+//     with ~14 independent draws inside exact-equality diagnostics that is
+//     ~0.3% per suite run. A 1-in-330 false failure gets blamed on something
+//     else when it fires.
 //
-// Neither boundary weakens the guard: a leaked errno, stack frame, or Traceback
-// banner still matches.
-const LEAKED_INTERNALS = /\bE[A-Z]{3,}\b|errno|\bat .*\.js:\d+|Traceback/;
+// The enumeration removes that class outright and additionally catches `EIO`,
+// which neither pattern form matched. Extend the list rather than loosening it
+// back into a pattern.
+const LEAKED_INTERNALS =
+  /\b(ENOENT|EACCES|EPERM|EEXIST|ENOTDIR|EISDIR|EBUSY|ENOTEMPTY|ELOOP|ENAMETOOLONG|EMFILE|ENFILE|EROFS|EXDEV|EIO|EAGAIN)\b|errno|\bat .*\.js:\d+|Traceback/;
 
 /**
  * No prepare-owned diagnostic may carry errno text, a stack frame, or reader
@@ -308,10 +316,8 @@ void test("GENERATED-HOOKS-DECLARED-01 GENERATED-UNKNOWN-FIELDS-01 declared hook
   const many = createCase({ fakes: "probe" });
   const declared = await prepare(many, { SUPERPOWERS_REF: REFS.declaredHooks });
   assert.equal(declared.status, 0, declared.stderr);
-  assert.deepEqual(generatedManifest(many).hooks, [
-    "./config/hooks-first.json",
-    "./alternate/hooks-second.json",
-  ]);
+  // Taken from the fixture that wrote them, never re-typed here.
+  assert.deepEqual(generatedManifest(many).hooks, DECLARED_HOOK_PATHS);
   assert.deepEqual(
     generatedManifest(many).x_future_manifest,
     upstreamManifest.x_future_manifest,
@@ -432,11 +438,18 @@ void test("prepare rejects an upstream missing any required path", async () => {
       SUPERPOWERS_UPSTREAM_URL: source,
       SUPERPOWERS_REF: commit,
     });
-    assert.equal(result.status, 1, result.stdout);
-    assert.equal(
-      result.stderr,
-      `error: required upstream path missing: ${label}\n`,
-    );
+    // src/commands/prepare.ts:330-335 names only the source when a clone fails
+    // and discards git's output by contract, so an unexpected failure here
+    // cannot say why on its own. Attach the fixture's own view of the source —
+    // computed only once the expectation has already failed, so a passing run
+    // pays for no extra git processes.
+    const expected = `error: required upstream path missing: ${label}\n`;
+    const diagnosis =
+      result.status === 1 && result.stderr === expected
+        ? ""
+        : `\n${describeRepository(source)}`;
+    assert.equal(result.status, 1, `${result.stdout}${diagnosis}`);
+    assert.equal(result.stderr, expected, `${result.stderr}${diagnosis}`);
     assertNoLeakedInternals(result.stderr);
     assert.deepEqual(snapshotTree(generated(c)), before);
   }
@@ -601,6 +614,10 @@ void test("prepare reports an unreadable upstream manifest without an errno", as
   const before = snapshotTree(generated(c));
 
   const manifest = cacheManifest(c);
+  // Captured, not assumed: the mode git checked the file out with belongs to
+  // git and the process umask, so a literal restore value would be this test
+  // asserting something it does not own.
+  const manifestMode = statSync(manifest).mode & 0o7777;
   chmodSync(manifest, 0o000);
   try {
     const result = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
@@ -612,7 +629,7 @@ void test("prepare reports an unreadable upstream manifest without an errno", as
     assertNoLeakedInternals(result.stderr);
     assert.deepEqual(snapshotTree(generated(c)), before);
   } finally {
-    chmodSync(manifest, 0o644);
+    chmodSync(manifest, manifestMode);
   }
 });
 
@@ -704,6 +721,8 @@ void test("prepare reports a failed upstream copy without an errno", async () =>
   const before = snapshotTree(generated(c));
 
   const skill = join(cacheRepo(c), "skills", "brainstorming");
+  // Captured for the same reason as the unreadable-manifest case above.
+  const skillMode = statSync(skill).mode & 0o7777;
   chmodSync(skill, 0o000);
   try {
     const result = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
@@ -715,7 +734,7 @@ void test("prepare reports a failed upstream copy without an errno", async () =>
     assertNoLeakedInternals(result.stderr);
     assert.deepEqual(snapshotTree(generated(c)), before);
   } finally {
-    chmodSync(skill, 0o755);
+    chmodSync(skill, skillMode);
   }
 });
 
@@ -754,12 +773,28 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   assertNoLeakedInternals(fetched.stderr);
   assert.deepEqual(snapshotTree(generated(env)), before);
 
-  // Pinned: fetchExactCommit splices git's combined output into its own message
-  // at src/upstream.ts:334, :349, and through proveCommit at :262 — inherited
-  // from spw_upstream_cli's `spw_die "${_upstream_out#error: }"`, not a
-  // regression. oneLine() is what bounds the harm, so the contract this half
-  // can state is containment: however many lines git wrote, the whole stream is
-  // exactly one line.
+  // Pinned: this reaches fetchExactCommit. NOTE what actually happens, because
+  // it is not what the splice sites would suggest: proveCommit's fetch fails,
+  // `UNAVAILABLE_OBJECT_RE` does not match "does not appear to be a git
+  // repository", so the HAND-WRITTEN non-splicing branch (src/upstream.ts:277)
+  // wins and git's five lines are DISCARDED by the callee. oneLine() is not what
+  // bounds this output.
+  //
+  // fetchExactCommit does hold three splice sites — src/upstream.ts:334, :349,
+  // and proveCommit's init at :262, inherited from spw_upstream_cli's
+  // `spw_die "${_upstream_out#error: }"` and not a regression — but no
+  // externally constructible input reaches any of them. Four shapes were tried:
+  // a regular file as the cache repository, `.git` as a regular file, an empty
+  // `.git` directory, and a read-only `.git/objects`. Every one either fails
+  // earlier or makes git emit a single `fatal:` line, so a multi-line splice
+  // cannot be built from outside the process. Pinning the collapse itself needs
+  // an injected git result in a src/upstream.ts unit test, not this driver.
+  // Do not re-derive that list; extend it.
+  //
+  // So this half asserts the exact message, which is strictly stronger than the
+  // single-line shape check the task text asked for. The same string is already
+  // pinned at tests/unit/upstream.test.js:404 and
+  // tests/baseline/selection-commands.test.js:645.
   const pinned = createCase({ fakes: "probe" });
   const pinnedBefore = seedSentinel(pinned);
   const pinnedHostile = nonRepository(pinned);
@@ -775,11 +810,9 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
     SUPERPOWERS_UPSTREAM_URL: pinnedHostile,
   });
   assert.equal(result.status, 1, result.stdout);
-  assert.equal(result.stderr.split("\n").filter(Boolean).length, 1);
-  assert.match(result.stderr, /^error: [^\n]*\n$/);
   assert.equal(
-    result.stderr.includes("does not appear to be a git repository"),
-    false,
+    result.stderr,
+    `error: cannot fetch requested commit from ${pinnedHostile}\n`,
   );
   assertNoLeakedInternals(result.stderr);
   assert.deepEqual(snapshotTree(generated(pinned)), pinnedBefore);
