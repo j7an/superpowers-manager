@@ -34,6 +34,7 @@ dist/safety-error.js
 dist/selection-state-cli.js
 dist/selection-store.js
 dist/selection.js
+dist/status.js
 dist/strict-json.js
 dist/upstream-cli.js
 dist/upstream-version.js
