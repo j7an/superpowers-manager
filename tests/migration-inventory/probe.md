@@ -359,16 +359,37 @@ strict cluster above.
     injected the value through the recording `SPW_ADAPTER` (`:216-227`).
     In-process, `runInspect` answers the `update-control` view itself and
     returns the literal `managed` (`src/adapter.ts:765-767`), so no seam to
-    inject through survives. Update-control reporting is covered by
-    `tests/unit/adapter-protocol.test.js` and
-    `tests/test_adapter_protocol.sh`; slice 5 owns the disposition of that
-    pair.
+    inject through survives.
+
+    **Slice 5, read this before retiring anything.** The single surviving
+    witness in the repository that any inspection can report
+    `update_control=unsupported` at all is `tests/test_adapter_protocol.sh:99-101`
+    (the `update-control-unsupported` adapter fixture). **There is no
+    TypeScript counterpart yet**: `tests/unit/adapter-protocol.test.js`
+    contains exactly three tests — command byte escaping (`:36`), message-log
+    splitting (`:63`), and serializer shape (`:76`) — and not one occurrence
+    of `update-control`, `update_control`, or `unsupported`. Retiring that
+    shell suite without first porting `:99-101` would delete the property
+    outright.
+
+    Three nearby suites look like substitutes and are not. Each writes
+    `unsupported` into a stubbed adapter *state* to prove a command **refuses
+    to act** on it, which is gating, not reporting:
+    `tests/baseline/cli-parity.test.js:1595-1615` (`UPDATE-CONTROL-01`,
+    `update` refuses), `tests/bin/install-commands.test.js:504`/`:536`, and
+    `tests/bin/uninstall-commands.test.js:223`. None of them exercises an
+    inspection producing the value.
 93. A malformed update-control inspection is an operational failure
-    (`:513-516`). **Retired**: same injection seam, same covering suites,
-    same slice-5 disposition owner. What is *not* lost is the general
-    fail-closed property for a malformed inspection response — the port drives
-    it through the fingerprint view instead, in
-    `tests/baseline/probe.test.js`'s `PROBE-FAIL-CLOSED-01` clause 2.
+    (`:513-516`). **Retired**: same injection seam, same slice-5 disposition
+    owner. Nothing witnesses the `update-control`-specific injection any more,
+    because the seam is gone; the nearest adapter-layer neighbour,
+    `tests/test_adapter_protocol.sh:111-123`, drives a *controlled failure*
+    envelope for that view rather than an unparseable one. What is *not* lost
+    is the general fail-closed property for a malformed inspection response:
+    the port drives it through the fingerprint view in
+    `tests/baseline/probe.test.js`'s `PROBE-FAIL-CLOSED-01` clause 2, and the
+    validator-layer rejection of a truncated envelope is pinned by
+    `tests/test_adapter_protocol.py:608-618`.
 94. A malformed `selection.json` fails before Git and adapter access
     (`:540`, one `assert_preflight_failure` call site bundling four checks).
     Port: `tests/baseline/probe.test.js`'s `PROBE-FAIL-CLOSED-01`, first
