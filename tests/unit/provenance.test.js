@@ -1,8 +1,8 @@
 // @ts-check
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 /** @type {typeof import("../../src/provenance.js")} */
@@ -12,6 +12,8 @@ const {
   readStrictProvenanceField,
   serializeProvenance,
   writeProvenance,
+  generatedMetadataPath,
+  generatedCommitOrEmpty,
 } = await import(new URL("../../dist/provenance.js", import.meta.url).href);
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -192,4 +194,31 @@ void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
     await writeProvenance(output, record);
     assert.deepEqual(await readFile(output), expected, fixture);
   }
+});
+
+void test("generatedCommitOrEmpty reads the generated tree's provenance", async (t) => {
+  const directory = await sandbox(t);
+  const metadata = join(
+    directory,
+    "plugins",
+    "superpowers",
+    ".superpowers-upstream.json",
+  );
+  assert.equal(
+    generatedMetadataPath(directory),
+    metadata,
+    "the metadata path must match scripts/core/lifecycle.sh:28-31",
+  );
+
+  // Absent tree: empty, not a throw. scripts/core/lifecycle.sh:33-37 relied on
+  // the lenient reader so `probe` can report "needs prepare" instead of
+  // aborting the remediation path.
+  assert.equal(await generatedCommitOrEmpty(directory), "");
+
+  await mkdir(dirname(metadata), { recursive: true });
+  await writeFile(metadata, `{"commit":"${commit}"}`);
+  assert.equal(await generatedCommitOrEmpty(directory), commit);
+
+  await writeFile(metadata, "{");
+  assert.equal(await generatedCommitOrEmpty(directory), "");
 });

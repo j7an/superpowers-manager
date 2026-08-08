@@ -59,9 +59,30 @@ for (const argv of [
   ["pin", "a", "b"],
   ["track-latest", "x"],
   ["unpin", "x"],
+  // PR 11.5 slice 2: probe's arity is CLI-owned, so a typo'd flag, a stray
+  // positional, and a repeated flag are all usage errors here rather than
+  // reaching runProbe. `:88`'s loop below still asserts that bare `probe`
+  // parses as a run, and `:18` that `probe --porcelain` does.
+  ["probe", "--porcelaine"],
+  ["probe", "extra"],
+  ["probe", "--porcelain", "extra"],
+  ["probe", "--porcelain", "--porcelain"],
 ]) {
-  assert.strictEqual(bin.parseArgs(argv).kind, "usage-error");
+  assert.strictEqual(
+    bin.parseArgs(argv).kind,
+    "usage-error",
+    `${argv.join(" ")} must be a usage error`,
+  );
 }
+// The exact message matters: main() prints `error: <message>` followed by the
+// full usage block, which is the half src/commands/probe.ts's PROBE_USAGE
+// cannot produce on its own.
+const probeUsage = bin.parseArgs(["probe", "--porcelaine"]);
+assert.strictEqual(probeUsage.kind, "usage-error");
+assert.strictEqual(
+  probeUsage.message,
+  "usage: superpowers-manager probe [--porcelain]",
+);
 assert.strictEqual(bin.parseArgs(["track-latest"]).kind, "run");
 assert.strictEqual(bin.parseArgs(["unpin"]).kind, "run");
 for (const cmd of ["prepare", "probe", "install", "update", "uninstall"]) {
@@ -96,15 +117,27 @@ assert.ok(help.includes("$XDG_CONFIG_HOME/superpowers-manager"));
 assert.ok(help.includes("$HOME/.config/superpowers-manager"));
 
 // --- buildSpawn: POSIX executes the script directly ---
+// Vehicle only. This asserts buildSpawn's path construction and argv
+// passthrough, not anything specific to `prepare`; it just has to name a
+// command DISPATCH still spawns. It moved off `probe` when slice 2 flipped it
+// in-process — a pure path computation keeps passing either way, so a stale
+// vehicle here would read as live coverage of a command that is no longer
+// spawned. It dies with buildSpawn in slice 4.
+//
+// The argv is arbitrary and stays non-empty on purpose: buildSpawn is a pure
+// function that forwards whatever it is handed, so passing `[]` here would
+// drop the passthrough half of the contract on the ground. What
+// `scripts/prepare` itself accepts is a fact about the script, not about
+// buildSpawn.
 const posix = bin.buildSpawn(
-  "probe",
-  ["--porcelain"],
+  "prepare",
+  ["--ref", "test"],
   "/root",
   "/bin/sh",
   "linux",
 );
-assert.strictEqual(posix.file, path.join("/root", "scripts", "probe"));
-assert.deepStrictEqual(posix.argv, ["--porcelain"]);
+assert.strictEqual(posix.file, path.join("/root", "scripts", "prepare"));
+assert.deepStrictEqual(posix.argv, ["--ref", "test"]);
 
 // --- buildSpawn: Windows dispatches through the discovered shell:
 // <shell> scripts/<cmd> [args...]. path.join is used on both sides so the
@@ -118,10 +151,30 @@ assert.deepStrictEqual(win.argv, [
 ]);
 
 // --- resolvePackageRoot walks up to package.json from the bin's real path ---
+const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const root = bin.resolvePackageRoot(
-  path.join(import.meta.dirname, "..", "..", "bin", "superpowers-manager.js"),
+  path.join(REPOSITORY_ROOT, "bin", "superpowers-manager.js"),
 );
-assert.strictEqual(root, path.resolve(import.meta.dirname, "..", ".."));
+assert.strictEqual(root, REPOSITORY_ROOT);
+
+// --- scripts/probe outlives this slice ---
+// scripts/install:18 and scripts/update:8 still execute `scripts/probe
+// --porcelain`, so deleting it breaks both commands before they reach their
+// lifecycle logic. Delete the script, its two callers' probe steps, and
+// tests/test_probe.sh together in the slice that ports install and update.
+// Asserting the RELATIONSHIP rather than a line number keeps this stable
+// against edits to either caller.
+assert.ok(
+  fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", "probe")),
+  "scripts/probe is still executed by scripts/install and scripts/update",
+);
+for (const caller of ["install", "update"]) {
+  assert.match(
+    fs.readFileSync(path.join(REPOSITORY_ROOT, "scripts", caller), "utf8"),
+    /scripts\/probe" --porcelain/,
+    `scripts/${caller} must still invoke scripts/probe`,
+  );
+}
 
 // --- isMain supports all declared Node 24.x releases and resolves bin symlinks ---
 const entryPath = fs.realpathSync(process.argv[1]);

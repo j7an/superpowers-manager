@@ -65,10 +65,24 @@ port has no direct JS counterpart for this item — the guarantee is structural
 
 ### Routing: each subcommand reaches its script with its args (`:71-103`)
 
-7. `probe --porcelain` → logs `probe --porcelain ref=` (`:73-74`). Port:
-   `:77`, `ROUTING_CASES[0]`.
+7. `probe --porcelain` → logs `probe --porcelain ref=` (`:73-74`). **Retired**
+   (PR 11.5 slice 2, Task 6): `probe` flipped to an in-process command
+   (`src/cli.ts` `DISPATCH.probe`), so it never invokes `scripts/probe` and
+   never logs to the dispatch log — the condition this item asserted can no
+   longer occur, in either direction. `probe` was removed from
+   `ROUTING_CASES`. Unlike items 9, 10, and 11, no standalone in-process case
+   replaces it *in this port file*: `runDispatch`'s tool stubs are `exit 0`
+   one-liners, and a `codex` that answers nothing is exactly what the
+   in-process probe fails closed on, so "succeeds without ever reaching its
+   script" is not writable through this fixture. The analogous property is
+   covered end to end by `tests/baseline/probe.test.js` (see
+   `tests/migration-inventory/probe.md`) and, at the routing level, by
+   `tests/baseline/cli-parity.test.js`'s `CLI-COMMANDS-01`, whose in-process
+   branch asserts `probe` succeeds and dispatches nothing.
 8. `prepare --ref test` → logs `prepare --ref test ref=` (`:76-78`). Port:
-   `:77`, `ROUTING_CASES[1]`.
+   `:80`, `ROUTING_CASES[0]`. **Index updated** (PR 11.5 slice 2, Task 6) from
+   `ROUTING_CASES[1]` to `[0]`: the table shrank when `probe` (formerly index
+   0) was removed — see item 7's retirement note.
 9. `pin v6.1.1` → logs `pin v6.1.1 ref=` (`:80-82`). **Retired** (PR 11.5,
     Task 7): `pin` flipped to an in-process command (`src/cli.ts`
     `DISPATCH.pin`), so it never invokes `scripts/pin` and never logs to the
@@ -101,19 +115,20 @@ port has no direct JS counterpart for this item — the guarantee is structural
     as port-only item 21, since it is a different property than "reaches its
     script with its args".
 12. `install --dry-run` → logs `install --dry-run ref=` (`:92-94`). Port:
-    `:77`, `ROUTING_CASES[2]`. **Index updated** (PR 11.5, Task 7) from
-    `ROUTING_CASES[3]` to `[2]`: the table shrank by one more when `pin`
-    (formerly index 2) was also removed — see item 9's retirement note.
-    (Task 6 had already updated this from `[4]` to `[3]` when `track-latest`
-    was removed — see item 10's retirement note. Task 5 had already updated
-    this from `[5]` to `[4]` when `unpin` was removed — see item 11's
-    retirement note.)
+    `:80`, `ROUTING_CASES[1]`. **Index updated** (PR 11.5 slice 2, Task 6)
+    from `ROUTING_CASES[2]` to `[1]`: the table shrank by one more when
+    `probe` (formerly index 0) was also removed — see item 7's retirement
+    note. (Slice 1's Task 7 had already updated this from `[3]` to `[2]` when
+    `pin` was removed — see item 9's retirement note. Its Task 6 had already
+    updated this from `[4]` to `[3]` when `track-latest` was removed — see
+    item 10's retirement note. Its Task 5 had already updated this from `[5]`
+    to `[4]` when `unpin` was removed — see item 11's retirement note.)
 13. `uninstall --purge` → logs `uninstall --purge ref=` (`:96-98`). Port:
-    `:77`, `ROUTING_CASES[3]`. **Index updated** (PR 11.5, Task 7) from
-    `ROUTING_CASES[4]` to `[3]`, same cause as item 12.
+    `:80`, `ROUTING_CASES[2]`. **Index updated** (PR 11.5 slice 2, Task 6)
+    from `ROUTING_CASES[3]` to `[2]`, same cause as item 12.
 14. A bare invocation routes to `update` → logs `update  ref=` (`:101-103`).
-    Port: `:77`, `ROUTING_CASES[4]`. **Index updated** (PR 11.5, Task 7) from
-    `ROUTING_CASES[5]` to `[4]`, same cause as item 12.
+    Port: `:80`, `ROUTING_CASES[3]`. **Index updated** (PR 11.5 slice 2,
+    Task 6) from `ROUTING_CASES[4]` to `[3]`, same cause as item 12.
 
 Each of items 7-14 is one `grep -Fqx` in the shell. The port's per-case
 `assert.equal(result.status, 0)` at `:76` has no shell counterpart (the shell
@@ -154,7 +169,12 @@ and is not counted here.
 ### Exit-code propagation (`:138-145`)
 
 29. A script's exit code (`42`) propagates unchanged through `probe`
-    (`:144-145`). Port: `:162`.
+    (`:144-145`). Port: `:197`. The port's vehicle moved from `probe` to
+    `install` (PR 11.5 slice 2, Task 6): the property under test is that a
+    spawned child's status reaches the caller unchanged, and an in-process
+    command has no child whose status could propagate. The item stays mapped
+    — only the command carrying it changed — and the port carries an inline
+    comment saying so.
 
 ### Env passthrough (`:147-154`)
 
@@ -235,17 +255,27 @@ and is not counted here.
 ### codex required for probe and install (`:188-205`)
 
 42. Exit status is `1` when `codex` is absent and `probe` is run (`:198`,
-    bare `[ "$rc" -eq 1 ]`). Port: `:367`.
+    bare `[ "$rc" -eq 1 ]`). Port: `:404`. Deliberately still carried by
+    `probe` after PR 11.5 slice 2's in-process flip, unlike items 29's and
+    the port-only backstop's vehicles: `COMMAND_REQUIREMENTS.probe` keeps
+    `codex` (only `python3` left it), and preflight runs before dispatch
+    either way, so this is the end-to-end net for that requirement row rather
+    than a spawn vehicle.
 43. Stderr contains `required command not found: codex` for `probe` (`:199`).
-    Port: `:368`.
+    Port: `:405`.
 44. The dispatch log is empty — missing codex must not dispatch `probe`
-    (`:200`). Port: `:369`.
+    (`:200`). Port: `:406`. The per-case `scripts` override that mirrored the
+    shell's `"probe ran"` stub was removed in PR 11.5 slice 2, Task 6: an
+    in-process `probe` reaches no script, so a stub for one could never log
+    and the override proved nothing. The shared `PACKAGE_ROOT`'s default
+    `loggingStub` still logs unconditionally on invocation, so the assertion
+    keeps its teeth exactly the way item 47's `install` case does.
 45. Exit status is `1` when `codex` is absent and `install` is run (`:203`,
-    bare `[ "$rc" -eq 1 ]`). Port: `:377`.
+    bare `[ "$rc" -eq 1 ]`). Port: `:414`.
 46. Stderr contains `required command not found: codex` for `install`
-    (`:204`). Port: `:378`.
+    (`:204`). Port: `:415`.
 47. The dispatch log is empty — missing codex must not dispatch `install`
-    (`:205`). Port: `:379`. The shell proves this with a `probe` override
+    (`:205`). Port: `:416`. The shell proves this with a `probe` override
     that logs unconditionally before its own logic runs (`:191-196`,
     `"probe ran"`), so "did not dispatch" is proven rather than assumed. The
     port's `install` case takes no `scripts` override and runs against the
@@ -255,10 +285,11 @@ and is not counted here.
     makes the assertion load-bearing here too: if `install` were mistakenly
     dispatched despite the missing-codex preflight, the default stub would
     still append to the log, and `assert.deepEqual(result.log, [])` at
-    `:379` would catch it. It is sound; it is just less visually obvious
-    than the probe case's explicit override, because the "logs
-    unconditionally" property comes from the shared fixture rather than
-    from a per-case script.
+    `:416` would catch it. It is sound; it is just less visually obvious
+    than the shell's explicit override, because the "logs unconditionally"
+    property comes from the shared fixture rather than from a per-case
+    script. Since PR 11.5 slice 2 the port's `probe` case (item 44) rests on
+    the same shared stub, for the reason recorded there.
 
 ### Commands that need no codex (`:207-215`)
 
@@ -320,23 +351,34 @@ item 1, a structural safety net with no shell analogue at all.
 
 <!-- inventory:port-only:start -->
 
-1. `ROUTING_CASES.length === 5` (`:67-71`), asserted once at module load,
-   before any `test(` runs. Port-only — the shell has no array to check the
-   length of; this guards against a routing case silently added to or
-   removed from the fixture table without a matching update to this
-   inventory's item count for 7-14, the same "silent deletion" failure mode
-   `tests/bin/migration-inventory.test.js`'s own docstring names for
-   `test(` call sites. **Updated** (PR 11.5, Task 7): the length dropped
-   from 6 to 5 when `pin` was also removed from the table (see item 9's
-   retirement note). (Task 6 had already dropped it from 7 to 6 when
-   `track-latest` was removed — see item 10's retirement note. Task 5 had
-   already dropped it from 8 to 7 when `unpin` was removed — see item 11's
-   retirement note.) The guard itself, and its rationale, are unchanged.
-2. Routing case `probe --porcelain`: `result.status === 0` (`:76`,
-   `ROUTING_CASES[0]`). Port-only — the shell's `run_bin probe --porcelain
-   >/dev/null` at `:73` has no explicit exit-status test.
-3. Routing case `prepare --ref test`: `result.status === 0` (`:76`,
-   `ROUTING_CASES[1]`). Port-only — same rationale as item 2.
+1. `ROUTING_CASES.length === SPAWN_COMMANDS.length` (`:70-74`), asserted once
+   at module load, before any `test(` runs. Port-only — the shell has no
+   array to check the length of; this guards against a routing case silently
+   added to or removed from the fixture table without a matching update to
+   this inventory's item count for 7-14, the same "silent deletion" failure
+   mode `tests/bin/migration-inventory.test.js`'s own docstring names for
+   `test(` call sites. **Updated** (PR 11.5 slice 2, Task 6): the expected
+   length is no longer a literal. It is derived from
+   `dispatch-fixture.js`'s `SPAWN_COMMANDS`, the subset of the production
+   `DISPATCH` table still marked `"spawn"` — 4 entries once `probe` left
+   (see item 7's retirement note), and self-updating for the two slices to
+   come. (Slice 1's Task 7 had already dropped the literal from 6 to 5 when
+   `pin` was removed — see item 9's retirement note; its Task 6 from 7 to 6
+   for `track-latest`, item 10; its Task 5 from 8 to 7 for `unpin`, item 11.)
+   The guard itself, and its rationale, are unchanged.
+2. Routing case `probe --porcelain`: `result.status === 0` (`ROUTING_CASES[0]`
+   as it then was). **Relocated** (PR 11.5 slice 2, Task 6): `probe` left
+   `ROUTING_CASES` (see item 7's retirement note), and — unlike items 4, 5,
+   and 6 — it did not get a standalone case in this port file, because this
+   fixture's `exit 0` tool stubs cannot satisfy a command that actually reads
+   Codex state. The same underlying property (`probe` succeeds and dispatches
+   nothing) is asserted by `tests/baseline/cli-parity.test.js`'s
+   `CLI-COMMANDS-01` in-process branch, against a `codex` that answers the
+   adapter's listing calls.
+3. Routing case `prepare --ref test`: `result.status === 0` (`:79`,
+   `ROUTING_CASES[0]`). Port-only — same rationale as item 2. **Index
+   updated** (PR 11.5 slice 2, Task 6) from `ROUTING_CASES[1]` to `[0]` when
+   `probe` left the table.
 4. Routing case `pin v6.1.1`: `result.status === 0`. **Relocated** (PR 11.5,
    Task 7): `pin` left `ROUTING_CASES` (see item 9's retirement note) for its
    own standalone case, `tests/bin/bin-dispatch.test.js:103`. Same underlying
@@ -356,21 +398,21 @@ item 1, a structural safety net with no shell analogue at all.
    when Task 6 added `track-latest`'s own standalone case immediately
    above it). Same underlying property (`unpin` succeeds); same rationale
    as item 2, just no longer a loop iteration.
-7. Routing case `install --dry-run`: `result.status === 0` (`:76`,
+7. Routing case `install --dry-run`: `result.status === 0` (`:79`,
+   `ROUTING_CASES[1]`). Port-only — same rationale as item 2. **Index
+   updated** (PR 11.5 slice 2, Task 6) from `ROUTING_CASES[2]` to `[1]`: the
+   table shrank by one more when `probe` (formerly index 0) was also removed.
+   (Slice 1's Task 7 had already updated this from `[3]` to `[2]` when `pin`
+   was removed; its Task 6 from `[4]` to `[3]` for `track-latest`; its Task 5
+   from `[5]` to `[4]` for `unpin`.)
+8. Routing case `uninstall --purge`: `result.status === 0` (`:79`,
    `ROUTING_CASES[2]`). Port-only — same rationale as item 2. **Index
-   updated** (PR 11.5, Task 7) from `ROUTING_CASES[3]` to `[2]`: the table
-   shrank by one more when `pin` (formerly index 3) was also removed. (Task
-   6 had already updated this from `[4]` to `[3]` when `track-latest` was
-   removed. Task 5 had already updated this from `[5]` to `[4]` when `unpin`
-   was removed.)
-8. Routing case `uninstall --purge`: `result.status === 0` (`:76`,
+   updated** (PR 11.5 slice 2, Task 6) from `ROUTING_CASES[3]` to `[2]`, same
+   cause as item 7.
+9. Routing case bare invocation (`update`): `result.status === 0` (`:79`,
    `ROUTING_CASES[3]`). Port-only — same rationale as item 2. **Index
-   updated** (PR 11.5, Task 7) from `ROUTING_CASES[4]` to `[3]`, same cause
-   as item 7.
-9. Routing case bare invocation (`update`): `result.status === 0` (`:76`,
-   `ROUTING_CASES[4]`). Port-only — same rationale as item 2. **Index
-   updated** (PR 11.5, Task 7) from `ROUTING_CASES[5]` to `[4]`, same cause
-   as item 7.
+   updated** (PR 11.5 slice 2, Task 6) from `ROUTING_CASES[4]` to `[3]`, same
+   cause as item 7.
 10. `--version` (no symlink): `result.status === 0` (`tests/bin/bin-dispatch.test.js:140`,
     corrected from a stale `:120` citation that predated PR 11.5's in-process
     flips — citation predates PR 11.5, left as found until this correction).
@@ -530,6 +572,24 @@ item 1, a structural safety net with no shell analogue at all.
     numbered shell item.
 40. **New** (PR 11.5, Task 7). Same case: `result.log` is empty (`:351`).
     Port-only, same rationale as item 39.
+41. **New** (PR 11.5 slice 2, Task 3). An in-process command with no
+    registered handler fails closed: `result.status === 1`
+    (`tests/bin/bin-dispatch.test.js:133`). Port-only, with no shell
+    counterpart of any kind: the condition only exists because `src/cli.ts`'s
+    `IN_PROCESS_HANDLERS` registry became exhaustiveness-checked in that
+    task, making a `DISPATCH` entry without a registered handler a compile
+    error through the real table. The case reaches the runtime backstop that
+    remains for that guarantee by patching a case-local copy of the compiled
+    `dist/cli.js`'s `DISPATCH` table (`dispatch-fixture.js`'s
+    `dispatchOverride` option on `runDispatch`), never `src/cli.ts` itself.
+    The command it patches is a vehicle and must be one `DISPATCH` still
+    spawns; Task 6 moved it from `probe` to `prepare` when `probe` gained a
+    registered handler, since overriding an already-registered command no
+    longer reaches the backstop at all.
+42. **New** (PR 11.5 slice 2, Task 3). Same case: stderr is exactly
+    `error: no in-process handler registered for: prepare\n`
+    (`:134-137`). Port-only, same rationale as item 41; the command named in
+    that string is the vehicle, updated with it in Task 6.
 
 <!-- inventory:port-only:end -->
 
@@ -538,8 +598,8 @@ item 1, a structural safety net with no shell analogue at all.
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 40,
-  "ports": { "tests/bin/bin-dispatch.test.js": 31 }
+  "portOnly": 42,
+  "ports": { "tests/bin/bin-dispatch.test.js": 32 }
 }
 ```
 
@@ -552,32 +612,35 @@ item 1, a structural safety net with no shell analogue at all.
   1+2+3+8+5+4+3+1+1+1+2+3+3+3+1+3+3+1+3+2 = 53). This count is historical —
   it describes the deleted shell script as it stood at the time it was
   ported — and does not change when the port's own structure changes.
-- Port (`tests/bin/bin-dispatch.test.js`): 31 static `test(` call sites (3 of
-  them data-driven loops — `ROUTING_CASES` ×5, `NO_GIT_CASES` ×1,
+- Port (`tests/bin/bin-dispatch.test.js`): 32 static `test(` call sites (3 of
+  them data-driven loops — `ROUTING_CASES` ×4, `NO_GIT_CASES` ×1,
   `NO_CODEX_CASES` ×1, each one smaller than before PR 11.5 flipped `pin`,
-  `track-latest`, and `unpin` to in-process and removed all three from every
-  table they used to occupy — expanding to 35 runtime cases), carrying **44**
-  of the 53 shell assertions mapped (two recorded merges: item 15 into the
-  port's `status === 2` check, and items 30-31 into the port's two-line
-  `assert.deepEqual`), plus **9 retired items** (9, 10, 11, 38, 39, 41, 48,
-  49, 50 — items 9, 10, 38, and 49 each asserted that `pin` or `track-latest`
-  "dispatches ... and logs `<name>  ref=`"; items 11, 39, and 50 each
-  asserted the analogous condition for `unpin`; item 48 asserted `pin`
-  dispatches with `codex` absent and logs `pin v6.1.1 ref=`; item 41 asserted
-  `unpin` dispatches with `python3` absent. PR 11.5's in-process flips (Task
-  5 for `unpin`, Task 6 for `track-latest`, Task 7 for `pin`) mean none of the
-  three commands ever invokes its script or logs to the dispatch log any
-  more, so each specific condition can no longer occur in either direction,
-  and no JS assertion enforces any of them any more; see each item's
-  retirement note for the analogous in-process property and where it is now
-  tested). 44 mapped + 9 retired = 53. Plus 40 port-only assertions (39
-  additive `result.status === 0` / `result.log` checks the shell left
-  implicit under `set -e` or that have no shell counterpart at all, plus one
-  structural array-length guard) with no shell counterpart.
-- Reconciliation: 44 of the 53 shell items are mapped (some 1:1 to their own
+  `track-latest`, `unpin`, and `probe` to in-process and removed all four
+  from every table they used to occupy — expanding to 35 runtime cases),
+  carrying **43** of the 53 shell assertions mapped (two recorded merges:
+  item 15 into the port's `status === 2` check, and items 30-31 into the
+  port's two-line `assert.deepEqual`), plus **10 retired items** (7, 9, 10,
+  11, 38, 39, 41, 48, 49, 50 — items 7, 9, 10, 38, and 49 each asserted that
+  `probe`, `pin`, or `track-latest` "dispatches ... and logs
+  `<name>  ref=`"; items 11, 39, and 50 each asserted the analogous condition
+  for `unpin`; item 48 asserted `pin` dispatches with `codex` absent and logs
+  `pin v6.1.1 ref=`; item 41 asserted `unpin` dispatches with `python3`
+  absent. PR 11.5's in-process flips (slice 1's Task 5 for `unpin`, Task 6
+  for `track-latest`, and Task 7 for `pin`; slice 2's Task 6 for `probe`)
+  mean none of the four commands ever invokes its script or logs to the
+  dispatch log any more, so each specific condition can no longer occur in
+  either direction, and no JS assertion enforces any of them any more; see
+  each item's retirement note for the analogous in-process property and where
+  it is now tested). 43 mapped + 10 retired = 53. Plus 42 port-only
+  assertions (39 additive `result.status === 0` / `result.log` checks the
+  shell left implicit under `set -e` or that have no shell counterpart at
+  all, plus one structural array-length guard, plus 2 new assertions covering
+  the in-process runtime backstop with no shell counterpart of any kind — see
+  items 41-42) with no shell counterpart.
+- Reconciliation: 43 of the 53 shell items are mapped (some 1:1 to their own
   JS assertion, two pairs sharing one JS assertion via the recorded merges
-  above), 9 are retired (noted above) — not drops, since a retirement is
+  above), 10 are retired (noted above) — not drops, since a retirement is
   recorded with its own note explaining why no replacement assertion is
-  possible, rather than silently disappearing. 44 + 9 = 53. The 40 port-only
+  possible, rather than silently disappearing. 43 + 10 = 53. The 42 port-only
   assertions are strictly additive test coverage — not a reconciliation of
-  any shell assertion — and are excluded from the 44/53 arithmetic above.
+  any shell assertion — and are excluded from the 43/53 arithmetic above.

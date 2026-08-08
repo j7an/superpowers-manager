@@ -16,6 +16,7 @@ dist/codex-json.js
 dist/codex-state.js
 dist/commands/context.js
 dist/commands/pin.js
+dist/commands/probe.js
 dist/commands/track-latest.js
 dist/commands/unpin.js
 dist/domain/fingerprint.js
@@ -34,6 +35,7 @@ dist/safety-error.js
 dist/selection-state-cli.js
 dist/selection-store.js
 dist/selection.js
+dist/status.js
 dist/strict-json.js
 dist/upstream-cli.js
 dist/upstream-version.js

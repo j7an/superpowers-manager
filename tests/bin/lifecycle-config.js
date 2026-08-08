@@ -62,7 +62,23 @@ export const INSTALL_DEFAULTS = {
 };
 
 /**
- * @param {"install" | "uninstall"} kind
+ * Probe's fake needs only the two listing return codes: probe performs no
+ * mutation, and its malformed-evidence cases are driven by writing malformed
+ * JSON into plugin_list.json rather than by a config toggle.
+ * @type {Record<string, Rule>}
+ */
+export const PROBE_SCHEMA = {
+  pluginListRc: "integer",
+  marketplaceListRc: "integer",
+};
+
+export const PROBE_DEFAULTS = {
+  pluginListRc: 0,
+  marketplaceListRc: 0,
+};
+
+/**
+ * @param {"install" | "uninstall" | "probe"} kind
  * @returns {{ schema: Record<string, Rule>, defaults: Record<string, unknown> }}
  */
 export function schemaFor(kind) {
@@ -72,6 +88,9 @@ export function schemaFor(kind) {
   if (kind === "uninstall") {
     return { schema: UNINSTALL_SCHEMA, defaults: UNINSTALL_DEFAULTS };
   }
+  if (kind === "probe") {
+    return { schema: PROBE_SCHEMA, defaults: PROBE_DEFAULTS };
+  }
   throw new Error(`unknown fixture kind: ${String(kind)}`);
 }
 
@@ -79,7 +98,7 @@ export function schemaFor(kind) {
  * Throws on an unknown key or an invalid value. This is the property the 16
  * marker files it replaces could not have: today a typo'd
  * `: > "$state/plugin_add_stail"` yields a passing test.
- * @param {"install" | "uninstall"} kind
+ * @param {"install" | "uninstall" | "probe"} kind
  * @param {Record<string, unknown>} config
  * @returns {void}
  */

@@ -93,11 +93,13 @@ const COMMANDS = [
 ];
 // Derived, never restated. A second hand-maintained list can agree with itself
 // while disagreeing with the code it describes.
-const { DISPATCH } = await import(
+/** @type {typeof import("../../src/cli.js")} */
+const { DISPATCH, commandRequirements } = await import(
   new URL("../../dist/cli.js", import.meta.url).href
 );
 const IN_PROCESS_COMMANDS = COMMANDS.filter(
-  (command) => DISPATCH[command] === "in-process",
+  (command) =>
+    DISPATCH[/** @type {keyof typeof DISPATCH} */ (command)] === "in-process",
 );
 const PASSTHROUGH_VARIABLES = [
   "SUPERPOWERS_REF",
@@ -672,6 +674,7 @@ export {
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
   clearDispatchLog,
+  commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,

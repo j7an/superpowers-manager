@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { oneLine } from "./cli-arguments.js";
 import type { CommandContext } from "./commands/context.js";
 import { runPin } from "./commands/pin.js";
+import { runProbe } from "./commands/probe.js";
 import { runTrackLatest } from "./commands/track-latest.js";
 import { runUnpin } from "./commands/unpin.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
@@ -63,35 +64,42 @@ export type DispatchMode = "spawn" | "in-process";
 // a POSIX shell is required only while a command is still spawned. Each slice
 // flips entries to "in-process"; when none remain, `buildSpawn`,
 // `discoverShell`, and this table are deleted together.
-const DISPATCH: Record<Subcommand, DispatchMode> = {
+const DISPATCH = {
   pin: "in-process",
   "track-latest": "in-process",
   unpin: "in-process",
   prepare: "spawn",
-  probe: "spawn",
+  probe: "in-process",
   install: "spawn",
   update: "spawn",
   uninstall: "spawn",
-};
+} as const satisfies Record<Subcommand, DispatchMode>;
 
-// Registry of in-process handlers, keyed by the DISPATCH entries above that
-// read "in-process". A later slice adds an entry here alongside each flip.
-const IN_PROCESS_HANDLERS: {
-  readonly [K in Subcommand]?: (
-    argv: string[],
-    ctx: CommandContext,
-  ) => Promise<number>;
-} = {
+type InProcessCommand = {
+  [K in Subcommand]: (typeof DISPATCH)[K] extends "in-process" ? K : never;
+}[Subcommand];
+
+type InProcessHandler = (
+  argv: string[],
+  ctx: CommandContext,
+) => Promise<number>;
+
+// Keyed by exactly the DISPATCH entries that read "in-process". Flipping an
+// entry without registering its handler is now a compile error, not a
+// runtime surprise. Requires DISPATCH to be declared `as const` so its value
+// types are literals rather than widened to DispatchMode.
+const IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler> = {
   pin: runPin,
   "track-latest": runTrackLatest,
   unpin: runUnpin,
+  probe: runProbe,
 };
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
   "track-latest": [],
   unpin: [],
   prepare: ["git", "python3"],
-  probe: ["git", "python3", "codex"],
+  probe: ["git", "codex"],
   install: ["git", "python3", "codex"],
   update: ["git", "python3", "codex"],
   uninstall: ["python3", "codex"],
@@ -157,6 +165,22 @@ function parseArgs(argv: string[]): ParseResult {
       return {
         kind: "usage-error",
         message: `usage: superpowers-manager ${command}`,
+      };
+    }
+    // Arity lives HERE, not only in src/commands/probe.ts, so `probe` gets the
+    // same shape as every other CLI-owned usage error: `error: <msg>` plus the
+    // full usage block, exit 2, decided before preflight. Leaving it to the
+    // handler alone made `probe --porcelaine` print no usage block, and made
+    // the identical input exit 1 on a machine without `codex` because preflight
+    // ran first. `PROBE_USAGE` stays as the same unreachable-from-CLI duplicate
+    // that track-latest and unpin already carry.
+    if (
+      command === "probe" &&
+      !(args.length === 0 || (args.length === 1 && args[0] === "--porcelain"))
+    ) {
+      return {
+        kind: "usage-error",
+        message: "usage: superpowers-manager probe [--porcelain]",
       };
     }
     return { kind: "run", cmd: command, args };
@@ -331,7 +355,17 @@ async function main(): Promise<never> {
     process.exit(1);
   }
   if (pf.dispatch === "in-process") {
-    const handler = IN_PROCESS_HANDLERS[parsed.cmd];
+    // `pf.dispatch === "in-process"` narrows only the preflight result, not
+    // `parsed.cmd`'s type: PreflightResult carries no command, so `cmd` stays
+    // the wider Subcommand here. The registry is keyed by the narrower
+    // InProcessCommand, so this cast is required to index it. The
+    // exhaustiveness check on IN_PROCESS_HANDLERS makes this branch
+    // unreachable through the real DISPATCH table; the `!handler` guard below
+    // is the runtime backstop for that guarantee, and is unreachable through
+    // production code but covered by a fixture that patches the dispatch
+    // table directly (Task 3, Step 5).
+    const handler: InProcessHandler | undefined =
+      IN_PROCESS_HANDLERS[parsed.cmd as InProcessCommand];
     if (!handler) {
       console.error(
         `error: no in-process handler registered for: ${parsed.cmd}`,

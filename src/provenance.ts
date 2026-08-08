@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { COMMIT_INPUT_RE } from "./domain/refs.js";
 import { escapePythonJsonString } from "./python-json.js";
 import { SafetyError } from "./safety-error.js";
@@ -90,6 +91,19 @@ export async function readGeneratedCommitLenient(
   } catch {
     return "";
   }
+}
+
+// scripts/core/lifecycle.sh:28-31. The path the generated tree's provenance
+// lives at, relative to a package root.
+export function generatedMetadataPath(root: string): string {
+  return join(root, "plugins", "superpowers", ".superpowers-upstream.json");
+}
+
+// scripts/core/lifecycle.sh:33-37. Lenient by design: a missing or malformed
+// generated provenance file yields "", which `statusForCommits` reads as
+// "needs prepare". Aborting here would deny the operator the remediation path.
+export async function generatedCommitOrEmpty(root: string): Promise<string> {
+  return readGeneratedCommitLenient(generatedMetadataPath(root));
 }
 
 export async function readCodexBuildSource(path: string): Promise<string> {
