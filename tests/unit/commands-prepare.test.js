@@ -174,4 +174,27 @@ void test("runPrepare rejects a directory as the additional validator", async ()
   assert.doesNotMatch(err.text(), /ENOENT|errno|Error:|\n.*\n.*\n/);
 });
 
+void test("runPrepare takes the clone branch, not fetch, when the cache's .git is a regular file", async () => {
+  const dir = mkdtempSync(join(SCRATCH, "case-"));
+  const template = join(dir, "template.json");
+  writeFileSync(template, '{"name":"superpowers"}\n');
+  const source = join(dir, "no-such-upstream");
+  // scripts/prepare:50 is `[ -d "$cache/.git" ]`. A regular file named
+  // `.git` -- what a git worktree or `clone --separate-git-dir` leaves
+  // behind -- must NOT be treated as a directory: an `-e` predicate would
+  // take the fetch branch and let git follow the file's `gitdir:` pointer,
+  // where the shell (and the `-d` port) take the clone branch instead. The
+  // two branches are discriminated here by their diagnostics, which differ.
+  const cache = join(dir, "cache", "superpowers");
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, ".git"), "gitdir: /nonexistent\n");
+  const { err, ctx } = unitContext(dir, {
+    SUPERPOWERS_MANIFEST_TEMPLATE: template,
+    SUPERPOWERS_UPSTREAM_URL: source,
+  });
+  const status = await runPrepare([], ctx);
+  assert.equal(status, 1);
+  assert.equal(err.text(), `error: cannot clone upstream repo: ${source}\n`);
+});
+
 console.log("commands-prepare.test.js: OK");

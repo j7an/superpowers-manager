@@ -50,7 +50,12 @@ function prepareError(message: string, cause?: unknown): SafetyError {
 }
 
 // `[ -e ]` — follows symlinks, so a dangling link is absent to the shell too.
-// Used ONLY for spw_require_upstream_path's four checks.
+// Two call sites, each mirroring a distinct `-e` in the shell: the
+// REQUIRED_UPSTREAM loop (spw_require_upstream_path, common.sh:53-59 — e.g.
+// skills/ is a directory, not a regular file) and copyPathIfPresent's guard
+// (spw_copy_path_if_present's `[ -e "$src" ]`, common.sh:44-51). The `.git`
+// check below is NOT a third site: it needs `-d` (F1), not `-e`, and uses
+// directoryExists instead.
 async function pathExists(path: string): Promise<boolean> {
   try {
     await stat(path);
@@ -67,6 +72,18 @@ async function pathExists(path: string): Promise<boolean> {
 async function regularFileExists(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+// `[ -d ]` — scripts/prepare:50. A regular file named `.git` is what a git
+// worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
+// fetch branch and let git follow its `gitdir:` pointer, where the shell took
+// the clone branch. src/upstream.ts:330 makes the same distinction.
+async function directoryExists(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
   } catch {
     return false;
   }
@@ -185,14 +202,24 @@ function replayEnvelope(envelope: AdapterEnvelope, ctx: CommandContext): void {
 // Output is captured rather than inherited so it reaches ctx.stdout/stderr
 // instead of the real process streams. That buffers it until the command ends;
 // the shell streamed it live. Spec divergence 8.
+//
+// scripts/prepare:35-36 exported TMPDIR="$prepare_workspace" so every child
+// confined its temporary files to the tree the workspace trap removed. This
+// child still does. The in-process adapter build does NOT: src/adapter.ts:319
+// calls withWorkspace(tmpdir(), ...) and os.tmpdir() reads process.env, never
+// ctx.env, so its build workspace lands in the ambient temp dir. Setting
+// process.env.TMPDIR around the call would be a process-global mutation inside
+// a library function and is unsafe under the concurrent suite; the adapter
+// removes its own workspace, so the residue is bounded. Spec divergence 9.
 function runValidator(
   validator: string,
   candidate: string,
   env: NodeJS.ProcessEnv,
+  workspace: string,
 ): Promise<{ readonly code: number | null } & ValidatorOutput> {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn("python3", [validator, candidate], {
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...env, TMPDIR: workspace },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -280,7 +307,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
         );
       } else {
         const source = gitSafeSource(selection.effectiveSource);
-        if (await pathExists(join(cache, ".git"))) {
+        if (await directoryExists(join(cache, ".git"))) {
           const fetched = await runGit([
             "-C",
             cache,
@@ -424,7 +451,12 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
             message: `additional plugin validator not found: ${additionalValidator}`,
           };
         }
-        const ran = await runValidator(additionalValidator, candidate, env);
+        const ran = await runValidator(
+          additionalValidator,
+          candidate,
+          env,
+          workspace,
+        );
         validator = { stdout: ran.stdout, stderr: ran.stderr };
         if (ran.code !== 0) {
           return {
@@ -489,15 +521,25 @@ export async function runPrepare(
     //   - SafetyErrors from computeEffectiveSelection, gitSafeSource,
     //     writeProvenance, and withWorkspace.
     //
-    // ONE exception, inherited and not a regression: fetchExactCommit splices
-    // git's combined stdout+stderr into its own text (src/upstream.ts:334,
-    // :349, and proveCommit via :262), so the PINNED path can put raw git
-    // output on this stream. scripts/prepare piped the same text through
-    // spw_upstream_cli's `spw_die "${_upstream_out#error: }"`. oneLine()
-    // collapses it to one line, containing the harm to one line of git text
-    // rather than the arbitrarily many the shell original allowed. The
-    // non-pinned clone/fetch branch does NOT have this shape: runGit returns
-    // its status instead of throwing, so those messages name only the source.
+    // TWO exceptions, both inherited and neither a regression:
+    //   1. fetchExactCommit splices git's combined stdout+stderr into its own
+    //      text (src/upstream.ts:334, :349, and proveCommit via :262), so the
+    //      PINNED path can put raw git output on this stream. scripts/prepare
+    //      piped the same text through spw_upstream_cli's
+    //      `spw_die "${_upstream_out#error: }"`. oneLine() collapses it to one
+    //      line, containing the harm to one line of git text rather than the
+    //      arbitrarily many the shell original allowed.
+    //   2. Every runGit call site in this module (fetch, clone, checkout) can
+    //      reject instead of resolving: src/git.ts:47-51 wraps every string
+    //      errno other than ENOENT in
+    //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
+    //      and that Node spawn-level message reaches ctx.stderr through this
+    //      catch. So the claim that the non-pinned clone/fetch/checkout
+    //      branch names only the source is true for a non-zero *exit status*
+    //      (handled explicitly below, in gatherPrepare) but false for a
+    //      *spawn-level* failure -- runGit throws rather than returning a
+    //      status in that case, and this outer catch is what stands between
+    //      it and the stream.
     //
     // runAdapter's rethrow (src/adapter.ts:993) does NOT arrive here -- the
     // call site catches it and converts it to a hand-written message.
