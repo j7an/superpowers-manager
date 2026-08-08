@@ -507,7 +507,8 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    the exact message), `tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01`
    (two end-to-end rows, plus a standalone block with `codex` genuinely absent
    that pins the before-preflight ordering), and
-   `tests/unit/commands-probe.test.js:131` for the handler-side duplicate.
+   `tests/unit/commands-probe.test.js:134` ("an unrecognised argument is a
+   usage error on stderr") for the handler-side duplicate.
 2. The absent invocation workspace. `assert_probe_tmp_empty`
    (`tests/test_probe.sh:377-383`) asserted that the `TMPDIR` handed to
    `scripts/probe` held nothing afterwards, which covered both probe's own
@@ -568,15 +569,17 @@ string in `tests/**/*.js`, because a spawn assumption expressed as
 | Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — `ROUTING_CASES[0]` | Removed; see `bin-dispatch.md` item 7's retirement note |
 | Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — exit-code propagation | Re-pointed to `install`; an in-process command has no child whose status could propagate |
 | Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — the no-registered-handler backstop | Re-pointed to `prepare`: `probe` now has a registered handler, so overriding its dispatch entry no longer reaches the backstop |
-| Executable spawn assumption | `tests/bin/units.test.js:99-107` | `buildSpawn` path construction, re-pointed to `prepare`. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned |
+| Executable spawn assumption | `tests/bin/units.test.js:119-140` ("buildSpawn: POSIX executes the script directly") | `buildSpawn` path construction and argv passthrough, re-pointed to `prepare`. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned |
 | Historical prose | `src/commands/probe.ts` (7 sites), `src/effective-selection.ts:70`, `:91` | Provenance citations into the shell original, which still exists, so every citation still resolves |
 | Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:679`, `:693`, `selection-state.md:237` | The migration record of what the shell did |
 | Historical prose | `tests/unit/commands-probe.test.js:70`, `:77`, `:106`; `tests/baseline/probe.test.js:4`, `:155`, `:234`, `:398`; `tests/bin/probe-fakes.js:4`; `tests/baseline/selection-location.test.js:26`, `:788` | Comments citing the shell original as the source of a ported contract |
 | Historical prose | `AGENTS.md:46` | "Keep `scripts/probe` read-only" still binds the surviving script, and `PROBE-READONLY-01` now holds the same property for the in-process command |
 
-`tests/bin/units.test.js:18-22`, `:67`, and `:162-166` mention `probe` and are
-deliberately unchanged: `parseArgs` is dispatch-independent, and
-`COMMAND_REQUIREMENTS.probe` keeps `codex` — only `python3` left it.
+`tests/bin/units.test.js:18-22` (`parseArgs(["probe", "--porcelain"])`), `:88`
+(the no-argument `run` loop), and `:194-199` (`preflight("probe", …)` must
+report `codex`) mention `probe` and are deliberately unchanged: `parseArgs` is
+dispatch-independent, and `COMMAND_REQUIREMENTS.probe` keeps `codex` — only
+`python3` left it.
 `tests/bin/bin-dispatch.test.js`'s "missing codex blocks `probe`" case also
 stays on `probe`: it is the end-to-end net for that same requirement row, not
 a spawn vehicle. See the note on `bin-dispatch.md` items 42-44.
