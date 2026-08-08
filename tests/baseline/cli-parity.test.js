@@ -24,6 +24,7 @@ import {
   PASSTHROUGH_VARIABLES,
   baseEnvironment,
   clearDispatchLog,
+  commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,
@@ -34,6 +35,17 @@ import {
   writeAdapterState,
   writeNoopTool,
 } from "./support.js";
+import { createCase, UPSTREAM } from "../bin/lifecycle-fixture.js";
+// From the NON-TEST helper, not from probe.test.js: importing a *.test.js
+// module re-executes and re-registers its tests inside this suite
+// (tests/run-node-suites.js:15).
+import { caseEnv, seedCodex } from "./probe-fixture.js";
+import { capture } from "../unit/helpers/command-harness.js";
+
+/** @type {typeof import("../../src/commands/probe.js")} */
+const { runProbe } = await import(
+  new URL("../../dist/commands/probe.js", import.meta.url).href
+);
 
 /** @typedef {import('./support.js').Sandbox} Sandbox */
 
@@ -157,6 +169,36 @@ function scenarioValues(result) {
 function createReleaseRepo(sandbox, name = "upstream") {
   const upstream = join(sandbox.root, name);
   return scenarioValues(runScenario(sandbox, "git-release-repo", upstream));
+}
+
+/**
+ * A `codex` that answers the two listing commands the in-process probe's
+ * adapter views issue (`src/adapter.ts:787`, `:861`, `:873`) with empty
+ * inventories, and rejects anything else. `writeNoopTool`'s `exit 0` stub is
+ * enough for a preflight lookup but not for a command that actually reads
+ * Codex state: probe fails closed on its unparseable empty output.
+ * @param {Sandbox} sandbox
+ */
+function writeListingCodex(sandbox) {
+  const tool = join(sandbox.bin, "codex");
+  writeFileSync(
+    tool,
+    [
+      "#!/bin/sh",
+      'case "$*" in',
+      "  'plugin list --json') printf '%s\\n' '{\"installed\":[]}' ;;",
+      "  'plugin marketplace list --json')",
+      "    printf '%s\\n' '{\"marketplaces\":[]}' ;;",
+      "  *)",
+      "    printf 'unexpected codex command: %s\\n' \"$*\" >&2",
+      "    exit 99 ;;",
+      "esac",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  chmodSync(tool, 0o755);
+  return tool;
 }
 
 /**
@@ -562,6 +604,15 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     // elsewhere in this suite, since it is the tag this scenario actually
     // has.
     const upstream = createReleaseRepo(sandbox);
+    // `probe` is the first in-process command that reads Codex state, so the
+    // `exit 0` codex runCli would otherwise install cannot carry it: probe
+    // fails closed on that stub's unparseable output. It is also the first
+    // one that would resolve the package-default ref against the public
+    // upstream URL, so it is pinned to the same local repository `pin` uses —
+    // a 40-hex RAW_COMMIT, which resolves without reaching Git at all
+    // (src/upstream.ts:160-162). Both are hermeticity requirements, not
+    // conveniences.
+    writeListingCodex(sandbox);
     for (const [command, argv] of cases) {
       clearDispatchLog(sandbox);
       const overrides =
@@ -570,7 +621,13 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
               ...dispatchEnvironment(sandbox),
               SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
             }
-          : dispatchEnvironment(sandbox);
+          : command === "probe"
+            ? {
+                ...dispatchEnvironment(sandbox),
+                SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+                SUPERPOWERS_REF: upstream.RAW_COMMIT,
+              }
+            : dispatchEnvironment(sandbox);
       const result = runCli(sandbox, [command, ...argv], overrides);
       if (IN_PROCESS_COMMANDS.includes(command)) {
         // An in-process command must reach its module and dispatch NOTHING.
@@ -716,16 +773,27 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 });
 
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
-  const requirements = new Map([
-    ["pin", ["git"]],
-    ["track-latest", []],
-    ["unpin", []],
-    ["prepare", ["git", "python3", "sh"]],
-    ["probe", ["git", "python3", "codex", "sh"]],
-    ["install", ["git", "python3", "codex", "sh"]],
-    ["update", ["git", "python3", "codex", "sh"]],
-    ["uninstall", ["python3", "codex", "sh"]],
-  ]);
+  // Derived, never restated. The hand-written map this replaces encoded
+  // DISPATCH a second time through the presence of "sh", forty lines below
+  // this same file's correct derived usage.
+  //
+  // commandRequirements() (src/cli.ts:212) takes no argument and returns the
+  // whole Record<Subcommand, string[]>; index it per command.
+  const declared = commandRequirements();
+  const requirements = new Map(
+    COMMANDS.map((command) => {
+      // COMMANDS is a plain string[]; CLI-COMMANDS-01 above asserts it agrees
+      // with Object.keys(DISPATCH) as a set in both directions, which is what
+      // makes this narrowing sound rather than assumed.
+      const key = /** @type {keyof typeof DISPATCH} */ (command);
+      return [
+        command,
+        DISPATCH[key] === "spawn"
+          ? [...declared[key], "sh"]
+          : [...declared[key]],
+      ];
+    }),
+  );
   // Every tool any command in `requirements` can require. Used below to give
   // the empty-requirements rows (`track-latest`, `unpin`) a real assertion
   // instead of a `for` loop over `[]` that runs zero iterations.
@@ -772,13 +840,18 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   }
 });
 
+// Vehicle only. These five cases test buildSpawn — inherited stdio, child
+// exit status, child signal death, and the ENOENT diagnostic — not anything
+// specific to `install`. They moved off `probe` when slice 2 flipped it
+// in-process, and they die with buildSpawn in slice 4. Do not read the
+// choice of `install` as a contract.
 void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight", () => {
   withSandbox({ stubScripts: true }, (sandbox) => {
     const customCodex = writeNoopTool(sandbox, "baseline-custom-codex");
     removeTool(sandbox, "codex");
     const result = runCli(
       sandbox,
-      ["probe"],
+      ["install"],
       dispatchEnvironment(sandbox, {
         SUPERPOWERS_CODEX: customCodex,
       }),
@@ -786,7 +859,7 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
     assertCleanResult(result);
     assert.equal(result.stdout, "");
     assert.equal(result.stderr, "");
-    assertOnlyDispatch(sandbox, "probe", []);
+    assertOnlyDispatch(sandbox, "install", []);
   });
 });
 
@@ -794,15 +867,15 @@ void test("CLI-CHILD-STATUS-01 delegated child status is preserved", () => {
   withSandbox({ stubScripts: true }, (sandbox) => {
     const result = runCli(
       sandbox,
-      ["probe"],
+      ["install"],
       dispatchEnvironment(sandbox, { SPW_BASELINE_DELEGATE_EXIT: "42" }),
     );
     assertCleanResult(result, 42);
-    assertOnlyDispatch(sandbox, "probe", []);
+    assertOnlyDispatch(sandbox, "install", []);
   });
 
   withSandbox({ stubScripts: true }, (sandbox) => {
-    const script = join(sandbox.pkg, "scripts", "probe");
+    const script = join(sandbox.pkg, "scripts", "install");
     writeFileSync(
       script,
       '#!/bin/sh\nprintf "child stdout: %s\\n" "$SPW_CHILD_SENTINEL"\n' +
@@ -810,7 +883,7 @@ void test("CLI-CHILD-STATUS-01 delegated child status is preserved", () => {
       "utf8",
     );
     chmodSync(script, 0o755);
-    const result = runCli(sandbox, ["probe"], {
+    const result = runCli(sandbox, ["install"], {
       SPW_ADAPTER: sandbox.adapter,
       SPW_CHILD_SENTINEL: "inherited",
     });
@@ -820,26 +893,26 @@ void test("CLI-CHILD-STATUS-01 delegated child status is preserved", () => {
   });
 
   withSandbox({ stubScripts: true }, (sandbox) => {
-    const script = join(sandbox.pkg, "scripts", "probe");
+    const script = join(sandbox.pkg, "scripts", "install");
     writeFileSync(script, "#!/bin/sh\nkill -TERM $$\n", "utf8");
     chmodSync(script, 0o755);
-    const result = runCli(sandbox, ["probe"], {
+    const result = runCli(sandbox, ["install"], {
       SPW_ADAPTER: sandbox.adapter,
     });
     assertCleanResult(result, 1);
   });
 
   withSandbox({ stubScripts: true }, (sandbox) => {
-    const script = join(sandbox.pkg, "scripts", "probe");
+    const script = join(sandbox.pkg, "scripts", "install");
     writeFileSync(script, "#!/no/such/interpreter\n", "utf8");
     chmodSync(script, 0o755);
-    const result = runCli(sandbox, ["probe"], {
+    const result = runCli(sandbox, ["install"], {
       SPW_ADAPTER: sandbox.adapter,
     });
     assertCleanResult(result, 1);
     assert.match(
       result.stderr,
-      /^error: cannot run .*\/scripts\/probe: spawnSync .* ENOENT\n$/,
+      /^error: cannot run .*\/scripts\/install: spawnSync .* ENOENT\n$/,
     );
   });
 });
@@ -1524,25 +1597,37 @@ void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
   }
 });
 
-void test("PROBE-READONLY-01 probe is read-only", () => {
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    const pin = runCli(sandbox, ["pin", "v1.1.0"], {
-      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-    });
-    assertCleanResult(pin);
-    writeNoopTool(sandbox);
-    const before = snapshotTree(sandbox.root);
-    const result = runCli(sandbox, ["probe", "--porcelain"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-    });
-    assertCleanResult(result);
-    assert.match(result.stdout, /^desired_commit=[0-9a-f]{40}$/m);
-    assert.match(result.stdout, /^status=needs prepare$/m);
-    assert.equal(result.stderr, "");
-    assert.deepEqual(snapshotTree(sandbox.root), before);
+// Rewritten, not re-pointed (PR 11.5 slice 2): the previous version ran the
+// real `scripts/probe` with an SPW_ADAPTER stub, a seam only
+// scripts/core/adapter.sh honours. Once probe dispatches in-process the stub
+// stops taking effect, so this drives `runProbe` against the probe fake
+// instead. The ID and the contract — probe mutates nothing — are unchanged.
+void test("PROBE-READONLY-01 probe is read-only", async () => {
+  const c = createCase({ fakes: "probe" });
+  // Two empty listings: probe issues `plugin list --json` once per inspection
+  // and the fake fails closed if the sequence runs out.
+  seedCodex(c, {});
+  // No generated tree is seeded, so the expected status is "needs prepare" —
+  // the same state the shell version asserted after a fresh `pin`.
+  const before = snapshotTree(c.pkg);
+  const out = capture();
+  const err = capture();
+  const status = await runProbe(["--porcelain"], {
+    root: c.pkg,
+    // `v1.0.0` is the annotated tag lifecycle-fixture.js:118-127 creates on
+    // UPSTREAM; both values come from the fixture, neither is invented.
+    env: caseEnv(c, {
+      SUPERPOWERS_REF: "v1.0.0",
+      SUPERPOWERS_UPSTREAM_URL: UPSTREAM,
+    }),
+    stdout: out.stream,
+    stderr: err.stream,
   });
+  assert.equal(status, 0, err.text());
+  assert.match(out.text(), /^desired_commit=[0-9a-f]{40}$/m);
+  assert.match(out.text(), /^status=needs prepare$/m);
+  assert.equal(err.text(), "");
+  assert.deepEqual(snapshotTree(c.pkg), before);
 });
 
 void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", () => {

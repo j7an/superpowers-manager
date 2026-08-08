@@ -4,9 +4,10 @@
 // tests/test_probe.sh (see tests/migration-inventory/probe.md).
 //
 // It calls `runProbe` directly rather than spawning `node dist/cli.js probe`:
-// src/cli.ts's DISPATCH still routes `probe` to the shell script until the
-// slice's flip lands, and driving the function is also what lets these cases
-// assert exact stream contents instead of parsing a subprocess.
+// driving the function is what lets these cases assert exact stream contents
+// instead of parsing a subprocess. It was also the only option when this
+// driver landed, one task before the flip, while src/cli.ts's DISPATCH still
+// routed `probe` to the shell script.
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

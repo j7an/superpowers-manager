@@ -96,15 +96,16 @@ assert.ok(help.includes("$XDG_CONFIG_HOME/superpowers-manager"));
 assert.ok(help.includes("$HOME/.config/superpowers-manager"));
 
 // --- buildSpawn: POSIX executes the script directly ---
-const posix = bin.buildSpawn(
-  "probe",
-  ["--porcelain"],
-  "/root",
-  "/bin/sh",
-  "linux",
-);
-assert.strictEqual(posix.file, path.join("/root", "scripts", "probe"));
-assert.deepStrictEqual(posix.argv, ["--porcelain"]);
+// Vehicle only. This asserts buildSpawn's path construction, not anything
+// specific to `prepare`; it just has to name a command DISPATCH still spawns.
+// It moved off `probe` when slice 2 flipped it in-process — a pure path
+// computation keeps passing either way, so a stale vehicle here would read as
+// live coverage of a command that is no longer spawned. `scripts/prepare`
+// accepts no arguments, so the argv is empty. It dies with buildSpawn in
+// slice 4.
+const posix = bin.buildSpawn("prepare", [], "/root", "/bin/sh", "linux");
+assert.strictEqual(posix.file, path.join("/root", "scripts", "prepare"));
+assert.deepStrictEqual(posix.argv, []);
 
 // --- buildSpawn: Windows dispatches through the discovered shell:
 // <shell> scripts/<cmd> [args...]. path.join is used on both sides so the
@@ -118,10 +119,30 @@ assert.deepStrictEqual(win.argv, [
 ]);
 
 // --- resolvePackageRoot walks up to package.json from the bin's real path ---
+const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..", "..");
 const root = bin.resolvePackageRoot(
-  path.join(import.meta.dirname, "..", "..", "bin", "superpowers-manager.js"),
+  path.join(REPOSITORY_ROOT, "bin", "superpowers-manager.js"),
 );
-assert.strictEqual(root, path.resolve(import.meta.dirname, "..", ".."));
+assert.strictEqual(root, REPOSITORY_ROOT);
+
+// --- scripts/probe outlives this slice ---
+// scripts/install:18 and scripts/update:8 still execute `scripts/probe
+// --porcelain`, so deleting it breaks both commands before they reach their
+// lifecycle logic. Delete the script, its two callers' probe steps, and
+// tests/test_probe.sh together in the slice that ports install and update.
+// Asserting the RELATIONSHIP rather than a line number keeps this stable
+// against edits to either caller.
+assert.ok(
+  fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", "probe")),
+  "scripts/probe is still executed by scripts/install and scripts/update",
+);
+for (const caller of ["install", "update"]) {
+  assert.match(
+    fs.readFileSync(path.join(REPOSITORY_ROOT, "scripts", caller), "utf8"),
+    /scripts\/probe" --porcelain/,
+    `scripts/${caller} must still invoke scripts/probe`,
+  );
+}
 
 // --- isMain supports all declared Node 24.x releases and resolves bin symlinks ---
 const entryPath = fs.realpathSync(process.argv[1]);

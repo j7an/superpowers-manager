@@ -508,6 +508,53 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
 
 <!-- inventory:port-only:end -->
 
+## Surviving `scripts/probe` references (PR 11.5 slice 2, Task 6)
+
+Prose, deliberately not a numbered port-only entry: nothing below is an
+assertion this port added, so counting any of it would overstate `portOnly`.
+
+Task 6 flipped `DISPATCH.probe` to `in-process` and **deleted nothing**.
+`scripts/probe` and `tests/test_probe.sh` both survive this slice, because
+`scripts/install:18` and `scripts/update:8` still execute
+`sh "$root/scripts/probe" --porcelain` and read `identity_state`, `status`,
+and `update_control` back out of the porcelain through `spw_probe_field`.
+Re-pointing those two callers at the in-process command is also rejected for
+this slice: their lifecycle fakes stub `SPW_ADAPTER`, a seam only
+`scripts/core/adapter.sh` honours and the in-process `runAdapter` does not, so
+one command would resolve Codex state through two disagreeing sources. Delete
+the script, both callers' probe steps, and `tests/test_probe.sh` together in
+the slice that ports `install` and `update`.
+
+Every `scripts/probe` and `test_probe` match in the tree, classified. Two
+passes were run (full path and basename), plus a third over the bare `"probe"`
+string in `tests/**/*.js`, because a spawn assumption expressed as
+`runCli(sandbox, ["probe"], …)` matches neither of the first two patterns.
+
+| Bucket | Site | Why |
+|---|---|---|
+| Live shell caller | `scripts/install:18`, `scripts/update:8` | Production; the Task 6 Step 9 guard in `tests/bin/units.test.js` asserts both references, and Step 9a proved it fires |
+| Live shell caller | `tests/expected_tarball_contents.txt:58` | The script still ships, because those two callers execute it at runtime |
+| Live shell caller | `tests/test_probe.sh:346`, `:353` | The shell driver still exists and still runs under `tests/run.sh` |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-ENV-CODEX-PREFLIGHT-01` and the four `CLI-CHILD-STATUS-01` blocks | Re-pointed to `install`, vehicle-only comment added |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-PREFLIGHT-01`'s requirements map | Replaced by a derivation over `commandRequirements()` and `DISPATCH`; the hand-written map encoded dispatch a second time through the presence of `sh` |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-COMMANDS-01`'s `probe` row | Now takes the in-process branch; given a local upstream, a 40-hex ref, and a listing-answering `codex`, since an `exit 0` stub and the package-default upstream URL are respectively unusable and non-hermetic for a command that actually reads Codex state |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `PROBE-READONLY-01` | Rewritten, not re-pointed: it drove the real script through an `SPW_ADAPTER` stub that no longer takes effect |
+| Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — `ROUTING_CASES[0]` | Removed; see `bin-dispatch.md` item 7's retirement note |
+| Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — exit-code propagation | Re-pointed to `install`; an in-process command has no child whose status could propagate |
+| Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — the no-registered-handler backstop | Re-pointed to `prepare`: `probe` now has a registered handler, so overriding its dispatch entry no longer reaches the backstop |
+| Executable spawn assumption | `tests/bin/units.test.js:99-107` | `buildSpawn` path construction, re-pointed to `prepare`. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned |
+| Historical prose | `src/commands/probe.ts` (7 sites), `src/effective-selection.ts:70`, `:91` | Provenance citations into the shell original, which still exists, so every citation still resolves |
+| Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:679`, `:693`, `selection-state.md:237` | The migration record of what the shell did |
+| Historical prose | `tests/unit/commands-probe.test.js:70`, `:77`, `:106`; `tests/baseline/probe.test.js:4`, `:155`, `:234`, `:398`; `tests/bin/probe-fakes.js:4`; `tests/baseline/selection-location.test.js:26`, `:788` | Comments citing the shell original as the source of a ported contract |
+| Historical prose | `AGENTS.md:46` | "Keep `scripts/probe` read-only" still binds the surviving script, and `PROBE-READONLY-01` now holds the same property for the in-process command |
+
+`tests/bin/units.test.js:18-22`, `:67`, and `:162-166` mention `probe` and are
+deliberately unchanged: `parseArgs` is dispatch-independent, and
+`COMMAND_REQUIREMENTS.probe` keeps `codex` — only `python3` left it.
+`tests/bin/bin-dispatch.test.js`'s "missing codex blocks `probe`" case also
+stays on `probe`: it is the end-to-end net for that same requirement row, not
+a spawn vehicle. See the note on `bin-dispatch.md` items 42-44.
+
 ## Cardinality
 
 ```json inventory

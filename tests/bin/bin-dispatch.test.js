@@ -11,7 +11,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makePackageRoot, runDispatch } from "./dispatch-fixture.js";
+import {
+  makePackageRoot,
+  runDispatch,
+  SPAWN_COMMANDS,
+} from "./dispatch-fixture.js";
 
 const ALL_TOOLS = ["git", "python3", "codex"];
 
@@ -49,16 +53,15 @@ void test("a dist/cli.js that throws keeps its real error and is not relabelled"
 
 // --- inventory items 7-14: routing ----------------------------------------
 
-// `track-latest` (formerly item 10), `unpin` (formerly item 11), and `pin`
-// (formerly item 9) are no longer in this table: PR 11.5 flipped all three to
-// in-process commands (src/cli.ts DISPATCH), so none of them ever reaches its
-// `scripts/<name>` and none of them ever logs to the dispatch log. See the
-// retirement notes for items 9, 10, and 11 in
-// tests/migration-inventory/bin-dispatch.md and the dedicated in-process
-// routing cases just below this loop.
+// `track-latest` (formerly item 10), `unpin` (formerly item 11), `pin`
+// (formerly item 9), and `probe` (formerly item 7) are no longer in this
+// table: PR 11.5 flipped all four to in-process commands (src/cli.ts
+// DISPATCH), so none of them ever reaches its `scripts/<name>` and none of
+// them ever logs to the dispatch log. See the retirement notes for items 7,
+// 9, 10, and 11 in tests/migration-inventory/bin-dispatch.md and the
+// dedicated in-process routing cases just below this loop.
 /** @type {Array<[string[], string]>} */
 const ROUTING_CASES = [
-  [["probe", "--porcelain"], "probe --porcelain ref="],
   [["prepare", "--ref", "test"], "prepare --ref test ref="],
   [["install", "--dry-run"], "install --dry-run ref="],
   [["uninstall", "--purge"], "uninstall --purge ref="],
@@ -66,7 +69,7 @@ const ROUTING_CASES = [
 ];
 assert.equal(
   ROUTING_CASES.length,
-  5,
+  SPAWN_COMMANDS.length,
   "ROUTING_CASES lost or gained a case — update tests/migration-inventory/bin-dispatch.md",
 );
 
@@ -112,6 +115,11 @@ void test("routing: `pin` succeeds in-process and never reaches its script", () 
 // the shipped table. The runtime backstop that reports instead of crashing
 // still has zero other coverage, so this reaches it the only way left: by
 // patching a case-local copy of the compiled dispatch table directly.
+// Vehicle only. The command named here must be one DISPATCH still marks
+// "spawn", so that patching its entry to "in-process" reaches a name
+// IN_PROCESS_HANDLERS does not carry. It moved from `probe` to `prepare` when
+// slice 2 flipped `probe` in-process and gave it a registered handler. Do not
+// read the choice of `prepare` as a contract.
 void test("an in-process command with no registered handler fails closed", () => {
   // The compile-time guard (src/cli.ts's InProcessHandler registry) makes this
   // unreachable through the real table. The fixture reaches it by dispatching
@@ -119,13 +127,13 @@ void test("an in-process command with no registered handler fails closed", () =>
   // runtime backstop still reports rather than crashing.
   const result = runDispatch({
     tools: ALL_TOOLS,
-    args: ["probe"],
-    dispatchOverride: { probe: "in-process" },
+    args: ["prepare"],
+    dispatchOverride: { prepare: "in-process" },
   });
   assert.equal(result.status, 1);
   assert.equal(
     result.stderr,
-    "error: no in-process handler registered for: probe\n",
+    "error: no in-process handler registered for: prepare\n",
   );
 });
 
@@ -176,11 +184,15 @@ void test("--version through a symlink resolves, as npm and npx invoke bins", ()
 
 // --- inventory item 29: exit-code propagation --------------------------------
 
+// Vehicle only. This case tests that a spawned child's exit status reaches
+// the caller unchanged, not anything specific to `install`. It moved off
+// `probe` when slice 2 flipped it in-process, and it dies with the spawn path
+// in slice 4. Do not read the choice of `install` as a contract.
 void test("a script's exit code propagates unchanged", () => {
   const result = runDispatch({
     tools: ALL_TOOLS,
-    args: ["probe"],
-    scripts: { probe: "#!/bin/sh\nexit 42\n" },
+    args: ["install"],
+    scripts: { install: "#!/bin/sh\nexit 42\n" },
   });
   assert.equal(result.status, 42);
 });
@@ -376,16 +388,18 @@ void test("`pin` succeeds in-process with no POSIX shell on PATH", () => {
 
 // --- inventory items 42-47: codex required for probe and install ------------
 
+// NOT a vehicle: `probe` is the subject here. `COMMAND_REQUIREMENTS.probe`
+// keeps `codex` after slice 2's in-process flip (only `python3` leaves), and
+// this is the end-to-end net for that row. The per-case `scripts` override the
+// shell mirrored here went away with the flip — probe no longer reaches any
+// script, so a stub for one could never log. The shared `PACKAGE_ROOT`'s
+// default `loggingStub` still logs unconditionally on invocation, so the
+// empty-log assertion keeps catching a regression that dispatched anyway,
+// exactly as it does for the `install` sibling below.
 void test("missing codex blocks `probe` before dispatch and names the tool", () => {
   const result = runDispatch({
     tools: ["git", "python3"],
     args: ["probe"],
-    // Logs unconditionally if reached, so "did not dispatch" is proven rather
-    // than assumed.
-    scripts: {
-      probe:
-        "#!/bin/sh\nprintf 'probe ran\\n' >> \"$SPW_DISPATCH_LOG\"\nexit 0\n",
-    },
   });
   assert.equal(result.status, 1);
   assert.ok(result.stderr.includes("required command not found: codex"));

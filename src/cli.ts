@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { oneLine } from "./cli-arguments.js";
 import type { CommandContext } from "./commands/context.js";
 import { runPin } from "./commands/pin.js";
+import { runProbe } from "./commands/probe.js";
 import { runTrackLatest } from "./commands/track-latest.js";
 import { runUnpin } from "./commands/unpin.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
@@ -68,7 +69,7 @@ const DISPATCH = {
   "track-latest": "in-process",
   unpin: "in-process",
   prepare: "spawn",
-  probe: "spawn",
+  probe: "in-process",
   install: "spawn",
   update: "spawn",
   uninstall: "spawn",
@@ -91,13 +92,14 @@ const IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler> = {
   pin: runPin,
   "track-latest": runTrackLatest,
   unpin: runUnpin,
+  probe: runProbe,
 };
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
   "track-latest": [],
   unpin: [],
   prepare: ["git", "python3"],
-  probe: ["git", "python3", "codex"],
+  probe: ["git", "codex"],
   install: ["git", "python3", "codex"],
   update: ["git", "python3", "codex"],
   uninstall: ["python3", "codex"],
