@@ -30,6 +30,11 @@ const DECLARED = {
   "install-commands.md": ["tests/bin/install-commands.test.js"],
   "node-tooling.md": ["tests/bin/node-tooling.test.js"],
   "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.js"],
+  "probe.md": [
+    "tests/baseline/probe.test.js",
+    "tests/unit/commands-probe.test.js",
+    "tests/unit/status.test.js",
+  ],
   "ref-resolution.md": ["tests/baseline/ref-resolution.test.js"],
   "selection-commands.md": ["tests/baseline/selection-commands.test.js"],
   "selection-state.md": ["tests/baseline/selection-location.test.js"],

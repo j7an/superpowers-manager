@@ -57,8 +57,8 @@ selectors or intentionally update the inventory, test, and this map together.
 | `SEL-READER-DEPTH-01` | `tests/baseline/selection-state.test.js::SEL-READER-DEPTH-01 read enforces the exact JSON nesting boundary` | `tests/fixtures/baseline/selection/depth-257.json` |
 | `SEL-READER-BYTES-01` | `tests/baseline/selection-state.test.js::SEL-READER-BYTES-01 read has no input byte limit` | `tests/fixtures/baseline/selection/track-latest.json` |
 | `SEL-READER-PATHS-01` | `tests/baseline/selection-state.test.js::SEL-READER-PATHS-01 read rejects symlink, directory, and FIFO paths` | — |
-| `PROV-READER-STRICT-01` | `tests/test_probe.sh::# BASELINE CASE: PROV-READER-STRICT-01 strict provenance reader profile` | `tests/fixtures/baseline/provenance/duplicate-key.json` |
-| `PROV-READER-LENIENT-01` | `tests/test_probe.sh::# BASELINE CASE: PROV-READER-LENIENT-01 lenient commit reader profile` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
+| `PROV-READER-STRICT-01` | `tests/unit/provenance.test.js::PROV-READER-STRICT-01 reads fields under the strict provenance profile` | — |
+| `PROV-READER-LENIENT-01` | `tests/unit/provenance.test.js::PROV-READER-LENIENT-01 returns only an acceptable generated commit` | — |
 | `PROV-READER-CANDIDATE-01` | `tests/baseline/generated-plugin-corpus.test.js::PROV-READER-CANDIDATE-01 candidate provenance validator profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
 | `PROV-READER-CODEX-SOURCE-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: PROV-READER-CODEX-SOURCE-01 Codex source reader profile` | `tests/fixtures/baseline/provenance/non-standard-constant.json` |
 | `PROV-READER-CODEX-COMMIT-01` | `tests/unit/codex-state.test.js::PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
@@ -115,7 +115,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `PREPARE-VALIDATE-01` | `tests/baseline/cli-parity.test.js::PREPARE-VALIDATE-01 validation completes before activation` | `tests/builders/baseline-scenario.sh` |
 | `PREPARE-DETERMINISTIC-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
 | `PROBE-READONLY-01` | `tests/baseline/cli-parity.test.js::PROBE-READONLY-01 probe is read-only` | `tests/builders/baseline-scenario.sh` |
-| `PROBE-FAIL-CLOSED-01` | `tests/test_probe.sh::# BASELINE CASE: PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail closed` | — |
+| `PROBE-FAIL-CLOSED-01` | `tests/baseline/probe.test.js::PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail closed` | — |
 | `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.js::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/builders/baseline-scenario.sh` |
 | `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.js::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/builders/baseline-scenario.sh` |
 | `INSTALL-VERIFY-01` | `tests/test_marketplace_reconcile.sh::# BASELINE CASE: INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
