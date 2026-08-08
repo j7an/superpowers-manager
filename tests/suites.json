@@ -33,6 +33,7 @@
     "tests/unit/codex-json.test.js",
     "tests/unit/codex-state.test.js",
     "tests/unit/commands-pin.test.js",
+    "tests/unit/commands-prepare.test.js",
     "tests/unit/commands-probe.test.js",
     "tests/unit/commands-track-latest.test.js",
     "tests/unit/commands-unpin.test.js",
