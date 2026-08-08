@@ -460,6 +460,42 @@ function writeNoopTool(sandbox, name = "codex") {
 }
 
 /**
+ * The sandbox's `git` refuses any remote with a URL scheme and passes
+ * everything else through to the real binary.
+ *
+ * PR 11.5 slice 3. Slice 2 shipped a Layer 3 hermeticity escape:
+ * CLI-COMMANDS-01 resolved the package-default ref against a real GitHub URL
+ * once `probe` went in-process. `prepare` is worse — it clones. A gate that
+ * pattern-matches test source for "sites that reach prepare" is brittle and
+ * cannot see indirect reachability; this sits at the egress point instead,
+ * alongside GIT_CONFIG_NOSYSTEM, the private HOME, and the private TMPDIR that
+ * already make this sandbox a containment boundary.
+ *
+ * Local paths are byte-identical: the shim only ADDS a rejection.
+ * @param {string} bin
+ */
+function writeGitEgressShim(bin) {
+  const real = hostExecutable("git");
+  writeFileSync(
+    join(bin, "git"),
+    [
+      "#!/bin/sh",
+      'for spw_arg in "$@"; do',
+      '  case "$spw_arg" in',
+      "    http://*|https://*|git://*|ssh://*|ftp://*|ftps://*|git@*:*)",
+      '      echo "sandbox refuses network git remote: $spw_arg" >&2',
+      "      exit 128",
+      "      ;;",
+      "  esac",
+      "done",
+      `exec ${JSON.stringify(real)} "$@"`,
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+}
+
+/**
  * @param {{ stubScripts?: boolean }} [options]
  * @returns {Sandbox}
  */
@@ -512,6 +548,10 @@ function createSandbox({ stubScripts = false } = {}) {
     copyFileSync(ADAPTER, sandbox.adapter);
     chmodSync(sandbox.adapter, 0o755);
     for (const tool of SANDBOX_TOOLS) {
+      if (tool === "git") {
+        writeGitEgressShim(sandbox.bin);
+        continue;
+      }
       linkHostTool(sandbox.bin, tool);
     }
     for (const tool of ["node", "python3", "git"]) {

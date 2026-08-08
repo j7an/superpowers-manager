@@ -2,6 +2,7 @@
 // Unit tests for the bin's pure functions. Platform and env are injected so
 // the Windows dispatch path is testable without Windows.
 import * as assert from "node:assert";
+import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 /** @type {typeof import('../../src/cli.js')} */
@@ -204,5 +205,40 @@ assert.ok(
   "install must require codex",
 );
 assert.ok(installPf.errors.join("\n").includes("git"));
+
+// --- the baseline sandbox refuses network egress through git ---
+// PR 11.5 slice 3. The in-process prepare CLONES, so any sandbox case that
+// forgets SUPERPOWERS_UPSTREAM_URL would reach the production default at
+// src/effective-selection.ts:66. Local paths must still pass through.
+{
+  const support = await import(
+    new URL("../baseline/support.js", import.meta.url).href
+  );
+  const sandbox = support.createSandbox();
+  try {
+    for (const remote of [
+      "https://example.invalid/repo.git",
+      "http://example.invalid/repo.git",
+      "git://example.invalid/repo.git",
+      "ssh://git@example.invalid/repo.git",
+      "git@example.invalid:owner/repo.git",
+    ]) {
+      const refused = cp.spawnSync(path.join(sandbox.bin, "git"), [
+        "ls-remote",
+        remote,
+      ]);
+      assert.notStrictEqual(refused.status, 0, `${remote} must be refused`);
+      assert.match(
+        String(refused.stderr),
+        /sandbox refuses network git remote/,
+        `${remote} must be refused by the shim, not by the network`,
+      );
+    }
+    const version = cp.spawnSync(path.join(sandbox.bin, "git"), ["--version"]);
+    assert.strictEqual(version.status, 0, "local git must pass through");
+  } finally {
+    support.destroySandbox(sandbox);
+  }
+}
 
 console.log("units.test.js: OK");
