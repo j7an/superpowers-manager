@@ -1,0 +1,786 @@
+// @ts-check
+// End-to-end driver for the in-process `prepare` command, ported from
+// tests/test_prepare_with_fake_upstream.sh.
+//
+// Unlike tests/baseline/probe.test.js, this driver SPAWNS runPrepare rather
+// than calling it: see tests/baseline/prepare-child.js for why ctx.env cannot
+// make a prepare run hermetic on its own.
+
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { createCase } from "../bin/lifecycle-fixture.js";
+import {
+  caseEnv,
+  cloneUpstream,
+  commitOf,
+  prepare,
+  REFS,
+  UPSTREAM,
+} from "./prepare-fixture.js";
+
+/** @type {typeof import("../../src/selection-store.js")} */
+const { writeSelectionState } = await import(
+  new URL("../../dist/selection-store.js", import.meta.url).href
+);
+
+/** @typedef {import("../bin/lifecycle-fixture.js").CaseEnv} CaseEnv */
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const MANIFESTS = join(ROOT, "tests/fixtures/baseline/manifests");
+const LAYOUTS = join(ROOT, "tests/fixtures/baseline/generated-tree");
+
+/** @param {{ pkg: string }} c */
+const generated = (c) => join(c.pkg, "plugins", "superpowers");
+
+/** @param {CaseEnv} c */
+const cacheRepo = (c) => join(c.dir, "cache", "superpowers");
+
+/** @param {CaseEnv} c */
+const cacheManifest = (c) => join(cacheRepo(c), ".codex-plugin", "plugin.json");
+
+// An errno name always appears as a whole token — `ENOENT: no such file`,
+// `Error: EACCES`. The word boundaries are load-bearing, not cosmetic:
+//
+//   - `LICENSE` is one of the four required upstream paths, and
+//     `required upstream path missing: LICENSE` legitimately names it. Without
+//     `\b`, `E[A-Z]{3,}` matches the `ENSE` inside it and the case cannot pass.
+//   - mkdtempSync draws its six-character suffix from [A-Za-z0-9], so roughly
+//     one suffix in 280 contains an `E` followed by three more capitals. Every
+//     diagnostic here names a path under such a directory, so the unanchored
+//     form carries a several-percent false-failure rate per run.
+//
+// Neither boundary weakens the guard: a leaked errno, stack frame, or Traceback
+// banner still matches.
+const LEAKED_INTERNALS = /\bE[A-Z]{3,}\b|errno|\bat .*\.js:\d+|Traceback/;
+
+/**
+ * No prepare-owned diagnostic may carry errno text, a stack frame, or reader
+ * vocabulary. Applied to every negative case.
+ * @param {string} stderr
+ */
+function assertNoLeakedInternals(stderr) {
+  assert.doesNotMatch(stderr, LEAKED_INTERNALS);
+}
+
+/**
+ * `path\tkind[\tdigest]` lines for everything under `root`, so "the prior
+ * generated tree survived byte-identical" is a real byte comparison rather than
+ * an existence check. Same shape as tests/baseline/probe.test.js:65.
+ * @param {string} root
+ * @returns {string[]}
+ */
+function snapshotTree(root) {
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { recursive: true, withFileTypes: true })
+    .map((entry) => {
+      const path = join(entry.parentPath, entry.name);
+      const name = relative(root, path);
+      if (!entry.isFile()) return `${name}\t${entry.isDirectory() ? "d" : "?"}`;
+      return `${name}\tf\t${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+    })
+    .sort();
+}
+
+/**
+ * The `python3 -S` listing the two committed layout fixtures were generated
+ * from (tests/test_prepare_with_fake_upstream.sh:459-479): sorted relative
+ * paths, one per line, directories suffixed with `/`.
+ * @param {string} root
+ * @returns {string}
+ */
+function listing(root) {
+  const entries = readdirSync(root, { recursive: true, withFileTypes: true })
+    .map((entry) => {
+      const name = relative(root, join(entry.parentPath, entry.name));
+      return entry.isDirectory() ? `${name}/` : name;
+    })
+    .sort();
+  return `${entries.join("\n")}\n`;
+}
+
+/**
+ * A prior generated tree the run must not disturb. Every negative case seeds
+ * one and compares it afterwards; the assertion is worthless without a file in
+ * there that a replacement would remove.
+ * @param {CaseEnv} c
+ * @returns {string[]}
+ */
+function seedSentinel(c) {
+  const root = generated(c);
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, "sentinel.txt"), "prior generated tree\n");
+  return snapshotTree(root);
+}
+
+/**
+ * The parsed generated manifest.
+ * @param {CaseEnv} c
+ * @returns {Record<string, unknown>}
+ */
+function generatedManifest(c) {
+  return JSON.parse(
+    readFileSync(join(generated(c), ".codex-plugin", "plugin.json"), "utf8"),
+  );
+}
+
+/**
+ * A committed upstream manifest fixture, read at test time so no expectation
+ * here is a literal copy of it.
+ * @param {string} name
+ * @returns {Record<string, unknown>}
+ */
+function fixtureManifest(name) {
+  return JSON.parse(readFileSync(join(MANIFESTS, name), "utf8"));
+}
+
+/**
+ * The single helper cases 14-20 share: a throwaway upstream whose
+ * `.codex-plugin/plugin.json` is whatever `write` puts there, committed on
+ * `main`. Returns the ref to request and the cache path prepare will report.
+ * @param {CaseEnv} c
+ * @param {(path: string) => void} write
+ * @returns {{ source: string, commit: string, manifest: string }}
+ */
+function brokenManifestUpstream(c, write) {
+  const source = join(c.dir, "upstream-broken-manifest");
+  const { commit } = cloneUpstream(source, "main", (repository) => {
+    const dir = join(repository, ".codex-plugin");
+    mkdirSync(dir, { recursive: true });
+    write(join(dir, "plugin.json"));
+  });
+  return { source, commit, manifest: cacheManifest(c) };
+}
+
+/**
+ * Runs prepare against a broken-manifest upstream and pins the whole contract:
+ * exit 1, the exact hand-written diagnostic, no leaked internals, prior tree
+ * intact.
+ * @param {CaseEnv} c
+ * @param {(path: string) => void} write
+ * @param {(manifest: string) => string} message
+ */
+async function assertManifestRejected(c, write, message) {
+  const before = seedSentinel(c);
+  const broken = brokenManifestUpstream(c, write);
+  const result = await prepare(c, {
+    SUPERPOWERS_UPSTREAM_URL: broken.source,
+    SUPERPOWERS_REF: broken.commit,
+  });
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(result.stderr, `error: ${message(broken.manifest)}\n`);
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+}
+
+/**
+ * @param {CaseEnv} c
+ * @param {import("../../src/selection.js").SelectionRecord} record
+ */
+async function saveSelection(c, record) {
+  await writeSelectionState(
+    join(c.home, ".config", "superpowers-manager", "selection.json"),
+    record,
+  );
+}
+
+void test("GENERATED-FALLBACK-01 manifest-less upstream uses the manager fallback", async () => {
+  const c = createCase({ fakes: "probe" });
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^prepared v5\.0\.0 at [0-9a-f]{40}\n$/m);
+
+  // The generated manifest came from the manager template, not from upstream:
+  // the v5.0.0 commit has no .codex-plugin/plugin.json at all.
+  const manifest = JSON.parse(
+    readFileSync(join(generated(c), ".codex-plugin", "plugin.json"), "utf8"),
+  );
+  assert.equal(manifest.name, "superpowers");
+  assert.equal(manifest.skills, "./skills/");
+
+  // A manifest-less upstream generates no hooks/ (AGENTS.md's hook policy).
+  assert.equal(existsSync(join(generated(c), "hooks")), false);
+
+  // prepare makes no Codex-dependent adapter call, so the fake codex in this
+  // case must never have been launched.
+  assert.equal(existsSync(c.codexLog), false);
+});
+
+void test("MANIFEST-READER-UPSTREAM-01 upstream manifest version reaches provenance", async () => {
+  const c = createCase({ fakes: "probe" });
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
+  assert.equal(result.status, 0, result.stderr);
+
+  const provenance = JSON.parse(
+    readFileSync(join(generated(c), ".superpowers-upstream.json"), "utf8"),
+  );
+  // Read from the committed fixture at test time. A literal here would be a
+  // claim about a file this test does not own.
+  assert.equal(
+    provenance.upstream_manifest_version,
+    fixtureManifest("upstream-no-hooks.json").version,
+  );
+  assert.equal(provenance.requested_ref, REFS.noHooksManifest);
+  assert.equal(provenance.source, UPSTREAM);
+  assert.equal(existsSync(c.codexLog), false);
+});
+
+void test("GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.wrongName });
+  assert.equal(result.status, 1, result.stdout);
+
+  // The adapter's own rejection, replayed verbatim, then prepare's own trailer.
+  assert.match(
+    result.stderr,
+    /^- plugin manifest field `name` must equal `superpowers`$/m,
+  );
+  assert.match(
+    result.stderr,
+    /^error: built-in generated plugin validation failed\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+void test("GENERATED-HOOKS-FORBID-01 an exact empty hooks object stays hook-free", async () => {
+  const c = createCase({ fakes: "probe" });
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.emptyObjectHooks });
+  assert.equal(result.status, 0, result.stderr);
+
+  assert.deepEqual(
+    generatedManifest(c).hooks,
+    fixtureManifest("upstream-empty-hooks.json").hooks,
+  );
+  assert.equal(existsSync(join(generated(c), "hooks")), false);
+});
+
+void test("GENERATED-HOOKS-DEFAULT-01 GENERATED-HOOKS-DEFAULT-LAYOUT-01 empty-array default discovery", async () => {
+  const c = createCase({ fakes: "probe" });
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.defaultHooks });
+  assert.equal(result.status, 0, result.stderr);
+
+  assert.deepEqual(
+    generatedManifest(c).hooks,
+    fixtureManifest("upstream-default-hooks.json").hooks,
+  );
+  // Layout fixtures contain only relative paths, so no dynamic commit,
+  // version, or source value requires normalization.
+  assert.equal(
+    listing(generated(c)),
+    readFileSync(join(LAYOUTS, "default-hooks.txt"), "utf8"),
+  );
+});
+
+void test("GENERATED-HOOKS-DECLARED-01 GENERATED-UNKNOWN-FIELDS-01 declared hook paths and unknown fields", async () => {
+  // The single-path form. Its manifest is the committed fixture unmodified, so
+  // this half also pins that an unknown upstream field survives the build.
+  const single = createCase({ fakes: "probe" });
+  const active = await prepare(single, { SUPERPOWERS_REF: REFS.activeHooks });
+  assert.equal(active.status, 0, active.stderr);
+  const upstreamManifest = fixtureManifest("upstream-active-hooks.json");
+  assert.deepEqual(generatedManifest(single).hooks, upstreamManifest.hooks);
+  assert.deepEqual(
+    generatedManifest(single).x_future_manifest,
+    upstreamManifest.x_future_manifest,
+  );
+  assert.equal(
+    existsSync(join(generated(single), "hooks", "hooks-codex.json")),
+    true,
+  );
+
+  // The multi-path form, whose declared targets sit outside hooks/. This is the
+  // shape declared-hooks.txt was captured from
+  // (tests/test_prepare_with_fake_upstream.sh:864-876).
+  const many = createCase({ fakes: "probe" });
+  const declared = await prepare(many, { SUPERPOWERS_REF: REFS.declaredHooks });
+  assert.equal(declared.status, 0, declared.stderr);
+  assert.deepEqual(generatedManifest(many).hooks, [
+    "./config/hooks-first.json",
+    "./alternate/hooks-second.json",
+  ]);
+  assert.deepEqual(
+    generatedManifest(many).x_future_manifest,
+    upstreamManifest.x_future_manifest,
+  );
+  assert.equal(
+    listing(generated(many)),
+    readFileSync(join(LAYOUTS, "declared-hooks.txt"), "utf8"),
+  );
+});
+
+void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.escapingSymlink });
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stderr, /^hook materialization failed: symlink escapes/m);
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+void test("CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd", async () => {
+  const c = createCase({ fakes: "probe" });
+  // The package root's own generated tree must be untouched: a relative
+  // SUPERPOWERS_PLUGIN_ROOT resolves against the invocation cwd
+  // (scripts/prepare:17-24), never against ctx.root.
+  const untouched = snapshotTree(generated(c));
+  const result = await prepare(
+    c,
+    {
+      SUPERPOWERS_CACHE_DIR: "relative-cache",
+      SUPERPOWERS_PLUGIN_ROOT: "relative-plugins/superpowers",
+    },
+    { cwd: c.dir },
+  );
+  assert.equal(result.status, 0, result.stderr);
+
+  assert.equal(
+    existsSync(join(c.dir, "relative-cache", "superpowers", ".git")),
+    true,
+  );
+  assert.equal(
+    existsSync(
+      join(
+        c.dir,
+        "relative-plugins",
+        "superpowers",
+        ".codex-plugin",
+        "plugin.json",
+      ),
+    ),
+    true,
+  );
+  assert.deepEqual(snapshotTree(generated(c)), untouched);
+});
+
+void test("prepare honours a pinned saved selection", async () => {
+  const c = createCase({ fakes: "probe" });
+  const commit = commitOf(REFS.fallback);
+  await saveSelection(c, {
+    schema_version: 1,
+    mode: "pinned",
+    source: UPSTREAM,
+    requested_ref: REFS.fallback,
+    resolved_ref: REFS.fallback,
+    commit,
+  });
+  // No SUPERPOWERS_REF: this is the branch that reaches fetchExactCommit.
+  const result = await prepare(c, {});
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    result.stdout.includes(`prepared ${REFS.fallback} at ${commit}\n`),
+    true,
+  );
+
+  const provenance = JSON.parse(
+    readFileSync(join(generated(c), ".superpowers-upstream.json"), "utf8"),
+  );
+  assert.equal(provenance.commit, commit);
+  assert.equal(provenance.source, UPSTREAM);
+});
+
+void test("prepare clones once and then fetches into the same cache", async () => {
+  const c = createCase({ fakes: "probe" });
+  const first = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
+  assert.equal(first.status, 0, first.stderr);
+  const inode = statSync(cacheRepo(c)).ino;
+
+  const second = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
+  assert.equal(second.status, 0, second.stderr);
+  // Same inode: the second run took the fetch branch
+  // (src/commands/prepare.ts:310) instead of removing and re-cloning.
+  assert.equal(statSync(cacheRepo(c)).ino, inode);
+});
+
+void test("prepare rejects an upstream missing any required path", async () => {
+  // scripts/prepare:64-67's labels, in the shell's order. The label, not the
+  // path, is what the diagnostic carries.
+  for (const [path, label] of [
+    ["skills", "skills/"],
+    ["LICENSE", "LICENSE"],
+    ["README.md", "README.md"],
+    ["CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT.md"],
+  ]) {
+    const c = createCase({ fakes: "probe" });
+    const before = seedSentinel(c);
+    const { source, commit } = cloneUpstream(
+      join(c.dir, `upstream-without-${label.replace("/", "")}`),
+      "main",
+      (repository) => {
+        rmSync(join(repository, path), { recursive: true, force: true });
+      },
+    );
+    const result = await prepare(c, {
+      SUPERPOWERS_UPSTREAM_URL: source,
+      SUPERPOWERS_REF: commit,
+    });
+    assert.equal(result.status, 1, result.stdout);
+    assert.equal(
+      result.stderr,
+      `error: required upstream path missing: ${label}\n`,
+    );
+    assertNoLeakedInternals(result.stderr);
+    assert.deepEqual(snapshotTree(generated(c)), before);
+  }
+});
+
+void test("prepare runs the additional plugin validator inside the staging workspace", async () => {
+  // (a) A validator that succeeds. Its stdout reaches result.stdout, and it
+  // prints the TMPDIR it actually ran under.
+  const ok = createCase({ fakes: "probe" });
+  const okValidator = join(ok.dir, "validator-ok.py");
+  writeFileSync(
+    okValidator,
+    'import os\nimport sys\nprint("validator saw " + sys.argv[1])\nprint("TMPDIR=" + os.environ["TMPDIR"])\n',
+  );
+  const passed = await prepare(ok, {
+    SUPERPOWERS_REF: REFS.fallback,
+    SUPERPOWERS_VALIDATOR: okValidator,
+  });
+  assert.equal(passed.status, 0, passed.stderr);
+  assert.match(passed.stdout, /^validator saw .*\/superpowers$/m);
+
+  // scripts/prepare:35-36 exported TMPDIR="$prepare_workspace"; runValidator
+  // restores that. Without the override the child would inherit the case's own
+  // TMPDIR, so this is the assertion that keeps the ported half of spec
+  // divergence 9 load-bearing rather than comment-only.
+  const environment = caseEnv(ok);
+  const printed = passed.stdout.match(/^TMPDIR=(.*)$/m)?.[1];
+  assert.equal(typeof printed, "string", passed.stdout);
+  const workspace = /** @type {string} */ (printed);
+  assert.notEqual(workspace, environment.TMPDIR);
+  assert.equal(
+    dirname(workspace),
+    dirname(environment.SUPERPOWERS_PLUGIN_ROOT),
+  );
+  assert.match(basename(workspace), /^\.superpowers\.prepare\./);
+
+  // (b) A validator that fails.
+  const failing = createCase({ fakes: "probe" });
+  const before = seedSentinel(failing);
+  const failValidator = join(failing.dir, "validator-fail.py");
+  writeFileSync(failValidator, "import sys\nsys.exit(1)\n");
+  const rejected = await prepare(failing, {
+    SUPERPOWERS_REF: REFS.fallback,
+    SUPERPOWERS_VALIDATOR: failValidator,
+  });
+  assert.equal(rejected.status, 1, rejected.stdout);
+  assert.equal(rejected.stderr, "error: additional plugin validation failed\n");
+  assertNoLeakedInternals(rejected.stderr);
+  assert.deepEqual(snapshotTree(generated(failing)), before);
+
+  // (c) A validator path that does not exist.
+  const absent = createCase({ fakes: "probe" });
+  const missing = join(absent.dir, "validator-missing.py");
+  const notFound = await prepare(absent, {
+    SUPERPOWERS_REF: REFS.fallback,
+    SUPERPOWERS_VALIDATOR: missing,
+  });
+  assert.equal(notFound.status, 1, notFound.stdout);
+  assert.equal(
+    notFound.stderr,
+    `error: additional plugin validator not found: ${missing}\n`,
+  );
+  assertNoLeakedInternals(notFound.stderr);
+});
+
+void test("prepare writes complete provenance and is idempotent", async () => {
+  const c = createCase({ fakes: "probe" });
+  const first = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
+  assert.equal(first.status, 0, first.stderr);
+
+  const path = join(generated(c), ".superpowers-upstream.json");
+  const bytes = readFileSync(path);
+  const provenance = JSON.parse(bytes.toString("utf8"));
+  assert.deepEqual(Object.keys(provenance).sort(), [
+    "commit",
+    "requested_ref",
+    "resolved_ref",
+    "source",
+    "upstream_manifest_version",
+  ]);
+  assert.equal(provenance.source, UPSTREAM);
+  assert.equal(provenance.requested_ref, REFS.noHooksManifest);
+  assert.equal(provenance.resolved_ref, REFS.noHooksManifest);
+  assert.equal(provenance.commit, commitOf(REFS.noHooksManifest));
+  assert.equal(
+    provenance.upstream_manifest_version,
+    fixtureManifest("upstream-no-hooks.json").version,
+  );
+
+  const second = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
+  assert.equal(second.status, 0, second.stderr);
+  assert.deepEqual(readFileSync(path), bytes);
+});
+
+void test("prepare rejects a malformed upstream manifest", async () => {
+  const c = createCase({ fakes: "probe" });
+  await assertManifestRejected(
+    c,
+    (path) => {
+      writeFileSync(path, '{"name": "superpowers",\n');
+    },
+    (manifest) => `invalid manifest JSON in ${manifest}`,
+  );
+});
+
+void test("prepare rejects an upstream manifest carrying NaN", async () => {
+  const c = createCase({ fakes: "probe" });
+  await assertManifestRejected(
+    c,
+    (path) => {
+      writeFileSync(path, '{"name": "superpowers", "version": NaN}\n');
+    },
+    (manifest) => `invalid manifest JSON in ${manifest}`,
+  );
+});
+
+void test("prepare rejects an upstream manifest nested beyond the depth limit", async () => {
+  const c = createCase({ fakes: "probe" });
+  await assertManifestRejected(
+    c,
+    (path) => {
+      // The profile allows 256 containers (src/hooks.ts:35); 257 arrays inside
+      // the top-level object is the first shape past it.
+      /** @type {unknown} */
+      let nested = 0;
+      for (let depth = 0; depth < 257; depth += 1) nested = [nested];
+      writeFileSync(
+        path,
+        `${JSON.stringify({ name: "superpowers", x_future_manifest: nested })}\n`,
+      );
+    },
+    (manifest) => `invalid manifest JSON in ${manifest}`,
+  );
+});
+
+void test("prepare rejects an upstream manifest holding invalid UTF-8", async () => {
+  const c = createCase({ fakes: "probe" });
+  await assertManifestRejected(
+    c,
+    (path) => {
+      writeFileSync(
+        path,
+        Buffer.concat([
+          Buffer.from('{"name": "'),
+          Buffer.from([0xff]),
+          Buffer.from('"}\n'),
+        ]),
+      );
+    },
+    (manifest) => `invalid manifest JSON in ${manifest}`,
+  );
+});
+
+void test("prepare reports an unreadable upstream manifest without an errno", async () => {
+  const c = createCase({ fakes: "probe" });
+  // Two runs: git stores no mode below the executable bit, so a committed
+  // mode-000 file checks out readable. The first run populates the cache; the
+  // mode is applied there, and the second run takes the fetch branch, which
+  // leaves the working tree alone.
+  const first = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
+  assert.equal(first.status, 0, first.stderr);
+  const before = snapshotTree(generated(c));
+
+  const manifest = cacheManifest(c);
+  chmodSync(manifest, 0o000);
+  try {
+    const result = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
+    assert.equal(result.status, 1, result.stdout);
+    assert.equal(
+      result.stderr,
+      `error: cannot read manifest JSON in ${manifest}\n`,
+    );
+    assertNoLeakedInternals(result.stderr);
+    assert.deepEqual(snapshotTree(generated(c)), before);
+  } finally {
+    chmodSync(manifest, 0o644);
+  }
+});
+
+void test("prepare rejects an upstream manifest that is a JSON array", async () => {
+  const c = createCase({ fakes: "probe" });
+  await assertManifestRejected(
+    c,
+    (path) => {
+      writeFileSync(path, '[{"name": "superpowers"}]\n');
+    },
+    (manifest) => `manifest must be a JSON object: ${manifest}`,
+  );
+});
+
+void test("prepare rejects a non-string upstream manifest version", async () => {
+  const c = createCase({ fakes: "probe" });
+  // Spec divergence 7: the shell stringified any type through Python's print(),
+  // so `"version": 6` became "6" and flowed into provenance.
+  await assertManifestRejected(
+    c,
+    (path) => {
+      writeFileSync(path, '{"name": "superpowers", "version": 6}\n');
+    },
+    (manifest) => `upstream manifest version is not a string: ${manifest}`,
+  );
+});
+
+void test("prepare rejects a directory as the fallback manifest template before building", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const template = join(c.dir, "template-directory");
+  mkdirSync(template, { recursive: true });
+
+  const result = await prepare(c, {
+    SUPERPOWERS_REF: REFS.fallback,
+    SUPERPOWERS_MANIFEST_TEMPLATE: template,
+  });
+  assert.equal(result.status, 1, result.stdout);
+  assert.equal(
+    result.stderr,
+    `error: missing fallback manifest template: ${template}\n`,
+  );
+  assertNoLeakedInternals(result.stderr);
+
+  // No adapter build ran: the same contract
+  // tests/baseline/cli-parity.test.js:1190-1209 asserts for the spawned path.
+  // An adapter build always replays `generated plugin validation passed: …`
+  // onto stdout, and the template check precedes the cache mkdir
+  // (src/commands/prepare.ts:292-299), so neither is present.
+  assert.equal(result.stdout, "");
+  assert.equal(existsSync(join(c.dir, "cache")), false);
+
+  // And no staging tree was left behind under the plugin root's parent.
+  const plugins = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
+  assert.deepEqual(
+    readdirSync(plugins).filter((name) =>
+      name.startsWith(".superpowers.prepare."),
+    ),
+    [],
+  );
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+void test("prepare rejects a directory as the additional plugin validator", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const validator = join(c.dir, "validator-directory");
+  mkdirSync(validator, { recursive: true });
+
+  const result = await prepare(c, {
+    SUPERPOWERS_REF: REFS.fallback,
+    SUPERPOWERS_VALIDATOR: validator,
+  });
+  assert.equal(result.status, 1, result.stdout);
+  assert.equal(
+    result.stderr,
+    `error: additional plugin validator not found: ${validator}\n`,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+void test("prepare reports a failed upstream copy without an errno", async () => {
+  const c = createCase({ fakes: "probe" });
+  // Two runs for the same reason as the unreadable-manifest case: git records
+  // no directory modes at all, so the mode has to be applied to the cache.
+  const first = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
+  assert.equal(first.status, 0, first.stderr);
+  const before = snapshotTree(generated(c));
+
+  const skill = join(cacheRepo(c), "skills", "brainstorming");
+  chmodSync(skill, 0o000);
+  try {
+    const result = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
+    assert.equal(result.status, 1, result.stdout);
+    assert.equal(
+      result.stderr,
+      `error: cannot copy upstream path into candidate: ${join(cacheRepo(c), "skills")}\n`,
+    );
+    assertNoLeakedInternals(result.stderr);
+    assert.deepEqual(snapshotTree(generated(c)), before);
+  } finally {
+    chmodSync(skill, 0o755);
+  }
+});
+
+void test("prepare keeps hostile git output off its stream on both fetch branches", async () => {
+  /**
+   * A source that is a directory but not a repository. Measured: git itself
+   * writes five lines to the combined stream for this shape.
+   * @param {CaseEnv} c
+   * @returns {string}
+   */
+  const nonRepository = (c) => {
+    const path = join(c.dir, "not-a-repository");
+    mkdirSync(path, { recursive: true });
+    return path;
+  };
+
+  // Non-pinned: the cache already exists, so this is the fetch branch
+  // (src/commands/prepare.ts:311-328), whose diagnostic names the source and
+  // nothing else. Exact equality is the assertion — one hand-written line.
+  const env = createCase({ fakes: "probe" });
+  const commit = commitOf(REFS.fallback);
+  const seeded = await prepare(env, { SUPERPOWERS_REF: commit });
+  assert.equal(seeded.status, 0, seeded.stderr);
+  const before = snapshotTree(generated(env));
+
+  const hostile = nonRepository(env);
+  const fetched = await prepare(env, {
+    SUPERPOWERS_REF: commit,
+    SUPERPOWERS_UPSTREAM_URL: hostile,
+  });
+  assert.equal(fetched.status, 1, fetched.stdout);
+  assert.equal(
+    fetched.stderr,
+    `error: cannot fetch upstream repo: ${hostile}\n`,
+  );
+  assertNoLeakedInternals(fetched.stderr);
+  assert.deepEqual(snapshotTree(generated(env)), before);
+
+  // Pinned: fetchExactCommit splices git's combined output into its own message
+  // at src/upstream.ts:334, :349, and through proveCommit at :262 — inherited
+  // from spw_upstream_cli's `spw_die "${_upstream_out#error: }"`, not a
+  // regression. oneLine() is what bounds the harm, so the contract this half
+  // can state is containment: however many lines git wrote, the whole stream is
+  // exactly one line.
+  const pinned = createCase({ fakes: "probe" });
+  const pinnedBefore = seedSentinel(pinned);
+  const pinnedHostile = nonRepository(pinned);
+  await saveSelection(pinned, {
+    schema_version: 1,
+    mode: "pinned",
+    source: pinnedHostile,
+    requested_ref: commit,
+    resolved_ref: commit,
+    commit,
+  });
+  const result = await prepare(pinned, {
+    SUPERPOWERS_UPSTREAM_URL: pinnedHostile,
+  });
+  assert.equal(result.status, 1, result.stdout);
+  assert.equal(result.stderr.split("\n").filter(Boolean).length, 1);
+  assert.match(result.stderr, /^error: [^\n]*\n$/);
+  assert.equal(
+    result.stderr.includes("does not appear to be a git repository"),
+    false,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(pinned)), pinnedBefore);
+});
