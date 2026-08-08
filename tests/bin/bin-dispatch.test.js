@@ -106,6 +106,29 @@ void test("routing: `pin` succeeds in-process and never reaches its script", () 
   assert.deepEqual(result.log, []);
 });
 
+// New (PR 11.5, Task 3): src/cli.ts's IN_PROCESS_HANDLERS registry is now
+// exhaustive over the commands DISPATCH marks "in-process", so a real flip
+// without a registered handler is a compile error and cannot happen through
+// the shipped table. The runtime backstop that reports instead of crashing
+// still has zero other coverage, so this reaches it the only way left: by
+// patching a case-local copy of the compiled dispatch table directly.
+void test("an in-process command with no registered handler fails closed", () => {
+  // The compile-time guard (src/cli.ts's InProcessHandler registry) makes this
+  // unreachable through the real table. The fixture reaches it by dispatching
+  // a name the registry does not carry, which is the only way to prove the
+  // runtime backstop still reports rather than crashing.
+  const result = runDispatch({
+    tools: ALL_TOOLS,
+    args: ["probe"],
+    dispatchOverride: { probe: "in-process" },
+  });
+  assert.equal(result.status, 1);
+  assert.equal(
+    result.stderr,
+    "error: no in-process handler registered for: probe\n",
+  );
+});
+
 // --- inventory items 15-19: unknown subcommand -----------------------------
 
 void test("an unknown subcommand fails with usage and dispatches nothing", () => {

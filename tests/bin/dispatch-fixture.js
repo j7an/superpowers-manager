@@ -86,17 +86,30 @@ const PIN_UPSTREAM = join(SCRATCH, "pin-upstream");
   }
 }
 
-/** The subcommands the real bin dispatches to. */
-export const DISPATCH_COMMANDS = [
-  "pin",
-  "track-latest",
-  "unpin",
-  "prepare",
-  "probe",
-  "install",
-  "update",
-  "uninstall",
-];
+/** @type {typeof import("../../src/cli.js")} */
+const { DISPATCH } = await import(
+  new URL("../../dist/cli.js", import.meta.url).href
+);
+
+/**
+ * The subcommands the real bin dispatches to. Derived, never restated: a
+ * third hand-maintained copy of the eight names can agree with itself while
+ * disagreeing with the code it describes.
+ */
+export const DISPATCH_COMMANDS = /** @type {(keyof typeof DISPATCH)[]} */ (
+  Object.keys(DISPATCH)
+);
+
+/**
+ * The subset the real bin still spawns. Exported here so
+ * tests/bin/bin-dispatch.test.js can size ROUTING_CASES from production
+ * instead of a literal — it imports only from this fixture today, and adding
+ * a second dynamic `dist/cli.js` import there would recreate the drift this
+ * derivation removes.
+ */
+export const SPAWN_COMMANDS = DISPATCH_COMMANDS.filter(
+  (command) => DISPATCH[command] === "spawn",
+);
 
 /**
  * A stub script that appends its invocation to $SPW_DISPATCH_LOG. Mirrors the
@@ -124,6 +137,32 @@ function writeExecutable(dir, name, body) {
   const path = join(dir, name);
   writeFileSync(path, body, { mode: 0o755 });
   return path;
+}
+
+/**
+ * Patches a case-local copy of dist/cli.js's compiled DISPATCH table —
+ * never the shared dist/ this fixture copies from, and never src/cli.ts.
+ * Used to simulate a DISPATCH entry the real IN_PROCESS_HANDLERS registry
+ * does not carry: src/cli.ts's exhaustiveness check makes that state
+ * unreachable through the real table, so this is the only way to exercise
+ * the runtime backstop that remains for it.
+ * @param {string} cliPath
+ * @param {Record<string, "spawn" | "in-process">} overrides
+ */
+function patchDispatch(cliPath, overrides) {
+  let text = readFileSync(cliPath, "utf8");
+  for (const [command, mode] of Object.entries(overrides)) {
+    const pattern = new RegExp(
+      `(["']?${command}["']?:\\s*)"(?:spawn|in-process)"`,
+    );
+    if (!pattern.test(text)) {
+      throw new Error(
+        `dispatchOverride: no DISPATCH entry found for "${command}" in ${cliPath}`,
+      );
+    }
+    text = text.replace(pattern, `$1"${mode}"`);
+  }
+  writeFileSync(cliPath, text, "utf8");
 }
 
 /**
@@ -203,6 +242,12 @@ export function makePackageRoot(kind) {
  *   resolving something. `git` must not also appear in `tools` when this is
  *   set. Every other tool's presence or absence is still stated by `tools`
  *   exactly as the file header promises.
+ * @property {Record<string, "spawn" | "in-process">} [dispatchOverride]
+ *   patches the case-local copy of dist/cli.js's compiled DISPATCH table for
+ *   the named commands — never the real src/cli.ts. The only way to put a
+ *   command into a DISPATCH state src/cli.ts's IN_PROCESS_HANDLERS registry
+ *   does not carry, which is otherwise a compile error and thus unreachable
+ *   through the real table.
  */
 
 /**
@@ -240,9 +285,10 @@ export function runDispatch(options) {
   mkdirSync(configDir, { recursive: true });
 
   let packageRoot = options.packageRoot ?? PACKAGE_ROOT;
-  if (options.scripts || options.missingScripts) {
-    // Overrides mutate scripts/, so this case gets its own copy of the root
-    // rather than editing the shared base out from under other cases.
+  if (options.scripts || options.missingScripts || options.dispatchOverride) {
+    // Overrides mutate scripts/ or dist/, so this case gets its own copy of
+    // the root rather than editing the shared base out from under other
+    // cases.
     const copy = join(caseDir, "pkg");
     cpSync(packageRoot, copy, { recursive: true });
     for (const [name, body] of Object.entries(options.scripts ?? {})) {
@@ -250,6 +296,9 @@ export function runDispatch(options) {
     }
     for (const name of options.missingScripts ?? []) {
       rmSync(join(copy, "scripts", name), { force: true });
+    }
+    if (options.dispatchOverride) {
+      patchDispatch(join(copy, "dist", "cli.js"), options.dispatchOverride);
     }
     packageRoot = copy;
   }

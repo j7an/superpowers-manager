@@ -530,6 +530,19 @@ item 1, a structural safety net with no shell analogue at all.
     numbered shell item.
 40. **New** (PR 11.5, Task 7). Same case: `result.log` is empty (`:351`).
     Port-only, same rationale as item 39.
+41. **New** (PR 11.5, Task 3). An in-process command with no registered
+    handler fails closed: `result.status === 1`
+    (`tests/bin/bin-dispatch.test.js:125`). Port-only, with no shell
+    counterpart of any kind: the condition only exists because `src/cli.ts`'s
+    `IN_PROCESS_HANDLERS` registry became exhaustiveness-checked in this same
+    task, making a `DISPATCH` entry without a registered handler a compile
+    error through the real table. The case reaches the runtime backstop that
+    remains for that guarantee by patching a case-local copy of the compiled
+    `dist/cli.js`'s `DISPATCH` table (`dispatch-fixture.js`'s
+    `dispatchOverride` option on `runDispatch`), never `src/cli.ts` itself.
+42. **New** (PR 11.5, Task 3). Same case: stderr is exactly
+    `error: no in-process handler registered for: probe\n`
+    (`:126-129`). Port-only, same rationale as item 41.
 
 <!-- inventory:port-only:end -->
 
@@ -538,8 +551,8 @@ item 1, a structural safety net with no shell analogue at all.
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 40,
-  "ports": { "tests/bin/bin-dispatch.test.js": 31 }
+  "portOnly": 42,
+  "ports": { "tests/bin/bin-dispatch.test.js": 32 }
 }
 ```
 
@@ -552,11 +565,11 @@ item 1, a structural safety net with no shell analogue at all.
   1+2+3+8+5+4+3+1+1+1+2+3+3+3+1+3+3+1+3+2 = 53). This count is historical —
   it describes the deleted shell script as it stood at the time it was
   ported — and does not change when the port's own structure changes.
-- Port (`tests/bin/bin-dispatch.test.js`): 31 static `test(` call sites (3 of
+- Port (`tests/bin/bin-dispatch.test.js`): 32 static `test(` call sites (3 of
   them data-driven loops — `ROUTING_CASES` ×5, `NO_GIT_CASES` ×1,
   `NO_CODEX_CASES` ×1, each one smaller than before PR 11.5 flipped `pin`,
   `track-latest`, and `unpin` to in-process and removed all three from every
-  table they used to occupy — expanding to 35 runtime cases), carrying **44**
+  table they used to occupy — expanding to 36 runtime cases), carrying **44**
   of the 53 shell assertions mapped (two recorded merges: item 15 into the
   port's `status === 2` check, and items 30-31 into the port's two-line
   `assert.deepEqual`), plus **9 retired items** (9, 10, 11, 38, 39, 41, 48,
@@ -570,14 +583,16 @@ item 1, a structural safety net with no shell analogue at all.
   more, so each specific condition can no longer occur in either direction,
   and no JS assertion enforces any of them any more; see each item's
   retirement note for the analogous in-process property and where it is now
-  tested). 44 mapped + 9 retired = 53. Plus 40 port-only assertions (39
+  tested). 44 mapped + 9 retired = 53. Plus 42 port-only assertions (39
   additive `result.status === 0` / `result.log` checks the shell left
   implicit under `set -e` or that have no shell counterpart at all, plus one
-  structural array-length guard) with no shell counterpart.
+  structural array-length guard, plus 2 new assertions covering the
+  in-process runtime backstop with no shell counterpart of any kind — see
+  items 41-42) with no shell counterpart.
 - Reconciliation: 44 of the 53 shell items are mapped (some 1:1 to their own
   JS assertion, two pairs sharing one JS assertion via the recorded merges
   above), 9 are retired (noted above) — not drops, since a retirement is
   recorded with its own note explaining why no replacement assertion is
-  possible, rather than silently disappearing. 44 + 9 = 53. The 40 port-only
+  possible, rather than silently disappearing. 44 + 9 = 53. The 42 port-only
   assertions are strictly additive test coverage — not a reconciliation of
   any shell assertion — and are excluded from the 44/53 arithmetic above.
