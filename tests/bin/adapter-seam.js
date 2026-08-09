@@ -12,6 +12,8 @@
 // performs reaches Codex through codexBin (src/adapter.ts:575-660). What
 // cannot re-anchor is declared here.
 
+import { join } from "node:path";
+
 /** What the fake does. */
 export const SEAM_MODES = /** @type {const} */ ([
   "delegate",
@@ -115,7 +117,16 @@ export function assertSeamScriptsPresent(root, exists) {
           "entry, so the gate cannot name the files that would need re-basing",
       );
     }
-    if (!exists(`${root}/scripts/${script}`)) {
+    // join(), not string concatenation: root is a fileURLToPath(new URL("../..",
+    // import.meta.url)) result, which always carries a trailing slash, so
+    // `${root}/scripts/${script}` would double the slash. That spelling still
+    // resolves through a real existsSync (the OS collapses it), but it is a
+    // different string than the join()-built path adapter-seam.test.js's
+    // mutation-proof compares against — so an injected "this path doesn't
+    // exist" predicate would never match and the gate would never observe its
+    // own failure mode. Keeping join() here is what lets that test prove
+    // anything at all.
+    if (!exists(join(root, "scripts", script))) {
       throw new Error(
         `adapter-seam: scripts/${script} is gone, but ${count} of its cases ` +
           "still depend on the SPW_ADAPTER seam — a seam the in-process " +
