@@ -342,6 +342,57 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
+// P1 — the adapter's classification wrapper (src/adapter.ts:364). Ported from
+// tests/test_prepare_with_fake_upstream.sh:1001-1022, which held the only
+// witness of this prefix anywhere in the repository. The eight inner causes
+// those shell lines also asserted are already message-exact in
+// tests/unit/hooks.test.js and are deliberately NOT re-ported: what was
+// missing is that a classification failure reaches stderr through the adapter
+// with this prefix intact. Its materialization twin (src/adapter.ts:373) is
+// asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
+void test("a classification failure reaches stderr through the adapter wrapper", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.unsupportedHooks });
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(
+    result.stderr,
+    /^hook classification failed: unsupported or mixed hooks declaration$/m,
+  );
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+// P2a — src/hooks.ts:303 reached from the SOURCE-side call at :358. Ports the
+// retired driver's :1041 and :1044 cases (inventory items 127 and 128).
+//
+// The PATH is the assertion, not the message. Three different failures print
+// `hook subtree escapes or is broken`: this one names the hooks root under the
+// upstream cache checkout, P2b names the root under the staging candidate, and
+// P3 names a subdirectory inside hooks/. Matching the bare message would leave
+// all three indistinguishable and satisfy none specifically.
+void test("an escaping hooks-root symlink fails closed on the source side", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.escapingHooksRoot });
+  assert.equal(result.status, 1, result.stdout);
+  const emitted = result.stderr.match(
+    /^hook materialization failed: hook subtree escapes or is broken: (\S+)$/m,
+  );
+  assert.ok(emitted, result.stderr);
+  assert.equal(emitted[1], join(cacheRepo(c), "hooks"));
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
 void test("CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd", async () => {
   const c = createCase({ fakes: "probe" });
   // The package root's own generated tree must be untouched: a relative

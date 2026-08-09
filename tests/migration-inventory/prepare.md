@@ -1067,7 +1067,7 @@ traceability row at all, and its two assertions are retired against
   "shellOriginal": 163,
   "portOnly": 5,
   "ports": {
-    "tests/baseline/prepare.test.js": 24,
+    "tests/baseline/prepare.test.js": 26,
     "tests/unit/commands-prepare.test.js": 6,
     "tests/unit/atomic.test.js": 8
   }

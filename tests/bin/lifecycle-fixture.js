@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -28,7 +29,9 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // turns the CI toolchain job red on a bare ubuntu-latest runner while every
 // local gate stays green — PR 11.2 shipped exactly that defect and had to
 // remove it.
-export const SCRATCH = mkdtempSync(join(tmpdir(), "spw-lifecycle-"));
+export const SCRATCH = realpathSync(
+  mkdtempSync(join(tmpdir(), "spw-lifecycle-")),
+);
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });

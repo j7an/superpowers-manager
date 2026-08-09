@@ -9,6 +9,7 @@ import {
   cpSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -266,6 +267,51 @@ function buildUpstream() {
     );
     symlinkSync("../../outside", join(upstream, "hooks", "escape"));
   });
+  // P1 — a `hooks` value no classification branch accepts, so the adapter's
+  // `hook classification failed:` wrapper (src/adapter.ts:364) is the
+  // diagnostic under test.
+  //
+  // The value is a NUMBER on purpose. classifyHooks accepts
+  // `typeof hooks === "string"` as a single declared path
+  // (src/hooks.ts:196-198), so a plain string reaches validateDeclaredFile and
+  // fails with `declared hook path must start with ./` — a different cause,
+  // already covered in tests/unit/hooks.test.js. 42 falls through every
+  // accepted shape to the unsupported-declaration throw.
+  //
+  // The eight underlying causes the retired shell driver asserted behind this
+  // prefix are all already message-exact in tests/unit/hooks.test.js. This
+  // branch exists for the wrapper alone.
+  branchWith("hooks-unsupported-declaration", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = 42;
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+  });
+  // P2a — the hooks ROOT is a relative symlink escaping the upstream checkout,
+  // so the SOURCE-side validateSubtreeSymlinks call (src/hooks.ts:358) fails
+  // its containment check at :303. Ports the retired driver's
+  // hooks-root-escape-symlink and hooks-root-broken-symlink cases (items 128
+  // and 127), which share this branch.
+  //
+  // classifyHooks returns copyHooksSubtree: hooksRootPresent
+  // (src/hooks.ts:230), and a symlink is present rather than missing, so
+  // materializeHooks reaches the validation. The link is relative, so it
+  // passes the absolute-symlink rejection at src/hooks.ts:296-298 first.
+  branchWith("hooks-root-escape-symlink", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = [...DECLARED_HOOK_PATHS];
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    for (const relative of DECLARED_HOOK_PATHS) {
+      const target = join(upstream, relative);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, `${JSON.stringify({ fixture: relative })}\n`);
+    }
+    rmSync(join(upstream, "hooks"), { recursive: true, force: true });
+    symlinkSync("../outside-the-checkout", join(upstream, "hooks"));
+  });
   return upstream;
 }
 
@@ -279,6 +325,8 @@ export const REFS = {
   noHooksManifest: "manifest-no-hooks",
   wrongName: "manifest-wrong-name",
   escapingSymlink: "hooks-escaping-symlink",
+  unsupportedHooks: "hooks-unsupported-declaration",
+  escapingHooksRoot: "hooks-root-escape-symlink",
 };
 
 /**
