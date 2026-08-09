@@ -12,10 +12,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DISPATCH,
   makePackageRoot,
   runDispatch,
   SPAWN_COMMANDS,
 } from "./dispatch-fixture.js";
+import { vehicleCommand } from "./dispatch-mode.js";
 
 const ALL_TOOLS = ["git", "python3", "codex"];
 
@@ -117,23 +119,39 @@ void test("routing: `pin` succeeds in-process and never reaches its script", () 
 // patching a case-local copy of the compiled dispatch table directly.
 // Vehicle only. The command named here must be one DISPATCH still marks
 // "spawn", so that patching its entry to "in-process" reaches a name
-// IN_PROCESS_HANDLERS does not carry. It moved from `probe` to `prepare` when
-// slice 2 flipped `probe` in-process and gave it a registered handler. Do not
-// read the choice of `prepare` as a contract.
+// IN_PROCESS_HANDLERS does not carry. vehicleCommand derives it, so this no
+// longer needs re-pointing at each flip; in slice 4 it throws instead, which
+// is when this test should be deleted.
 void test("an in-process command with no registered handler fails closed", () => {
   // The compile-time guard (src/cli.ts's InProcessHandler registry) makes this
   // unreachable through the real table. The fixture reaches it by dispatching
   // a name the registry does not carry, which is the only way to prove the
   // runtime backstop still reports rather than crashing.
+  const spawned = vehicleCommand(DISPATCH);
   const result = runDispatch({
     tools: ALL_TOOLS,
-    args: ["prepare"],
-    dispatchOverride: { prepare: "in-process" },
+    args: [spawned],
+    dispatchOverride: { [spawned]: "in-process" },
   });
   assert.equal(result.status, 1);
   assert.equal(
     result.stderr,
-    "error: no in-process handler registered for: prepare\n",
+    `error: no in-process handler registered for: ${spawned}\n`,
+  );
+});
+
+// patchDispatch happily rewrote a literal to itself, so a vehicle naming a
+// command that had since flipped silently became a no-op. Fixing the one
+// victim without fixing the mechanism is what let it recur.
+void test("dispatchOverride rejects an override that changes nothing", () => {
+  assert.throws(
+    () =>
+      runDispatch({
+        tools: ALL_TOOLS,
+        args: ["pin"],
+        dispatchOverride: { pin: "in-process" },
+      }),
+    /is already "in-process"/,
   );
 });
 

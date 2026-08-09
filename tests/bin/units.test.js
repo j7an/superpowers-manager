@@ -5,6 +5,7 @@ import * as assert from "node:assert";
 import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { vehicleCommand } from "./dispatch-mode.js";
 /** @type {typeof import('../../src/cli.js')} */
 const bin = await import(new URL("../../dist/cli.js", import.meta.url).href);
 
@@ -102,6 +103,22 @@ assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
 assert.deepStrictEqual(requirements.uninstall, ["python3", "codex"]);
 
+// --- vehicleCommand: the dispatch vehicles pick their own subject ----------
+// Two tests below need "some command DISPATCH still spawns" and assert nothing
+// about which. Hardcoding one meant re-pointing it at every flip -- `probe` to
+// `prepare` at slice 2, `prepare` to something else here -- and buildSpawn is a
+// pure path computation, so a stale literal kept passing while describing a
+// command that is no longer spawned. Deriving it also makes both tests fail
+// loudly in slice 4, when nothing is spawned and they should be deleted.
+assert.strictEqual(
+  vehicleCommand({ pin: "in-process", update: "spawn", probe: "in-process" }),
+  "update",
+);
+assert.throws(
+  () => vehicleCommand({ pin: "in-process", probe: "in-process" }),
+  /no spawned command remains/,
+);
+
 // --- usage separates saving selection intent from applying it ---
 const help = bin.usage();
 for (const text of [
@@ -119,35 +136,33 @@ assert.ok(help.includes("$HOME/.config/superpowers-manager"));
 
 // --- buildSpawn: POSIX executes the script directly ---
 // Vehicle only. This asserts buildSpawn's path construction and argv
-// passthrough, not anything specific to `prepare`; it just has to name a
-// command DISPATCH still spawns. It moved off `probe` when slice 2 flipped it
-// in-process — a pure path computation keeps passing either way, so a stale
-// vehicle here would read as live coverage of a command that is no longer
-// spawned. It dies with buildSpawn in slice 4.
+// passthrough, not anything specific to the command it names — it just has to
+// be one DISPATCH still spawns, which vehicleCommand now guarantees rather
+// than a literal that has to be maintained. It dies with buildSpawn in slice 4,
+// and vehicleCommand throws at exactly that moment.
 //
 // The argv is arbitrary and stays non-empty on purpose: buildSpawn is a pure
 // function that forwards whatever it is handed, so passing `[]` here would
-// drop the passthrough half of the contract on the ground. What
-// `scripts/prepare` itself accepts is a fact about the script, not about
-// buildSpawn.
+// drop the passthrough half of the contract on the ground.
+const spawned = vehicleCommand(bin.DISPATCH);
 const posix = bin.buildSpawn(
-  "prepare",
+  spawned,
   ["--ref", "test"],
   "/root",
   "/bin/sh",
   "linux",
 );
-assert.strictEqual(posix.file, path.join("/root", "scripts", "prepare"));
+assert.strictEqual(posix.file, path.join("/root", "scripts", spawned));
 assert.deepStrictEqual(posix.argv, ["--ref", "test"]);
 
 // --- buildSpawn: Windows dispatches through the discovered shell:
 // <shell> scripts/<cmd> [args...]. path.join is used on both sides so the
 // assertion holds on any host separator.
 const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-const win = bin.buildSpawn("update", ["-x"], "C:\\pkg", gitBash, "win32");
+const win = bin.buildSpawn(spawned, ["-x"], "C:\\pkg", gitBash, "win32");
 assert.strictEqual(win.file, gitBash);
 assert.deepStrictEqual(win.argv, [
-  path.join("C:\\pkg", "scripts", "update"),
+  path.join("C:\\pkg", "scripts", spawned),
   "-x",
 ]);
 

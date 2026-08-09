@@ -91,6 +91,11 @@ const { DISPATCH } = await import(
   new URL("../../dist/cli.js", import.meta.url).href
 );
 
+// Exported so bin-dispatch.test.js can derive its vehicle command without a
+// second dynamic `dist/cli.js` import, which would recreate the drift the
+// derivations in this file remove.
+export { DISPATCH };
+
 /**
  * The subcommands the real bin dispatches to. Derived, never restated: a
  * third hand-maintained copy of the eight names can agree with itself while
@@ -153,11 +158,18 @@ function patchDispatch(cliPath, overrides) {
   let text = readFileSync(cliPath, "utf8");
   for (const [command, mode] of Object.entries(overrides)) {
     const pattern = new RegExp(
-      `(["']?${command}["']?:\\s*)"(?:spawn|in-process)"`,
+      `(["']?${command}["']?:\\s*)"(spawn|in-process)"`,
     );
-    if (!pattern.test(text)) {
+    const match = text.match(pattern);
+    if (!match) {
       throw new Error(
         `dispatchOverride: no DISPATCH entry found for "${command}" in ${cliPath}`,
+      );
+    }
+    if (match[2] === mode) {
+      throw new Error(
+        `dispatchOverride: "${command}" is already "${mode}" in ${cliPath}; ` +
+          "an override that changes nothing is a vehicle that cannot fail",
       );
     }
     text = text.replace(pattern, `$1"${mode}"`);
