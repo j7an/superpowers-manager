@@ -360,10 +360,55 @@ export async function runProbe(
   try {
     outcome = await gatherProbe(ctx);
   } catch (cause) {
-    // Every throw that reaches HERE is a hand-written SafetyError from
-    // computeEffectiveSelection or generatedCommitOrEmpty -- re-emitting a
-    // subordinate module's own diagnostic is the sanctioned form of
-    // interpolation (AGENTS.md).
+    // Most throws reachable here carry a HAND-WRITTEN message:
+    //   - the selectionErrors src/selection.ts raises from validateSource,
+    //     validateRecord, and normalizeSaved, and the ones
+    //     src/effective-selection.ts:15,35 raises for a non-absolute or
+    //     missing config directory.
+    //   - readConfigRef's `cannot read packaged upstream ref <path>`
+    //     (src/upstream.ts:52), which names the path and drops the cause.
+    //   - resolveRef's own no-match diagnostics (src/upstream.ts:155, :199).
+    //
+    // THREE exceptions, all inherited and none a regression:
+    //   1. resolveRef splices git's combined stdout+stderr into its own text
+    //      (src/upstream.ts:150, :175, :191), reached via
+    //      computeEffectiveSelection (src/effective-selection.ts:133). This is
+    //      probe's DEFAULT path -- every invocation that is not resolving a
+    //      saved pin -- not an exotic corner. Pinned by
+    //      tests/unit/upstream.test.js:460, :471, and :483.
+    //   2. src/selection-store.ts:124 (same shape at :49, :86, :98)
+    //      interpolates the caught error's own message, so Node errno prose
+    //      (e.g. "EACCES: permission denied, open '<path>'") can reach this
+    //      stream. Reached on the READ path only, via loadSavedSelection
+    //      (src/effective-selection.ts:50) -> readSelectionState
+    //      (src/selection-store.ts:149); the write-path sites at :225 and
+    //      :231 are not reachable from probe, which never writes. AGENTS.md
+    //      explicitly grandfathers this module's wording, so this is
+    //      sanctioned behaviour -- nothing here needs fixing.
+    //   3. Every runGit call site inside resolveRef (src/upstream.ts:141,
+    //      :165, :188) can reject instead of resolving: src/git.ts:47-51
+    //      wraps every string errno other than ENOENT in
+    //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
+    //      and that Node spawn-level message reaches ctx.stderr through this
+    //      catch. A non-zero *exit status* is handled by exception 1 above;
+    //      this is the *spawn-level* case, where runGit throws rather than
+    //      returning a status.
+    //
+    // oneLine() collapses each of exceptions 1 and 3 to a single line,
+    // containing the harm to one line of git text rather than the arbitrarily
+    // many scripts/probe's `set -eu` plumbing allowed.
+    //
+    // fetchExactCommit is deliberately NOT in this list, unlike
+    // src/commands/prepare.ts:530's exception 2. Its only callers are
+    // src/upstream-cli.ts:83 and src/commands/prepare.ts:302, so probe never
+    // reaches it and its splice sites cannot appear on this stream. Do not
+    // add it back by symmetry with prepare.
+    //
+    // generatedCommitOrEmpty is not in this list either, and -- contrary to
+    // what this comment used to claim -- it is not a source of hand-written
+    // SafetyErrors: it cannot throw at all. src/provenance.ts:105 delegates to
+    // readGeneratedCommitLenient (src/provenance.ts:78-94), which catches
+    // every failure and returns "".
     //
     // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:993) does
     // NOT reach here: inspect() catches it and converts it to a hand-written
