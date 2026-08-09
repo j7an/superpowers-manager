@@ -314,7 +314,7 @@ function buildUpstream() {
   });
   // P2b — the hooks ROOT is a relative symlink to source-contained content
   // that never reaches the candidate, so SOURCE validation passes and the
-  // CANDIDATE validation at src/hooks.ts:366 fails.
+  // CANDIDATE validation at src/hooks.ts:367 fails.
   //
   // `.git` is the target for the same reason the retired shell fixture used
   // it: it exists in the upstream checkout, so assertExistingContained accepts
@@ -338,7 +338,7 @@ function buildUpstream() {
   // exactly five paths into the candidate — skills, assets, LICENSE,
   // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
   // directory would dangle in the candidate and fail the SECOND
-  // validateSubtreeSymlinks call at src/hooks.ts:366. That is precisely what
+  // validateSubtreeSymlinks call at src/hooks.ts:367. That is precisely what
   // P2b's `.git` fixture does on purpose; this one is its mirror image, and
   // the two differ only in whether the target is one of the copied five.
   branchWith("hooks-root-contained-materialized", () => {

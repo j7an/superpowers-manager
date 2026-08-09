@@ -5,8 +5,12 @@
 // SPW_ADAPTER is honoured only by scripts/core/adapter.sh; the in-process
 // runAdapter ignores it. Every assertion reading a fake adapter's log or
 // depending on its interception dies silently when the seam goes — the same
-// shape that left five cli-parity assertions vacuous in slice 3.4, at five
-// times the scale (twenty-five readLog(c.adapterLog) sites).
+// shape that left five cli-parity assertions vacuous in slice 3.4, at a larger
+// scale. Both numbers are counted from the tree, not from the design: the two
+// SEAM_SOURCES files hold 9 literal readLog(c.adapterLog) sites, and 30 cases
+// declare a seamDependency (the sum of SEAM_DEPENDENT below). The two differ
+// because one case can hold several readers and a case can be seam-dependent
+// through interception without reading the log at all.
 //
 // Most of those re-anchor onto codex.log, because every mutation the adapter
 // performs reaches Codex through codexBin (src/adapter.ts:575-660). What

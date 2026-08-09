@@ -395,7 +395,7 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P2b — src/hooks.ts:303 reached from the CANDIDATE-side call at :366. Ports
+// P2b — src/hooks.ts:303 reached from the CANDIDATE-side call at :367. Ports
 // the retired driver's :1035 case (inventory item 125), which is the only
 // root-specific witness that post-copy validation runs.
 //
@@ -977,7 +977,7 @@ void test("a contained relative hooks root is recreated as a symlink in the cand
   );
   assert.equal(readlinkSync(hooks), "assets/hook-root");
   // Validating side: the candidate passed validateSubtreeSymlinks at
-  // src/hooks.ts:366 (status 0 above) AND the content behind the root is
+  // src/hooks.ts:367 (status 0 above) AND the content behind the root is
   // actually reachable through it, which is what makes the acceptance real
   // rather than a dangling link nobody followed.
   assert.equal(

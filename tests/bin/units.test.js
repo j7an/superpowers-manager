@@ -208,14 +208,20 @@ for (const caller of ["install", "update"]) {
 // --- scripts/prepare outlives this slice ---
 // scripts/install:25 and scripts/update:23 still execute `scripts/prepare`, so
 // deleting it breaks both commands. Slice 3.4 flipped `prepare` itself to
-// in-process dispatch and re-derived the cli-parity prepare cases off the
-// synthetic adapter at tests/fixtures/baseline/bin/stateful-adapter, so that
-// coupling is gone. What remains is the lifecycle path: `install` and `update`
-// still spawn, and their test fakes stub SPW_ADAPTER — a seam only
+// in-process dispatch and re-derived the cli-parity prepare cases off
+// tests/fixtures/baseline/bin/stateful-adapter, so that coupling is gone. That
+// fixture is NOT synthetic for `build`, the only operation prepare invokes:
+// its build branch (stateful-adapter:159-188) logs the invocation and then
+// os.execv's SPW_BASELINE_RUNTIME_ADAPTER, the real shipped adapter that
+// tests/baseline/support.js:610 provisions. It is a logging DELEGATOR for
+// build, and synthetic only for install and uninstall.
+// What remains is the lifecycle path: `install` and `update` still spawn
+// (src/cli.ts:74-76), and their test fakes stub SPW_ADAPTER — a seam only
 // scripts/core/adapter.sh honours and the in-process runAdapter does not.
-// Slice 3.5 re-bases those fakes and deletes this script. Asserting the
-// RELATIONSHIP rather than a line number keeps this stable against edits to
-// either caller.
+// Slice 3.5 re-bases those fakes and records the irreducible residue in
+// tests/bin/adapter-seam.js; SLICE 4 deletes this script, beside scripts/probe.
+// Asserting the RELATIONSHIP rather than a line number keeps this stable
+// against edits to either caller.
 assert.ok(
   fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", "prepare")),
   "scripts/prepare is still executed by scripts/install and scripts/update",

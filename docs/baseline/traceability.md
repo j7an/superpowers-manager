@@ -132,3 +132,26 @@ selectors or intentionally update the inventory, test, and this map together.
 | `DIAG-ADAPTER-01` | `tests/test_adapter_protocol.py::test_messages_replay_by_channel_in_order` | — |
 | `PACKAGE-REPO-01` | `tests/baseline/cli-parity.test.js::CLI-MODE-VERSION-01 version mode routes through dist` | — |
 | `PACKAGE-TARBALL-01` | `tests/baseline/packaged-cli.test.js::PACKAGE-CLI-01 offline installed tarball routes through dist and exposes help and version` | — |
+
+## Split coverage
+
+One row above anchors a case that covers only part of its behavior ID. The
+remainder is named here rather than left to be rediscovered.
+
+`GENERATED-HOOKS-FORBID-01` states two claims in
+[`behavioral-inventory.md`](behavioral-inventory.md): that an upstream exact
+`hooks: {}` forbids a generated `hooks/`, and that a manifest-less fallback
+forbids one too. Its row's case exercises only the first, over
+`REFS.emptyObjectHooks`. The second is asserted at
+`tests/baseline/prepare.test.js:224`, inside
+`GENERATED-FALLBACK-01 manifest-less upstream uses the manager fallback` — the
+case `GENERATED-FALLBACK-01`'s own row anchors, and whose inventory entry
+independently states that the generated fallback has no `hooks/`. The claim is
+therefore co-owned by the two IDs, not orphaned: broadening the
+`GENERATED-HOOKS-FORBID-01` case would duplicate an assertion three lines away
+in the same file, and would cost a case rename that both this table and
+`tests/migration-inventory/prepare.md` cite by name.
+
+Before PR 11.5 slice 3.5 the row anchored a single retired shell case that
+carried both halves; the split is a consequence of that case's deletion, not of
+lost coverage.

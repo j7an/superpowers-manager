@@ -3,11 +3,15 @@
 Source read in full (1278 lines). Ported to `tests/baseline/prepare.test.js`,
 `tests/unit/commands-prepare.test.js`, and `tests/unit/atomic.test.js`.
 
-**The shell driver is retained and green in this slice.** `scripts/prepare` is
-still executed by `scripts/install:25` and `scripts/update:23`, `DISPATCH.prepare`
-is still `spawn`, and this file still runs under `tests/run.sh`. This inventory
-records where each shell assertion's property now lives; it does not authorize
-deleting the source. See "Surviving `scripts/prepare` references" below.
+**The shell driver is gone.** PR 11.5 slice 3.5 deleted
+`tests/test_prepare_with_fake_upstream.sh` after porting the five behaviours it
+uniquely witnessed, and re-pointed the ten `docs/baseline/traceability.md` rows
+that anchored on it. `scripts/prepare` outlives it: `scripts/install:25` and
+`scripts/update:23` still execute it, so its deletion is slice 4's. This
+inventory records where each shell assertion's property now lives; every `:NNN`
+citation without a filename is a historical reference into the deleted driver,
+kept so the derivation stays auditable. See "Surviving `scripts/prepare`
+references" below.
 
 ## Counting rules applied
 
@@ -134,45 +138,74 @@ branch, not fetch, when the cache's `.git` is a regular file" is coverage the
 shell did not have. It is recorded here as prose rather than as a numbered
 port-only entry, because counting it would overstate `portOnly`.
 
-**Three diagnostics whose only witness is still this shell file.** Recorded
-here so slice 3.5 cannot delete them by accident.
+**Three diagnostics whose only witness used to be this shell file.** All three
+gained a TypeScript witness in PR 11.5 slice 3.5, before the driver was
+deleted. Each entry records what the gap was and which case closed it, because
+the disposition of fourteen ledger items below turns on it.
 
 *(a) `hook subtree escapes or is broken`.* `src/hooks.ts:279` and `:303` emit
-it, and no TypeScript test in the repository asserts that string — a full-tree
-grep for `escapes or is broken` finds only `symlink escapes or is broken`
+it, and until slice 3.5 no TypeScript test asserted that string. It now has
+**three** witnesses, one per reachable branch, and each asserts the emitted
+**path** rather than the message — the message alone cannot tell the three
+apart, so a bare string match would prove nothing about which branch ran:
+
+- `:303` reached from the **source**-side `validateSubtreeSymlinks` call at
+  `src/hooks.ts:358` — "an escaping hooks-root symlink fails closed on the
+  source side", which pins the emitted path to the hooks root under the
+  upstream cache checkout. Items 127 and 128.
+- `:303` reached from the **candidate**-side call at `src/hooks.ts:367` —
+  "a source-only hooks root fails closed on the candidate side", which pins
+  the emitted path to a `/hooks` root that is *not* under the cache. Item 125.
+- `:279`, `collectEntries`'s `readdir` failure — "an unreadable hooks
+  subdirectory fails closed naming the subdirectory", which pins the failing
+  subdirectory *inside* `hooks/`. Port-only entry 6; no shell counterpart.
+
+The pre-existing `escapes or is broken` matches remain what they were and none
+of them covers this string: `symlink escapes or is broken`
 (`tests/unit/hooks.test.js:376`, `:393`), `materialized hook destination escapes
 or is broken` (`:460`, `:493`), and `generated hook symlink escapes or is
-broken` (the validator's own, `tests/unit/generated-plugin.test.js:714`). Items
-125, 127, and 128 are retired against a diagnostic with no other witness.
+broken` (the validator's own, `tests/unit/generated-plugin.test.js:714`).
 
 *(b) `hook classification failed:` — the adapter's wrapper prefix.*
-`src/adapter.ts:364` emits it, and a full-tree grep finds it **nowhere else
-outside this shell file** (`:1001`, `:1004`, `:1007`, `:1010`, `:1013`, `:1016`,
-`:1019`, `:1022`). Items 113-120 are the shell's only assertions of that
-prefix. Each of them retires to a `classifyHooks` unit test whose *inner*
-message is message-exact — that half genuinely holds — but no unit test goes
-through the adapter wrapper, so the prefix itself is unwitnessed. The asymmetry
-is easy to miss because the materialization twin **is** ported:
-`src/adapter.ts:373`'s `hook materialization failed:` is asserted by
-`tests/baseline/prepare.test.js:336` and
-`tests/baseline/cli-parity.test.js:1622`. Items 121-128 therefore keep a
-witnessed prefix; items 113-120 do not.
+`src/adapter.ts:364` emits it, and until slice 3.5 the eight shell lines items
+113-120 record were the only assertions of it anywhere. It is now witnessed by
+`tests/baseline/prepare.test.js`'s "a classification failure reaches stderr
+through the adapter wrapper". **What moved is the wrapper, not the causes.**
+Each item's *inner* message was already message-exact in the `classifyHooks`
+unit test it cites and still is; those unit tests are untouched. The one case
+above adds the half no unit test could reach — that a classification failure
+travels out through the adapter carrying this prefix — and one reaching it is
+enough, because the prefix does not vary by cause. The materialization twin
+`src/adapter.ts:373` was witnessed all along, by
+`tests/baseline/prepare.test.js:338` and
+`tests/baseline/cli-parity.test.js:1613`.
 
 *(c) The accepted contained relative hooks-root symlink.* `src/hooks.ts:359-360`
 recreates such a symlink in the candidate rather than dereferencing it, and
-**nothing in the repository exercises the accepting path on either side.** On
-the materializing side, `tests/unit/hooks.test.js` covers only the rejecting
-root shapes (`:337` absolute, `:351` not a directory). On the validating side,
-the only place the hooks *root* is a symlink is the twelve-case matrix in
+until slice 3.5 nothing exercised the accepting path on either side. It is now
+witnessed by `tests/baseline/prepare.test.js`'s "a contained relative hooks
+root is recreated as a symlink in the candidate", which asserts all three
+halves items 83-85 record: the root is still a symlink after materialization,
+its target is byte-identical to the upstream one, and the content behind it is
+readable through the candidate — the last of which is what proves the
+candidate-side `validateSubtreeSymlinks` call at `src/hooks.ts:367` accepted a
+live link rather than a dangling one. Its fixture targets `assets/hook-root`
+because `src/commands/prepare.ts:29-35` copies exactly five paths into the
+candidate and `assets` is one of them.
+
+The surrounding rejection coverage is unchanged and still does not reach this
+path: `tests/unit/hooks.test.js` covers only the rejecting root shapes (`:337`
+absolute, `:351` not a directory); the only other place the hooks *root* is a
+symlink is the twelve-case matrix in
 `tests/baseline/generated-plugin-corpus.test.js`'s "the hook subtree rejects
 unsafe symlinks for allowing policies" (`:812-880`), whose `location === "root"`
 arm symlinks `hooks` itself and whose every one of the twelve cases asserts
-`status === 1`. The two corpus cases items 83-85 lean on do **not** symlink the
-root: both "the hook subtree follows a contained directory symlink" (`:886`)
-and "the hook subtree accepts contained materialized relative symlinks"
-(`:907`) call `mkdirSync(join(state.plugin, "hooks"))`, so `hooks/` is a real
-directory and the contained symlink is an *entry inside* it — and `:886` is
-itself a rejection case, ending in
+`status === 1`. The two corpus cases items 83-85 used to lean on do **not**
+symlink the root: both "the hook subtree follows a contained directory symlink"
+(`:886`) and "the hook subtree accepts contained materialized relative
+symlinks" (`:907`) call `mkdirSync(join(state.plugin, "hooks"))`, so `hooks/` is
+a real directory and the contained symlink is an *entry inside* it — and `:886`
+is itself a rejection case, ending in
 `assertRejected(state, "generated hook symlink must be relative")`.
 
 ## Assertion inventory
@@ -294,20 +327,36 @@ itself a rejection case, ending in
 
 ### A dash-prefixed local source stays usable (`:706-727`)
 
-**Narrowing, recorded for honesty.** `tests/baseline/prepare.test.js` has no
-dash-prefixed-source case: every case's `SUPERPOWERS_UPSTREAM_URL` is an
-absolute path under the case scratch tree, which the fixture's own hermeticity
-guard requires (`tests/baseline/prepare-fixture.js:378-382`, whose
-`startsWith("/")` predicate is at `:380`). Items 22-26 are
-therefore the weakest cluster in this file — each rests on the shared
-`gitSafeSource` code path plus a sibling suite's dash-prefixed case, not on a
-prepare-level counterpart.
+**Recorded narrowing, not a port.** Slice 3.5 deliberately added no
+prepare-level dash-prefixed case, and could not have: every prepare case's
+`SUPERPOWERS_UPSTREAM_URL` must be an absolute path under the case scratch
+tree, and the fixture's own hermeticity guard hard-fails anything else before
+the child is spawned (`tests/baseline/prepare-fixture.js:465-475`, whose
+`startsWith("/")` predicate is at `:473`). A dash-prefixed *relative* source is
+the whole point of the shell cluster, so the narrowing is structural rather
+than an omission: closing it would mean relaxing the guard that keeps this
+suite hermetic.
+
+What survives is the shared `gitSafeSource` code path plus a sibling suite's
+dash-prefixed case, verified rather than assumed:
+
+- `tests/baseline/probe.test.js:282` — "a dash-prefixed local source saved by
+  `track-latest` stays usable" — exercises the same
+  `computeEffectiveSelection` result `prepare` consumes.
+- `tests/baseline/selection-commands.test.js:432` —
+  `REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source` — is
+  the one case that actually puts a bare relative `-upstream` on a Git command
+  line. Its dash-prefixed block is `:504-542`; the symlink that creates the
+  name is at `:513`, and both the raw-commit and exact-tag loops run over it.
+
+Items 22-26 are therefore the weakest cluster in this file: each rests on those
+two, not on a prepare-level counterpart.
 
 22. A `track-latest` selection over a dash-prefixed source prepares the release
-    commit (`:721`). **Retired**: `tests/baseline/probe.test.js`'s "a
-    dash-prefixed local source saved by `track-latest` stays usable" proves the
-    same selection resolves, and `prepare` consumes the identical
-    `computeEffectiveSelection` result.
+    commit (`:721`). **Retired**, as the recorded narrowing above:
+    `tests/baseline/probe.test.js:282`'s "a dash-prefixed local source saved by
+    `track-latest` stays usable" proves the same selection resolves, and
+    `prepare` consumes the identical `computeEffectiveSelection` result.
 23. The provenance `source` is the dash-prefixed path verbatim (`:722`).
     **Retired**, same citation: probe's port asserts
     `saved_source=<dash-prefixed path>` and `effective_source` likewise.
@@ -316,8 +365,10 @@ prepare-level counterpart.
     terminator is written into a literal array
     (`src/upstream.ts:140-147`). `tests/unit/upstream.test.js`'s "gitSafeSource
     anchors bare relative paths and leaves others alone" pins the anchoring,
-    and `tests/baseline/selection-commands.test.js:504-542` is the one case that
-    actually puts a bare relative `-upstream` on a Git command line.
+    and `tests/baseline/selection-commands.test.js:432`'s
+    `REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source`
+    (dash-prefixed block `:504-542`) is the one case that actually puts a bare
+    relative `-upstream` on a Git command line.
 25. The recording Git log shows `clone -- <physical>/-upstream <cache>` — the
     initial clone (`:724`). **Retired**: same reason. `prepare` passes
     `gitSafeSource(selection.effectiveSource)` (`src/commands/prepare.ts:309`)
@@ -557,27 +608,23 @@ prepare-level counterpart.
     **Retired**: `tests/unit/hooks.test.js`'s "classifyHooks treats an inline
     object as a subtree copy" — the declaration shape is the same inline object
     item 62 covers.
-83. The hooks root remains a symlink in the candidate (`:921-924`).
-    **Retired** with **no equivalent witness anywhere** — see note (c) above,
-    which is the honest statement of this gap. The nearest coverage is
-    `tests/baseline/generated-plugin-corpus.test.js`'s "the hook subtree
-    accepts contained materialized relative symlinks" (`:907`), and it does
-    **not** symlink the hooks root: it calls
-    `mkdirSync(join(state.plugin, "hooks"))` and puts contained relative
-    symlinks *inside* that real directory. The one place the root itself is a
-    symlink is the twelve-case matrix at `:812-880`, where every case asserts
-    `status === 1`. So the accepting root-symlink path is exercised by nothing
-    on either side: not `src/hooks.ts:359-360` (the materializer), not the
-    validator. **Slice 3.5, read this before deleting the shell file.**
-84. The hooks root preserves its relative target verbatim (`:925-929`).
-    **Retired**, same gap and same warning: `readlink` equality is precisely
-    what `src/hooks.ts:360` implements, and no test on either side asserts it.
+83. The hooks root remains a symlink in the candidate (`:921-924`). Port:
+    `tests/baseline/prepare.test.js`'s "a contained relative hooks root is
+    recreated as a symlink in the candidate" asserts
+    `lstatSync(join(generated(c), "hooks")).isSymbolicLink()` on a successful
+    run. This closes the gap note (c) recorded: before slice 3.5 the accepting
+    root-symlink path at `src/hooks.ts:359-360` was exercised by nothing on
+    either side.
+84. The hooks root preserves its relative target verbatim (`:925-929`). Port:
+    the same case asserts `readlinkSync(...)` equals the upstream target
+    exactly, which is precisely what `src/hooks.ts:360` implements — the
+    materializer recreates the link rather than dereferencing it.
 85. Content behind the contained root is reachable in the candidate (`:930`).
-    **Retired**, and this one holds only in a weak sense: "the hook subtree
-    accepts contained materialized relative symlinks" (`:907`) does require a
-    contained relative symlink's target content to be present and valid, but on
-    a candidate whose `hooks/` is a real directory. The reachability property
-    survives; the root-is-a-symlink premise it was asserted under does not.
+    Port: the same case reads the target file *through* the candidate's
+    symlinked root and compares its bytes. That read is also what makes the
+    acceptance real rather than a dangling link nobody followed, and it is why
+    the fixture targets `assets/hook-root`: `src/commands/prepare.ts:29-35`
+    copies exactly five paths into the candidate, and `assets` is one of them.
 
 ### Every ref shape's commit and manager version (`:934-970`)
 
@@ -700,16 +747,19 @@ manifest reports line and column".
      the cached manifest to `0o000` between two runs and asserts the exact
      `cannot read manifest JSON in <path>` message.
 111. A manifest holding an unencodable `version` is rejected (`:995`).
-     **Retired**, and this is the weakest retirement in the file. The shell's
+     **Retired**, as a recorded narrowing rather than a port. The failure
+     class no longer exists at that site: the shell's
      `cannot output JSON value from` came from a `UnicodeError` raised by
      Python's `print()` when `spw_json_get` wrote the value out
-     (`scripts/core/provenance.sh:62-65`); `readUpstreamManifestVersion` parses
-     the value and returns it without re-encoding, so that failure class does
-     not exist at that site and nothing asserts what an unpaired surrogate in
-     `version` does downstream. The nearest witness is
+     (`scripts/core/provenance.sh:62-65`), whereas
+     `readUpstreamManifestVersion` returns the parsed value verbatim behind a
+     `typeof === "string"` check and re-encodes nothing. There is no in-process
+     emitter to assert against, so a port would have had to invent a behaviour
+     rather than witness one. What remains unasserted is what an unpaired
+     surrogate in `version` does downstream; the nearest witness is
      `tests/unit/generated-plugin.test.js`'s "an unpaired surrogate in a
-     manifest path fails during resolution", which is a different field on a
-     different reader. **Slice 3.5, read this before deleting the shell file.**
+     manifest path fails during resolution", a different field on a different
+     reader. Recorded here so the gap survives the driver's deletion.
 112. A document nested 2000 deep is rejected (`:996`). Port: "prepare rejects
      an upstream manifest nested beyond the depth limit" — the same branch, one
      step past the boundary rather than 2000 past it; `tests/baseline/generated-plugin-corpus.test.js`'s
@@ -722,34 +772,51 @@ Each item is one `assert_hook_prepare_failure` call site bundling four checks:
 a non-zero exit, the expected diagnostic, no Python traceback, and the prior
 generated tree preserved.
 
-**Items 113-120 lose the wrapper prefix, not the classification.** All eight
-shell diagnostics begin `hook classification failed:` — `src/adapter.ts:364`'s
-wrapper — and that prefix is asserted **nowhere outside this shell file**; see
-note (b) above. Each item's *inner* message is message-exact in the
-`classifyHooks` unit test it cites, so the classification logic is fully
-carried; what is unwitnessed is that the adapter wraps it with that prefix on
-the way out. Items 121-128's `hook materialization failed:` twin does not have
-this problem — it is asserted by `tests/baseline/prepare.test.js:336`.
-**Slice 3.5, read this before deleting the shell file.**
+**Items 113-120: the wrapper is now witnessed; the causes never moved.** All
+eight shell diagnostics begin `hook classification failed:` —
+`src/adapter.ts:364`'s wrapper — and that prefix was asserted nowhere outside
+this shell file until slice 3.5 added
+`tests/baseline/prepare.test.js`'s "a classification failure reaches stderr
+through the adapter wrapper"; see note (b) above.
 
-113. A scalar `hooks` value is rejected (`:999`). **Retired**:
+Read each citation below as two halves. The *inner* message stays where it
+always was, message-exact in the `classifyHooks` unit test named on the item —
+those tests are untouched by this slice and are still what carries the
+classification logic. The *wrapper* half, which no unit test can reach because
+no unit test goes through the adapter, is carried by that one new case for all
+eight items at once: the prefix does not vary by cause, so one branch reaching
+it witnesses the wrapping for every branch that can reach it. Nothing about
+these eight causes was re-ported, and no item below should be read as claiming
+its cause moved into `tests/baseline/prepare.test.js`.
+
+Items 121-128's `hook materialization failed:` twin never had this problem —
+it is asserted by `tests/baseline/prepare.test.js:338`.
+
+113. A scalar `hooks` value is rejected (`:999`). Port: inner message,
      `tests/unit/hooks.test.js`'s "classifyHooks rejects scalar, mixed, and
-     null declarations" — inner message only; wrapper prefix unwitnessed.
-114. A mixed array is rejected (`:1002`). **Retired**, same citation — that
-     test's name enumerates this case. Inner message only.
-115. An unprefixed declared path is rejected (`:1005`). **Retired**:
-     "classifyHooks rejects an unprefixed declared path". Inner message only.
-116. An absolute declared path is rejected (`:1008`). **Retired**:
-     "classifyHooks rejects an absolute declared path". Inner message only.
-117. A traversing declared path is rejected (`:1011`). **Retired**:
-     "classifyHooks rejects a traversing declared path". Inner message only.
-118. A missing declared path is rejected (`:1014`). **Retired**:
-     "classifyHooks rejects a missing declared path". Inner message only.
-119. A declared directory is rejected (`:1017`). **Retired**: "classifyHooks
-     rejects a declared directory". Inner message only.
-120. A declared symlink escaping upstream is rejected (`:1020`). **Retired**:
-     "classifyHooks rejects a declared symlink that escapes upstream". Inner
-     message only.
+     null declarations"; wrapper prefix, "a classification failure reaches
+     stderr through the adapter wrapper", which drives this same
+     `unsupported or mixed hooks declaration` cause end to end.
+114. A mixed array is rejected (`:1002`). Port: same two citations — that unit
+     test's name enumerates this case, and it is the same wrapped cause.
+115. An unprefixed declared path is rejected (`:1005`). Port: inner message,
+     "classifyHooks rejects an unprefixed declared path"; wrapper prefix, the
+     shared adapter-wrapper case.
+116. An absolute declared path is rejected (`:1008`). Port: inner message,
+     "classifyHooks rejects an absolute declared path"; wrapper prefix, the
+     shared adapter-wrapper case.
+117. A traversing declared path is rejected (`:1011`). Port: inner message,
+     "classifyHooks rejects a traversing declared path"; wrapper prefix, the
+     shared adapter-wrapper case.
+118. A missing declared path is rejected (`:1014`). Port: inner message,
+     "classifyHooks rejects a missing declared path"; wrapper prefix, the
+     shared adapter-wrapper case.
+119. A declared directory is rejected (`:1017`). Port: inner message,
+     "classifyHooks rejects a declared directory"; wrapper prefix, the shared
+     adapter-wrapper case.
+120. A declared symlink escaping upstream is rejected (`:1020`). Port: inner
+     message, "classifyHooks rejects a declared symlink that escapes
+     upstream"; wrapper prefix, the shared adapter-wrapper case.
 121. A declared symlink contained in upstream but dangling in the candidate is
      rejected (`:1023`). **Retired**: "materializeHooks rejects a declared
      symlink that dangles in the candidate".
@@ -766,19 +833,33 @@ this problem — it is asserted by `tests/baseline/prepare.test.js:336`.
      same `symlink escapes or is broken` branch, reached by a broken link
      rather than an escaping one.
 125. A hooks root symlinked to source-only content is rejected (`:1035`).
-     **Retired** against `src/hooks.ts:279`/`:303`'s `hook subtree escapes or
-     is broken`, which **no TypeScript test asserts** — see the note above the
-     ledger. The nearest witness is `tests/unit/hooks.test.js`'s
-     "materializeHooks rejects a subtree that is not a directory", a different
-     branch with a different message. **Slice 3.5, read this before deleting
-     the shell file.**
+     Port: `tests/baseline/prepare.test.js`'s "a source-only hooks root fails
+     closed on the candidate side". **This is the CANDIDATE-side call**, and
+     the distinction is the correction this slice exists to make. The shell's
+     root here is `ln -s .git`: `.git` exists inside the upstream checkout, so
+     `assertExistingContained` accepts it at the source-side call
+     (`src/hooks.ts:358`) and the run survives to the recreation at `:359-360`;
+     `.git` is not one of the five paths `src/commands/prepare.ts:29-35` copies
+     into the candidate, so the recreated link dangles and the **candidate**
+     call at `src/hooks.ts:367` is what emits. The case pins the emitted path
+     to a `/hooks` root that is *not* under the case's upstream cache, which is
+     the only assertion that can tell this branch from items 127-128's.
 126. An absolute hooks-root symlink is rejected (`:1038`). **Retired**:
      "materializeHooks rejects an absolute subtree symlink", which asserts the
-     `absolute subtree symlink is not allowed` message.
-127. A broken relative hooks-root symlink is rejected (`:1041`). **Retired**,
-     same unwitnessed diagnostic as item 125.
-128. An escaping relative hooks-root symlink is rejected (`:1044`).
-     **Retired**, same unwitnessed diagnostic as item 125.
+     `absolute subtree symlink is not allowed` message — a different emit site
+     (`src/hooks.ts:297`), reached before either containment check.
+127. A broken relative hooks-root symlink is rejected (`:1041`). Port:
+     `tests/baseline/prepare.test.js`'s "an escaping hooks-root symlink fails
+     closed on the source side". **This is the SOURCE-side call** at
+     `src/hooks.ts:358`: a root whose target does not resolve inside the
+     upstream checkout fails containment before anything is copied, so the
+     emitted path is the hooks root under the upstream cache checkout, and the
+     case asserts that exact path.
+128. An escaping relative hooks-root symlink is rejected (`:1044`). Port: the
+     same source-side case and the same `src/hooks.ts:358` call. Escaping and
+     broken are one branch here — `assertExistingContained` rejects both — and
+     the case's fixture is the escaping form, which is why the two items share
+     a citation while item 125 does not.
 
 ### The JSON reader on an unreadable path (`:1048-1061`)
 
@@ -942,10 +1023,12 @@ the **prescriptive** voice — it is the change the spec schedules, and two line
 earlier the same paragraph states the current fact, "`src/` filters these
 variables nowhere". **This branch has not landed that change.** So items
 161-163 retire assertions about a property the shell path has and the
-TypeScript path does not yet have. **Slice 3.5, read this before deleting the
-shell file** — this is the same class of gap as items 83-85, 111, and 125, and
-it is the only one of the four that is a behaviour regression rather than a
-missing test.
+TypeScript path does not yet have. **This one outlived the driver's deletion
+and is still open.** Slice 3.5 closed the three missing-test gaps this file
+flagged beside it — items 83-85, 113-120, and 125/127/128 — and narrowed item
+111 with a reason. This is the remaining flagged finding, and the only one of
+the set that is a behaviour regression rather than a missing test, so no test
+can close it: it needs the scrub `src/` does not perform.
 
 159. The adapter really routes through `spw_node_cli` rather than bare `node`
      (`:1216`) — the structural half. **Retired**: the seam is
@@ -1038,42 +1121,56 @@ map onto.
 
 <!-- inventory:port-only:end -->
 
-## Surviving `scripts/prepare` references (PR 11.5 slice 3)
+## Surviving `scripts/prepare` references (through PR 11.5 slice 3.5)
 
 Prose, deliberately not a numbered port-only entry: nothing below is an
 assertion this port added, so counting any of it would overstate `portOnly`.
 
-This slice adds the in-process command module and its drivers and **deletes
-nothing**. `DISPATCH.prepare` is still `spawn`, `COMMAND_REQUIREMENTS` is
-unchanged, and `src/cli.ts` is untouched across the branch. `scripts/prepare`
-and `tests/test_prepare_with_fake_upstream.sh` both survive, because
-`scripts/install:25` and `scripts/update:23` still execute
-`sh "$root/scripts/prepare"`. Two couplings keep the script alive beyond those
-callers: the lifecycle test fakes stub `SPW_ADAPTER`, a seam only
-`scripts/core/adapter.sh` honours and the in-process `runAdapter` does not; and
-roughly twenty `prepare` cases in `tests/baseline/cli-parity.test.js` are
-calibrated against the synthetic adapter at
-`tests/fixtures/baseline/bin/stateful-adapter` rather than a real build. Slice
-3.4 re-derives those cases and flips dispatch; slice 3.5 re-bases the fakes and
-deletes the script. `tests/bin/units.test.js` carries the retention guard,
-which asserts the relationship — the script exists and both callers still
-invoke it — rather than a line number, and it was mutation-proved once per
-caller.
+`scripts/prepare` outlives this inventory's subject. `DISPATCH.prepare` is
+`"in-process"` (`src/cli.ts:72`) since slice 3.4, but `scripts/install:25` and
+`scripts/update:23` still execute `sh "$root/scripts/prepare"`, and
+`src/cli.ts:74-76` still routes `install`, `update` and `uninstall` to
+`"spawn"`. Two couplings kept the script alive beyond those callers, and only
+one is left:
 
-**Traceability.** Ten rows in `docs/baseline/traceability.md` still cite
-`tests/test_prepare_with_fake_upstream.sh` (`:31`, `:66`, `:96`-`:102`,
-`:107`), and they stay that way this slice: the shell test is retained and
-green, so every one of those anchors still resolves. Slice 3.5 re-points them
-when it deletes the file, and the case *names* it will need are the ones this
-ledger cites — `CLI-ENV-PREPARE-PATHS-01`, `MANIFEST-READER-UPSTREAM-01`,
+- **Retired in slice 3.4.** Roughly twenty `prepare` cases in
+  `tests/baseline/cli-parity.test.js` were calibrated against
+  `tests/fixtures/baseline/bin/stateful-adapter` rather than a real build.
+  Slice 3.4 re-derived those cases and flipped dispatch. Note that this fixture
+  is **not** synthetic for `build`, the only operation `prepare` invokes: its
+  `build` branch (`stateful-adapter:159-188`) logs the invocation and then
+  `os.execv`s `SPW_BASELINE_RUNTIME_ADAPTER`, the real shipped adapter, which
+  `tests/baseline/support.js:610` provisions. For `build` it is a **logging
+  delegator**; it is genuinely synthetic only for `install` and `uninstall`.
+- **Live.** The lifecycle test fakes stub `SPW_ADAPTER`, a seam only
+  `scripts/core/adapter.sh` honours and the in-process `runAdapter` does not.
+  Slice 3.5 re-bases those fakes and records the irreducible residue in
+  `tests/bin/adapter-seam.js`; **slice 4 deletes the script**, beside
+  `scripts/probe`.
+
+`tests/bin/units.test.js` carries the retention guard, which asserts the
+relationship — the script exists and both callers still invoke it — rather than
+a line number, and it was mutation-proved once per caller.
+
+**Traceability.** Ten rows in `docs/baseline/traceability.md` used to cite
+`tests/test_prepare_with_fake_upstream.sh`. Slice 3.5 re-pointed all ten at the
+live Node cases in the same commit that deleted the driver, so no anchor was
+ever left dangling: `CLI-ENV-PREPARE-PATHS-01`, `MANIFEST-READER-UPSTREAM-01`,
 `GENERATED-UNKNOWN-FIELDS-01` and `GENERATED-HOOKS-DECLARED-01` (both on case
 6), `GENERATED-WRONG-NAME-01`, `GENERATED-FALLBACK-01`,
 `GENERATED-HOOKS-FORBID-01`, `GENERATED-HOOKS-DEFAULT-01` and
 `GENERATED-HOOKS-DEFAULT-LAYOUT-01` (both on case 5), and
-`FS-HOOK-CONTAINMENT-01`. `FS-ATOMIC-SWAP-01` is the one row that already
-moved, to `tests/unit/atomic.test.js` (Task 2); `BUILDER-SYMLINK-01` has no
-traceability row at all, and its two assertions are retired against
+`FS-HOOK-CONTAINMENT-01`. `FS-ATOMIC-SWAP-01` is the one row that had already
+moved, to `tests/unit/atomic.test.js` (slice 3, Task 2); `BUILDER-SYMLINK-01`
+has no traceability row at all, and its two assertions are retired against
 `FS-SYMLINK-01`.
+
+One of the ten is a partial anchor and is recorded as such in
+`docs/baseline/traceability.md` itself: `GENERATED-HOOKS-FORBID-01` names two
+claims in `docs/baseline/behavioral-inventory.md:230`, and the case its row
+anchors exercises only the exact-`hooks: {}` half. The manifest-less-fallback
+half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
+`GENERATED-FALLBACK-01`'s own row anchors.
 
 ## Cardinality
 
@@ -1117,41 +1214,54 @@ traceability row at all, and its two assertions are retired against
   `readUpstreamManifestVersion` and three for `runPrepare`'s `-f`/`-d`
   predicates); `tests/unit/atomic.test.js` has 8 (five for `atomicWriteFile`
   and three for `atomicReplaceDir`, two of which carry `FS-ATOMIC-SWAP-01`).
-- Reconciliation: 66 of the 163 shell items are mapped into those ports — 59
+- Reconciliation: 80 of the 163 shell items are mapped into those ports — 73
   into `tests/baseline/prepare.test.js`, 2 into
   `tests/unit/commands-prepare.test.js`, and 5 into
   `tests/unit/atomic.test.js`, with items 104, 105, 110, 112, and 131
-  additionally witnessed in the unit file. The rest are **97 retired items**
-  (1-2, 7-12, 15-34, 37, 39-40, 59-60, 62-76, 82-89, 91-97, 99, 101-102,
-  106-107, 109, 111, 113-121, 123-128, 142-143, 147-148, 150-151, 158-163),
+  additionally witnessed in the unit file. The rest are **83 retired items**
+  (1-2, 7-12, 15-34, 37, 39-40, 59-60, 62-76, 82, 86-89, 91-97, 99, 101-102,
+  106-107, 109, 111, 121, 123-124, 126, 142-143, 147-148, 150-151, 158-163),
   each with a citation to pre-existing coverage that already supersedes it, to
   a structural guarantee that makes a runtime check impossible to violate, or
   — for the adapter-argv, recording-`git`, `python3`-argv and `spw_node_cli`
   clusters — to the removal of the seam the assertion read through, naming the
-  suite that still covers the underlying behaviour. 66 + 97 = 163. Plus 5
+  suite that still covers the underlying behaviour. 80 + 83 = 163. Plus 6
   port-only assertions with no shell counterpart.
-- **Five findings are flagged for slice 3.5 rather than settled.** Ordered by
-  severity, because one of them is not a missing test:
-  1. Items 162-163 — the **child-clean** `NODE_OPTIONS`/`NODE_PATH` property.
-     `scripts/core/common.sh:71` gives it to the shell path; `src/` scrubs
-     neither variable anywhere, and `runCommand` passes `env` through
+- **Four of the five findings this file flagged for slice 3.5 are now
+  settled; one is not.** Ordered by severity, because the open one is not a
+  missing test:
+  1. **OPEN.** Items 162-163 — the **child-clean** `NODE_OPTIONS`/`NODE_PATH`
+     property. `scripts/core/common.sh:71` gives it to the shell path; `src/`
+     scrubs neither variable anywhere, and `runCommand` passes `env` through
      untouched. This is a behaviour difference the parent spec prescribes
-     closing and this branch has not closed, not merely an unwitnessed one.
-     §11's "not scheduled" covers only the *dispatcher* half.
-  2. Items 113-120 — `hook classification failed:` (`src/adapter.ts:364`), the
-     adapter's wrapper prefix, asserted nowhere outside the shell file. The
-     inner classification messages are message-exact in their cited unit
-     tests; only the wrapper is lost. Its materialization twin *is* ported.
-  3. Items 83-85 — an accepted contained relative hooks-root symlink
-     (`src/hooks.ts:359-360`) is exercised by nothing on either the
-     materializing or the validating side; every root-symlink case in the
-     corpus asserts rejection.
-  4. Items 125/127/128 — `hook subtree escapes or is broken`
-     (`src/hooks.ts:279`, `:303`) has no TypeScript witness at all.
-  5. Item 111 — the unencodable-`version` failure class no longer exists at
-     that site and nothing replaces it.
+     closing and no branch has closed, not merely an unwitnessed one.
+     §11's "not scheduled" covers only the *dispatcher* half. No test can
+     settle it; the scrub has to exist first.
+  2. **Settled.** Items 113-120 — `hook classification failed:`
+     (`src/adapter.ts:364`), the adapter's wrapper prefix. Witnessed by
+     "a classification failure reaches stderr through the adapter wrapper".
+     The eight inner classification messages stayed where they were, exact in
+     their cited unit tests; it is the wrapper that gained a witness.
+  3. **Settled.** Items 83-85 — an accepted contained relative hooks-root
+     symlink (`src/hooks.ts:359-360`) is now exercised on both sides by
+     "a contained relative hooks root is recreated as a symlink in the
+     candidate". Every other root-symlink case in the corpus still asserts
+     rejection; this is the only acceptance witness.
+  4. **Settled, and split.** Items 125/127/128 —
+     `hook subtree escapes or is broken` (`src/hooks.ts:279`, `:303`) now has
+     three witnesses, one per reachable branch, each asserting the emitted
+     path rather than the message: items 127-128 on the source-side call
+     (`src/hooks.ts:358`), item 125 on the candidate-side call (`:367`), and
+     port-only entry 6 on `collectEntries`'s `readdir` (`:279`). The three
+     were collapsed onto one disposition while they were all unwitnessed;
+     they are three different branches and are dispositioned separately now.
+  5. **Narrowed, not settled.** Item 111 — the unencodable-`version` failure
+     class no longer exists at that site, so there is no in-process emitter to
+     witness. Recorded as a narrowing on the item, with what stays unasserted.
 
-  Items 22-26 are the weakest *cluster* rather than a flagged finding: the
+  Items 22-26 are a recorded narrowing rather than a flagged finding: the
   property holds, but it rests on a sibling suite's dash-prefixed case rather
-  than a prepare-level one. Item 15 is narrower than its citation in the same
-  way — both halves are covered, the combination is not.
+  than a prepare-level one, and the prepare fixture's hermeticity guard makes
+  a prepare-level counterpart structurally impossible. Item 15 is narrower
+  than its citation in a related way — both halves are covered, the
+  combination is not.

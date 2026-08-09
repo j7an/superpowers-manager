@@ -1,7 +1,10 @@
 // @ts-check
-// Two gates. Without them, twenty-five readLog(c.adapterLog) assertions go
+// Two gates. Without them, the 9 literal readLog(c.adapterLog) reader sites in
+// the SEAM_SOURCES files, and the 30 cases that declare a seamDependency, go
 // vacuous when slice 4 removes the seam, in exactly the way five cli-parity
-// assertions did in slice 3.4 — silently, with the suite still green.
+// assertions did in slice 3.4 — silently, with the suite still green. Both
+// numbers are counted from the tree; the third case below re-derives the 30
+// on every run.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";

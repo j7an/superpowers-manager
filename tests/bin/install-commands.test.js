@@ -248,8 +248,9 @@ async function prepareGeneratedTree(c) {
   // and recording that is the whole point of the registry.
   const adapter = readLog(c.adapterLog);
   // Hoisted above the negative, and the same instrument the capability-
-  // independence case at :522-524 already uses: prepare must have reached the
-  // adapter at all, or the negative passes on an empty log. `build
+  // independence case ("prepare is capability-independent", :539-542) already
+  // uses: prepare must have reached the adapter at all, or the negative
+  // passes on an empty log. `build
   // --upstream-root` rather than a bare `nonEmpty` because it names the one
   // adapter operation scripts/prepare issues, so it proves THIS channel live
   // rather than merely non-empty — and because keeping the two sites identical
