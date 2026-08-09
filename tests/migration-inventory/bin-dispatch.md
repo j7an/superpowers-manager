@@ -35,6 +35,36 @@ Both readings, for the record: **53** including it, **52** excluding it. The
 port has no direct JS counterpart for this item — the guarantee is structural
 (a `node:test` file only runs under `node`), not a runtime assertion.
 
+**Marker legend.** An item may carry one bold prefix marker recording what
+became of it. The names are spelled without their asterisks below, on purpose:
+`tests/bin/migration-inventory.test.js` counts real markers across the whole
+file and cross-checks them against this file's own stated counts, so a legend
+that wrote them in bold would inflate those counts and make the check lie.
+
+Mapped region — the shell original's assertions, numbered `1..shellOriginal`:
+
+- `Retired` — the shell condition can no longer occur in either direction after
+  an in-process flip, so no JS assertion enforces it. The note names the
+  analogous surviving property and where it is now tested. Counted, and
+  cross-checked against this file's stated count.
+- `Merged` — the shell assertion is carried by a JS assertion that another item
+  also maps to, rather than one of its own. Counted the same way.
+- `Index updated` — the item still maps to a fixture-table row; only that row's
+  index moved. Not counted.
+
+Port-only region — additive JS assertions that map no shell item, numbered
+`1..portOnly` and excluded from the reconciliation arithmetic:
+
+- `New` — an assertion with no shell counterpart of any kind.
+- `Relocated` — the same assertion survives, moved from a loop iteration into a
+  standalone case.
+- `Updated` — the assertion survives in place with a changed derivation.
+- `Dropped` — the assertion itself is gone with no successor, and the entry
+  records why. Deliberately *not* the mapped region's retirement marker: these
+  were never shell assertions, so their removal changes no reconciliation
+  arithmetic, and marking them retired would corrupt the retirement count the
+  gate checks. No gate enforces this marker.
+
 ## Assertion inventory
 
 <!-- inventory:mapped:start -->
@@ -355,12 +385,24 @@ properties) — see each item's retirement/relocation note.
 
 ## Port-only assertions (outside the 1:1 mapping)
 
-Every item below is additive: the shell left the condition implicit under
-`set -e` (a bare `run_bin ... >/dev/null` or `x=$(run_bin ...)` with no
-explicit exit-status test), so the shell would already abort on failure, but
-no counted assertion (per the rules above) asserted it. The port makes each
-of these explicit with its own `assert.equal(result.status, 0)`, or, for
-item 1, a structural safety net with no shell analogue at all.
+No item below maps a counted shell assertion, so nothing here participates in
+the mapped region's reconciliation arithmetic. Most are additive: the shell
+left the condition implicit under `set -e` (a bare `run_bin ... >/dev/null` or
+`x=$(run_bin ...)` with no explicit exit-status test), so the shell would
+already abort on failure, but no counted assertion (per the rules above)
+asserted it, and the port makes it explicit. The region is no longer uniform
+in shape, and has not been for several slices — read each entry, not this
+preamble, for what it asserts:
+
+- Most entries are an `assert.equal(result.status, 0)` the shell left implicit.
+- Item 1 is a structural array-length guard with no shell analogue at all.
+- Entries added for the in-process flips assert `result.log` is empty — a
+  property the shell could not express, since it always dispatched and logged.
+- Items 41-43 and 47-50 assert stderr text or a non-zero status: the in-process
+  runtime backstop, `patchDispatch`'s no-op rejection, and `prepare`'s
+  conditional `python3` requirement have no `status === 0` form.
+- Items 3 and 20 assert nothing at all. They are records of an assertion
+  removed, kept numbered so the removal is visible rather than silent.
 
 <!-- inventory:port-only:start -->
 
@@ -664,7 +706,7 @@ item 1, a structural safety net with no shell analogue at all.
     `SUPERPOWERS_VALIDATOR` names one: `result.status === 1`
     (`tests/bin/bin-dispatch.test.js:475`). Port-only, same
     no-shell-counterpart rationale as item 47, and the half that must fire.
-    Items 47-49 are the integration net for `commandRequirements(env)`:
+    Items 47-50 are the integration net for `commandRequirements(env)`:
     `tests/bin/units.test.js` unit-tests the accessor, but nothing else
     proves `preflight` reads it rather than the static table, and reverting
     it to the static table is invisible to every other case in this file
@@ -733,8 +775,12 @@ item 1, a structural safety net with no shell analogue at all.
   counterpart.
 - Reconciliation: 41 of the 53 shell items are mapped (some 1:1 to their own
   JS assertion, two pairs sharing one JS assertion via the recorded merges
-  above), 12 are retired (noted above) — not drops, since a retirement is
-  recorded with its own note explaining why no replacement assertion is
-  possible, rather than silently disappearing. 41 + 12 = 53. The 50 port-only
+  above), 12 are retired (noted above) — not *silent* drops, since a
+  retirement is recorded with its own note explaining why no replacement
+  assertion is possible, rather than disappearing unremarked. That is the only
+  sense in which "drop" is pejorative here: it names an unrecorded
+  disappearance, not the port-only `Dropped` category, whose two entries
+  (items 3 and 20) are recorded exactly as carefully and are not shell items at
+  all. 41 + 12 = 53. The 50 port-only
   entries are strictly additive test coverage — not a reconciliation of
   any shell assertion — and are excluded from the 41/53 arithmetic above.
