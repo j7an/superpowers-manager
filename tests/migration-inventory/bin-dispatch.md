@@ -127,7 +127,10 @@ Port-only region — additive JS assertions that map no shell item, numbered
     dispatch log — the condition this item asserted can no longer occur, in
     either direction. `pin` was removed from `ROUTING_CASES`; the analogous
     in-process property ("succeeds without ever reaching its script") is
-    covered by `tests/bin/bin-dispatch.test.js:97` and recorded as port-only
+    covered by `tests/bin/bin-dispatch.test.js:123` (**re-derived from the
+    file** at PR 11.5 slice 3.4; this read `:97`, which was `unpin`'s log
+    assertion, not `pin`'s, and slice 3.4's new `prepare` case then shifted
+    even that by 14 lines) and recorded as port-only
     item 37, since it is a different property than "reaches its script with
     its args". Unlike items 10 and 11 below, `pin`'s standalone case needs a
     real, resolvable local upstream to succeed — see
@@ -148,8 +151,12 @@ Port-only region — additive JS assertions that map no shell item, numbered
     condition this item asserted can no longer occur, in either direction.
     `unpin` was removed from `ROUTING_CASES`; the analogous in-process
     property ("succeeds without ever reaching its script") is covered by
-    `tests/bin/bin-dispatch.test.js:89` (moved from `:81` when Task 6 added
-    `track-latest`'s own standalone case immediately above it) and recorded
+    `tests/bin/bin-dispatch.test.js:111` (**re-derived from the file** at
+    PR 11.5 slice 3.4; this read `:89`, which was `track-latest`'s log
+    assertion rather than `unpin`'s — the earlier "moved from `:81` when Task 6
+    added `track-latest`'s own standalone case immediately above it" note
+    advanced the citation by one case too few — and slice 3.4's new `prepare`
+    case then shifted the correct line to `:111`) and recorded
     as port-only item 21, since it is a different property than "reaches its
     script with its args".
 12. `install --dry-run` → logs `install --dry-run ref=` (`:92-94`). Port:
@@ -209,7 +216,7 @@ and is not counted here.
 ### Exit-code propagation (`:138-145`)
 
 29. A script's exit code (`42`) propagates unchanged through `probe`
-    (`:144-145`). Port: `:197`. The port's vehicle moved from `probe` to
+    (`:144-145`). Port: `:234`. The port's vehicle moved from `probe` to
     `install` (PR 11.5 slice 2, Task 6): the property under test is that a
     spawned child's status reaches the caller unchanged, and an in-process
     command has no child whose status could propagate. The item stays mapped
@@ -295,27 +302,27 @@ and is not counted here.
 ### codex required for probe and install (`:188-205`)
 
 42. Exit status is `1` when `codex` is absent and `probe` is run (`:198`,
-    bare `[ "$rc" -eq 1 ]`). Port: `:404`. Deliberately still carried by
+    bare `[ "$rc" -eq 1 ]`). Port: `:441`. Deliberately still carried by
     `probe` after PR 11.5 slice 2's in-process flip, unlike items 29's and
     the port-only backstop's vehicles: `COMMAND_REQUIREMENTS.probe` keeps
     `codex` (only `python3` left it), and preflight runs before dispatch
     either way, so this is the end-to-end net for that requirement row rather
     than a spawn vehicle.
 43. Stderr contains `required command not found: codex` for `probe` (`:199`).
-    Port: `:405`.
+    Port: `:442`.
 44. The dispatch log is empty — missing codex must not dispatch `probe`
-    (`:200`). Port: `:406`. The per-case `scripts` override that mirrored the
+    (`:200`). Port: `:443`. The per-case `scripts` override that mirrored the
     shell's `"probe ran"` stub was removed in PR 11.5 slice 2, Task 6: an
     in-process `probe` reaches no script, so a stub for one could never log
     and the override proved nothing. The shared `PACKAGE_ROOT`'s default
     `loggingStub` still logs unconditionally on invocation, so the assertion
     keeps its teeth exactly the way item 47's `install` case does.
 45. Exit status is `1` when `codex` is absent and `install` is run (`:203`,
-    bare `[ "$rc" -eq 1 ]`). Port: `:414`.
+    bare `[ "$rc" -eq 1 ]`). Port: `:451`.
 46. Stderr contains `required command not found: codex` for `install`
-    (`:204`). Port: `:415`.
+    (`:204`). Port: `:452`.
 47. The dispatch log is empty — missing codex must not dispatch `install`
-    (`:205`). Port: `:416`. The shell proves this with a `probe` override
+    (`:205`). Port: `:453`. The shell proves this with a `probe` override
     that logs unconditionally before its own logic runs (`:191-196`,
     `"probe ran"`), so "did not dispatch" is proven rather than assumed. The
     port's `install` case takes no `scripts` override and runs against the
@@ -639,7 +646,7 @@ preamble, for what it asserts:
     Port-only, same rationale as item 39.
 41. **New** (PR 11.5 slice 2, Task 3). An in-process command with no
     registered handler fails closed: `result.status === 1`
-    (`tests/bin/bin-dispatch.test.js:136`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:148`). Port-only, with no shell
     counterpart of any kind: the condition only exists because `src/cli.ts`'s
     `IN_PROCESS_HANDLERS` registry became exhaustiveness-checked in that
     task, making a `DISPATCH` entry without a registered handler a compile
@@ -657,12 +664,12 @@ preamble, for what it asserts:
 42. **New** (PR 11.5 slice 2, Task 3). Same case: stderr is exactly
     `error: no in-process handler registered for: ${spawned}\n`, where
     `spawned` is item 41's derived vehicle command
-    (`tests/bin/bin-dispatch.test.js:137-140`). Port-only, same rationale as
+    (`tests/bin/bin-dispatch.test.js:149-151`). Port-only, same rationale as
     item 41; the command named in that string is whatever `vehicleCommand`
     currently derives, not a literal to keep in sync by hand.
 43. **New** (PR 11.5 slice 3.4, Task 3). `dispatchOverride` rejects an
     override that changes nothing: `runDispatch` throws
-    (`tests/bin/bin-dispatch.test.js:152-162`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:166-174`). Port-only, with no shell
     counterpart of any kind: the condition only exists because
     `dispatch-fixture.js`'s `patchDispatch` helper, introduced in slice 2's
     Task 3 (items 41-42), used to rewrite a `DISPATCH` entry to its own
