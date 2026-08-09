@@ -12,8 +12,12 @@
 // gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
 // opens a `.superpowers.prepare.*` workspace there, all at
 // src/commands/prepare.ts:274-281 and all BEFORE computeEffectiveSelection.
-// Every `prepare` case therefore leaves an empty `<PACKAGE_ROOT>/plugins/`
-// behind. That residue is inert: nothing in this file or in
+// Every `prepare` case that clears preflight therefore leaves an empty
+// `<PACKAGE_ROOT>/plugins/` behind -- three of the four. The exception is the
+// `SUPERPOWERS_VALIDATOR` case, which withholds `python3` so that preflight
+// rejects the command and gatherPrepare never runs; its exact-equality stderr
+// assertion admits only the preflight diagnostic, which is what pins that
+// ordering down. That residue is inert: nothing in this file or in
 // bin-dispatch.test.js reads the path, withWorkspace removes its own
 // directory, the fakeBin `git` stub kills the run at ref resolution before
 // the clone and before the `.cache/` mkdir, and the per-case cpSync copies

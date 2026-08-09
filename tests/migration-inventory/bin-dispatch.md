@@ -334,7 +334,7 @@ and is not counted here.
     `"probe ran"`), so "did not dispatch" is proven rather than assumed. The
     port's `install` case takes no `scripts` override and runs against the
     shared `PACKAGE_ROOT`'s default stub instead — but that default stub
-    (`dispatch-fixture.js`'s `loggingStub`, `:135-150`) *also* logs
+    (`dispatch-fixture.js`'s `loggingStub`, `:139-154`) *also* logs
     unconditionally on invocation, before checking anything. That is what
     makes the assertion load-bearing here too: if `install` were mistakenly
     dispatched despite the missing-codex preflight, the default stub would
