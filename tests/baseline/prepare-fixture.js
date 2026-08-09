@@ -124,7 +124,7 @@ export const DECLARED_HOOK_PATHS = [
 ];
 
 /**
- * Eight branches, built once. The base commit is deliberately manifest-less so
+ * Ten branches, built once. The base commit is deliberately manifest-less so
  * `v5.0.0` serves GENERATED-FALLBACK-01; every other branch adds a manifest on
  * top of it.
  * @returns {string}

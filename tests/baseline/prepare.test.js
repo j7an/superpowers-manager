@@ -381,7 +381,7 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
   const result = await prepare(c, { SUPERPOWERS_REF: REFS.escapingHooksRoot });
   assert.equal(result.status, 1, result.stdout);
   const emitted = result.stderr.match(
-    /^hook materialization failed: hook subtree escapes or is broken: (\S+)$/m,
+    /^hook materialization failed: hook subtree escapes or is broken: (.+)$/m,
   );
   assert.ok(emitted, result.stderr);
   assert.equal(emitted[1], join(cacheRepo(c), "hooks"));
