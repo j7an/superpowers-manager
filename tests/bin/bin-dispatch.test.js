@@ -144,11 +144,12 @@ void test("an in-process command with no registered handler fails closed", () =>
 // command that had since flipped silently became a no-op. Fixing the one
 // victim without fixing the mechanism is what let it recur.
 //
-// `pin` here is a hardcoded literal, not a derived vehicle, and that is
-// fine: if `pin` ever flips to in-process, patchDispatch's own "no DISPATCH
-// entry found" throw fails this test loudly rather than letting it pass
-// while describing something untrue, so it carries none of the silent-drift
-// risk vehicleCommand exists to eliminate.
+// `pin` here is a hardcoded literal, not a derived vehicle. Unlike
+// `buildSpawn`'s vehicle, that is fine: staleness in this one is loud, not
+// silent — if `pin` ever stops being the "in-process" command this test
+// needs, the test fails visibly instead of quietly describing something
+// untrue, so it carries none of the risk vehicleCommand exists to
+// eliminate.
 void test("dispatchOverride rejects an override that changes nothing", () => {
   assert.throws(
     () =>
