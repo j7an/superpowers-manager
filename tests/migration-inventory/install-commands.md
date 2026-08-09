@@ -94,97 +94,97 @@ These read the repository's own `scripts/`, not a fixture snapshot, so the
 port reads `ROOT`.
 
 1. An unreadable production script is a hard failure, never a skip
-   (`:26-29`). Port: `:417`.
+   (`:26-29`). Port: `:469`.
 2. No production script contains `requirements.toml` (`:30-35`, literal 1 of
-   4). Port: `:423`.
+   4). Port: `:475`.
 3. No production script contains `hooks.state` (literal 2 of 4). Port:
    `:423`.
 4. No production script contains `trusted_hash` (literal 3 of 4). Port:
    `:423`.
 5. No production script contains `--dangerously-bypass-hook-trust` (literal 4
-   of 4). Port: `:423`.
+   of 4). Port: `:475`.
 6. No production script names `app-server` outside a comment (`:36-41`).
-   Port: `:431`.
+   Port: `:483`.
 
 ### Packaged root preconditions (`:77-82`)
 
 7. `scripts/install` is executable in the packaged root (`:77`). Port:
    `:449`.
-8. `scripts/adapters/codex/adapter` is executable (`:78`). Port: `:449`.
-9. `dist/validate-generated-plugin-cli.js` is packaged (`:79`). Port: `:461`.
-10. `dist/generated-plugin.js` is packaged (`:80`). Port: `:461`.
-11. `dist/python-text.js` is packaged (`:81`). Port: `:461`.
+8. `scripts/adapters/codex/adapter` is executable (`:78`). Port: `:501`.
+9. `dist/validate-generated-plugin-cli.js` is packaged (`:79`). Port: `:513`.
+10. `dist/generated-plugin.js` is packaged (`:80`). Port: `:513`.
+11. `dist/python-text.js` is packaged (`:81`). Port: `:513`.
 12. `scripts/adapters/codex/validate-generated-plugin.py` is **not** packaged
-    (`:82`). Port: `:467`.
+    (`:82`). Port: `:519`.
 
 ### Prepare is capability-independent (`:321-336`)
 
 13. The adapter log holds no `inspect --view update-control` (`:326-330`).
-    Port: `:485`.
+    Port: `:545`.
 14. The adapter log holds no `install --package-root` (`:331-335`). Port:
     `:490`.
-15. No Codex mutation (`:336`, `assert_no_codex_mutation`). Port: `:497`,
+15. No Codex mutation (`:336`, `assert_no_codex_mutation`). Port: `:557`,
     which asserts the strictly stronger property that the Codex log is
     **empty** — prepare makes no Codex call at all, and unlike the helper's
     form that claim is non-vacuous on its own.
 
 ### Unsupported update control blocks the update fast path (`:338-347`)
 
-16. Update fails (`:344`). Port: `:516`.
+16. Update fails (`:344`). Port: `:582`.
 17. Output contains `adapter cannot guarantee manager-controlled updates`
-    (`:345`). Port: `:521`.
-18. Output does **not** contain `manager is current` (`:346`). Port: `:528`.
+    (`:345`). Port: `:587`.
+18. Output does **not** contain `manager is current` (`:346`). Port: `:594`.
     Non-vacuous: item 17 proves the output carries the subject's diagnostics.
-19. No Codex mutation (`:347`). Port: `:533`.
+19. No Codex mutation (`:347`). Port: `:599`.
 
 ### Unsupported update control blocks a direct install (`:349-352`)
 
-20. Install fails (`:351`). Port: `:544`.
-21. No Codex mutation (`:352`). Port: `:548`.
+20. Install fails (`:351`). Port: `:614`.
+21. No Codex mutation (`:352`). Port: `:618`.
 
 ### Malformed update-control output exits exactly 1 (`:354-364`)
 
-22. Install does not succeed (`:357-362`). Port: `:556`.
-23. The exit status is exactly 1 (`:363`). Port: `:556`. **Merged:** one
+22. Install does not succeed (`:357-362`). Port: `:630`.
+23. The exit status is exactly 1 (`:363`). Port: `:630`. **Merged:** one
     `assert.equal(result.status, 1, …)` carries items 22 and 23 together,
     because `status === 1` implies `status !== 0`.
-24. No Codex mutation (`:364`). Port: `:562`.
+24. No Codex mutation (`:364`). Port: `:636`.
 
 ### Failed update-control inspection exits exactly 1 (`:366-375`)
 
-25. Update does not succeed (`:368-373`). Port: `:569`.
-26. The exit status is exactly 1 (`:374`). Port: `:569`. Merged with item 25,
+25. Update does not succeed (`:368-373`). Port: `:647`.
+26. The exit status is exactly 1 (`:374`). Port: `:647`. Merged with item 25,
     as items 22-23 were.
-27. No Codex mutation (`:375`). Port: `:575`.
+27. No Codex mutation (`:375`). Port: `:653`.
 
 ### A needs-prepare install reinspects after prepare (`:377-392`)
 
 28. Install rejects capability drift after prepare (`:383-386`). Port:
     `:590`.
-29. Stdout contains `prepared v1.0.0` (`:387`). Port: `:596`.
+29. Stdout contains `prepared v1.0.0` (`:387`). Port: `:678`.
 30. Update control was inspected exactly twice (`:388`, bare `[ ... ]` per
-    rule 6). Port: `:598`.
+    rule 6). Port: `:680`.
 31. The build line precedes the second update-control inspection (`:391`).
-    Port: `:608`. `head -n1` for the build line, `tail -n1` for the second
+    Port: `:690`. `head -n1` for the build line, `tail -n1` for the second
     inspection, as the shell did.
-32. No Codex mutation (`:392`). Port: `:613`.
+32. No Codex mutation (`:392`). Port: `:695`.
 
 ### The needs-install path inspects freshly, then installs (`:394-404`)
 
 33. Update control was inspected exactly twice (`:399`, bare `[ ... ]`).
-    Port: `:625`.
+    Port: `:713`.
 34. The last ownership inspection precedes the last update-control gate
-    (`:403`). Port: `:632`.
+    (`:403`). Port: `:720`.
 35. The last update-control gate precedes the adapter install (`:404`). Port:
     `:636`.
 
 ### The fresh gate, not the probe, controls mutation authority (`:406-416`)
 
 36. Install rejects capability drift before adapter install (`:411-414`).
-    Port: `:651`.
+    Port: `:741`.
 37. Update control was inspected exactly twice (`:415`, bare `[ ... ]`).
-    Port: `:660`.
-38. No Codex mutation (`:416`). Port: `:662`.
+    Port: `:750`.
+38. No Codex mutation (`:416`). Port: `:752`.
 
 ### Legacy and mixed identity state stop before mutation (`:425-451`)
 
@@ -193,63 +193,63 @@ iteration (rule 4). Items 39-44 are the `legacy` iteration, items 45-50 the
 `both` iteration. Both port to the shared helper at `:361-394`; the call sites
 are `:671` and `:680`.
 
-39. Install rejects the `legacy` identity state (`:438-441`). Port: `:365`.
+39. Install rejects the `legacy` identity state (`:438-441`). Port: `:410`.
 40. Output holds the exact line `Legacy superpowers-wrapper Codex state is
-    installed.` (`:442`). Port: `:374`.
+    installed.` (`:442`). Port: `:419`.
 41. Output holds the exact line `Run: npx superpowers-wrapper@0.1.1
-    uninstall` (`:443`). Port: `:378`. This literal is user-facing guidance
+    uninstall` (`:443`). Port: `:423`. This literal is user-facing guidance
     owned by `scripts/core/lifecycle.sh:52`, not a dependency version that
     moves on someone else's schedule — the exact text is the contract.
 42. Output holds the exact line `Then run: npx superpowers-manager install`
-    (`:444`). Port: `:379`.
+    (`:444`). Port: `:424`.
 43. The adapter log holds no `^build ` or `^install ` line (`:445-449`).
-    Port: `:387`.
-44. No Codex mutation (`:450`). Port: `:393`.
+    Port: `:439`.
+44. No Codex mutation (`:450`). Port: `:445`.
 45. Install rejects the `both` identity state (`:438-441`, iteration 2).
-    Port: `:365` via `:680`.
+    Port: `:410` via `:680`.
 46. The same exact `Legacy superpowers-wrapper …` line (`:442`, iteration 2).
-    Port: `:374` via `:680`.
+    Port: `:419` via `:680`.
 47. The same exact `Run: npx superpowers-wrapper@0.1.1 uninstall` line
-    (`:443`, iteration 2). Port: `:378` via `:680`.
+    (`:443`, iteration 2). Port: `:423` via `:680`.
 48. The same exact `Then run: npx superpowers-manager install` line (`:444`,
-    iteration 2). Port: `:379` via `:680`.
+    iteration 2). Port: `:424` via `:680`.
 49. No `^build ` or `^install ` adapter line (`:445-449`, iteration 2). Port:
     `:387` via `:680`.
-50. No Codex mutation (`:450`, iteration 2). Port: `:393` via `:680`.
+50. No Codex mutation (`:450`, iteration 2). Port: `:445` via `:680`.
 
 ### Built-in validation failure leaves Codex untouched (`:453-476`)
 
-51. Install fails on built-in validation (`:468-472`). Port: `:700`.
+51. Install fails on built-in validation (`:468-472`). Port: `:794`.
 52. Output contains ``field `name` must equal `superpowers` `` (`:473`).
-    Port: `:706`.
-53. No Codex mutation (`:474`). Port: `:708`.
+    Port: `:800`.
+53. No Codex mutation (`:474`). Port: `:802`.
 
 ### Additional-validator failure leaves Codex untouched (`:478-487`)
 
-54. Install fails on additional validation (`:481-485`). Port: `:722`.
+54. Install fails on additional validation (`:481-485`). Port: `:816`.
 55. Output contains `additional plugin validation failed` (`:486`). Port:
     `:728`.
-56. No Codex mutation (`:487`). Port: `:730`.
+56. No Codex mutation (`:487`). Port: `:824`.
 
 ### Scenario 1 — fresh install (`:489-512`)
 
 57. Prepare generated the tree: the package root carries
-    `.superpowers-upstream.json` (`:496`). Port: `:760`.
+    `.superpowers-upstream.json` (`:496`). Port: `:854`.
 58. `plugin marketplace list` precedes `plugin marketplace add <pkg>`
-    (`:500`, first `[ ]` of the rule-9 chain). Port: `:767`, via
+    (`:500`, first `[ ]` of the rule-9 chain). Port: `:861`, via
     `assertOrder`.
 59. `plugin marketplace add <pkg>` precedes `plugin add
-    superpowers@superpowers-manager` (`:500`, second `[ ]`). Port: `:767`,
+    superpowers@superpowers-manager` (`:500`, second `[ ]`). Port: `:861`,
     same call.
-60. Stdout contains `manager updated` (`:502`). Port: `:777`.
+60. Stdout contains `manager updated` (`:502`). Port: `:871`.
 61. The invocation TMPDIR is left empty (`:503`,
-    `assert_install_tmp_empty`). Port: `:779`, helper at `:293`. **Scope
+    `assert_install_tmp_empty`). Port: `:873`, helper at `:293`. **Scope
     narrowed twice — see the note below, and the further narrowing the
     mutation proof's row 13a records.**
-62. The Codex log holds no `marketplace remove` (`:504-506`). Port: `:782`.
+62. The Codex log holds no `marketplace remove` (`:504-506`). Port: `:876`.
 63. The Codex log holds no `plugin remove superpowers@superpowers-manager`
-    (`:507-509`). Port: `:786`.
-64. The Codex log never names `openai-curated` (`:510-512`). Port: `:790`.
+    (`:507-509`). Port: `:880`.
+64. The Codex log never names `openai-curated` (`:510-512`). Port: `:884`.
     Items 62-64 are non-vacuous because items 58-59 prove all three expected
     commands reached the log.
 
@@ -268,48 +268,48 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 65. The adapter log holds `install --package-root <pkg>` (`:523`). Port:
     `:812`.
 66. `plugin marketplace list` precedes `plugin marketplace add <pkg>`
-    (`:527`, first `[ ]`). Port: `:817`.
+    (`:527`, first `[ ]`). Port: `:914`.
 67. `plugin marketplace add <pkg>` precedes `plugin add
-    superpowers@superpowers-manager` (`:527`, second `[ ]`). Port: `:817`.
+    superpowers@superpowers-manager` (`:527`, second `[ ]`). Port: `:914`.
 
 ### Scenario 1c — a matching fingerprint at a different root (`:534-551`)
 
 68. The adapter log holds `install --package-root <pkg>` (`:542`). Port:
     `:844`.
 69. `plugin marketplace remove superpowers-manager` precedes `plugin
-    marketplace add <pkg>` (`:546`, first `[ ]`). Port: `:849`.
+    marketplace add <pkg>` (`:546`, first `[ ]`). Port: `:947`.
 70. `plugin marketplace add <pkg>` precedes `plugin add
-    superpowers@superpowers-manager` (`:546`, second `[ ]`). Port: `:849`.
+    superpowers@superpowers-manager` (`:546`, second `[ ]`). Port: `:947`.
 
 ### Scenario 2 — the same physical root via a symlink (`:553-567`)
 
 71. The Codex log holds no `marketplace add` (`:561`, first grep of the
-    rule-8 `||` chain). Port: `:882`.
+    rule-8 `||` chain). Port: `:984`.
 72. The Codex log holds no `marketplace remove` (`:561`, second grep of the
-    same chain). Port: `:886`.
+    same chain). Port: `:988`.
 73. The Codex log holds `plugin add superpowers@superpowers-manager`
-    (`:564`). Port: `:877` — hoisted **above** items 71-72 in the port so
+    (`:564`). Port: `:979` — hoisted **above** items 71-72 in the port so
     neither negative can pass on an empty log.
 74. The Codex log holds no `plugin remove superpowers@superpowers-manager`
-    (`:565-567`). Port: `:891`.
+    (`:565-567`). Port: `:993`.
 
 ### Scenario 3 — a different registered root (`:569-585`)
 
 75. `plugin marketplace remove superpowers-manager` precedes `plugin
-    marketplace add <pkg>` (`:578`, first `[ ]`). Port: `:912`.
+    marketplace add <pkg>` (`:578`, first `[ ]`). Port: `:1018`.
 76. `plugin marketplace add <pkg>` precedes `plugin add
-    superpowers@superpowers-manager` (`:578`, second `[ ]`). Port: `:912`.
+    superpowers@superpowers-manager` (`:578`, second `[ ]`). Port: `:1018`.
 77. The Codex log holds no `marketplace remove openai-curated` (`:580-582`).
-    Port: `:922`.
+    Port: `:1028`.
 78. The Codex log holds no `plugin remove superpowers@superpowers-manager`
-    (`:583-585`). Port: `:926`.
+    (`:583-585`). Port: `:1032`.
 
 ### Scenario 3b — update stays read-only when probe reports current (`:587-602`)
 
-79. Stdout contains `manager is current` (`:594`). Port: `:944`.
+79. Stdout contains `manager is current` (`:594`). Port: `:1054`.
 80. The adapter log holds no `install --package-root` (`:595-599`). Port:
     `:947`.
-81. No Codex mutation (`:600-602`). Port: `:955`. **Divergence:** the shell
+81. No Codex mutation (`:600-602`). Port: `:1066`. **Divergence:** the shell
     wrapped the helper in `[ ! -s "$log" ] ||`, so an empty Codex log
     satisfied the scenario. The port drops that escape hatch —
     `assertNoCodexMutation`'s emptiness guard reports an empty log as the
@@ -319,37 +319,37 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 ### Scenario 3c — update rejects mixed legacy state while current (`:604-620`)
 
-82. Update fails (`:610-613`). Port: `:972`.
+82. Update fails (`:610-613`). Port: `:1088`.
 83. Output holds the exact line `Then run: npx superpowers-manager install`
-    (`:614`, `grep -Fxq`). Port: `:978`.
+    (`:614`, `grep -Fxq`). Port: `:1094`.
 84. The adapter log holds no `^build ` or `^install ` line (`:615-619`).
-    Port: `:986`.
-85. No Codex mutation (`:620`). Port: `:992`.
+    Port: `:1102`.
+85. No Codex mutation (`:620`). Port: `:1108`.
 
 ### Scenario 4 — remove succeeds, add fails (`:622-634`)
 
-86. Install fails (`:629`, `expect_fail`). Port: `:1006`.
+86. Install fails (`:629`, `expect_fail`). Port: `:1127`.
 87. Output names the root it failed to add: `plugin marketplace add <pkg>`
-    (`:630`). Port: `:1013`.
+    (`:630`). Port: `:1134`.
 88. Output names the previous root it had already removed (`:631`). Port:
     `:1014`.
 89. The Codex log holds no `plugin add superpowers@superpowers-manager` — the
-    plugin add was never attempted (`:632-634`). Port: `:1017`.
+    plugin add was never attempted (`:632-634`). Port: `:1138`.
 
 ### Scenario 5 — malformed marketplace listing (`:636-646`)
 
-90. Install fails (`:641`). Port: `:1032`.
+90. Install fails (`:641`). Port: `:1157`.
 91. The Codex log holds no `marketplace (add|remove)` and no `^plugin
-    (add|remove)` (`:642-646`). Port: `:1039`. The ERE here is wider than
+    (add|remove)` (`:642-646`). Port: `:1164`. The ERE here is wider than
     `assert_no_codex_mutation`'s — `marketplace (add|remove)` is unanchored —
     so the port carries it as its own pattern rather than reusing
     `CODEX_MUTATION`.
 
 ### Scenario 6 — plugin add refreshes nothing (`:648-659`)
 
-92. Install fails (`:654`). Port: `:1053`.
-93. Output contains `fingerprint is not detectable` (`:655`). Port: `:1059`.
-94. The invocation TMPDIR is left empty (`:656`). Port: `:1061`. Same scope
+92. Install fails (`:654`). Port: `:1183`.
+93. Output contains `fingerprint is not detectable` (`:655`). Port: `:1189`.
+94. The invocation TMPDIR is left empty (`:656`). Port: `:1191`. Same scope
     narrowing as item 61, including the further narrowing the mutation proof's
     row 13a records.
 95. Output does **not** contain `manager updated` (`:657-659`). Port:
@@ -358,11 +358,11 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 ### Scenario 7 — the installed fingerprint stays stale (`:661-674`)
 
-96. Install fails (`:669`). Port: `:1077`.
+96. Install fails (`:669`). Port: `:1212`.
 97. Output contains `does not match the prepared plugin` (`:670`). Port:
     `:1083`.
 98. Output contains `SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add` (`:671`).
-    Port: `:1087`. The hint text is owned by `src/adapter.ts:641-643` and
+    Port: `:1222`. The hint text is owned by `src/adapter.ts:641-643` and
     replayed from the adapter result by `scripts/core/lifecycle.sh:109,121`;
     core holds no copy of it.
 99. Output does **not** contain `manager updated` (`:672-674`). Port:
@@ -370,15 +370,15 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 ### Scenario 8 — the missing-fingerprint replay hint (`:676-685`)
 
-100. Install fails (`:683`). Port: `:1102`.
-101. Output contains `fingerprint is not detectable` (`:684`). Port: `:1108`.
+100. Install fails (`:683`). Port: `:1242`.
+101. Output contains `fingerprint is not detectable` (`:684`). Port: `:1248`.
 102. Output contains `verify with 'codex plugin list --json'` (`:685`,
-     `src/adapter.ts:645`). Port: `:1110`.
+     `src/adapter.ts:645`). Port: `:1250`.
 
 ### Scenario 8a — fingerprint inspection command failure (`:687-700`)
 
-103. Install fails (`:694`). Port: `:1262`.
-104. Output contains `fingerprint inspection` (`:695`). Port: `:1270`.
+103. Install fails (`:694`). Port: `:1281`.
+104. Output contains `fingerprint inspection` (`:695`). Port: `:1289`.
      **Re-based, and the narrowing lifted with it.** The shell drove this
      scenario by making the fake ADAPTER fail (`fingerprintInspect: "fail"`),
      and the earlier port carried that fixture forward — which is what the
@@ -401,56 +401,56 @@ narrowing recorded at `uninstall-commands.md:157-170`.
      behind it were retired in the same commit, having lost their only
      consumer.
 105. Output does **not** contain `fingerprint is not detectable` (`:696`,
-     first grep of the rule-8 `||` chain). Port: `:1279`.
+     first grep of the rule-8 `||` chain). Port: `:1298`.
 106. Output does **not** contain `manager updated` (`:697`, second grep of
-     the same chain). Port: `:1283`. Items 105-106 are non-vacuous because
+     the same chain). Port: `:1302`. Items 105-106 are non-vacuous because
      item 104 proves `out` carries the subject's diagnostic stream — which,
      since the re-base, it does: the line it matches has exactly one emitter
      and that emitter is `scripts/core/lifecycle.sh`, not the fixture.
 
 ### Scenario 8b — malformed fingerprint inspection output (`:702-716`)
 
-107. Install fails (`:709`). Port: `:1146`.
-108. Output contains `invalid adapter response` (`:710`). Port: `:1152`.
-109. Output contains `fingerprint inspection` (`:711`). Port: `:1154`.
+107. Install fails (`:709`). Port: `:1322`.
+108. Output contains `invalid adapter response` (`:710`). Port: `:1328`.
+109. Output contains `fingerprint inspection` (`:711`). Port: `:1330`.
 110. Output does **not** contain `fingerprint is not detectable` (`:712`,
-     first grep of the rule-8 chain). Port: `:1156`.
+     first grep of the rule-8 chain). Port: `:1332`.
 111. Output does **not** contain `manager updated` (`:713`, second grep).
-     Port: `:1160`.
+     Port: `:1336`.
 
 ### Scenario 9 — remove-add refresh mode (`:718-736`)
 
 112. `plugin marketplace list` precedes `plugin marketplace add <pkg>`
-     (`:729`, first `[ ]` of the rule-9 chain). Port: `:1177`.
+     (`:729`, first `[ ]` of the rule-9 chain). Port: `:1357`.
 113. `plugin marketplace add <pkg>` precedes `plugin remove
-     superpowers@superpowers-manager` (`:729`, second `[ ]`). Port: `:1177`.
+     superpowers@superpowers-manager` (`:729`, second `[ ]`). Port: `:1357`.
 114. `plugin remove superpowers@superpowers-manager` precedes `plugin add
-     superpowers@superpowers-manager` (`:729`, third `[ ]`). Port: `:1177`.
-115. The Codex log never names `openai-curated` (`:734-736`). Port: `:1188`.
+     superpowers@superpowers-manager` (`:729`, third `[ ]`). Port: `:1357`.
+115. The Codex log never names `openai-curated` (`:734-736`). Port: `:1368`.
      Non-vacuous via items 112-114.
 
 ### Scenario 10 — invalid refresh mode (`:738-745`)
 
-116. Install fails (`:744`, `expect_fail`). Port: `:1203`.
-117. No Codex mutation (`:745`). Port: `:1209`.
+116. Install fails (`:744`, `expect_fail`). Port: `:1387`.
+117. No Codex mutation (`:745`). Port: `:1393`.
 
 ### Scenario 11 — install remediates malformed generated provenance (`:747-768`)
 
-118. Stdout contains `prepared v1.0.0` (`:756`). Port: `:1230`. `v1.0.0` is
+118. Stdout contains `prepared v1.0.0` (`:756`). Port: `:1418`. `v1.0.0` is
      the tag the fixture creates for itself (`lifecycle-fixture.js:118-127`),
      an input this test owns — not a version whose source of truth lives
      elsewhere.
-119. Stdout contains `manager updated` (`:757`). Port: `:1232`.
+119. Stdout contains `manager updated` (`:757`). Port: `:1420`.
 120. The adapter log holds `install --package-root <pkg>` (`:758`). Port:
      `:1235`.
 121. The regenerated provenance carries a `commit` that is a string of
-     exactly 40 hex digits (`:759-768`, rule 10). Port: `:1240`, helper at
+     exactly 40 hex digits (`:759-768`, rule 10). Port: `:1435`, helper at
      `:340`.
 
 ### Scenario 12 — update takes the same remediation path (`:770-780`)
 
-122. Stdout contains `prepared v1.0.0` (`:778`). Port: `:1256`.
-123. Stdout contains `manager updated` (`:779`). Port: `:1258`.
+122. Stdout contains `prepared v1.0.0` (`:778`). Port: `:1455`.
+123. Stdout contains `manager updated` (`:779`). Port: `:1457`.
 124. The adapter log holds `install --package-root <pkg>` (`:780`). Port:
      `:1261`.
 
