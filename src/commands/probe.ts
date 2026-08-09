@@ -361,10 +361,16 @@ export async function runProbe(
     outcome = await gatherProbe(ctx);
   } catch (cause) {
     // Most throws reachable here carry a HAND-WRITTEN message:
-    //   - the selectionErrors src/selection.ts raises from validateSource,
-    //     validateRecord, and normalizeSaved, and the ones
-    //     src/effective-selection.ts:15,35 raises for a non-absolute or
-    //     missing config directory.
+    //   - the selectionErrors validateSource raises (src/selection.ts:137,
+    //     :140, and requireSingleLineString at :77), reached from
+    //     src/effective-selection.ts:92, and the ones validateRecord raises
+    //     (src/selection.ts:198, :219, plus requireObject at :47,
+    //     requireExactKeys at :64, and validatePinnedRecord at :170-183),
+    //     reached from src/selection-store.ts:103 on the read path.
+    //     normalizeSaved (src/selection.ts:222-241) is NOT in this list: it
+    //     contains no throw statement and raises nothing at all.
+    //   - the selectionErrors src/effective-selection.ts:15 and :35 raise for
+    //     a non-absolute or missing config directory.
     //   - readConfigRef's `cannot read packaged upstream ref <path>`
     //     (src/upstream.ts:52), which names the path and drops the cause.
     //   - resolveRef's own no-match diagnostics (src/upstream.ts:155, :199).
@@ -381,18 +387,23 @@ export async function runProbe(
     //      (e.g. "EACCES: permission denied, open '<path>'") can reach this
     //      stream. Reached on the READ path only, via loadSavedSelection
     //      (src/effective-selection.ts:50) -> readSelectionState
-    //      (src/selection-store.ts:149); the write-path sites at :225 and
-    //      :231 are not reachable from probe, which never writes. AGENTS.md
-    //      explicitly grandfathers this module's wording, so this is
-    //      sanctioned behaviour -- nothing here needs fixing.
+    //      (src/selection-store.ts:149). This module's four write-only
+    //      interpolating sites are all unreachable from probe, which never
+    //      writes: :172 (ensureStateDirectory, called from :206), :197
+    //      (finalStateDiagnostic, called from :229), and :225 and :231 in
+    //      writeSelectionState's own catch. AGENTS.md explicitly grandfathers
+    //      this module's wording, so the read-path sites are sanctioned
+    //      behaviour -- nothing here needs fixing.
     //   3. Every runGit call site inside resolveRef (src/upstream.ts:141,
-    //      :165, :188) can reject instead of resolving: src/git.ts:47-51
-    //      wraps every string errno other than ENOENT in
-    //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
-    //      and that Node spawn-level message reaches ctx.stderr through this
-    //      catch. A non-zero *exit status* is handled by exception 1 above;
-    //      this is the *spawn-level* case, where runGit throws rather than
-    //      returning a status.
+    //      :165, :188) can reject instead of resolving. On the non-ENOENT arm
+    //      of src/git.ts:47-52, runGit builds the message
+    //      "cannot run git: " followed by the Node spawn error's own message
+    //      (:51) and rejects with a SafetyError carrying it (:52), so that
+    //      Node spawn-level text reaches ctx.stderr through this catch. The
+    //      ENOENT arm (:50) is hand-written and carries nothing. A non-zero
+    //      *exit status* is handled by exception 1 above; this is the
+    //      *spawn-level* case, where runGit throws rather than returning a
+    //      status.
     //
     // oneLine() collapses each of exceptions 1 and 3 to a single line,
     // containing the harm to one line of git text rather than the arbitrarily
