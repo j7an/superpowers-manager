@@ -574,7 +574,7 @@ item 1, a structural safety net with no shell analogue at all.
     Port-only, same rationale as item 39.
 41. **New** (PR 11.5 slice 2, Task 3). An in-process command with no
     registered handler fails closed: `result.status === 1`
-    (`tests/bin/bin-dispatch.test.js:133`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:136`). Port-only, with no shell
     counterpart of any kind: the condition only exists because `src/cli.ts`'s
     `IN_PROCESS_HANDLERS` registry became exhaustiveness-checked in that
     task, making a `DISPATCH` entry without a registered handler a compile
@@ -583,24 +583,34 @@ item 1, a structural safety net with no shell analogue at all.
     `dist/cli.js`'s `DISPATCH` table (`dispatch-fixture.js`'s
     `dispatchOverride` option on `runDispatch`), never `src/cli.ts` itself.
     The command it patches is a vehicle and must be one `DISPATCH` still
-    spawns; Task 6 moved it from `probe` to `prepare` when `probe` gained a
-    registered handler, since overriding an already-registered command no
-    longer reaches the backstop at all.
+    spawns; Task 6 re-pointed it by hand, from `probe` to `prepare`, when
+    `probe` gained a registered handler and overriding an already-registered
+    command stopped reaching the backstop at all. Slice 3.4's Task 3 replaced
+    that hand-maintained literal with `vehicleCommand`
+    (`tests/bin/dispatch-mode.js`), which derives the vehicle from the live
+    table, so no future flip needs a manual re-point here again.
 42. **New** (PR 11.5 slice 2, Task 3). Same case: stderr is exactly
-    `error: no in-process handler registered for: prepare\n`
-    (`:134-137`). Port-only, same rationale as item 41; the command named in
-    that string is the vehicle, updated with it in Task 6.
+    `error: no in-process handler registered for: ${spawned}\n`, where
+    `spawned` is item 41's derived vehicle command
+    (`tests/bin/bin-dispatch.test.js:137-140`). Port-only, same rationale as
+    item 41; the command named in that string is whatever `vehicleCommand`
+    currently derives, not a literal to keep in sync by hand.
 43. **New** (PR 11.5 slice 3.4, Task 3). `dispatchOverride` rejects an
     override that changes nothing: `runDispatch` throws
-    (`tests/bin/bin-dispatch.test.js:146-156`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:152-162`). Port-only, with no shell
     counterpart of any kind: the condition only exists because
     `dispatch-fixture.js`'s `patchDispatch` helper, introduced in slice 2's
     Task 3 (items 41-42), used to rewrite a `DISPATCH` entry to its own
-    current value without complaint. That let a vehicle naming a command
-    that had since flipped modes silently become a no-op instead of failing
-    — exactly the failure mode items 41-42's own vehicle already suffered
-    once (`probe` to `prepare` at slice 2). This asserts the mechanism
-    itself refuses a no-op, not just that the one victim was re-pointed.
+    current value without complaint, so a stale `dispatchOverride` vehicle
+    silently degraded into a no-op. That is not what happened to items
+    41-42's own vehicle: a no-op override there still reaches an
+    already-registered handler, so `result.status === 1` fails loudly, which
+    is why Task 6 re-pointed it rather than leaving it stale. The precedent
+    this guard actually answers to is `units.test.js`'s `buildSpawn` vehicle
+    (Task 3, this slice) — a pure path computation with no path through
+    `patchDispatch` at all — which kept passing silently while naming a
+    command no longer spawned. This asserts the mechanism itself refuses a
+    no-op, not just that one victim was re-pointed.
 
 <!-- inventory:port-only:end -->
 

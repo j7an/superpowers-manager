@@ -157,8 +157,12 @@ function writeExecutable(dir, name, body) {
 function patchDispatch(cliPath, overrides) {
   let text = readFileSync(cliPath, "utf8");
   for (const [command, mode] of Object.entries(overrides)) {
+    // The leading negative lookbehind anchors the key: without it, `pin`
+    // matches inside `unpin:` too (`pin` is a suffix of `unpin`), and
+    // `String.match` silently returns whichever entry sorts first in the
+    // table instead of throwing "no DISPATCH entry found".
     const pattern = new RegExp(
-      `(["']?${command}["']?:\\s*)"(spawn|in-process)"`,
+      `(?<![\\w$])(["']?${command}["']?:\\s*)"(spawn|in-process)"`,
     );
     const match = text.match(pattern);
     if (!match) {
