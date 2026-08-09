@@ -24,6 +24,7 @@
     "tests/bin/migration-inventory.test.js",
     "tests/bin/node-tooling.test.js",
     "tests/bin/npm-pack-contents.test.js",
+    "tests/bin/readme-requirements.test.js",
     "tests/bin/tooling-coverage.test.js",
     "tests/bin/uninstall-commands.test.js",
     "tests/bin/units.test.js",

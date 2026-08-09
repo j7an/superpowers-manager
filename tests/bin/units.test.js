@@ -5,6 +5,7 @@ import * as assert from "node:assert";
 import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { vehicleCommand } from "./dispatch-mode.js";
 /** @type {typeof import('../../src/cli.js')} */
 const bin = await import(new URL("../../dist/cli.js", import.meta.url).href);
 
@@ -96,11 +97,40 @@ assert.strictEqual(bin.parseArgs(["--version"]).kind, "version");
 assert.strictEqual(bin.parseArgs(["bogus"]).kind, "usage-error");
 assert.strictEqual(bin.parseArgs(["--porcelain"]).kind, "usage-error");
 
-const requirements = bin.commandRequirements();
+const requirements = bin.commandRequirements({});
 assert.deepStrictEqual(requirements.pin, ["git"]);
 assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
 assert.deepStrictEqual(requirements.uninstall, ["python3", "codex"]);
+// Independent coverage of the conditional, which CLI-PREFLIGHT-01 cannot
+// provide: it derives from this same accessor, so it follows the conditional
+// automatically and can never detect a wrong one (slice 3, D5).
+assert.deepStrictEqual(requirements.prepare, ["git"]);
+assert.deepStrictEqual(
+  bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "/validator.py" }).prepare,
+  ["git", "python3"],
+);
+// An empty value is not a configured validator.
+assert.deepStrictEqual(
+  bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
+  ["git"],
+);
+
+// --- vehicleCommand: the dispatch vehicles pick their own subject ----------
+// Two tests below need "some command DISPATCH still spawns" and assert nothing
+// about which. Hardcoding one meant re-pointing it at every flip -- `probe` to
+// `prepare` at slice 2, `prepare` to something else here -- and buildSpawn is a
+// pure path computation, so a stale literal kept passing while describing a
+// command that is no longer spawned. Deriving it also makes both tests fail
+// loudly in slice 4, when nothing is spawned and they should be deleted.
+assert.strictEqual(
+  vehicleCommand({ pin: "in-process", update: "spawn", probe: "in-process" }),
+  "update",
+);
+assert.throws(
+  () => vehicleCommand({ pin: "in-process", probe: "in-process" }),
+  /no spawned command remains/,
+);
 
 // --- usage separates saving selection intent from applying it ---
 const help = bin.usage();
@@ -119,35 +149,33 @@ assert.ok(help.includes("$HOME/.config/superpowers-manager"));
 
 // --- buildSpawn: POSIX executes the script directly ---
 // Vehicle only. This asserts buildSpawn's path construction and argv
-// passthrough, not anything specific to `prepare`; it just has to name a
-// command DISPATCH still spawns. It moved off `probe` when slice 2 flipped it
-// in-process — a pure path computation keeps passing either way, so a stale
-// vehicle here would read as live coverage of a command that is no longer
-// spawned. It dies with buildSpawn in slice 4.
+// passthrough, not anything specific to the command it names — it just has to
+// be one DISPATCH still spawns, which vehicleCommand now guarantees rather
+// than a literal that has to be maintained. It dies with buildSpawn in slice 4,
+// and vehicleCommand throws at exactly that moment.
 //
 // The argv is arbitrary and stays non-empty on purpose: buildSpawn is a pure
 // function that forwards whatever it is handed, so passing `[]` here would
-// drop the passthrough half of the contract on the ground. What
-// `scripts/prepare` itself accepts is a fact about the script, not about
-// buildSpawn.
+// drop the passthrough half of the contract on the ground.
+const spawned = vehicleCommand(bin.DISPATCH);
 const posix = bin.buildSpawn(
-  "prepare",
+  spawned,
   ["--ref", "test"],
   "/root",
   "/bin/sh",
   "linux",
 );
-assert.strictEqual(posix.file, path.join("/root", "scripts", "prepare"));
+assert.strictEqual(posix.file, path.join("/root", "scripts", spawned));
 assert.deepStrictEqual(posix.argv, ["--ref", "test"]);
 
 // --- buildSpawn: Windows dispatches through the discovered shell:
 // <shell> scripts/<cmd> [args...]. path.join is used on both sides so the
 // assertion holds on any host separator.
 const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-const win = bin.buildSpawn("update", ["-x"], "C:\\pkg", gitBash, "win32");
+const win = bin.buildSpawn(spawned, ["-x"], "C:\\pkg", gitBash, "win32");
 assert.strictEqual(win.file, gitBash);
 assert.deepStrictEqual(win.argv, [
-  path.join("C:\\pkg", "scripts", "update"),
+  path.join("C:\\pkg", "scripts", spawned),
   "-x",
 ]);
 
@@ -179,14 +207,15 @@ for (const caller of ["install", "update"]) {
 
 // --- scripts/prepare outlives this slice ---
 // scripts/install:25 and scripts/update:23 still execute `scripts/prepare`, so
-// deleting it breaks both commands. Two couplings keep it alive: the lifecycle
-// test fakes stub SPW_ADAPTER, a seam only scripts/core/adapter.sh honours and
-// the in-process runAdapter does not; and ~20 prepare cases in
-// tests/baseline/cli-parity.test.js are calibrated against the synthetic
-// adapter at tests/fixtures/baseline/bin/stateful-adapter rather than a real
-// build. Slice 3.4 re-derives those cases and flips dispatch; slice 3.5
-// re-bases the fakes and deletes this script. Asserting the RELATIONSHIP
-// rather than a line number keeps this stable against edits to either caller.
+// deleting it breaks both commands. Slice 3.4 flipped `prepare` itself to
+// in-process dispatch and re-derived the cli-parity prepare cases off the
+// synthetic adapter at tests/fixtures/baseline/bin/stateful-adapter, so that
+// coupling is gone. What remains is the lifecycle path: `install` and `update`
+// still spawn, and their test fakes stub SPW_ADAPTER — a seam only
+// scripts/core/adapter.sh honours and the in-process runAdapter does not.
+// Slice 3.5 re-bases those fakes and deletes this script. Asserting the
+// RELATIONSHIP rather than a line number keeps this stable against edits to
+// either caller.
 assert.ok(
   fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", "prepare")),
   "scripts/prepare is still executed by scripts/install and scripts/update",

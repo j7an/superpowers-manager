@@ -22,6 +22,8 @@ import {
   DISPATCH,
   IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
+  assertNoCodexContact,
+  assertSeamRetired,
   baseEnvironment,
   clearDispatchLog,
   commandRequirements,
@@ -33,6 +35,7 @@ import {
   runCli,
   runScenario,
   writeAdapterState,
+  writeCodexLogTool,
   writeNoopTool,
 } from "./support.js";
 import { createCase, UPSTREAM } from "../bin/lifecycle-fixture.js";
@@ -133,6 +136,7 @@ function assertOnlyDispatch(sandbox, command, argv) {
  * @param {Record<string, string>} [overrides]
  */
 function runCliWithoutEnvironment(sandbox, args, unsetNames, overrides = {}) {
+  assertSeamRetired(args, overrides);
   const environment = baseEnvironment(sandbox, overrides);
   for (const name of unsetNames) delete environment[name];
   return spawnSync(
@@ -411,6 +415,7 @@ function commitUnsafeHookScenario(sandbox, repo, scenarioName) {
 function assertMalformedSelectionFailsBeforeTools(sandbox) {
   const savedState = selectionPath(sandbox);
   const gitLog = join(sandbox.root, "git-access.log");
+  writeCodexLogTool(sandbox);
   writeFileSync(savedState, "{\n", "utf8");
   removeTool(sandbox, "git");
   writeFileSync(
@@ -421,9 +426,6 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
   chmodSync(join(sandbox.bin, "git"), 0o755);
 
   const result = runCli(sandbox, ["prepare"], {
-    SPW_ADAPTER: sandbox.adapter,
-    SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-    SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
     SPW_BASELINE_GIT_LOG: gitLog,
     SUPERPOWERS_REF: "v1.1.0",
     SUPERPOWERS_UPSTREAM_URL: join(sandbox.root, "unused-upstream"),
@@ -436,7 +438,7 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
       "Expecting property name enclosed in double quotes\n",
   );
   assert.equal(existsSync(gitLog), false);
-  assert.equal(existsSync(sandbox.adapterLog), false);
+  assertNoCodexContact(sandbox);
 }
 
 /**
@@ -629,7 +631,29 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
                 SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
                 SUPERPOWERS_REF: upstream.RAW_COMMIT,
               }
-            : dispatchEnvironment(sandbox);
+            : command === "prepare"
+              ? (() => {
+                  // `prepare` really runs here now, so this row needs a local
+                  // upstream: without one it resolves the packaged default and
+                  // the sandbox git shim turns that into `exit 128` rather
+                  // than a readable failure.
+                  //
+                  // SPW_ADAPTER is stripped rather than never added, because
+                  // `dispatchEnvironment` carries it for every other row in
+                  // this Map. It is the only one of `assertSeamRetired`'s
+                  // three keys that helper supplies, so stripping the other
+                  // two would not typecheck. `assertSeamRetired` reads the
+                  // command out of `args`, so it catches this site even though
+                  // no grep for "prepare" would attribute the override to it.
+                  const { SPW_ADAPTER: _adapter, ...rest } =
+                    dispatchEnvironment(sandbox);
+                  return {
+                    ...rest,
+                    SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+                    SUPERPOWERS_REF: upstream.RAW_COMMIT,
+                  };
+                })()
+              : dispatchEnvironment(sandbox);
       const result = runCli(sandbox, [command, ...argv], overrides);
       if (IN_PROCESS_COMMANDS.includes(command)) {
         // An in-process command must reach its module and dispatch NOTHING.
@@ -809,9 +833,11 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // DISPATCH a second time through the presence of "sh", forty lines below
   // this same file's correct derived usage.
   //
-  // commandRequirements() (src/cli.ts:212) takes no argument and returns the
-  // whole Record<Subcommand, string[]>; index it per command.
-  const declared = commandRequirements();
+  // commandRequirements(env) (src/cli.ts:244) takes the environment — `prepare`
+  // requires python3 only when SUPERPOWERS_VALIDATOR names one — and returns
+  // the whole Record<Subcommand, string[]>; index it per command. These cases
+  // configure no validator, so the empty env is the right derivation for them.
+  const declared = commandRequirements({});
   const requirements = new Map(
     COMMANDS.map((command) => {
       // COMMANDS is a plain string[]; CLI-COMMANDS-01 above asserts it agrees
@@ -1042,6 +1068,7 @@ void test("CLI-ENV-LOCATION-01 public selection location chain", () => {
 void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const result = runCliWithoutEnvironment(
       sandbox,
       ["prepare"],
@@ -1052,9 +1079,6 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
         "SUPERPOWERS_VALIDATOR",
       ],
       {
-        SPW_ADAPTER: sandbox.adapter,
-        SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-        SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
         SUPERPOWERS_REF: "v1.1.0",
         SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       },
@@ -1074,16 +1098,12 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
       existsSync(join(sandbox.plugin, ".codex-plugin", "plugin.template.json")),
       true,
     );
-    assert.deepEqual(adapterOperations(sandbox), ["build"]);
-    assert.equal(
-      existsSync(join(sandbox.adapterState, "state.json")),
-      false,
-      "prepare must not mutate adapter install state",
-    );
+    assertNoCodexContact(sandbox);
   });
 
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const customCache = join(sandbox.root, "custom-cache");
     const customPlugin = join(sandbox.root, "custom-plugin");
     const customValidator = join(sandbox.root, "custom-validator.py");
@@ -1095,9 +1115,6 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
       "utf8",
     );
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SPW_BASELINE_VALIDATOR_MARKER: validatorMarker,
       SUPERPOWERS_CACHE_DIR: customCache,
       SUPERPOWERS_PLUGIN_ROOT: customPlugin,
@@ -1112,6 +1129,7 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
       true,
     );
     assert.equal(readFileSync(validatorMarker, "utf8"), "ran\n");
+    assertNoCodexContact(sandbox);
   });
 });
 
@@ -1126,14 +1144,12 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
       "plugin.template.json",
     );
     const defaultTemplateBytes = readFileSync(defaultTemplate);
+    writeCodexLogTool(sandbox);
     const result = runCliWithoutEnvironment(
       sandbox,
       ["prepare"],
       ["SUPERPOWERS_MANIFEST_TEMPLATE"],
       {
-        SPW_ADAPTER: sandbox.adapter,
-        SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-        SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
         SUPERPOWERS_REF: "v1.1.0",
         SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       },
@@ -1145,10 +1161,12 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
       ),
       defaultTemplateBytes,
     );
+    assertNoCodexContact(sandbox);
   });
 
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const defaultTemplate = join(
       sandbox.pkg,
       "plugins",
@@ -1170,9 +1188,6 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
     writeFileSync(customTemplate, customTemplateBytes);
 
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_MANIFEST_TEMPLATE: customTemplate,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1185,17 +1200,16 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
       ),
       customTemplateBytes,
     );
+    assertNoCodexContact(sandbox);
   });
 
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const nonFileTemplate = join(sandbox.root, "non-file-template");
     mkdirSync(nonFileTemplate);
     const previous = snapshotTree(sandbox.plugin);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_MANIFEST_TEMPLATE: nonFileTemplate,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1206,20 +1220,17 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
       result.stderr,
       `error: missing fallback manifest template: ${nonFileTemplate}\n`,
     );
-    assert.deepEqual(adapterOperations(sandbox), []);
-    assert.equal(existsSync(join(sandbox.adapterState, "state.json")), false);
     assert.deepEqual(snapshotTree(sandbox.plugin), previous);
     assertNoInvocationPrepareWorkspace(dirname(sandbox.plugin));
+    assertNoCodexContact(sandbox);
   });
 });
 
 void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "main",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
@@ -1228,21 +1239,20 @@ void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs
     assert.equal(provenance.requested_ref, "main");
     assert.equal(provenance.resolved_ref, "main");
     assert.match(provenance.commit, /^[0-9a-f]{40}$/);
+    assertNoCodexContact(sandbox);
   });
 });
 
 void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const pin = runCli(sandbox, ["pin", "v1.0.0"], {
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
     assertCleanResult(pin);
 
     const prepare = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "v1.1.0",
     });
     assertCleanResult(prepare);
@@ -1253,6 +1263,7 @@ void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", ()
       commit: upstream.STABLE_COMMIT,
       upstream_manifest_version: "1.0.0",
     });
+    assertNoCodexContact(sandbox);
   });
 });
 
@@ -1266,6 +1277,7 @@ void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
     );
 
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const alternate = join(sandbox.root, "alternate-upstream");
     symlinkSync(upstream.REPO, alternate, "dir");
     const pin = runCli(sandbox, ["pin", "v1.0.0"], {
@@ -1274,9 +1286,6 @@ void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
     assertCleanResult(pin);
 
     let prepare = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "v1.1.0",
     });
     assertCleanResult(prepare);
@@ -1284,15 +1293,13 @@ void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
     assert.equal(generatedProvenance(sandbox).requested_ref, "v1.1.0");
 
     prepare = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_UPSTREAM_URL: alternate,
     });
     assertCleanResult(prepare);
     assert.equal(generatedProvenance(sandbox).source, alternate);
     assert.equal(generatedProvenance(sandbox).requested_ref, "v1.0.0");
     assert.equal(generatedProvenance(sandbox).commit, upstream.BASE_COMMIT);
+    assertNoCodexContact(sandbox);
   });
 });
 
@@ -1403,11 +1410,9 @@ void test("SEL-INVALID-01 malformed saved state fails before Git or adapter acce
 void test("PREPARE-TREE-01 prepare creates the canonical generated tree", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const commit = commitUnknownManifestField(sandbox, upstream.REPO);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: commit,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
@@ -1433,24 +1438,20 @@ void test("PREPARE-TREE-01 prepare creates the canonical generated tree", () => 
 
     const firstTree = snapshotTree(sandbox.plugin);
     const repeated = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: commit,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
     assertCleanResult(repeated);
     assert.deepEqual(snapshotTree(sandbox.plugin), firstTree);
+    assertNoCodexContact(sandbox);
   });
 });
 
 void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox, 'upstream "quoted"');
+    writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
@@ -1466,14 +1467,13 @@ void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () =>
         ['"6.1.1"', '"1.0.0"'],
       ]),
     );
+    assertNoCodexContact(sandbox);
   });
 
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox, 'raw upstream "quoted"');
+    writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
@@ -1487,27 +1487,22 @@ void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () =>
         ['"6.1.1"', '"1.0.0"'],
       ]),
     );
+    assertNoCodexContact(sandbox);
   });
 });
 
 void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     let result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
     assertCleanResult(result);
     const accepted = snapshotTree(sandbox.plugin);
-    writeFileSync(sandbox.adapterLog, "", "utf8");
 
     result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_VALIDATOR: writeFailingValidator(sandbox),
@@ -1521,14 +1516,15 @@ void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
     assert.match(result.stderr, /baseline additional validator rejection/);
     assert.match(result.stderr, /error: additional plugin validation failed/);
     assert.deepEqual(snapshotTree(sandbox.plugin), accepted);
-    assert.equal(readFileSync(sandbox.adapterLog, "utf8"), "build\n");
     assertNoInvocationPrepareWorkspace(join(sandbox.pkg, "plugins"));
+    assertNoCodexContact(sandbox);
   });
 });
 
 void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", () => {
   withSandbox({}, (sandbox) => {
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     writeFileSync(
       join(sandbox.plugin, "preexisting-sentinel"),
       "preserve me\n",
@@ -1536,9 +1532,6 @@ void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", (
     const candidateRecord = join(sandbox.work, "atomic-candidate-path");
     const previous = snapshotTree(sandbox.plugin);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_REF: "v1.0.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_VALIDATOR: writeFailingValidator(
@@ -1559,6 +1552,7 @@ void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", (
     );
     assert.deepEqual(snapshotTree(sandbox.plugin), previous);
     assertNoInvocationPrepareWorkspace(join(sandbox.pkg, "plugins"));
+    assertNoCodexContact(sandbox);
   });
 });
 
@@ -1572,13 +1566,11 @@ void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => 
       ),
     );
     const upstream = createReleaseRepo(sandbox);
+    writeCodexLogTool(sandbox);
     const previous = snapshotTree(topology.PREVIOUS_TREE);
     const interrupted = snapshotTree(topology.PREPARE_STAGING);
     const sibling = snapshotTree(topology.SIBLING);
     const result = runCli(sandbox, ["prepare"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
       SUPERPOWERS_PLUGIN_ROOT: topology.PREVIOUS_TREE,
       SUPERPOWERS_REF: "v1.0.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1595,6 +1587,7 @@ void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => 
     assertNoInvocationPrepareWorkspace(join(topology.ROOT, "plugins"), [
       ".superpowers.prepare.interrupted",
     ]);
+    assertNoCodexContact(sandbox);
   });
 });
 
@@ -1602,6 +1595,7 @@ void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
   for (const scenarioName of ["broken-symlink", "escaping-symlink"]) {
     withSandbox({}, (sandbox) => {
       const upstream = createReleaseRepo(sandbox);
+      writeCodexLogTool(sandbox);
       const commit = commitUnsafeHookScenario(
         sandbox,
         upstream.REPO,
@@ -1609,9 +1603,6 @@ void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
       );
       const previous = snapshotTree(sandbox.plugin);
       const result = runCli(sandbox, ["prepare"], {
-        SPW_ADAPTER: sandbox.adapter,
-        SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-        SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
         SUPERPOWERS_REF: commit,
         SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       });
@@ -1623,8 +1614,7 @@ void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
       );
       assert.doesNotMatch(result.stderr, /Traceback/);
       assert.deepEqual(snapshotTree(sandbox.plugin), previous);
-      assert.equal(readFileSync(sandbox.adapterLog, "utf8"), "build\n");
-      assert.equal(existsSync(join(sandbox.adapterState, "state.json")), false);
+      assertNoCodexContact(sandbox);
     });
   }
 });
