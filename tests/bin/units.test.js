@@ -97,11 +97,24 @@ assert.strictEqual(bin.parseArgs(["--version"]).kind, "version");
 assert.strictEqual(bin.parseArgs(["bogus"]).kind, "usage-error");
 assert.strictEqual(bin.parseArgs(["--porcelain"]).kind, "usage-error");
 
-const requirements = bin.commandRequirements();
+const requirements = bin.commandRequirements({});
 assert.deepStrictEqual(requirements.pin, ["git"]);
 assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
 assert.deepStrictEqual(requirements.uninstall, ["python3", "codex"]);
+// Independent coverage of the conditional, which CLI-PREFLIGHT-01 cannot
+// provide: it derives from this same accessor, so it follows the conditional
+// automatically and can never detect a wrong one (slice 3, D5).
+assert.deepStrictEqual(requirements.prepare, ["git"]);
+assert.deepStrictEqual(
+  bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "/validator.py" }).prepare,
+  ["git", "python3"],
+);
+// An empty value is not a configured validator.
+assert.deepStrictEqual(
+  bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
+  ["git"],
+);
 
 // --- vehicleCommand: the dispatch vehicles pick their own subject ----------
 // Two tests below need "some command DISPATCH still spawns" and assert nothing
@@ -194,14 +207,15 @@ for (const caller of ["install", "update"]) {
 
 // --- scripts/prepare outlives this slice ---
 // scripts/install:25 and scripts/update:23 still execute `scripts/prepare`, so
-// deleting it breaks both commands. Two couplings keep it alive: the lifecycle
-// test fakes stub SPW_ADAPTER, a seam only scripts/core/adapter.sh honours and
-// the in-process runAdapter does not; and ~20 prepare cases in
-// tests/baseline/cli-parity.test.js are calibrated against the synthetic
-// adapter at tests/fixtures/baseline/bin/stateful-adapter rather than a real
-// build. Slice 3.4 re-derives those cases and flips dispatch; slice 3.5
-// re-bases the fakes and deletes this script. Asserting the RELATIONSHIP
-// rather than a line number keeps this stable against edits to either caller.
+// deleting it breaks both commands. Slice 3.4 flipped `prepare` itself to
+// in-process dispatch and re-derived the cli-parity prepare cases off the
+// synthetic adapter at tests/fixtures/baseline/bin/stateful-adapter, so that
+// coupling is gone. What remains is the lifecycle path: `install` and `update`
+// still spawn, and their test fakes stub SPW_ADAPTER — a seam only
+// scripts/core/adapter.sh honours and the in-process runAdapter does not.
+// Slice 3.5 re-bases those fakes and deletes this script. Asserting the
+// RELATIONSHIP rather than a line number keeps this stable against edits to
+// either caller.
 assert.ok(
   fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", "prepare")),
   "scripts/prepare is still executed by scripts/install and scripts/update",

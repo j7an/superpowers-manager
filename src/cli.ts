@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { oneLine } from "./cli-arguments.js";
 import type { CommandContext } from "./commands/context.js";
 import { runPin } from "./commands/pin.js";
+import { runPrepare } from "./commands/prepare.js";
 import { runProbe } from "./commands/probe.js";
 import { runTrackLatest } from "./commands/track-latest.js";
 import { runUnpin } from "./commands/unpin.js";
@@ -68,7 +69,7 @@ const DISPATCH = {
   pin: "in-process",
   "track-latest": "in-process",
   unpin: "in-process",
-  prepare: "spawn",
+  prepare: "in-process",
   probe: "in-process",
   install: "spawn",
   update: "spawn",
@@ -92,13 +93,14 @@ const IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler> = {
   pin: runPin,
   "track-latest": runTrackLatest,
   unpin: runUnpin,
+  prepare: runPrepare,
   probe: runProbe,
 };
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
   "track-latest": [],
   unpin: [],
-  prepare: ["git", "python3"],
+  prepare: ["git"],
   probe: ["git", "codex"],
   install: ["git", "python3", "codex"],
   update: ["git", "python3", "codex"],
@@ -233,8 +235,20 @@ function discoverShell(
   return findTool("bash", env, platform);
 }
 
-function commandRequirements(): Record<Subcommand, string[]> {
-  return COMMAND_REQUIREMENTS;
+// python3 is required by `prepare` only when SUPERPOWERS_VALIDATOR names one:
+// after the port, that optional spawn (src/commands/prepare.ts:221) is Python's
+// only remaining consumer on the prepare path. The conditional lives here, in
+// the accessor preflight reads, rather than inside preflight — an accessor that
+// under-reports what preflight enforces is the blind spot slice 2 closed when
+// it made CLI-PREFLIGHT-01 derive its map from production.
+function commandRequirements(
+  env: NodeJS.ProcessEnv,
+): Record<Subcommand, string[]> {
+  if (!env.SUPERPOWERS_VALIDATOR) return COMMAND_REQUIREMENTS;
+  return {
+    ...COMMAND_REQUIREMENTS,
+    prepare: [...COMMAND_REQUIREMENTS.prepare, "python3"],
+  };
 }
 
 // Tool preflight; never touches Codex state. Requirements are specific to the
@@ -246,7 +260,7 @@ function preflight(
   platform: NodeJS.Platform,
 ): PreflightResult {
   const errors: string[] = [];
-  for (const tool of COMMAND_REQUIREMENTS[cmd]) {
+  for (const tool of commandRequirements(env)[cmd]) {
     if (tool === "codex") {
       const codexBin = env.SUPERPOWERS_CODEX || "codex";
       // An explicit override may be a path rather than a PATH-resolvable name.

@@ -51,7 +51,7 @@ change, in the same pull request.
 | `pin` | yes | no | no | no |
 | `track-latest` | no | no | no | no |
 | `unpin` | no | no | no | no |
-| `prepare` | yes | yes | yes | no |
+| `prepare` | yes | only with SUPERPOWERS_VALIDATOR | no | no |
 | `probe` | yes | no | no | yes |
 | `install` | yes | yes | yes | yes |
 | `update` | yes | yes | yes | yes |

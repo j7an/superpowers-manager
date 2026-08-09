@@ -700,7 +700,7 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
 // with. Slice 4 adds install/update/uninstall as it cleans each; slice 6
 // deletes this with the seam.
 /** @type {Set<string>} */
-const ADAPTER_SEAM_RETIRED = new Set();
+const ADAPTER_SEAM_RETIRED = new Set(["prepare"]);
 const ADAPTER_SEAM_KEYS = [
   "SPW_ADAPTER",
   "SPW_BASELINE_ADAPTER_STATE",

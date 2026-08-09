@@ -59,12 +59,12 @@ void test("a dist/cli.js that throws keeps its real error and is not relabelled"
 // (formerly item 9), and `probe` (formerly item 7) are no longer in this
 // table: PR 11.5 flipped all four to in-process commands (src/cli.ts
 // DISPATCH), so none of them ever reaches its `scripts/<name>` and none of
-// them ever logs to the dispatch log. See the retirement notes for items 7,
-// 9, 10, and 11 in tests/migration-inventory/bin-dispatch.md and the
-// dedicated in-process routing cases just below this loop.
+// them ever logs to the dispatch log. `prepare` (formerly item 8) left the
+// same way in slice 3.4. See the retirement notes for items 7, 8, 9, 10, and
+// 11 in tests/migration-inventory/bin-dispatch.md and the dedicated in-process
+// routing cases just below this loop.
 /** @type {Array<[string[], string]>} */
 const ROUTING_CASES = [
-  [["prepare", "--ref", "test"], "prepare --ref test ref="],
   [["install", "--dry-run"], "install --dry-run ref="],
   [["uninstall", "--purge"], "uninstall --purge ref="],
   [[], "update  ref="],
@@ -82,6 +82,18 @@ for (const [args, expected] of ROUTING_CASES) {
     assert.deepEqual(result.log, [expected]);
   });
 }
+
+void test("`prepare` runs in-process and dispatches nothing", () => {
+  // The fake `git` from `tools` exits 0 and produces nothing, so prepare fails
+  // on the clone — deliberately not asserted. Item 8's contract was routing,
+  // not outcome, and this fixture's package root has no upstream or manifest
+  // template to succeed against.
+  const result = runDispatch({
+    tools: ALL_TOOLS,
+    args: ["prepare", "--ref", "test"],
+  });
+  assert.deepEqual(result.log, []);
+});
 
 void test("routing: `track-latest` succeeds in-process and never reaches its script", () => {
   const result = runDispatch({ tools: ALL_TOOLS, args: ["track-latest"] });
@@ -441,24 +453,58 @@ void test("missing codex blocks `install` before dispatch and names the tool", (
   assert.deepEqual(result.log, []);
 });
 
+// --- prepare's conditional python3 requirement -------------------------------
+// The accessor is unit-tested in units.test.js; these prove preflight reads it.
+// Without them, reverting preflight to the static COMMAND_REQUIREMENTS table is
+// green everywhere and a configured validator fails late, inside runValidator,
+// after the clone and the build (PR 11.5 slice 3, D5).
+void test("`prepare` does not require python3 when no validator is configured", () => {
+  const result = runDispatch({ tools: ["git", "codex"], args: ["prepare"] });
+  assert.ok(
+    !result.stderr.includes("required command not found: python3"),
+    `preflight must not require python3 without a validator: ${result.stderr}`,
+  );
+});
+
+void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () => {
+  const result = runDispatch({
+    tools: ["git", "codex"],
+    args: ["prepare"],
+    env: { SUPERPOWERS_VALIDATOR: "/nonexistent/validator.py" },
+  });
+  assert.equal(result.status, 1);
+  assert.equal(
+    result.stderr,
+    "error: required command not found: python3 — install python3 and re-run\n",
+  );
+  // Preflight completes before dispatch and before any Git or build effect.
+  assert.deepEqual(result.log, []);
+});
+
 // --- inventory items 48-51: commands that need no codex ----------------------
 
-// `track-latest` (formerly item 49), `unpin` (formerly item 50), and `pin`
-// (formerly item 48) are no longer in this table: all three are in-process
-// now and never log to the dispatch log regardless of `codex`'s presence.
-// See the retirement notes for items 48, 49, and 50 in
-// tests/migration-inventory/bin-dispatch.md and the dedicated cases just
-// below this loop.
-/** @type {Array<[string[], string]>} */
-const NO_CODEX_CASES = [[["prepare"], "prepare  ref="]];
-
-for (const [args, expected] of NO_CODEX_CASES) {
-  void test(`\`${args.join(" ")}\` dispatches with codex absent from PATH`, () => {
-    const result = runDispatch({ tools: ["git", "python3"], args });
-    assert.equal(result.status, 0);
-    assert.deepEqual(result.log, [expected]);
-  });
-}
+// A `NO_CODEX_CASES` table and its `for` loop used to stand here. `pin`
+// (formerly item 48), `track-latest` (formerly item 49), and `unpin`
+// (formerly item 50) left it as each went in-process, and `prepare` (formerly
+// item 51) — its last entry — left the same way at slice 3.4: none of the four
+// logs to the dispatch log any more regardless of `codex`'s presence. The
+// table and its loop are deleted rather than left with zero entries, because a
+// `for` over `[]` reports success without asserting anything. See the
+// retirement notes for items 48, 49, 50, and 51 in
+// tests/migration-inventory/bin-dispatch.md; the four standalone cases below
+// carry the analogous in-process properties.
+void test("`prepare` runs in-process with codex absent from PATH", () => {
+  // Item 51's shell contract was that preflight does not require Codex for
+  // prepare, observed through a dispatch. In-process there is no dispatch, so
+  // the surviving contract is: preflight admits the command, and no script is
+  // spawned.
+  const result = runDispatch({ tools: ["git", "python3"], args: ["prepare"] });
+  assert.ok(
+    !result.stderr.includes("required command not found: codex"),
+    `preflight must not require codex for prepare: ${result.stderr}`,
+  );
+  assert.deepEqual(result.log, []);
+});
 
 void test("`track-latest` succeeds in-process with codex absent from PATH", () => {
   const result = runDispatch({

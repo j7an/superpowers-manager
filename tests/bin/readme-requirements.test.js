@@ -21,7 +21,7 @@ const cli = await import(new URL("../../dist/cli.js", import.meta.url).href);
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
 // Column heading -> the COMMAND_REQUIREMENTS token it reports on. The POSIX sh
-// column has no token: preflight derives it from DISPATCH (src/cli.ts:267-278),
+// column has no token: preflight derives it from DISPATCH (src/cli.ts:281-292),
 // which is exactly the second encoding of dispatch that slice 2 removed from
 // CLI-PREFLIGHT-01's hand-written map.
 const TOOL_COLUMNS = [
@@ -33,13 +33,23 @@ const COLUMNS = ["git", "Python 3", "POSIX `sh`", "Codex CLI"];
 
 /** @returns {Record<string, string>[]} */
 function derive() {
-  const declared = cli.commandRequirements();
-  return Object.keys(declared).map((command) => {
-    const key = /** @type {keyof typeof declared} */ (command);
+  const unset = cli.commandRequirements({});
+  const withValidator = cli.commandRequirements({
+    SUPERPOWERS_VALIDATOR: "/validator.py",
+  });
+  return Object.keys(unset).map((command) => {
+    const key = /** @type {keyof typeof unset} */ (command);
     /** @type {Record<string, string>} */
     const row = { Command: command };
     for (const [column, tool] of TOOL_COLUMNS) {
-      row[column] = declared[key].includes(tool) ? "yes" : "no";
+      // Required with no validator configured -> plainly required. Required
+      // only once one is -> conditional. The README must say which; a boolean
+      // cell would be a lie in one direction or the other.
+      row[column] = unset[key].includes(tool)
+        ? "yes"
+        : withValidator[key].includes(tool)
+          ? "only with SUPERPOWERS_VALIDATOR"
+          : "no";
     }
     row["POSIX `sh`"] = cli.DISPATCH[key] === "spawn" ? "yes" : "no";
     return row;
