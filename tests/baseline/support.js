@@ -49,6 +49,7 @@ import { spawnSync } from "node:child_process";
  *   runtimeAdapter: string,
  *   adapterState: string,
  *   adapterLog: string,
+ *   codexLog: string,
  *   dispatchLog: string,
  * }} Sandbox
  */
@@ -471,6 +472,74 @@ function writeNoopTool(sandbox, name = "codex") {
   return tool;
 }
 
+// The logging `codex` carries this marker so assertNoCodexContact can prove it
+// is the shim on PATH before reading its log. Without that check, "the log is
+// empty" and "nothing ever wired a log" are the same observation -- which is
+// precisely how the SPW_ADAPTER assertions this replaces became vacuous.
+const CODEX_LOG_MARKER = "spw-baseline-codex-log";
+
+/**
+ * A `codex` that records every invocation instead of swallowing it.
+ *
+ * POSIX sh rather than python3 on purpose: dispatchStub and regressionStub
+ * shell out to python3 for JSON, and PR 11.5 slice 3.4 is the slice that stops
+ * requiring Python for `prepare`. Emptiness is the assertion; the recorded
+ * argv is for diagnosis when it is not empty.
+ *
+ * @param {Sandbox} sandbox
+ * @returns {string}
+ */
+function writeCodexLogTool(sandbox) {
+  registeredRoot(sandbox);
+  const tool = join(sandbox.bin, "codex");
+  assertContainedPath(sandbox, tool, "sandbox tool");
+  assertContainedPath(sandbox, sandbox.codexLog, "sandbox codex log");
+  writeFileSync(
+    tool,
+    [
+      "#!/bin/sh",
+      `# ${CODEX_LOG_MARKER}`,
+      `printf '%s\\n' "$*" >> ${shQuote(sandbox.codexLog)}`,
+      "exit 0",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  writeFileSync(sandbox.codexLog, "", "utf8");
+  return tool;
+}
+
+/**
+ * Three ordered checks. The first two are the point: they establish that the
+ * channel is live, so an empty log means "wired and never called" rather than
+ * "never wired".
+ *
+ * @param {Sandbox} sandbox
+ */
+function assertNoCodexContact(sandbox) {
+  registeredRoot(sandbox);
+  const tool = join(sandbox.bin, "codex");
+  if (!existsSync(tool)) {
+    throw new Error(
+      "assertNoCodexContact: no `codex` on the sandbox PATH; the guard is not wired",
+    );
+  }
+  if (!readFileSync(tool, "utf8").includes(CODEX_LOG_MARKER)) {
+    throw new Error(
+      "assertNoCodexContact: the sandbox `codex` is not the logging shim; an empty log would prove nothing",
+    );
+  }
+  if (!existsSync(sandbox.codexLog)) {
+    throw new Error(
+      "assertNoCodexContact: the codex log is missing; the guard is not wired",
+    );
+  }
+  const contacted = readFileSync(sandbox.codexLog, "utf8");
+  if (contacted !== "") {
+    throw new Error(`assertNoCodexContact: codex was invoked:\n${contacted}`);
+  }
+}
+
 /**
  * The sandbox's `git` refuses any remote with a URL scheme and passes
  * everything else through to the real binary.
@@ -548,6 +617,7 @@ function createSandbox({ stubScripts = false } = {}) {
       ),
       adapterState: join(root, "adapter-state"),
       adapterLog: join(root, "adapter.log"),
+      codexLog: join(root, "codex.log"),
       dispatchLog: join(root, "dispatch.log"),
     };
 
@@ -620,6 +690,43 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
   return environment;
 }
 
+// Commands whose SPW_ADAPTER seam has been retired: their test sites have been
+// cleaned of it and must not reacquire it.
+//
+// NOT a second copy of DISPATCH. IN_PROCESS_COMMANDS is derived because it
+// restates a fact DISPATCH owns, and a copy can disagree with its source. This
+// records something DISPATCH does not know -- which commands' *test sites* have
+// been migrated off the dead seam -- so there is no source for it to disagree
+// with. Slice 4 adds install/update/uninstall as it cleans each; slice 6
+// deletes this with the seam.
+/** @type {Set<string>} */
+const ADAPTER_SEAM_RETIRED = new Set();
+const ADAPTER_SEAM_KEYS = [
+  "SPW_ADAPTER",
+  "SPW_BASELINE_ADAPTER_STATE",
+  "SPW_BASELINE_ADAPTER_LOG",
+];
+
+/**
+ * @param {string[]} args
+ * @param {Record<string, string>} overrides
+ */
+function assertSeamRetired(args, overrides) {
+  // `runCli(sandbox, [])` dispatches `update`; parseArgs decides that, and this
+  // has to agree with it or the guard silently skips the default invocation.
+  const command = args[0] || "update";
+  if (!ADAPTER_SEAM_RETIRED.has(command)) return;
+  for (const key of ADAPTER_SEAM_KEYS) {
+    if (Object.hasOwn(overrides, key)) {
+      throw new Error(
+        `${command}'s adapter seam is retired: remove ${key} from this call. ` +
+          "The in-process runAdapter ignores SPW_ADAPTER, so the override is " +
+          "inert and any assertion reading its log asserts nothing.",
+      );
+    }
+  }
+}
+
 /**
  * @param {Sandbox} sandbox
  * @param {string[]} [args]
@@ -627,6 +734,7 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
  * @param {{ cwd?: string }} [options]
  */
 function runCli(sandbox, args = [], overrides = {}, options = {}) {
+  assertSeamRetired(args, overrides);
   const cwd = options.cwd || sandbox.work;
   assertContainedPath(sandbox, cwd, "working directory");
   if (
@@ -728,10 +836,13 @@ function fixturePath(...parts) {
 }
 
 export {
+  ADAPTER_SEAM_RETIRED,
   COMMANDS,
   DISPATCH,
   IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
+  assertNoCodexContact,
+  assertSeamRetired,
   baseEnvironment,
   clearDispatchLog,
   commandRequirements,
@@ -743,5 +854,6 @@ export {
   runCli,
   runScenario,
   writeAdapterState,
+  writeCodexLogTool,
   writeNoopTool,
 };
