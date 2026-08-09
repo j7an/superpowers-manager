@@ -970,7 +970,7 @@ missing test.
 
 ## Port-only assertions (outside the 1:1 mapping)
 
-Five deliberate divergences and narrowings, none with a shell counterpart to
+Six deliberate divergences and narrowings, none with a shell counterpart to
 map onto.
 
 <!-- inventory:port-only:start -->
@@ -1020,6 +1020,21 @@ map onto.
    existed. The port's `snapshotTree` records `path\tkind[\tsha256]` for every
    entry, and every negative case in `tests/baseline/prepare.test.js` seeds a
    tree and compares the full snapshot afterwards.
+6. **New.** The hook-subtree **walk** failure — `src/hooks.ts:279`,
+   `collectEntries`'s `readdir` — is witnessed for the first time on either
+   side. The shell file's three hooks-root cases (items 125, 127, 128) all
+   corrupt the hooks *root* and land on `src/hooks.ts:303`, so porting the
+   shell's coverage alone would have carried the gap across rather than closed
+   it. The precondition is a directory permission, which git cannot store, so
+   the case runs `prepare` once to populate the upstream cache, captures
+   `hooks/support`'s real mode, chmods it to `0o000`, runs again, and restores
+   in a `finally`. Ports: `tests/baseline/prepare.test.js`'s "an unreadable
+   hooks subdirectory fails closed naming the subdirectory" (case 28). The
+   emitted **path** is the assertion, not the message: `:279` names the failing
+   subdirectory, which is what discriminates it from the two `:303` witnesses,
+   both of which name a `hooks` root. Mutation-proved by expecting
+   `<cache>/superpowers/hooks` instead, which fails against the actual
+   `<cache>/superpowers/hooks/support`.
 
 <!-- inventory:port-only:end -->
 
@@ -1065,9 +1080,9 @@ traceability row at all, and its two assertions are retired against
 ```json inventory
 {
   "shellOriginal": 163,
-  "portOnly": 5,
+  "portOnly": 6,
   "ports": {
-    "tests/baseline/prepare.test.js": 27,
+    "tests/baseline/prepare.test.js": 28,
     "tests/unit/commands-prepare.test.js": 6,
     "tests/unit/atomic.test.js": 8
   }
@@ -1088,14 +1103,15 @@ traceability row at all, and its two assertions are retired against
   2+7+5+7+5+3+3+4+10+2+6+7+8+7+5+4+17+10+16+3+10+5+6+5+1+5 = 163). See
   "Divergences from the derived 158" above for the full +15/-10/net5 derivation
   from the mechanical 158.
-- Ports: `tests/baseline/prepare.test.js` has 27 static `test(` call sites (8
-  named for the baseline case IDs they own, and 19 further end-to-end cases —
+- Ports: `tests/baseline/prepare.test.js` has 28 static `test(` call sites (8
+  named for the baseline case IDs they own, and 20 further end-to-end cases —
   the adapter classification wrapper, source-side hooks-root containment,
   candidate-side hooks-root containment, the pinned saved selection,
   clone-then-fetch, the required-path matrix, the additional validator's
   three clauses, provenance completeness and idempotence, seven
   manifest-rejection shapes, two directory-as-path rejections, the failed
-  upstream copy, and the two hostile-git fetch branches);
+  upstream copy, the two hostile-git fetch branches, and the unreadable
+  hooks subdirectory inside an already-contained subtree);
   `tests/unit/commands-prepare.test.js` has 6 (three for
   `readUpstreamManifestVersion` and three for `runPrepare`'s `-f`/`-d`
   predicates); `tests/unit/atomic.test.js` has 8 (five for `atomicWriteFile`

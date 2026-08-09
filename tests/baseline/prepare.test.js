@@ -902,3 +902,50 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   assertNoLeakedInternals(result.stderr);
   assert.deepEqual(snapshotTree(generated(pinned)), pinnedBefore);
 });
+
+// P3 — src/hooks.ts:279, the WALK branch, where readdir fails on a directory
+// inside a subtree that has already passed the containment check at :303.
+//
+// This branch is unwitnessed on BOTH sides. The retired driver's three
+// hooks-root cases all corrupt the root and land on :303 — two source-side
+// (P2a), one candidate-side (P2b). Porting "the shell's coverage" would have
+// carried this gap across rather than closed it.
+//
+// The precondition is a filesystem permission, which git cannot store, so the
+// fixture follows the shape already established for the unreadable-manifest
+// case above: run once so the upstream cache is populated, capture the real
+// mode rather than assuming one, chmod, run again, restore in a `finally`.
+// The second run takes the fetch branch and leaves the working tree alone.
+void test("an unreadable hooks subdirectory fails closed naming the subdirectory", async () => {
+  // Permission checks do not apply to root, and the second run would succeed.
+  if (process.getuid?.() === 0) return;
+
+  const c = createCase({ fakes: "probe" });
+  const first = await prepare(c, { SUPERPOWERS_REF: REFS.defaultHooks });
+  assert.equal(first.status, 0, first.stderr);
+  const before = snapshotTree(generated(c));
+
+  // hooks/support/ holds helper.txt in the shared fixture, so collectEntries
+  // pushes it onto the walk queue and readdirs it. Captured, not assumed: the
+  // mode git checked the directory out with belongs to git and the umask.
+  const unreadable = join(cacheRepo(c), "hooks", "support");
+  const mode = statSync(unreadable).mode & 0o7777;
+  chmodSync(unreadable, 0o000);
+  try {
+    const result = await prepare(c, { SUPERPOWERS_REF: REFS.defaultHooks });
+    assert.equal(result.status, 1, result.stdout);
+    const emitted = result.stderr.match(
+      /^hook materialization failed: hook subtree escapes or is broken: (\S+)$/m,
+    );
+    assert.ok(emitted, result.stderr);
+    assert.equal(emitted[1], unreadable);
+    assert.match(
+      result.stderr,
+      /^error: failed to prepare upstream Codex hooks\n$/m,
+    );
+    assertNoLeakedInternals(result.stderr);
+    assert.deepEqual(snapshotTree(generated(c)), before);
+  } finally {
+    chmodSync(unreadable, mode);
+  }
+});
