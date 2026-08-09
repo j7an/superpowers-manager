@@ -393,6 +393,40 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
+// P2b — src/hooks.ts:303 reached from the CANDIDATE-side call at :366. Ports
+// the retired driver's :1035 case (inventory item 125), which is the only
+// root-specific witness that post-copy validation runs.
+//
+// The discriminator is which root the emitted path names. Both P2a and this
+// case end in `/hooks`, so a `/hooks$` matcher cannot tell them apart. The
+// candidate root is an invocation-specific staging path the workspace trap
+// removes on failure, so assert its RELATIONSHIP to the cache root rather
+// than pinning a literal that cannot exist by the time the test reads it.
+void test("a source-only hooks root fails closed on the candidate side", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, {
+    SUPERPOWERS_REF: REFS.sourceOnlyHooksRoot,
+  });
+  assert.equal(result.status, 1, result.stdout);
+  const emitted = result.stderr.match(
+    /^hook materialization failed: hook subtree escapes or is broken: (\S+)$/m,
+  );
+  assert.ok(emitted, result.stderr);
+  assert.match(emitted[1], /\/hooks$/);
+  assert.ok(
+    !emitted[1].startsWith(cacheRepo(c)),
+    `expected the CANDIDATE hooks root, got a path under the source ` +
+      `checkout: ${emitted[1]}`,
+  );
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
 void test("CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd", async () => {
   const c = createCase({ fakes: "probe" });
   // The package root's own generated tree must be untouched: a relative

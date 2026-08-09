@@ -312,6 +312,25 @@ function buildUpstream() {
     rmSync(join(upstream, "hooks"), { recursive: true, force: true });
     symlinkSync("../outside-the-checkout", join(upstream, "hooks"));
   });
+  // P2b — the hooks ROOT is a relative symlink to source-contained content
+  // that never reaches the candidate, so SOURCE validation passes and the
+  // CANDIDATE validation at src/hooks.ts:366 fails.
+  //
+  // `.git` is the target for the same reason the retired shell fixture used
+  // it: it exists in the upstream checkout, so assertExistingContained accepts
+  // it at :358, and it is absent from src/commands/prepare.ts:29-35's five
+  // copied paths, so the symlink recreated at src/hooks.ts:359-360 dangles in
+  // the candidate. Any target outside those five works; this one keeps the
+  // ported case recognisable against the file it replaces.
+  branchWith("hooks-root-contained-source-only", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = { SessionStart: [] };
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    rmSync(join(upstream, "hooks"), { recursive: true, force: true });
+    symlinkSync(".git", join(upstream, "hooks"));
+  });
   return upstream;
 }
 
@@ -327,6 +346,7 @@ export const REFS = {
   escapingSymlink: "hooks-escaping-symlink",
   unsupportedHooks: "hooks-unsupported-declaration",
   escapingHooksRoot: "hooks-root-escape-symlink",
+  sourceOnlyHooksRoot: "hooks-root-contained-source-only",
 };
 
 /**
