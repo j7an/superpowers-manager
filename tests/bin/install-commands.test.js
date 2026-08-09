@@ -217,7 +217,7 @@ function updateControlCount(c) {
  *
  * SEAM: this helper reads adapter.log, so EVERY caller declares a
  * seamDependency. See the guard below for why no other channel can carry the
- * claim.
+ * claim, and for the liveness hoist that keeps slice 4's seam removal loud.
  * @param {import("./lifecycle-fixture.js").CaseEnv} c
  * @returns {Promise<void>}
  */
@@ -246,8 +246,26 @@ async function prepareGeneratedTree(c) {
   // operation issues no Codex command (src/adapter.ts:757-759) and prints
   // nothing — so the guard genuinely dies with the seam wherever it is used,
   // and recording that is the whole point of the registry.
+  const adapter = readLog(c.adapterLog);
+  // Hoisted above the negative, and the same instrument the capability-
+  // independence case at :522-524 already uses: prepare must have reached the
+  // adapter at all, or the negative passes on an empty log. `build
+  // --upstream-root` rather than a bare `nonEmpty` because it names the one
+  // adapter operation scripts/prepare issues, so it proves THIS channel live
+  // rather than merely non-empty — and because keeping the two sites identical
+  // makes them read as one pattern.
+  //
+  // This is not defence against today's tree; the negative below is live now.
+  // It is defence against slice 4: scripts/prepare:10,41 is what routes prepare
+  // through adapter.sh and SPW_ADAPTER, so the moment prepare stops spawning
+  // the fake, adapter.log goes empty and an unhoisted negative would turn
+  // silently green instead of RED.
   assert.ok(
-    !has(readLog(c.adapterLog), "inspect --view update-control"),
+    has(adapter, "build --upstream-root"),
+    `fixture: prepare did not reach the adapter, so the guard below would pass vacuously:\n${adapter.join("\n")}`,
+  );
+  assert.ok(
+    !has(adapter, "inspect --view update-control"),
     "fixture: prepare must not have inspected update control",
   );
 }
