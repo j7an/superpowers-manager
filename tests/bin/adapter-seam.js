@@ -44,7 +44,7 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 // `grep -c 'script: "<name>"'` over SEAM_SOURCES, not from any plan table.
 // Cases are named, not line-numbered, because these two files move under edit:
 //
-//   install   8 = 6 intercept + 2 log
+//   install   21 = 6 intercept + 15 log
 //     intercept: "unsupported update control blocks a direct install";
 //                "malformed update-control output exits exactly 1";
 //                "needs-prepare install reinspects after prepare and rejects
@@ -53,15 +53,20 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //                "the fresh gate, not the initial probe, controls mutation
 //                 authority"; "malformed fingerprint output is rejected by
 //                 response validation".
-//     log:       the two identity-state cases, legacy and both. Both reach
-//                assertLegacyIdentityStops, whose `^build ` negative has no
-//                Codex-level footprint: the adapter's build operation issues
-//                no Codex command at all.
-//   update    3 = 2 intercept + 1 log
+//     log:       the two identity-state cases, legacy and both, which reach
+//                assertLegacyIdentityStops — its `^build ` negative has no
+//                Codex-level footprint because the adapter's build operation
+//                issues no Codex command at all. THIRTEEN more come from a
+//                single shared helper: prepareGeneratedTree reads adapter.log
+//                to prove prepare did not inspect update control, and that
+//                property is observable nowhere else. Re-basing that one
+//                helper collapses most of this number at once.
+//   update    5 = 2 intercept + 3 log
 //     intercept: "unsupported update control blocks the update fast path";
 //                "failed update-control inspection exits exactly 1".
 //     log:       "update rejects mixed legacy state even when the fingerprint
-//                is current" — same `^build ` negative.
+//                is current" (same `^build ` negative), plus the two
+//                prepareGeneratedTree callers that run `update`.
 //   uninstall 3 = 1 intercept + 2 log
 //     intercept: "selection-independent recovery".
 //     log:       "missing Codex" (codex.log is empty by construction, so it
@@ -73,8 +78,8 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //                property the case asserts.
 /** @type {Record<string, number>} */
 export const SEAM_DEPENDENT = {
-  install: 8,
-  update: 3,
+  install: 21,
+  update: 5,
   uninstall: 3,
   prepare: 1,
 };
@@ -100,12 +105,22 @@ export const SEAM_SOURCES = {
 export function assertSeamScriptsPresent(root, exists) {
   for (const [script, count] of Object.entries(SEAM_DEPENDENT)) {
     if (count === 0) continue;
+    // Named before it is used: without this, a key added to SEAM_DEPENDENT and
+    // forgotten in SEAM_SOURCES would surface as a TypeError on undefined
+    // instead of the diagnostic below.
+    const sources = SEAM_SOURCES[script];
+    if (!sources) {
+      throw new Error(
+        `adapter-seam: ${script} is in SEAM_DEPENDENT with no SEAM_SOURCES ` +
+          "entry, so the gate cannot name the files that would need re-basing",
+      );
+    }
     if (!exists(`${root}/scripts/${script}`)) {
       throw new Error(
         `adapter-seam: scripts/${script} is gone, but ${count} of its cases ` +
           "still depend on the SPW_ADAPTER seam — a seam the in-process " +
           "runAdapter ignores. Re-base or retire those cases in " +
-          `${SEAM_SOURCES[script].join(", ")} and remove this entry before ` +
+          `${sources.join(", ")} and remove this entry before ` +
           "deleting the script, or their assertions read a dead channel.",
       );
     }

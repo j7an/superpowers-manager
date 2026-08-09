@@ -278,12 +278,9 @@ function runAdapter() {
       join(STATE, "codex-home", "plugins", "cache", "superpowers-manager"),
     )
   ) {
-    if (CONFIG.fingerprintInspect === "fail") {
-      process.stderr.write(
-        "fingerprint inspection failed in adapter fixture\n",
-      );
-      process.exit(99);
-    }
+    // Only `malformed` remains. The `fail` branch was retired with its single
+    // consumer: that case is now driven from the fake Codex through
+    // `pluginAdd: "orphan"`, so the REAL adapter produces the failure.
     if (CONFIG.fingerprintInspect === "malformed") {
       process.stdout.write("{");
       process.exit(0);

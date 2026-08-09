@@ -214,6 +214,10 @@ function updateControlCount(c) {
  * prepare never inspects update control (proved by the case at :321-336), so
  * this leaves `update-control-count` untouched and the later count assertions
  * mean what they meant in the shell.
+ *
+ * SEAM: this helper reads adapter.log, so EVERY caller declares a
+ * seamDependency. See the guard below for why no other channel can carry the
+ * claim.
  * @param {import("./lifecycle-fixture.js").CaseEnv} c
  * @returns {Promise<void>}
  */
@@ -230,8 +234,20 @@ async function prepareGeneratedTree(c) {
     existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
     "fixture: prepare did not leave generated provenance in the package root",
   );
+  // Over adapter.log, NOT over the update-control-count file. That counter is
+  // written only inside install-fakes.js's interception block, so an
+  // existsSync() negative on it cannot fail in a `delegate` case: the file can
+  // never exist there whatever scripts/prepare does. adapter.log is written in
+  // all three seam modes, so this form is live in every caller.
+  //
+  // The consequence is deliberate and accepted: every caller of this helper is
+  // now an adapter-log reader and declares a seamDependency. "prepare did not
+  // inspect update control" is observable ONLY through the fake adapter — the
+  // operation issues no Codex command (src/adapter.ts:757-759) and prints
+  // nothing — so the guard genuinely dies with the seam wherever it is used,
+  // and recording that is the whole point of the registry.
   assert.ok(
-    !existsSync(join(c.state, "update-control-count")),
+    !has(readLog(c.adapterLog), "inspect --view update-control"),
     "fixture: prepare must not have inspected update control",
   );
 }
@@ -853,7 +869,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a current manager is reconciled, not skipped as up to date (:514-532)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     seedInstalledCurrent(c); // :520
     clearLogs(c);
@@ -868,7 +888,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (src/adapter.ts:575-656), and the third of them
+    // the three commands below (src/adapter.ts:575-656), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
@@ -884,7 +904,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a matching fingerprint at a different registered root still reconciles (:534-551)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     seedInstalledCurrent(c); // :539
     // :540 — `$tmpdir/otherroot` was never created in the shell either; only
@@ -913,7 +937,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("the same physical root reached via a symlink is kept (:553-567)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
@@ -950,7 +978,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a different registered root is removed then added, in order (:569-585)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     // :573
     const otherRoot = join(c.dir, "otherroot");
@@ -985,7 +1017,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("update stays read-only when probe reports current (:587-602)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "update" },
+    });
     await prepareGeneratedTree(c);
     seedInstalledCurrent(c); // :591
     clearLogs(c);
@@ -1054,7 +1090,12 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a failed marketplace add after a successful remove never reaches plugin add (:622-634)", async () => {
-    const c = installCase({ config: { marketplaceAdd: "fail" } }); // :628
+    const c = installCase({
+      config: { marketplaceAdd: "fail" },
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    }); // :628
     await prepareGeneratedTree(c);
     // :627
     const otherRoot = join(c.dir, "otherroot");
@@ -1082,7 +1123,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a malformed marketplace listing aborts before any mutation (:636-646)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     // :640
     writeFileSync(join(c.state, "marketplace_list.json"), "not json {{{\n");
@@ -1105,7 +1150,12 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a plugin add that refreshes nothing fails verification (:648-659)", async () => {
-    const c = installCase({ config: { pluginAdd: "noop" } }); // :653
+    const c = installCase({
+      config: { pluginAdd: "noop" },
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    }); // :653
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
@@ -1129,7 +1179,12 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a stale installed fingerprint fails, with the retry hint from the adapter result (:661-674)", async () => {
-    const c = installCase({ config: { pluginAdd: "stale" } }); // :668
+    const c = installCase({
+      config: { pluginAdd: "stale" },
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    }); // :668
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
@@ -1154,7 +1209,12 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("the missing-fingerprint replay hint also comes only from the adapter result (:676-685)", async () => {
-    const c = installCase({ config: { pluginAdd: "noop" } }); // :682
+    const c = installCase({
+      config: { pluginAdd: "noop" },
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    }); // :682
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
@@ -1188,7 +1248,12 @@ void describe("install commands", { concurrency: true }, () => {
     // (src/codex-state.ts:67-84) — and fails with a controlled inspect-failed
     // envelope. The case therefore needs no interception and is not
     // seam-dependent.
-    const c = installCase({ config: { pluginAdd: "orphan" } }); // :693
+    const c = installCase({
+      config: { pluginAdd: "orphan" },
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    }); // :693
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
@@ -1256,7 +1321,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("remove-add refresh mode removes the plugin between reconcile and add (:718-736)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     // :724 — src/adapter.ts:533 reads this; `add-only` is the default.
@@ -1284,7 +1353,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("an invalid refresh mode makes no Codex mutation (:738-745)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install", {
@@ -1302,7 +1375,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("install remediates malformed generated provenance (:747-768)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "install" },
+    });
     // The shell's $pkg carried a complete generated tree at this point and
     // corrupted only the provenance file, so the remediation exercised
     // spw_replace_generated_tree's replace-an-existing-tree path
@@ -1340,7 +1417,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("update takes the same remediation path, not the current-state skip (:770-780)", async () => {
-    const c = installCase();
+    const c = installCase({
+      // Seam-dependent through prepareGeneratedTree, which reads adapter.log
+      // to prove prepare did not inspect update control.
+      seamDependency: { reason: "log", script: "update" },
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     // :776

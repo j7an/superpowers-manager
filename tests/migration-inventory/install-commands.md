@@ -377,19 +377,36 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 ### Scenario 8a — fingerprint inspection command failure (`:687-700`)
 
-103. Install fails (`:694`). Port: `:1120`.
-104. Output contains `fingerprint inspection` (`:695`). Port: `:1126`.
-     **Narrowed — see the mutation proof's row 8:** the fixture's own stderr
-     line carries this needle too, so the assertion proves the string appears,
-     not that the subject produced it.
+103. Install fails (`:694`). Port: `:1262`.
+104. Output contains `fingerprint inspection` (`:695`). Port: `:1270`.
+     **Re-based, and the narrowing lifted with it.** The shell drove this
+     scenario by making the fake ADAPTER fail (`fingerprintInspect: "fail"`),
+     and the earlier port carried that fixture forward — which is what the
+     mutation proof's row 8 caught: the fake's own stderr line
+     `fingerprint inspection failed in adapter fixture` carried the needle, so
+     the assertion proved the string appeared, not that the subject produced
+     it.
+     PR 11.5 slice 3.5 replaced the mechanism with a lever below the fixture.
+     `pluginAdd: "orphan"` makes the fake CODEX register the plugin as
+     installed at 1.0.0 without materialising its cached tree, so the **real**
+     adapter's fingerprint handler resolves an active version
+     (`src/adapter.ts:790-797`), builds the installed root for it (`:815-820`),
+     finds nothing readable there — `installedCommitFromRoot` returns `""`
+     (`src/codex-state.ts:67-84`) — and returns a controlled `inspect-failed`
+     envelope. The port now asserts the **subject-owned** whole line
+     `error: installed manager fingerprint inspection failed after install.`
+     (`scripts/core/lifecycle.sh:92`), which no fixture emits. The claim is
+     the shell's, discharged by a stronger witness; the item is not narrowed.
+     The `fingerprintInspect: "fail"` config value and the fake-adapter branch
+     behind it were retired in the same commit, having lost their only
+     consumer.
 105. Output does **not** contain `fingerprint is not detectable` (`:696`,
-     first grep of the rule-8 `||` chain). Port: `:1129`.
+     first grep of the rule-8 `||` chain). Port: `:1279`.
 106. Output does **not** contain `manager updated` (`:697`, second grep of
-     the same chain). Port: `:1133`. Items 105-106 are non-vacuous because
-     item 104 proves `out` is non-empty — but, per the narrowing recorded at
-     item 104, that emptiness guard rests on the fixture's own stderr being in
-     the capture, so item 104 is **not** evidence that `out` carries the
-     subject's diagnostic stream.
+     the same chain). Port: `:1283`. Items 105-106 are non-vacuous because
+     item 104 proves `out` carries the subject's diagnostic stream — which,
+     since the re-base, it does: the line it matches has exactly one emitter
+     and that emitter is `scripts/core/lifecycle.sh`, not the fixture.
 
 ### Scenario 8b — malformed fingerprint inspection output (`:702-716`)
 
@@ -698,6 +715,13 @@ carries no fingerprint context, so item 108 (`invalid adapter response`,
 `:1152`) stayed GREEN and item 109 (`fingerprint inspection`, `:1154`) went
 RED. That is the fake's own comment (`install-fakes.js:270-273`) proved live.
 
+**Superseded for c27 by the slice-3.5 re-base — kept because it is the finding
+that motivated the fix, not because it still describes the tree.** The
+`fingerprintInspect: "fail"` fixture this paragraph analyses no longer exists;
+c27 is now driven from the fake Codex by `pluginAdd: "orphan"` and asserts a
+subject-owned line. See item 104 for the current disposition. What follows is
+the observation as recorded at the time.
+
 c27 (`fingerprintInspect: "fail"`) stayed GREEN, and an out-of-band probe —
 one case reproduced outside the suite, touching no tracked file — shows why.
 Its whole captured output under the injection is:
@@ -712,11 +736,13 @@ The only text carrying item 104's needle is the **fixture's own stderr line**,
 not the subject's diagnostic. `grep -rn 'fingerprint inspection' scripts/ src/`
 returns exactly two sites, `scripts/core/lifecycle.sh:92` and `:96`, both
 inside `spw_verify_installed_fingerprint` — so in the baseline the needle has
-two possible sources and item 104 cannot tell them apart. **Item 104 is
-therefore narrower than it reads**: it proves the string appears, not that the
-subject produced it. Faithful to the shell, which grepped the same combined
-capture; recorded, not changed, with a forward pointer at item 104. Items 103,
-105 and 106 were unaffected.
+two possible sources and item 104 cannot tell them apart. **Item 104 was
+therefore narrower than it read**: it proved the string appeared, not that the
+subject produced it. Recorded here at the time as faithful-to-the-shell; slice
+3.5 subsequently removed the ambiguity at its source rather than living with
+it, by re-basing the case onto a lower lever and asserting the whole
+subject-owned line. Items 103, 105 and 106 were unaffected then, and item 106's
+non-vacuity rationale was strengthened by the re-base.
 
 **Row 1c — an injection artifact, recorded so it is not read as evidence.**
 The payload `plugin remove superpowers@superpowers-manager` is itself one of
@@ -784,8 +810,10 @@ A fixture-side lever nevertheless exists, and adjudication C's disposition
 applies here too: a fake writing `manager updated` to **stderr** would turn all
 four RED while `status !== 0` still holds, because each case asserts over
 `result.stdout + result.stderr` (`:1051`, `:1075`, `:1118`, `:1144`) and
-fixture stderr reaches that capture — `install-fakes.js:282` is the same
-mechanism row 8 exercised. That manufacture is deliberately not performed,
+fixture stderr reaches that capture — the retired `fingerprintInspect: "fail"`
+branch in `install-fakes.js` was the same mechanism row 8 exercised, and the
+lever survives its removal because any fixture write to stderr reaches the
+capture. That manufacture is deliberately not performed,
 because it would prove only that a fixture can print the banner, not that the
 subject reported success while failing. *(2)* Reachable, by the subject rather
 than a fixture, exactly when the coupling breaks: if the banner moved above the
@@ -817,9 +845,11 @@ exclusive in the subject. `spw_verify_installed_fingerprint` returns at
 `lifecycle.sh:92` when the inspection fails and at `:96` when its result
 cannot be parsed; the `not detectable` message at `:118` is reachable only
 after a *successful* inspection that yielded an empty fingerprint. The
-`fingerprintInspect` config surface offers exactly `ok | fail | malformed`, and
-`fail`/`malformed` both land on the early returns, so no value of it can
-produce both. A fixture *could* be made to emit the failure diagnostic on
+`fingerprintInspect` config surface offers exactly `ok | malformed` since the
+slice-3.5 re-base retired `fail`, and `malformed` lands on the early return at
+`:92`, so no value of it can produce both. The re-based c27 reaches the same
+early return from a real `inspect-failed` envelope, so the disposition is
+unchanged by the re-base. A fixture *could* be made to emit the failure diagnostic on
 stderr and a valid empty-fingerprint envelope on stdout at once, which would
 turn item 105 RED — that manufacture is deliberately not performed, because it
 would prove only that the fixture can print two contradictory things, not that

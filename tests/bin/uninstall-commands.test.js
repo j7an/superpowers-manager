@@ -165,11 +165,25 @@ function ownershipInspections(codex) {
  * scripts/uninstall:23-29 brackets `spw_adapter_uninstall` between two
  * ownership inspections and, under `set -e`, reaches the second one only if the
  * adapter uninstall returned 0. So exactly one ownership inspection at the
- * Codex level means the flow never got past the first one. Paired with the
- * `assertNoRemoves(readLog(c.codexLog))` every call site already makes, that is
- * the original claim in full: an adapter uninstall carrying either flag `true`
- * would have issued a Codex remove, and one carrying both `false` would have
- * returned 0 and produced the second inspection.
+ * Codex level means the flow never got past the first one.
+ *
+ * WHAT THIS CATCHES, precisely — the re-anchor is not the original assertion,
+ * and the difference is worth stating rather than glossing. Paired with the
+ * `assertNoRemoves(readLog(c.codexLog))` every call site already makes, it
+ * rejects every adapter uninstall that either issued a Codex command (any flag
+ * `true` reaches `plugin remove` or `plugin marketplace remove`) or ran to
+ * completion (both flags `false` returns 0 and produces the second
+ * inspection).
+ *
+ * WHAT IT DOES NOT CATCH: an adapter uninstall that was invoked and then failed
+ * before issuing any Codex command — `requireCodex` or the workspace creation
+ * failing inside `runUninstall` (src/adapter.ts:697-703). That leaves one
+ * inspection and no removes, and passes here where the shell's
+ * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
+ * theoretical, and it is accepted only because in all six call sites the abort
+ * provably happens inside the FIRST ownership inspection — upstream of
+ * scripts/uninstall:27 entirely — which each case's own subject diagnostic
+ * pins.
  *
  * The emptiness guard is port-only, for the same reason as `assertNoRemoves`:
  * every call site reaches `codex plugin list --json` before aborting.
@@ -193,11 +207,15 @@ function assertNoAdapterUninstall(codex, message) {
  * uninstall operation ran to completion: the verify-after ownership inspection
  * at scripts/uninstall:29 exists only on that path.
  *
- * This is what re-anchors the `uninstall --plugin-present … --marketplace-present
- * …` needles whose flags are both `false`, since that combination issues no
- * Codex command of its own (src/adapter.ts:686-745 — the two
- * skip branches at :724 and :741 only append stdout text). Which flags were set is
- * then pinned by which removes did or did not appear.
+ * It is an ORDERING witness, not a call witness: two inspections do not by
+ * themselves prove scripts/uninstall:27 ran, since :23 and :29 emit one each.
+ * Which flags the operation carried — and, for the both-`false` pair, that it
+ * was called at all — is pinned separately at each call site, by the Codex
+ * removes that appeared or by the operation's own skip lines on stdout
+ * (src/adapter.ts:724, :741).
+ *
+ * No emptiness guard: this is a positive with an exact count, so an empty log
+ * fails it rather than satisfying it.
  * @param {string[]} codex
  * @param {string} message
  */
@@ -394,9 +412,22 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const codex = readLog(c.codexLog);
     // :239
     assertNoRemoves(codex);
-    // :240, re-anchored onto codex.log: the verify-after ownership inspection
-    // proves the adapter uninstall ran and returned 0, and :239 proves it
-    // issued no remove — which is the both-false flag pair.
+    // :240, re-anchored onto the SUBJECT's stdout. The ownership-inspection
+    // count alone would not do it: scripts/uninstall:23,29 emits two
+    // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
+    // outright would leave that count at 2. These two lines are emitted by the
+    // uninstall operation itself, one per flag, and only on the `false` branch
+    // of each (src/adapter.ts:724, :741) — so together they pin both the call
+    // and the both-false pair. The completion check is kept beneath them as the
+    // ordering witness it actually is.
+    assert.ok(
+      result.stdout.includes("plugin not installed; skipping"),
+      result.stdout,
+    );
+    assert.ok(
+      result.stdout.includes("marketplace not registered; skipping"),
+      result.stdout,
+    );
     assertAdapterUninstallRan(
       codex,
       "legacy-only state must still reach a completed adapter uninstall",
