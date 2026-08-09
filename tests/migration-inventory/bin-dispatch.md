@@ -160,7 +160,7 @@ Port-only region — additive JS assertions that map no shell item, numbered
     as port-only item 21, since it is a different property than "reaches its
     script with its args".
 12. `install --dry-run` → logs `install --dry-run ref=` (`:92-94`). Port:
-    `:79`, `ROUTING_CASES[0]`. **Index updated** (PR 11.5 slice 3.4) from
+    `:82`, `ROUTING_CASES[0]`. **Index updated** (PR 11.5 slice 3.4) from
     `ROUTING_CASES[1]` to `[0]`: the table shrank by one more when `prepare`
     (formerly index 0) was also removed — see item 8's retirement note.
     (Slice 2's Task 6 had already updated this from `[2]` to `[1]` when
@@ -170,11 +170,18 @@ Port-only region — additive JS assertions that map no shell item, numbered
     updated this from `[4]` to `[3]` when `track-latest` was removed — see
     item 10's retirement note. Its Task 5 had already updated this from `[5]`
     to `[4]` when `unpin` was removed — see item 11's retirement note.)
+    **Citation corrected** in the same pass: items 12, 13 and 14 read `:80` at
+    `162acb3`, which was the loop's `assert.deepEqual(result.log, [expected])`
+    and therefore right; slice 3.4 rewrote the token to `:79` while updating
+    the `ROUTING_CASES` indices, and `:79` is the `void test(` line. The
+    assertion these three items map to now sits at `:82`. (`:81` is the
+    per-case `assert.equal(result.status, 0)`, cited correctly in the paragraph
+    that closes items 7-14.)
 13. `uninstall --purge` → logs `uninstall --purge ref=` (`:96-98`). Port:
-    `:79`, `ROUTING_CASES[1]`. **Index updated** (PR 11.5 slice 3.4)
+    `:82`, `ROUTING_CASES[1]`. **Index updated** (PR 11.5 slice 3.4)
     from `ROUTING_CASES[2]` to `[1]`, same cause as item 12.
 14. A bare invocation routes to `update` → logs `update  ref=` (`:101-103`).
-    Port: `:79`, `ROUTING_CASES[2]`. **Index updated** (PR 11.5 slice 3.4)
+    Port: `:82`, `ROUTING_CASES[2]`. **Index updated** (PR 11.5 slice 3.4)
     from `ROUTING_CASES[3]` to `[2]`, same cause as item 12.
 
 Each of items 7-14 is one `grep -Fqx` in the shell. The port's per-case
