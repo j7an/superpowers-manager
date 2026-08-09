@@ -39,15 +39,27 @@ It never removes the legacy provider automatically.
 
 ## Requirements and platforms
 
-Superpowers Manager requires Node 24+. `git`, Python 3, and a POSIX `sh` are
-needed by `prepare`, `probe`, `install`, and `update`; `uninstall` needs
-Python 3 and `sh` but not `git`; the in-process `pin`, `track-latest`, and
-`unpin` commands need none of Python or `sh`, and only `pin` needs `git` (see
-`docs/baseline/behavioral-inventory.md`'s `CLI-PREFLIGHT-01` for the exact
-per-command breakdown). Codex CLI is required
-for `probe`, `install`, `update`, and `uninstall`; `prepare`, `pin`,
-`track-latest`, and `unpin` do not require it. Codex is the only supported
-integration today.
+Superpowers Manager requires Node 24+, and Codex is the only supported
+integration today. Every other requirement is per command, enforced by
+preflight before any dispatch. This table is checked against production by
+`tests/bin/readme-requirements.test.js`; edit it when a command's requirements
+change, in the same pull request.
+
+<!-- requirements:begin -->
+| Command | git | Python 3 | POSIX `sh` | Codex CLI |
+|---|---|---|---|---|
+| `pin` | yes | no | no | no |
+| `track-latest` | no | no | no | no |
+| `unpin` | no | no | no | no |
+| `prepare` | yes | yes | yes | no |
+| `probe` | yes | no | no | yes |
+| `install` | yes | yes | yes | yes |
+| `update` | yes | yes | yes | yes |
+| `uninstall` | no | yes | yes | yes |
+<!-- requirements:end -->
+
+See `docs/baseline/behavioral-inventory.md`'s `CLI-PREFLIGHT-01` for the
+behaviour this table describes.
 
 macOS and Linux are tested. WSL2 is supported. The native Windows path is
 untested; the launcher looks for Git Bash, `git`, and `python3`, but path
