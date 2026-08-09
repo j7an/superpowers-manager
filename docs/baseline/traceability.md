@@ -28,7 +28,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-ENV-INSTALLED-ROOT-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
 | `CLI-ENV-REFRESH-MODE-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-REFRESH-MODE-01 install refresh defaults and validation` | — |
 | `CLI-ENV-PASSTHROUGH-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-01 ten SUPERPOWERS variables pass through` | — |
-| `CLI-ENV-PREPARE-PATHS-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: CLI-ENV-PREPARE-PATHS-01 relative prepare paths use invocation cwd` | — |
+| `CLI-ENV-PREPARE-PATHS-01` | `tests/baseline/prepare.test.js::CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd` | — |
 | `CLI-ENV-INSTALLED-DEFAULTS-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
 | `SEL-LOCATION-01` | `tests/baseline/selection-location.test.js::SEL-LOCATION-01 selection location chain and fail-closed bases` | — |
 | `SEL-PRECEDENCE-REF-01` | `tests/baseline/selection-location.test.js::SEL-PRECEDENCE-REF-01 complete ref precedence` | — |
@@ -63,7 +63,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `PROV-READER-CODEX-SOURCE-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: PROV-READER-CODEX-SOURCE-01 Codex source reader profile` | `tests/fixtures/baseline/provenance/non-standard-constant.json` |
 | `PROV-READER-CODEX-COMMIT-01` | `tests/unit/codex-state.test.js::PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
 | `MANIFEST-READER-INSTALLED-01` | `tests/unit/codex-state.test.js::MANIFEST-READER-INSTALLED-01 installed manifest complete matrix` | `tests/fixtures/baseline/manifests/installed-manager-version.json` |
-| `MANIFEST-READER-UPSTREAM-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: MANIFEST-READER-UPSTREAM-01 upstream manifest reader profile` | `tests/fixtures/baseline/manifests/upstream-no-hooks.json` |
+| `MANIFEST-READER-UPSTREAM-01` | `tests/baseline/prepare.test.js::MANIFEST-READER-UPSTREAM-01 upstream manifest version reaches provenance` | `tests/fixtures/baseline/manifests/upstream-no-hooks.json` |
 | `MANIFEST-READER-MATERIALIZE-01` | `tests/unit/hooks.test.js::MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix` | `tests/fixtures/baseline/manifests/candidate-non-standard-constant.json` |
 | `MANIFEST-READER-OVERLAY-01` | `tests/baseline/manifest-overlay-parity.test.js::BASELINE CASE: MANIFEST-READER-OVERLAY-01 byte parity with the Python oracle` | `tests/fixtures/baseline/overlay-parity/input/unknown-field.json` |
 | `MANIFEST-READER-VALIDATOR-01` | `tests/baseline/generated-plugin-corpus.test.js::MANIFEST-READER-VALIDATOR-01 candidate validator profile` | `tests/fixtures/baseline/manifests/candidate-duplicate-key.json` |
@@ -93,18 +93,18 @@ selectors or intentionally update the inventory, test, and this map together.
 | `ADAPTER-READER-DEPTH-01` | `tests/test_adapter_protocol.py::test_enforces_exact_json_nesting_boundary` | `tests/fixtures/baseline/adapter-responses/depth-64.json` |
 | `ADAPTER-READER-DUPLICATES-01` | `tests/test_adapter_protocol.py::test_rejects_duplicate_object_keys_recursively_without_replay` | `tests/fixtures/baseline/adapter-responses/duplicate-key.json` |
 | `GENERATED-LAYOUT-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
-| `GENERATED-UNKNOWN-FIELDS-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DECLARED-01 declared path and inline hook forms` | `tests/fixtures/baseline/manifests/upstream-active-hooks.json` |
-| `GENERATED-WRONG-NAME-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected` | — |
-| `GENERATED-FALLBACK-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-FALLBACK-01 manifest-less upstream uses manager fallback` | — |
-| `GENERATED-HOOKS-FORBID-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-FORBID-01 explicit empty and fallback stay hook-free` | `tests/fixtures/baseline/manifests/upstream-empty-hooks.json` |
-| `GENERATED-HOOKS-DEFAULT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DEFAULT-01 absent and empty-array default discovery` | `tests/fixtures/baseline/manifests/upstream-default-hooks.json` |
-| `GENERATED-HOOKS-DEFAULT-LAYOUT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DEFAULT-01 absent and empty-array default discovery` | `tests/fixtures/baseline/generated-tree/default-hooks.txt` |
-| `GENERATED-HOOKS-DECLARED-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: GENERATED-HOOKS-DECLARED-01 declared path and inline hook forms` | `tests/fixtures/baseline/generated-tree/declared-hooks.txt` |
+| `GENERATED-UNKNOWN-FIELDS-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-DECLARED-01 GENERATED-UNKNOWN-FIELDS-01 declared hook paths and unknown fields` | `tests/fixtures/baseline/manifests/upstream-active-hooks.json` |
+| `GENERATED-WRONG-NAME-01` | `tests/baseline/prepare.test.js::GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected` | — |
+| `GENERATED-FALLBACK-01` | `tests/baseline/prepare.test.js::GENERATED-FALLBACK-01 manifest-less upstream uses the manager fallback` | — |
+| `GENERATED-HOOKS-FORBID-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-FORBID-01 an exact empty hooks object stays hook-free` | `tests/fixtures/baseline/manifests/upstream-empty-hooks.json` |
+| `GENERATED-HOOKS-DEFAULT-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-DEFAULT-01 GENERATED-HOOKS-DEFAULT-LAYOUT-01 empty-array default discovery` | `tests/fixtures/baseline/manifests/upstream-default-hooks.json` |
+| `GENERATED-HOOKS-DEFAULT-LAYOUT-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-DEFAULT-01 GENERATED-HOOKS-DEFAULT-LAYOUT-01 empty-array default discovery` | `tests/fixtures/baseline/generated-tree/default-hooks.txt` |
+| `GENERATED-HOOKS-DECLARED-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-DECLARED-01 GENERATED-UNKNOWN-FIELDS-01 declared hook paths and unknown fields` | `tests/fixtures/baseline/generated-tree/declared-hooks.txt` |
 | `FS-ATOMIC-01` | `tests/baseline/cli-parity.test.js::FS-ATOMIC-01 failed prepare preserves the previous generated tree` | `tests/builders/baseline-scenario.sh` |
 | `FS-ATOMIC-SWAP-01` | `tests/unit/atomic.test.js::FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree` | — |
 | `FS-CLEANUP-01` | `tests/baseline/cli-parity.test.js::FS-CLEANUP-01 interrupted state cleanup is invocation-scoped` | `tests/builders/baseline-scenario.sh` |
 | `FS-SYMLINK-01` | `tests/baseline/cli-parity.test.js::FS-SYMLINK-01 escaping and broken symlinks fail closed` | `tests/builders/baseline-scenario.sh` |
-| `FS-HOOK-CONTAINMENT-01` | `tests/test_prepare_with_fake_upstream.sh::# BASELINE CASE: FS-HOOK-CONTAINMENT-01 unsafe hook paths and symlinks fail closed` | — |
+| `FS-HOOK-CONTAINMENT-01` | `tests/baseline/prepare.test.js::FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed` | — |
 | `FS-GENERATED-RESOLVE-01` | `tests/unit/generated-plugin.test.js::FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures` | — |
 | `FS-SELECTION-ATOMIC-01` | `tests/unit/selection.test.js::FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary` | — |
 | `FS-SELECTION-CONCURRENT-01` | `tests/baseline/selection-state.test.js::FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete valid record` | — |
