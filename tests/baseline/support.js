@@ -836,7 +836,6 @@ function fixturePath(...parts) {
 }
 
 export {
-  ADAPTER_SEAM_RETIRED,
   COMMANDS,
   DISPATCH,
   IN_PROCESS_COMMANDS,

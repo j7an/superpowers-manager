@@ -1,9 +1,25 @@
 // @ts-check
-// Shared, immutable base package root plus per-case PATH overlays for the
-// bin-dispatch port. The expensive operation (copying the real dist/) happens
-// once; the mutated state (a directory of two-line stub scripts) is per case
+// Shared base package root plus per-case PATH overlays for the bin-dispatch
+// port. The expensive operation (copying the real dist/) happens once; the
+// state a case configures (a directory of two-line stub scripts) is per case
 // and declarative, so each case states the tool set it needs at the assertion
 // rather than inheriting it from a mutation twenty lines earlier.
+//
+// The base is shared but NOT literally immutable, and has not been since PR
+// 11.5 slice 3.4 flipped `prepare` in-process. No case configures the base --
+// `scripts`, `missingScripts`, and `dispatchOverride` still take a per-case
+// copy -- but the subject under test now writes into it: runPrepare's
+// gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
+// opens a `.superpowers.prepare.*` workspace there, all at
+// src/commands/prepare.ts:274-281 and all BEFORE computeEffectiveSelection.
+// Every `prepare` case therefore leaves an empty `<PACKAGE_ROOT>/plugins/`
+// behind. That residue is inert: nothing in this file or in
+// bin-dispatch.test.js reads the path, withWorkspace removes its own
+// directory, the fakeBin `git` stub kills the run at ref resolution before
+// the clone and before the `.cache/` mkdir, and the per-case cpSync copies
+// the empty directory along harmlessly. Restoring literal immutability would
+// mean a private root for every prepare case -- more cost than the residue is
+// worth. Revisit if a case ever asserts on the base root's contents.
 
 import {
   accessSync,

@@ -334,12 +334,12 @@ and is not counted here.
     `"probe ran"`), so "did not dispatch" is proven rather than assumed. The
     port's `install` case takes no `scripts` override and runs against the
     shared `PACKAGE_ROOT`'s default stub instead — but that default stub
-    (`dispatch-fixture.js`'s `loggingStub`, `:101-116`) *also* logs
+    (`dispatch-fixture.js`'s `loggingStub`, `:135-150`) *also* logs
     unconditionally on invocation, before checking anything. That is what
     makes the assertion load-bearing here too: if `install` were mistakenly
     dispatched despite the missing-codex preflight, the default stub would
     still append to the log, and `assert.deepEqual(result.log, [])` at
-    `:416` would catch it. It is sound; it is just less visually obvious
+    `:453` would catch it. It is sound; it is just less visually obvious
     than the shell's explicit override, because the "logs unconditionally"
     property comes from the shared fixture rather than from a per-case
     script. Since PR 11.5 slice 2 the port's `probe` case (item 44) rests on
@@ -377,7 +377,7 @@ and is not counted here.
     last entry, so the table and its `for` loop were deleted outright rather
     than left with zero iterations; the property this item actually protects
     (preflight does not require Codex for `prepare`) is covered by
-    `tests/bin/bin-dispatch.test.js:496` and recorded as port-only items
+    `tests/bin/bin-dispatch.test.js:497` and recorded as port-only items
     45-46. Like item 8, and unlike items 48, 49, and 50, the replacement case
     asserts no exit status — see item 8's retirement note for why `prepare`
     cannot succeed through this fixture.
@@ -550,7 +550,7 @@ preamble, for what it asserts:
 20. `NO_CODEX_CASES` iteration `prepare`: `result.status === 0` (as
     `NO_CODEX_CASES[0]`, latterly). **Dropped** (PR 11.5 slice 3.4), for the
     same reason as item 3 and deliberately not carried into `prepare`'s
-    standalone codex-absent case at `tests/bin/bin-dispatch.test.js:496`:
+    standalone codex-absent case at `tests/bin/bin-dispatch.test.js:497`:
     `prepare` really runs there and cannot succeed through this fixture. The
     property item 51 actually protected — preflight admits `prepare` without
     `codex` — survives as port-only items 45-46, asserted directly on the
@@ -699,12 +699,12 @@ preamble, for what it asserts:
     reason recorded in item 3.
 45. **New** (PR 11.5 slice 3.4). `prepare` with `codex` absent: stderr does
     not contain `required command not found: codex`
-    (`tests/bin/bin-dispatch.test.js:502-505`). Port-only. The shell observed
+    (`tests/bin/bin-dispatch.test.js:503-506`). Port-only. The shell observed
     the same preflight fact indirectly, through a successful dispatch (item
     51); with no dispatch left to observe, the assertion moves onto the
     diagnostic preflight would have emitted, which is a direct statement of
     the property rather than a proxy for it.
-46. **New** (PR 11.5 slice 3.4). Same case: `result.log` is empty (`:506`).
+46. **New** (PR 11.5 slice 3.4). Same case: `result.log` is empty (`:507`).
     Port-only, same rationale as item 21.
 47. **New** (PR 11.5 slice 3.4). `prepare` does not require `python3` when no
     validator is configured: stderr does not contain
@@ -718,22 +718,28 @@ preamble, for what it asserts:
     conditional that must NOT fire.
 48. **New** (PR 11.5 slice 3.4). `prepare` requires `python3` once
     `SUPERPOWERS_VALIDATOR` names one: `result.status === 1`
-    (`tests/bin/bin-dispatch.test.js:475`). Port-only, same
+    (`tests/bin/bin-dispatch.test.js:476`). Port-only, same
     no-shell-counterpart rationale as item 47, and the half that must fire.
-    Items 47-50 are the integration net for `commandRequirements(env)`:
+    Items 47-51 are the integration net for `commandRequirements(env)`:
     `tests/bin/units.test.js` unit-tests the accessor, but nothing else
     proves `preflight` reads it rather than the static table, and reverting
     it to the static table is invisible to every other case in this file
     because none configures a validator.
 49. **New** (PR 11.5 slice 3.4). Same case: stderr is exactly
     `error: required command not found: python3 — install python3 and re-run`
-    plus a newline (`tests/bin/bin-dispatch.test.js:476-479`). Port-only, same
+    plus a newline (`tests/bin/bin-dispatch.test.js:477-480`). Port-only, same
     rationale as item 48. Exact rather than substring because the text is the
     contract: it must be preflight's own hand-written diagnostic, not a
     prepare-path failure that merely mentions `python3`.
-50. **New** (PR 11.5 slice 3.4). Same case: `result.log` is empty (`:481`).
+50. **New** (PR 11.5 slice 3.4). Same case: `result.log` is empty (`:482`).
     Port-only, same rationale as item 21 — preflight completes before dispatch
     and before any Git or build effect.
+51. **New** (PR 11.5 slice 3.4). Back on item 47's no-validator case:
+    `result.log` is empty (`:467`). Port-only, same rationale as item 21. Item
+    47's stderr check alone cannot distinguish "preflight admitted `prepare`
+    without `python3`" from "preflight never ran a `python3` check because it
+    dispatched instead"; this is the half that pins the second reading out,
+    and it is the shape items 46 and 50 already give their own cases.
 
 <!-- inventory:port-only:end -->
 
@@ -742,7 +748,7 @@ preamble, for what it asserts:
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 50,
+  "portOnly": 51,
   "ports": { "tests/bin/bin-dispatch.test.js": 36 }
 }
 ```
@@ -778,8 +784,8 @@ preamble, for what it asserts:
   dispatch log any more, so each specific condition can no longer occur in
   either direction, and no JS assertion enforces any of them any more; see
   each item's retirement note for the analogous in-process property and where
-  it is now tested). 41 mapped + 12 retired = 53. Plus 50 port-only
-  assertions (44 additive `result.status === 0` / `result.log` / stderr checks
+  it is now tested). 41 mapped + 12 retired = 53. Plus 51 port-only
+  assertions (45 additive `result.status === 0` / `result.log` / stderr checks
   the shell left implicit under `set -e` or that have no shell counterpart at
   all, plus one structural array-length guard, plus 2 assertions covering
   the in-process runtime backstop with no shell counterpart of any kind — see
@@ -795,6 +801,6 @@ preamble, for what it asserts:
   sense in which "drop" is pejorative here: it names an unrecorded
   disappearance, not the port-only `Dropped` category, whose two entries
   (items 3 and 20) are recorded exactly as carefully and are not shell items at
-  all. 41 + 12 = 53. The 50 port-only
+  all. 41 + 12 = 53. The 51 port-only
   entries are strictly additive test coverage — not a reconciliation of
   any shell assertion — and are excluded from the 41/53 arithmetic above.
