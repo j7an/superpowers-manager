@@ -11,9 +11,11 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -948,4 +950,38 @@ void test("an unreadable hooks subdirectory fails closed naming the subdirectory
   } finally {
     chmodSync(unreadable, mode);
   }
+});
+
+// P4 — src/hooks.ts:359-360, the ACCEPTING side of the hooks-root symlink
+// policy, covering both halves the retired shell driver held alone (items
+// 83-85 in tests/migration-inventory/prepare.md, whose entry for item 83 ends
+// "Slice 3.5, read this before deleting the shell file").
+//
+// Every other root-symlink case in the repository asserts rejection:
+// tests/baseline/generated-plugin-corpus.test.js:812-880 is twelve cases of
+// status === 1, and :907 puts contained symlinks inside a REAL hooks/
+// directory rather than symlinking the root. Without this case, acceptance is
+// exercised by nothing on either the materializing or the validating side.
+void test("a contained relative hooks root is recreated as a symlink in the candidate", async () => {
+  const c = createCase({ fakes: "probe" });
+  const result = await prepare(c, {
+    SUPERPOWERS_REF: REFS.containedHooksRoot,
+  });
+  assert.equal(result.status, 0, result.stderr);
+
+  const hooks = join(generated(c), "hooks");
+  // Materializing side: the root stays a symlink and keeps its exact target.
+  assert.ok(
+    lstatSync(hooks).isSymbolicLink(),
+    "a contained hooks root must remain a symlink in the candidate",
+  );
+  assert.equal(readlinkSync(hooks), "assets/hook-root");
+  // Validating side: the candidate passed validateSubtreeSymlinks at
+  // src/hooks.ts:366 (status 0 above) AND the content behind the root is
+  // actually reachable through it, which is what makes the acceptance real
+  // rather than a dangling link nobody followed.
+  assert.equal(
+    readFileSync(join(hooks, "root-hook.txt"), "utf8"),
+    "materialized root target\n",
+  );
 });

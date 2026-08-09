@@ -331,6 +331,30 @@ function buildUpstream() {
     rmSync(join(upstream, "hooks"), { recursive: true, force: true });
     symlinkSync(".git", join(upstream, "hooks"));
   });
+  // P4 — a CONTAINED relative hooks-root symlink, which src/hooks.ts:359-360
+  // recreates in the candidate rather than dereferencing.
+  //
+  // The target must live under `assets/`. src/commands/prepare.ts:29-35 copies
+  // exactly five paths into the candidate — skills, assets, LICENSE,
+  // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
+  // directory would dangle in the candidate and fail the SECOND
+  // validateSubtreeSymlinks call at src/hooks.ts:366. That is precisely what
+  // P2b's `.git` fixture does on purpose; this one is its mirror image, and
+  // the two differ only in whether the target is one of the copied five.
+  branchWith("hooks-root-contained-materialized", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = { SessionStart: [] };
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    mkdirSync(join(upstream, "assets", "hook-root"), { recursive: true });
+    writeFileSync(
+      join(upstream, "assets", "hook-root", "root-hook.txt"),
+      "materialized root target\n",
+    );
+    rmSync(join(upstream, "hooks"), { recursive: true, force: true });
+    symlinkSync("assets/hook-root", join(upstream, "hooks"));
+  });
   return upstream;
 }
 
@@ -347,6 +371,7 @@ export const REFS = {
   unsupportedHooks: "hooks-unsupported-declaration",
   escapingHooksRoot: "hooks-root-escape-symlink",
   sourceOnlyHooksRoot: "hooks-root-contained-source-only",
+  containedHooksRoot: "hooks-root-contained-materialized",
 };
 
 /**
