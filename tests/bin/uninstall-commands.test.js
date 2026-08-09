@@ -78,11 +78,21 @@ const NO_GIT_TOOLS = [
  * yields a fully independent case.
  * @param {object} [options]
  * @param {Record<string, unknown>} [options.config]
+ * @param {"delegate" | "tripwire" | "intercept"} [options.adapterSeam]
+ * @param {{ reason: "intercept" | "log", script: string }} [options.seamDependency]
  * @param {string} [options.plugins]
  * @param {string} [options.marketplaces]
  */
 function uninstallCase(options = {}) {
-  const c = createCase({ fakes: "uninstall", config: options.config ?? {} });
+  // Both seam options are forwarded, never defaulted here: createCase owns the
+  // default mode and the eager validation, so a case that omits them still
+  // gets checked against tests/bin/adapter-seam.js.
+  const c = createCase({
+    fakes: "uninstall",
+    config: options.config ?? {},
+    adapterSeam: options.adapterSeam,
+    seamDependency: options.seamDependency,
+  });
   writeFileSync(
     join(c.state, "plugin_list.json"),
     `${options.plugins ?? PLUGIN_PRESENT}\n`,
@@ -134,20 +144,69 @@ function assertNoRemoves(log) {
 }
 
 /**
+ * How many ownership inspections reached Codex.
+ *
+ * `inspect --view ownership` issues exactly one `codex plugin list --json` and
+ * then one `codex plugin marketplace list --json` (src/adapter.ts:842-873).
+ * Counting the plugin listing alone is unambiguous: `plugin marketplace list
+ * --json` does not contain it as a substring, and nothing else scripts/uninstall
+ * runs issues either listing.
+ * @param {string[]} codex
+ * @returns {number}
+ */
+function ownershipInspections(codex) {
+  return codex.filter((line) => line === "plugin list --json").length;
+}
+
+/**
  * The six identical `if grep -Fq "uninstall --" "$adapter_log"` guards
- * (:321, :333, :345, :360, :372, :387). The emptiness guard is port-only, for
- * the same reason as `assertNoRemoves`: every call site reaches
- * `inspect --view ownership` before aborting.
- * @param {string[]} adapter
+ * (:321, :333, :345, :360, :372, :387), RE-ANCHORED onto codex.log.
+ *
+ * scripts/uninstall:23-29 brackets `spw_adapter_uninstall` between two
+ * ownership inspections and, under `set -e`, reaches the second one only if the
+ * adapter uninstall returned 0. So exactly one ownership inspection at the
+ * Codex level means the flow never got past the first one. Paired with the
+ * `assertNoRemoves(readLog(c.codexLog))` every call site already makes, that is
+ * the original claim in full: an adapter uninstall carrying either flag `true`
+ * would have issued a Codex remove, and one carrying both `false` would have
+ * returned 0 and produced the second inspection.
+ *
+ * The emptiness guard is port-only, for the same reason as `assertNoRemoves`:
+ * every call site reaches `codex plugin list --json` before aborting.
+ * @param {string[]} codex
  * @param {string} message
  */
-function assertNoAdapterUninstall(adapter, message) {
+function assertNoAdapterUninstall(codex, message) {
   assert.ok(
-    adapter.length > 0,
-    "adapter log is empty — the adapter never ran, so this negative would pass vacuously",
+    codex.length > 0,
+    "codex log is empty — the fake never ran, so this negative would pass vacuously",
   );
-  const offenders = adapter.filter((line) => line.includes("uninstall --"));
-  assert.deepEqual(offenders, [], message);
+  assert.equal(
+    ownershipInspections(codex),
+    1,
+    `${message}:\n${codex.join("\n")}`,
+  );
+}
+
+/**
+ * The positive counterpart, and the Codex-level witness that the adapter
+ * uninstall operation ran to completion: the verify-after ownership inspection
+ * at scripts/uninstall:29 exists only on that path.
+ *
+ * This is what re-anchors the `uninstall --plugin-present … --marketplace-present
+ * …` needles whose flags are both `false`, since that combination issues no
+ * Codex command of its own (src/adapter.ts:686-745 — the two
+ * skip branches at :724 and :741 only append stdout text). Which flags were set is
+ * then pinned by which removes did or did not appear.
+ * @param {string[]} codex
+ * @param {string} message
+ */
+function assertAdapterUninstallRan(codex, message) {
+  assert.equal(
+    ownershipInspections(codex),
+    2,
+    `${message}:\n${codex.join("\n")}`,
+  );
 }
 
 /**
@@ -221,7 +280,15 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("selection-independent recovery: malformed selection, no git, unsupported update control (:162-190)", async () => {
-    const c = uninstallCase({ config: { updateControl: "unsupported" } });
+    const c = uninstallCase({
+      config: { updateControl: "unsupported" },
+      adapterSeam: "intercept",
+      // Seam-dependent on the interception AND on the log: :185-189 below reads
+      // adapter.log for an update-control inspection, and that operation issues
+      // no Codex command at all (src/adapter.ts:757-759), so its absence has no
+      // Codex-level witness either.
+      seamDependency: { reason: "intercept", script: "uninstall" },
+    });
     // :168-170 — a malformed saved selection under the case-local
     // XDG_CONFIG_HOME the fixture already exports.
     const selectionDir = join(c.home, ".config", "superpowers-manager");
@@ -284,7 +351,13 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("missing Codex: controlled ownership-inspect failure (:214-232)", async () => {
-    const c = uninstallCase({});
+    // Seam-dependent with no re-anchor available: the case removes Codex, so
+    // codex.log is empty by construction and cannot witness anything. :226's
+    // adapter-log read is the only evidence that the subject reached the
+    // ownership inspection before failing.
+    const c = uninstallCase({
+      seamDependency: { reason: "log", script: "uninstall" },
+    });
     const missingCodex = join(c.dir, "missing-codex");
     const result = await runScript(c, "uninstall", {
       env: { SUPERPOWERS_CODEX: missingCodex },
@@ -318,13 +391,15 @@ void describe("uninstall commands", { concurrency: true }, () => {
     });
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    const codex = readLog(c.codexLog);
     // :239
-    assertNoRemoves(readLog(c.codexLog));
-    // :240
-    assert.ok(
-      readLog(c.adapterLog).includes(
-        "uninstall --plugin-present false --marketplace-present false",
-      ),
+    assertNoRemoves(codex);
+    // :240, re-anchored onto codex.log: the verify-after ownership inspection
+    // proves the adapter uninstall ran and returned 0, and :239 proves it
+    // issued no remove — which is the both-false flag pair.
+    assertAdapterUninstallRan(
+      codex,
+      "legacy-only state must still reach a completed adapter uninstall",
     );
     // :241-242
     assert.ok(
@@ -382,7 +457,16 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("both present: both removed, plugin before marketplace (:261-289)", async () => {
-    const c = uninstallCase({});
+    // Seam-dependent, and deliberately left reading adapter.log rather than
+    // half-re-anchored. Most of this case's adapter claims do have Codex
+    // footprints, but :288-289 does not: "adapter uninstall must receive
+    // booleans, not provider names" is a claim about the adapter's OWN argv,
+    // and Codex never sees it. Re-expressing it over codex.log would assert
+    // something weaker (at best, that the run succeeded), so the case declares
+    // instead and slice 4 re-bases the whole block at once.
+    const c = uninstallCase({
+      seamDependency: { reason: "log", script: "uninstall" },
+    });
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
 
@@ -462,11 +546,13 @@ void describe("uninstall commands", { concurrency: true }, () => {
       !has(codex, "plugin remove superpowers@superpowers-manager"),
       "must not remove an absent plugin",
     );
-    // :300
-    assert.ok(
-      readLog(c.adapterLog).includes(
-        "uninstall --plugin-present false --marketplace-present true",
-      ),
+    // :300, re-anchored onto codex.log. The flag pair's whole Codex footprint
+    // is the marketplace remove asserted at :301 and the plugin remove ruled
+    // out at :296-299; the verify-after inspection below adds that the adapter
+    // uninstall ran to completion rather than aborting between them.
+    assertAdapterUninstallRan(
+      codex,
+      "the adapter uninstall must complete when only the marketplace is present",
     );
     // :302
     assert.ok(result.stdout.includes("plugin not installed; skipping"));
@@ -479,13 +565,14 @@ void describe("uninstall commands", { concurrency: true }, () => {
     });
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    const codex = readLog(c.codexLog);
     // :309
-    assertNoRemoves(readLog(c.codexLog));
-    // :310
-    assert.ok(
-      readLog(c.adapterLog).includes(
-        "uninstall --plugin-present false --marketplace-present false",
-      ),
+    assertNoRemoves(codex);
+    // :310, re-anchored onto codex.log for the same reason as the legacy-only
+    // case: completed adapter uninstall plus no removes is the both-false pair.
+    assertAdapterUninstallRan(
+      codex,
+      "an idempotent uninstall must still reach a completed adapter uninstall",
     );
     // :311-312
     assert.ok(result.stdout.includes("plugin not installed; skipping"));
@@ -505,7 +592,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assertTmpEmpty(c);
     // :321-325
     assertNoAdapterUninstall(
-      readLog(c.adapterLog),
+      readLog(c.codexLog),
       "adapter uninstall must not run when ownership inspection fails",
     );
     // :326
@@ -523,7 +610,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     );
     // :333-337
     assertNoAdapterUninstall(
-      readLog(c.adapterLog),
+      readLog(c.codexLog),
       "adapter uninstall must not run on malformed ownership inspection",
     );
     // :338
@@ -541,7 +628,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     );
     // :345-349
     assertNoAdapterUninstall(
-      readLog(c.adapterLog),
+      readLog(c.codexLog),
       "adapter uninstall must not run on malformed individual plugin entries",
     );
     // :350
@@ -564,7 +651,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     );
     // :360-364
     assertNoAdapterUninstall(
-      readLog(c.adapterLog),
+      readLog(c.codexLog),
       "adapter uninstall must not run when marketplace ownership inspection fails",
     );
     // :365
@@ -582,7 +669,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     );
     // :372-376
     assertNoAdapterUninstall(
-      readLog(c.adapterLog),
+      readLog(c.codexLog),
       "adapter uninstall must not run on malformed individual marketplace entries",
     );
     // :377
@@ -605,7 +692,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     );
     // :387-391
     assertNoAdapterUninstall(
-      readLog(c.adapterLog),
+      readLog(c.codexLog),
       "adapter uninstall must not run on malformed marketplace ownership inspection",
     );
     // :392
@@ -624,23 +711,21 @@ void describe("uninstall commands", { concurrency: true }, () => {
       0,
       "expected uninstall to fail but it succeeded",
     );
-    const adapter = readLog(c.adapterLog);
-    // :401
+    const codex = readLog(c.codexLog);
+    // :401, re-anchored onto codex.log: the true/true flag pair's whole Codex
+    // footprint is the two removes, asserted at :408 below and here.
     assert.ok(
-      adapter.includes(
-        "uninstall --plugin-present true --marketplace-present true",
-      ),
+      has(codex, "plugin marketplace remove superpowers-manager"),
+      codex.join("\n"),
     );
-    // :402-406
-    assert.equal(
-      adapter.filter((l) => l === "inspect --view ownership").length,
-      2,
+    // :402-406, re-anchored: one ownership inspection is one Codex plugin
+    // listing, so the verify-after re-inspection is the second of them.
+    assertAdapterUninstallRan(
+      codex,
       "verify-after must re-run ownership inspection after adapter uninstall",
     );
     // :408 — the removal was attempted...
-    assert.ok(
-      has(readLog(c.codexLog), "plugin remove superpowers@superpowers-manager"),
-    );
+    assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     // :410 — ...but the plugin is still present on re-query.
     assert.ok(out.includes("still installed"), out);
   });
@@ -655,16 +740,19 @@ void describe("uninstall commands", { concurrency: true }, () => {
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :419
+    const codex = readLog(c.codexLog);
+    // :419, re-anchored onto codex.log: the true/true flag pair issues both
+    // removes, and the verify-after inspection proves the operation completed.
     assert.ok(
-      readLog(c.adapterLog).includes(
-        "uninstall --plugin-present true --marketplace-present true",
-      ),
+      has(codex, "plugin marketplace remove superpowers-manager"),
+      codex.join("\n"),
+    );
+    assertAdapterUninstallRan(
+      codex,
+      "verify-after must re-run ownership inspection after adapter uninstall",
     );
     // :420
-    assert.ok(
-      has(readLog(c.codexLog), "plugin remove superpowers@superpowers-manager"),
-    );
+    assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     // :421
     assert.ok(out.includes("cannot parse output of"), out);
     // :422-426 — non-vacuous: the assertion above proves `out` carries the
@@ -686,12 +774,11 @@ void describe("uninstall commands", { concurrency: true }, () => {
       "expected uninstall to fail but it succeeded",
     );
     const codex = readLog(c.codexLog);
-    // :436
-    assert.ok(
-      readLog(c.adapterLog).includes(
-        "uninstall --plugin-present true --marketplace-present true",
-      ),
-    );
+    // :436, re-anchored onto codex.log — and NOT onto assertAdapterUninstallRan,
+    // which would be false here: the marketplace remove fails, so the flow dies
+    // before scripts/uninstall:29's verify-after inspection. The true/true flag
+    // pair is witnessed instead by the two removes at :437-438, which the
+    // adapter issues only when both flags are true (src/adapter.ts:713-745).
     // :437-438
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));

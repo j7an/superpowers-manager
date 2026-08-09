@@ -81,12 +81,22 @@ const PARSE_ABORT_MUTATION = /marketplace (add|remove)|^plugin (add|remove)/;
  * has to be stated instead of inherited.
  * @param {object} [options]
  * @param {Record<string, unknown>} [options.config]
+ * @param {"delegate" | "tripwire" | "intercept"} [options.adapterSeam]
+ * @param {{ reason: "intercept" | "log", script: string }} [options.seamDependency]
  * @param {string} [options.plugins]
  * @param {string} [options.marketplaces]
  * @returns {import("./lifecycle-fixture.js").CaseEnv}
  */
 function installCase(options = {}) {
-  const c = createCase({ fakes: "install", config: options.config ?? {} });
+  // Both seam options are forwarded, never defaulted here: createCase owns the
+  // default mode and the eager validation, so a case that omits them still
+  // gets checked against tests/bin/adapter-seam.js.
+  const c = createCase({
+    fakes: "install",
+    config: options.config ?? {},
+    adapterSeam: options.adapterSeam,
+    seamDependency: options.seamDependency,
+  });
   writeFileSync(
     join(c.state, "plugin_list.json"),
     `${options.plugins ?? PLUGIN_LIST_EMPTY}\n`,
@@ -379,6 +389,13 @@ async function assertLegacyIdentityStops(c) {
   assert.ok(hasLine(out, "Then run: npx superpowers-manager install"), out);
   // :445-449 — non-vacuous: the adapter log must show the ownership inspection
   // that produced the identity verdict asserted above.
+  //
+  // NOT re-anchored onto codex.log, and both callers therefore declare a
+  // seamDependency. The `^install ` half does have a Codex footprint — adapter
+  // install always reaches `codex plugin add` (src/adapter.ts:650-656) — and
+  // :450 already asserts it. The `^build ` half does not: the adapter's build
+  // operation is pure filesystem work and issues no Codex command at all, so
+  // no expression over codex.log can witness its absence.
   const adapter = readLog(c.adapterLog);
   assert.ok(
     adapter.includes("inspect --view ownership"),
@@ -473,7 +490,15 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("prepare is capability-independent (:321-336)", async () => {
-    const c = installCase({ config: { updateControl: "unsupported" } });
+    // `updateControl: "unsupported"` is INERT here and deliberately so: prepare
+    // never inspects update control, which is exactly what :326-330 asserts. So
+    // the case is not intercept-dependent — the interceptor is never reached —
+    // but it is log-dependent, because every assertion below names an adapter
+    // operation on a path that makes no Codex call whatsoever (:336).
+    const c = installCase({
+      config: { updateControl: "unsupported" },
+      seamDependency: { reason: "log", script: "prepare" },
+    });
     const result = await runScript(c, "prepare");
     assert.equal(result.status, 0, result.stdout + result.stderr);
 
@@ -502,7 +527,13 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("unsupported update control blocks the update fast path (:338-347)", async () => {
-    const c = installCase({ config: { updateControl: "unsupported" } });
+    const c = installCase({
+      config: { updateControl: "unsupported" },
+      adapterSeam: "intercept",
+      // `update`, not `install`: runScript spawns scripts/update below, and the
+      // registry is keyed by the script actually spawned.
+      seamDependency: { reason: "intercept", script: "update" },
+    });
     // The generated tree the shell inherited from the prepare at :325. Without
     // it the package root probes as "needs prepare", `seed_installed_current`
     // is inert, and `scripts/update` never reaches its `current)` branch — the
@@ -534,7 +565,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("unsupported update control blocks a direct install (:349-352)", async () => {
-    const c = installCase({ config: { updateControl: "unsupported" } });
+    const c = installCase({
+      config: { updateControl: "unsupported" },
+      adapterSeam: "intercept",
+      seamDependency: { reason: "intercept", script: "install" },
+    });
     // The shell reached this gate on the needs-install path: `reset` cleared
     // the Codex cache but left the generated tree from :325 in $pkg.
     await prepareGeneratedTree(c);
@@ -549,7 +584,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("malformed update-control output exits exactly 1 (:354-364)", async () => {
-    const c = installCase({ config: { updateControl: "malformed" } });
+    const c = installCase({
+      config: { updateControl: "malformed" },
+      adapterSeam: "intercept",
+      seamDependency: { reason: "intercept", script: "install" },
+    });
     const result = await runScript(c, "install");
     // :357-363 — the shell checked "did not succeed" and then "rc is exactly
     // 1"; one equality carries both claims.
@@ -563,7 +602,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("failed update-control inspection exits exactly 1 (:366-375)", async () => {
-    const c = installCase({ config: { updateControl: "failure" } });
+    const c = installCase({
+      config: { updateControl: "failure" },
+      adapterSeam: "intercept",
+      seamDependency: { reason: "intercept", script: "update" },
+    });
     const result = await runScript(c, "update");
     // :368-374
     assert.equal(
@@ -578,6 +621,10 @@ void describe("install commands", { concurrency: true }, () => {
   void test("needs-prepare install reinspects after prepare and rejects drift (:377-392)", async () => {
     const c = installCase({
       config: { updateControl: "managed-then-unsupported" },
+      adapterSeam: "intercept",
+      // Both halves of the interception: the drifting VALUE and the count file
+      // asserted at :388, which only the interceptor writes.
+      seamDependency: { reason: "intercept", script: "install" },
     });
     // :381 — malformed generated provenance forces the needs-prepare path.
     writeFileSync(
@@ -614,7 +661,13 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("needs-install path inspects ownership then update control, then installs (:394-404)", async () => {
-    const c = installCase();
+    // Intercept-dependent on the COUNT alone: the config is the default, but
+    // :399 reads update-control-count, which nothing writes except the
+    // interceptor at install-fakes.js:180-192.
+    const c = installCase({
+      adapterSeam: "intercept",
+      seamDependency: { reason: "intercept", script: "install" },
+    });
     await prepareGeneratedTree(c);
     const result = await runScript(c, "install");
     // :398 — captured stdout only, and `set -e` made a non-zero exit fatal.
@@ -642,6 +695,8 @@ void describe("install commands", { concurrency: true }, () => {
   void test("the fresh gate, not the initial probe, controls mutation authority (:406-416)", async () => {
     const c = installCase({
       config: { updateControl: "managed-then-unsupported" },
+      adapterSeam: "intercept",
+      seamDependency: { reason: "intercept", script: "install" },
     });
     await prepareGeneratedTree(c);
     const result = await runScript(c, "install");
@@ -667,12 +722,16 @@ void describe("install commands", { concurrency: true }, () => {
     const c = installCase({
       plugins: LEGACY_ONLY_PLUGINS,
       marketplaces: LEGACY_MARKETPLACE,
+      seamDependency: { reason: "log", script: "install" },
     });
     await assertLegacyIdentityStops(c);
   });
 
   void test("mixed identity state stops before prepare or adapter mutation (:425-451, both)", async () => {
-    const c = installCase({ marketplaces: LEGACY_MARKETPLACE });
+    const c = installCase({
+      marketplaces: LEGACY_MARKETPLACE,
+      seamDependency: { reason: "log", script: "install" },
+    });
     // :432-434 — seed_installed_current writes its own plugin list, which the
     // driver then overwrote with the mixed one. Order preserved.
     seedInstalledCurrent(c);
@@ -807,12 +866,11 @@ void describe("install commands", { concurrency: true }, () => {
     // this case exists to cover. Without the tree the package root probes as
     // "needs prepare" and the subject re-runs prepare, which this catches.
     assertNoPrepareRan(result.stdout);
-    // :523
-    const adapter = readLog(c.adapterLog);
-    assert.ok(
-      has(adapter, `install --package-root ${c.pkg}`),
-      `current install must still reconcile via adapter install:\n${adapter.join("\n")}`,
-    );
+    // :523, re-anchored onto codex.log. The shell grepped the adapter log for
+    // `install --package-root $pkg`; that operation's whole Codex footprint is
+    // the three commands below (src/adapter.ts:575-656), and the third of them
+    // carries the package root the original needle pinned. Nothing else in this
+    // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
     assertOrder(
       readLog(c.codexLog),
@@ -839,12 +897,9 @@ void describe("install commands", { concurrency: true }, () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // Precondition: the "current" branch, as in the case above.
     assertNoPrepareRan(result.stdout);
-    // :542
-    const adapter = readLog(c.adapterLog);
-    assert.ok(
-      has(adapter, `install --package-root ${c.pkg}`),
-      adapter.join("\n"),
-    );
+    // :542, re-anchored onto codex.log for the same reason as the case above:
+    // `plugin marketplace add ${c.pkg}` in the ordering below is the adapter
+    // install operation's own Codex footprint, package root included.
     // :543-551
     assertOrder(
       readLog(c.codexLog),
@@ -942,12 +997,13 @@ void describe("install commands", { concurrency: true }, () => {
     // tree or cache seed turns this RED rather than silently rerouting the
     // case through needs-prepare.
     assert.ok(result.stdout.includes("manager is current"), result.stdout);
-    // :595-599
-    const adapter = nonEmpty(readLog(c.adapterLog), "adapter");
-    assert.ok(
-      !has(adapter, "install --package-root"),
-      `update must not invoke adapter install when probe reports current:\n${adapter.join("\n")}`,
-    );
+    // :595-599, re-anchored onto codex.log. `install --package-root` absent
+    // from the adapter log and "no Codex mutation" are the same claim here:
+    // the adapter install operation unconditionally reaches
+    // `codex plugin add superpowers@superpowers-manager` (src/adapter.ts:650),
+    // which CODEX_MUTATION matches, so :600-602 below already excludes it —
+    // and it carries its own emptiness guard, which is what `nonEmpty` gave
+    // the adapter-log form.
     // :600-602. The shell guarded this with `[ ! -s "$log" ] ||`, tolerating an
     // empty Codex log. That escape hatch is deliberately not ported: probe
     // always reaches `codex plugin list`, so an empty log is a fixture fault,
@@ -956,7 +1012,12 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("update rejects mixed legacy state even when the fingerprint is current (:604-620)", async () => {
-    const c = installCase({ marketplaces: LEGACY_MARKETPLACE }); // :609
+    const c = installCase({
+      marketplaces: LEGACY_MARKETPLACE, // :609
+      // Same shape as assertLegacyIdentityStops, and seam-dependent for the
+      // same reason: the `^build ` half of :615-619 has no Codex footprint.
+      seamDependency: { reason: "log", script: "update" },
+    });
     await prepareGeneratedTree(c);
     seedInstalledCurrent(c); // :607
     // :608 — seed_installed_current writes its own plugin list, which the
@@ -1111,7 +1172,23 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("a failed fingerprint inspection is reported as an inspection failure (:687-700)", async () => {
-    const c = installCase({ config: { fingerprintInspect: "fail" } }); // :693
+    // Re-based off the SPW_ADAPTER seam, and off a needle that did not prove
+    // its claim. The shell fixture made the FAKE adapter print
+    // "fingerprint inspection failed in adapter fixture" and exit 99, so :695's
+    // `out.includes("fingerprint inspection")` matched the fixture's own stderr
+    // line — tests/migration-inventory/install-commands.md:704-714 records this
+    // as item 104: it proves the string appears, not that the subject produced
+    // it.
+    //
+    // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
+    // plugin as installed at 1.0.0 without materialising its cached tree, so
+    // the REAL adapter's fingerprint handler resolves an active version
+    // (src/adapter.ts:790-797), builds the installed root for it (:815-820),
+    // and finds nothing readable there — installedCommitFromRoot returns ""
+    // (src/codex-state.ts:67-84) — and fails with a controlled inspect-failed
+    // envelope. The case therefore needs no interception and is not
+    // seam-dependent.
+    const c = installCase({ config: { pluginAdd: "orphan" } }); // :693
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
@@ -1122,10 +1199,18 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :695
-    assert.ok(out.includes("fingerprint inspection"), out);
-    // :696-700 — two independent greps. :695 proves `out` is non-empty, not
-    // that the subject wrote it (the fake's stderr carries that needle too).
+    // :695, re-anchored onto the SUBJECT's own diagnostic at
+    // scripts/core/lifecycle.sh:92, whole-line so no substring of a longer
+    // adapter or fixture message can satisfy it.
+    assert.ok(
+      hasLine(
+        out,
+        "error: installed manager fingerprint inspection failed after install.",
+      ),
+      out,
+    );
+    // :696-700 — two independent greps, now non-vacuous because the assertion
+    // above proves `out` carries the subject's verification diagnostics.
     assert.ok(
       !out.includes("fingerprint is not detectable"),
       `unverifiable fingerprint state must not be reported as absence:\n${out}`,
@@ -1137,7 +1222,14 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("malformed fingerprint output is rejected by response validation (:702-716)", async () => {
-    const c = installCase({ config: { fingerprintInspect: "malformed" } }); // :708
+    // Stays on `intercept`, and no lower lever is wanted: a bare `{` on stdout
+    // is a PROTOCOL-level fault. The real adapter always emits a well-formed
+    // envelope, so nothing the fake Codex can do reaches this branch.
+    const c = installCase({
+      config: { fingerprintInspect: "malformed" }, // :708
+      adapterSeam: "intercept",
+      seamDependency: { reason: "intercept", script: "install" },
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
@@ -1230,11 +1322,18 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
-    // :758
-    const adapter = readLog(c.adapterLog);
-    assert.ok(
-      has(adapter, `install --package-root ${c.pkg}`),
-      adapter.join("\n"),
+    // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
+    // witnessed by the Codex commands that operation issues
+    // (src/adapter.ts:575-656): the marketplace add carries the same package
+    // root the original needle pinned, and the plugin add is unconditional.
+    // clearLogs above means both lines can only have come from this run.
+    assertOrder(
+      readLog(c.codexLog),
+      [
+        `plugin marketplace add ${c.pkg}`,
+        "plugin add superpowers@superpowers-manager",
+      ],
+      "remediating install must reconcile via adapter install",
     );
     // :759-768
     assertGeneratedCommitIsSha(c);
@@ -1256,11 +1355,14 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :779
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
-    // :780
-    const adapter = readLog(c.adapterLog);
-    assert.ok(
-      has(adapter, `install --package-root ${c.pkg}`),
-      adapter.join("\n"),
+    // :780, re-anchored onto codex.log for the same reason as the case above.
+    assertOrder(
+      readLog(c.codexLog),
+      [
+        `plugin marketplace add ${c.pkg}`,
+        "plugin add superpowers@superpowers-manager",
+      ],
+      "remediating update must reconcile via adapter install",
     );
     // Port-only: the shell ran its provenance check only for the install path
     // (:759-768). Update reaches the same remediation through
