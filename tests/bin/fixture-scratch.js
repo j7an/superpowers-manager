@@ -25,11 +25,28 @@ const handlers = new Map();
  * Names the path only — never the caught error — per AGENTS.md's
  * diagnostics convention: a free-form caught message is not a bounded,
  * validated token.
+ *
+ * Node documents pipe writes as asynchronous on some platforms (notably
+ * macOS); a saturated pipe could drop this write. That applies here at
+ * least as strongly as it does to src/workspace.ts's equivalent write
+ * (:64-67), since this one runs inside a `process.on("exit")` listener as
+ * well as a signal handler.
+ *
+ * The write itself is guarded: both call sites reach this from inside their
+ * own try/catch over `rmSync`, but a throw from the write (e.g. EPIPE, if
+ * the pipe's other end is already gone) must not escape either of
+ * those — or, on the signal path, the remaining trees' cleanup,
+ * deregistration, and the re-raise never run, exactly the hazard
+ * src/workspace.ts's equivalent write guards against at :58-61.
  * @param {string} path
  * @returns {void}
  */
 function reportRemovalFailure(path) {
-  process.stderr.write(`cannot remove scratch ${path}\n`);
+  try {
+    process.stderr.write(`cannot remove scratch ${path}\n`);
+  } catch {
+    // See above: a reporting failure must not block cleanup/re-raise either.
+  }
 }
 
 /**
@@ -72,6 +89,12 @@ export function registerScratch(path) {
   // `exiting` stays true forever, so every later signal would be consumed by
   // cleanupForSignal's own `if (exiting) return;` and never re-raised: the
   // exact "uninterruptible test run" the module header warns against.
+  //
+  // A consequence, and not a bug: a path registered after this point is
+  // neither tracked nor ever removed by this module. That's fine — the
+  // process is already on its way out by signal — but it does mean a
+  // caller that manages to create a scratch tree after teardown has begun
+  // is on its own for cleaning it up.
   if (exiting) return;
   active.add(path);
   if (handlers.size === 0) {
