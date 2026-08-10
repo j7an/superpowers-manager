@@ -41,12 +41,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerScratch } from "./fixture-scratch.js";
-import { writeGitEgressShim } from "../lib/git-egress.js";
-
-/** @param {string} value */
-function shQuoteLocal(value) {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
+import { shQuote, writeGitEgressShim } from "../lib/git-egress.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -327,8 +322,8 @@ export function runDispatch(options) {
         "git-recording",
         [
           "#!/bin/sh",
-          `printf '%s\\n' "$*" >> ${shQuoteLocal(sentinelPath)}`,
-          `exec ${shQuoteLocal(REAL_GIT)} "$@"`,
+          `printf '%s\\n' "$*" >> ${shQuote(sentinelPath)}`,
+          `exec ${shQuote(REAL_GIT)} "$@"`,
           "",
         ].join("\n"),
       );

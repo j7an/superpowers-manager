@@ -32,13 +32,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { registerScratch } from "./fixture-scratch.js";
 
 const BIN = fileURLToPath(new URL(".", import.meta.url));
 
@@ -46,9 +46,11 @@ const BIN = fileURLToPath(new URL(".", import.meta.url));
 // gives: TMPDIR when the runner sets one, the platform default when it does
 // not, and uniqueness from mkdtemp rather than from a fixed name.
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-fakes-"));
-process.on("exit", () => {
-  rmSync(SCRATCH, { recursive: true, force: true });
-});
+// registerScratch, not a bare process.on("exit"): the exit-only form is the
+// carried defect (row :2040) that fixture-scratch.js exists to close, and it
+// leaks this tree on SIGHUP/SIGINT/SIGTERM. This file was added before that
+// module landed and kept the old form for five commits.
+registerScratch(SCRATCH);
 
 // A stand-in for `scripts/adapters/codex/adapter` whose only job is to be
 // noticed. It exits 7 — a status no branch of the shell produces — so the

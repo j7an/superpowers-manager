@@ -23,46 +23,46 @@ returning 121 with zero `test_codex_state_units` hits). This inventory, not the
 ### `spw_require_no_legacy_state` admits the two clean identity states (`:11-14`)
 
 1. `[ -z "$output" ]` for `neither` (`:12-13`). Port:
-   `tests/unit/lifecycle.test.js:25-29`.
+   `tests/unit/lifecycle.test.js:29-33`.
 2. `[ -z "$output" ]` for `manager` (`:12-13`). Port:
-   `tests/unit/lifecycle.test.js:25-29`.
+   `tests/unit/lifecycle.test.js:29-33`.
 
 ### `spw_require_no_legacy_state` rejects `legacy` and `both` (`:16-26`)
 
 3. The `if …; then exit 1; fi` rejection for `legacy` (`:17-20`). Port:
-   `tests/unit/lifecycle.test.js:31-39`.
+   `tests/unit/lifecycle.test.js:35-43`.
 4. The `if …; then exit 1; fi` rejection for `both` (`:17-20`). Port:
-   `tests/unit/lifecycle.test.js:31-39`.
+   `tests/unit/lifecycle.test.js:35-43`.
 5. `grep -Fxq 'Legacy superpowers-wrapper Codex state is installed.'` for
-   `legacy` (`:21-22`). Port: `tests/unit/lifecycle.test.js:31-39`.
+   `legacy` (`:21-22`). Port: `tests/unit/lifecycle.test.js:35-43`.
 6. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `legacy`
-   (`:23-24`). Port: `tests/unit/lifecycle.test.js:31-39`.
+   (`:23-24`). Port: `tests/unit/lifecycle.test.js:35-43`.
 7. `grep -Fxq 'Then run: npx superpowers-manager install'` for `legacy`
-   (`:25-26`). Port: `tests/unit/lifecycle.test.js:31-39`.
+   (`:25-26`). Port: `tests/unit/lifecycle.test.js:35-43`.
 8. `grep -Fxq 'Legacy superpowers-wrapper Codex state is installed.'` for
-   `both` (`:21-22`). Port: `tests/unit/lifecycle.test.js:31-39`.
+   `both` (`:21-22`). Port: `tests/unit/lifecycle.test.js:35-43`.
 9. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `both`
-   (`:23-24`). Port: `tests/unit/lifecycle.test.js:31-39`.
+   (`:23-24`). Port: `tests/unit/lifecycle.test.js:35-43`.
 10. `grep -Fxq 'Then run: npx superpowers-manager install'` for `both`
-    (`:25-26`). Port: `tests/unit/lifecycle.test.js:31-39`.
+    (`:25-26`). Port: `tests/unit/lifecycle.test.js:35-43`.
 
 ### `spw_report_legacy_state` is silent for the two clean identity states (`:29-32`)
 
 11. `[ -z "$output" ]` for `neither` (`:30-31`). Port:
-    `tests/unit/lifecycle.test.js:41-45`.
+    `tests/unit/lifecycle.test.js:45-49`.
 12. `[ -z "$output" ]` for `manager` (`:30-31`). Port:
-    `tests/unit/lifecycle.test.js:41-45`.
+    `tests/unit/lifecycle.test.js:45-49`.
 
 ### `spw_report_legacy_state` reports `legacy` and `both` (`:34-40`)
 
 13. `grep -Fxq 'Legacy superpowers-wrapper Codex state remains installed.'`
-    for `legacy` (`:36-37`). Port: `tests/unit/lifecycle.test.js:47-55`.
+    for `legacy` (`:36-37`). Port: `tests/unit/lifecycle.test.js:51-59`.
 14. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `legacy`
-    (`:38-39`). Port: `tests/unit/lifecycle.test.js:47-55`.
+    (`:38-39`). Port: `tests/unit/lifecycle.test.js:51-59`.
 15. `grep -Fxq 'Legacy superpowers-wrapper Codex state remains installed.'`
-    for `both` (`:36-37`). Port: `tests/unit/lifecycle.test.js:47-55`.
+    for `both` (`:36-37`). Port: `tests/unit/lifecycle.test.js:51-59`.
 16. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `both`
-    (`:38-39`). Port: `tests/unit/lifecycle.test.js:47-55`.
+    (`:38-39`). Port: `tests/unit/lifecycle.test.js:51-59`.
 
 <!-- inventory:mapped:end -->
 
@@ -104,20 +104,20 @@ or "counterpart" claim is quoted inline in that item.
 
 1. **New.** `requireNoLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: garbage" }` for an unrecognised state.
-   Port: `tests/unit/lifecycle.test.js:62-71`. No shell counterpart — the
+   Port: `tests/unit/lifecycle.test.js:66-75`. No shell counterpart — the
    shell driver never called `spw_require_no_legacy_state` with a state
    outside `neither|manager|legacy|both`.
 2. **New.** `reportLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: garbage" }` for an unrecognised state.
-   Port: `tests/unit/lifecycle.test.js:62-71`. No shell counterpart, same
+   Port: `tests/unit/lifecycle.test.js:66-75`. No shell counterpart, same
    rationale as item 1.
 3. **New.** `requireNoLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: " }` for an empty identity state. Port:
-   `tests/unit/lifecycle.test.js:73-82`. No shell counterpart, same
+   `tests/unit/lifecycle.test.js:77-86`. No shell counterpart, same
    rationale as item 1.
 4. **New.** `reportLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: " }` for an empty identity state. Port:
-   `tests/unit/lifecycle.test.js:73-82`. No shell counterpart, same
+   `tests/unit/lifecycle.test.js:77-86`. No shell counterpart, same
    rationale as item 1.
 5. **New.** `requireManagedUpdateControl("managed")` returns `{ ok: true }`.
    Port: `tests/unit/lifecycle.test.js:124-126`. No counterpart in
@@ -171,8 +171,12 @@ or "counterpart" claim is quoted inline in that item.
     failed after install" tests/test_marketplace_reconcile.sh` returns 0.
     Its only `spw_inspect_fingerprint` override (`:304-306`) writes
     malformed content but returns 0 itself, so that driver never forces the
-    inspection *call* to fail — only its *content* to be unparseable, which
-    is a different branch (see item 14).
+    inspection *call* to fail — only its *content* to be unparseable. On the
+    shell that content lands on a **different** branch,
+    `scripts/core/lifecycle.sh:95-97`'s "cannot parse" path, not on the
+    "inspection failed" path this item describes. **In the port the two
+    collapse onto this item's branch**, which is a behavioural divergence
+    rather than a mapping gap — see the divergence note under item 14.
 13. Same case's `stdout` is `[]`. Port:
     `tests/unit/lifecycle.test.js:170-177`. No counterpart in either driver,
     same rationale as item 12.
@@ -180,13 +184,48 @@ or "counterpart" claim is quoted inline in that item.
     inspection failed after install."]`. Port:
     `tests/unit/lifecycle.test.js:170-177`. No counterpart in either driver,
     same rationale as item 12.
-    `tests/test_marketplace_reconcile.sh:307-316` tests the *sibling* branch
-    — an unparseable fingerprint value (`raw` present but non-string,
-    non-null) — and asserts on the word "parse" (`:312`) instead; that
-    sibling branch has no port among these 14 tests either (none of them
-    passes a non-string, non-null `fingerprint`), so neither driver's
+
+    **Divergence — a live shell assertion with no satisfying port.**
+    *Rewritten 2026-08-10 at the whole-branch review; the previous text was
+    wrong in both halves and is quoted here so the error is not re-derived:
+    it said `:307-316` tests "an unparseable fingerprint value (`raw` present
+    but non-string, non-null)" and concluded that "neither driver's
     malformed-inspection case lines up with this item or with any other item
-    in this list.
+    in this list." Both claims are false, and item 12 fourteen lines above
+    described the same lines correctly, so the inventory contradicted itself.*
+
+    What `tests/test_marketplace_reconcile.sh:304-316` actually exercises:
+    `:304-306` overrides `spw_inspect_fingerprint` with
+    `printf '%s\n' '{' > "$1"`, which writes malformed JSON for the **whole
+    result file** — not a non-string value in the `fingerprint` field. That
+    `printf` **succeeds**, so `scripts/core/lifecycle.sh:91` does not take the
+    "inspection failed" branch. Control reaches `:95`, where
+    `spw_adapter_result_get` → `spw_json_get` fails at `json.load`
+    (`scripts/core/provenance.sh:39-43` exits with `invalid JSON in <path>`),
+    the command substitution's subshell dies non-zero, and `:96` emits
+    **`error: cannot parse installed manager fingerprint inspection result
+    after install.`** `:312`'s `grep -Fq "parse"` is a **live assertion** on
+    that output, with `:313-314` forbidding both "fingerprint is not
+    detectable" and "manager updated".
+
+    In the port that same malformed content arrives as an `AdapterResult`
+    that `resultObject` rejects (`src/lifecycle.ts:101-112` returns `null` for
+    a non-zero status, a non-`ok` envelope, or a non-object `result`), so
+    `:129-137` returns `"error: installed manager fingerprint inspection
+    failed after install."` — **which does not contain the word "parse"**, and
+    is this item's own text. The port's "cannot parse" branch (`:142-150`)
+    fires only on a `raw` that is present, non-null and non-string — a trigger
+    **the shell cannot produce**, because `spw_json_get` prints any non-null
+    scalar (`provenance.sh:62`), so a numeric `fingerprint` would be
+    stringified and compared rather than diagnosed.
+
+    So the two sides genuinely disagree, in both directions at once: a
+    currently-asserted shell assertion (`:312`) has **no satisfying port**,
+    and the port's "cannot parse" branch is **new behaviour with no shell
+    origin**. **The code fix is deferred, the record is not.** Slice 4c's
+    `marketplace-reconcile.md` reconciles that driver against this text and
+    must treat `:312` as an open divergence to disposition — not as a mapped
+    assertion and not as a gap this inventory already settled.
 15. `verifyInstalledFingerprint` returns `ok: false` on a stale/mismatched
     commit. Port: `tests/unit/lifecycle.test.js:179-191`. No counterpart in
     `tests/test_codex_state_units.sh`. Counterpart in

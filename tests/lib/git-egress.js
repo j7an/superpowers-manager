@@ -31,8 +31,15 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** @param {string} value */
-function shQuote(value) {
+/**
+ * POSIX single-quote quoting for a value interpolated into generated `sh`.
+ * Exported because `dispatch-fixture.js` builds a recording stub in front of
+ * this shim and needs the identical rule; it carried a byte-identical private
+ * copy named `shQuoteLocal` until 2026-08-10.
+ * @param {string} value
+ * @returns {string}
+ */
+export function shQuote(value) {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
