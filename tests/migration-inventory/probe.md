@@ -527,10 +527,22 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    where every response-then-exit site uses `process.exitCode` plus a normal
    return so a pending pipe write cannot be truncated. PR 11.5 slice 4a
    converted the two fakes' remaining *mutation* branches the same way: all
-   33 sites across both files now use `process.exitCode` plus an explicit
+   **31** sites — nineteen in `install-fakes.js`, twelve in
+   `uninstall-fakes.js` — now use `process.exitCode` plus an explicit
    `return` wherever control previously terminated there and code follows.
-   Both files cite this inventory at their `:8-9`, which is why the entry is
-   recorded here rather than in an install- or uninstall-scoped file.
+   An earlier revision of this entry said "33 sites across both files" and
+   was wrong twice. **33** was a raw `grep -c 'process\.exit('` figure that
+   also counted the header comment on line 9 of each file, which names
+   `process.exit()` in prose rather than calling it; the true call-site count
+   is 31. **"Across both files"** stopped being true when slice 4a's later
+   shared-shell extraction moved each fake's `90`/`95`/`96`/`97`/`98`
+   branches — five of the 31 per file, ten in all — into five shared sites in
+   `tests/bin/lifecycle-fakes.js`, alongside the shared `94` adapter tripwire
+   that was already `process.exitCode` before the conversion. Twenty-one of
+   the 31 stayed put: fourteen in `install-fakes.js`, seven in
+   `uninstall-fakes.js`. `install-fakes.js` and `uninstall-fakes.js` both
+   cite this inventory at their `:8-9`, which is why the entry is recorded
+   here rather than in an install- or uninstall-scoped file.
 
    `tests/unit/helpers/pipe-flush-child.js` proves the idiom is load-bearing
    on a pipe, not cosmetic: a 1 MiB write followed by `process.exit(0)`
@@ -548,10 +560,11 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    regression guard in `tests/bin/lifecycle-fixture.test.js`) pass with the
    slice 4a conversion reverted back to `process.exit()`, because neither
    spawns install-fakes.js/uninstall-fakes.js with a payload sized to exceed
-   the pipe buffer through one of the 33 converted branches specifically.
+   the pipe buffer through one of the 31 converted branches specifically.
    Nothing in this inventory's ports guards against a future regression to
-   `process.exit()` at any of those 33 sites; fall-through correctness at
-   each one rests on the site-by-site audit slice 4a did, not on coverage.
+   `process.exit()` at any of those 31 sites — in either mutating fake or in
+   the shared shell they now delegate to; fall-through correctness at each
+   one rests on the site-by-site audit slice 4a did, not on coverage.
    This gap is accepted rather than closed with a new test because these are
    test fakes, not product code: the failure mode is truncated stdout in the
    test harness (a fixture bug that would surface as a flaky or wrong-looking
