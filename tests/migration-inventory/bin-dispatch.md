@@ -745,17 +745,34 @@ preamble, for what it asserts:
     symlink to a real, unfiltered `git`. `runDispatch({ pinUpstream: true,
     gitSentinel: true, ... })` against a network `SUPERPOWERS_UPSTREAM_URL`
     refuses before git runs: `result.stderr` matches the shim's refusal text
-    and the returned `gitSentinel` file — a recording stub the shim wraps
-    instead of the real binary — stays empty (`tests/bin/bin-dispatch.test.js:538`).
-    A second case with no URL override (the fixture's local-path default)
-    proves the sentinel is non-vacuous: it records a real `git ls-remote`
-    invocation, so the first case's empty sentinel means "refused", not
-    "never wired". Port-only: no shell counterpart, since the shell driver
-    never had a `pinUpstream` mode. Reverting the fixture to the old symlink
-    does not fail this case through the sentinel as originally expected —
-    with the recording stub off `PATH`, `git` still runs, but against a
-    real network target it fails with git's own DNS error rather than the
-    shim's refusal text, so the `stderr` match is what goes red.
+    (`tests/bin/bin-dispatch.test.js:554`). Port-only: no shell counterpart,
+    since the shell driver never had a `pinUpstream` mode. Reverting the
+    fixture to the old symlink does not fail this case through item 54's
+    sentinel-emptiness check as might be expected — with the recording stub
+    off `PATH`, `git` still runs, but against a real network target it fails
+    with git's own DNS error rather than the shim's refusal text, so it is
+    this item's `stderr` match that goes red under that mutation.
+53. **New** (PR 11.5 slice 4a Task 7). Same case: the returned `gitSentinel`
+    path — a recording stub the shim wraps instead of the real binary — was
+    created (`:564`). Port-only, same rationale as item 52. Guards item 54
+    against reading a missing sentinel file as vacuously "empty".
+54. **New** (PR 11.5 slice 4a Task 7). Same case: the sentinel file is empty
+    (`:565-569`). Port-only, same rationale as item 52. The load-bearing
+    check: an empty sentinel proves the refusal happened BEFORE anything
+    reached git, not merely that the command failed — a non-zero status
+    alone proves nothing, since a failing git produces one too.
+55. **New** (PR 11.5 slice 4a Task 7). The positive control: the same
+    fixture with no URL override (the fixture's local-path `PIN_UPSTREAM`
+    default) succeeds, `result.status === 0` (`:580`). Port-only, same
+    no-shell-counterpart rationale as item 52. Without this case, item 54's
+    empty sentinel would be equally satisfied by a shim that refuses
+    everything, which would break every real `pin` case while item 54 stayed
+    green.
+56. **New** (PR 11.5 slice 4a Task 7). Same case: the sentinel now records a
+    real `git ls-remote` invocation against the local upstream (`:581-585`).
+    Port-only, same rationale as item 55. Proves the sentinel mechanism is
+    non-vacuous, so item 54's empty sentinel means "refused", not "never
+    wired".
 
 <!-- inventory:port-only:end -->
 
@@ -764,7 +781,7 @@ preamble, for what it asserts:
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 52,
+  "portOnly": 56,
   "ports": { "tests/bin/bin-dispatch.test.js": 37 }
 }
 ```
@@ -783,9 +800,11 @@ preamble, for what it asserts:
   smaller than before PR 11.5 flipped `pin`, `track-latest`, `unpin`, `probe`,
   and `prepare` to in-process and removed all five from every table they used
   to occupy; `NO_CODEX_CASES` is gone entirely, emptied by the same flips —
-  expanding to 39 runtime cases; PR 11.5 slice 4a Task 7 added the 37th as
-  port-only item 52, a matrix row 13 regression case with no shell-original
-  counterpart), carrying **41** of the 53 shell assertions
+  expanding to 39 runtime cases; PR 11.5 slice 4a Task 7 added the 37th, a
+  matrix row 13 regression case with no shell-original counterpart, whose
+  five assert calls are port-only items 52-56 — one entry per assertion, not
+  one per case, matching items 32-34's and 41-42's precedent below), carrying
+  **41** of the 53 shell assertions
   mapped (two recorded merges:
   item 15 into the port's `status === 2` check, and items 30-31 into the
   port's two-line `assert.deepEqual`), plus **12 retired items** (7, 8, 9, 10,
@@ -802,8 +821,8 @@ preamble, for what it asserts:
   dispatch log any more, so each specific condition can no longer occur in
   either direction, and no JS assertion enforces any of them any more; see
   each item's retirement note for the analogous in-process property and where
-  it is now tested). 41 mapped + 12 retired = 53. Plus 52 port-only
-  assertions (46 additive `result.status === 0` / `result.log` / stderr checks
+  it is now tested). 41 mapped + 12 retired = 53. Plus 56 port-only
+  assertions (50 additive `result.status === 0` / `result.log` / stderr checks
   the shell left implicit under `set -e` or that have no shell counterpart at
   all, plus one structural array-length guard, plus 2 assertions covering
   the in-process runtime backstop with no shell counterpart of any kind — see
@@ -819,6 +838,6 @@ preamble, for what it asserts:
   sense in which "drop" is pejorative here: it names an unrecorded
   disappearance, not the port-only `Dropped` category, whose two entries
   (items 3 and 20) are recorded exactly as carefully and are not shell items at
-  all. 41 + 12 = 53. The 52 port-only
+  all. 41 + 12 = 53. The 56 port-only
   entries are strictly additive test coverage — not a reconciliation of
   any shell assertion — and are excluded from the 41/53 arithmetic above.

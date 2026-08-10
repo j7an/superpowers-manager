@@ -533,7 +533,7 @@ void test("`pin` succeeds in-process with codex absent from PATH", () => {
   assert.deepEqual(result.log, []);
 });
 
-// --- matrix row 13: the pin fixture's git sits behind one egress refusal ---
+// --- inventory items 52-56: matrix row 13's git-egress refusal ------------
 
 void test("the pin dispatch fixture refuses a network git remote before git runs", () => {
   // Matrix row 13. Asserted through runDispatch, not against a standalone
@@ -551,15 +551,16 @@ void test("the pin dispatch fixture refuses a network git remote before git runs
     args: ["pin", "v1.0.0"],
     env: { SUPERPOWERS_UPSTREAM_URL: "https://example.invalid/upstream" },
   });
-  // Reverting the fixture's adoption (a symlink to REAL_GIT instead of the
-  // shim) does not turn this sentinel non-empty: the recording stub is off
-  // PATH entirely in that case, so git still runs but against a real network
-  // target, which fails with git's own DNS error rather than the shim's
-  // refusal text. It is the stderr match above that goes red under that
-  // mutation, not this emptiness check — see the mutation proof in the task
-  // report. This check still matters: it is what distinguishes "the shim
-  // refused before git ran" from "something else made git fail first".
   assert.match(refused.stderr, /sandbox refuses network git remote/);
+  // Reverting the fixture's adoption (a symlink to REAL_GIT instead of the
+  // shim) does not turn the sentinel below non-empty: the recording stub is
+  // off PATH entirely in that case, so git still runs but against a real
+  // network target, which fails with git's own DNS error rather than the
+  // shim's refusal text. It is the stderr match above that goes red under
+  // that mutation, not the emptiness check below — see the mutation proof
+  // in the task report. That check still matters: it is what distinguishes
+  // "the shim refused before git ran" from "something else made git fail
+  // first".
   assert.ok(existsSync(refused.gitSentinel), "the sentinel was never created");
   assert.equal(
     readFileSync(refused.gitSentinel, "utf8").trim().length > 0,
