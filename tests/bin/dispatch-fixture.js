@@ -40,6 +40,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { registerScratch } from "./fixture-scratch.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -47,9 +48,7 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // node-tooling.test.js): os.tmpdir() honors TMPDIR when set, and
 // mkdtempSync supplies the uniqueness that makes this hermetic.
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-dispatch-"));
-process.on("exit", () => {
-  rmSync(SCRATCH, { recursive: true, force: true });
-});
+registerScratch(SCRATCH);
 
 // Resolves a real, functioning host tool by name, searching this process's
 // own (ambient, unrestricted) PATH — never a case's fakeBin, which only ever

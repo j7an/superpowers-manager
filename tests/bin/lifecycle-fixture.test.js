@@ -35,7 +35,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -302,4 +302,37 @@ void test("the fake codex delivers an oversized plugin listing intact", async ()
     maxBuffer: 8 << 20,
   });
   assert.equal(JSON.parse(result.stdout).filler.length, filler.length);
+});
+
+void test("a scratch tree is removed and the signal is re-raised on SIGTERM", async () => {
+  // A CHILD-PROCESS signal test, per D4: an assertion about the code would not
+  // show that the process dies BY the signal. The child prints its scratch
+  // path, then waits; the parent signals it and checks both halves.
+  const child = fileURLToPath(
+    new URL("./helpers/scratch-signal-child.js", import.meta.url),
+  );
+  const proc = spawn(process.execPath, [child], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  const scratch = await new Promise((resolvePath) => {
+    let buffer = "";
+    proc.stdout.setEncoding("utf8");
+    proc.stdout.on("data", (chunk) => {
+      buffer += chunk;
+      const newline = buffer.indexOf("\n");
+      if (newline !== -1) resolvePath(buffer.slice(0, newline));
+    });
+  });
+  assert.equal(existsSync(scratch), true, "child did not create its scratch");
+
+  const ended = new Promise((resolveEnd) => {
+    proc.on("close", (code, signal) => resolveEnd({ code, signal }));
+  });
+  proc.kill("SIGTERM");
+  const outcome = await ended;
+
+  // Asserting the SIGNAL, not 143. `128+N` is a shell convention, not a POSIX
+  // guarantee, and asserting the signal is both stronger and immune to it.
+  assert.equal(outcome.signal, "SIGTERM");
+  assert.equal(existsSync(scratch), false, "scratch survived the signal");
 });
