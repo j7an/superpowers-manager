@@ -785,9 +785,6 @@ preamble, for what it asserts:
     (`src/commands/pin.ts:50`) only `ls-remote` can land, from
     `resolveExactTag`'s single git call (`src/upstream.ts:209`), and `tag`
     matches merely as a substring of that call's `--tags`/`refs/tags/` argv.
-    A raw-commit request would instead run `verifyRawCommit`'s
-    `init`/`fetch`/`cat-file` (`src/upstream.ts:260-279`), matching none of
-    the alternatives.
 
 <!-- inventory:port-only:end -->
 
