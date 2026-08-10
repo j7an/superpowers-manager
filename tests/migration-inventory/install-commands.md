@@ -319,6 +319,12 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 79. Stdout contains `manager is current` (`:594`). Port: `:1054`.
 80. The adapter log holds no `install --package-root` (`:595-599`). Port:
     `:947`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored scenario 3b onto `codex.log`: the adapter-log negative and
+    its `nonEmpty` guard were both deleted, subsumed into the
+    `assertNoCodexMutation` call item 81 cites. `:947` is assertion-shaped
+    at HEAD but is an unrelated `assertOrder`, so it reads as valid and is
+    not. Re-deriving the claim is a re-disposition, not a pointer fix.
 81. No Codex mutation (`:600-602`). Port: `:1066`. **Divergence:** the shell
     wrapped the helper in `[ ! -s "$log" ] ||`, so an empty Codex log
     satisfied the scenario. The port drops that escape hatch —
@@ -541,54 +547,57 @@ Item 41 extends the shell's install-path provenance check to the update path.
 
 <!-- inventory:port-only:start -->
 
-1. `assertLegacyIdentityStops` adapter-log non-vacuity guard (`:383`) at the
-   `legacy` call site (`:671`).
-2. The same guard at the `both` call site (`:680`).
-3. `assertNoCodexMutation` emptiness guard (`:169`), reached through the
-   helper at `:445`, at the `legacy` call site (`:671`).
-4. The same guard at the `both` call site (`:680`).
+1. `assertLegacyIdentityStops` adapter-log non-vacuity guard (`:435`) at the
+   `legacy` call site (`:762`).
+2. The same guard at the `both` call site (`:774`).
+3. `assertNoCodexMutation` emptiness guard (`:179`), reached through the
+   helper at `:445`, at the `legacy` call site (`:762`).
+4. The same guard at the `both` call site (`:774`).
 5. `scripts/` held at least one file, so the source scan proved something
-   (`:437`).
-6. Prepare exits 0 (`:478`; shell `:325` left it implicit).
+   (`:489`).
+6. Prepare exits 0 (`:538`; shell `:325` left it implicit).
 7. The adapter log holds `build --upstream-root`, hoisting items 13-14 above
-   an empty log (`:483`).
-8. `assertNoPrepareRan` at the unsupported-update-fast-path case (`:519`).
-9. `assertNoCodexMutation` emptiness guard at `:533`.
-10. `assertNoPrepareRan` at the unsupported-direct-install case (`:546`).
-11. `assertNoCodexMutation` emptiness guard at `:548`.
-12. `assertNoCodexMutation` emptiness guard at `:562`.
-13. `assertNoCodexMutation` emptiness guard at `:575`.
-14. The build line exists at all (`:607`); the shell's `[ "$build_line" -lt
+   an empty log (`:543`).
+8. `assertNoPrepareRan` at the unsupported-update-fast-path case (`:585`).
+9. `assertNoCodexMutation` emptiness guard at `:599`.
+10. `assertNoPrepareRan` at the unsupported-direct-install case (`:616`).
+11. `assertNoCodexMutation` emptiness guard at `:618`.
+12. `assertNoCodexMutation` emptiness guard at `:636`.
+13. `assertNoCodexMutation` emptiness guard at `:653`.
+14. The build line exists at all (`:689`); the shell's `[ "$build_line" -lt
     … ]` would have errored on an empty extraction rather than said so.
-15. `assertNoCodexMutation` emptiness guard at `:613`.
-16. Install exits 0 on the needs-install path (`:621`; shell `:398`).
-17. `assertNoPrepareRan` at the needs-install case (`:623`).
-18. The adapter install line exists at all (`:631`).
-19. `assertNoPrepareRan` at the fresh-gate case (`:658`).
-20. `assertNoCodexMutation` emptiness guard at `:662`.
-21. `assertNoCodexMutation` emptiness guard at `:708`.
-22. `assertNoCodexMutation` emptiness guard at `:730`.
-23. Install exits 0 in scenario 1 (`:758`; shell `:495`).
-24. Install exits 0 in scenario 1b (`:803`; shell `:522`).
-25. `assertNoPrepareRan` at scenario 1b (`:809`).
-26. Install exits 0 in scenario 1c (`:839`; shell `:541`).
-27. `assertNoPrepareRan` at scenario 1c (`:841`).
-28. Install exits 0 in scenario 2 (`:873`; shell `:560`).
-29. Install exits 0 in scenario 3 (`:909`; shell `:574`).
-30. Update exits 0 in scenario 3b (`:939`; shell `:593`).
+15. `assertNoCodexMutation` emptiness guard at `:695`.
+16. Install exits 0 on the needs-install path (`:709`; shell `:398`).
+17. `assertNoPrepareRan` at the needs-install case (`:711`).
+18. The adapter install line exists at all (`:719`).
+19. `assertNoPrepareRan` at the fresh-gate case (`:748`).
+20. `assertNoCodexMutation` emptiness guard at `:752`.
+21. `assertNoCodexMutation` emptiness guard at `:802`.
+22. `assertNoCodexMutation` emptiness guard at `:824`.
+23. Install exits 0 in scenario 1 (`:852`; shell `:495`).
+24. Install exits 0 in scenario 1b (`:901`; shell `:522`).
+25. `assertNoPrepareRan` at scenario 1b (`:907`).
+26. Install exits 0 in scenario 1c (`:940`; shell `:541`).
+27. `assertNoPrepareRan` at scenario 1c (`:942`).
+28. Install exits 0 in scenario 2 (`:975`; shell `:560`).
+29. Install exits 0 in scenario 3 (`:1015`; shell `:574`).
+30. Update exits 0 in scenario 3b (`:1049`; shell `:593`).
 31. `nonEmpty` adapter-log guard in scenario 3b (`:946`), hoisting item 80.
-32. `assertNoCodexMutation` emptiness guard at `:955`.
-33. Adapter ownership non-vacuity guard in scenario 3c (`:982`), hoisting
+    **Stale, deliberately not remapped.** The `nonEmpty` adapter-log guard
+    no longer exists: slice 3.5's re-anchoring of scenario 3b deleted it
+    along with the negative it hoisted above an empty log.
+32. `assertNoCodexMutation` emptiness guard at `:1066`.
+33. Adapter ownership non-vacuity guard in scenario 3c (`:1098`), hoisting
     item 84.
-34. `assertNoCodexMutation` emptiness guard at `:992`.
-35. `nonEmpty` Codex-log guard in scenario 4 (`:1016`), hoisting item 89.
-36. `nonEmpty` Codex-log guard in scenario 5 (`:1038`), hoisting item 91.
-37. Install exits 0 in scenario 9 (`:1174`; shell `:724`).
-38. `assertNoCodexMutation` emptiness guard at `:1209`.
-39. Install exits 0 in scenario 11 (`:1227`; shell `:755`).
-40. Update exits 0 in scenario 12 (`:1254`; shell `:777`).
+34. `assertNoCodexMutation` emptiness guard at `:1108`.
+35. `nonEmpty` Codex-log guard in scenario 4 (`:1137`), hoisting item 89.
+36. `nonEmpty` Codex-log guard in scenario 5 (`:1163`), hoisting item 91.
+37. Install exits 0 in scenario 9 (`:1354`; shell `:724`).
+38. `assertNoCodexMutation` emptiness guard at `:1393`.
+39. Install exits 0 in scenario 11 (`:1415`; shell `:755`).
+40. Update exits 0 in scenario 12 (`:1453`; shell `:777`).
 41. The regenerated provenance carries a 40-hex `commit` after the **update**
-    remediation path (`:1268`). The shell ran this check only for install
+    remediation path (`:1470`). The shell ran this check only for install
     (`:759-768`); update reaches the same remediation through
     `scripts/update:22-25`, so the same claim is asserted there.
 
@@ -665,7 +674,7 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 | 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:550`), 43 (`:439` via `:762`), 49 (`:439` via `:774`), 80 (`:947`), 84 (`:1102`) |
 | 3 | `install-fakes.js` `runAdapter`: `if (joined.startsWith("build ")) log("adapter.log", "inspect --view update-control")` | item 13 (`:545`), and only that |
 | 4 | `install-fakes.js` `runAdapter`: extra `log("codex.log", "plugin list --json")` on every adapter call | item 15 (`:557`), and only that |
-| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:435` via `:762`), 2 (`:435` via `:774`), 7 (`:543`), 14 (`:689`), 18 (`:719`), 31 (`:357` via `:946`), 33 (`:1098`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) |
+| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:435` via `:762`), 2 (`:435` via `:774`), 7 (`:543`), 14 (`:689`), 18 (`:719`), 31 (`:357` via `:946`), 33 (`:1098`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) — **all four stale, see their entries** |
 | 6 | `install-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only 3, 4, 9, 11, 12, 13, 15, 20, 21, 22, 32, 34, 38 — all 13 `assertNoCodexMutation` emptiness guards, at `:445` (×2), `:599`, `:618`, `:636`, `:653`, `:695`, `:752`, `:802`, `:824`, `:1066`, `:1108`, `:1393` — plus port-only 35 (`:1137`), 36 (`:1163`), item 73 (`:979`), and all five `assertOrder` sites (`:861`, `:914`, `:947`, `:1018`, `:1357`) on "needle never appears" |
 | 7 | `install-fakes.js` `runAdapter`: the observable `update-control-count` frozen at `1` while the real count moves to a shadow file, so the `managed-then-unsupported` flip is unchanged and only the counter stops advancing | items 30 (`:680`), 33 (`:713`), 37 (`:750`) |
 | 8 | `install-fakes.js` `runAdapter`: the codex-home existence condition dropped from the fingerprint intercept | item 109 (`:1330`) in c28 only — see Divergences |
@@ -676,7 +685,7 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 | 13a | `install-fakes.js` `runAdapter`: writes `spw-sidecar-leak` into `$TMPDIR` | **none — 32/32 GREEN.** See Divergences |
 | 13b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 61 (`:339` via `:873`), 94 (`:339` via `:1191`) — both `assertTmpEmpty` ports |
 | 14 | `install-commands.test.js`: `prepareGeneratedTree` (`:224`) short-circuited to a no-op, so the generated-tree precondition is lost at all of its call sites | port-only 8 (`:585`), 10 (`:616`), 17 (`:711`), 19 (`:748`), 25 (`:907`), 27 (`:942`) — all six `assertNoPrepareRan` guards — plus item 79 (`:1054`). The injection added one line, so the runner reported each of these one higher; the numbers here are against the restored file |
-| 15 | `lifecycle-fixture.js` `buildSnapshot` (`:42-61`): `scripts/adapters/codex/validate-generated-plugin.py` planted in the snapshot every per-case package root is copied from (`:198`) | item 12 (`:519`), and only that |
+| 15 | `lifecycle-fixture.js` `buildSnapshot` (`:46-65`): `scripts/adapters/codex/validate-generated-plugin.py` planted in the snapshot every per-case package root is copied from (`:225`) | item 12 (`:519`), and only that |
 | O1 | first adjacent needle pair swapped at each of the five `assertOrder` sites, plus `buildLine < secondControlLine` → `>` and `lastOwnership < lastControl` → `>` | items 31 (`:690`), 34 (`:720`), 58 (`:861`), 66 (`:914`), 69 (`:947`), 75 (`:1018`), 112 (`:1357`) |
 | O2 | second adjacent pair swapped at the same five sites, plus `lastControl < installLine` → `>` | items 35 (`:724`), 59 (`:861`), 67 (`:914`), 70 (`:947`), 76 (`:1018`), 113 (`:1357`) |
 | O3 | third adjacent pair swapped at the four-needle site | item 114 (`:1357`) |
@@ -754,7 +763,7 @@ error: invalid adapter response: Expecting value: line 1 column 1 (char 0)
 
 The only text carrying item 104's needle is the **fixture's own stderr line**,
 not the subject's diagnostic. `grep -rn 'fingerprint inspection' scripts/ src/`
-returns exactly two sites, `scripts/core/lifecycle.sh:92` and `:106`, both
+returns exactly two sites, `scripts/core/lifecycle.sh:92` and `:96`, both
 inside `spw_verify_installed_fingerprint` — so in the baseline the needle has
 two possible sources and item 104 cannot tell them apart. **Item 104 was
 therefore narrower than it read**: it proved the string appeared, not that the
@@ -786,7 +795,8 @@ produced no RED at any of the three sites, which is the observed confirmation.
 **Row 5 — the hoisted non-vacuity guards shadowed the negatives they protect,
 which is them working.** Items 13 and 14 (prepare's adapter-log negatives)
 stayed GREEN because port-only 7 (`:543`) fires six lines earlier; items 80 and
-84 stayed GREEN behind port-only 31 (`:946`) and 33 (`:1098`). Each of those
+84 stayed GREEN behind port-only 31 (`:946`, stale — see its entry) and 33
+(`:1098`). Each of those
 four negatives is proven independently by rows 2 and 3.
 
 **Row 14 — two findings beyond the six guards it was aimed at.** Item 79
@@ -818,7 +828,7 @@ counting-decision adjudication it generalises.
 **A — items 95 (`:1194`), 99 (`:1224`), 106 (`:1302`) and 111 (`:1336`),
 "output does not contain `manager updated`".** *(1)* Structurally shadowed by
 each case's own exit-status assertion. `scripts/core/lifecycle.sh:102` prints
-the banner and `:113` immediately `return 0`s, and `scripts/install:57-59`
+the banner and `:103` immediately `return 0`s, and `scripts/install:57-59`
 exits 1 only when that function returns non-zero — so when the **subject**
 prints `manager updated`, it is exiting 0. Every config toggle that makes the
 subject print the banner therefore makes `status === 0` too, and each of the
@@ -862,8 +872,8 @@ item 18 is not vacuous — only shadowed.
 **C — items 105 (`:1298`) and 110 (`:1332`), "output does not contain
 `fingerprint is not detectable`".** *(1)* The two states are mutually
 exclusive in the subject. `spw_verify_installed_fingerprint` returns at
-`lifecycle.sh:92` when the inspection fails and at `:106` when its result
-cannot be parsed; the `not detectable` message at `:128` is reachable only
+`lifecycle.sh:92` when the inspection fails and at `:96` when its result
+cannot be parsed; the `not detectable` message at `:118` is reachable only
 after a *successful* inspection that yielded an empty fingerprint. The
 `fingerprintInspect` config surface offers exactly `ok | malformed` since the
 slice-3.5 re-base retired `fail`, and `malformed` lands on the early return at
@@ -880,9 +890,9 @@ adapter reported inspection failure inside an `ok: true` envelope with an
 empty `fingerprint`. Either change satisfies every earlier assertion in c27
 and c28 and is caught only by items 105 and 110.
 
-**D — items 1-6 (`:417`, `:423`, `:431`) and port-only 5 (`:437`), the
+**D — items 1-6 (`:469`, `:475`, `:483`) and port-only 5 (`:489`), the
 source-tree guards.** *(1)* Their subject is the repository's own `scripts/`
-tree, read from `ROOT` at `:403` — **not** a per-case package root. There is no
+tree, read from `ROOT` at `:455` — **not** a per-case package root. There is no
 fixture in the path for these six items: the only mutation that violates any of
 them is an edit to the production tree, which this task is scoped out of. Row
 P1 therefore probed the predicates without touching a tracked file, applying
@@ -891,9 +901,9 @@ copies. Results: each of the four forbidden literals is absent from the real
 file (`true`) and detected in a copy carrying it (`false`); the `app-server`
 line predicate is `true` on the real file, `false` on a copy with a bare
 `codex app-server` line, and `true` again on a copy where that line is
-commented — so the comment exemption at `:432` is live rather than an accident.
+commented — so the comment exemption at `:484` is live rather than an accident.
 Item 1's catch branch was probed separately: `readFileSync` on a mode-`000`
-scratch file does throw, so the `assert.fail` at `:417` is live code and not
+scratch file does throw, so the `assert.fail` at `:469` is live code and not
 dead — no file in `scripts/` is unreadable today, which is why the scan never
 enters it. Port-only 5 (`scanned > 0`) is unreachable while `scripts/` holds
 any file. *(2)* Reachable the moment someone lands the corresponding edit for
@@ -970,7 +980,7 @@ truncation `reset` performed is load-bearing and not decorative.
   `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. No call site
   is data-driven, so the 32 static sites produce 32 runtime cases. The
   `for legacy_state in legacy both` loop at `:426` is expanded into two
-  explicit call sites (`:665`, `:674`) sharing one helper.
+  explicit call sites (`:755`, `:765`) sharing one helper.
 - Reconciliation: all 124 shell items are accounted for and none is dropped,
   but the mapping is **not** 1:1 throughout. 109 items map onto a port
   assertion of their own; the remaining 15 share 7, across seven merges

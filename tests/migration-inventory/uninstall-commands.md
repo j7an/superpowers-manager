@@ -403,39 +403,39 @@ empty log there is a fixture fault, never a legitimate state.
 
 <!-- inventory:port-only:start -->
 
-1. Selection-independent recovery: `result.status === 0` (`:241`).
-2. Legacy-only state: `result.status === 0` (`:320`).
-3. Mixed state: `result.status === 0` (`:354`).
-4. Both present: `result.status === 0` (`:387`).
-5. Plugin absent, marketplace present: `result.status === 0` (`:455`).
-6. Both absent: `result.status === 0` (`:481`).
-7. `assertNoRemoves` non-vacuity guard (`:128`) at the legacy-only call site
-   (`:322`).
-8. `assertNoRemoves` non-vacuity guard at the both-absent call site (`:483`).
+1. Selection-independent recovery: `result.status === 0` (`:326`).
+2. Legacy-only state: `result.status === 0` (`:411`).
+3. Mixed state: `result.status === 0` (`:460`).
+4. Both present: `result.status === 0` (`:502`).
+5. Plugin absent, marketplace present: `result.status === 0` (`:570`).
+6. Both absent: `result.status === 0` (`:598`).
+7. `assertNoRemoves` non-vacuity guard (`:138`) at the legacy-only call site
+   (`:414`).
+8. `assertNoRemoves` non-vacuity guard at the both-absent call site (`:601`).
 9. `assertNoRemoves` non-vacuity guard at the plugin-list-fails call site
-   (`:512`).
+   (`:630`).
 10. `assertNoRemoves` non-vacuity guard at the malformed-plugin-list call site
-    (`:530`).
+    (`:648`).
 11. `assertNoRemoves` non-vacuity guard at the malformed-plugin-entry call
-    site (`:548`).
+    site (`:666`).
 12. `assertNoRemoves` non-vacuity guard at the marketplace-list-fails call
-    site (`:571`).
+    site (`:689`).
 13. `assertNoRemoves` non-vacuity guard at the malformed-marketplace-entry
-    call site (`:589`).
+    call site (`:707`).
 14. `assertNoRemoves` non-vacuity guard at the malformed-marketplace-list call
-    site (`:612`).
-15. `assertNoAdapterUninstall` non-vacuity guard (`:145`) at the
-    plugin-list-fails call site (`:507`).
+    site (`:730`).
+15. `assertNoAdapterUninstall` non-vacuity guard (`:194`) at the
+    plugin-list-fails call site (`:625`).
 16. `assertNoAdapterUninstall` non-vacuity guard at the malformed-plugin-list
-    call site (`:525`).
+    call site (`:643`).
 17. `assertNoAdapterUninstall` non-vacuity guard at the malformed-plugin-entry
-    call site (`:543`).
+    call site (`:661`).
 18. `assertNoAdapterUninstall` non-vacuity guard at the marketplace-list-fails
-    call site (`:566`).
+    call site (`:684`).
 19. `assertNoAdapterUninstall` non-vacuity guard at the
-    malformed-marketplace-entry call site (`:584`).
+    malformed-marketplace-entry call site (`:702`).
 20. `assertNoAdapterUninstall` non-vacuity guard at the
-    malformed-marketplace-list call site (`:607`).
+    malformed-marketplace-list call site (`:725`).
 
 <!-- inventory:port-only:end -->
 
@@ -474,7 +474,7 @@ c18 marketplace-remove-fails.
 
 | Row | Injection (file, exact edit) | Observed RED — item @ port line |
 |---|---|---|
-| 1 | `lifecycle-config.js`: `UNINSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin remove superpowers@spurious` into every Codex call's log | items 14 (`:322`), 40 (`:483`), 47 (`:630`), 50 (`:648`), 53 (`:666`), 57 (`:689`), 60 (`:707`), 64 (`:730`) — all 8 `assertNoRemoves` sites, 8/18 cases |
+| 1 | `lifecycle-config.js`: `UNINSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin remove superpowers@spurious` into every Codex call's log | items 14 (`:414`), 40 (`:601`), 47 (`:630`), 50 (`:648`), 53 (`:666`), 57 (`:689`), 60 (`:707`), 64 (`:730`) — all 8 `assertNoRemoves` sites, 8/18 cases |
 | 2a | `uninstall-fakes.js:124`: the `marketplaceRemove === "fail"` branch's `process.exit(1)` → `process.exit(0)`, stderr kept | item 82 (`:819`), c18 only |
 | 2b | `uninstall-fakes.js:122`: branch condition `"fail"` → `"fail-disabled"`, so the failure path never fires and the remove genuinely succeeds | item 75 (`:802`), c18 only |
 | 3 | `uninstall-fakes.js`: `plugin remove` branch prefixed with `writeJson("plugin_list.json", { installed: [], available: [] }); process.exit(0);` — verify-after always sees the plugin absent | items 69 (`:761`), 70 (`:769`) |
@@ -482,9 +482,9 @@ c18 marketplace-remove-fails.
 | 5 | `uninstall-fakes.js`: both list branches `process.exit(CONFIG.pluginListRc / marketplaceListRc)` → `process.exit(0)` — a failed ownership query no longer aborts | items 44 (`:617`), 55 (`:678`) |
 | 6a | `uninstall-fakes.js` `runAdapter`: write `spw-sidecar-leak` into `$TMPDIR` | **none — 18/18 GREEN.** See Divergences |
 | 6b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 24 (`:508`), 45 (`:623`) — both `assertTmpEmpty` ports |
-| O1 | `uninstall-commands.test.js:422`: `firstInspect < uninstallAt` → `>` | item 29 (`:537`), "ownership inspect must precede adapter uninstall" |
-| O2 | `uninstall-commands.test.js:426`: `uninstallAt < lastInspect` → `>` | item 30 (`:541`), "ownership re-inspect must follow adapter uninstall" |
-| O3 | `uninstall-commands.test.js:433`: the two `assertOrder` needles swapped | item 33 (`:548`), `assertOrder` "out of order" |
+| O1 | `uninstall-commands.test.js:537`: `firstInspect < uninstallAt` → `>` | item 29 (`:537`), "ownership inspect must precede adapter uninstall" |
+| O2 | `uninstall-commands.test.js:541`: `uninstallAt < lastInspect` → `>` | item 30 (`:541`), "ownership re-inspect must follow adapter uninstall" |
+| O3 | `uninstall-commands.test.js:548`: the two `assertOrder` needles swapped | item 33 (`:548`), `assertOrder` "out of order" |
 | D1b | injection 1 with the payload string changed to `plugin remove superpowers@superpowers-wrapper` | item 20 (`:468`) in c6, plus the 8 row-1 sites |
 | D1c | payload `plugin marketplace remove superpowers-wrapper` | item 21 (`:472`) in c6, plus the 8 row-1 sites |
 | D1d | payload `plugin marketplace remove openai-curated` | items 34 (`:557`) in c7 and 83 (`:836`) in c18, plus the 8 row-1 sites |
@@ -492,7 +492,7 @@ c18 marketplace-remove-fails.
 | D2 | `uninstall-fakes.js` `runAdapter`: extra `log("adapter.log", "uninstall --spurious")` on every adapter call | items 46 (`:625`), 49 (`:643`), 52 (`:661`), 56 (`:684`), 59 (`:702`), 63 (`:725`) — all 6 `assertNoAdapterUninstall` sites, and only those |
 | D3 | same, payload `uninstall --plugin-present true --marketplace-present true` | item 28 (`:521`) in c7, plus the 6 D2 sites |
 | D4 | same, payload `inspect --view update-control` | item 5 (`:335`) in c2, and only that |
-| D5 | `uninstall-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only items 7-14, the `assertNoRemoves` emptiness guards, at `:322`, `:483`, `:630`, `:648`, `:666`, `:689`, `:707`, `:730` |
+| D5 | `uninstall-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only items 7-14, the `assertNoRemoves` emptiness guards, at `:414`, `:601`, `:630`, `:648`, `:666`, `:689`, `:707`, `:730` |
 | D6 | `uninstall-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only items 15-20, the `assertNoAdapterUninstall` emptiness guards, at `:625`, `:643`, `:661`, `:684`, `:702`, `:725` |
 | D7 | `uninstall-fakes.js`: `process.stdout.write("not a protocol envelope\n")` before the real adapter delegation | item 12 (`:393`) and 11 other cases; items 13 and 80 shadowed — see adjudication B |
 | D8 | same line written **after** the delegation, so the envelope is intact and only trailing data is added | identical shape (`Extra data: line 2 column 1`); items 13 and 80 still shadowed |
@@ -589,7 +589,7 @@ item 12 still passes. That manufacture is refused for the item-35 reason — it
 would prove only that a fixture can print a string it planted, not that the
 subject emitted a protocol complaint. The same argument covers item 80 in
 c18, where D7 aborts the run at the ownership inspect and item 76
-(`:690`) fires first. *(2)* Independently reachable when the subject can emit
+(`:690`, stale — see its entry) fires first. *(2)* Independently reachable when the subject can emit
 *both* the controlled diagnostic and a protocol complaint in one run — for
 example if `spw_inspect_ownership` grew a second, stricter parse of an already
 reported response, or if the adapter began writing its envelope and a
