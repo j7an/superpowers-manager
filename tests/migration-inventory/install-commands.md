@@ -671,10 +671,10 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 | 1c | payload → `plugin remove superpowers@superpowers-manager` | row 1's 14 sites, plus items 63 (`:880`), 74 (`:993`), 78 (`:1032`), and c29's `assertOrder` (`:1357`) as an injection artifact — see Divergences |
 | 1d | payload → `plugin marketplace add /spurious-root` | row 1's 14 sites, plus item 71 (`:984`) |
 | 1e | payload → `plugin marketplace list openai-curated`, which matches neither `CODEX_MUTATION` nor `PARSE_ABORT_MUTATION` | items 64 (`:884`) and 115 (`:1368`), and nothing else |
-| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:550`), 43 (`:439` via `:762`), 49 (`:439` via `:774`), 80 (`:947`, stale — see its entry), 84 (`:1102`) | — **item 80's entry is historical: slice 3.5 re-anchored scenario 3b onto `codex.log`, so this row records an observation HEAD's assertions cannot produce**
+| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:550`), 43 (`:439` via `:762`), 49 (`:439` via `:774`), 80 (`:947`, stale — see its entry), 84 (`:1102`) — **item 80's entry is historical: slice 3.5 re-anchored scenario 3b onto `codex.log`, so this row records an observation HEAD's assertions cannot produce** |
 | 3 | `install-fakes.js` `runAdapter`: `if (joined.startsWith("build ")) log("adapter.log", "inspect --view update-control")` | item 13 (`:545`), and only that |
 | 4 | `install-fakes.js` `runAdapter`: extra `log("codex.log", "plugin list --json")` on every adapter call | item 15 (`:557`), and only that |
-| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:435` via `:762`), 2 (`:435` via `:774`), 7 (`:543`), 14 (`:689`), 18 (`:719`), 31 (`:357` via `:946`), 33 (`:1098`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) — **all four stale, see their entries** |
+| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:435` via `:762`), 2 (`:435` via `:774`), 7 (`:543`), 14 (`:689`), 18 (`:719`), 31 (`:357` via `:946`, stale — see its entry), 33 (`:1098`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) — **all four stale, see their entries** |
 | 6 | `install-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only 3, 4, 9, 11, 12, 13, 15, 20, 21, 22, 32, 34, 38 — all 13 `assertNoCodexMutation` emptiness guards, at `:445` (×2), `:599`, `:618`, `:636`, `:653`, `:695`, `:752`, `:802`, `:824`, `:1066`, `:1108`, `:1393` — plus port-only 35 (`:1137`), 36 (`:1163`), item 73 (`:979`), and all five `assertOrder` sites (`:861`, `:914`, `:947`, `:1018`, `:1357`) on "needle never appears" |
 | 7 | `install-fakes.js` `runAdapter`: the observable `update-control-count` frozen at `1` while the real count moves to a shadow file, so the `managed-then-unsupported` flip is unchanged and only the counter stops advancing | items 30 (`:680`), 33 (`:713`), 37 (`:750`) |
 | 8 | `install-fakes.js` `runAdapter`: the codex-home existence condition dropped from the fingerprint intercept | item 109 (`:1330`) in c28 only — see Divergences |
@@ -916,9 +916,9 @@ never by real content; and the recursive scan reads whatever `scripts/`
 contains at run time, so it needs no maintenance when files are added.
 
 **Item 12 is deliberately not adjudicated here.** Unlike items 1-6 it reads
-`c.pkg` (`:467-472`), a fixture-built snapshot (`lifecycle-fixture.js:188`,
-copied from `buildSnapshot` at `:42-61`), so it does have a fixture lever.
-Row 15 pulls it: planting
+`c.pkg` (`:512`, `:519-524`), a fixture-built snapshot
+(`lifecycle-fixture.js:220-225`, copied from `buildSnapshot` at `:46-65`), so
+it does have a fixture lever. Row 15 pulls it: planting
 `scripts/adapters/codex/validate-generated-plugin.py` in the snapshot turns
 item 12 RED at `:519` and nothing else. It is a proven guard, not a boundary
 guard.
