@@ -776,13 +776,18 @@ preamble, for what it asserts:
     everything, which would break every real `pin` case while item 54 stayed
     green.
 56. **New** (PR 11.5 slice 4a Task 7). Same case: the sentinel's contents
-    match one of the four git subcommands `pin` could resolve a ref through
-    — `ls-remote`, `rev-parse`, `clone`, or `tag` (`:581-585`). Port-only,
-    same rationale as item 55. Proves the sentinel mechanism is non-vacuous,
-    so item 54's empty sentinel means "refused", not "never wired"; which of
-    the four subcommands actually lands is an implementation detail of
-    `resolveExactTag`/`verifyRawCommit` (`src/upstream.ts`), not something
-    this assertion pins.
+    match `/ls-remote|rev-parse|clone|tag/` (`:581-585`) — a deliberately
+    loose matcher, so the entry pins that git ran at all rather than an argv
+    detail. Port-only, same rationale as item 55. Proves the sentinel
+    mechanism is non-vacuous, so item 54's empty sentinel means "refused",
+    not "never wired". The alternation is slack, not a four-way choice the
+    implementation makes: on this case's tag-ref path
+    (`src/commands/pin.ts:50`) only `ls-remote` can land, from
+    `resolveExactTag`'s single git call (`src/upstream.ts:209`), and `tag`
+    matches merely as a substring of that call's `--tags`/`refs/tags/` argv.
+    A raw-commit request would instead run `verifyRawCommit`'s
+    `init`/`fetch`/`cat-file` (`src/upstream.ts:260-279`), matching none of
+    the alternatives.
 
 <!-- inventory:port-only:end -->
 
