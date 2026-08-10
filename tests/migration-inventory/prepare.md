@@ -331,8 +331,8 @@ is itself a rejection case, ending in
 prepare-level dash-prefixed case, and could not have: every prepare case's
 `SUPERPOWERS_UPSTREAM_URL` must be an absolute path under the case scratch
 tree, and the fixture's own hermeticity guard hard-fails anything else before
-the child is spawned (`tests/baseline/prepare-fixture.js:465-475`, whose
-`startsWith("/")` predicate is at `:473`). A dash-prefixed *relative* source is
+the child is spawned (`tests/baseline/prepare-fixture.js:465-482`, whose
+`startsWith("/")` predicate is at `:480`). A dash-prefixed *relative* source is
 the whole point of the shell cluster, so the narrowing is structural rather
 than an omission: closing it would mean relaxing the guard that keeps this
 suite hermetic.
@@ -1140,7 +1140,7 @@ one is left:
   is **not** synthetic for `build`, the only operation `prepare` invokes: its
   `build` branch (`stateful-adapter:159-188`) logs the invocation and then
   `os.execv`s `SPW_BASELINE_RUNTIME_ADAPTER`, the real shipped adapter, which
-  `tests/baseline/support.js:610` provisions. For `build` it is a **logging
+  `tests/baseline/support.js:590` provisions. For `build` it is a **logging
   delegator**; it is genuinely synthetic only for `install` and `uninstall`.
 - **Live.** The lifecycle test fakes stub `SPW_ADAPTER`, a seam only
   `scripts/core/adapter.sh` honours and the in-process `runAdapter` does not.

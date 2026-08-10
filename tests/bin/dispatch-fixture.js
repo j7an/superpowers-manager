@@ -41,6 +41,12 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerScratch } from "./fixture-scratch.js";
+import { writeGitEgressShim } from "../lib/git-egress.js";
+
+/** @param {string} value */
+function shQuoteLocal(value) {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -283,16 +289,19 @@ export function makePackageRoot(kind) {
  *   command into a DISPATCH state src/cli.ts's IN_PROCESS_HANDLERS registry
  *   does not carry, which is otherwise a compile error and thus unreachable
  *   through the real table.
+ * @property {boolean} [gitSentinel] wraps the case's git in a recording stub
+ *   so a case can prove the egress refusal happened before git ran.
  */
 
 /**
  * @param {DispatchOptions} options
- * @returns {{ status: number, stdout: string, stderr: string, log: string[] }}
+ * @returns {{ status: number, stdout: string, stderr: string, log: string[], gitSentinel: string }}
  */
 export function runDispatch(options) {
   const caseDir = mkdtempSync(join(SCRATCH, "case-"));
   const fakeBin = join(caseDir, "bin");
   mkdirSync(fakeBin, { recursive: true });
+  let sentinelPath = "";
   for (const tool of options.tools) {
     writeExecutable(fakeBin, tool, "#!/bin/sh\nexit 0\n");
   }
@@ -302,7 +311,30 @@ export function runDispatch(options) {
         "pinUpstream already supplies a real git; do not also list it in tools",
       );
     }
-    symlinkSync(REAL_GIT, join(fakeBin, "git"));
+    // The shim, not a symlink to REAL_GIT. Matrix row 13: the symlink put a
+    // real git in the case bin outside the only egress refusal this repository
+    // has, and slice 4b adds three more commands to this fixture.
+    //
+    // gitSentinel inserts a recording stub between the shim and the real git,
+    // so a case can prove the refusal happened BEFORE git ran rather than
+    // merely that the command failed.
+    let wrapped = REAL_GIT;
+    if (options.gitSentinel) {
+      sentinelPath = join(caseDir, "git-sentinel.log");
+      writeFileSync(sentinelPath, "");
+      wrapped = join(caseDir, "git-recording");
+      writeFileSync(
+        wrapped,
+        [
+          "#!/bin/sh",
+          `printf '%s\\n' "$*" >> ${shQuoteLocal(sentinelPath)}`,
+          `exec ${shQuoteLocal(REAL_GIT)} "$@"`,
+          "",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+    }
+    writeGitEgressShim(fakeBin, wrapped);
   }
   if (!options.omitShell) symlinkSync("/bin/sh", join(fakeBin, "sh"));
   symlinkSync(process.execPath, join(fakeBin, "node"));
@@ -364,5 +396,6 @@ export function runDispatch(options) {
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
     log,
+    gitSentinel: sentinelPath,
   };
 }

@@ -468,6 +468,13 @@ export function prepare(c, extra = {}, options = {}) {
       `hermeticity: the child environment must declare ${name}`,
     );
   }
+  // RETAINED deliberately alongside tests/lib/git-egress.js's shim, and not
+  // folded into it. This is a CONFIGURATION precondition on the fixture's own
+  // environment, asserted before any child is spawned; the shim is a RUNTIME
+  // refusal at the git boundary. Neither subsumes the other — the shim cannot
+  // fire in a case that never invokes git, and this cannot fire for a URL that
+  // does not come from SUPERPOWERS_UPSTREAM_URL. Matrix row 13 permits either
+  // folding in or retaining with a stated reason; this is the reason.
   const source = env.SUPERPOWERS_UPSTREAM_URL;
   assert.ok(
     source.startsWith("/"),
