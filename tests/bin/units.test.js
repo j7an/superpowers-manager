@@ -213,7 +213,7 @@ for (const caller of ["install", "update"]) {
 // fixture is NOT synthetic for `build`, the only operation prepare invokes:
 // its build branch (stateful-adapter:159-188) logs the invocation and then
 // os.execv's SPW_BASELINE_RUNTIME_ADAPTER, the real shipped adapter that
-// tests/baseline/support.js:610 provisions. It is a logging DELEGATOR for
+// tests/baseline/support.js:590 provisions. It is a logging DELEGATOR for
 // build, and synthetic only for install and uninstall.
 // What remains is the lifecycle path: `install` and `update` still spawn
 // (src/cli.ts:74-76), and their test fakes stub SPW_ADAPTER — a seam only

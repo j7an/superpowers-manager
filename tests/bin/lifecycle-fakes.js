@@ -1,8 +1,11 @@
 // @ts-check
-// Shared read-side behaviour for the three lifecycle fake executables
-// (install-fakes.js, uninstall-fakes.js, probe-fakes.js). Extracted in PR 11.5
-// slice 2, whose fake `codex` for probe is the "third lifecycle fake" the
-// parent spec named as this extraction's trigger.
+// Shared behaviour for the three lifecycle fake executables
+// (install-fakes.js, uninstall-fakes.js, probe-fakes.js). PR 11.5 slice 2
+// extracted the read side — loadFixtureConfig, respondToListing, logLine —
+// from the fake `codex` for probe, the "third lifecycle fake" the parent spec
+// named as this extraction's trigger. Slice 4a added the outer shell the two
+// mutating fakes also duplicated: runFake, its FakeContext, the Decision 5
+// injection toggle, the adapter tripwire, and the real-adapter delegation.
 //
 // Every response-then-exit site here uses `process.exitCode` plus a normal
 // return, never `process.exit()`. `process.exit()` truncates a pending write
@@ -15,6 +18,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { schemaFor, validateConfig } from "./lifecycle-config.js";
 
@@ -169,4 +173,156 @@ function nextPluginList(state) {
  */
 export function logLine(state, name, line) {
   appendFileSync(join(state, name), `${line}\n`);
+}
+
+/**
+ * `seam` is read once here rather than at each use: the extraction would
+ * otherwise leave three copies of the `?? "delegate"` default — one per fake
+ * plus the tripwire — and a default that disagrees across copies is how a
+ * tripwire silently becomes a delegation. A fake is a fresh process per
+ * invocation, so one read per process is one read per command.
+ *
+ * @typedef {{
+ *   state: string,
+ *   config: Record<string, unknown>,
+ *   args: string[],
+ *   seam: string,
+ *   log: (name: string, line: string) => void,
+ *   readJson: (file: string) => any,
+ *   writeJson: (file: string, value: unknown) => void,
+ * }} FakeContext
+ */
+
+/**
+ * @param {string} state
+ * @param {Record<string, unknown>} config
+ * @returns {FakeContext}
+ */
+function makeContext(state, config) {
+  return {
+    state,
+    config,
+    args: process.argv.slice(3),
+    seam: process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate",
+    log: (name, line) => logLine(state, name, line),
+    readJson: (file) => JSON.parse(readFileSync(join(state, file), "utf8")),
+    writeJson: (file, value) =>
+      writeFileSync(join(state, file), JSON.stringify(value)),
+  };
+}
+
+/**
+ * The whole outer shell of a lifecycle fake: state guard, config load, role
+ * dispatch, and the unknown-role trap. Each fake supplies only its two role
+ * bodies, so the branch structure cannot drift between them.
+ *
+ * It deliberately does NOT own either role's unmatched-command trap. A shared
+ * gatekeeper could let an unhandled configured value fall past every branch
+ * into the real adapter — the defect PR 11.2b patched by hand, and the reason
+ * respondToListing above returns a boolean instead of exiting.
+ *
+ * @param {{
+ *   kind: "install" | "uninstall",
+ *   codex: (ctx: FakeContext) => void,
+ *   adapter: (ctx: FakeContext) => void,
+ * }} fake
+ * @returns {void}
+ */
+export function runFake(fake) {
+  const state = process.env.SPW_FIXTURE_STATE;
+  if (!state) {
+    process.stderr.write("fixture: SPW_FIXTURE_STATE is unset\n");
+    process.exitCode = 90;
+    return;
+  }
+  const config = loadFixtureConfig(fake.kind, state);
+  if (config.__failed) {
+    // loadFixtureConfig already set the exit code and wrote the diagnostic.
+    // Running a role body here would execute fake logic against defaults
+    // rather than the config the case asked for.
+    return;
+  }
+  const ctx = makeContext(state, config);
+  const role = process.argv[2];
+  if (role === "codex") {
+    fake.codex(ctx);
+    return;
+  }
+  if (role === "adapter") {
+    fake.adapter(ctx);
+    return;
+  }
+  process.stderr.write(`fixture: unknown role: ${String(role)}\n`);
+  process.exitCode = 98;
+}
+
+/**
+ * Decision 5 injection toggle: the fake commits the forbidden act so every
+ * guard that is load-bearing turns RED. A guard that stays GREEN under this is
+ * a boundary guard and must be adjudicated in the inventory, never "proved" by
+ * breaking its own text.
+ *
+ * The forbidden line is a PARAMETER, not a constant: install injects a spurious
+ * `plugin add` and uninstall a spurious `plugin remove`, and a shared constant
+ * would quietly disarm one of them.
+ *
+ * @param {FakeContext} ctx
+ * @param {string} forbiddenLine
+ * @returns {void}
+ */
+export function injectSpuriousMutation(ctx, forbiddenLine) {
+  if (ctx.config.spuriousMutation) ctx.log("codex.log", forbiddenLine);
+}
+
+/**
+ * The adapter role's tripwire. Slice 4b is its first genuine consumer (matrix
+ * row 18): once install/update/uninstall dispatch in-process, runAdapter is a
+ * function call and this executable must never be reached.
+ *
+ * The caller MUST `return` on true. Setting `process.exitCode` does not halt
+ * execution, so a missing return falls through into the delegation below and
+ * spawns the real adapter — the exact inverse of a tripwire.
+ *
+ * @param {FakeContext} ctx
+ * @returns {boolean} true when the caller must stop
+ */
+export function tripwireTriggered(ctx) {
+  if (ctx.seam !== "tripwire") {
+    return false;
+  }
+  process.stderr.write("fixture: this command must not spawn the adapter\n");
+  process.exitCode = 94;
+  return true;
+}
+
+/**
+ * Runs the REAL adapter, exactly as the shell fixtures did
+ * (tests/test_install_commands.sh:220, tests/test_uninstall_commands.sh:97).
+ * build, install, uninstall and ownership inspection are production code in
+ * every case.
+ *
+ * Slice 4c deletes this function with the seam: once no case spawns the
+ * adapter, `scripts/adapters/codex/adapter` has no fixture consumer.
+ *
+ * @param {FakeContext} ctx
+ * @returns {void}
+ */
+export function delegateToRealAdapter(ctx) {
+  const pkgRoot = process.env.SPW_TEST_PKG_ROOT;
+  if (!pkgRoot) {
+    process.stderr.write("fixture: SPW_TEST_PKG_ROOT is unset\n");
+    process.exitCode = 95;
+    return;
+  }
+  const real = join(pkgRoot, "scripts", "adapters", "codex", "adapter");
+  if (!existsSync(real)) {
+    process.stderr.write(`fixture: real adapter is missing at ${real}\n`);
+    process.exitCode = 96;
+    return;
+  }
+  const result = spawnSync(real, ctx.args, {
+    stdio: "inherit",
+    env: process.env,
+  });
+  process.exitCode = result.status ?? 97;
 }

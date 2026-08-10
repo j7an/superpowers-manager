@@ -11,6 +11,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync, existsSync } from "node:fs";
 import {
   DISPATCH,
   makePackageRoot,
@@ -530,6 +531,58 @@ void test("`pin` succeeds in-process with codex absent from PATH", () => {
   });
   assert.equal(result.status, 0);
   assert.deepEqual(result.log, []);
+});
+
+// --- matrix row 13: the pin fixture's git sits behind one egress refusal ---
+
+void test("the pin dispatch fixture refuses a network git remote before git runs", () => {
+  // Matrix row 13. Asserted through runDispatch, not against a standalone
+  // shim: before consolidation this fixture symlinked the real git straight
+  // into the case bin, and a test that exercised only the shim would stay
+  // green if that symlink came back.
+  //
+  // The sentinel is what makes the refusal observable. A non-zero status alone
+  // proves nothing — a failing git produces one too. An EMPTY sentinel proves
+  // the shim refused BEFORE anything reached git.
+  const refused = runDispatch({
+    tools: [],
+    pinUpstream: true,
+    gitSentinel: true,
+    args: ["pin", "v1.0.0"],
+    env: { SUPERPOWERS_UPSTREAM_URL: "https://example.invalid/upstream" },
+  });
+  assert.match(refused.stderr, /sandbox refuses network git remote/);
+  // Reverting the fixture's adoption (a symlink to REAL_GIT instead of the
+  // shim) does not turn the sentinel below non-empty: the recording stub is
+  // off PATH entirely in that case, so git still runs but against a real
+  // network target, which fails with git's own DNS error rather than the
+  // shim's refusal text. It is the stderr match above that goes red under
+  // that mutation, not the emptiness check below — see the mutation proof
+  // in the task report. That check still matters: it is what distinguishes
+  // "the shim refused before git ran" from "something else made git fail
+  // first".
+  assert.ok(existsSync(refused.gitSentinel), "the sentinel was never created");
+  assert.equal(
+    readFileSync(refused.gitSentinel, "utf8").trim().length > 0,
+    false,
+    "git ran despite the egress refusal",
+  );
+
+  // The positive control. Without it the case above is satisfied by a shim
+  // that refuses everything, which would break every real pin case while this
+  // test stayed green.
+  const allowed = runDispatch({
+    tools: [],
+    pinUpstream: true,
+    gitSentinel: true,
+    args: ["pin", "v1.0.0"],
+  });
+  assert.equal(allowed.status, 0);
+  assert.match(
+    readFileSync(allowed.gitSentinel, "utf8"),
+    /ls-remote|rev-parse|clone|tag/,
+    "the local-upstream path did not reach git at all",
+  );
 });
 
 // --- inventory items 52-53: missing script file ------------------------------

@@ -26,14 +26,16 @@
 // Restored from tests/bin/lifecycle-fixture-selftest.test.js
 // (`git show 76131cf`), deleted in `ccde130` on the rationale that the ports
 // now exercise every path it proved. That rationale covered exercise, not
-// assertion: tests/bin/install-fakes.js:26-32 and
-// tests/bin/uninstall-fakes.js:23-29 both still say their re-validation "is
-// what makes a hand-written config.json ... fail closed too", a guarantee
-// that had no test once this file was gone. This file is permanent, not
-// temporary scaffolding — hence the plain name, without "-selftest".
+// assertion: tests/bin/lifecycle-fakes.js:26-28 still says the re-validation
+// "is what makes a hand-written config.json ... fail closed too", and since
+// PR 11.5 slice 4a both fakes reach it through runFake's single call site
+// (:238) rather than calling it themselves — one loader for two fakes, and a
+// guarantee that had no test once this file was gone. This file is permanent,
+// not temporary scaffolding — hence the plain name, without "-selftest".
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -44,6 +46,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   SCRATCH,
   UPSTREAM,
@@ -54,6 +58,8 @@ import {
   readLog,
   runScript,
 } from "./lifecycle-fixture.js";
+
+const execFileAsync = promisify(execFile);
 
 /** @typedef {import("./lifecycle-fixture.js").CaseEnv} CaseEnv */
 
@@ -248,3 +254,142 @@ void test("runScript bodies actually overlap under concurrency", async () => {
       `they are not overlapping (total elapsed ${Date.now() - started}ms)`,
   );
 });
+
+void test("the process.exitCode idiom is what delivers a large pipe payload", async () => {
+  // Carried row :2041's mutation proof. The `exit` arm is the OLD idiom and
+  // must truncate; the `exitCode` arm is the new one and must not. Both arms
+  // are asserted: dropping the truncating arm would leave a test that passes
+  // under either idiom, which is the vacuous shape this slice exists to close.
+  //
+  // If the truncating arm ever stops truncating on a supported platform, do
+  // NOT weaken this to a one-sided check — re-derive the payload size or the
+  // channel and escalate, because a passing negative control is the only
+  // evidence that the positive one means anything.
+  const child = fileURLToPath(
+    new URL("../unit/helpers/pipe-flush-child.js", import.meta.url),
+  );
+  const BYTES = 1024 * 1024;
+
+  const complete = await execFileAsync(process.execPath, [child, "exitCode"], {
+    maxBuffer: BYTES * 4,
+  });
+  assert.equal(complete.stdout.length, BYTES);
+
+  const truncated = await execFileAsync(process.execPath, [child, "exit"], {
+    maxBuffer: BYTES * 4,
+  });
+  assert.ok(
+    truncated.stdout.length < BYTES,
+    `process.exit() delivered ${truncated.stdout.length} of ${BYTES} bytes; ` +
+      "the negative control no longer demonstrates truncation",
+  );
+});
+
+void test("the fake codex delivers an oversized plugin listing intact", async () => {
+  // The read side already used process.exitCode (slice 2), so this is a
+  // regression guard on the whole spawn path rather than a mutation proof:
+  // it is what fails if a future edit reintroduces process.exit() into
+  // respondToListing or the role dispatch around it.
+  const c = createCase({ fakes: "install" });
+  const filler = "y".repeat(1024 * 1024);
+  writeFileSync(
+    join(c.state, "plugin_list.json"),
+    JSON.stringify({ installed: [], available: [], filler }),
+    "utf8",
+  );
+  const result = await execFileAsync(c.codexBin, ["plugin", "list", "--json"], {
+    env: { ...process.env, SPW_FIXTURE_STATE: c.state },
+    maxBuffer: 8 << 20,
+  });
+  assert.equal(JSON.parse(result.stdout).filler.length, filler.length);
+});
+
+/**
+ * Bounds a promise that would otherwise hang forever if the termination
+ * contract regresses — e.g. deregistration dropped or reordered so the
+ * re-raise re-enters cleanupForSignal, whose own `if (exiting) return;`
+ * guard then swallows the signal and the child's `setInterval` keeps it
+ * alive. node:test's own `{ timeout }` marks a test failed once it fires,
+ * but never resolves the promise it was waiting on, so an unbounded await
+ * here would never reach `finally` and the child would survive the whole
+ * suite. Racing against an explicit, shorter bound instead turns that hang
+ * into a rejection this test's own try/finally can act on.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {string} message
+ * @returns {Promise<T>}
+ */
+function withBound(promise, message) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const timer = setTimeout(() => {
+      rejectPromise(new Error(message));
+    }, 10_000);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolvePromise(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        rejectPromise(error);
+      },
+    );
+  });
+}
+
+void test(
+  "a scratch tree is removed and the signal is re-raised on SIGTERM",
+  { timeout: 15_000 },
+  async () => {
+    // A CHILD-PROCESS signal test, per D4: an assertion about the code would
+    // not show that the process dies BY the signal. The child prints its
+    // scratch path, then waits; the parent signals it and checks both
+    // halves.
+    const child = fileURLToPath(
+      new URL("./helpers/scratch-signal-child.js", import.meta.url),
+    );
+    const proc = spawn(process.execPath, [child], {
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    try {
+      const scratch = await withBound(
+        new Promise((resolvePath) => {
+          let buffer = "";
+          proc.stdout.setEncoding("utf8");
+          proc.stdout.on("data", (chunk) => {
+            buffer += chunk;
+            const newline = buffer.indexOf("\n");
+            if (newline !== -1) resolvePath(buffer.slice(0, newline));
+          });
+        }),
+        "child did not print its scratch path before the bound elapsed",
+      );
+      assert.equal(
+        existsSync(scratch),
+        true,
+        "child did not create its scratch",
+      );
+
+      const ended = new Promise((resolveEnd) => {
+        proc.on("close", (code, signal) => resolveEnd({ code, signal }));
+      });
+      proc.kill("SIGTERM");
+      const outcome = await withBound(
+        ended,
+        "child did not exit after SIGTERM before the bound elapsed -- " +
+          "deregistration or the re-raise is likely broken",
+      );
+
+      // Asserting the SIGNAL, not 143. `128+N` is a shell convention, not a
+      // POSIX guarantee, and asserting the signal is both stronger and
+      // immune to it.
+      assert.equal(outcome.signal, "SIGTERM");
+      assert.equal(existsSync(scratch), false, "scratch survived the signal");
+    } finally {
+      // Runs whether the test passed, failed an assertion, or the bound
+      // above rejected -- so a failed run never leaves the child (and its
+      // scratch tree) still holding the suite hostage.
+      proc.kill("SIGKILL");
+    }
+  },
+);

@@ -5,9 +5,13 @@
 // the recording adapter at :171-221.
 //
 // PR 11.5 slice 2 extracted only the read side (config load + the two
-// listings) into lifecycle-fakes.js. The mutation branches below still call
-// process.exit(); converting them is slice 4's work, tracked in
-// tests/migration-inventory/probe.md.
+// listings) into lifecycle-fakes.js. Slice 4 converted the mutation branches
+// below to process.exitCode too; see tests/migration-inventory/probe.md.
+//
+// Slice 4a also moved the outer shell — state guard, config load, role
+// dispatch, tripwire, delegation — into runFake. What stays here is exactly
+// what must NOT be shared: this fake's own command branches and both of its
+// exhaustiveness traps.
 
 import {
   cpSync,
@@ -17,127 +21,104 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import {
-  loadFixtureConfig,
-  logLine,
+  delegateToRealAdapter,
+  injectSpuriousMutation,
   respondToListing,
+  runFake,
+  tripwireTriggered,
 } from "./lifecycle-fakes.js";
 
-if (!process.env.SPW_FIXTURE_STATE) {
-  process.stderr.write("fixture: SPW_FIXTURE_STATE is unset\n");
-  process.exit(90);
-}
-const STATE = /** @type {string} */ (process.env.SPW_FIXTURE_STATE);
-const CONFIG = loadFixtureConfig("install", STATE);
-const ROLE = process.argv[2];
-const ARGS = process.argv.slice(3);
-
 /**
- * @param {string} name
- * @param {string} line
+ * @param {import("./lifecycle-fakes.js").FakeContext} ctx
+ * @returns {void}
  */
-function log(name, line) {
-  logLine(STATE, name, line);
-}
-
-/**
- * @param {string} file
- * @returns {any}
- */
-function readJson(file) {
-  return JSON.parse(readFileSync(join(STATE, file), "utf8"));
-}
-
-/**
- * @param {string} file
- * @param {unknown} value
- */
-function writeJson(file, value) {
-  writeFileSync(join(STATE, file), JSON.stringify(value));
-}
-
-function runCodex() {
-  log("codex.log", ARGS.join(" "));
-
-  // Decision 5 injection toggle: the fake commits the forbidden act so every
-  // guard that is load-bearing turns RED. A guard that stays GREEN under this
-  // is a boundary guard and must be adjudicated in the inventory, never
-  // "proved" by breaking its own text.
-  if (CONFIG.spuriousMutation) {
-    log("codex.log", "plugin add superpowers@spurious");
-  }
+function runCodex(ctx) {
+  ctx.log("codex.log", ctx.args.join(" "));
+  injectSpuriousMutation(ctx, "plugin add superpowers@spurious");
 
   const pkgRoot = process.env.SPW_TEST_PKG_ROOT;
-  const [a, b, c, d] = ARGS;
+  const [a, b, c, d] = ctx.args;
 
   if (
     respondToListing({
-      args: ARGS,
-      state: STATE,
-      pluginListRc: /** @type {number} */ (CONFIG.pluginListRc),
-      marketplaceListRc: /** @type {number} */ (CONFIG.marketplaceListRc),
+      args: ctx.args,
+      state: ctx.state,
+      pluginListRc: /** @type {number} */ (ctx.config.pluginListRc),
+      marketplaceListRc: /** @type {number} */ (ctx.config.marketplaceListRc),
     })
   ) {
     return;
   }
   if (
-    ARGS.length === 4 &&
+    ctx.args.length === 4 &&
     a === "plugin" &&
     b === "marketplace" &&
     c === "add" &&
     d === pkgRoot
   ) {
-    if (CONFIG.marketplaceAdd === "fail") process.exit(1);
-    const data = readJson("marketplace_list.json");
+    if (ctx.config.marketplaceAdd === "fail") {
+      process.exitCode = 1;
+      return;
+    }
+    const data = ctx.readJson("marketplace_list.json");
     data.marketplaces = data.marketplaces.filter(
       (/** @type {{name?: string}} */ item) =>
         item.name !== "superpowers-manager",
     );
     data.marketplaces.push({ name: "superpowers-manager", root: d });
-    writeJson("marketplace_list.json", data);
-    process.exit(0);
+    ctx.writeJson("marketplace_list.json", data);
+    process.exitCode = 0;
+    return;
   }
   if (
-    ARGS.length === 4 &&
+    ctx.args.length === 4 &&
     a === "plugin" &&
     b === "marketplace" &&
     c === "remove" &&
     d === "superpowers-manager"
   ) {
-    const data = readJson("marketplace_list.json");
+    const data = ctx.readJson("marketplace_list.json");
     data.marketplaces = data.marketplaces.filter(
       (/** @type {{name?: string}} */ item) =>
         item.name !== "superpowers-manager",
     );
-    writeJson("marketplace_list.json", data);
-    process.exit(0);
+    ctx.writeJson("marketplace_list.json", data);
+    process.exitCode = 0;
+    return;
   }
   if (
-    ARGS.length === 3 &&
+    ctx.args.length === 3 &&
     a === "plugin" &&
     b === "add" &&
     c === "superpowers@superpowers-manager"
   ) {
-    if (CONFIG.pluginAdd === "fail") process.exit(1);
-    if (CONFIG.pluginAdd === "noop") process.exit(0);
-    if (CONFIG.pluginAdd === "orphan") {
+    if (ctx.config.pluginAdd === "fail") {
+      process.exitCode = 1;
+      return;
+    }
+    if (ctx.config.pluginAdd === "noop") {
+      process.exitCode = 0;
+      return;
+    }
+    if (ctx.config.pluginAdd === "orphan") {
       // Codex reports the plugin installed at 1.0.0, but no cached tree is
       // ever written for it. The real adapter's fingerprint handler then
       // resolves an active version, builds the installed root for it, and
       // finds nothing to read there — src/adapter.ts:815-828 — so it returns a
       // controlled inspect-failed envelope. No adapter interception needed.
-      writeJson("plugin_list.json", {
+      ctx.writeJson("plugin_list.json", {
         installed: [
           { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
         ],
         available: [],
       });
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
     const dest = join(
-      STATE,
+      ctx.state,
       "codex-home",
       "plugins",
       "cache",
@@ -155,54 +136,58 @@ function runCodex() {
       ),
       join(dest, ".superpowers-upstream.json"),
     );
-    writeJson("plugin_list.json", {
+    ctx.writeJson("plugin_list.json", {
       installed: [
         { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
       ],
       available: [],
     });
-    if (CONFIG.pluginAdd === "stale") {
+    if (ctx.config.pluginAdd === "stale") {
       const upstreamJson = join(dest, ".superpowers-upstream.json");
       const data = JSON.parse(readFileSync(upstreamJson, "utf8"));
       data.commit = "0".repeat(40);
       writeFileSync(upstreamJson, JSON.stringify(data));
     }
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
   if (
-    ARGS.length === 3 &&
+    ctx.args.length === 3 &&
     a === "plugin" &&
     b === "remove" &&
     c === "superpowers@superpowers-manager"
   ) {
     rmSync(
-      join(STATE, "codex-home", "plugins", "cache", "superpowers-manager"),
+      join(ctx.state, "codex-home", "plugins", "cache", "superpowers-manager"),
       {
         recursive: true,
         force: true,
       },
     );
-    process.exit(0);
-  }
-  process.stderr.write(`unexpected fake Codex command: ${ARGS.join(" ")}\n`);
-  process.exit(99);
-}
-
-function runAdapter() {
-  const SEAM = process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate";
-  log("adapter.log", ARGS.join(" "));
-  if (SEAM === "tripwire") {
-    // The command is dispatched in-process, so runAdapter is a function call
-    // and this executable must never be reached. Same shape as
-    // tests/bin/probe-fakes.js:23-29, shipped in slice 2.
-    process.stderr.write("fixture: this command must not spawn the adapter\n");
-    process.exitCode = 94;
+    process.exitCode = 0;
     return;
   }
-  const joined = ARGS.join(" ");
+  process.stderr.write(
+    `unexpected fake Codex command: ${ctx.args.join(" ")}\n`,
+  );
+  process.exitCode = 99;
+  return;
+}
 
-  if (SEAM === "intercept" && joined === "inspect --view update-control") {
-    const countFile = join(STATE, "update-control-count");
+/**
+ * @param {import("./lifecycle-fakes.js").FakeContext} ctx
+ * @returns {void}
+ */
+function runAdapter(ctx) {
+  ctx.log("adapter.log", ctx.args.join(" "));
+  // The return is load-bearing: process.exitCode does not halt execution, so
+  // falling through here would reach delegateToRealAdapter below and spawn the
+  // very adapter the tripwire exists to forbid.
+  if (tripwireTriggered(ctx)) return;
+  const joined = ctx.args.join(" ");
+
+  if (ctx.seam === "intercept" && joined === "inspect --view update-control") {
+    const countFile = join(ctx.state, "update-control-count");
     let count = 0;
     try {
       count = Number(readFileSync(countFile, "utf8").trim());
@@ -212,7 +197,7 @@ function runAdapter() {
     count += 1;
     writeFileSync(countFile, `${count}\n`);
 
-    let updateControl = /** @type {string} */ (CONFIG.updateControl);
+    let updateControl = /** @type {string} */ (ctx.config.updateControl);
     if (updateControl === "managed-then-unsupported") {
       updateControl = count === 1 ? "managed" : "unsupported";
     }
@@ -231,11 +216,13 @@ function runAdapter() {
           error: null,
         })}\n`,
       );
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
     if (updateControl === "malformed") {
       process.stdout.write("{");
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
     if (updateControl === "failure") {
       process.stdout.write(
@@ -252,7 +239,8 @@ function runAdapter() {
           },
         })}\n`,
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
 
     // Fail closed, restoring the shell fake's `*) unknown update-control
@@ -264,7 +252,8 @@ function runAdapter() {
     process.stderr.write(
       `fixture: unknown update-control value: ${updateControl}\n`,
     );
-    process.exit(99);
+    process.exitCode = 99;
+    return;
   }
 
   // The fingerprint intercept is conditioned on the plugin cache existing.
@@ -272,47 +261,24 @@ function runAdapter() {
   // legacy-state cases) and silently changes what several later
   // verification cases mean.
   if (
-    SEAM === "intercept" &&
+    ctx.seam === "intercept" &&
     joined === "inspect --view fingerprint" &&
     existsSync(
-      join(STATE, "codex-home", "plugins", "cache", "superpowers-manager"),
+      join(ctx.state, "codex-home", "plugins", "cache", "superpowers-manager"),
     )
   ) {
     // Only `malformed` remains. The `fail` branch was retired with its single
     // consumer: that case is now driven from the fake Codex through
     // `pluginAdd: "orphan"`, so the REAL adapter produces the failure.
-    if (CONFIG.fingerprintInspect === "malformed") {
+    if (ctx.config.fingerprintInspect === "malformed") {
       process.stdout.write("{");
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     }
   }
 
-  // Everything else runs the REAL adapter, exactly as the shell fixture did
-  // (tests/test_install_commands.sh:220). build, install, ownership
-  // inspection, and an "ok" fingerprint inspection are production code in
-  // every case.
-  const pkgRoot = process.env.SPW_TEST_PKG_ROOT;
-  if (!pkgRoot) {
-    process.stderr.write("fixture: SPW_TEST_PKG_ROOT is unset\n");
-    process.exit(95);
-  }
-  const real = join(pkgRoot, "scripts", "adapters", "codex", "adapter");
-  if (!existsSync(real)) {
-    process.stderr.write(`fixture: real adapter is missing at ${real}\n`);
-    process.exit(96);
-  }
-  const result = spawnSync(real, ARGS, { stdio: "inherit", env: process.env });
-  process.exit(result.status ?? 97);
+  delegateToRealAdapter(ctx);
+  return;
 }
 
-if (CONFIG.__failed) {
-  // loadFixtureConfig already set the exit code and wrote the diagnostic.
-  // Reaching runCodex/runAdapter here would run fake logic against defaults
-  // instead of the config the case actually asked for, so this replicates
-  // the hard-exit-before-any-mutation behaviour the old loadConfig() had.
-} else if (ROLE === "codex") runCodex();
-else if (ROLE === "adapter") runAdapter();
-else {
-  process.stderr.write(`fixture: unknown role: ${String(ROLE)}\n`);
-  process.exit(98);
-}
+runFake({ kind: "install", codex: runCodex, adapter: runAdapter });

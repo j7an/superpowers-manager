@@ -12,7 +12,6 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
@@ -21,6 +20,7 @@ import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateConfig } from "./lifecycle-config.js";
 import { SEAM_DEPENDENT, SEAM_MODES, SEAM_REASONS } from "./adapter-seam.js";
+import { registerScratch } from "./fixture-scratch.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -33,9 +33,7 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const SCRATCH = realpathSync(
   mkdtempSync(join(tmpdir(), "spw-lifecycle-")),
 );
-process.on("exit", () => {
-  rmSync(SCRATCH, { recursive: true, force: true });
-});
+registerScratch(SCRATCH);
 
 /**
  * One immutable copy of everything a package root needs. Per-case roots are

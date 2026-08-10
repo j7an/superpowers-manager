@@ -46,11 +46,14 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 // test-support residue that outlives the seam on purpose, because an emptied
 // gate is what proves slice 4 finished.
 //
-// Counted per script from the seamDependency declarations actually written —
-// `grep -c 'script: "<name>"'` over SEAM_SOURCES, not from any plan table.
+// Counted per script and per reason from the seamDependency declarations
+// actually written — adapter-seam.test.js's "each declared count matches the
+// declarations in its sources" is the derivation of record, re-run on every
+// test invocation; a `grep -c` over SEAM_SOURCES only reproduces the
+// per-script total, not the intercept/log split this constant now declares.
 // Cases are named, not line-numbered, because these two files move under edit:
 //
-//   install   21 = 6 intercept + 15 log
+//   install:
 //     intercept: "unsupported update control blocks a direct install";
 //                "malformed update-control output exits exactly 1";
 //                "needs-prepare install reinspects after prepare and rejects
@@ -67,27 +70,33 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //                to prove prepare did not inspect update control, and that
 //                property is observable nowhere else. Re-basing that one
 //                helper collapses most of this number at once.
-//   update    5 = 2 intercept + 3 log
+//   update:
 //     intercept: "unsupported update control blocks the update fast path";
 //                "failed update-control inspection exits exactly 1".
 //     log:       "update rejects mixed legacy state even when the fingerprint
 //                is current" (same `^build ` negative), plus the two
 //                prepareGeneratedTree callers that run `update`.
-//   uninstall 3 = 1 intercept + 2 log
+//   uninstall:
 //     intercept: "selection-independent recovery".
 //     log:       "missing Codex" (codex.log is empty by construction, so it
 //                can witness nothing); "both present" (asserts the adapter's
 //                own argv shape, which Codex never sees).
-//   prepare   1 = 1 log
+//   prepare:
 //     log:       "prepare is capability-independent" — adapter operation names
 //                on a path that makes no Codex call at all, which is the very
 //                property the case asserts.
-/** @type {Record<string, number>} */
+/**
+ * Per script, split by the reason a case cannot survive the seam's removal.
+ * The split was prose in a comment until slice 4a; nothing detected a case
+ * whose reason changed, which is matrix row 19. It is now the gated shape and
+ * the count gate matches `reason:` as well as `script:`.
+ * @type {Record<string, { intercept: number, log: number }>}
+ */
 export const SEAM_DEPENDENT = {
-  install: 21,
-  update: 5,
-  uninstall: 3,
-  prepare: 1,
+  install: { intercept: 6, log: 15 },
+  update: { intercept: 2, log: 3 },
+  uninstall: { intercept: 1, log: 2 },
+  prepare: { intercept: 0, log: 1 },
 };
 
 /** @type {Record<string, string[]>} */
@@ -140,7 +149,7 @@ export const SEAM_SOURCE_FILES = [
 /**
  * The live condition for a lifecycle case is the SCRIPT's existence, not its
  * dispatch mode: runScript spawns /bin/sh scripts/<script> directly
- * (tests/bin/lifecycle-fixture.js:268) and never routes through
+ * (tests/bin/lifecycle-fixture.js:266) and never routes through
  * bin/superpowers, so DISPATCH does not govern these cases at all.
  *
  * @param {string} root repository root
@@ -148,8 +157,9 @@ export const SEAM_SOURCE_FILES = [
  * @returns {void}
  */
 export function assertSeamScriptsPresent(root, exists) {
-  for (const [script, count] of Object.entries(SEAM_DEPENDENT)) {
-    if (count === 0) continue;
+  for (const [script, counts] of Object.entries(SEAM_DEPENDENT)) {
+    const total = counts.intercept + counts.log;
+    if (total === 0) continue;
     // Named before it is used: without this, a key added to SEAM_DEPENDENT and
     // forgotten in SEAM_SOURCES would surface as a TypeError on undefined
     // instead of the diagnostic below.
@@ -171,7 +181,7 @@ export function assertSeamScriptsPresent(root, exists) {
     // anything at all.
     if (!exists(join(root, "scripts", script))) {
       throw new Error(
-        `adapter-seam: scripts/${script} is gone, but ${count} of its cases ` +
+        `adapter-seam: scripts/${script} is gone, but ${total} of its cases ` +
           "still depend on the SPW_ADAPTER seam — a seam the in-process " +
           "runAdapter ignores. Re-base or retire those cases in " +
           `${sources.join(", ")} and remove this entry before ` +

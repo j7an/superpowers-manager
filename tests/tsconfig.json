@@ -15,6 +15,7 @@
     "bin/**/*.js",
     "unit/**/*.js",
     "baseline/**/*.js",
+    "lib/**/*.js",
     "run-node-suites.js",
     "build-id.js",
     "write-build-id.js",

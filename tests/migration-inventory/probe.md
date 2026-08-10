@@ -103,7 +103,7 @@ and the fake writes nothing there when it is merely returning a non-zero
 status, so the envelope carries no messages at all and `error:` lands at index
 0 — an ordering assertion built on it would pass vacuously or fail for the
 wrong reason. Exhausting the configured listing sequence is the failure that
-does write to the child's stderr (`tests/bin/lifecycle-fakes.js:141-163`), so
+does write to the child's stderr (`tests/bin/lifecycle-fakes.js:145-167`), so
 that one fixture proves both the replay ordering and `nextPluginList`'s
 fail-closed branch: were the fake to repeat its last listing instead, the
 ownership inspection would succeed and the run would exit 0.
@@ -521,17 +521,61 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    The surviving property, that `withWorkspace` removes what it created, is
    covered by `tests/unit/workspace.test.js`. Items 56, 69, 91, 102, 105,
    108, 111, and 118 are retired against this entry.
-3. The remaining `process.exit()` sites in `tests/bin/install-fakes.js` and
+3. The `process.exit()` sites in `tests/bin/install-fakes.js` and
    `tests/bin/uninstall-fakes.js`. PR 11.5 slice 2 extracted only the read
    side of the three lifecycle fakes into `tests/bin/lifecycle-fakes.js`,
    where every response-then-exit site uses `process.exitCode` plus a normal
-   return so a pending pipe write cannot be truncated. The two fakes'
-   *mutation* branches still call `process.exit()` directly; converting them
-   is slice 4's work. Both files cite this inventory at their `:9-10`, which
-   is why the entry is recorded here rather than in an install- or
-   uninstall-scoped file. No test exercises the truncation itself — it needs
-   a reader that closes the pipe mid-write — so this entry documents the
-   carried defect without a port citation.
+   return so a pending pipe write cannot be truncated. PR 11.5 slice 4a
+   converted the two fakes' remaining *mutation* branches the same way: all
+   **31** sites — nineteen **originating in** `install-fakes.js`, twelve
+   **originating in** `uninstall-fakes.js` — now use `process.exitCode` plus
+   an explicit `return` wherever control previously terminated there and code
+   follows. *The 19/12 split is the **pre-conversion origin** of the 31, not a
+   census of either file at `HEAD`; ten of the 31 have since moved into the
+   shared shell, as the next paragraph states.*
+   An earlier revision of this entry said "33 sites across both files" and
+   was wrong twice. **33** was a raw `grep -c 'process\.exit('` figure that
+   also counted the header comment on line 9 of each file, which names
+   `process.exit()` in prose rather than calling it; the true call-site count
+   is 31. **"Across both files"** stopped being true when slice 4a's later
+   shared-shell extraction moved each fake's `90`/`95`/`96`/`97`/`98`
+   branches — five of the 31 per file, ten in all — into five shared sites in
+   `tests/bin/lifecycle-fakes.js`, alongside the shared `94` adapter tripwire
+   that was already `process.exitCode` before the conversion. Twenty-one of
+   the 31 stayed put: fourteen in `install-fakes.js`, seven in
+   `uninstall-fakes.js`. `install-fakes.js` and `uninstall-fakes.js` both
+   cite this inventory at their `:8-9`, which is why the entry is recorded
+   here rather than in an install- or uninstall-scoped file.
+
+   `tests/unit/helpers/pipe-flush-child.js` proves the idiom is load-bearing
+   on a pipe, not cosmetic: a 1 MiB write followed by `process.exit(0)`
+   truncates to the 64 KiB POSIX pipe buffer (65536 of 1048576 bytes
+   delivered), while the same write followed by `process.exitCode = 0`
+   delivers all 1048576 bytes — deterministically, because the writer's own
+   `process.exit()` discards its own queued write via a single
+   `uv_try_write` that fills the pipe to capacity. This is truncation
+   demonstrated by the writer's own exit call, with **no reader that closes
+   the pipe mid-write** — the earlier text in this entry claiming such a
+   reader was required was wrong, not merely stale.
+
+   **Accepted coverage gap:** no test exercises a converted line itself.
+   Both new tests (the pipe-flush mutation proof and the oversized-listing
+   regression guard in `tests/bin/lifecycle-fixture.test.js`) pass with the
+   slice 4a conversion reverted back to `process.exit()`, because neither
+   spawns install-fakes.js/uninstall-fakes.js with a payload sized to exceed
+   the pipe buffer through one of the 31 converted branches specifically.
+   Nothing in this inventory's ports guards against a future regression to
+   `process.exit()` at any of those 31 sites — in either mutating fake or in
+   the shared shell they now delegate to; fall-through correctness at each
+   one rests on the site-by-site audit slice 4a did, not on coverage.
+   This gap is accepted rather than closed with a new test because these are
+   test fakes, not product code: the failure mode is truncated stdout in the
+   test harness (a fixture bug that would surface as a flaky or wrong-looking
+   assertion), not shipped behaviour reaching a real user. This entry
+   documents the carried defect and its resolution without a port citation —
+   `tests/bin/lifecycle-fixture.test.js` is not one of this inventory's three
+   port files (`tests/baseline/probe.test.js`, `tests/unit/commands-probe.test.js`,
+   `tests/unit/status.test.js`), so it does not belong in `ports` below.
 
 <!-- inventory:port-only:end -->
 

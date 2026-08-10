@@ -453,7 +453,7 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 ### Scenario 11 — install remediates malformed generated provenance (`:747-768`)
 
 118. Stdout contains `prepared v1.0.0` (`:756`). Port: `:1418`. `v1.0.0` is
-     the tag the fixture creates for itself (`lifecycle-fixture.js:118-127`),
+     the tag the fixture creates for itself (`lifecycle-fixture.js:116-125`),
      an input this test owns — not a version whose source of truth lives
      elsewhere.
 119. Stdout contains `manager updated` (`:757`). Port: `:1420`.
@@ -786,9 +786,9 @@ reader is not relying on a broader claim than was checked: row 1e's payload
 `plugin marketplace list` used by the `assertOrder` calls at `:861`, `:914`,
 and `:1357`. It is harmless because the injected line is appended on *every*
 Codex call, starting with probe's `plugin list --json`, so `firstIndex`
-(`lifecycle-fixture.js:319-321`) resolves that needle *earlier* than the real
+(`lifecycle-fixture.js:317-319`) resolves that needle *earlier* than the real
 `plugin marketplace list` line rather than later, and every following needle
-still comes after it — the pairwise check at `lifecycle-fixture.js:358-364` is
+still comes after it — the pairwise check at `lifecycle-fixture.js:356-362` is
 unaffected. Row 1e
 produced no RED at any of the three sites, which is the observed confirmation.
 
@@ -811,7 +811,7 @@ branch it took.
 **Row 6 — a property worth stating.** Beyond the emptiness guards, all five
 `assertOrder` sites turned RED on `"…" never appears in the log`, which is
 `assertOrder`'s missing-needle-is-an-error contract
-(`lifecycle-fixture.js:348-365`) exercised for real. An `assertOrder` call can
+(`lifecycle-fixture.js:346-363`) exercised for real. An `assertOrder` call can
 therefore not pass on a log that never carried its needles.
 
 **Rows 9, 11 and 12 matched their predictions** (the brief's cases 21; 23 and
@@ -917,7 +917,7 @@ contains at run time, so it needs no maintenance when files are added.
 
 **Item 12 is deliberately not adjudicated here.** Unlike items 1-6 it reads
 `c.pkg` (`:512`, `:519-524`), a fixture-built snapshot
-(`lifecycle-fixture.js:220-225`, copied from `buildSnapshot` at `:46-65`), so
+(`lifecycle-fixture.js:218-223`, copied from `buildSnapshot` at `:44-63`), so
 it does have a fixture lever. Row 15 pulls it: planting
 `scripts/adapters/codex/validate-generated-plugin.py` in the snapshot turns
 item 12 RED at `:519` and nothing else. It is a proven guard, not a boundary

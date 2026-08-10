@@ -26,6 +26,7 @@ dist/effective-selection.js
 dist/generated-plugin.js
 dist/git.js
 dist/hooks.js
+dist/lifecycle.js
 dist/manifest-overlay.js
 dist/provenance.js
 dist/python-json-format.js

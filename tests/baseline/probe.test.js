@@ -90,7 +90,7 @@ async function saveSelection(c, record) {
 
 /**
  * A per-case copy of the shared fixture upstream. `UPSTREAM` is built once and
- * shared across the whole run (tests/bin/lifecycle-fixture.js:89-131), so a
+ * shared across the whole run (tests/bin/lifecycle-fixture.js:87-129), so a
  * case that renames its source away must rename a copy — renaming the original
  * would break every concurrently running case.
  * @param {CaseEnv} c
@@ -567,7 +567,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // messages reach stderr BEFORE its error line, exactly as
 // scripts/core/validate-adapter-response.py:268-270 ordered them
 // (tests/unit/commands-probe.test.js proves replayEnvelope only in isolation).
-// Second: nextPluginList (tests/bin/lifecycle-fakes.js:141-163) FAILS CLOSED
+// Second: nextPluginList (tests/bin/lifecycle-fakes.js:145-167) FAILS CLOSED
 // when the configured sequence runs out instead of repeating its last entry --
 // if it repeated, the ownership inspection would succeed and this run would
 // exit 0.
