@@ -417,6 +417,12 @@ preamble, for what it asserts:
   conditional `python3` requirement have no `status === 0` form.
 - Items 3 and 20 assert nothing at all. They are records of an assertion
   removed, kept numbered so the removal is visible rather than silent.
+- Items 53, 54, and 56 assert against the sentinel *file* the `gitSentinel`
+  option creates, not against `result.status`/`result.log`/`result.stderr`:
+  item 53 is `existsSync` on the path, item 54 is
+  `readFileSync(...).trim().length`, and item 56 is `assert.match` over the
+  file's contents. No shell analogue is possible — the shell had no
+  equivalent of a fixture-side recording stub between it and `git`.
 
 <!-- inventory:port-only:start -->
 
@@ -753,9 +759,10 @@ preamble, for what it asserts:
     with git's own DNS error rather than the shim's refusal text, so it is
     this item's `stderr` match that goes red under that mutation.
 53. **New** (PR 11.5 slice 4a Task 7). Same case: the returned `gitSentinel`
-    path — a recording stub the shim wraps instead of the real binary — was
-    created (`:564`). Port-only, same rationale as item 52. Guards item 54
-    against reading a missing sentinel file as vacuously "empty".
+    path — the log file a recording stub (wrapped by the shim in place of
+    the real binary) appends every invocation to — was created (`:564`).
+    Port-only, same rationale as item 52. Guards item 54 against reading a
+    missing sentinel file as vacuously "empty".
 54. **New** (PR 11.5 slice 4a Task 7). Same case: the sentinel file is empty
     (`:565-569`). Port-only, same rationale as item 52. The load-bearing
     check: an empty sentinel proves the refusal happened BEFORE anything
@@ -768,11 +775,14 @@ preamble, for what it asserts:
     empty sentinel would be equally satisfied by a shim that refuses
     everything, which would break every real `pin` case while item 54 stayed
     green.
-56. **New** (PR 11.5 slice 4a Task 7). Same case: the sentinel now records a
-    real `git ls-remote` invocation against the local upstream (`:581-585`).
-    Port-only, same rationale as item 55. Proves the sentinel mechanism is
-    non-vacuous, so item 54's empty sentinel means "refused", not "never
-    wired".
+56. **New** (PR 11.5 slice 4a Task 7). Same case: the sentinel's contents
+    match one of the four git subcommands `pin` could resolve a ref through
+    — `ls-remote`, `rev-parse`, `clone`, or `tag` (`:581-585`). Port-only,
+    same rationale as item 55. Proves the sentinel mechanism is non-vacuous,
+    so item 54's empty sentinel means "refused", not "never wired"; which of
+    the four subcommands actually lands is an implementation detail of
+    `resolveExactTag`/`verifyRawCommit` (`src/upstream.ts`), not something
+    this assertion pins.
 
 <!-- inventory:port-only:end -->
 
@@ -822,14 +832,17 @@ preamble, for what it asserts:
   either direction, and no JS assertion enforces any of them any more; see
   each item's retirement note for the analogous in-process property and where
   it is now tested). 41 mapped + 12 retired = 53. Plus 56 port-only
-  assertions (50 additive `result.status === 0` / `result.log` / stderr checks
-  the shell left implicit under `set -e` or that have no shell counterpart at
-  all, plus one structural array-length guard, plus 2 assertions covering
-  the in-process runtime backstop with no shell counterpart of any kind — see
-  items 41-42, plus 1 assertion covering `patchDispatch`'s rejection of a
-  no-op override — see item 43, plus 2 entries, items 3 and 20, that record
-  their own assertion's removal rather than an assertion) with no shell
-  counterpart.
+  assertions (47 additive `result.status === 0` / `result.log` / stderr
+  checks the shell left implicit under `set -e` or that have no shell
+  counterpart at all, plus 3 checks against the `gitSentinel` *file* rather
+  than `result.status`/`result.log`/`result.stderr` — see items 53, 54, and
+  56, which have no shell analogue since the shell had no equivalent of a
+  fixture-side recording stub — plus one structural array-length guard, plus
+  2 assertions covering the in-process runtime backstop with no shell
+  counterpart of any kind — see items 41-42, plus 1 assertion covering
+  `patchDispatch`'s rejection of a no-op override — see item 43, plus 2
+  entries, items 3 and 20, that record their own assertion's removal rather
+  than an assertion) with no shell counterpart.
 - Reconciliation: 41 of the 53 shell items are mapped (some 1:1 to their own
   JS assertion, two pairs sharing one JS assertion via the recorded merges
   above), 12 are retired (noted above) — not *silent* drops, since a

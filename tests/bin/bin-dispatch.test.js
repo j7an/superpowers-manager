@@ -533,7 +533,7 @@ void test("`pin` succeeds in-process with codex absent from PATH", () => {
   assert.deepEqual(result.log, []);
 });
 
-// --- inventory items 52-56: matrix row 13's git-egress refusal ------------
+// --- matrix row 13: the pin fixture's git sits behind one egress refusal ---
 
 void test("the pin dispatch fixture refuses a network git remote before git runs", () => {
   // Matrix row 13. Asserted through runDispatch, not against a standalone
