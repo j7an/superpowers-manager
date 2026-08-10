@@ -19,6 +19,20 @@ let exiting = false;
 const handlers = new Map();
 
 /**
+ * A cleanup failure must not be silent: src/workspace.ts's header (:15-18)
+ * records that a fully-silent swallow "is the state PR 11.4 removed" from
+ * the production path, and this mirrors that same policy at suite lifetime.
+ * Names the path only — never the caught error — per AGENTS.md's
+ * diagnostics convention: a free-form caught message is not a bounded,
+ * validated token.
+ * @param {string} path
+ * @returns {void}
+ */
+function reportRemovalFailure(path) {
+  process.stderr.write(`cannot remove scratch ${path}\n`);
+}
+
+/**
  * Synchronous by contract. An `await` here would yield to the event loop with
  * the listeners still registered, and every signal arriving in that window
  * would be consumed and discarded — an uninterruptible test run, which is
@@ -32,7 +46,10 @@ function cleanupForSignal(signal) {
     try {
       rmSync(path, { recursive: true, force: true });
     } catch {
-      // A cleanup failure must not block the remaining trees or the re-raise.
+      // A cleanup failure must not block the remaining trees or the
+      // re-raise, but it must not be silent either — see
+      // reportRemovalFailure above.
+      reportRemovalFailure(path);
     }
   }
   active.clear();
@@ -48,6 +65,14 @@ function cleanupForSignal(signal) {
  * @returns {void}
  */
 export function registerScratch(path) {
+  // Once a signal has started tearing the suite down, `handlers` is cleared
+  // and `exiting` never resets — this module is done for the life of the
+  // process. Without this guard, a scratch created after that point would
+  // find `handlers.size === 0` and re-register all three listeners while
+  // `exiting` stays true forever, so every later signal would be consumed by
+  // cleanupForSignal's own `if (exiting) return;` and never re-raised: the
+  // exact "uninterruptible test run" the module header warns against.
+  if (exiting) return;
   active.add(path);
   if (handlers.size === 0) {
     for (const signal of MANAGED_SIGNALS) {
@@ -63,7 +88,15 @@ export function registerScratch(path) {
 // The normal-exit path stays, because the signal path only covers signals.
 process.on("exit", () => {
   for (const path of active) {
-    rmSync(path, { recursive: true, force: true });
+    // Per-path, like cleanupForSignal: a throwing rmSync (EACCES/EBUSY --
+    // `force` only covers ENOENT) must not escape this listener as an
+    // uncaught exception, and must not abandon every other fixture's tree
+    // still left in this loop.
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch {
+      reportRemovalFailure(path);
+    }
   }
   active.clear();
 });

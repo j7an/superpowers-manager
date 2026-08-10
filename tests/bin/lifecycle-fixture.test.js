@@ -304,35 +304,92 @@ void test("the fake codex delivers an oversized plugin listing intact", async ()
   assert.equal(JSON.parse(result.stdout).filler.length, filler.length);
 });
 
-void test("a scratch tree is removed and the signal is re-raised on SIGTERM", async () => {
-  // A CHILD-PROCESS signal test, per D4: an assertion about the code would not
-  // show that the process dies BY the signal. The child prints its scratch
-  // path, then waits; the parent signals it and checks both halves.
-  const child = fileURLToPath(
-    new URL("./helpers/scratch-signal-child.js", import.meta.url),
-  );
-  const proc = spawn(process.execPath, [child], {
-    stdio: ["ignore", "pipe", "inherit"],
+/**
+ * Bounds a promise that would otherwise hang forever if the termination
+ * contract regresses — e.g. deregistration dropped or reordered so the
+ * re-raise re-enters cleanupForSignal, whose own `if (exiting) return;`
+ * guard then swallows the signal and the child's `setInterval` keeps it
+ * alive. node:test's own `{ timeout }` marks a test failed once it fires,
+ * but never resolves the promise it was waiting on, so an unbounded await
+ * here would never reach `finally` and the child would survive the whole
+ * suite. Racing against an explicit, shorter bound instead turns that hang
+ * into a rejection this test's own try/finally can act on.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {string} message
+ * @returns {Promise<T>}
+ */
+function withBound(promise, message) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const timer = setTimeout(() => {
+      rejectPromise(new Error(message));
+    }, 10_000);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolvePromise(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        rejectPromise(error);
+      },
+    );
   });
-  const scratch = await new Promise((resolvePath) => {
-    let buffer = "";
-    proc.stdout.setEncoding("utf8");
-    proc.stdout.on("data", (chunk) => {
-      buffer += chunk;
-      const newline = buffer.indexOf("\n");
-      if (newline !== -1) resolvePath(buffer.slice(0, newline));
+}
+
+void test(
+  "a scratch tree is removed and the signal is re-raised on SIGTERM",
+  { timeout: 15_000 },
+  async () => {
+    // A CHILD-PROCESS signal test, per D4: an assertion about the code would
+    // not show that the process dies BY the signal. The child prints its
+    // scratch path, then waits; the parent signals it and checks both
+    // halves.
+    const child = fileURLToPath(
+      new URL("./helpers/scratch-signal-child.js", import.meta.url),
+    );
+    const proc = spawn(process.execPath, [child], {
+      stdio: ["ignore", "pipe", "inherit"],
     });
-  });
-  assert.equal(existsSync(scratch), true, "child did not create its scratch");
+    try {
+      const scratch = await withBound(
+        new Promise((resolvePath) => {
+          let buffer = "";
+          proc.stdout.setEncoding("utf8");
+          proc.stdout.on("data", (chunk) => {
+            buffer += chunk;
+            const newline = buffer.indexOf("\n");
+            if (newline !== -1) resolvePath(buffer.slice(0, newline));
+          });
+        }),
+        "child did not print its scratch path before the bound elapsed",
+      );
+      assert.equal(
+        existsSync(scratch),
+        true,
+        "child did not create its scratch",
+      );
 
-  const ended = new Promise((resolveEnd) => {
-    proc.on("close", (code, signal) => resolveEnd({ code, signal }));
-  });
-  proc.kill("SIGTERM");
-  const outcome = await ended;
+      const ended = new Promise((resolveEnd) => {
+        proc.on("close", (code, signal) => resolveEnd({ code, signal }));
+      });
+      proc.kill("SIGTERM");
+      const outcome = await withBound(
+        ended,
+        "child did not exit after SIGTERM before the bound elapsed -- " +
+          "deregistration or the re-raise is likely broken",
+      );
 
-  // Asserting the SIGNAL, not 143. `128+N` is a shell convention, not a POSIX
-  // guarantee, and asserting the signal is both stronger and immune to it.
-  assert.equal(outcome.signal, "SIGTERM");
-  assert.equal(existsSync(scratch), false, "scratch survived the signal");
-});
+      // Asserting the SIGNAL, not 143. `128+N` is a shell convention, not a
+      // POSIX guarantee, and asserting the signal is both stronger and
+      // immune to it.
+      assert.equal(outcome.signal, "SIGTERM");
+      assert.equal(existsSync(scratch), false, "scratch survived the signal");
+    } finally {
+      // Runs whether the test passed, failed an assertion, or the bound
+      // above rejected -- so a failed run never leaves the child (and its
+      // scratch tree) still holding the suite hostage.
+      proc.kill("SIGKILL");
+    }
+  },
+);
