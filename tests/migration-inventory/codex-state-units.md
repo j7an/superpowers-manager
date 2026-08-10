@@ -1,11 +1,11 @@
 # Migration inventory: tests/test_codex_state_units.sh
 
-Source read in full (48 lines). Ported to `tests/unit/lifecycle.test.js`.
+Source read in full (47 lines). Ported to `tests/unit/lifecycle.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references
-`test_codex_state_units` (confirmed by `grep -c '^\| *\`' docs/baseline/traceability.md`
-returning 159 with zero `test_codex_state_units` hits). This inventory, not the
-159-ID count, is the evidence that no assertion was dropped.
+`test_codex_state_units` (confirmed by `grep -c '^| *\`' docs/baseline/traceability.md`
+returning 121 with zero `test_codex_state_units` hits). This inventory, not the
+121-ID count, is the evidence that no assertion was dropped.
 
 ## Counting rules applied
 
@@ -23,46 +23,46 @@ returning 159 with zero `test_codex_state_units` hits). This inventory, not the
 ### `spw_require_no_legacy_state` admits the two clean identity states (`:11-14`)
 
 1. `[ -z "$output" ]` for `neither` (`:12-13`). Port:
-   `tests/unit/lifecycle.test.js:26-30`.
+   `tests/unit/lifecycle.test.js:25-29`.
 2. `[ -z "$output" ]` for `manager` (`:12-13`). Port:
-   `tests/unit/lifecycle.test.js:26-30`.
+   `tests/unit/lifecycle.test.js:25-29`.
 
 ### `spw_require_no_legacy_state` rejects `legacy` and `both` (`:16-26`)
 
 3. The `if …; then exit 1; fi` rejection for `legacy` (`:17-20`). Port:
-   `tests/unit/lifecycle.test.js:33-39`.
+   `tests/unit/lifecycle.test.js:31-39`.
 4. The `if …; then exit 1; fi` rejection for `both` (`:17-20`). Port:
-   `tests/unit/lifecycle.test.js:33-39`.
+   `tests/unit/lifecycle.test.js:31-39`.
 5. `grep -Fxq 'Legacy superpowers-wrapper Codex state is installed.'` for
-   `legacy` (`:21-22`). Port: `tests/unit/lifecycle.test.js:33-39`.
+   `legacy` (`:21-22`). Port: `tests/unit/lifecycle.test.js:31-39`.
 6. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `legacy`
-   (`:23-24`). Port: `tests/unit/lifecycle.test.js:33-39`.
+   (`:23-24`). Port: `tests/unit/lifecycle.test.js:31-39`.
 7. `grep -Fxq 'Then run: npx superpowers-manager install'` for `legacy`
-   (`:25-26`). Port: `tests/unit/lifecycle.test.js:33-39`.
+   (`:25-26`). Port: `tests/unit/lifecycle.test.js:31-39`.
 8. `grep -Fxq 'Legacy superpowers-wrapper Codex state is installed.'` for
-   `both` (`:21-22`). Port: `tests/unit/lifecycle.test.js:33-39`.
+   `both` (`:21-22`). Port: `tests/unit/lifecycle.test.js:31-39`.
 9. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `both`
-   (`:23-24`). Port: `tests/unit/lifecycle.test.js:33-39`.
+   (`:23-24`). Port: `tests/unit/lifecycle.test.js:31-39`.
 10. `grep -Fxq 'Then run: npx superpowers-manager install'` for `both`
-    (`:25-26`). Port: `tests/unit/lifecycle.test.js:33-39`.
+    (`:25-26`). Port: `tests/unit/lifecycle.test.js:31-39`.
 
 ### `spw_report_legacy_state` is silent for the two clean identity states (`:29-32`)
 
 11. `[ -z "$output" ]` for `neither` (`:30-31`). Port:
-    `tests/unit/lifecycle.test.js:42-46`.
+    `tests/unit/lifecycle.test.js:41-45`.
 12. `[ -z "$output" ]` for `manager` (`:30-31`). Port:
-    `tests/unit/lifecycle.test.js:42-46`.
+    `tests/unit/lifecycle.test.js:41-45`.
 
 ### `spw_report_legacy_state` reports `legacy` and `both` (`:34-40`)
 
 13. `grep -Fxq 'Legacy superpowers-wrapper Codex state remains installed.'`
-    for `legacy` (`:36-37`). Port: `tests/unit/lifecycle.test.js:49-55`.
+    for `legacy` (`:36-37`). Port: `tests/unit/lifecycle.test.js:47-55`.
 14. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `legacy`
-    (`:38-39`). Port: `tests/unit/lifecycle.test.js:49-55`.
+    (`:38-39`). Port: `tests/unit/lifecycle.test.js:47-55`.
 15. `grep -Fxq 'Legacy superpowers-wrapper Codex state remains installed.'`
-    for `both` (`:36-37`). Port: `tests/unit/lifecycle.test.js:49-55`.
+    for `both` (`:36-37`). Port: `tests/unit/lifecycle.test.js:47-55`.
 16. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `both`
-    (`:38-39`). Port: `tests/unit/lifecycle.test.js:49-55`.
+    (`:38-39`). Port: `tests/unit/lifecycle.test.js:47-55`.
 
 <!-- inventory:mapped:end -->
 
@@ -80,20 +80,20 @@ These four items close that gap; they do not carry one across from the shell.
 
 1. **New.** `requireNoLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: garbage" }` for an unrecognised state.
-   Port: `tests/unit/lifecycle.test.js:58-67`. No shell counterpart — the
+   Port: `tests/unit/lifecycle.test.js:62-71`. No shell counterpart — the
    shell driver never called `spw_require_no_legacy_state` with a state
    outside `neither|manager|legacy|both`.
 2. **New.** `reportLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: garbage" }` for an unrecognised state.
-   Port: `tests/unit/lifecycle.test.js:58-67`. No shell counterpart, same
+   Port: `tests/unit/lifecycle.test.js:62-71`. No shell counterpart, same
    rationale as item 1.
 3. **New.** `requireNoLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: " }` for an empty identity state. Port:
-   `tests/unit/lifecycle.test.js:69-78`. No shell counterpart, same
+   `tests/unit/lifecycle.test.js:73-82`. No shell counterpart, same
    rationale as item 1.
 4. **New.** `reportLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: " }` for an empty identity state. Port:
-   `tests/unit/lifecycle.test.js:69-78`. No shell counterpart, same
+   `tests/unit/lifecycle.test.js:73-82`. No shell counterpart, same
    rationale as item 1.
 
 <!-- inventory:port-only:end -->
@@ -118,7 +118,20 @@ These four items close that gap; they do not carry one across from the shell.
   one `assert.deepEqual`, since the port returns a verdict object rather than
   writing text line by line), plus 4 port-only assertions (items 1-4 above)
   covering the `*)` arm neither shell case statement ever reached.
-- Reconciliation: 16 of 16 shell items are mapped 1:1, no merges, no drops.
-  The 4 port-only entries are strictly additive test coverage — not a
-  reconciliation of any shell assertion — and are excluded from the 16/16
-  arithmetic above.
+- Reconciliation: 16 of 16 shell items are mapped 1:1, no merges, no drops of
+  assertion coverage. One distinction the shell driver captured is not
+  preserved as an assertion here, and is called out rather than silently
+  lost: `tests/test_codex_state_units.sh` invoked
+  `spw_require_no_legacy_state` with `2>&1` (`:12`, `:17`) but
+  `spw_report_legacy_state` with no redirect at all (`:30`, `:35`) — positive
+  evidence that the block path writes to stderr and the report path writes
+  to stdout (`scripts/core/lifecycle.sh:53` has `>&2`; `:75-77` does not).
+  `LegacyVerdict` is a pure verdict by design (see `src/lifecycle.ts`'s
+  header comment) — it carries no stream and no exit status — so nothing in
+  this repo witnesses that stdout/stderr split after this commit. This is a
+  deferral, not a drop: the command-path caller that consumes
+  `LegacyVerdict.lines`, landing in **slice 4b**, must pin the report path's
+  lines to stdout and the block path's lines to stderr, and that is where the
+  distinction becomes assertable again. The 4 port-only entries are strictly
+  additive test coverage — not a reconciliation of any shell assertion — and
+  are excluded from the 16/16 arithmetic above.
