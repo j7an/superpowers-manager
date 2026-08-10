@@ -26,11 +26,12 @@
 // Restored from tests/bin/lifecycle-fixture-selftest.test.js
 // (`git show 76131cf`), deleted in `ccde130` on the rationale that the ports
 // now exercise every path it proved. That rationale covered exercise, not
-// assertion: tests/bin/install-fakes.js:26-32 and
-// tests/bin/uninstall-fakes.js:23-29 both still say their re-validation "is
-// what makes a hand-written config.json ... fail closed too", a guarantee
-// that had no test once this file was gone. This file is permanent, not
-// temporary scaffolding — hence the plain name, without "-selftest".
+// assertion: tests/bin/lifecycle-fakes.js:26-28 still says the re-validation
+// "is what makes a hand-written config.json ... fail closed too", and since
+// PR 11.5 slice 4a both fakes reach it through runFake's single call site
+// (:238) rather than calling it themselves — one loader for two fakes, and a
+// guarantee that had no test once this file was gone. This file is permanent,
+// not temporary scaffolding — hence the plain name, without "-selftest".
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

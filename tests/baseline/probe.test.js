@@ -567,7 +567,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // messages reach stderr BEFORE its error line, exactly as
 // scripts/core/validate-adapter-response.py:268-270 ordered them
 // (tests/unit/commands-probe.test.js proves replayEnvelope only in isolation).
-// Second: nextPluginList (tests/bin/lifecycle-fakes.js:141-163) FAILS CLOSED
+// Second: nextPluginList (tests/bin/lifecycle-fakes.js:145-167) FAILS CLOSED
 // when the configured sequence runs out instead of repeating its last entry --
 // if it repeated, the ownership inspection would succeed and this run would
 // exit 0.

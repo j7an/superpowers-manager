@@ -698,7 +698,7 @@ void describe("install commands", { concurrency: true }, () => {
   void test("needs-install path inspects ownership then update control, then installs (:394-404)", async () => {
     // Intercept-dependent on the COUNT alone: the config is the default, but
     // :399 reads update-control-count, which nothing writes except the
-    // interceptor at install-fakes.js:180-192.
+    // interceptor at install-fakes.js:190-198.
     const c = installCase({
       adapterSeam: "intercept",
       seamDependency: { reason: "intercept", script: "install" },

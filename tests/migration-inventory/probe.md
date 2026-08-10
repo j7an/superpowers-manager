@@ -103,7 +103,7 @@ and the fake writes nothing there when it is merely returning a non-zero
 status, so the envelope carries no messages at all and `error:` lands at index
 0 — an ordering assertion built on it would pass vacuously or fail for the
 wrong reason. Exhausting the configured listing sequence is the failure that
-does write to the child's stderr (`tests/bin/lifecycle-fakes.js:141-163`), so
+does write to the child's stderr (`tests/bin/lifecycle-fakes.js:145-167`), so
 that one fixture proves both the replay ordering and `nextPluginList`'s
 fail-closed branch: were the fake to repeat its last listing instead, the
 ownership inspection would succeed and the run would exit 0.
