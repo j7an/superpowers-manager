@@ -90,7 +90,7 @@ async function saveSelection(c, record) {
 
 /**
  * A per-case copy of the shared fixture upstream. `UPSTREAM` is built once and
- * shared across the whole run (tests/bin/lifecycle-fixture.js:89-131), so a
+ * shared across the whole run (tests/bin/lifecycle-fixture.js:87-129), so a
  * case that renames its source away must rename a copy — renaming the original
  * would break every concurrently running case.
  * @param {CaseEnv} c

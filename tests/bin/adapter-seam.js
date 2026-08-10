@@ -149,7 +149,7 @@ export const SEAM_SOURCE_FILES = [
 /**
  * The live condition for a lifecycle case is the SCRIPT's existence, not its
  * dispatch mode: runScript spawns /bin/sh scripts/<script> directly
- * (tests/bin/lifecycle-fixture.js:268) and never routes through
+ * (tests/bin/lifecycle-fixture.js:266) and never routes through
  * bin/superpowers, so DISPATCH does not govern these cases at all.
  *
  * @param {string} root repository root
