@@ -46,8 +46,11 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 // test-support residue that outlives the seam on purpose, because an emptied
 // gate is what proves slice 4 finished.
 //
-// Counted per script from the seamDependency declarations actually written —
-// `grep -c 'script: "<name>"'` over SEAM_SOURCES, not from any plan table.
+// Counted per script and per reason from the seamDependency declarations
+// actually written — adapter-seam.test.js's "each declared count matches the
+// declarations in its sources" is the derivation of record, re-run on every
+// test invocation; a `grep -c` over SEAM_SOURCES only reproduces the
+// per-script total, not the intercept/log split this constant now declares.
 // Cases are named, not line-numbered, because these two files move under edit:
 //
 //   install:

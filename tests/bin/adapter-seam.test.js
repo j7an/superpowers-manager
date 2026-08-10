@@ -22,25 +22,51 @@ import { fileURLToPath } from "node:url";
 import {
   assertSeamScriptsPresent,
   SEAM_DEPENDENT,
+  SEAM_REASONS,
   SEAM_SOURCE_FILES,
   SEAM_SOURCES,
 } from "./adapter-seam.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-// One source of truth for what a declaration looks like, shared by the count
-// case and the tree-derived membership case below. If the two ever drifted,
-// the tree scan could miss a form the count scan credits — which is the
-// unclassified-residue hole all over again, one level up. Non-global on
-// purpose; the count case adds the `g` flag where it needs matchAll, so no
-// `lastIndex` is ever carried between .test() calls.
+// Site pattern: what counts as "a declaration," shared by the count case and
+// the tree-derived membership case below (declaringFiles()). If the two ever
+// drifted, the tree scan could miss a form the count scan credits — the
+// unclassified-residue hole all over again, one level up.
 //
-// Captures reason and script. Two groups, not one: the count gate now
-// reconciles the 9/21 split, which was prose until slice 4a (matrix row 19).
-// Order is `reason` then `script` at all 30 declaration sites; a pattern
-// tolerant of either order would also match a malformed declaration.
-const DECLARATION =
-  /seamDependency:\s*\{[^}]*reason:\s*"(\w+)",\s*script:\s*"(\w+)"/;
+// `[^}]*` stops at the first `}`, so this depends on every site being flat —
+// no nested object inside a seamDependency declaration. Verified against the
+// tree while widening this pattern (matrix row 19's follow-up): all 30 sites
+// match with none truncated by a nested brace.
+//
+// Order-tolerant deliberately: property order carries no meaning in JS, so a
+// pattern anchored on `reason` before `script` (this file's prior shape)
+// rejects a well-formed declaration written script-first, not a malformed
+// one — property order was never the thing worth gating. `reason:` and
+// `script:` are matched independently against each site below, so either
+// order is accepted; a site where either field fails to parse is the actual
+// malformed declaration, and the count case below fails loud on it, naming
+// the file and the missing field, rather than surfacing as a confusing count
+// mismatch.
+//
+// Non-global on purpose; the count case adds the `g` flag where it needs
+// matchAll, so no `lastIndex` is ever carried between .test() calls.
+const DECLARATION = /seamDependency:\s*\{[^}]*\}/;
+const REASON_FIELD = /reason:\s*"(\w+)"/;
+const SCRIPT_FIELD = /script:\s*"(\w+)"/;
+
+/**
+ * Type-guards a string against SEAM_REASONS. The cast is only on the
+ * `.includes` receiver, to a widened `readonly string[]` view that accepts a
+ * plain string argument — SEAM_REASONS's own declared element type is
+ * untouched, so this is the real runtime membership check, not a bypass of
+ * it, and the `reason is ...` return type still narrows the caller.
+ * @param {string} reason
+ * @returns {reason is (typeof SEAM_REASONS)[number]}
+ */
+function isSeamReason(reason) {
+  return /** @type {readonly string[]} */ (SEAM_REASONS).includes(reason);
+}
 
 void test("every script with seam-dependent cases still exists", () => {
   assertSeamScriptsPresent(ROOT, existsSync);
@@ -83,14 +109,27 @@ void test("each declared count matches the declarations in its sources", () => {
   for (const relative of SEAM_SOURCE_FILES) {
     const source = readFileSync(join(ROOT, relative), "utf8");
     for (const m of source.matchAll(new RegExp(DECLARATION, "g"))) {
-      const reason = /** @type {string} */ (m[1]);
-      const script = /** @type {string} */ (m[2]);
+      const site = m[0];
+      const foundReason = REASON_FIELD.exec(site);
+      assert.ok(
+        foundReason,
+        `${relative} has a seamDependency declaration with no parseable ` +
+          `reason field: ${site}`,
+      );
+      const foundScript = SCRIPT_FIELD.exec(site);
+      assert.ok(
+        foundScript,
+        `${relative} has a seamDependency declaration with no parseable ` +
+          `script field: ${site}`,
+      );
+      const reason = /** @type {string} */ (foundReason[1]);
+      const script = /** @type {string} */ (foundScript[1]);
       assert.ok(
         Object.hasOwn(found, script),
         `${relative} declares script "${script}", absent from SEAM_DEPENDENT`,
       );
       assert.ok(
-        reason === "intercept" || reason === "log",
+        isSeamReason(reason),
         `${relative} declares reason "${reason}" for script "${script}", ` +
           "which is neither intercept nor log",
       );
@@ -169,9 +208,12 @@ void test("every file declaring a seamDependency is in SEAM_SOURCE_FILES", () =>
   // readLog(c.adapterLog) readers. An entry may leave SEAM_SOURCE_FILES only
   // after its file's residue is zero, and this is what enforces that order.
   //
-  // Self-excluding by construction: this file and adapter-seam.js mention
-  // seamDependency only in prose and in escaped regex source, neither of which
-  // matches DECLARATION's literal `: {`.
+  // Self-excluding by construction: every seamDependency mention in this file
+  // and in adapter-seam.js is prose, or the escaped regex source above — never
+  // a literal `{` (mod whitespace) immediately following `seamDependency:`,
+  // which is what DECLARATION's site pattern requires. In the regex source
+  // that position holds a backslash instead, so it can never match its own
+  // definition.
   for (const relative of declaringFiles()) {
     assert.ok(
       SEAM_SOURCE_FILES.includes(relative),
