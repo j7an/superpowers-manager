@@ -501,7 +501,7 @@ the defect this migration exists to eliminate.
 - **The `current` branch.** Scenarios 1b (`:519`), 1c (`:538`), 3b (`:591`),
   and 3c (`:607`) add `seed_installed_current` on top of that tree. Ports at
   `:799`, `:831`, `:935`, and `:961`. In the port, 1b and 1c pin the branch
-  with `assertNoPrepareRan` (`:809`, `:841`); 3b is pinned by ported item 79,
+  with `assertNoPrepareRan` (`:907`, `:942`); 3b is pinned by ported item 79,
   since `manager is current` is printed only by `scripts/update:20`. 3c cannot
   be pinned from its output — `scripts/update:11` rejects the mixed identity
   state before the status `case` is reached — so its `current` precondition
@@ -621,7 +621,7 @@ no fixture-side lever.
 
 Two rows edit `tests/bin/install-commands.test.js` without touching an
 assertion, and are called out so no reader mistakes them for manufactured
-REDs. Row 14 short-circuits `prepareGeneratedTree` (`:210`), a
+REDs. Row 14 short-circuits `prepareGeneratedTree` (`:224`), a
 fixture-precondition helper, to model a lost precondition — the same technique
 the "Preconditions" section above used for `clearLogs`. Rows O1-O3 are the
 ordering exception.
@@ -671,7 +671,7 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 | 1c | payload → `plugin remove superpowers@superpowers-manager` | row 1's 14 sites, plus items 63 (`:880`), 74 (`:993`), 78 (`:1032`), and c29's `assertOrder` (`:1357`) as an injection artifact — see Divergences |
 | 1d | payload → `plugin marketplace add /spurious-root` | row 1's 14 sites, plus item 71 (`:984`) |
 | 1e | payload → `plugin marketplace list openai-curated`, which matches neither `CODEX_MUTATION` nor `PARSE_ABORT_MUTATION` | items 64 (`:884`) and 115 (`:1368`), and nothing else |
-| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:550`), 43 (`:439` via `:762`), 49 (`:439` via `:774`), 80 (`:947`), 84 (`:1102`) |
+| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:550`), 43 (`:439` via `:762`), 49 (`:439` via `:774`), 80 (`:947`, stale — see its entry), 84 (`:1102`) | — **item 80's entry is historical: slice 3.5 re-anchored scenario 3b onto `codex.log`, so this row records an observation HEAD's assertions cannot produce**
 | 3 | `install-fakes.js` `runAdapter`: `if (joined.startsWith("build ")) log("adapter.log", "inspect --view update-control")` | item 13 (`:545`), and only that |
 | 4 | `install-fakes.js` `runAdapter`: extra `log("codex.log", "plugin list --json")` on every adapter call | item 15 (`:557`), and only that |
 | 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:435` via `:762`), 2 (`:435` via `:774`), 7 (`:543`), 14 (`:689`), 18 (`:719`), 31 (`:357` via `:946`), 33 (`:1098`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) — **all four stale, see their entries** |
@@ -920,7 +920,7 @@ contains at run time, so it needs no maintenance when files are added.
 copied from `buildSnapshot` at `:42-61`), so it does have a fixture lever.
 Row 15 pulls it: planting
 `scripts/adapters/codex/validate-generated-plugin.py` in the snapshot turns
-item 12 RED at `:467` and nothing else. It is a proven guard, not a boundary
+item 12 RED at `:519` and nothing else. It is a proven guard, not a boundary
 guard.
 
 ### Coverage ledger
