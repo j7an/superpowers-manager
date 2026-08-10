@@ -142,15 +142,17 @@ remainder is named here rather than left to be rediscovered.
 [`behavioral-inventory.md`](behavioral-inventory.md): that an upstream exact
 `hooks: {}` forbids a generated `hooks/`, and that a manifest-less fallback
 forbids one too. Its row's case exercises only the first, over
-`REFS.emptyObjectHooks`. The second is asserted at
-`tests/baseline/prepare.test.js:224`, inside
-`GENERATED-FALLBACK-01 manifest-less upstream uses the manager fallback` — the
-case `GENERATED-FALLBACK-01`'s own row anchors, and whose inventory entry
-independently states that the generated fallback has no `hooks/`. The claim is
-therefore co-owned by the two IDs, not orphaned: broadening the
-`GENERATED-HOOKS-FORBID-01` case would duplicate an assertion three lines away
-in the same file, and would cost a case rename that both this table and
-`tests/migration-inventory/prepare.md` cite by name.
+`REFS.emptyObjectHooks`. The second is asserted by
+`assert.equal(existsSync(join(generated(c), "hooks")), false);` inside
+`tests/baseline/prepare.test.js::GENERATED-FALLBACK-01 manifest-less upstream
+uses the manager fallback` — the case `GENERATED-FALLBACK-01`'s own row
+anchors, and whose inventory entry independently states that the generated
+fallback has no `hooks/`. The case is named rather than line-numbered on
+purpose: a line pointer into a file under edit goes stale silently, and nothing
+gates it. The claim is therefore co-owned by the two IDs, not orphaned:
+broadening the `GENERATED-HOOKS-FORBID-01` case would duplicate an assertion
+already made a few lines away in the same file, and would cost a case rename
+that both this table and `tests/migration-inventory/prepare.md` cite by name.
 
 Before PR 11.5 slice 3.5 the row anchored a single retired shell case that
 carried both halves; the split is a consequence of that case's deletion, not of

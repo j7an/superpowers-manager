@@ -214,6 +214,16 @@ export function createCase(options) {
           "before adding a seam-dependent case, or the gate cannot see it",
       );
     }
+    // The converse of the adapterSeam check above, which alone leaves the
+    // implication one-directional: a case declaring reason 'intercept' while
+    // running in delegate or tripwire mode would silently get no interception,
+    // and the registry would over-report its intercept count.
+    if (reason === "intercept" && adapterSeam !== "intercept") {
+      throw new Error(
+        "createCase: seamDependency reason 'intercept' requires adapterSeam " +
+          "'intercept'",
+      );
+    }
   }
 
   const dir = mkdtempSync(join(SCRATCH, "case-"));

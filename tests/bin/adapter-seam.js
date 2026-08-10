@@ -99,6 +99,28 @@ export const SEAM_SOURCES = {
 };
 
 /**
+ * Every file that may hold a seamDependency declaration or an adapter-log
+ * reader. Independent of SEAM_DEPENDENT's keys ON PURPOSE: deriving it from
+ * them — `new Set(Object.values(SEAM_SOURCES).flat())` — empties the scan set
+ * exactly when slice 4 removes the last key for a file, which is the moment
+ * that file's residue must be counted. That is this module's own argument at
+ * the SEAM_DEPENDENT comment above ("a query over mutable state empties
+ * exactly when the deletion it should catch happens") turned back on itself:
+ * the count gate's own diagnostic ("declares script X, absent from
+ * SEAM_DEPENDENT") is silenced by deleting the SEAM_SOURCES key, which would
+ * turn both gates green with every residue site intact.
+ *
+ * adapter-seam.test.js asserts every SEAM_SOURCES value is a member here, so
+ * the two lists cannot drift apart.
+ *
+ * @type {string[]}
+ */
+export const SEAM_SOURCE_FILES = [
+  "tests/bin/install-commands.test.js",
+  "tests/bin/uninstall-commands.test.js",
+];
+
+/**
  * The live condition for a lifecycle case is the SCRIPT's existence, not its
  * dispatch mode: runScript spawns /bin/sh scripts/<script> directly
  * (tests/bin/lifecycle-fixture.js:268) and never routes through
