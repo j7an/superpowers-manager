@@ -527,9 +527,12 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    where every response-then-exit site uses `process.exitCode` plus a normal
    return so a pending pipe write cannot be truncated. PR 11.5 slice 4a
    converted the two fakes' remaining *mutation* branches the same way: all
-   **31** sites — nineteen in `install-fakes.js`, twelve in
-   `uninstall-fakes.js` — now use `process.exitCode` plus an explicit
-   `return` wherever control previously terminated there and code follows.
+   **31** sites — nineteen **originating in** `install-fakes.js`, twelve
+   **originating in** `uninstall-fakes.js` — now use `process.exitCode` plus
+   an explicit `return` wherever control previously terminated there and code
+   follows. *The 19/12 split is the **pre-conversion origin** of the 31, not a
+   census of either file at `HEAD`; ten of the 31 have since moved into the
+   shared shell, as the next paragraph states.*
    An earlier revision of this entry said "33 sites across both files" and
    was wrong twice. **33** was a raw `grep -c 'process\.exit('` figure that
    also counted the header comment on line 9 of each file, which names
