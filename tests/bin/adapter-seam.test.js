@@ -34,7 +34,13 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // unclassified-residue hole all over again, one level up. Non-global on
 // purpose; the count case adds the `g` flag where it needs matchAll, so no
 // `lastIndex` is ever carried between .test() calls.
-const DECLARATION = /seamDependency:\s*\{[^}]*script:\s*"(\w+)"/;
+//
+// Captures reason and script. Two groups, not one: the count gate now
+// reconciles the 9/21 split, which was prose until slice 4a (matrix row 19).
+// Order is `reason` then `script` at all 30 declaration sites; a pattern
+// tolerant of either order would also match a malformed declaration.
+const DECLARATION =
+  /seamDependency:\s*\{[^}]*reason:\s*"(\w+)",\s*script:\s*"(\w+)"/;
 
 void test("every script with seam-dependent cases still exists", () => {
   assertSeamScriptsPresent(ROOT, existsSync);
@@ -69,18 +75,26 @@ void test("each declared count matches the declarations in its sources", () => {
   // the derived set drops a file the moment slice 4 removes its last
   // SEAM_DEPENDENT key, which is exactly when that file's leftover
   // declarations must still be counted. See SEAM_SOURCE_FILES's comment.
-  /** @type {Record<string, number>} */
+  /** @type {Record<string, { intercept: number, log: number }>} */
   const found = {};
-  for (const script of Object.keys(SEAM_DEPENDENT)) found[script] = 0;
+  for (const script of Object.keys(SEAM_DEPENDENT)) {
+    found[script] = { intercept: 0, log: 0 };
+  }
   for (const relative of SEAM_SOURCE_FILES) {
     const source = readFileSync(join(ROOT, relative), "utf8");
     for (const m of source.matchAll(new RegExp(DECLARATION, "g"))) {
-      const script = m[1];
+      const reason = /** @type {string} */ (m[1]);
+      const script = /** @type {string} */ (m[2]);
       assert.ok(
         Object.hasOwn(found, script),
         `${relative} declares script "${script}", absent from SEAM_DEPENDENT`,
       );
-      found[script] += 1;
+      assert.ok(
+        reason === "intercept" || reason === "log",
+        `${relative} declares reason "${reason}" for script "${script}", ` +
+          "which is neither intercept nor log",
+      );
+      found[script][reason] += 1;
     }
   }
   assert.deepEqual(found, SEAM_DEPENDENT);
