@@ -98,9 +98,9 @@ port reads `ROOT`.
 2. No production script contains `requirements.toml` (`:30-35`, literal 1 of
    4). Port: `:475`.
 3. No production script contains `hooks.state` (literal 2 of 4). Port:
-   `:423`.
+   `:475`.
 4. No production script contains `trusted_hash` (literal 3 of 4). Port:
-   `:423`.
+   `:475`.
 5. No production script contains `--dangerously-bypass-hook-trust` (literal 4
    of 4). Port: `:475`.
 6. No production script names `app-server` outside a comment (`:36-41`).
@@ -109,7 +109,7 @@ port reads `ROOT`.
 ### Packaged root preconditions (`:77-82`)
 
 7. `scripts/install` is executable in the packaged root (`:77`). Port:
-   `:449`.
+   `:501`.
 8. `scripts/adapters/codex/adapter` is executable (`:78`). Port: `:501`.
 9. `dist/validate-generated-plugin-cli.js` is packaged (`:79`). Port: `:513`.
 10. `dist/generated-plugin.js` is packaged (`:80`). Port: `:513`.
@@ -122,7 +122,7 @@ port reads `ROOT`.
 13. The adapter log holds no `inspect --view update-control` (`:326-330`).
     Port: `:545`.
 14. The adapter log holds no `install --package-root` (`:331-335`). Port:
-    `:490`.
+    `:550`.
 15. No Codex mutation (`:336`, `assert_no_codex_mutation`). Port: `:557`,
     which asserts the strictly stronger property that the Codex log is
     **empty** — prepare makes no Codex call at all, and unlike the helper's
@@ -160,7 +160,7 @@ port reads `ROOT`.
 ### A needs-prepare install reinspects after prepare (`:377-392`)
 
 28. Install rejects capability drift after prepare (`:383-386`). Port:
-    `:590`.
+    `:672`.
 29. Stdout contains `prepared v1.0.0` (`:387`). Port: `:678`.
 30. Update control was inspected exactly twice (`:388`, bare `[ ... ]` per
     rule 6). Port: `:680`.
@@ -176,7 +176,7 @@ port reads `ROOT`.
 34. The last ownership inspection precedes the last update-control gate
     (`:403`). Port: `:720`.
 35. The last update-control gate precedes the adapter install (`:404`). Port:
-    `:636`.
+    `:724`.
 
 ### The fresh gate, not the probe, controls mutation authority (`:406-416`)
 
@@ -190,8 +190,8 @@ port reads `ROOT`.
 
 The `for legacy_state in legacy both` loop contributes 6 assertions per
 iteration (rule 4). Items 39-44 are the `legacy` iteration, items 45-50 the
-`both` iteration. Both port to the shared helper at `:361-394`; the call sites
-are `:671` and `:680`.
+`both` iteration. Both port to the shared helper at `:406-446`; the call sites
+are `:762` and `:774`.
 
 39. Install rejects the `legacy` identity state (`:438-441`). Port: `:410`.
 40. Output holds the exact line `Legacy superpowers-wrapper Codex state is
@@ -206,16 +206,16 @@ are `:671` and `:680`.
     Port: `:439`.
 44. No Codex mutation (`:450`). Port: `:445`.
 45. Install rejects the `both` identity state (`:438-441`, iteration 2).
-    Port: `:410` via `:680`.
+    Port: `:410` via `:774`.
 46. The same exact `Legacy superpowers-wrapper …` line (`:442`, iteration 2).
-    Port: `:419` via `:680`.
+    Port: `:419` via `:774`.
 47. The same exact `Run: npx superpowers-wrapper@0.1.1 uninstall` line
-    (`:443`, iteration 2). Port: `:423` via `:680`.
+    (`:443`, iteration 2). Port: `:423` via `:774`.
 48. The same exact `Then run: npx superpowers-manager install` line (`:444`,
-    iteration 2). Port: `:424` via `:680`.
+    iteration 2). Port: `:424` via `:774`.
 49. No `^build ` or `^install ` adapter line (`:445-449`, iteration 2). Port:
-    `:387` via `:680`.
-50. No Codex mutation (`:450`, iteration 2). Port: `:445` via `:680`.
+    `:439` via `:774`.
+50. No Codex mutation (`:450`, iteration 2). Port: `:445` via `:774`.
 
 ### Built-in validation failure leaves Codex untouched (`:453-476`)
 
@@ -228,7 +228,7 @@ are `:671` and `:680`.
 
 54. Install fails on additional validation (`:481-485`). Port: `:816`.
 55. Output contains `additional plugin validation failed` (`:486`). Port:
-    `:728`.
+    `:822`.
 56. No Codex mutation (`:487`). Port: `:824`.
 
 ### Scenario 1 — fresh install (`:489-512`)
@@ -243,7 +243,7 @@ are `:671` and `:680`.
     same call.
 60. Stdout contains `manager updated` (`:502`). Port: `:871`.
 61. The invocation TMPDIR is left empty (`:503`,
-    `assert_install_tmp_empty`). Port: `:873`, helper at `:293`. **Scope
+    `assert_install_tmp_empty`). Port: `:873`, helper at `:338`. **Scope
     narrowed twice — see the note below, and the further narrowing the
     mutation proof's row 13a records.**
 62. The Codex log holds no `marketplace remove` (`:504-506`). Port: `:876`.
@@ -267,6 +267,11 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 65. The adapter log holds `install --package-root <pkg>` (`:523`). Port:
     `:812`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, so the adapter-log line
+    this item describes is no longer asserted anywhere and no line number
+    can honestly stand in for it. Re-deriving the claim and its pointer
+    together is a re-disposition, not a pointer fix.
 66. `plugin marketplace list` precedes `plugin marketplace add <pkg>`
     (`:527`, first `[ ]`). Port: `:914`.
 67. `plugin marketplace add <pkg>` precedes `plugin add
@@ -276,6 +281,11 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 68. The adapter log holds `install --package-root <pkg>` (`:542`). Port:
     `:844`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, so the adapter-log line
+    this item describes is no longer asserted anywhere and no line number
+    can honestly stand in for it. Re-deriving the claim and its pointer
+    together is a re-disposition, not a pointer fix.
 69. `plugin marketplace remove superpowers-manager` precedes `plugin
     marketplace add <pkg>` (`:546`, first `[ ]`). Port: `:947`.
 70. `plugin marketplace add <pkg>` precedes `plugin add
@@ -332,7 +342,7 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 87. Output names the root it failed to add: `plugin marketplace add <pkg>`
     (`:630`). Port: `:1134`.
 88. Output names the previous root it had already removed (`:631`). Port:
-    `:1014`.
+    `:1135`.
 89. The Codex log holds no `plugin add superpowers@superpowers-manager` — the
     plugin add was never attempted (`:632-634`). Port: `:1138`.
 
@@ -353,20 +363,20 @@ narrowing recorded at `uninstall-commands.md:157-170`.
     narrowing as item 61, including the further narrowing the mutation proof's
     row 13a records.
 95. Output does **not** contain `manager updated` (`:657-659`). Port:
-    `:1064`. Non-vacuous: item 93 proves the output carries the subject's
+    `:1194`. Non-vacuous: item 93 proves the output carries the subject's
     verification diagnostics.
 
 ### Scenario 7 — the installed fingerprint stays stale (`:661-674`)
 
 96. Install fails (`:669`). Port: `:1212`.
 97. Output contains `does not match the prepared plugin` (`:670`). Port:
-    `:1083`.
+    `:1218`.
 98. Output contains `SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add` (`:671`).
     Port: `:1222`. The hint text is owned by `src/adapter.ts:641-643` and
     replayed from the adapter result by `scripts/core/lifecycle.sh:109,121`;
     core holds no copy of it.
 99. Output does **not** contain `manager updated` (`:672-674`). Port:
-    `:1089`.
+    `:1224`.
 
 ### Scenario 8 — the missing-fingerprint replay hint (`:676-685`)
 
@@ -443,9 +453,14 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 119. Stdout contains `manager updated` (`:757`). Port: `:1420`.
 120. The adapter log holds `install --package-root <pkg>` (`:758`). Port:
      `:1235`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, so the adapter-log line
+    this item describes is no longer asserted anywhere and no line number
+    can honestly stand in for it. Re-deriving the claim and its pointer
+    together is a re-disposition, not a pointer fix.
 121. The regenerated provenance carries a `commit` that is a string of
      exactly 40 hex digits (`:759-768`, rule 10). Port: `:1435`, helper at
-     `:340`.
+     `:385`.
 
 ### Scenario 12 — update takes the same remediation path (`:770-780`)
 
@@ -453,6 +468,11 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 123. Stdout contains `manager updated` (`:779`). Port: `:1457`.
 124. The adapter log holds `install --package-root <pkg>` (`:780`). Port:
      `:1261`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, so the adapter-log line
+    this item describes is no longer asserted anywhere and no line number
+    can honestly stand in for it. Re-deriving the claim and its pointer
+    together is a re-disposition, not a pointer fix.
 
 <!-- inventory:mapped:end -->
 
@@ -525,7 +545,7 @@ Item 41 extends the shell's install-path provenance check to the update path.
    `legacy` call site (`:671`).
 2. The same guard at the `both` call site (`:680`).
 3. `assertNoCodexMutation` emptiness guard (`:169`), reached through the
-   helper at `:393`, at the `legacy` call site (`:671`).
+   helper at `:445`, at the `legacy` call site (`:671`).
 4. The same guard at the `both` call site (`:680`).
 5. `scripts/` held at least one file, so the source scan proved something
    (`:437`).
@@ -637,29 +657,29 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 
 | Row | Injection (file, exact edit) | Observed RED — item @ port line |
 |---|---|---|
-| 1 | `lifecycle-config.js`: `INSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin add superpowers@spurious` into every Codex call's log | items 19 (`:533`), 21 (`:548`), 24 (`:562`), 27 (`:575`), 32 (`:613`), 38 (`:662`), 44 (`:393` via `:671`), 50 (`:393` via `:680`), 53 (`:708`), 56 (`:730`), 81 (`:955`), 85 (`:992`), 117 (`:1209`) — all 13 `assertNoCodexMutation` sites — plus item 91 (`:1039`); 14/32 cases |
-| 1b | payload → `plugin marketplace remove openai-curated` | row 1's 14 sites, plus items 62 (`:782`), 72 (`:886`), 77 (`:922`), 115 (`:1188`) |
-| 1c | payload → `plugin remove superpowers@superpowers-manager` | row 1's 14 sites, plus items 63 (`:786`), 74 (`:891`), 78 (`:926`), and c29's `assertOrder` (`:1177`) as an injection artifact — see Divergences |
-| 1d | payload → `plugin marketplace add /spurious-root` | row 1's 14 sites, plus item 71 (`:882`) |
-| 1e | payload → `plugin marketplace list openai-curated`, which matches neither `CODEX_MUTATION` nor `PARSE_ABORT_MUTATION` | items 64 (`:790`) and 115 (`:1188`), and nothing else |
-| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:490`), 43 (`:387` via `:671`), 49 (`:387` via `:680`), 80 (`:947`), 84 (`:986`) |
-| 3 | `install-fakes.js` `runAdapter`: `if (joined.startsWith("build ")) log("adapter.log", "inspect --view update-control")` | item 13 (`:485`), and only that |
-| 4 | `install-fakes.js` `runAdapter`: extra `log("codex.log", "plugin list --json")` on every adapter call | item 15 (`:497`), and only that |
-| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:383` via `:671`), 2 (`:383` via `:680`), 7 (`:483`), 14 (`:607`), 18 (`:631`), 31 (`:312` via `:946`), 33 (`:982`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) |
-| 6 | `install-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only 3, 4, 9, 11, 12, 13, 15, 20, 21, 22, 32, 34, 38 — all 13 `assertNoCodexMutation` emptiness guards, at `:393` (×2), `:533`, `:548`, `:562`, `:575`, `:613`, `:662`, `:708`, `:730`, `:955`, `:992`, `:1209` — plus port-only 35 (`:1016`), 36 (`:1038`), item 73 (`:877`), and all five `assertOrder` sites (`:767`, `:817`, `:849`, `:912`, `:1177`) on "needle never appears" |
-| 7 | `install-fakes.js` `runAdapter`: the observable `update-control-count` frozen at `1` while the real count moves to a shadow file, so the `managed-then-unsupported` flip is unchanged and only the counter stops advancing | items 30 (`:598`), 33 (`:625`), 37 (`:660`) |
-| 8 | `install-fakes.js` `runAdapter`: the codex-home existence condition dropped from the fingerprint intercept | item 109 (`:1154`) in c28 only — see Divergences |
-| 9 | `install-fakes.js` `runCodex`: the `marketplaceAdd === "fail"` branch's `process.exit(1)` → `process.exit(0)`, so the add reports success without registering | item 86 (`:1006`), c22 only |
-| 10 | `install-fakes.js` `runCodex`: the `marketplaceAdd === "fail"` branch logs `plugin add superpowers@superpowers-manager` before exiting 1, modelling a subject that proceeds past the failure | item 89 (`:1017`), and only that |
-| 11 | `install-fakes.js` `runCodex`: `if (CONFIG.pluginAdd === "noop") process.exit(0);` deleted, so a `noop` add really refreshes | items 92 (`:1053`), 100 (`:1102`) |
-| 12 | `install-fakes.js` `runCodex`: the `pluginAdd === "stale"` branch condition → `"stale-disabled"`, so the real commit is written | item 96 (`:1077`) |
+| 1 | `lifecycle-config.js`: `INSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin add superpowers@spurious` into every Codex call's log | items 19 (`:599`), 21 (`:618`), 24 (`:636`), 27 (`:653`), 32 (`:695`), 38 (`:752`), 44 (`:445` via `:762`), 50 (`:445` via `:774`), 53 (`:802`), 56 (`:824`), 81 (`:1066`), 85 (`:1108`), 117 (`:1393`) — all 13 `assertNoCodexMutation` sites — plus item 91 (`:1164`); 14/32 cases |
+| 1b | payload → `plugin marketplace remove openai-curated` | row 1's 14 sites, plus items 62 (`:876`), 72 (`:988`), 77 (`:1028`), 115 (`:1368`) |
+| 1c | payload → `plugin remove superpowers@superpowers-manager` | row 1's 14 sites, plus items 63 (`:880`), 74 (`:993`), 78 (`:1032`), and c29's `assertOrder` (`:1357`) as an injection artifact — see Divergences |
+| 1d | payload → `plugin marketplace add /spurious-root` | row 1's 14 sites, plus item 71 (`:984`) |
+| 1e | payload → `plugin marketplace list openai-curated`, which matches neither `CODEX_MUTATION` nor `PARSE_ABORT_MUTATION` | items 64 (`:884`) and 115 (`:1368`), and nothing else |
+| 2 | `install-fakes.js` `runAdapter`: extra `log("adapter.log", "install --package-root /spurious")` on every adapter call | items 14 (`:550`), 43 (`:439` via `:762`), 49 (`:439` via `:774`), 80 (`:947`), 84 (`:1102`) |
+| 3 | `install-fakes.js` `runAdapter`: `if (joined.startsWith("build ")) log("adapter.log", "inspect --view update-control")` | item 13 (`:545`), and only that |
+| 4 | `install-fakes.js` `runAdapter`: extra `log("codex.log", "plugin list --json")` on every adapter call | item 15 (`:557`), and only that |
+| 5 | `install-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only 1 (`:435` via `:762`), 2 (`:435` via `:774`), 7 (`:543`), 14 (`:689`), 18 (`:719`), 31 (`:357` via `:946`), 33 (`:1098`); items 65 (`:812`), 68 (`:844`), 120 (`:1235`), 124 (`:1261`) |
+| 6 | `install-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only 3, 4, 9, 11, 12, 13, 15, 20, 21, 22, 32, 34, 38 — all 13 `assertNoCodexMutation` emptiness guards, at `:445` (×2), `:599`, `:618`, `:636`, `:653`, `:695`, `:752`, `:802`, `:824`, `:1066`, `:1108`, `:1393` — plus port-only 35 (`:1137`), 36 (`:1163`), item 73 (`:979`), and all five `assertOrder` sites (`:861`, `:914`, `:947`, `:1018`, `:1357`) on "needle never appears" |
+| 7 | `install-fakes.js` `runAdapter`: the observable `update-control-count` frozen at `1` while the real count moves to a shadow file, so the `managed-then-unsupported` flip is unchanged and only the counter stops advancing | items 30 (`:680`), 33 (`:713`), 37 (`:750`) |
+| 8 | `install-fakes.js` `runAdapter`: the codex-home existence condition dropped from the fingerprint intercept | item 109 (`:1330`) in c28 only — see Divergences |
+| 9 | `install-fakes.js` `runCodex`: the `marketplaceAdd === "fail"` branch's `process.exit(1)` → `process.exit(0)`, so the add reports success without registering | item 86 (`:1127`), c22 only |
+| 10 | `install-fakes.js` `runCodex`: the `marketplaceAdd === "fail"` branch logs `plugin add superpowers@superpowers-manager` before exiting 1, modelling a subject that proceeds past the failure | item 89 (`:1138`), and only that |
+| 11 | `install-fakes.js` `runCodex`: `if (CONFIG.pluginAdd === "noop") process.exit(0);` deleted, so a `noop` add really refreshes | items 92 (`:1183`), 100 (`:1242`) |
+| 12 | `install-fakes.js` `runCodex`: the `pluginAdd === "stale"` branch condition → `"stale-disabled"`, so the real commit is written | item 96 (`:1212`) |
 | 13a | `install-fakes.js` `runAdapter`: writes `spw-sidecar-leak` into `$TMPDIR` | **none — 32/32 GREEN.** See Divergences |
-| 13b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 61 (`:294` via `:779`), 94 (`:294` via `:1061`) — both `assertTmpEmpty` ports |
-| 14 | `install-commands.test.js`: `prepareGeneratedTree` (`:210`) short-circuited to a no-op, so the generated-tree precondition is lost at all of its call sites | port-only 8 (`:519`), 10 (`:546`), 17 (`:623`), 19 (`:658`), 25 (`:809`), 27 (`:841`) — all six `assertNoPrepareRan` guards — plus item 79 (`:944`). The injection added one line, so the runner reported each of these one higher; the numbers here are against the restored file |
-| 15 | `lifecycle-fixture.js` `buildSnapshot` (`:42-61`): `scripts/adapters/codex/validate-generated-plugin.py` planted in the snapshot every per-case package root is copied from (`:188`) | item 12 (`:467`), and only that |
-| O1 | first adjacent needle pair swapped at each of the five `assertOrder` sites, plus `buildLine < secondControlLine` → `>` and `lastOwnership < lastControl` → `>` | items 31 (`:608`), 34 (`:632`), 58 (`:767`), 66 (`:817`), 69 (`:849`), 75 (`:912`), 112 (`:1177`) |
-| O2 | second adjacent pair swapped at the same five sites, plus `lastControl < installLine` → `>` | items 35 (`:636`), 59 (`:767`), 67 (`:817`), 70 (`:849`), 76 (`:912`), 113 (`:1177`) |
-| O3 | third adjacent pair swapped at the four-needle site | item 114 (`:1177`) |
+| 13b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 61 (`:339` via `:873`), 94 (`:339` via `:1191`) — both `assertTmpEmpty` ports |
+| 14 | `install-commands.test.js`: `prepareGeneratedTree` (`:224`) short-circuited to a no-op, so the generated-tree precondition is lost at all of its call sites | port-only 8 (`:585`), 10 (`:616`), 17 (`:711`), 19 (`:748`), 25 (`:907`), 27 (`:942`) — all six `assertNoPrepareRan` guards — plus item 79 (`:1054`). The injection added one line, so the runner reported each of these one higher; the numbers here are against the restored file |
+| 15 | `lifecycle-fixture.js` `buildSnapshot` (`:42-61`): `scripts/adapters/codex/validate-generated-plugin.py` planted in the snapshot every per-case package root is copied from (`:198`) | item 12 (`:519`), and only that |
+| O1 | first adjacent needle pair swapped at each of the five `assertOrder` sites, plus `buildLine < secondControlLine` → `>` and `lastOwnership < lastControl` → `>` | items 31 (`:690`), 34 (`:720`), 58 (`:861`), 66 (`:914`), 69 (`:947`), 75 (`:1018`), 112 (`:1357`) |
+| O2 | second adjacent pair swapped at the same five sites, plus `lastControl < installLine` → `>` | items 35 (`:724`), 59 (`:861`), 67 (`:914`), 70 (`:947`), 76 (`:1018`), 113 (`:1357`) |
+| O3 | third adjacent pair swapped at the four-needle site | item 114 (`:1357`) |
 | P1 | no tracked file touched: a `node` probe applied the source-guard and packaged-root predicates to the real file contents and to in-memory regression copies | predicates `true` on the real inputs, `false` on every regression copy — see adjudication D |
 
 Row 1's `plugin add superpowers@spurious` payload deliberately names no real
@@ -712,7 +732,7 @@ codex-home condition makes the fingerprint intercept fire at
 the subject then dies with a bare `error: invalid adapter response: Expecting
 property name enclosed in double quotes: line 1 column 2 (char 1)`, which
 carries no fingerprint context, so item 108 (`invalid adapter response`,
-`:1152`) stayed GREEN and item 109 (`fingerprint inspection`, `:1154`) went
+`:1328`) stayed GREEN and item 109 (`fingerprint inspection`, `:1330`) went
 RED. That is the fake's own comment (`install-fakes.js:270-273`) proved live.
 
 **Superseded for c27 by the slice-3.5 re-base — kept because it is the finding
@@ -734,7 +754,7 @@ error: invalid adapter response: Expecting value: line 1 column 1 (char 0)
 
 The only text carrying item 104's needle is the **fixture's own stderr line**,
 not the subject's diagnostic. `grep -rn 'fingerprint inspection' scripts/ src/`
-returns exactly two sites, `scripts/core/lifecycle.sh:92` and `:96`, both
+returns exactly two sites, `scripts/core/lifecycle.sh:92` and `:106`, both
 inside `spw_verify_installed_fingerprint` — so in the baseline the needle has
 two possible sources and item 104 cannot tell them apart. **Item 104 was
 therefore narrower than it read**: it proved the string appeared, not that the
@@ -747,15 +767,15 @@ non-vacuity rationale was strengthened by the re-base.
 **Row 1c — an injection artifact, recorded so it is not read as evidence.**
 The payload `plugin remove superpowers@superpowers-manager` is itself one of
 c29's `assertOrder` needles, so `firstIndex` found the injected line at index 1
-and the call failed "out of order" at `:1177`. That RED says nothing about
+and the call failed "out of order" at `:1357`. That RED says nothing about
 item 113, which is proven by row O2 instead.
 
 No other row's payload collides with a needle **in a way that perturbs
 first-occurrence order**. One benign collision exists and is named here so the
 reader is not relying on a broader claim than was checked: row 1e's payload
 `plugin marketplace list openai-curated` contains the needle
-`plugin marketplace list` used by the `assertOrder` calls at `:767`, `:817`,
-and `:1177`. It is harmless because the injected line is appended on *every*
+`plugin marketplace list` used by the `assertOrder` calls at `:861`, `:914`,
+and `:1357`. It is harmless because the injected line is appended on *every*
 Codex call, starting with probe's `plugin list --json`, so `firstIndex`
 (`lifecycle-fixture.js:319-321`) resolves that needle *earlier* than the real
 `plugin marketplace list` line rather than later, and every following needle
@@ -765,12 +785,12 @@ produced no RED at any of the three sites, which is the observed confirmation.
 
 **Row 5 — the hoisted non-vacuity guards shadowed the negatives they protect,
 which is them working.** Items 13 and 14 (prepare's adapter-log negatives)
-stayed GREEN because port-only 7 (`:483`) fires six lines earlier; items 80 and
-84 stayed GREEN behind port-only 31 (`:946`) and 33 (`:982`). Each of those
+stayed GREEN because port-only 7 (`:543`) fires six lines earlier; items 80 and
+84 stayed GREEN behind port-only 31 (`:946`) and 33 (`:1098`). Each of those
 four negatives is proven independently by rows 2 and 3.
 
 **Row 14 — two findings beyond the six guards it was aimed at.** Item 79
-(`:944`, `manager is current`) also turned RED, confirming live the claim at
+(`:1054`, `manager is current`) also turned RED, confirming live the claim at
 `:450-457` that item 79 doubles as scenario 3b's precondition pin. And c21
 (scenario 3c) stayed GREEN under the same lost precondition, confirming the
 same passage's statement that 3c's `current` precondition *cannot* be pinned
@@ -795,10 +815,10 @@ that scenario and **(2)** what future change would make it reachable. This
 two-part form is introduced here; `bin-dispatch.md:27-36` is the
 counting-decision adjudication it generalises.
 
-**A — items 95 (`:1064`), 99 (`:1089`), 106 (`:1133`) and 111 (`:1160`),
+**A — items 95 (`:1194`), 99 (`:1224`), 106 (`:1302`) and 111 (`:1336`),
 "output does not contain `manager updated`".** *(1)* Structurally shadowed by
 each case's own exit-status assertion. `scripts/core/lifecycle.sh:102` prints
-the banner and `:103` immediately `return 0`s, and `scripts/install:57-59`
+the banner and `:113` immediately `return 0`s, and `scripts/install:57-59`
 exits 1 only when that function returns non-zero — so when the **subject**
 prints `manager updated`, it is exiting 0. Every config toggle that makes the
 subject print the banner therefore makes `status === 0` too, and each of the
@@ -809,7 +829,7 @@ the banner negative.
 A fixture-side lever nevertheless exists, and adjudication C's disposition
 applies here too: a fake writing `manager updated` to **stderr** would turn all
 four RED while `status !== 0` still holds, because each case asserts over
-`result.stdout + result.stderr` (`:1051`, `:1075`, `:1118`, `:1144`) and
+`result.stdout + result.stderr` (`:1181`, `:1210`, `:1279`, `:1320`) and
 fixture stderr reaches that capture — the retired `fingerprintInspect: "fail"`
 branch in `install-fakes.js` was the same mechanism row 8 exercised, and the
 lever survives its removal because any fixture write to stderr reaches the
@@ -823,27 +843,27 @@ That is a real regression class the exit-status assertions do not catch, which
 is why all four negatives are kept rather than folded into items 92, 96, 100
 and 104.
 
-**B — item 18 (`:528`), "output does not contain `manager is current`".**
+**B — item 18 (`:594`), "output does not contain `manager is current`".**
 *(1)* Same coupling, on the update side. `scripts/update:17-21` runs
 `spw_require_managed_update_control` *before* `echo "manager is current"`, and
 the `current)` branch has no step after the echo that can fail — so when the
-**subject** prints the banner it is exiting 0, which item 16 (`:516`) asserts
+**subject** prints the banner it is exiting 0, which item 16 (`:582`) asserts
 against and would report first. Under c4's `updateControl: "unsupported"` the
 gate rejects before the echo; under any toggle that lets the gate pass, item 16
 fires. The same declined fixture lever as in adjudication A applies here: c4
-asserts over `result.stdout + result.stderr` (`:514`), so a fake writing
+asserts over `result.stdout + result.stderr` (`:580`), so a fake writing
 `manager is current` to stderr would turn item 18 RED without proving anything
 about the subject. *(2)*
 Reachable if the echo moved above `spw_require_managed_update_control`, if the
 banner were emitted from a trap, or if a failing step were added after it.
-Item 17 (`:521`) already proves `out` carries the subject's diagnostics, so
+Item 17 (`:587`) already proves `out` carries the subject's diagnostics, so
 item 18 is not vacuous — only shadowed.
 
-**C — items 105 (`:1129`) and 110 (`:1156`), "output does not contain
+**C — items 105 (`:1298`) and 110 (`:1332`), "output does not contain
 `fingerprint is not detectable`".** *(1)* The two states are mutually
 exclusive in the subject. `spw_verify_installed_fingerprint` returns at
-`lifecycle.sh:92` when the inspection fails and at `:96` when its result
-cannot be parsed; the `not detectable` message at `:118` is reachable only
+`lifecycle.sh:92` when the inspection fails and at `:106` when its result
+cannot be parsed; the `not detectable` message at `:128` is reachable only
 after a *successful* inspection that yielded an empty fingerprint. The
 `fingerprintInspect` config surface offers exactly `ok | malformed` since the
 slice-3.5 re-base retired `fail`, and `malformed` lands on the early return at
