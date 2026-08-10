@@ -1,13 +1,21 @@
 // @ts-check
-// Two gates. Without them, the 9 literal readLog(c.adapterLog) reader sites in
-// the SEAM_SOURCES files, and the 30 cases that declare a seamDependency, go
-// vacuous when slice 4 removes the seam, in exactly the way five cli-parity
-// assertions did in slice 3.4 — silently, with the suite still green. Both
-// numbers are counted from the tree; the third case below re-derives the 30
-// on every run.
+// Two gates, plus the four cases that keep them from going vacuous. Without
+// them, the 9 literal readLog(c.adapterLog) reader sites in the SEAM_SOURCES
+// files, and the 30 cases that declare a seamDependency, go vacuous when slice
+// 4 removes the seam, in exactly the way five cli-parity assertions did in
+// slice 3.4 — silently, with the suite still green. Both numbers are counted
+// from the tree; the count case below re-derives the 30 on every run.
+//
+// The two gates are "every script with seam-dependent cases still exists" and
+// "no adapter-log reader is left unclassified". The other four cases exist
+// only because each gate has a way to stop asserting: the injection proof
+// shows gate 1 can still fail, the count case ties SEAM_DEPENDENT to the
+// declarations it claims to protect, and the two membership cases keep
+// SEAM_SOURCE_FILES — the scan set both gates now walk — from being emptied
+// ahead of the residue it is supposed to find.
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -19,6 +27,14 @@ import {
 } from "./adapter-seam.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
+// One source of truth for what a declaration looks like, shared by the count
+// case and the tree-derived membership case below. If the two ever drifted,
+// the tree scan could miss a form the count scan credits — which is the
+// unclassified-residue hole all over again, one level up. Non-global on
+// purpose; the count case adds the `g` flag where it needs matchAll, so no
+// `lastIndex` is ever carried between .test() calls.
+const DECLARATION = /seamDependency:\s*\{[^}]*script:\s*"(\w+)"/;
 
 void test("every script with seam-dependent cases still exists", () => {
   assertSeamScriptsPresent(ROOT, existsSync);
@@ -58,9 +74,7 @@ void test("each declared count matches the declarations in its sources", () => {
   for (const script of Object.keys(SEAM_DEPENDENT)) found[script] = 0;
   for (const relative of SEAM_SOURCE_FILES) {
     const source = readFileSync(join(ROOT, relative), "utf8");
-    for (const m of source.matchAll(
-      /seamDependency:\s*\{[^}]*script:\s*"(\w+)"/g,
-    )) {
+    for (const m of source.matchAll(new RegExp(DECLARATION, "g"))) {
       const script = m[1];
       assert.ok(
         Object.hasOwn(found, script),
@@ -120,3 +134,56 @@ void test("every SEAM_SOURCES file is listed in SEAM_SOURCE_FILES", () => {
     }
   }
 });
+
+void test("every file declaring a seamDependency is in SEAM_SOURCE_FILES", () => {
+  // The converse the case above CANNOT state, derived from the TREE rather
+  // than from any map. The distinction is the whole point, and the two fail in
+  // opposite directions:
+  //
+  //   A query over SEAM_SOURCES empties when an engineer edits a map. That is
+  //   why deriving the scan set from it was the original defect, and why the
+  //   case above deliberately checks only one direction.
+  //
+  //   A query over the tree empties only when the residue is actually gone —
+  //   which is exactly slice 4's success condition. So it can safely demand
+  //   the direction the map query must not.
+  //
+  // Without this, retiring `uninstall` from SEAM_DEPENDENT, SEAM_SOURCES and
+  // SEAM_SOURCE_FILES together — the procedure gate 1's own diagnostic
+  // prescribes — turns every other case green while
+  // uninstall-commands.test.js still holds live declarations and live
+  // readLog(c.adapterLog) readers. An entry may leave SEAM_SOURCE_FILES only
+  // after its file's residue is zero, and this is what enforces that order.
+  //
+  // Self-excluding by construction: this file and adapter-seam.js mention
+  // seamDependency only in prose and in escaped regex source, neither of which
+  // matches DECLARATION's literal `: {`.
+  for (const relative of declaringFiles()) {
+    assert.ok(
+      SEAM_SOURCE_FILES.includes(relative),
+      `${relative} declares a seamDependency but is absent from ` +
+        "SEAM_SOURCE_FILES, so both gates skip it entirely. Re-base or " +
+        "retire its declarations and its adapter-log readers BEFORE " +
+        "removing its SEAM_SOURCE_FILES entry, not after.",
+    );
+  }
+});
+
+/**
+ * Every path under tests/ whose contents hold a seamDependency declaration,
+ * repository-relative and posix-spelled to match SEAM_SOURCE_FILES.
+ *
+ * @returns {string[]}
+ */
+function declaringFiles() {
+  const found = [];
+  for (const entry of readdirSync(join(ROOT, "tests"), { recursive: true })) {
+    const relative = join("tests", String(entry));
+    if (!relative.endsWith(".js")) continue;
+    if (relative.split("/").includes("node_modules")) continue;
+    const absolute = join(ROOT, relative);
+    if (!statSync(absolute).isFile()) continue;
+    if (DECLARATION.test(readFileSync(absolute, "utf8"))) found.push(relative);
+  }
+  return found;
+}

@@ -78,7 +78,9 @@ const LEAKED_INTERNALS =
 
 /**
  * No prepare-owned diagnostic may carry errno text, a stack frame, or reader
- * vocabulary. Applied to every negative case.
+ * vocabulary. Applied to every negative case, and to the positive cases whose
+ * stderr is expected to be empty — a status-0 run that leaks errno text on a
+ * warning line is the same defect.
  * @param {string} stderr
  */
 function assertNoLeakedInternals(stderr) {

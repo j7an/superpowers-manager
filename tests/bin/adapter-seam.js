@@ -110,8 +110,25 @@ export const SEAM_SOURCES = {
  * SEAM_DEPENDENT") is silenced by deleting the SEAM_SOURCES key, which would
  * turn both gates green with every residue site intact.
  *
- * adapter-seam.test.js asserts every SEAM_SOURCES value is a member here, so
- * the two lists cannot drift apart.
+ * RETIRING AN ENTRY. Emptying this list is as dangerous as deriving it, and
+ * for the same reason: a file that leaves it stops being scanned by both
+ * gates, residue and all. Gate 1's diagnostic below says "remove this entry
+ * before deleting the script", and that instruction is about SEAM_DEPENDENT
+ * only. For THIS list the order is the reverse:
+ *
+ *   1. Re-base or retire the file's seamDependency declarations and its
+ *      readLog(c.adapterLog) readers, until its residue is zero.
+ *   2. Only then remove its SEAM_SOURCE_FILES entry.
+ *
+ * Doing it the other way round — retiring `uninstall` from SEAM_DEPENDENT,
+ * SEAM_SOURCES and this list in one step, alongside scripts/uninstall — leaves
+ * every gate green over a file that still holds live declarations and live
+ * readers. adapter-seam.test.js's "every file declaring a seamDependency is in
+ * SEAM_SOURCE_FILES" enforces step 1 before step 2 by scanning the TREE, not
+ * these maps: a tree query empties only when the residue is genuinely gone,
+ * which is precisely slice 4's success condition. Its sibling case asserts
+ * every SEAM_SOURCES value is a member here, so the two lists cannot drift
+ * apart either.
  *
  * @type {string[]}
  */
