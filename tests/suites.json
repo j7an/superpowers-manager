@@ -15,6 +15,7 @@
     "tests/baseline/suite-runner.test.js",
     "tests/baseline/traceability.test.js",
     "tests/bin/action-pins.test.js",
+    "tests/bin/adapter-seam.test.js",
     "tests/bin/assert-matcher-gate.test.js",
     "tests/bin/bin-dispatch.test.js",
     "tests/bin/bootstrap.test.js",

@@ -44,8 +44,17 @@ export const INSTALL_SCHEMA = {
     "managed-then-unsupported",
   ],
   marketplaceAdd: ["ok", "fail"],
-  pluginAdd: ["ok", "fail", "noop", "stale"],
-  fingerprintInspect: ["ok", "fail", "malformed"],
+  // `orphan` registers the plugin as installed without materialising its
+  // cached tree, which is the only lever that makes the REAL adapter's
+  // fingerprint inspection fail (src/adapter.ts:815-828). It exists so the
+  // failed-inspection case can assert the subject's own diagnostic instead of
+  // intercepting the adapter — see install-commands.test.js's
+  // "a failed fingerprint inspection is reported as an inspection failure".
+  pluginAdd: ["ok", "fail", "noop", "stale", "orphan"],
+  // No `fail`: the failed-inspection case is driven from the fake Codex by
+  // `pluginAdd: "orphan"` instead, so the enum carries only the protocol-level
+  // fault the real adapter cannot produce.
+  fingerprintInspect: ["ok", "malformed"],
   pluginListRc: "integer",
   marketplaceListRc: "integer",
   spuriousMutation: "boolean",

@@ -9,6 +9,7 @@ import {
   cpSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -123,7 +124,7 @@ export const DECLARED_HOOK_PATHS = [
 ];
 
 /**
- * Eight branches, built once. The base commit is deliberately manifest-less so
+ * Ten branches, built once. The base commit is deliberately manifest-less so
  * `v5.0.0` serves GENERATED-FALLBACK-01; every other branch adds a manifest on
  * top of it.
  * @returns {string}
@@ -266,6 +267,94 @@ function buildUpstream() {
     );
     symlinkSync("../../outside", join(upstream, "hooks", "escape"));
   });
+  // P1 — a `hooks` value no classification branch accepts, so the adapter's
+  // `hook classification failed:` wrapper (src/adapter.ts:364) is the
+  // diagnostic under test.
+  //
+  // The value is a NUMBER on purpose. classifyHooks accepts
+  // `typeof hooks === "string"` as a single declared path
+  // (src/hooks.ts:196-198), so a plain string reaches validateDeclaredFile and
+  // fails with `declared hook path must start with ./` — a different cause,
+  // already covered in tests/unit/hooks.test.js. 42 falls through every
+  // accepted shape to the unsupported-declaration throw.
+  //
+  // The eight underlying causes the retired shell driver asserted behind this
+  // prefix are all already message-exact in tests/unit/hooks.test.js. This
+  // branch exists for the wrapper alone.
+  branchWith("hooks-unsupported-declaration", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = 42;
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+  });
+  // P2a — the hooks ROOT is a relative symlink escaping the upstream checkout,
+  // so the SOURCE-side validateSubtreeSymlinks call (src/hooks.ts:358) fails
+  // its containment check at :303. Ports the retired driver's
+  // hooks-root-escape-symlink and hooks-root-broken-symlink cases (items 128
+  // and 127), which share this branch.
+  //
+  // classifyHooks returns copyHooksSubtree: hooksRootPresent
+  // (src/hooks.ts:230), and a symlink is present rather than missing, so
+  // materializeHooks reaches the validation. The link is relative, so it
+  // passes the absolute-symlink rejection at src/hooks.ts:296-298 first.
+  branchWith("hooks-root-escape-symlink", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = [...DECLARED_HOOK_PATHS];
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    for (const relative of DECLARED_HOOK_PATHS) {
+      const target = join(upstream, relative);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, `${JSON.stringify({ fixture: relative })}\n`);
+    }
+    rmSync(join(upstream, "hooks"), { recursive: true, force: true });
+    symlinkSync("../outside-the-checkout", join(upstream, "hooks"));
+  });
+  // P2b — the hooks ROOT is a relative symlink to source-contained content
+  // that never reaches the candidate, so SOURCE validation passes and the
+  // CANDIDATE validation at src/hooks.ts:367 fails.
+  //
+  // `.git` is the target for the same reason the retired shell fixture used
+  // it: it exists in the upstream checkout, so assertExistingContained accepts
+  // it at :358, and it is absent from src/commands/prepare.ts:29-35's five
+  // copied paths, so the symlink recreated at src/hooks.ts:359-360 dangles in
+  // the candidate. Any target outside those five works; this one keeps the
+  // ported case recognisable against the file it replaces.
+  branchWith("hooks-root-contained-source-only", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = { SessionStart: [] };
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    rmSync(join(upstream, "hooks"), { recursive: true, force: true });
+    symlinkSync(".git", join(upstream, "hooks"));
+  });
+  // P4 — a CONTAINED relative hooks-root symlink, which src/hooks.ts:359-360
+  // recreates in the candidate rather than dereferencing.
+  //
+  // The target must live under `assets/`. src/commands/prepare.ts:29-35 copies
+  // exactly five paths into the candidate — skills, assets, LICENSE,
+  // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
+  // directory would dangle in the candidate and fail the SECOND
+  // validateSubtreeSymlinks call at src/hooks.ts:367. That is precisely what
+  // P2b's `.git` fixture does on purpose; this one is its mirror image, and
+  // the two differ only in whether the target is one of the copied five.
+  branchWith("hooks-root-contained-materialized", () => {
+    const declared = JSON.parse(
+      readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
+    );
+    declared.hooks = { SessionStart: [] };
+    writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
+    mkdirSync(join(upstream, "assets", "hook-root"), { recursive: true });
+    writeFileSync(
+      join(upstream, "assets", "hook-root", "root-hook.txt"),
+      "materialized root target\n",
+    );
+    rmSync(join(upstream, "hooks"), { recursive: true, force: true });
+    symlinkSync("assets/hook-root", join(upstream, "hooks"));
+  });
   return upstream;
 }
 
@@ -279,6 +368,10 @@ export const REFS = {
   noHooksManifest: "manifest-no-hooks",
   wrongName: "manifest-wrong-name",
   escapingSymlink: "hooks-escaping-symlink",
+  unsupportedHooks: "hooks-unsupported-declaration",
+  escapingHooksRoot: "hooks-root-escape-symlink",
+  sourceOnlyHooksRoot: "hooks-root-contained-source-only",
+  containedHooksRoot: "hooks-root-contained-materialized",
 };
 
 /**

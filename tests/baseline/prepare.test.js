@@ -11,9 +11,11 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -76,7 +78,9 @@ const LEAKED_INTERNALS =
 
 /**
  * No prepare-owned diagnostic may carry errno text, a stack frame, or reader
- * vocabulary. Applied to every negative case.
+ * vocabulary. Applied to every negative case, and to the positive cases whose
+ * stderr is expected to be empty — a status-0 run that leaks errno text on a
+ * warning line is the same defect.
  * @param {string} stderr
  */
 function assertNoLeakedInternals(stderr) {
@@ -334,6 +338,91 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   const result = await prepare(c, { SUPERPOWERS_REF: REFS.escapingSymlink });
   assert.equal(result.status, 1, result.stdout);
   assert.match(result.stderr, /^hook materialization failed: symlink escapes/m);
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+// P1 — the adapter's classification wrapper (src/adapter.ts:364). Ported from
+// tests/test_prepare_with_fake_upstream.sh:1001-1022, which held the only
+// witness of this prefix anywhere in the repository. The eight inner causes
+// those shell lines also asserted are already message-exact in
+// tests/unit/hooks.test.js and are deliberately NOT re-ported: what was
+// missing is that a classification failure reaches stderr through the adapter
+// with this prefix intact. Its materialization twin (src/adapter.ts:373) is
+// asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
+void test("a classification failure reaches stderr through the adapter wrapper", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.unsupportedHooks });
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(
+    result.stderr,
+    /^hook classification failed: unsupported or mixed hooks declaration$/m,
+  );
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+// P2a — src/hooks.ts:303 reached from the SOURCE-side call at :358. Ports the
+// retired driver's :1041 and :1044 cases (inventory items 127 and 128).
+//
+// The PATH is the assertion, not the message. Three different failures print
+// `hook subtree escapes or is broken`: this one names the hooks root under the
+// upstream cache checkout, P2b names the root under the staging candidate, and
+// P3 names a subdirectory inside hooks/. Matching the bare message would leave
+// all three indistinguishable and satisfy none specifically.
+void test("an escaping hooks-root symlink fails closed on the source side", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, { SUPERPOWERS_REF: REFS.escapingHooksRoot });
+  assert.equal(result.status, 1, result.stdout);
+  const emitted = result.stderr.match(
+    /^hook materialization failed: hook subtree escapes or is broken: (.+)$/m,
+  );
+  assert.ok(emitted, result.stderr);
+  assert.equal(emitted[1], join(cacheRepo(c), "hooks"));
+  assert.match(
+    result.stderr,
+    /^error: failed to prepare upstream Codex hooks\n$/m,
+  );
+  assertNoLeakedInternals(result.stderr);
+  assert.deepEqual(snapshotTree(generated(c)), before);
+});
+
+// P2b — src/hooks.ts:303 reached from the CANDIDATE-side call at :367. Ports
+// the retired driver's :1035 case (inventory item 125), which is the only
+// root-specific witness that post-copy validation runs.
+//
+// The discriminator is which root the emitted path names. Both P2a and this
+// case end in `/hooks`, so a `/hooks$` matcher cannot tell them apart. The
+// candidate root is an invocation-specific staging path the workspace trap
+// removes on failure, so assert its RELATIONSHIP to the cache root rather
+// than pinning a literal that cannot exist by the time the test reads it.
+void test("a source-only hooks root fails closed on the candidate side", async () => {
+  const c = createCase({ fakes: "probe" });
+  const before = seedSentinel(c);
+  const result = await prepare(c, {
+    SUPERPOWERS_REF: REFS.sourceOnlyHooksRoot,
+  });
+  assert.equal(result.status, 1, result.stdout);
+  const emitted = result.stderr.match(
+    /^hook materialization failed: hook subtree escapes or is broken: (.+)$/m,
+  );
+  assert.ok(emitted, result.stderr);
+  assert.match(emitted[1], /\/hooks$/);
+  assert.ok(
+    !emitted[1].startsWith(cacheRepo(c)),
+    `expected the CANDIDATE hooks root, got a path under the source ` +
+      `checkout: ${emitted[1]}`,
+  );
   assert.match(
     result.stderr,
     /^error: failed to prepare upstream Codex hooks\n$/m,
@@ -816,4 +905,98 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   );
   assertNoLeakedInternals(result.stderr);
   assert.deepEqual(snapshotTree(generated(pinned)), pinnedBefore);
+});
+
+// P3 — src/hooks.ts:279, the WALK branch, where readdir fails on a directory
+// inside a subtree that has already passed the containment check at :303.
+//
+// This branch is unwitnessed on BOTH sides. The retired driver's three
+// hooks-root cases all corrupt the root and land on :303 — two source-side
+// (P2a), one candidate-side (P2b). Porting "the shell's coverage" would have
+// carried this gap across rather than closed it.
+//
+// The precondition is a filesystem permission, which git cannot store, so the
+// fixture follows the shape already established for the unreadable-manifest
+// case above: run once so the upstream cache is populated, capture the real
+// mode rather than assuming one, chmod, run again, restore in a `finally`.
+// The second run takes the fetch branch and leaves the working tree alone.
+//
+// A visible skip, not an early `return`: returning reports a PASS while
+// asserting nothing. tests/container.sh:8-12 refuses a root container, but
+// `sh tests/run.sh` on a root host has no uid check at all, so this branch is
+// reachable and must say so when it is taken.
+void test(
+  "an unreadable hooks subdirectory fails closed naming the subdirectory",
+  {
+    skip:
+      process.getuid?.() === 0
+        ? "permission checks do not apply to root"
+        : false,
+  },
+  async () => {
+    const c = createCase({ fakes: "probe" });
+    const first = await prepare(c, { SUPERPOWERS_REF: REFS.defaultHooks });
+    assert.equal(first.status, 0, first.stderr);
+    const before = snapshotTree(generated(c));
+
+    // hooks/support/ holds helper.txt in the shared fixture, so collectEntries
+    // pushes it onto the walk queue and readdirs it. Captured, not assumed:
+    // the mode git checked the directory out with belongs to git and the
+    // umask.
+    const unreadable = join(cacheRepo(c), "hooks", "support");
+    const mode = statSync(unreadable).mode & 0o7777;
+    chmodSync(unreadable, 0o000);
+    try {
+      const result = await prepare(c, { SUPERPOWERS_REF: REFS.defaultHooks });
+      assert.equal(result.status, 1, result.stdout);
+      const emitted = result.stderr.match(
+        /^hook materialization failed: hook subtree escapes or is broken: (.+)$/m,
+      );
+      assert.ok(emitted, result.stderr);
+      assert.equal(emitted[1], unreadable);
+      assert.match(
+        result.stderr,
+        /^error: failed to prepare upstream Codex hooks\n$/m,
+      );
+      assertNoLeakedInternals(result.stderr);
+      assert.deepEqual(snapshotTree(generated(c)), before);
+    } finally {
+      chmodSync(unreadable, mode);
+    }
+  },
+);
+
+// P4 — src/hooks.ts:359-360, the ACCEPTING side of the hooks-root symlink
+// policy, covering both halves the retired shell driver held alone (items
+// 83-85 in tests/migration-inventory/prepare.md, whose entry for item 83 ends
+// "Slice 3.5, read this before deleting the shell file").
+//
+// Every other root-symlink case in the repository asserts rejection:
+// tests/baseline/generated-plugin-corpus.test.js:812-880 is twelve cases of
+// status === 1, and :907 puts contained symlinks inside a REAL hooks/
+// directory rather than symlinking the root. Without this case, acceptance is
+// exercised by nothing on either the materializing or the validating side.
+void test("a contained relative hooks root is recreated as a symlink in the candidate", async () => {
+  const c = createCase({ fakes: "probe" });
+  const result = await prepare(c, {
+    SUPERPOWERS_REF: REFS.containedHooksRoot,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assertNoLeakedInternals(result.stderr);
+
+  const hooks = join(generated(c), "hooks");
+  // Materializing side: the root stays a symlink and keeps its exact target.
+  assert.ok(
+    lstatSync(hooks).isSymbolicLink(),
+    "a contained hooks root must remain a symlink in the candidate",
+  );
+  assert.equal(readlinkSync(hooks), "assets/hook-root");
+  // Validating side: the candidate passed validateSubtreeSymlinks at
+  // src/hooks.ts:367 (status 0 above) AND the content behind the root is
+  // actually reachable through it, which is what makes the acceptance real
+  // rather than a dangling link nobody followed.
+  assert.equal(
+    readFileSync(join(hooks, "root-hook.txt"), "utf8"),
+    "materialized root target\n",
+  );
 });

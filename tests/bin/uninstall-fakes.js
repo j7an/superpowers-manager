@@ -104,8 +104,20 @@ function runCodex() {
 }
 
 function runAdapter() {
+  const SEAM = process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate";
   log("adapter.log", ARGS.join(" "));
-  if (ARGS.join(" ") === "inspect --view update-control") {
+  if (SEAM === "tripwire") {
+    // The command is dispatched in-process, so runAdapter is a function call
+    // and this executable must never be reached. Same shape as
+    // tests/bin/probe-fakes.js:23-29, shipped in slice 2.
+    process.stderr.write("fixture: this command must not spawn the adapter\n");
+    process.exitCode = 94;
+    return;
+  }
+  if (
+    SEAM === "intercept" &&
+    ARGS.join(" ") === "inspect --view update-control"
+  ) {
     process.stdout.write(
       `${JSON.stringify({
         protocol: 1,

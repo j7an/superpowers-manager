@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -19,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateConfig } from "./lifecycle-config.js";
+import { SEAM_DEPENDENT, SEAM_MODES, SEAM_REASONS } from "./adapter-seam.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -28,7 +30,9 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 // turns the CI toolchain job red on a bare ubuntu-latest runner while every
 // local gate stays green — PR 11.2 shipped exactly that defect and had to
 // remove it.
-export const SCRATCH = mkdtempSync(join(tmpdir(), "spw-lifecycle-"));
+export const SCRATCH = realpathSync(
+  mkdtempSync(join(tmpdir(), "spw-lifecycle-")),
+);
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });
@@ -141,6 +145,7 @@ export const UPSTREAM = buildUpstream();
  * @property {string} adapterLog
  * @property {string} codexBin
  * @property {string} adapterBin
+ * @property {string} adapterSeam what the fake adapter does: delegate, tripwire, or intercept
  */
 
 /**
@@ -170,6 +175,8 @@ function writeFakeBin(dir, name, modulePath, role) {
  * @param {object} options
  * @param {"install" | "uninstall" | "probe"} options.fakes
  * @param {Record<string, unknown>} [options.config]
+ * @param {"delegate" | "tripwire" | "intercept"} [options.adapterSeam]
+ * @param {{ reason: "intercept" | "log", script: string }} [options.seamDependency]
  * @returns {CaseEnv}
  */
 export function createCase(options) {
@@ -178,6 +185,46 @@ export function createCase(options) {
   // calls — the missing-python3 case asserts an empty Codex log, so a typo'd
   // key there would otherwise still pass, defeating this design's rationale.
   validateConfig(options.fakes, options.config ?? {});
+
+  // Eager, for the same reason validateConfig above is eager: a case that
+  // makes zero adapter calls would otherwise carry a typo'd mode undetected.
+  const adapterSeam = options.adapterSeam ?? "delegate";
+  if (!SEAM_MODES.includes(adapterSeam)) {
+    throw new Error(
+      `createCase: unknown adapterSeam ${JSON.stringify(adapterSeam)} — ` +
+        `expected one of ${SEAM_MODES.join(", ")}`,
+    );
+  }
+  if (adapterSeam === "intercept" && !options.seamDependency) {
+    throw new Error(
+      "createCase: adapterSeam 'intercept' requires seamDependency, so the " +
+        "case is attributable to a script in SEAM_DEPENDENT",
+    );
+  }
+  if (options.seamDependency) {
+    const { reason, script } = options.seamDependency;
+    if (!SEAM_REASONS.includes(reason)) {
+      throw new Error(
+        `createCase: unknown seamDependency reason ${JSON.stringify(reason)}`,
+      );
+    }
+    if (!Object.hasOwn(SEAM_DEPENDENT, script)) {
+      throw new Error(
+        `createCase: ${script} is not in SEAM_DEPENDENT — declare it there ` +
+          "before adding a seam-dependent case, or the gate cannot see it",
+      );
+    }
+    // The converse of the adapterSeam check above, which alone leaves the
+    // implication one-directional: a case declaring reason 'intercept' while
+    // running in delegate or tripwire mode would silently get no interception,
+    // and the registry would over-report its intercept count.
+    if (reason === "intercept" && adapterSeam !== "intercept") {
+      throw new Error(
+        "createCase: seamDependency reason 'intercept' requires adapterSeam " +
+          "'intercept'",
+      );
+    }
+  }
 
   const dir = mkdtempSync(join(SCRATCH, "case-"));
   const pkg = join(dir, "pkg");
@@ -212,6 +259,7 @@ export function createCase(options) {
     adapterLog: join(state, "adapter.log"),
     codexBin,
     adapterBin,
+    adapterSeam,
   };
 }
 
@@ -253,6 +301,10 @@ export async function runScript(caseEnv, script, options = {}) {
     XDG_CONFIG_HOME: join(caseEnv.home, ".config"),
     TMPDIR: caseEnv.tmp,
     SPW_ADAPTER: caseEnv.adapterBin,
+    // A FIXTURE variable, read only by tests/bin/*-fakes.js. Nothing under
+    // src/ may read it: it selects what the fake does, never what the subject
+    // does.
+    SPW_FIXTURE_ADAPTER_SEAM: caseEnv.adapterSeam,
     SPW_FIXTURE_STATE: caseEnv.state,
     SPW_TEST_PKG_ROOT: caseEnv.pkg,
     SUPERPOWERS_CODEX: caseEnv.codexBin,

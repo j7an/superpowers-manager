@@ -70,9 +70,9 @@ These two read the repository's own source, not a fixture snapshot, so the
 port reads `ROOT` rather than the copied package root.
 
 1. `scripts/uninstall` does not source `scripts/adapters/codex/lib.sh`
-   (`:9-12`). Port: `:208`.
+   (`:9-12`). Port: `:285`.
 2. `scripts/core/lifecycle.sh` names neither `SPW_PLUGIN_ID` nor
-   `SPW_MARKETPLACE_NAME` (`:13-16`). Port: `:217`.
+   `SPW_MARKETPLACE_NAME` (`:13-16`). Port: `:294`.
 
 ### Selection-independent recovery (`:162-190`)
 
@@ -80,14 +80,14 @@ Malformed saved selection, no `git` on PATH, and `unsupported` update control
 must not prevent owned-resource removal and verification.
 
 3. The plugin remove reaches Codex: `plugin remove
-   superpowers@superpowers-manager` (`:183`). Port: `:246`.
+   superpowers@superpowers-manager` (`:183`). Port: `:331`.
 4. The marketplace remove reaches Codex: `plugin marketplace remove
-   superpowers-manager` (`:184`). Port: `:247`.
+   superpowers-manager` (`:184`). Port: `:332`.
 5. Update control is never inspected — the adapter log holds no
-   `inspect --view update-control` (`:185-189`). Port: `:250`. Non-vacuous
+   `inspect --view update-control` (`:185-189`). Port: `:335`. Non-vacuous
    because items 3-4 prove the adapter ran: only the adapter issues those
    Codex calls.
-6. Stdout contains `uninstall complete` (`:190`). Port: `:255`.
+6. Stdout contains `uninstall complete` (`:190`). Port: `:340`.
 
 ### Missing python3: clear requirement error, no Codex calls (`:192-212`)
 
@@ -102,57 +102,63 @@ indistinguishable from an unnoticed one. `SPW_ADAPTER` is not narrowed away
 anywhere else — every other scenario set it in the shell too.
 
 7. Uninstall fails when `python3` is absent from PATH (`:198-202`). Port:
-   `:268`.
+   `:353`.
 8. Output contains `required command not found: python3` (`:203-207`). Port:
-   `:274`.
+   `:359`.
 9. The Codex log is empty — no Codex call was made (`:208-212`). Port:
-   `:279`.
+   `:364`.
 
 ### Missing Codex is a controlled ownership-inspect failure (`:214-232`)
 
 10. Uninstall fails when the Codex binary is missing (`:220-225`). Port:
-    `:294`.
+    `:385`.
 11. The adapter log holds the exact line `inspect --view ownership`
-    (`:226`). Port: `:300`.
+    (`:226`). Port: `:391`.
 12. Output holds the exact line `error: required Codex command not found:
-    <path>` (`:227`). Port: `:302`.
+    <path>` (`:227`). Port: `:393`.
 13. Output does **not** contain `error: invalid adapter response:` — a
     missing Codex must stay a controlled inspect failure (`:228-232`). Port:
-    `:308`. Non-vacuous because item 12 proves the output carries the
+    `:399`. Non-vacuous because item 12 proves the output carries the
     adapter's diagnostics.
 
 ### Legacy-only state is never mutated and leaves guidance (`:234-242`)
 
 14. No remove command reaches Codex (`:239`, `assert_no_removes`). Port:
-    `:322`, helper at `:133`.
+    `:414`, helper at `:143`.
 15. The adapter log holds the exact line `uninstall --plugin-present false
     --marketplace-present false` (`:240`). Port: `:324`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, replacing the exact
+    adapter-log line this item describes, so the assertion named here no
+    longer exists and no line number can honestly stand in for it. The
+    property is still witnessed in the same case; re-deriving the claim and
+    its pointer together is a re-disposition, not a pointer fix.
 16. Stdout holds the exact line `Legacy superpowers-wrapper Codex state
-    remains installed.` (`:241`). Port: `:330`.
+    remains installed.` (`:241`). Port: `:436`.
 17. Stdout holds the exact line `Run: npx superpowers-wrapper@0.1.1
-    uninstall` (`:242`). Port: `:342`. This literal is user-facing guidance
+    uninstall` (`:242`). Port: `:448`. This literal is user-facing guidance
     owned by `scripts/core/lifecycle.sh:52,77`, not a dependency version that
     moves on someone else's schedule — the exact text is the contract.
 
 ### Mixed state removes manager resources only (`:244-259`)
 
-18. The manager plugin remove reaches Codex (`:250`). Port: `:358`.
-19. The manager marketplace remove reaches Codex (`:251`). Port: `:359`.
+18. The manager plugin remove reaches Codex (`:250`). Port: `:464`.
+19. The manager marketplace remove reaches Codex (`:251`). Port: `:465`.
 20. The Codex log never names `superpowers@superpowers-wrapper` (`:252`, the
-    first grep of the rule-8 `||` chain). Port: `:362`.
+    first grep of the rule-8 `||` chain). Port: `:468`.
 21. The Codex log holds no `plugin marketplace remove superpowers-wrapper`
-    (`:253`, the second grep of the same chain). Port: `:366`. Items 20-21
+    (`:253`, the second grep of the same chain). Port: `:472`. Items 20-21
     are non-vacuous because items 18-19 prove removes reached the log.
 22. Stdout holds the exact line `Legacy superpowers-wrapper Codex state
-    remains installed.` (`:258`). Port: `:371`.
+    remains installed.` (`:258`). Port: `:477`.
 23. Stdout holds the exact line `Run: npx superpowers-wrapper@0.1.1
-    uninstall` (`:259`). Port: `:378`.
+    uninstall` (`:259`). Port: `:484`.
 
 ### Both present: both removed, plugin before marketplace (`:261-289`)
 
 24. The invocation TMPDIR is left empty — no leaked workspace or adapter
-    sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:393`, helper at
-    `:159`. **Scope narrowed twice — see the note below, and the further
+    sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:508`, helper at
+    `:236`. **Scope narrowed twice — see the note below, and the further
     narrowing the mutation proof's row 6a records.**
 
 **TMPDIR scope narrowing (items 24 and 45).** The shell created
@@ -170,28 +176,28 @@ remove — not an oversight. Restoring the wider claim would mean asserting an
 empty TMPDIR in all 18 cases, which is a different (and strictly stronger)
 design than the shell had; it is not proposed here.
 25. The adapter log holds the exact line `inspect --view ownership`
-    (`:268`). Port: `:395`.
+    (`:268`). Port: `:510`.
 26. The adapter log holds the exact line `uninstall --plugin-present true
-    --marketplace-present true` (`:269`). Port: `:396`.
+    --marketplace-present true` (`:269`). Port: `:511`.
 27. `inspect --view ownership` appears exactly twice (`:270`, bare `[ ... ]`
-    per rule 6). Port: `:402`.
+    per rule 6). Port: `:517`.
 28. `uninstall --plugin-present true --marketplace-present true` appears
-    exactly once (`:271`, bare `[ ... ]`). Port: `:406`.
+    exactly once (`:271`, bare `[ ... ]`). Port: `:521`.
 29. The first ownership inspect precedes the adapter uninstall (`:275`).
-    Port: `:422`.
+    Port: `:537`.
 30. The adapter uninstall precedes the last ownership inspect (`:276`).
-    Port: `:426`. Items 29-30 use `firstIndex` and `lastIndex` respectively,
+    Port: `:541`. Items 29-30 use `firstIndex` and `lastIndex` respectively,
     mirroring the shell's `head -n1` and `tail -n1`.
-31. The plugin remove reaches Codex (`:277`). Port: `:431`.
-32. The marketplace remove reaches Codex (`:278`). Port: `:432`.
+31. The plugin remove reaches Codex (`:277`). Port: `:546`.
+32. The marketplace remove reaches Codex (`:278`). Port: `:547`.
 33. The plugin remove precedes the marketplace remove (`:281`). Port:
-    `:433`, via `assertOrder`.
-34. The Codex log never names `openai-curated` (`:282-285`). Port: `:442`.
+    `:548`, via `assertOrder`.
+34. The Codex log never names `openai-curated` (`:282-285`). Port: `:557`.
     Non-vacuous and reachable: `openai-curated` is a real marketplace in
     `MARKETPLACE_PRESENT`, so an over-broad marketplace removal would log
     `plugin marketplace remove openai-curated` and turn this red.
 35. The adapter log never names `other@x` — the adapter uninstall receives
-    booleans, not provider names (`:286-289`). Port: `:446`.
+    booleans, not provider names (`:286-289`). Port: `:561`.
     **Inherited-inert; adjudicated below.**
 
 **Item 35 adjudication: inherited-inert.** The port is faithful — the shell
@@ -232,69 +238,123 @@ entry exists so no reader mistakes item 35 for a live check in the meantime.
 ### Plugin absent, marketplace present (`:291-302`)
 
 36. No plugin remove reaches Codex — an absent plugin is not removed
-    (`:296-299`). Port: `:461`. Non-vacuous because item 38 is asserted
+    (`:296-299`). Port: `:576`. Non-vacuous because item 38 is asserted
     first in the port, proving the Codex log is non-empty.
 37. The adapter log holds the exact line `uninstall --plugin-present false
     --marketplace-present true` (`:300`). Port: `:466`.
-38. The marketplace remove reaches Codex (`:301`). Port: `:459` — hoisted
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, replacing the exact
+    adapter-log line this item describes, so the assertion named here no
+    longer exists and no line number can honestly stand in for it. The
+    property is still witnessed in the same case; re-deriving the claim and
+    its pointer together is a re-disposition, not a pointer fix.
+38. The marketplace remove reaches Codex (`:301`). Port: `:574` — hoisted
     above item 36 in the port so the negative cannot pass on an empty log.
-39. Stdout reports `plugin not installed; skipping` (`:302`). Port: `:472`.
+39. Stdout reports `plugin not installed; skipping` (`:302`). Port: `:589`.
 
 ### Both absent: idempotent success, both skips reported (`:304-312`)
 
-40. No remove command reaches Codex (`:309`). Port: `:483`, helper at
-    `:133`.
+40. No remove command reaches Codex (`:309`). Port: `:601`, helper at
+    `:143`.
 41. The adapter log holds the exact line `uninstall --plugin-present false
     --marketplace-present false` (`:310`). Port: `:485`.
-42. Stdout reports `plugin not installed; skipping` (`:311`). Port: `:491`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, replacing the exact
+    adapter-log line this item describes, so the assertion named here no
+    longer exists and no line number can honestly stand in for it. The
+    property is still witnessed in the same case; re-deriving the claim and
+    its pointer together is a re-disposition, not a pointer fix.
+42. Stdout reports `plugin not installed; skipping` (`:311`). Port: `:609`.
 43. Stdout reports `marketplace not registered; skipping` (`:312`). Port:
-    `:492`.
+    `:610`.
 
 ### Plugin list query fails: abort, no removes (`:314-326`)
 
-44. Uninstall fails (`:319`, `expect_fail`). Port: `:499`.
-45. The invocation TMPDIR is left empty (`:320`). Port: `:505`, helper at
-    `:159`. Same scope narrowing as item 24, including the further narrowing
+44. Uninstall fails (`:319`, `expect_fail`). Port: `:617`.
+45. The invocation TMPDIR is left empty (`:320`). Port: `:623`, helper at
+    `:236`. Same scope narrowing as item 24, including the further narrowing
     the mutation proof's row 6a records.
 46. The adapter log holds no `uninstall --` line — the adapter uninstall must
-    not run when ownership inspection fails (`:321-325`). Port: `:507`,
-    helper at `:150`.
-47. No remove command reaches Codex (`:326`). Port: `:512`, helper at
-    `:133`.
+    not run when ownership inspection fails (`:321-325`). Port: `:625`,
+    helper at `:193`.
+    **Claim is historical.** PR 11.5 slice 3.5 re-anchored this assertion
+    onto `codex.log`: `assertNoAdapterUninstall` (`:193-203`) no longer
+    filters the adapter log for `uninstall --`, it asserts
+    `ownershipInspections(codex) === 1`. The pointer is correct; the
+    sentence describes an assertion that no longer exists.
+    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    in terms. Re-deriving the claim is out of scope here.
+47. No remove command reaches Codex (`:326`). Port: `:630`, helper at
+    `:143`.
 
 ### Malformed plugin list JSON: abort, no removes (`:328-338`)
 
-48. Uninstall fails (`:332`). Port: `:519`.
-49. The adapter log holds no `uninstall --` line (`:333-337`). Port: `:525`.
-50. No remove command reaches Codex (`:338`). Port: `:530`.
+48. Uninstall fails (`:332`). Port: `:637`.
+49. The adapter log holds no `uninstall --` line (`:333-337`). Port: `:643`.
+    **Claim is historical.** PR 11.5 slice 3.5 re-anchored this assertion
+    onto `codex.log`: `assertNoAdapterUninstall` (`:193-203`) no longer
+    filters the adapter log for `uninstall --`, it asserts
+    `ownershipInspections(codex) === 1`. The pointer is correct; the
+    sentence describes an assertion that no longer exists.
+    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    in terms. Re-deriving the claim is out of scope here.
+50. No remove command reaches Codex (`:338`). Port: `:648`.
 
 ### Malformed individual plugin entry: abort, no removes (`:340-351`)
 
-51. Uninstall fails (`:344`). Port: `:537`.
-52. The adapter log holds no `uninstall --` line (`:345-349`). Port: `:543`.
-53. No remove command reaches Codex (`:350`). Port: `:548`.
+51. Uninstall fails (`:344`). Port: `:655`.
+52. The adapter log holds no `uninstall --` line (`:345-349`). Port: `:661`.
+    **Claim is historical.** PR 11.5 slice 3.5 re-anchored this assertion
+    onto `codex.log`: `assertNoAdapterUninstall` (`:193-203`) no longer
+    filters the adapter log for `uninstall --`, it asserts
+    `ownershipInspections(codex) === 1`. The pointer is correct; the
+    sentence describes an assertion that no longer exists.
+    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    in terms. Re-deriving the claim is out of scope here.
+53. No remove command reaches Codex (`:350`). Port: `:666`.
 54. Output contains `cannot parse output of` (`:351`,
-    `assert_output_contains`). Port: `:550`.
+    `assert_output_contains`). Port: `:668`.
 
 ### Marketplace list fails while the plugin is present (`:353-365`)
 
-55. Uninstall fails (`:359`). Port: `:560`.
+55. Uninstall fails (`:359`). Port: `:678`.
 56. The adapter log holds no `uninstall --` line — abort before ANY remove,
-    including the plugin's (`:360-364`). Port: `:566`.
-57. No remove command reaches Codex (`:365`). Port: `:571`.
+    including the plugin's (`:360-364`). Port: `:684`.
+    **Claim is historical.** PR 11.5 slice 3.5 re-anchored this assertion
+    onto `codex.log`: `assertNoAdapterUninstall` (`:193-203`) no longer
+    filters the adapter log for `uninstall --`, it asserts
+    `ownershipInspections(codex) === 1`. The pointer is correct; the
+    sentence describes an assertion that no longer exists.
+    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    in terms. Re-deriving the claim is out of scope here.
+57. No remove command reaches Codex (`:365`). Port: `:689`.
 
 ### Malformed individual marketplace entry (`:367-378`)
 
-58. Uninstall fails (`:371`). Port: `:578`.
-59. The adapter log holds no `uninstall --` line (`:372-376`). Port: `:584`.
-60. No remove command reaches Codex (`:377`). Port: `:589`.
-61. Output contains `cannot parse output of` (`:378`). Port: `:591`.
+58. Uninstall fails (`:371`). Port: `:696`.
+59. The adapter log holds no `uninstall --` line (`:372-376`). Port: `:702`.
+    **Claim is historical.** PR 11.5 slice 3.5 re-anchored this assertion
+    onto `codex.log`: `assertNoAdapterUninstall` (`:193-203`) no longer
+    filters the adapter log for `uninstall --`, it asserts
+    `ownershipInspections(codex) === 1`. The pointer is correct; the
+    sentence describes an assertion that no longer exists.
+    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    in terms. Re-deriving the claim is out of scope here.
+60. No remove command reaches Codex (`:377`). Port: `:707`.
+61. Output contains `cannot parse output of` (`:378`). Port: `:709`.
 
 ### Malformed marketplace list while the plugin is present (`:380-392`)
 
-62. Uninstall fails (`:386`). Port: `:601`.
-63. The adapter log holds no `uninstall --` line (`:387-391`). Port: `:607`.
-64. No remove command reaches Codex (`:392`). Port: `:612`.
+62. Uninstall fails (`:386`). Port: `:719`.
+63. The adapter log holds no `uninstall --` line (`:387-391`). Port: `:725`.
+    **Claim is historical.** PR 11.5 slice 3.5 re-anchored this assertion
+    onto `codex.log`: `assertNoAdapterUninstall` (`:193-203`) no longer
+    filters the adapter log for `uninstall --`, it asserts
+    `ownershipInspections(codex) === 1`. The pointer is correct; the
+    sentence describes an assertion that no longer exists.
+    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    in terms. Re-deriving the claim is out of scope here.
+64. No remove command reaches Codex (`:392`). Port: `:730`.
 
 ### Remove is a no-op: verify-after detects the still-present target (`:394-410`)
 
@@ -303,46 +363,64 @@ mutation (`:44`) and the marketplace mutation (`:68`), and its own comment
 says "removes are logged but do not mutate the fixtures" — plural. It ports to
 `{ removesMutateState: false }`, a deliberately global switch.
 
-65. Uninstall fails (`:400`). Port: `:622`.
+65. Uninstall fails (`:400`). Port: `:740`.
 66. The adapter log holds the exact line `uninstall --plugin-present true
     --marketplace-present true` (`:401`). Port: `:629`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, replacing the exact
+    adapter-log line this item describes, so the assertion named here no
+    longer exists and no line number can honestly stand in for it. The
+    property is still witnessed in the same case; re-deriving the claim and
+    its pointer together is a re-disposition, not a pointer fix.
 67. `inspect --view ownership` appears exactly twice — verify-after re-runs
     ownership inspection after the adapter uninstall (`:402-406`). Port:
-    `:635`.
+    `:754`.
 68. The plugin remove was attempted and reached Codex (`:408`). Port:
-    `:641`.
+    `:759`.
 69. Output contains `still installed` — the plugin is still present on
-    re-query, so uninstall must not succeed (`:410`). Port: `:645`.
+    re-query, so uninstall must not succeed (`:410`). Port: `:761`.
 
 ### Verify-after schema drift: fail closed (`:412-426`)
 
-70. Uninstall fails (`:418`). Port: `:653`.
+70. Uninstall fails (`:418`). Port: `:769`.
 71. The adapter log holds the exact line `uninstall --plugin-present true
     --marketplace-present true` (`:419`). Port: `:659`.
-72. The plugin remove reached Codex (`:420`). Port: `:665`.
-73. Output contains `cannot parse output of` (`:421`). Port: `:669`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, replacing the exact
+    adapter-log line this item describes, so the assertion named here no
+    longer exists and no line number can honestly stand in for it. The
+    property is still witnessed in the same case; re-deriving the claim and
+    its pointer together is a re-disposition, not a pointer fix.
+72. The plugin remove reached Codex (`:420`). Port: `:786`.
+73. Output contains `cannot parse output of` (`:421`). Port: `:788`.
 74. Output does **not** contain `uninstall complete` (`:422-426`). Port:
-    `:672`. Non-vacuous because item 73 proves the output carries the
+    `:791`. Non-vacuous because item 73 proves the output carries the
     subject's diagnostics.
 
 ### Marketplace remove fails after the plugin remove succeeds (`:428-455`)
 
-75. Uninstall fails (`:435`). Port: `:683`.
+75. Uninstall fails (`:435`). Port: `:802`.
 76. The adapter log holds the exact line `uninstall --plugin-present true
     --marketplace-present true` (`:436`). Port: `:690`.
-77. The plugin remove reached Codex (`:437`). Port: `:696`.
-78. The marketplace remove reached Codex (`:438`). Port: `:697`.
+    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
+    re-anchored this assertion onto `codex.log`, replacing the exact
+    adapter-log line this item describes, so the assertion named here no
+    longer exists and no line number can honestly stand in for it. The
+    property is still witnessed in the same case; re-deriving the claim and
+    its pointer together is a re-disposition, not a pointer fix.
+77. The plugin remove reached Codex (`:437`). Port: `:814`.
+78. The marketplace remove reached Codex (`:438`). Port: `:815`.
 79. Output does **not** contain `uninstall complete` (`:439-443`). Port:
-    `:708`.
+    `:826`.
 80. Output does **not** contain `error: invalid adapter response:` — one
     controlled adapter failure, not a protocol violation (`:444-448`). Port:
-    `:713`.
+    `:831`.
 81. Output replays the Codex stderr `marketplace remove exploded` (`:449`).
-    Port: `:700`.
+    Port: `:818`.
 82. Output contains `error: codex plugin marketplace remove failed for
-    superpowers-manager` (`:450`). Port: `:701`.
+    superpowers-manager` (`:450`). Port: `:819`.
 83. The Codex log never names `openai-curated` — a marketplace failure must
-    not mutate unrelated providers (`:451-455`). Port: `:718`.
+    not mutate unrelated providers (`:451-455`). Port: `:836`.
 
 Items 81-82 are hoisted above items 79-80 in the port so that neither negative
 can pass on empty output.
@@ -367,39 +445,39 @@ empty log there is a fixture fault, never a legitimate state.
 
 <!-- inventory:port-only:start -->
 
-1. Selection-independent recovery: `result.status === 0` (`:241`).
-2. Legacy-only state: `result.status === 0` (`:320`).
-3. Mixed state: `result.status === 0` (`:354`).
-4. Both present: `result.status === 0` (`:387`).
-5. Plugin absent, marketplace present: `result.status === 0` (`:455`).
-6. Both absent: `result.status === 0` (`:481`).
-7. `assertNoRemoves` non-vacuity guard (`:128`) at the legacy-only call site
-   (`:322`).
-8. `assertNoRemoves` non-vacuity guard at the both-absent call site (`:483`).
+1. Selection-independent recovery: `result.status === 0` (`:326`).
+2. Legacy-only state: `result.status === 0` (`:411`).
+3. Mixed state: `result.status === 0` (`:460`).
+4. Both present: `result.status === 0` (`:502`).
+5. Plugin absent, marketplace present: `result.status === 0` (`:570`).
+6. Both absent: `result.status === 0` (`:598`).
+7. `assertNoRemoves` non-vacuity guard (`:138`) at the legacy-only call site
+   (`:414`).
+8. `assertNoRemoves` non-vacuity guard at the both-absent call site (`:601`).
 9. `assertNoRemoves` non-vacuity guard at the plugin-list-fails call site
-   (`:512`).
+   (`:630`).
 10. `assertNoRemoves` non-vacuity guard at the malformed-plugin-list call site
-    (`:530`).
+    (`:648`).
 11. `assertNoRemoves` non-vacuity guard at the malformed-plugin-entry call
-    site (`:548`).
+    site (`:666`).
 12. `assertNoRemoves` non-vacuity guard at the marketplace-list-fails call
-    site (`:571`).
+    site (`:689`).
 13. `assertNoRemoves` non-vacuity guard at the malformed-marketplace-entry
-    call site (`:589`).
+    call site (`:707`).
 14. `assertNoRemoves` non-vacuity guard at the malformed-marketplace-list call
-    site (`:612`).
-15. `assertNoAdapterUninstall` non-vacuity guard (`:145`) at the
-    plugin-list-fails call site (`:507`).
+    site (`:730`).
+15. `assertNoAdapterUninstall` non-vacuity guard (`:194`) at the
+    plugin-list-fails call site (`:625`).
 16. `assertNoAdapterUninstall` non-vacuity guard at the malformed-plugin-list
-    call site (`:525`).
+    call site (`:643`).
 17. `assertNoAdapterUninstall` non-vacuity guard at the malformed-plugin-entry
-    call site (`:543`).
+    call site (`:661`).
 18. `assertNoAdapterUninstall` non-vacuity guard at the marketplace-list-fails
-    call site (`:566`).
+    call site (`:684`).
 19. `assertNoAdapterUninstall` non-vacuity guard at the
-    malformed-marketplace-entry call site (`:584`).
+    malformed-marketplace-entry call site (`:702`).
 20. `assertNoAdapterUninstall` non-vacuity guard at the
-    malformed-marketplace-list call site (`:607`).
+    malformed-marketplace-list call site (`:725`).
 
 <!-- inventory:port-only:end -->
 
@@ -438,27 +516,27 @@ c18 marketplace-remove-fails.
 
 | Row | Injection (file, exact edit) | Observed RED — item @ port line |
 |---|---|---|
-| 1 | `lifecycle-config.js`: `UNINSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin remove superpowers@spurious` into every Codex call's log | items 14 (`:322`), 40 (`:483`), 47 (`:512`), 50 (`:530`), 53 (`:548`), 57 (`:571`), 60 (`:589`), 64 (`:612`) — all 8 `assertNoRemoves` sites, 8/18 cases |
-| 2a | `uninstall-fakes.js:124`: the `marketplaceRemove === "fail"` branch's `process.exit(1)` → `process.exit(0)`, stderr kept | item 82 (`:701`), c18 only |
-| 2b | `uninstall-fakes.js:122`: branch condition `"fail"` → `"fail-disabled"`, so the failure path never fires and the remove genuinely succeeds | item 75 (`:683`), c18 only |
-| 3 | `uninstall-fakes.js`: `plugin remove` branch prefixed with `writeJson("plugin_list.json", { installed: [], available: [] }); process.exit(0);` — verify-after always sees the plugin absent | items 69 (`:645`), 70 (`:653`) |
-| 4 | `uninstall-fakes.js` `runAdapter`: log `inspect --view ownership` only on its first occurrence — the verify-after re-inspect is dropped from the log | items 27 (`:402`), 67 (`:635`) |
-| 5 | `uninstall-fakes.js`: both list branches `process.exit(CONFIG.pluginListRc / marketplaceListRc)` → `process.exit(0)` — a failed ownership query no longer aborts | items 44 (`:499`), 55 (`:560`) |
+| 1 | `lifecycle-config.js`: `UNINSTALL_DEFAULTS.spuriousMutation` `false` → `true`, forcing `plugin remove superpowers@spurious` into every Codex call's log | items 14 (`:414`), 40 (`:601`), 47 (`:630`), 50 (`:648`), 53 (`:666`), 57 (`:689`), 60 (`:707`), 64 (`:730`) — all 8 `assertNoRemoves` sites, 8/18 cases |
+| 2a | `uninstall-fakes.js:124`: the `marketplaceRemove === "fail"` branch's `process.exit(1)` → `process.exit(0)`, stderr kept | item 82 (`:819`), c18 only |
+| 2b | `uninstall-fakes.js:122`: branch condition `"fail"` → `"fail-disabled"`, so the failure path never fires and the remove genuinely succeeds | item 75 (`:802`), c18 only |
+| 3 | `uninstall-fakes.js`: `plugin remove` branch prefixed with `writeJson("plugin_list.json", { installed: [], available: [] }); process.exit(0);` — verify-after always sees the plugin absent | items 69 (`:761`), 70 (`:769`) |
+| 4 | `uninstall-fakes.js` `runAdapter`: log `inspect --view ownership` only on its first occurrence — the verify-after re-inspect is dropped from the log | items 27 (`:517`), 67 (`:754`) |
+| 5 | `uninstall-fakes.js`: both list branches `process.exit(CONFIG.pluginListRc / marketplaceListRc)` → `process.exit(0)` — a failed ownership query no longer aborts | items 44 (`:617`), 55 (`:678`) |
 | 6a | `uninstall-fakes.js` `runAdapter`: write `spw-sidecar-leak` into `$TMPDIR` | **none — 18/18 GREEN.** See Divergences |
-| 6b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 24 (`:393`), 45 (`:505`) — both `assertTmpEmpty` ports |
-| O1 | `uninstall-commands.test.js:422`: `firstInspect < uninstallAt` → `>` | item 29 (`:422`), "ownership inspect must precede adapter uninstall" |
-| O2 | `uninstall-commands.test.js:426`: `uninstallAt < lastInspect` → `>` | item 30 (`:426`), "ownership re-inspect must follow adapter uninstall" |
-| O3 | `uninstall-commands.test.js:433`: the two `assertOrder` needles swapped | item 33 (`:433`), `assertOrder` "out of order" |
-| D1b | injection 1 with the payload string changed to `plugin remove superpowers@superpowers-wrapper` | item 20 (`:362`) in c6, plus the 8 row-1 sites |
-| D1c | payload `plugin marketplace remove superpowers-wrapper` | item 21 (`:366`) in c6, plus the 8 row-1 sites |
-| D1d | payload `plugin marketplace remove openai-curated` | items 34 (`:442`) in c7 and 83 (`:718`) in c18, plus the 8 row-1 sites |
-| D1e | payload `plugin remove superpowers@superpowers-manager` | item 36 (`:461`) in c8, plus the 8 row-1 sites |
-| D2 | `uninstall-fakes.js` `runAdapter`: extra `log("adapter.log", "uninstall --spurious")` on every adapter call | items 46 (`:507`), 49 (`:525`), 52 (`:543`), 56 (`:566`), 59 (`:584`), 63 (`:607`) — all 6 `assertNoAdapterUninstall` sites, and only those |
-| D3 | same, payload `uninstall --plugin-present true --marketplace-present true` | item 28 (`:406`) in c7, plus the 6 D2 sites |
-| D4 | same, payload `inspect --view update-control` | item 5 (`:250`) in c2, and only that |
-| D5 | `uninstall-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only items 7-14, the `assertNoRemoves` emptiness guards, at `:322`, `:483`, `:512`, `:530`, `:548`, `:571`, `:589`, `:612` |
-| D6 | `uninstall-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only items 15-20, the `assertNoAdapterUninstall` emptiness guards, at `:507`, `:525`, `:543`, `:566`, `:584`, `:607` |
-| D7 | `uninstall-fakes.js`: `process.stdout.write("not a protocol envelope\n")` before the real adapter delegation | item 12 (`:302`) and 11 other cases; items 13 and 80 shadowed — see adjudication B |
+| 6b | same, into `$TMPDIR/..` (the invocation TMPDIR the subject was handed) | items 24 (`:508`), 45 (`:623`) — both `assertTmpEmpty` ports |
+| O1 | `uninstall-commands.test.js:537`: `firstInspect < uninstallAt` → `>` | item 29 (`:537`), "ownership inspect must precede adapter uninstall" |
+| O2 | `uninstall-commands.test.js:541`: `uninstallAt < lastInspect` → `>` | item 30 (`:541`), "ownership re-inspect must follow adapter uninstall" |
+| O3 | `uninstall-commands.test.js:548`: the two `assertOrder` needles swapped | item 33 (`:548`), `assertOrder` "out of order" |
+| D1b | injection 1 with the payload string changed to `plugin remove superpowers@superpowers-wrapper` | item 20 (`:468`) in c6, plus the 8 row-1 sites |
+| D1c | payload `plugin marketplace remove superpowers-wrapper` | item 21 (`:472`) in c6, plus the 8 row-1 sites |
+| D1d | payload `plugin marketplace remove openai-curated` | items 34 (`:557`) in c7 and 83 (`:836`) in c18, plus the 8 row-1 sites |
+| D1e | payload `plugin remove superpowers@superpowers-manager` | item 36 (`:576`) in c8, plus the 8 row-1 sites |
+| D2 | `uninstall-fakes.js` `runAdapter`: extra `log("adapter.log", "uninstall --spurious")` on every adapter call | items 46 (`:625`), 49 (`:643`), 52 (`:661`), 56 (`:684`), 59 (`:702`), 63 (`:725`) — all 6 `assertNoAdapterUninstall` sites, and only those — **historical: these six assertions were re-anchored onto `codex.log`; see items 46-63** |
+| D3 | same, payload `uninstall --plugin-present true --marketplace-present true` | item 28 (`:521`) in c7, plus the 6 D2 sites |
+| D4 | same, payload `inspect --view update-control` | item 5 (`:335`) in c2, and only that |
+| D5 | `uninstall-fakes.js`: `log("codex.log", ARGS.join(" "))` deleted from `runCodex` | port-only items 7-14, the `assertNoRemoves` emptiness guards, at `:414`, `:601`, `:630`, `:648`, `:666`, `:689`, `:707`, `:730` |
+| D6 | `uninstall-fakes.js`: `log("adapter.log", ARGS.join(" "))` deleted from `runAdapter` | port-only items 15-20, the `assertNoAdapterUninstall` emptiness guards, at `:625`, `:643`, `:661`, `:684`, `:702`, `:725` — **historical: these six assertions were re-anchored onto `codex.log`; see items 46-63** |
+| D7 | `uninstall-fakes.js`: `process.stdout.write("not a protocol envelope\n")` before the real adapter delegation | item 12 (`:393`) and 11 other cases; items 13 and 80 shadowed — see adjudication B |
 | D8 | same line written **after** the delegation, so the envelope is intact and only trailing data is added | identical shape (`Extra data: line 2 column 1`); items 13 and 80 still shadowed |
 | P1 | no tracked file touched: a `node --input-type=module` probe applied items 1-2's predicates to in-memory regression copies of `scripts/uninstall` and `scripts/core/lifecycle.sh` | predicate `true` on the real files, `false` on both regression copies — see adjudication E |
 
@@ -517,7 +595,7 @@ that scenario and **(2)** what future change would make it reachable. This
 two-part form is introduced here; `bin-dispatch.md:27-36` is the
 counting-decision adjudication it generalises.
 
-**A — item 9, "the Codex log is empty" (c3, `:279`).** *(1)* The case strips
+**A — item 9, "the Codex log is empty" (c3, `:364`).** *(1)* The case strips
 PATH to a directory holding only `dirname`, and `scripts/uninstall:10` runs
 `spw_require_command python3` before the workspace, the adapter, or Codex is
 touched. The only writer to `codex.log` is `runCodex` in `uninstall-fakes.js`,
@@ -531,13 +609,13 @@ checking — which is precisely the regression the assertion guards. It would
 also become reachable if `runScript` or `createCase` ever pre-seeded a
 `codex.log`; today neither does.
 
-**B — items 13 (`:308`) and 80 (`:713`), "output does not contain
+**B — items 13 (`:399`) and 80 (`:831`), "output does not contain
 `error: invalid adapter response:`".** *(1)* Not vacuous and not inert — but
 structurally shadowed. Rows D7 and D8 do produce the violation: under D7 the
 c4 failure message, which is the port's `out` variable dumped verbatim, reads
 `error: invalid adapter response: Expecting value: line 1 column 1 (char 0)`
 and nothing else, so item 13's condition is demonstrably false in that run.
-The reported failure is item 12 (`:302`), asserted six lines earlier, because
+The reported failure is item 12 (`:393`), asserted six lines earlier, because
 node:test aborts the case at its first failure. D8 confirms the mechanism is
 not an artifact of *where* the corruption is injected: appending a non-JSON
 line after an intact envelope yields the same whole-output replacement
@@ -546,14 +624,14 @@ response as one strict JSON document. Any fixture corruption **of the
 adapter's stdout envelope** that produces the forbidden text also destroys the
 controlled diagnostic item 12 requires, so the two cannot be separated by that
 class of injection. A separate fixture lever does exist and is deliberately
-declined: item 12 is an exact-line match (`hasLine`, `:302`) while item 13 is
-a substring match (`:308`) over the same `stdout + stderr` capture (`:292`),
+declined: item 12 is an exact-line match (`hasLine`, `:393`) while item 13 is
+a substring match (`:399`) over the same `stdout + stderr` capture (`:383`),
 so a fake writing the forbidden text to **stderr** would redden item 13 while
 item 12 still passes. That manufacture is refused for the item-35 reason — it
 would prove only that a fixture can print a string it planted, not that the
 subject emitted a protocol complaint. The same argument covers item 80 in
 c18, where D7 aborts the run at the ownership inspect and item 76
-(`:690`) fires first. *(2)* Independently reachable when the subject can emit
+(`:690`, stale — see its entry) fires first. *(2)* Independently reachable when the subject can emit
 *both* the controlled diagnostic and a protocol complaint in one run — for
 example if `spw_inspect_ownership` grew a second, stricter parse of an already
 reported response, or if the adapter began writing its envelope and a
@@ -561,18 +639,18 @@ non-envelope diagnostic to the same stream on a path that still satisfies
 item 12. Either change satisfies every earlier assertion in the case and is
 caught only by items 13 and 80.
 
-**C — items 74 (`:672`) and 79 (`:708`), "output does not contain
+**C — items 74 (`:791`) and 79 (`:826`), "output does not contain
 `uninstall complete`".** *(1)* Every fixture injection that makes the subject
 print the final success banner also makes it exit 0, and both cases assert
-`status !== 0` first: row 2b drove c18 RED at item 75 (`:683`), and row 3 drove
-c17 RED at item 70 (`:653`), in both instances shadowing the banner negative.
+`status !== 0` first: row 2b drove c18 RED at item 75 (`:802`), and row 3 drove
+c17 RED at item 70 (`:769`), in both instances shadowing the banner negative.
 No change to the **subject's own output stream** can decouple the banner from
 the exit status, because `scripts/uninstall:34` prints the banner only once
 `spw_verify_uninstalled_resources` (`:30`) has passed under `set -eu`, and the
 only statement after it (`:35`, an informational `echo`) cannot fail —
 reaching the banner *is* exiting 0. The same declined fixture lever as in
-adjudication B applies: both cases assert over `stdout + stderr` (`:651`,
-`:681`), so a fake writing `uninstall complete` to stderr would redden items
+adjudication B applies: both cases assert over `stdout + stderr` (`:767`,
+`:800`), so a fake writing `uninstall complete` to stderr would redden items
 74 and 79 without proving anything about the subject. *(2)* Reachable exactly
 when that coupling breaks: if the banner moves above
 `spw_verify_uninstalled_resources` (`scripts/uninstall:30`), or is emitted
@@ -581,7 +659,7 @@ prints it and then exits non-zero from a later step. That is a real regression
 class, and the exit-status assertions alone do not catch it — which is why
 both negatives are kept rather than folded into items 70 and 75.
 
-**D — item 35 (`:446`), "the adapter log never names `other@x`":
+**D — item 35 (`:561`), "the adapter log never names `other@x`":
 inherited-inert.** The adjudication of record is the one already written at
 item 35's entry above; this pass confirms it rather than restating it, and
 adds one observation. A payload injection could trivially turn item 35 RED —
@@ -598,7 +676,7 @@ or change `spw_adapter_uninstall` to pass resource identities instead of
 booleans. Contrast item 34, reddened for real by row D1d because
 `openai-curated` is a string a real fixture supplies.
 
-**E — items 1 (`:208`) and 2 (`:217`), the source guards.** *(1)* Their
+**E — items 1 (`:285`) and 2 (`:294`), the source guards.** *(1)* Their
 subjects are `scripts/uninstall` and `scripts/core/lifecycle.sh` themselves,
 read from `ROOT`. There is no fixture in the path: the only mutation that
 violates either is an edit to the production tree, which this task is scoped
@@ -621,8 +699,8 @@ assertion in the port. Proven RED by injection: items 5, 14, 20, 21, 24, 27,
 28, 29, 30, 33, 34, 36, 40, 45, 46, 47, 49, 50, 52, 53, 56, 57, 59, 60, 63,
 64, 67, 83, and all 20 port-only guards — rows D5-D6 for the fourteen
 non-vacuity guards (port-only items 7-20), and row D7 for the six
-`status === 0` assertions (port-only items 1-6), which went RED at `:241`,
-`:320`, `:354`, `:387`, `:455`, and `:481` under the protocol corruption.
+`status === 0` assertions (port-only items 1-6), which went RED at `:326`,
+`:411`, `:460`, `:502`, `:570`, and `:598` under the protocol corruption.
 
 Adjudicated GREEN with both required parts: items 1, 2, 9, 13, 35, 74, 79, 80.
 
@@ -630,8 +708,8 @@ Adjudicated GREEN with both required parts: items 1, 2, 9, 13, 35, 74, 79, 80.
 6, 7, 8, 10, 11, 12, 15, 16, 17, 18, 19, 22, 23, 25, 26, 31, 32, 37, 38, 39,
 41, 42, 43, 48, 51, 54, 58, 61, 62, 65, 66, 68, 71, 72, 73, 76, 77, 78, 81. No
 claim is made about that class. Six mapped positives did turn RED
-incidentally — items 44 (`:499`), 55 (`:560`), 69 (`:645`), 70 (`:653`), 75
-(`:683`) and 82 (`:701`) — which is recorded as observation, not as coverage.
+incidentally — items 44 (`:617`), 55 (`:678`), 69 (`:761`), 70 (`:769`), 75
+(`:802`) and 82 (`:819`) — which is recorded as observation, not as coverage.
 
 No RED in this section was produced by editing an assertion's text outside
 rows O1-O3.

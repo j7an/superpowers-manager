@@ -122,6 +122,20 @@ function runCodex() {
   ) {
     if (CONFIG.pluginAdd === "fail") process.exit(1);
     if (CONFIG.pluginAdd === "noop") process.exit(0);
+    if (CONFIG.pluginAdd === "orphan") {
+      // Codex reports the plugin installed at 1.0.0, but no cached tree is
+      // ever written for it. The real adapter's fingerprint handler then
+      // resolves an active version, builds the installed root for it, and
+      // finds nothing to read there — src/adapter.ts:815-828 — so it returns a
+      // controlled inspect-failed envelope. No adapter interception needed.
+      writeJson("plugin_list.json", {
+        installed: [
+          { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
+        ],
+        available: [],
+      });
+      process.exit(0);
+    }
     const dest = join(
       STATE,
       "codex-home",
@@ -175,10 +189,19 @@ function runCodex() {
 }
 
 function runAdapter() {
+  const SEAM = process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate";
   log("adapter.log", ARGS.join(" "));
+  if (SEAM === "tripwire") {
+    // The command is dispatched in-process, so runAdapter is a function call
+    // and this executable must never be reached. Same shape as
+    // tests/bin/probe-fakes.js:23-29, shipped in slice 2.
+    process.stderr.write("fixture: this command must not spawn the adapter\n");
+    process.exitCode = 94;
+    return;
+  }
   const joined = ARGS.join(" ");
 
-  if (joined === "inspect --view update-control") {
+  if (SEAM === "intercept" && joined === "inspect --view update-control") {
     const countFile = join(STATE, "update-control-count");
     let count = 0;
     try {
@@ -249,17 +272,15 @@ function runAdapter() {
   // legacy-state cases) and silently changes what several later
   // verification cases mean.
   if (
+    SEAM === "intercept" &&
     joined === "inspect --view fingerprint" &&
     existsSync(
       join(STATE, "codex-home", "plugins", "cache", "superpowers-manager"),
     )
   ) {
-    if (CONFIG.fingerprintInspect === "fail") {
-      process.stderr.write(
-        "fingerprint inspection failed in adapter fixture\n",
-      );
-      process.exit(99);
-    }
+    // Only `malformed` remains. The `fail` branch was retired with its single
+    // consumer: that case is now driven from the fake Codex through
+    // `pluginAdd: "orphan"`, so the REAL adapter produces the failure.
     if (CONFIG.fingerprintInspect === "malformed") {
       process.stdout.write("{");
       process.exit(0);
