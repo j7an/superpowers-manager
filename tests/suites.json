@@ -21,6 +21,7 @@
     "tests/bin/bootstrap.test.js",
     "tests/bin/container-contract.test.js",
     "tests/bin/install-commands.test.js",
+    "tests/bin/lifecycle-fakes.test.js",
     "tests/bin/lifecycle-fixture.test.js",
     "tests/bin/migration-inventory.test.js",
     "tests/bin/node-tooling.test.js",
