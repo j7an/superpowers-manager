@@ -26,6 +26,7 @@ const INVENTORY_DIR = join(ROOT, "tests", "migration-inventory");
 const DECLARED = {
   "bin-dispatch.md": ["tests/bin/bin-dispatch.test.js"],
   "bootstrap.md": ["tests/bin/bootstrap.test.js"],
+  "codex-state-units.md": ["tests/unit/lifecycle.test.js"],
   "container-contract.md": ["tests/bin/container-contract.test.js"],
   "install-commands.md": ["tests/bin/install-commands.test.js"],
   "node-tooling.md": ["tests/bin/node-tooling.test.js"],
