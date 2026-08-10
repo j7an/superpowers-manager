@@ -322,16 +322,15 @@ export function runDispatch(options) {
     if (options.gitSentinel) {
       sentinelPath = join(caseDir, "git-sentinel.log");
       writeFileSync(sentinelPath, "");
-      wrapped = join(caseDir, "git-recording");
-      writeFileSync(
-        wrapped,
+      wrapped = writeExecutable(
+        caseDir,
+        "git-recording",
         [
           "#!/bin/sh",
           `printf '%s\\n' "$*" >> ${shQuoteLocal(sentinelPath)}`,
           `exec ${shQuoteLocal(REAL_GIT)} "$@"`,
           "",
         ].join("\n"),
-        { mode: 0o755 },
       );
     }
     writeGitEgressShim(fakeBin, wrapped);

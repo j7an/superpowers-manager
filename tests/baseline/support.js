@@ -542,27 +542,8 @@ function assertNoCodexContact(sandbox) {
 }
 
 // The sandbox's `git` refuses any remote with a URL scheme and passes
-// everything else through to the real binary. Shared with
-// tests/bin/dispatch-fixture.js as tests/lib/git-egress.js's
-// writeGitEgressShim -- see that module for the shim itself.
-//
-// PR 11.5 slice 3. Slice 2 shipped a Layer 3 hermeticity escape:
-// CLI-COMMANDS-01 resolved the package-default ref against a real GitHub URL
-// once `probe` went in-process. `prepare` is worse -- it clones. A gate that
-// pattern-matches test source for "sites that reach prepare" is brittle and
-// cannot see indirect reachability; this sits at the egress point instead,
-// alongside GIT_CONFIG_NOSYSTEM, the private HOME, and the private TMPDIR, as
-// best-effort egress refusal for `createSandbox` consumers -- not a
-// containment boundary. Known gaps: the pattern list matches only `git@*:*`
-// for SSH shorthand, so scp-style `host:path` and `user@host:path` remotes
-// pass through unmatched; and a scheme glob only matches when the URL is the
-// whole argument at its own position, so `-c url.https://x.insteadOf=…` (URL
-// embedded mid-argument) and `rsync://` both slip through. This branch's own
-// prepare driver does not rely on this shim at all -- it uses the host PATH
-// `git` and is protected instead by prepare-fixture.js's assertion that
-// SUPERPOWERS_UPSTREAM_URL is an absolute local path.
-//
-// Local paths are byte-identical: the shim only ADDS a rejection.
+// everything else through to the real binary — see tests/lib/git-egress.js
+// for the shim itself and its design rationale, including its known gaps.
 
 /**
  * @param {{ stubScripts?: boolean }} [options]

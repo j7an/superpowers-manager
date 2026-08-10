@@ -78,7 +78,7 @@ Port-only region — additive JS assertions that map no shell item, numbered
 ### An unbuilt checkout gets only the actionable build diagnostic (`:44-52`)
 
 2. Exit status is `1` when `dist/cli.js` is absent (`:46-50`). Port:
-   `tests/bin/bin-dispatch.test.js:27`.
+   `tests/bin/bin-dispatch.test.js:26`.
 3. Stderr contains the literal
    `` dist/ not built — run `pnpm install --frozen-lockfile && pnpm run build` ``
    (`:51-52`). Port: `:27-31`.
@@ -115,7 +115,7 @@ Port-only region — additive JS assertions that map no shell item, numbered
    and never logs to the dispatch log — the condition this item asserted can
    no longer occur, in either direction. `prepare` was removed from
    `ROUTING_CASES`; the analogous in-process property ("never reaches its
-   script") is covered by `tests/bin/bin-dispatch.test.js:87` and recorded as
+   script") is covered by `tests/bin/bin-dispatch.test.js:86` and recorded as
    port-only item 44. Unlike items 9, 10, and 11, the replacement case asserts
    no exit status: this fixture's `git` is an `exit 0` stub and its package
    root carries no upstream to clone or manifest template to build against, so
@@ -127,7 +127,7 @@ Port-only region — additive JS assertions that map no shell item, numbered
     dispatch log — the condition this item asserted can no longer occur, in
     either direction. `pin` was removed from `ROUTING_CASES`; the analogous
     in-process property ("succeeds without ever reaching its script") is
-    covered by `tests/bin/bin-dispatch.test.js:124` (**re-derived from the
+    covered by `tests/bin/bin-dispatch.test.js:123` (**re-derived from the
     file** at PR 11.5 slice 3.4; this read `:97`, which was `unpin`'s log
     assertion, not `pin`'s, and slice 3.4's new `prepare` case then shifted
     even that by 14 lines) and recorded as port-only
@@ -142,7 +142,7 @@ Port-only region — additive JS assertions that map no shell item, numbered
     condition this item asserted can no longer occur, in either direction.
     `track-latest` was removed from `ROUTING_CASES`; the analogous
     in-process property ("succeeds without ever reaching its script") is
-    covered by `tests/bin/bin-dispatch.test.js:82` and recorded as port-only
+    covered by `tests/bin/bin-dispatch.test.js:81` and recorded as port-only
     item 27, since it is a different property than "reaches its script with
     its args".
 11. `unpin` → logs `unpin  ref=` (`:88-90`). **Retired** (PR 11.5): `unpin`
@@ -151,7 +151,7 @@ Port-only region — additive JS assertions that map no shell item, numbered
     condition this item asserted can no longer occur, in either direction.
     `unpin` was removed from `ROUTING_CASES`; the analogous in-process
     property ("succeeds without ever reaching its script") is covered by
-    `tests/bin/bin-dispatch.test.js:112` (**re-derived from the file** at
+    `tests/bin/bin-dispatch.test.js:111` (**re-derived from the file** at
     PR 11.5 slice 3.4; this read `:89`, which was `track-latest`'s log
     assertion rather than `unpin`'s — the earlier "moved from `:81` when Task 6
     added `track-latest`'s own standalone case immediately above it" note
@@ -268,14 +268,14 @@ and is not counted here.
     never logs to the dispatch log, so "dispatches ... and logs
     `track-latest  ref=`" can no longer occur. `track-latest` was removed
     from `NO_GIT_CASES`; the analogous in-process property ("succeeds with
-    `git` absent") is covered by `tests/bin/bin-dispatch.test.js:253` and
+    `git` absent") is covered by `tests/bin/bin-dispatch.test.js:252` and
     recorded as port-only item 28.
 39. `unpin` dispatches with `git` absent from `PATH` (loop iteration 2).
     **Retired** (PR 11.5): `unpin` is now in-process and never logs to the
     dispatch log, so "dispatches ... and logs `unpin  ref=`" can no longer
     occur. `unpin` was removed from `NO_GIT_CASES`; the analogous in-process
     property ("succeeds with `git` absent") is covered by
-    `tests/bin/bin-dispatch.test.js:262` (moved from `:217` when Task 6 added
+    `tests/bin/bin-dispatch.test.js:261` (moved from `:217` when Task 6 added
     `track-latest`'s own standalone case immediately above it) and recorded
     as port-only item 22.
 40. `uninstall` dispatches with `git` absent from `PATH` (loop iteration 3).
@@ -292,9 +292,9 @@ and is not counted here.
     dispatch log, so "dispatches ... and logs `unpin  ref=`" can no longer
     occur. The analogous in-process property ("succeeds with `python3`
     absent" — the property this item actually protects) is covered by
-    `tests/bin/bin-dispatch.test.js:280` (moved from `:235`; see item 39's
+    `tests/bin/bin-dispatch.test.js:279` (moved from `:235`; see item 39's
     citation note) and recorded as port-only item 23. That test also gains a
-    sibling covering `sh` absent (`tests/bin/bin-dispatch.test.js:289`, moved
+    sibling covering `sh` absent (`tests/bin/bin-dispatch.test.js:288`, moved
     from `:244`, port-only items 25-26), a property the shell could never
     test at all: the shell driver itself required `sh` to run.
 
@@ -303,7 +303,7 @@ and is not counted here.
     (`spw_require_command python3`, `scripts/track-latest:11`), so no shell
     counterpart to "succeeds with `python3` absent" ever existed for it.
     Task 6's in-process flip makes that newly true; it is recorded as
-    port-only items 30-31 (`tests/bin/bin-dispatch.test.js:307`), with no
+    port-only items 30-31 (`tests/bin/bin-dispatch.test.js:306`), with no
     shell-side item to retire.
 
 ### codex required for probe and install (`:188-205`)
@@ -354,20 +354,20 @@ and is not counted here.
     dispatch log — the condition this item asserted can no longer occur, in
     either direction. `pin` was removed from `NO_CODEX_CASES`; the analogous
     in-process property ("succeeds with `codex` absent") is covered by
-    `tests/bin/bin-dispatch.test.js:417` and recorded as port-only item 38.
+    `tests/bin/bin-dispatch.test.js:416` and recorded as port-only item 38.
 49. `track-latest` dispatches with `codex` absent from `PATH` (shell loop
     iteration 1). **Retired** (PR 11.5, Task 6): `track-latest` is now
     in-process and never logs to the dispatch log, so "dispatches ... and
     logs `track-latest  ref=`" can no longer occur. `track-latest` was
     removed from `NO_CODEX_CASES`; the analogous in-process property
     ("succeeds with `codex` absent") is covered by
-    `tests/bin/bin-dispatch.test.js:402` and recorded as port-only item 29.
+    `tests/bin/bin-dispatch.test.js:401` and recorded as port-only item 29.
 50. `unpin` dispatches with `codex` absent from `PATH` (shell loop iteration
     2). **Retired** (PR 11.5): `unpin` is now in-process and never logs to
     the dispatch log, so "dispatches ... and logs `unpin  ref=`" can no
     longer occur. `unpin` was removed from `NO_CODEX_CASES`; the analogous
     in-process property ("succeeds with `codex` absent") is covered by
-    `tests/bin/bin-dispatch.test.js:411` (moved from `:303` when Task 6 added
+    `tests/bin/bin-dispatch.test.js:410` (moved from `:303` when Task 6 added
     `track-latest`'s own standalone case immediately above it) and recorded
     as port-only item 24.
 51. `prepare` dispatches with `codex` absent from `PATH` (shell loop
@@ -377,7 +377,7 @@ and is not counted here.
     last entry, so the table and its `for` loop were deleted outright rather
     than left with zero iterations; the property this item actually protects
     (preflight does not require Codex for `prepare`) is covered by
-    `tests/bin/bin-dispatch.test.js:498` and recorded as port-only items
+    `tests/bin/bin-dispatch.test.js:497` and recorded as port-only items
     45-46. Like item 8, and unlike items 48, 49, and 50, the replacement case
     asserts no exit status — see item 8's retirement note for why `prepare`
     cannot succeed through this fixture.
@@ -448,7 +448,7 @@ preamble, for what it asserts:
 3. Routing case `prepare --ref test`: `result.status === 0` (as
    `ROUTING_CASES[0]`, latterly). **Dropped** (PR 11.5 slice 3.4), and
    deliberately not carried into `prepare`'s standalone in-process case at
-   `tests/bin/bin-dispatch.test.js:87`: `prepare` really runs there, and this
+   `tests/bin/bin-dispatch.test.js:86`: `prepare` really runs there, and this
    fixture gives it an `exit 0` `git` stub, no upstream to clone, and no
    manifest template, so it cannot succeed. Asserting a status here would
    pin an outcome the fixture cannot produce; the routing property item 8
@@ -457,7 +457,7 @@ preamble, for what it asserts:
    41/53 reconciliation below changes with it.
 4. Routing case `pin v6.1.1`: `result.status === 0`. **Relocated** (PR 11.5,
    Task 7): `pin` left `ROUTING_CASES` (see item 9's retirement note) for its
-   own standalone case, `tests/bin/bin-dispatch.test.js:104`. Same underlying
+   own standalone case, `tests/bin/bin-dispatch.test.js:103`. Same underlying
    property (`pin` succeeds); same rationale as item 2, just no longer a
    loop iteration — and, unlike items 5 and 6, it needs a real, resolvable
    local upstream rather than a bare dispatch stub (see
@@ -465,12 +465,12 @@ preamble, for what it asserts:
 5. Routing case `track-latest`: `result.status === 0`. **Relocated** (PR
    11.5, Task 6): `track-latest` left `ROUTING_CASES` (see item 10's
    retirement note) for its own standalone case,
-   `tests/bin/bin-dispatch.test.js:84`. Same underlying property
+   `tests/bin/bin-dispatch.test.js:83`. Same underlying property
    (`track-latest` succeeds); same rationale as item 2, just no longer a
    loop iteration.
 6. Routing case `unpin`: `result.status === 0`. **Relocated** (PR 11.5):
    `unpin` left `ROUTING_CASES` (see item 11's retirement note) for its own
-   standalone case, `tests/bin/bin-dispatch.test.js:92` (moved from `:83`
+   standalone case, `tests/bin/bin-dispatch.test.js:91` (moved from `:83`
    when Task 6 added `track-latest`'s own standalone case immediately
    above it). Same underlying property (`unpin` succeeds); same rationale
    as item 2, just no longer a loop iteration.
@@ -490,7 +490,7 @@ preamble, for what it asserts:
    `ROUTING_CASES[2]`). Port-only — same rationale as item 2. **Index
    updated** (PR 11.5 slice 3.4) from `ROUTING_CASES[3]` to `[2]`, same
    cause as item 7.
-10. `--version` (no symlink): `result.status === 0` (`tests/bin/bin-dispatch.test.js:141`,
+10. `--version` (no symlink): `result.status === 0` (`tests/bin/bin-dispatch.test.js:140`,
     corrected from a stale `:120` citation that predated PR 11.5's in-process
     flips — citation predates PR 11.5, left as found until this correction).
     Port-only — the shell's `version_out=$(run_bin --version)` at `:129` has
@@ -498,22 +498,22 @@ preamble, for what it asserts:
     `set -e` implicitly, but nothing at the counted-assertion granularity
     checks it).
 11. `--version` through a symlink: `result.status === 0`
-    (`tests/bin/bin-dispatch.test.js:151`, corrected from a stale `:130`
+    (`tests/bin/bin-dispatch.test.js:150`, corrected from a stale `:130`
     citation — same pre-existing-citation history as item 10). Port-only —
     same rationale as item 10, for the shell's `:135` symlinked invocation.
-12. Env passthrough: `result.status === 0` (`tests/bin/bin-dispatch.test.js:178`,
+12. Env passthrough: `result.status === 0` (`tests/bin/bin-dispatch.test.js:177`,
     corrected from a stale `:157` citation — same pre-existing-citation
     history as item 10). Port-only — the shell's bare env-prefixed invocation
     at `:149-152` has no explicit exit-status test.
 13. `NO_GIT_CASES` iteration `track-latest`: `result.status === 0`.
     **Relocated** (PR 11.5, Task 6): `track-latest` left `NO_GIT_CASES` (see
     item 38's retirement note) for its own standalone case,
-    `tests/bin/bin-dispatch.test.js:258`. Same underlying property; same
+    `tests/bin/bin-dispatch.test.js:257`. Same underlying property; same
     rationale as before, just no longer a loop iteration.
 14. `unpin` succeeds with `git` absent: `result.status === 0`.
     **Relocated** (PR 11.5): `unpin` left `NO_GIT_CASES` (see item 39's
     retirement note) for its own standalone case,
-    `tests/bin/bin-dispatch.test.js:267` (moved from `:228`-equivalent
+    `tests/bin/bin-dispatch.test.js:266` (moved from `:228`-equivalent
     position when Task 6 added `track-latest`'s own standalone case
     immediately above it). Same underlying property; same rationale as
     item 13, just no longer a loop iteration.
@@ -532,32 +532,32 @@ preamble, for what it asserts:
 17. `NO_CODEX_CASES` iteration `pin v6.1.1`: `result.status === 0`.
     **Relocated** (PR 11.5, Task 7): `pin` left `NO_CODEX_CASES` (see item
     48's retirement note) for its own standalone case,
-    `tests/bin/bin-dispatch.test.js:423`. Port-only — the shell's standalone
+    `tests/bin/bin-dispatch.test.js:422`. Port-only — the shell's standalone
     `run_bin pin v6.1.1 >/dev/null` at `:208` has no explicit exit-status
     test; same rationale as item 2, just no longer a loop iteration.
 18. `NO_CODEX_CASES` iteration `track-latest`: `result.status === 0`.
     **Relocated** (PR 11.5, Task 6): `track-latest` left `NO_CODEX_CASES`
     (see item 49's retirement note) for its own standalone case,
-    `tests/bin/bin-dispatch.test.js:407`. Same underlying property; same
+    `tests/bin/bin-dispatch.test.js:406`. Same underlying property; same
     rationale as before, just no longer a loop iteration.
 19. `unpin` succeeds with `codex` absent: `result.status === 0`.
     **Relocated** (PR 11.5): `unpin` left `NO_CODEX_CASES` (see item 50's
     retirement note) for its own standalone case,
-    `tests/bin/bin-dispatch.test.js:413` (moved from `:305` when Task 6
+    `tests/bin/bin-dispatch.test.js:412` (moved from `:305` when Task 6
     added `track-latest`'s own standalone case immediately above it). Same
     underlying property; same rationale as item 17, just no longer a loop
     iteration.
 20. `NO_CODEX_CASES` iteration `prepare`: `result.status === 0` (as
     `NO_CODEX_CASES[0]`, latterly). **Dropped** (PR 11.5 slice 3.4), for the
     same reason as item 3 and deliberately not carried into `prepare`'s
-    standalone codex-absent case at `tests/bin/bin-dispatch.test.js:498`:
+    standalone codex-absent case at `tests/bin/bin-dispatch.test.js:497`:
     `prepare` really runs there and cannot succeed through this fixture. The
     property item 51 actually protected — preflight admits `prepare` without
     `codex` — survives as port-only items 45-46, asserted directly on the
     stderr and the dispatch log rather than through a status. `NO_CODEX_CASES`
     itself is gone with this entry.
 21. **New** (PR 11.5). Routing case `unpin`: `result.log` is empty
-    (`tests/bin/bin-dispatch.test.js:95`, moved from `:86` when Task 6 added
+    (`tests/bin/bin-dispatch.test.js:94`, moved from `:86` when Task 6 added
     `track-latest`'s own standalone case immediately above it). Port-only,
     with no shell counterpart of any kind: the shell's mechanism for this
     case always dispatched to `scripts/unpin` and logged something, so
@@ -583,7 +583,7 @@ preamble, for what it asserts:
     `result.log` is empty (`:295`). Port-only, same rationale as items 21
     and 25.
 27. **New** (PR 11.5, Task 6). Routing case `track-latest`: `result.log` is
-    empty (`tests/bin/bin-dispatch.test.js:87`). Port-only, with no shell
+    empty (`tests/bin/bin-dispatch.test.js:86`). Port-only, with no shell
     counterpart of any kind, same rationale as item 21: the shell always
     dispatched to `scripts/track-latest` and logged something for this case,
     so "successfully ran without ever dispatching" was not expressible
@@ -605,7 +605,7 @@ preamble, for what it asserts:
     POSIX shell on `PATH`: `result.log` is empty (`:313`). Port-only, same
     rationale as item 30.
 32. **New** (PR 11.5, Task 7). `pin` fails preflight when `git` is absent
-    from `PATH`: `result.status === 1` (`tests/bin/bin-dispatch.test.js:209`).
+    from `PATH`: `result.status === 1` (`tests/bin/bin-dispatch.test.js:208`).
     Port-only, with no shell counterpart of any kind: the shell's generic
     "missing git" driver (items 32-34 above) only ever exercised `install`,
     never `pin` specifically, and `pin`'s own preflight requirement changed
@@ -618,7 +618,7 @@ preamble, for what it asserts:
     Port-only, same rationale as item 32.
 35. **New** (PR 11.5, Task 7). `pin` succeeds in-process with `python3`
     absent from `PATH` while `codex` stays present: `result.status === 0`
-    (`tests/bin/bin-dispatch.test.js:336`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:335`). Port-only, with no shell
     counterpart of any kind: the shell's `scripts/pin` genuinely required
     `python3` (`spw_require_command python3`, `scripts/pin:17`), so no shell
     counterpart to "succeeds with `python3` absent" ever existed for `pin`.
@@ -631,7 +631,7 @@ preamble, for what it asserts:
 36. **New** (PR 11.5, Task 7). Same case: `result.log` is empty (`:336`).
     Port-only, same rationale as item 35.
 37. **New** (PR 11.5, Task 7). Routing case `pin`: `result.log` is empty
-    (`tests/bin/bin-dispatch.test.js:107`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:106`). Port-only, with no shell
     counterpart of any kind, same rationale as item 21: the shell always
     dispatched to `scripts/pin` and logged something for this case, so
     "successfully ran without ever dispatching" was not expressible through
@@ -645,7 +645,7 @@ preamble, for what it asserts:
     `tools` — rather than merely restating item 35 under a different name.
 39. **New** (PR 11.5, Task 7). `pin` succeeds in-process with no POSIX shell
     on `PATH` while `python3` and `codex` both stay present:
-    `result.status === 0` (`tests/bin/bin-dispatch.test.js:351`). Port-only,
+    `result.status === 0` (`tests/bin/bin-dispatch.test.js:350`). Port-only,
     with no shell counterpart of any kind: the shell driver itself required
     `sh` to execute at all, matching items 25/30's rationale rather than any
     numbered shell item.
@@ -653,7 +653,7 @@ preamble, for what it asserts:
     Port-only, same rationale as item 39.
 41. **New** (PR 11.5 slice 2, Task 3). An in-process command with no
     registered handler fails closed: `result.status === 1`
-    (`tests/bin/bin-dispatch.test.js:149`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:148`). Port-only, with no shell
     counterpart of any kind: the condition only exists because `src/cli.ts`'s
     `IN_PROCESS_HANDLERS` registry became exhaustiveness-checked in that
     task, making a `DISPATCH` entry without a registered handler a compile
@@ -671,12 +671,12 @@ preamble, for what it asserts:
 42. **New** (PR 11.5 slice 2, Task 3). Same case: stderr is exactly
     `error: no in-process handler registered for: ${spawned}\n`, where
     `spawned` is item 41's derived vehicle command
-    (`tests/bin/bin-dispatch.test.js:150-152`). Port-only, same rationale as
+    (`tests/bin/bin-dispatch.test.js:149-151`). Port-only, same rationale as
     item 41; the command named in that string is whatever `vehicleCommand`
     currently derives, not a literal to keep in sync by hand.
 43. **New** (PR 11.5 slice 3.4, Task 3). `dispatchOverride` rejects an
     override that changes nothing: `runDispatch` throws
-    (`tests/bin/bin-dispatch.test.js:167-175`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:166-174`). Port-only, with no shell
     counterpart of any kind: the condition only exists because
     `dispatch-fixture.js`'s `patchDispatch` helper, introduced in slice 2's
     Task 3 (items 41-42), used to rewrite a `DISPATCH` entry to its own
@@ -691,7 +691,7 @@ preamble, for what it asserts:
     command no longer spawned. This asserts the mechanism itself refuses a
     no-op, not just that one victim was re-pointed.
 44. **New** (PR 11.5 slice 3.4). Routing case `prepare`: `result.log` is empty
-    (`tests/bin/bin-dispatch.test.js:96`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:95`). Port-only, with no shell
     counterpart of any kind, same rationale as item 21: the shell always
     dispatched to `scripts/prepare` and logged something for this case, so
     "ran without ever dispatching" was not expressible through it. This is
@@ -699,7 +699,7 @@ preamble, for what it asserts:
     reason recorded in item 3.
 45. **New** (PR 11.5 slice 3.4). `prepare` with `codex` absent: stderr does
     not contain `required command not found: codex`
-    (`tests/bin/bin-dispatch.test.js:504-507`). Port-only. The shell observed
+    (`tests/bin/bin-dispatch.test.js:503-506`). Port-only. The shell observed
     the same preflight fact indirectly, through a successful dispatch (item
     51); with no dispatch left to observe, the assertion moves onto the
     diagnostic preflight would have emitted, which is a direct statement of
@@ -709,7 +709,7 @@ preamble, for what it asserts:
 47. **New** (PR 11.5 slice 3.4). `prepare` does not require `python3` when no
     validator is configured: stderr does not contain
     `required command not found: python3`
-    (`tests/bin/bin-dispatch.test.js:464-467`). Port-only, with no shell
+    (`tests/bin/bin-dispatch.test.js:463-466`). Port-only, with no shell
     counterpart of any kind: the shell's `scripts/prepare` required `python3`
     unconditionally (`spw_require_command python3`, `scripts/prepare:38`), so
     "succeeds without `python3`" was never true of the shell driver. Slice
@@ -718,7 +718,7 @@ preamble, for what it asserts:
     conditional that must NOT fire.
 48. **New** (PR 11.5 slice 3.4). `prepare` requires `python3` once
     `SUPERPOWERS_VALIDATOR` names one: `result.status === 1`
-    (`tests/bin/bin-dispatch.test.js:477`). Port-only, same
+    (`tests/bin/bin-dispatch.test.js:476`). Port-only, same
     no-shell-counterpart rationale as item 47, and the half that must fire.
     Items 47-51 are the integration net for `commandRequirements(env)`:
     `tests/bin/units.test.js` unit-tests the accessor, but nothing else
@@ -727,7 +727,7 @@ preamble, for what it asserts:
     because none configures a validator.
 49. **New** (PR 11.5 slice 3.4). Same case: stderr is exactly
     `error: required command not found: python3 — install python3 and re-run`
-    plus a newline (`tests/bin/bin-dispatch.test.js:478-481`). Port-only, same
+    plus a newline (`tests/bin/bin-dispatch.test.js:477-480`). Port-only, same
     rationale as item 48. Exact rather than substring because the text is the
     contract: it must be preflight's own hand-written diagnostic, not a
     prepare-path failure that merely mentions `python3`.
@@ -740,6 +740,22 @@ preamble, for what it asserts:
     without `python3`" from "preflight never ran a `python3` check because it
     dispatched instead"; this is the half that pins the second reading out,
     and it is the shape items 46 and 50 already give their own cases.
+52. **New** (PR 11.5 slice 4a Task 7). Matrix row 13: `pinUpstream`'s `git`
+    sits behind the same egress refusal `createSandbox` uses, instead of a
+    symlink to a real, unfiltered `git`. `runDispatch({ pinUpstream: true,
+    gitSentinel: true, ... })` against a network `SUPERPOWERS_UPSTREAM_URL`
+    refuses before git runs: `result.stderr` matches the shim's refusal text
+    and the returned `gitSentinel` file — a recording stub the shim wraps
+    instead of the real binary — stays empty (`tests/bin/bin-dispatch.test.js:538`).
+    A second case with no URL override (the fixture's local-path default)
+    proves the sentinel is non-vacuous: it records a real `git ls-remote`
+    invocation, so the first case's empty sentinel means "refused", not
+    "never wired". Port-only: no shell counterpart, since the shell driver
+    never had a `pinUpstream` mode. Reverting the fixture to the old symlink
+    does not fail this case through the sentinel as originally expected —
+    with the recording stub off `PATH`, `git` still runs, but against a
+    real network target it fails with git's own DNS error rather than the
+    shim's refusal text, so the `stderr` match is what goes red.
 
 <!-- inventory:port-only:end -->
 
@@ -748,7 +764,7 @@ preamble, for what it asserts:
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 51,
+  "portOnly": 52,
   "ports": { "tests/bin/bin-dispatch.test.js": 37 }
 }
 ```
@@ -767,9 +783,9 @@ preamble, for what it asserts:
   smaller than before PR 11.5 flipped `pin`, `track-latest`, `unpin`, `probe`,
   and `prepare` to in-process and removed all five from every table they used
   to occupy; `NO_CODEX_CASES` is gone entirely, emptied by the same flips —
-  expanding to 39 runtime cases; PR 11.5 slice 4a Task 7 added the 37th, a
-  matrix row 13 regression case with no shell-original counterpart, so it is
-  neither mapped nor port-only), carrying **41** of the 53 shell assertions
+  expanding to 39 runtime cases; PR 11.5 slice 4a Task 7 added the 37th as
+  port-only item 52, a matrix row 13 regression case with no shell-original
+  counterpart), carrying **41** of the 53 shell assertions
   mapped (two recorded merges:
   item 15 into the port's `status === 2` check, and items 30-31 into the
   port's two-line `assert.deepEqual`), plus **12 retired items** (7, 8, 9, 10,
@@ -786,8 +802,8 @@ preamble, for what it asserts:
   dispatch log any more, so each specific condition can no longer occur in
   either direction, and no JS assertion enforces any of them any more; see
   each item's retirement note for the analogous in-process property and where
-  it is now tested). 41 mapped + 12 retired = 53. Plus 51 port-only
-  assertions (45 additive `result.status === 0` / `result.log` / stderr checks
+  it is now tested). 41 mapped + 12 retired = 53. Plus 52 port-only
+  assertions (46 additive `result.status === 0` / `result.log` / stderr checks
   the shell left implicit under `set -e` or that have no shell counterpart at
   all, plus one structural array-length guard, plus 2 assertions covering
   the in-process runtime backstop with no shell counterpart of any kind — see
@@ -803,6 +819,6 @@ preamble, for what it asserts:
   sense in which "drop" is pejorative here: it names an unrecorded
   disappearance, not the port-only `Dropped` category, whose two entries
   (items 3 and 20) are recorded exactly as carefully and are not shell items at
-  all. 41 + 12 = 53. The 51 port-only
+  all. 41 + 12 = 53. The 52 port-only
   entries are strictly additive test coverage — not a reconciliation of
   any shell assertion — and are excluded from the 41/53 arithmetic above.

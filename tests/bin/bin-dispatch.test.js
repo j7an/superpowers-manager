@@ -551,10 +551,18 @@ void test("the pin dispatch fixture refuses a network git remote before git runs
     args: ["pin", "v1.0.0"],
     env: { SUPERPOWERS_UPSTREAM_URL: "https://example.invalid/upstream" },
   });
+  // Reverting the fixture's adoption (a symlink to REAL_GIT instead of the
+  // shim) does not turn this sentinel non-empty: the recording stub is off
+  // PATH entirely in that case, so git still runs but against a real network
+  // target, which fails with git's own DNS error rather than the shim's
+  // refusal text. It is the stderr match above that goes red under that
+  // mutation, not this emptiness check — see the mutation proof in the task
+  // report. This check still matters: it is what distinguishes "the shim
+  // refused before git ran" from "something else made git fail first".
   assert.match(refused.stderr, /sandbox refuses network git remote/);
+  assert.ok(existsSync(refused.gitSentinel), "the sentinel was never created");
   assert.equal(
-    existsSync(refused.gitSentinel) &&
-      readFileSync(refused.gitSentinel, "utf8").trim().length > 0,
+    readFileSync(refused.gitSentinel, "utf8").trim().length > 0,
     false,
     "git ran despite the egress refusal",
   );
