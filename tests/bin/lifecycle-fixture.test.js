@@ -34,6 +34,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -44,6 +45,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   SCRATCH,
   UPSTREAM,
@@ -54,6 +57,8 @@ import {
   readLog,
   runScript,
 } from "./lifecycle-fixture.js";
+
+const execFileAsync = promisify(execFile);
 
 /** @typedef {import("./lifecycle-fixture.js").CaseEnv} CaseEnv */
 
@@ -247,4 +252,53 @@ void test("runScript bodies actually overlap under concurrency", async () => {
     `four concurrent runs took ${together}ms against a ${single}ms single run — ` +
       `they are not overlapping (total elapsed ${Date.now() - started}ms)`,
   );
+});
+
+void test("the process.exitCode idiom is what delivers a large pipe payload", async () => {
+  // Carried row :2041's mutation proof. The `exit` arm is the OLD idiom and
+  // must truncate; the `exitCode` arm is the new one and must not. Both arms
+  // are asserted: dropping the truncating arm would leave a test that passes
+  // under either idiom, which is the vacuous shape this slice exists to close.
+  //
+  // If the truncating arm ever stops truncating on a supported platform, do
+  // NOT weaken this to a one-sided check — re-derive the payload size or the
+  // channel and escalate, because a passing negative control is the only
+  // evidence that the positive one means anything.
+  const child = fileURLToPath(
+    new URL("../unit/helpers/pipe-flush-child.js", import.meta.url),
+  );
+  const BYTES = 1024 * 1024;
+
+  const complete = await execFileAsync(process.execPath, [child, "exitCode"], {
+    maxBuffer: BYTES * 4,
+  });
+  assert.equal(complete.stdout.length, BYTES);
+
+  const truncated = await execFileAsync(process.execPath, [child, "exit"], {
+    maxBuffer: BYTES * 4,
+  });
+  assert.ok(
+    truncated.stdout.length < BYTES,
+    `process.exit() delivered ${truncated.stdout.length} of ${BYTES} bytes; ` +
+      "the negative control no longer demonstrates truncation",
+  );
+});
+
+void test("the fake codex delivers an oversized plugin listing intact", async () => {
+  // The read side already used process.exitCode (slice 2), so this is a
+  // regression guard on the whole spawn path rather than a mutation proof:
+  // it is what fails if a future edit reintroduces process.exit() into
+  // respondToListing or the role dispatch around it.
+  const c = createCase({ fakes: "install" });
+  const filler = "y".repeat(1024 * 1024);
+  writeFileSync(
+    join(c.state, "plugin_list.json"),
+    JSON.stringify({ installed: [], available: [], filler }),
+    "utf8",
+  );
+  const result = await execFileAsync(c.codexBin, ["plugin", "list", "--json"], {
+    env: { ...process.env, SPW_FIXTURE_STATE: c.state },
+    maxBuffer: 8 << 20,
+  });
+  assert.equal(JSON.parse(result.stdout).filler.length, filler.length);
 });
