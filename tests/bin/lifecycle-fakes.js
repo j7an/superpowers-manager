@@ -176,10 +176,17 @@ export function logLine(state, name, line) {
 }
 
 /**
+ * `seam` is read once here rather than at each use: the extraction would
+ * otherwise leave three copies of the `?? "delegate"` default — one per fake
+ * plus the tripwire — and a default that disagrees across copies is how a
+ * tripwire silently becomes a delegation. A fake is a fresh process per
+ * invocation, so one read per process is one read per command.
+ *
  * @typedef {{
  *   state: string,
  *   config: Record<string, unknown>,
  *   args: string[],
+ *   seam: string,
  *   log: (name: string, line: string) => void,
  *   readJson: (file: string) => any,
  *   writeJson: (file: string, value: unknown) => void,
@@ -196,6 +203,7 @@ function makeContext(state, config) {
     state,
     config,
     args: process.argv.slice(3),
+    seam: process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate",
     log: (name, line) => logLine(state, name, line),
     readJson: (file) => JSON.parse(readFileSync(join(state, file), "utf8")),
     writeJson: (file, value) =>
@@ -275,16 +283,11 @@ export function injectSpuriousMutation(ctx, forbiddenLine) {
  * execution, so a missing return falls through into the delegation below and
  * spawns the real adapter — the exact inverse of a tripwire.
  *
- * The context is taken but unused — hence `_ctx`. It keeps the call-site shape
- * uniform with the other shell helpers, and slice 4b's genuine consumer needs
- * it; the lint rule's underscore convention is how an intentionally unused
- * parameter is spelled here.
- *
- * @param {FakeContext} _ctx
+ * @param {FakeContext} ctx
  * @returns {boolean} true when the caller must stop
  */
-export function tripwireTriggered(_ctx) {
-  if ((process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate") !== "tripwire") {
+export function tripwireTriggered(ctx) {
+  if (ctx.seam !== "tripwire") {
     return false;
   }
   process.stderr.write("fixture: this command must not spawn the adapter\n");

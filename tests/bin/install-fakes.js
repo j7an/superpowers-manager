@@ -179,7 +179,6 @@ function runCodex(ctx) {
  * @returns {void}
  */
 function runAdapter(ctx) {
-  const SEAM = process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate";
   ctx.log("adapter.log", ctx.args.join(" "));
   // The return is load-bearing: process.exitCode does not halt execution, so
   // falling through here would reach delegateToRealAdapter below and spawn the
@@ -187,7 +186,7 @@ function runAdapter(ctx) {
   if (tripwireTriggered(ctx)) return;
   const joined = ctx.args.join(" ");
 
-  if (SEAM === "intercept" && joined === "inspect --view update-control") {
+  if (ctx.seam === "intercept" && joined === "inspect --view update-control") {
     const countFile = join(ctx.state, "update-control-count");
     let count = 0;
     try {
@@ -262,7 +261,7 @@ function runAdapter(ctx) {
   // legacy-state cases) and silently changes what several later
   // verification cases mean.
   if (
-    SEAM === "intercept" &&
+    ctx.seam === "intercept" &&
     joined === "inspect --view fingerprint" &&
     existsSync(
       join(ctx.state, "codex-home", "plugins", "cache", "superpowers-manager"),

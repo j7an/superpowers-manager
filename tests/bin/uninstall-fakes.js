@@ -81,14 +81,13 @@ function runCodex(ctx) {
  * @returns {void}
  */
 function runAdapter(ctx) {
-  const SEAM = process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate";
   ctx.log("adapter.log", ctx.args.join(" "));
   // The return is load-bearing: process.exitCode does not halt execution, so
   // falling through here would reach delegateToRealAdapter below and spawn the
   // very adapter the tripwire exists to forbid.
   if (tripwireTriggered(ctx)) return;
   if (
-    SEAM === "intercept" &&
+    ctx.seam === "intercept" &&
     ctx.args.join(" ") === "inspect --view update-control"
   ) {
     process.stdout.write(
