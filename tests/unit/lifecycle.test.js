@@ -13,6 +13,11 @@ const {
   verifyUninstalledResources,
 } = await import(new URL("../../dist/lifecycle.js", import.meta.url).href);
 
+/** @type {typeof import("../../src/adapter-protocol.js")} */
+const { successResult, failureResult } = await import(
+  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+);
+
 // Frozen operator text. scripts/core/lifecycle.sh:50-53 and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
 // they are whole-line exact and this suite keeps them that way.
@@ -267,4 +272,78 @@ void test("verifyUninstalledResources fails closed on a non-Boolean resource", (
 void test("verifyUninstalledResources fails closed on a failed inspection", () => {
   const verdict = verifyUninstalledResources(failed());
   assert.equal(verdict.ok, false);
+});
+
+void test("an unparseable fingerprint result names parsing, not inspection", () => {
+  // Previously unreached by any test. Reachable since the resultObject split
+  // (spec §6.2.3 item 3b): the envelope is well-formed, the result is not an
+  // object. This is the branch that makes the shell's `grep -Fq "parse"`
+  // satisfiable.
+  const verdict = verifyInstalledFingerprint(
+    "abcdef1234567890abcdef1234567890abcdef12",
+    successResult("install", {}, []),
+    successResult("inspect", "not-an-object", []),
+  );
+  assert.equal(verdict.ok, false);
+  assert.deepEqual(verdict.stderr, [
+    "error: cannot parse installed manager fingerprint inspection result after install.",
+  ]);
+  assert.deepEqual(verdict.stdout, []);
+});
+
+void test("a non-string fingerprint is unparseable, not empty", () => {
+  // PORT-ONLY. The shell cannot construct this: provenance.sh:62 stringifies
+  // any non-null scalar. Pinned so the branch cannot be deleted as dead.
+  const verdict = verifyInstalledFingerprint(
+    "abcdef1234567890abcdef1234567890abcdef12",
+    successResult("install", {}, []),
+    successResult("inspect", { fingerprint: 42 }, []),
+  );
+  assert.equal(verdict.ok, false);
+  assert.deepEqual(verdict.stderr, [
+    "error: cannot parse installed manager fingerprint inspection result after install.",
+  ]);
+});
+
+void test("an unreadable ownership inspection names reading, with its text", () => {
+  // Reached today, but the existing case asserts only ok === false, so the
+  // operator string was unpinned.
+  const verdict = verifyUninstalledResources(
+    failureResult("inspect", "inspect-failed", "boom", [], []),
+  );
+  assert.equal(verdict.ok, false);
+  assert.equal(
+    verdict.ok === false ? verdict.message : "",
+    "cannot read the adapter ownership inspection after removal",
+  );
+});
+
+void test("the marketplace Boolean check names its own key", () => {
+  // The loop covers both keys but only the `plugin` interpolation was
+  // asserted, so a template that hardcoded "plugin" would have passed.
+  const verdict = verifyUninstalledResources(
+    successResult(
+      "inspect",
+      { resources: { plugin: false, marketplace: "yes" } },
+      [],
+    ),
+  );
+  assert.equal(verdict.ok, false);
+  assert.equal(
+    verdict.ok === false ? verdict.message : "",
+    "expected a Boolean adapter result at resources.marketplace",
+  );
+});
+
+void test("a non-object resources falls through to the Boolean message", () => {
+  // Parity with scripts/core/adapter.sh:70 for input {} — the input
+  // tests/test_marketplace_reconcile.sh:224 writes. The distinct
+  // "expected an object adapter result at resources" message was DELETED by
+  // spec §6.2.3 item 3a; this case is what stops it coming back.
+  const verdict = verifyUninstalledResources(successResult("inspect", {}, []));
+  assert.equal(verdict.ok, false);
+  assert.equal(
+    verdict.ok === false ? verdict.message : "",
+    "expected a Boolean adapter result at resources.plugin",
+  );
 });
