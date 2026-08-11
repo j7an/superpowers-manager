@@ -110,13 +110,21 @@ function runCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
 ): Promise<CommandResult> {
+  // scripts/core/common.sh:71 is the system's only scrubbing site and it dies
+  // with scripts/ in 4c. Without this, NODE_OPTIONS would NEWLY reach codex.
+  // Preserves the property that was load-bearing — the child is clean — and
+  // drops the part that was never true, that the dispatcher scrubbed itself.
+  // Carried matrix row 11.
+  const childEnv = { ...env };
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.NODE_PATH;
   return new Promise((resolve, reject) => {
     execFile(
       file,
       [...args],
       {
         encoding: "buffer",
-        env,
+        env: childEnv,
         maxBuffer: Infinity,
         shell: false,
         windowsHide: true,
@@ -144,6 +152,10 @@ function runCommand(
     );
   });
 }
+
+// Exported only so tests/unit/adapter.test.js can assert the env scrub
+// directly. No production caller uses this name.
+export { runCommand as runCommandForTest };
 
 function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;

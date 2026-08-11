@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/adapter.js")} */
-const { runAdapter, mapCodexLaunchFailure } = await import(
+const { runAdapter, mapCodexLaunchFailure, runCommandForTest } = await import(
   new URL("../../dist/adapter.js", import.meta.url).href
 );
 
@@ -544,4 +544,34 @@ void test("mapCodexLaunchFailure carries a validated errno, guards free-form cod
       },
     );
   }
+});
+
+void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", async (t) => {
+  // scripts/core/common.sh:71 was the only scrubbing site in the system and
+  // dies with scripts/ in 4c. The property that was load-bearing is that the
+  // CHILD is clean; the part that was never true is that the dispatcher
+  // scrubbed itself. Carried matrix row 11.
+  const scratch = await mkdtemp(join(tmpdir(), "spw-adapter-env-"));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const script = join(scratch, "print-env.js");
+  await writeFile(
+    script,
+    "process.stdout.write(JSON.stringify({\n" +
+      "  NODE_OPTIONS: process.env.NODE_OPTIONS ?? null,\n" +
+      "  NODE_PATH: process.env.NODE_PATH ?? null,\n" +
+      "  MARKER: process.env.MARKER ?? null,\n" +
+      "}));\n",
+  );
+  const result = await runCommandForTest(process.execPath, [script], {
+    NODE_OPTIONS: "--max-old-space-size=64",
+    NODE_PATH: "/nowhere",
+    MARKER: "kept",
+    PATH: process.env.PATH ?? "",
+  });
+  assert.deepEqual(JSON.parse(result.stdout.toString("utf8")), {
+    NODE_OPTIONS: null,
+    NODE_PATH: null,
+    // The scrub is targeted, not a whitelist: everything else passes through.
+    MARKER: "kept",
+  });
 });
