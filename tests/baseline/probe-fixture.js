@@ -170,6 +170,10 @@ export function seedGenerated(c, body) {
 const { runProbe } = await import(
   new URL("../../dist/commands/probe.js", import.meta.url).href
 );
+/** @type {typeof import("../../src/adapter.js")} */
+const { runAdapter } = await import(
+  new URL("../../dist/adapter.js", import.meta.url).href
+);
 
 /**
  * @typedef {{ status: number, stdout: string, stderr: string }} ProbeRun
@@ -189,6 +193,10 @@ async function invoke(c, argv, env) {
     env,
     stdout: out.stream,
     stderr: err.stream,
+    // Real, not a double: this fixture's cases carry their own fake `codex`
+    // on PATH (via `env`), and runProbe must reach it exactly as it did
+    // before ctx.adapter existed.
+    adapter: runAdapter,
   });
   return { status, stdout: out.text(), stderr: err.text() };
 }

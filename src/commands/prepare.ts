@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { runAdapter } from "../adapter.js";
 import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
 import { atomicReplaceDir } from "../atomic.js";
 import { oneLine } from "../cli-arguments.js";
@@ -392,7 +391,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
 
       let built: AdapterResult;
       try {
-        built = await runAdapter(
+        built = await ctx.adapter(
           [
             "build",
             "--upstream-root",
@@ -415,7 +414,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
           { root: ctx.root, env },
         );
       } catch {
-        // runAdapter reports CONTROLLED failures by return value
+        // ctx.adapter reports CONTROLLED failures by return value
         // (src/adapter-protocol.ts:34-37) but still THROWS for a
         // non-AdapterFailure cause (src/adapter.ts:993). That cause is by
         // construction the one failure src/adapter.ts declined to own, so its

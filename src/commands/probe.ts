@@ -1,4 +1,3 @@
-import { runAdapter } from "../adapter.js";
 import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
 import { oneLine } from "../cli-arguments.js";
 import { computeEffectiveSelection } from "../effective-selection.js";
@@ -203,6 +202,10 @@ type Inspection =
 // It does still THROW for a non-AdapterFailure cause (src/adapter.ts:993).
 // That is caught here rather than in runProbe's outer catch, because the two
 // need different diagnostics -- see spec §3.3a.
+//
+// Reached through ctx.adapter, not a direct import: src/commands/prepare.ts
+// and this module are the two the injected double must observe, because
+// install reaches the adapter through gatherProbe and runPrepare. Spec §4.5.
 async function inspect(
   view: string,
   key: string,
@@ -210,7 +213,7 @@ async function inspect(
 ): Promise<Inspection> {
   let result: AdapterResult;
   try {
-    result = await runAdapter(["inspect", "--view", view], {
+    result = await ctx.adapter(["inspect", "--view", view], {
       root: ctx.root,
       env: ctx.env,
     });

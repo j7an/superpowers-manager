@@ -5,7 +5,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { capture, withPackage } from "./helpers/command-harness.js";
+import {
+  capture,
+  notCalledAdapter,
+  withPackage,
+} from "./helpers/command-harness.js";
 
 // A static import from `dist/` fails the `typecheck:js` gate: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
@@ -28,6 +32,7 @@ void test("track-latest writes the record and prints one line", async () => {
       },
       stdout: out.stream,
       stderr: capture().stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
     assert.equal(
@@ -57,6 +62,7 @@ void test("track-latest rejects a credential-bearing source before writing", asy
       },
       stdout: capture().stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
     assert.match(err.text(), /HTTP\(S\) source must not include userinfo/);
@@ -77,6 +83,7 @@ void test("track-latest refuses to overwrite a corrupt saved record", async () =
       },
       stdout: capture().stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
     // src/selection-store.ts's JSON-parse-failure translation is one of
@@ -99,6 +106,7 @@ void test("track-latest rejects extra arguments with exit 2", async () => {
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: capture().stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 2);
     assert.match(

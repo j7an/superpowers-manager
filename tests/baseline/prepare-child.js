@@ -16,6 +16,10 @@
 const { runPrepare } = await import(
   new URL("../../dist/commands/prepare.js", import.meta.url).href
 );
+/** @type {typeof import("../../src/adapter.js")} */
+const { runAdapter } = await import(
+  new URL("../../dist/adapter.js", import.meta.url).href
+);
 
 const root = process.argv[2];
 if (root === undefined) {
@@ -28,4 +32,8 @@ process.exitCode = await runPrepare(process.argv.slice(3), {
   env: process.env,
   stdout: process.stdout,
   stderr: process.stderr,
+  // Real, not a double: this is the end-to-end fixture, and gatherPrepare's
+  // build call must reach the case's fake `codex` on PATH the same way it
+  // did before ctx.adapter existed.
+  adapter: runAdapter,
 });

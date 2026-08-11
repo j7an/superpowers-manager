@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { capture } from "./helpers/command-harness.js";
+import { capture, notCalledAdapter } from "./helpers/command-harness.js";
 
 /** @type {typeof import("../../src/commands/prepare.js")} */
 const { runPrepare, readUpstreamManifestVersion } = await import(
@@ -114,6 +114,11 @@ void test("readUpstreamManifestVersion delegates every read and parse failure to
 /**
  * A ctx whose selection resolves without touching git: a 40-hex SUPERPOWERS_REF
  * is a raw-commit resolution (src/upstream.ts:160-162).
+ *
+ * `adapter: notCalledAdapter` is safe for every case below: each fails
+ * closed (a missing manifest template, a failed clone) before gatherPrepare
+ * ever reaches the `ctx.adapter` build call. End-to-end coverage of that
+ * call lives in tests/baseline/prepare.test.js.
  * @param {string} dir
  * @param {Record<string, string>} [extra]
  */
@@ -139,6 +144,7 @@ function unitContext(dir, extra = {}) {
       },
       stdout: out.stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     },
   };
 }

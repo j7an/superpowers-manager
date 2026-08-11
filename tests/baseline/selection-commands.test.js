@@ -375,6 +375,15 @@ function assertOnlySiblingKept(workspace) {
   assert.equal(readFileSync(join(workspace, "sibling"), "utf8"), "keep\n");
 }
 
+// None of pin/unpin/track-latest ever calls ctx.adapter (none of their
+// source modules even imports runAdapter), so freshContext's ctx.adapter is
+// a throwing stand-in: a loud failure instead of a silent pass-through if
+// that ever changes.
+/** @returns {Promise<never>} */
+async function notCalledAdapter() {
+  throw new Error("ctx.adapter must not be called by this command path");
+}
+
 /**
  * A fresh `SUPERPOWERS_CONFIG_DIR`, plus a `CommandContext` bound to it and
  * to a given `SUPERPOWERS_UPSTREAM_URL`. `root` is `ROOT` throughout this
@@ -407,6 +416,7 @@ function freshContext(label, envOverrides) {
         return true;
       },
     }),
+    adapter: notCalledAdapter,
   };
   return {
     configDir,

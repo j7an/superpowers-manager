@@ -16,6 +16,7 @@ import {
   AdapterMessageLog,
   failureResult,
   successResult,
+  type AdapterContext,
   type AdapterResult,
 } from "./adapter-protocol.js";
 import {
@@ -47,10 +48,11 @@ const MARKETPLACE_NAME = "superpowers-manager";
 const LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";
 const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 
-export interface AdapterContext {
-  readonly root: string;
-  readonly env?: NodeJS.ProcessEnv;
-}
+// Re-exported so existing importers of AdapterContext from this module are
+// unaffected: the interface itself now lives in adapter-protocol.js, moved
+// there to break a cycle (src/commands/context.ts is imported by every
+// command module, and so is adapter.ts).
+export type { AdapterContext };
 
 class AdapterFailure extends Error {
   constructor(

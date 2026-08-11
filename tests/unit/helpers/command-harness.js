@@ -16,6 +16,20 @@ import {
 } from "../../baseline/support.js";
 
 /**
+ * A ctx.adapter stand-in for command modules that never reach the adapter
+ * (pin, track-latest, unpin, and the prepare/probe cases that fail before
+ * inspecting or building). Throwing on invocation turns a future wiring
+ * mistake — a code path that starts reaching the adapter without the test
+ * being updated to expect it — into a loud test failure instead of a silent
+ * pass-through to the real runAdapter.
+ * @param {readonly string[]} _argv
+ * @returns {Promise<never>}
+ */
+export async function notCalledAdapter(_argv) {
+  throw new Error("ctx.adapter must not be called by this command path");
+}
+
+/**
  * A minimal writable-stream stand-in that records every chunk written to it,
  * for asserting exact CLI output without touching real stdout/stderr.
  * @returns {{ stream: any, text: () => string }}

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { runAdapter } from "./adapter.js";
 import { oneLine } from "./cli-arguments.js";
 import type { CommandContext } from "./commands/context.js";
 import { runPin } from "./commands/pin.js";
@@ -391,6 +392,10 @@ async function main(): Promise<never> {
       env: process.env,
       stdout: process.stdout,
       stderr: process.stderr,
+      // The ONLY place runAdapter is bound to a context. Every command module
+      // reaches the adapter through this field; none imports runAdapter
+      // itself. tests/unit/ctx-adapter-provenance.test.js gates both halves.
+      adapter: runAdapter,
     };
     let status: number;
     try {

@@ -49,6 +49,10 @@ import { capture } from "../unit/helpers/command-harness.js";
 const { runProbe } = await import(
   new URL("../../dist/commands/probe.js", import.meta.url).href
 );
+/** @type {typeof import("../../src/adapter.js")} */
+const { runAdapter } = await import(
+  new URL("../../dist/adapter.js", import.meta.url).href
+);
 
 /** @typedef {import('./support.js').Sandbox} Sandbox */
 
@@ -1654,6 +1658,10 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
     }),
     stdout: out.stream,
     stderr: err.stream,
+    // Real, not a double: this case's fake `codex` is on PATH via caseEnv,
+    // and runProbe must reach it exactly as it did before ctx.adapter
+    // existed.
+    adapter: runAdapter,
   });
   assert.equal(status, 0, err.text());
   assert.match(out.text(), /^desired_commit=[0-9a-f]{40}$/m);

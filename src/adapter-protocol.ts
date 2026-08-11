@@ -36,6 +36,15 @@ export interface AdapterResult {
   readonly envelope: AdapterEnvelope;
 }
 
+// Lives here, not in src/adapter.ts, so src/commands/context.ts can import it
+// without creating a cycle: context.ts is imported by every command module,
+// and adapter.ts is too. adapter.ts re-exports this name so its existing
+// importers are unaffected.
+export interface AdapterContext {
+  readonly root: string;
+  readonly env?: NodeJS.ProcessEnv;
+}
+
 function byteEscape(byte: number): string {
   return `\\x${byte.toString(16).padStart(2, "0")}`;
 }
