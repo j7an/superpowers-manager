@@ -120,6 +120,24 @@ type UninstallOutcome =
       readonly lines: readonly string[];
     };
 
+// withWorkspace can throw AFTER its callback has already returned a fully
+// computed UninstallOutcome: a post-success cleanup failure
+// (workspaceRemovalFailure, src/workspace.ts:25-27) discards that return
+// value entirely and rejects instead (src/workspace.ts:134-141). A bare
+// re-throw would silently drop every envelope collected before that point --
+// a narrow DIAG-ADAPTER-01 regression the shell never had, since it replayed
+// each adapter response as it went rather than batching replay to the end.
+// This carries the envelopes collected so far alongside the original cause,
+// so runUninstall's catch can still replay them before reporting the cause.
+class GatherFailure extends Error {
+  constructor(
+    readonly inner: unknown,
+    readonly envelopes: readonly AdapterEnvelope[],
+  ) {
+    super("uninstall gather failed");
+  }
+}
+
 // Every step that can throw or fail closed, returning the outcome as data and
 // performing NO writes. Same shape as gatherProbe (src/commands/probe.ts:285)
 // and for the same reason: a write inside this try could raise EPIPE, be
@@ -129,121 +147,155 @@ async function gatherUninstall(ctx: CommandContext): Promise<UninstallOutcome> {
   // child confined its temporary files to the tree the workspace trap
   // removed. The AdapterContext passed to ctx.adapter below does the same.
   const parent = ctx.env.TMPDIR ?? tmpdir();
-  return await withWorkspace(
-    parent,
-    "superpowers-manager.uninstall.",
-    async (workspace): Promise<UninstallOutcome> => {
-      const env = { ...ctx.env, TMPDIR: workspace };
-      const envelopes: AdapterEnvelope[] = [];
-      const failed = (message: string | null): UninstallOutcome => ({
-        status: 1,
-        envelopes,
-        message,
-      });
+  // Declared OUTSIDE the withWorkspace callback (rather than inside, as an
+  // earlier draft had it) so the catch below -- which wraps the ENTIRE
+  // withWorkspace call, not just the callback -- can still see whatever was
+  // collected before a workspace throw. Both `mkdtemp` failure (nothing
+  // collected yet) and a post-success cleanup failure (everything the
+  // callback collected) reach this same array.
+  const envelopes: AdapterEnvelope[] = [];
+  try {
+    return await withWorkspace(
+      parent,
+      "superpowers-manager.uninstall.",
+      async (workspace): Promise<UninstallOutcome> => {
+        const env = { ...ctx.env, TMPDIR: workspace };
+        const failed = (message: string | null): UninstallOutcome => ({
+          status: 1,
+          envelopes,
+          message,
+        });
 
-      // Stage 1: inspect ownership, before removal.
-      const first = await invoke(
-        ctx,
-        env,
-        ["inspect", "--view", "ownership"],
-        envelopes,
-      );
-      if (!first.ok) return failed(first.message);
-
-      const pluginFlag = presenceFlag(first.result, "plugin");
-      if (pluginFlag.kind === "malformed") {
-        return failed(
-          `expected a Boolean adapter result at resources.${pluginFlag.key}`,
+        // Stage 1: inspect ownership, before removal.
+        const first = await invoke(
+          ctx,
+          env,
+          ["inspect", "--view", "ownership"],
+          envelopes,
         );
-      }
-      if (pluginFlag.kind === "call-failed") {
-        // Unreachable via this call path: `first.ok` above already proved
-        // status === 0 && envelope.ok, the only inputs presenceFlag reads to
-        // decide this arm. Handled anyway so presenceFlag stays total and
-        // this switch stays exhaustive rather than assuming its caller
-        // always gates first.
-        return failed(null);
-      }
-      const marketplaceFlag = presenceFlag(first.result, "marketplace");
-      if (marketplaceFlag.kind === "malformed") {
-        return failed(
-          `expected a Boolean adapter result at resources.${marketplaceFlag.key}`,
+        if (!first.ok) return failed(first.message);
+
+        const pluginFlag = presenceFlag(first.result, "plugin");
+        if (pluginFlag.kind === "malformed") {
+          return failed(
+            `expected a Boolean adapter result at resources.${pluginFlag.key}`,
+          );
+        }
+        if (pluginFlag.kind === "call-failed") {
+          // Unreachable via this call path: `first.ok` above already proved
+          // status === 0 && envelope.ok, the only inputs presenceFlag reads
+          // to decide this arm. Handled anyway so presenceFlag stays total
+          // and this switch stays exhaustive rather than assuming its caller
+          // always gates first.
+          return failed(null);
+        }
+        const marketplaceFlag = presenceFlag(first.result, "marketplace");
+        if (marketplaceFlag.kind === "malformed") {
+          return failed(
+            `expected a Boolean adapter result at resources.${marketplaceFlag.key}`,
+          );
+        }
+        if (marketplaceFlag.kind === "call-failed") {
+          return failed(null);
+        }
+
+        // Stage 2: uninstall, with the two presence Booleans read above.
+        const uninstallStage = await invoke(
+          ctx,
+          env,
+          [
+            "uninstall",
+            "--plugin-present",
+            String(pluginFlag.value),
+            "--marketplace-present",
+            String(marketplaceFlag.value),
+          ],
+          envelopes,
         );
-      }
-      if (marketplaceFlag.kind === "call-failed") {
-        return failed(null);
-      }
+        if (!uninstallStage.ok) return failed(uninstallStage.message);
 
-      // Stage 2: uninstall, with the two presence Booleans read above.
-      const uninstallStage = await invoke(
-        ctx,
-        env,
-        [
-          "uninstall",
-          "--plugin-present",
-          String(pluginFlag.value),
-          "--marketplace-present",
-          String(marketplaceFlag.value),
-        ],
-        envelopes,
-      );
-      if (!uninstallStage.ok) return failed(uninstallStage.message);
+        // Stage 3: inspect ownership AGAIN. This overwrites the first
+        // inspection (scripts/uninstall:29), so everything below reads the
+        // POST-uninstall state, not the pre-uninstall one read above.
+        const second = await invoke(
+          ctx,
+          env,
+          ["inspect", "--view", "ownership"],
+          envelopes,
+        );
+        if (!second.ok) return failed(second.message);
 
-      // Stage 3: inspect ownership AGAIN. This overwrites the first
-      // inspection (scripts/uninstall:29), so everything below reads the
-      // POST-uninstall state, not the pre-uninstall one read above.
-      const second = await invoke(
-        ctx,
-        env,
-        ["inspect", "--view", "ownership"],
-        envelopes,
-      );
-      if (!second.ok) return failed(second.message);
+        const verify: Check = verifyUninstalledResources(second.result);
+        if (!verify.ok) return failed(verify.message);
 
-      const verify: Check = verifyUninstalledResources(second.result);
-      if (!verify.ok) return failed(verify.message);
+        // identity_state comes from this SAME second inspection, matching
+        // scripts/uninstall:31's spw_adapter_result_get read of the
+        // overwritten inspect_result. `second.ok` already proved this call
+        // succeeded, so envelope.ok is true here; the explicit check below is
+        // for TypeScript's narrowing (a local variable, not a re-derivation
+        // of that fact) rather than a live branch.
+        const secondEnvelope = second.result.envelope;
+        if (!secondEnvelope.ok) return failed(null);
+        // Mirrors src/commands/probe.ts:250-257's inspect() and
+        // src/lifecycle.ts:171-190's fingerprint read: a JSON null or a
+        // missing key defaults to "" (the Python reader's own convention for
+        // a JSON null, scripts/core/provenance.sh's spw_json_get), but a
+        // present, non-null, NON-STRING value is a distinct, fail-closed
+        // "malformed" case with its own text -- never silently stringified.
+        // (A previous draft of this comment claimed parity with the shell's
+        // stringify-and-compare behaviour at scripts/core/provenance.sh:61;
+        // that was wrong on inspection, and it cited these same two call
+        // sites as support even though both of them fail closed on a
+        // non-string value rather than stringifying it. AGENTS.md's
+        // fail-closed rule wins over shell parity here.)
+        const parsed = secondEnvelope.result as Record<string, unknown> | null;
+        const identityRaw = parsed?.identity_state;
+        let identityState: string;
+        if (identityRaw === null || identityRaw === undefined) {
+          identityState = "";
+        } else if (typeof identityRaw === "string") {
+          identityState = identityRaw;
+        } else {
+          return failed(
+            "adapter returned a non-string identity_state for inspect --view ownership",
+          );
+        }
+        const verdict = reportLegacyState(identityState);
+        if (verdict.kind === "unknown") return failed(verdict.message);
 
-      // identity_state comes from this SAME second inspection, matching
-      // scripts/uninstall:31's spw_adapter_result_get read of the
-      // overwritten inspect_result. `second.ok` already proved this call
-      // succeeded, so envelope.ok is true here; the explicit check below is
-      // for TypeScript's narrowing (a local variable, not a re-derivation of
-      // that fact) rather than a live branch. verify.ok === true additionally
-      // proved envelope.result is a usable object (readResult inside
-      // verifyUninstalledResources); a missing or non-string identity_state
-      // defaults to "", which reportLegacyState's own "unknown" arm below
-      // fails closed on -- the same JSON-null-to-empty-string convention
-      // src/commands/probe.ts's inspect() and src/lifecycle.ts's fingerprint
-      // read both use.
-      const secondEnvelope = second.result.envelope;
-      if (!secondEnvelope.ok) return failed(null);
-      const parsed = secondEnvelope.result as Record<string, unknown>;
-      const identityRaw = parsed.identity_state;
-      const identityState = typeof identityRaw === "string" ? identityRaw : "";
-      const verdict = reportLegacyState(identityState);
-      if (verdict.kind === "unknown") return failed(verdict.message);
-
-      const lines: string[] = [];
-      // verdict.kind is "ok" or "report" here (reportLegacyState never
-      // returns "blocked" -- that arm belongs to requireNoLegacyState -- but
-      // LegacyVerdict is one shared union, so this narrows rather than
-      // assumes).
-      if (verdict.kind !== "ok") {
-        lines.push(...verdict.lines);
-      }
-      // scripts/uninstall:34-35. The first line ports verbatim; the second
-      // changes scripts/prepare to npx superpowers-manager prepare (spec
-      // §3.6) -- a deliberate, observable divergence, recorded as a
-      // port-only entry in tests/migration-inventory/uninstall-commands.md.
-      lines.push("uninstall complete");
-      lines.push(
-        "note: local generated artifacts under plugins/superpowers/ and " +
-          ".cache/upstream/ were left in place; remove them manually or " +
-          "regenerate with npx superpowers-manager prepare.",
-      );
-      return { status: 0, envelopes, lines };
-    },
-  );
+        const lines: string[] = [];
+        // verdict.kind is "ok" or "report" here (reportLegacyState never
+        // returns "blocked" -- that arm belongs to requireNoLegacyState --
+        // but LegacyVerdict is one shared union, so this narrows rather than
+        // assumes).
+        if (verdict.kind !== "ok") {
+          lines.push(...verdict.lines);
+        }
+        // scripts/uninstall:34-35. The first line ports verbatim; the second
+        // changes scripts/prepare to npx superpowers-manager prepare (spec
+        // §3.6) -- a deliberate, observable divergence, recorded as a
+        // port-only entry in tests/migration-inventory/uninstall-commands.md.
+        lines.push("uninstall complete");
+        lines.push(
+          "note: local generated artifacts under plugins/superpowers/ and " +
+            ".cache/upstream/ were left in place; remove them manually or " +
+            "regenerate with npx superpowers-manager prepare.",
+        );
+        return { status: 0, envelopes, lines };
+      },
+    );
+  } catch (cause) {
+    // withWorkspace's own throws (mkdtemp failure -- "cannot create
+    // workspace", src/workspace.ts:120 -- or the post-success cleanup
+    // failure named above) are the only ones reachable here: every
+    // ctx.adapter throw is already caught inside invoke(), and
+    // presenceFlag/verifyUninstalledResources/reportLegacyState are pure
+    // (src/lifecycle.ts's header comment). Wrapping with the envelopes
+    // collected so far -- zero for the mkdtemp case, whatever the callback
+    // gathered for the cleanup case -- is what lets runUninstall's catch
+    // replay them instead of discarding them with a bare re-throw.
+    throw new GatherFailure(cause, envelopes);
+  }
 }
 
 export async function runUninstall(
@@ -258,10 +310,17 @@ export async function runUninstall(
   try {
     outcome = await gatherUninstall(ctx);
   } catch (cause) {
-    // Reachable throws here all carry a HAND-WRITTEN message:
-    //   - withWorkspace's own SafetyErrors: "cannot create workspace"
-    //     (src/workspace.ts:120) and workspaceRemovalFailure()'s "cannot
-    //     remove workspace <path>" (src/workspace.ts:25-27, :33-35).
+    // gatherUninstall throws exactly one shape: GatherFailure, wrapping
+    // withWorkspace's own SafetyErrors -- "cannot create workspace"
+    // (src/workspace.ts:120) or workspaceRemovalFailure()'s "cannot remove
+    // workspace <path>" (src/workspace.ts:25-27, :33-35) -- alongside
+    // whatever envelopes were collected before that throw. Replaying those
+    // FIRST, before reporting the cause, is what keeps a post-success
+    // cleanup failure from silently dropping every adapter message the
+    // operator would otherwise see (DIAG-ADAPTER-01). The `instanceof` guard
+    // is defensive rather than load-bearing -- gatherUninstall's own catch is
+    // the only thing that can throw here, and it always wraps -- but this
+    // catch does not assume that invariant blindly.
     //
     // ctx.adapter's non-AdapterFailure rethrow (src/adapter.ts:993) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
@@ -271,7 +330,11 @@ export async function runUninstall(
     // gatherUninstall performs no writes of its own, so this catch cannot
     // also be reached by an EPIPE from uninstall's own output -- every write
     // below runs only after this try/catch has resolved.
-    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
+    const envelopes =
+      cause instanceof GatherFailure ? cause.envelopes : ([] as const);
+    for (const envelope of envelopes) replayEnvelope(envelope, ctx);
+    const inner = cause instanceof GatherFailure ? cause.inner : cause;
+    ctx.stderr.write(`error: ${oneLine(inner)}\n`);
     return 1;
   }
   // Replay first, on both paths: the shell validator replayed every

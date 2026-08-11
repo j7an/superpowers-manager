@@ -1,5 +1,8 @@
 // @ts-check
 import assert from "node:assert/strict";
+import { chmodSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const { runUninstall } = await import(
@@ -7,6 +10,9 @@ const { runUninstall } = await import(
 );
 const { successResult, failureResult } = await import(
   new URL("../../dist/adapter-protocol.js", import.meta.url).href
+);
+const { workspaceRemovalFailure } = await import(
+  new URL("../../dist/workspace.js", import.meta.url).href
 );
 
 /** Collects writes without a real stream, so no EPIPE hazard exists here. */
@@ -61,11 +67,10 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
   // Spec §6.2.3 item 2.
   const out = sink();
   const err = sink();
-  const clean = { resources: { plugin: false, marketplace: false } };
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...clean, identity_state: "both" }, []),
+    successResult("inspect", { ...CLEAN, identity_state: "both" }, []),
     successResult("uninstall", {}, []),
-    successResult("inspect", { ...clean, identity_state: "both" }, []),
+    successResult("inspect", { ...CLEAN, identity_state: "both" }, []),
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
@@ -208,6 +213,36 @@ void test("an unrecognised identity state after removal is a distinct, named fai
   assert.equal(calls.length, 3);
 });
 
+void test("a non-string identity_state after removal fails closed with its own diagnostic", async () => {
+  // src/commands/uninstall.ts's identity_state read distinguishes three
+  // inputs: null/undefined -> "" (parity with spw_json_get's null/missing
+  // coercion), a string -> used as-is, and any other present, non-null value
+  // -> a dedicated fail-closed message, never silently stringified and never
+  // collapsed into the "unknown adapter identity state: " (empty) text a
+  // stringify-then-compare reading would produce for this same input.
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("uninstall", {}, []),
+    successResult("inspect", { ...CLEAN, identity_state: 42 }, []),
+  ]);
+  const status = await runUninstall([], {
+    root: "/nowhere",
+    env: {},
+    stdout: out.stream,
+    stderr: err.stream,
+    adapter,
+  });
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: adapter returned a non-string identity_state for inspect --view ownership\n",
+  );
+  assert.equal(out.chunks.join(""), "");
+  assert.equal(calls.length, 3);
+});
+
 // Spec §4.2a's closing requirement: every lifecycle adapter stage gets a
 // deterministic failure case AND an ordering case, since a stage with
 // neither is a stage whose stop clause is unproven. `uninstall` has three
@@ -272,6 +307,46 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
   assert.equal(
     err.chunks.join(""),
     "error: expected a Boolean adapter result at resources.plugin\n",
+  );
+  assert.equal(out.chunks.join(""), "");
+  assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
+});
+
+void test("stage 1 clause 3: envelope.ok but status !== 0 gets its own hand-written message", async () => {
+  // Spec §4.2a clause 3. successResult/failureResult cannot express this
+  // input -- successResult always pairs ok:true with status:0, failureResult
+  // always pairs ok:false with status:1 -- so the envelope is hand-built here
+  // to reach the one combination invoke()'s gate must distinguish from both
+  // clause 2 (!envelope.ok, replay-only) and clause 4 (a malformed but
+  // successful result).
+  const out = sink();
+  const err = sink();
+  /** @type {readonly import("../../src/adapter-protocol.js").AdapterResult[]} */
+  const responses = [
+    {
+      status: 1,
+      envelope: {
+        protocol: 1,
+        operation: "inspect",
+        ok: true,
+        messages: [],
+        result: null,
+        error: null,
+      },
+    },
+  ];
+  const { adapter, calls } = scriptedAdapter(responses);
+  const status = await runUninstall([], {
+    root: "/nowhere",
+    env: {},
+    stdout: out.stream,
+    stderr: err.stream,
+    adapter,
+  });
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: adapter reported a failure status for inspect --view ownership\n",
   );
   assert.equal(out.chunks.join(""), "");
   assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
@@ -410,4 +485,84 @@ void test('argv is ignored, matching scripts/uninstall never reading "$@"', asyn
     adapter,
   });
   assert.equal(status, 0);
+});
+
+// --- Post-success withWorkspace cleanup failure (GatherFailure) ---
+//
+// src/workspace.ts:134-141: a post-success cleanup failure
+// (workspaceRemovalFailure, reachable because uninstall.ts passes no
+// `onCleanupFailure`) discards withWorkspace's callback return value entirely
+// and rejects instead. GatherFailure exists so runUninstall's catch can still
+// replay every envelope collected before that throw. A bare re-throw would
+// silently drop them -- a narrow DIAG-ADAPTER-01 regression the shell never
+// had, since it replayed each adapter response as it went rather than
+// batching replay to the end.
+
+void test("a post-success withWorkspace cleanup failure still replays every envelope collected before the throw", async () => {
+  if (process.getuid?.() === 0) return; // chmod does not gate root
+  const parent = mkdtempSync(join(tmpdir(), "spw-uninstall-workspace-"));
+  try {
+    const out = sink();
+    const err = sink();
+    const responses = [
+      successResult("inspect", { ...CLEAN, identity_state: "neither" }, [
+        { channel: "stdout", text: "note: first inspection ran" },
+      ]),
+      successResult("uninstall", {}, []),
+      successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    ];
+    let index = 0;
+    /** @type {string[][]} */
+    const calls = [];
+    // No test double for the filesystem: the THIRD (and final) call chmods
+    // the workspace's own PARENT directory read-only, after the first two
+    // calls have already pushed their envelopes. By the time
+    // withWorkspace's post-callback `rm(workspace, ...)` runs, the parent
+    // cannot be written to, so the removal genuinely fails with EACCES/EPERM
+    // -- a real filesystem failure, not a mocked one.
+    const adapter = async (/** @type {readonly string[]} */ argv) => {
+      calls.push([...argv]);
+      const response = responses[index++];
+      assert.ok(
+        response !== undefined,
+        `adapter exhausted at call ${index}: ${argv.join(" ")}`,
+      );
+      if (index === responses.length) {
+        chmodSync(parent, 0o500);
+      }
+      return response;
+    };
+    const status = await runUninstall([], {
+      root: "/nowhere",
+      env: { TMPDIR: parent },
+      stdout: out.stream,
+      stderr: err.stream,
+      adapter,
+    });
+    assert.equal(status, 1);
+    assert.equal(calls.length, 3);
+    // The envelope collected from the FIRST call -- well before the throw --
+    // still reaches stdout. A bare re-throw that dropped `envelopes` would
+    // leave this empty.
+    assert.equal(out.chunks.join(""), "note: first inspection ran\n");
+    const entries = readdirSync(parent);
+    assert.equal(
+      entries.length,
+      1,
+      `expected exactly one leftover workspace directory in ${parent}, found: ${entries.join(", ")}`,
+    );
+    const workspace = join(parent, entries[0]);
+    assert.equal(
+      err.chunks.join(""),
+      `error: ${workspaceRemovalFailure(workspace)}\n`,
+    );
+  } finally {
+    try {
+      chmodSync(parent, 0o700);
+    } catch {
+      // Best-effort: the real cleanup below tolerates a missing or
+      // already-writable directory either way.
+    }
+    rmSync(parent, { recursive: true, force: true });
+  }
 });
