@@ -325,6 +325,22 @@ export async function runInstall(
   }
   const facts = probe.facts;
 
+  // scripts/install:19-20. Guards the PROBE-derived value only -- the
+  // re-inspection at :198 reads through readStringField, which already has
+  // its own "malformed" arm for a non-string value, and an empty string
+  // there is legitimately absent (the JSON-null convention), not an error.
+  // This check exists because a probe that reports no identity state at all
+  // is a different failure than one that reports an unrecognised one:
+  // requireNoLegacyState("") would otherwise reach its "unknown" arm and
+  // print "unknown adapter identity state: " (empty-suffixed), which names a
+  // symptom rather than the actual cause. Do NOT add a second copy of this
+  // check at :198 -- it guards a different value with a different failure
+  // mode.
+  if (facts.identityState.length === 0) {
+    ctx.stderr.write("error: probe did not report adapter identity state\n");
+    return 1;
+  }
+
   // scripts/install:21, run BEFORE the workspace is ever created and before
   // any further adapter call -- a legacy identity is fatal on sight, not
   // something worth spending a mutation attempt on.

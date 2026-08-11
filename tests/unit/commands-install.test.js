@@ -302,6 +302,38 @@ void test("an unparseable generated commit is never treated as success", async (
 
 // --- Named parity cases ---
 
+void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
+  // scripts/install:19-20. Guards the PROBE-derived value, not the
+  // re-inspected one (src/commands/install.ts's `identity.kind ===
+  // "malformed"` arm already owns that path). A JSON null identity_state on
+  // gatherProbe's own ownership inspect becomes "" (the JSON-null
+  // convention), and this check must fire BEFORE requireNoLegacyState would
+  // otherwise reach its "unknown" arm and print a symptom
+  // ("unknown adapter identity state: ", empty-suffixed) instead of the
+  // actual cause.
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: null }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+  ]);
+  const ctx = makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: probe did not report adapter identity state\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  assert.equal(calls.length, 3);
+});
+
 void test("a legacy identity state stops before the workspace is created", async () => {
   const out = sink();
   const err = sink();
