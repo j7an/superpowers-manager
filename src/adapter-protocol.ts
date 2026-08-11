@@ -36,10 +36,15 @@ export interface AdapterResult {
   readonly envelope: AdapterEnvelope;
 }
 
-// Lives here, not in src/adapter.ts, so src/commands/context.ts can import it
-// without creating a cycle: context.ts is imported by every command module,
-// and adapter.ts is too. adapter.ts re-exports this name so its existing
-// importers are unaffected.
+// Lives here, not in src/adapter.ts, rather than having context.ts import it
+// directly from adapter.ts. NOT a cycle avoidance: tsconfig.json's
+// verbatimModuleSyntax:true erases a type-only import
+// (`import type { AdapterContext } from "../adapter.js"`) at emit, so it
+// produces no runtime edge either way and a cycle was never possible. The
+// actual reason is grouping: AdapterContext, AdapterResult, and
+// AdapterEnvelope are all protocol types, and this is the module that owns
+// the protocol rather than the one that implements it. adapter.ts re-exports
+// this name so its existing importers are unaffected.
 export interface AdapterContext {
   readonly root: string;
   readonly env?: NodeJS.ProcessEnv;

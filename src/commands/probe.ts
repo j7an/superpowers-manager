@@ -203,9 +203,10 @@ type Inspection =
 // That is caught here rather than in runProbe's outer catch, because the two
 // need different diagnostics -- see spec §3.3a.
 //
-// Reached through ctx.adapter, not a direct import: src/commands/prepare.ts
-// and this module are the two the injected double must observe, because
-// install reaches the adapter through gatherProbe and runPrepare. Spec §4.5.
+// Reached through ctx.adapter, not a direct module-level dependency on the
+// adapter module: src/commands/prepare.ts and this module are the two the
+// injected double must observe, because install reaches the adapter through
+// gatherProbe and runPrepare. Spec §4.5.
 async function inspect(
   view: string,
   key: string,

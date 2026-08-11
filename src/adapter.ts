@@ -49,9 +49,11 @@ const LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";
 const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 
 // Re-exported so existing importers of AdapterContext from this module are
-// unaffected: the interface itself now lives in adapter-protocol.js, moved
-// there to break a cycle (src/commands/context.ts is imported by every
-// command module, and so is adapter.ts).
+// unaffected: the interface itself now lives in adapter-protocol.js, grouped
+// with the other protocol types (AdapterResult, AdapterEnvelope) rather than
+// with this module's implementation. Not a cycle avoidance — see
+// adapter-protocol.ts's comment on AdapterContext for why a cycle was never
+// possible here regardless of import direction.
 export type { AdapterContext };
 
 class AdapterFailure extends Error {

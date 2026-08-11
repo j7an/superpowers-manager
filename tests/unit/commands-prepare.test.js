@@ -183,9 +183,21 @@ void test("runPrepare emits no errno or multi-line git text when the clone fails
   // The clone of a nonexistent upstream fails first, so the validator's own
   // -f branch (a directory at SUPERPOWERS_VALIDATOR) is never reached here --
   // that predicate is exercised end-to-end in tests/baseline/prepare.test.js.
-  // This case only asserts that no errno, stack frame, or multi-line git text
-  // reached the stream.
+  //
+  // Exact equality, not just doesNotMatch(/ENOENT|errno|Error:|\n.*\n.*\n/):
+  // notCalledAdapter's throw is caught by gatherPrepare's own `catch` at
+  // src/commands/prepare.ts:404-414 and turned into a *different*,
+  // still-single-line, still-errno-free diagnostic
+  // ("cannot build the generated plugin candidate"). A loose doesNotMatch
+  // cannot tell that diagnostic apart from this one, so it would stay green
+  // even if a future change made this case wrongly reach the adapter. Pinning
+  // the exact clone-failure text is what makes reaching ctx.adapter here
+  // observable.
   assert.doesNotMatch(err.text(), /ENOENT|errno|Error:|\n.*\n.*\n/);
+  assert.equal(
+    err.text(),
+    `error: cannot clone upstream repo: ${join(dir, "no-such-upstream")}\n`,
+  );
 });
 
 void test("runPrepare takes the clone branch, not fetch, when the cache's .git is a regular file", async () => {

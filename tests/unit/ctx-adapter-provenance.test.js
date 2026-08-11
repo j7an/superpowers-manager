@@ -30,6 +30,15 @@ function tsFiles(dir) {
   return out;
 }
 
+// LIMITS, stated rather than implied: this pattern catches a direct named,
+// aliased, or default import of `runAdapter` (`import { runAdapter } …`,
+// `import { runAdapter as ra } …`, `import runAdapter from …`) and a dynamic
+// `import(...).runAdapter(...)` in the same statement-free stretch. It does
+// NOT catch a namespace import used to reach the same binding
+// (`import * as adapterMod from "../adapter.js"; … adapterMod.runAdapter(…)`)
+// or a re-export (`export { runAdapter } from "../adapter.js";`) — both are
+// real imports of `runAdapter` into a command module and would sail through
+// this gate uncaught.
 void test("no module under src/commands/ imports runAdapter", () => {
   const offenders = tsFiles("src/commands").filter((relative) =>
     /\bimport\b[^;]*\brunAdapter\b/s.test(
@@ -60,11 +69,21 @@ void test("no module under src/commands/ imports runAdapter", () => {
 //   in an ASSIGNMENT or PROPERTY position (`adapter:` / `adapter =`), not
 //   merely mentioned.
 //
-// LIMITS, stated rather than implied: this gate catches a derivation written
-// as one assignment or property value. It does not catch one laundered
-// through a helper (`adapter: pickAdapter(env)`), and no regex will. A gate
-// whose stated scope exceeds its reach is worse than a narrow one, because
-// the next reader stops looking.
+// LIMITS, stated rather than implied: this gate catches a derivation whose
+// deriving expression is a BRACE-FREE assignment or property value on the
+// identifier `adapter` itself — the `[^;,{}]` gap is what makes it brace-free,
+// and that bound is deliberate (see BOUNDED TO ONE VALUE above): widening or
+// dropping it would false-positive throughout src/adapter.ts, where the word
+// "adapter" appears in prose on nearly every page with `env.` nearby. It does
+// NOT catch one laundered through a helper (`adapter: pickAdapter(env)`), an
+// intermediate variable (`const chosen = env.X ? load(env.X) : runAdapter; …
+// { adapter: chosen }`), a destructuring (`const { SPW_ADAPTER } = env; … {
+// adapter: SPW_ADAPTER ? load(…) : runAdapter }`), or a braced function body
+// (`adapter: (a, c) => { const p = env.X; return p ? load(p)(a, c) :
+// runAdapter(a, c); }`) — all four are real derivations from the environment
+// that would sail through this gate uncaught, and no regex without a parser
+// will close that gap. A gate whose stated scope exceeds its reach is worse
+// than a narrow one, because the next reader stops looking.
 const GAP = 80;
 
 /** @param {string} source @returns {boolean} */
