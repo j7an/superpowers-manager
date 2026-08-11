@@ -147,12 +147,31 @@ this file's premise is line-level fidelity, and an unrecorded env difference is
 indistinguishable from an unnoticed one. `SPW_ADAPTER` is not narrowed away
 anywhere else — every other scenario set it in the shell too.
 
-7. Uninstall fails when `python3` is absent from PATH (`:198-202`). Port:
-   `:353`.
-8. Output contains `required command not found: python3` (`:203-207`). Port:
-   `:359`.
-9. The Codex log is empty — no Codex call was made (`:208-212`). Port:
-   `:364`.
+**Whole scenario retired (PR 11.5 slice 4b, Task 8).** `uninstall` flipped to
+in-process dispatch and `COMMAND_REQUIREMENTS.uninstall` dropped from
+`["python3", "codex"]` to `["codex"]` in the same commit: `python3` was
+required only so `spw_invoke_adapter` could run `validate-adapter-response.py`
+once per adapter call (`scripts/core/adapter.sh:37-44`), and the in-process
+path has no validator process. The shell's own
+`spw_require_command python3` (`scripts/uninstall:10`) has no port. All three
+conditions below can therefore no longer occur in either direction. The port's
+one `test(` call site is KEPT and carries the inverse property instead —
+`uninstall` runs with `python3` absent and reaches Codex — so the static
+call-site count is unchanged and no `ports` edit is owed. The PATH-stripping
+survives verbatim, and now doubles as the case that proves `runScript`'s
+retarget onto `process.execPath` kept the absolute-path property the `/bin/sh`
+launch had.
+
+7. Uninstall fails when `python3` is absent from PATH (`:198-202`).
+   **Retired**: `uninstall` no longer requires `python3`, so the run succeeds.
+   The successor asserts `status === 0`.
+8. Output contains `required command not found: python3` (`:203-207`).
+   **Retired**: the diagnostic is unreachable. The successor asserts its
+   ABSENCE, made non-vacuous by item 9's successor proving the run completed.
+9. The Codex log is empty — no Codex call was made (`:208-212`).
+   **Retired**: the run no longer aborts before the adapter. The successor
+   inverts it into the exact six-line ownership / remove / re-inspect sequence,
+   which an empty log cannot satisfy.
 
 ### Missing Codex is a controlled ownership-inspect failure (`:214-232`)
 
@@ -937,12 +956,19 @@ rows O1-O3.
   slice 4b, 2026-08-10): three cases converted in place (selection-independent
   recovery and missing-Codex to an injected double; both-present re-anchored
   onto `codex.log`, still via `runScript`), so the static count neither grew
-  nor shrank. They carry **81 of the 83** shell assertions, **75 of them
+  nor shrank. Unchanged by Task 8 (PR 11.5 slice 4b, 2026-08-11) for the same
+  reason: the missing-python3 case was rewritten in place onto the inverse
+  property when the flip removed `python3` from
+  `COMMAND_REQUIREMENTS.uninstall`, so again the static count neither grew nor
+  shrank. They carry **78 of the 83** shell assertions, **72 of them
   1:1** and **6 sharing 2** merged assertions, plus 20 port-only assertions;
-  items 28 and 35 (below) have no port counterpart as of that same task.
-- Reconciliation: **81 of the 83** shell items retain a port counterpart;
+  items 28 and 35 (below) have no port counterpart as of Task 6, and items 7,
+  8 and 9 are retired as of Task 8.
+- Reconciliation: **78 of the 83** shell items retain a port counterpart;
   **2 are dropped** — item 35 ("the adapter log never names `other@x`") and
-  item 28 ("the adapter uninstall op appears exactly once"). Both keep their
+  item 28 ("the adapter uninstall op appears exactly once") — and **3 retired
+  items** (7, 8, 9), whose shell condition can no longer occur in either
+  direction after `uninstall` stopped requiring `python3`. All five keep their
   numbers and are marked at their own entries rather than renumbered away.
   Item 35 is dropped because it was inert: its needle is defined by no
   fixture in this repository, so nothing the subject could do would have
@@ -950,9 +976,9 @@ rows O1-O3.
   collapses items 25-27 does not observe an exactly-once count. Both
   arguments are at the entries and in the "Both present" section note.
 
-  The remaining 81 are **not** 1:1 throughout, contrary to what this bullet
-  claimed before Task 6: **75 items map onto a port assertion of their own**
-  and **6 share 2**, across the two merges this task created and recorded
+  The remaining 78 are **not** 1:1 throughout, contrary to what this bullet
+  claimed before Task 6: **72 items map onto a port assertion of their own**
+  and **6 share 2**, across the two merges Task 6 created and recorded
   inline —
 
   - items **3, 4, 5** collapse onto the single `assert.deepEqual` over the
@@ -962,8 +988,9 @@ rows O1-O3.
 
   **How to reproduce these figures**, since the gate does not read this
   prose: dropped = the items whose entry says "No port counterpart" (28 and
-  35 — **2**), so retained = 83 − 2 = **81**; shared = the two merges above
-  (**6** items over **2** merges), so own = 81 − 6 = **75**. Items 29 and 30
+  35 — **2**); retired = the items carrying a bold `Retired` marker (7, 8 and
+  9 — **3**), so retained = 83 − 2 − 3 = **78**; shared = the two merges above
+  (**6** items over **2** merges), so own = 78 − 6 = **72**. Items 29 and 30
   are *not* a merge despite the ranges they cite: they are two distinct
   `assert.ok` calls inside the same re-anchored block.
 

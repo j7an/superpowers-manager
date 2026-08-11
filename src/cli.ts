@@ -1,14 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { spawnSync } from "node:child_process";
 import { runAdapter } from "./adapter.js";
 import { oneLine } from "./cli-arguments.js";
 import type { CommandContext } from "./commands/context.js";
+import { runInstall } from "./commands/install.js";
 import { runPin } from "./commands/pin.js";
 import { runPrepare } from "./commands/prepare.js";
 import { runProbe } from "./commands/probe.js";
 import { runTrackLatest } from "./commands/track-latest.js";
+import { runUninstall } from "./commands/uninstall.js";
 import { runUnpin } from "./commands/unpin.js";
+import { runUpdate } from "./commands/update.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
 
 type Subcommand =
@@ -35,19 +37,7 @@ type UsageErrorParseResult = {
 type ParseResult =
   RunParseResult | HelpParseResult | VersionParseResult | UsageErrorParseResult;
 
-// The success variant is keyed by dispatch mode so the compiler — not a
-// runtime check — enforces that `shell` exists only where it was actually
-// discovered. A later slice that flips a `DISPATCH` entry before wiring its
-// in-process handler cannot reach `pf.shell` by accident.
-type PreflightResult =
-  | { ok: true; dispatch: "spawn"; shell: string }
-  | { ok: true; dispatch: "in-process" }
-  | { ok: false; errors: string[] };
-
-type SpawnDescriptor = {
-  file: string;
-  argv: string[];
-};
+type PreflightResult = { ok: true } | { ok: false; errors: string[] };
 
 const SUBCOMMANDS: readonly Subcommand[] = [
   "pin",
@@ -62,19 +52,23 @@ const SUBCOMMANDS: readonly Subcommand[] = [
 
 export type DispatchMode = "spawn" | "in-process";
 
-// The PR 11.5 migration state, in production code because `preflight` reads it:
-// a POSIX shell is required only while a command is still spawned. Each slice
-// flips entries to "in-process"; when none remain, `buildSpawn`,
-// `discoverShell`, and this table are deleted together.
+// The PR 11.5 migration is complete: every command dispatches in-process, and
+// `buildSpawn`, `discoverShell` and `GIT_BASH_CANDIDATES` were deleted with the
+// last "spawn" entry (slice 4b). This table SURVIVES that deletion — it is not
+// vestigial. It keys `InProcessCommand`, which is what makes an unregistered
+// handler a compile error; `tests/bin/readme-requirements.test.js:54` derives
+// the README's POSIX `sh` column from it; and `tests/bin/dispatch-fixture.js`'s
+// `dispatchOverride` patches a compiled copy of it. Slice 6 deletes it with
+// `DispatchMode` once the README table goes.
 const DISPATCH = {
   pin: "in-process",
   "track-latest": "in-process",
   unpin: "in-process",
   prepare: "in-process",
   probe: "in-process",
-  install: "spawn",
-  update: "spawn",
-  uninstall: "spawn",
+  install: "in-process",
+  update: "in-process",
+  uninstall: "in-process",
 } as const satisfies Record<Subcommand, DispatchMode>;
 
 type InProcessCommand = {
@@ -96,22 +90,26 @@ const IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler> = {
   unpin: runUnpin,
   prepare: runPrepare,
   probe: runProbe,
+  install: runInstall,
+  update: runUpdate,
+  uninstall: runUninstall,
 };
+// `python3` left install, update and uninstall at slice 4b's flip. It was
+// required because `spw_invoke_adapter` ran validate-adapter-response.py once
+// per adapter call (scripts/core/adapter.sh:37-44); the in-process path has no
+// validator process. It remains CONDITIONAL for `prepare` through
+// commandRequirements(env) below, unchanged from slice 3.4. No command requires
+// a POSIX shell any more.
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
   "track-latest": [],
   unpin: [],
   prepare: ["git"],
   probe: ["git", "codex"],
-  install: ["git", "python3", "codex"],
-  update: ["git", "python3", "codex"],
-  uninstall: ["python3", "codex"],
+  install: ["git", "codex"],
+  update: ["git", "codex"],
+  uninstall: ["codex"],
 };
-// Mirrors upstream Superpowers' hooks/run-hook.cmd discovery order.
-const GIT_BASH_CANDIDATES = [
-  "C:\\Program Files\\Git\\bin\\bash.exe",
-  "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-];
 
 // Walk upward from the bin's physical location to the directory containing
 // package.json. realpathSync first: npm/npx expose the bin through a symlink
@@ -218,24 +216,6 @@ function findTool(
   return null;
 }
 
-// POSIX: `sh` on PATH. Windows: Git Bash at its standard install paths,
-// then `bash` on PATH.
-function discoverShell(
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-): string | null {
-  if (platform !== "win32") return findTool("sh", env, platform);
-  for (const candidate of GIT_BASH_CANDIDATES) {
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return candidate;
-    } catch {
-      /* keep looking */
-    }
-  }
-  return findTool("bash", env, platform);
-}
-
 // python3 is required by `prepare` only when SUPERPOWERS_VALIDATOR names one:
 // after the port, that optional spawn (src/commands/prepare.ts:221) is Python's
 // only remaining consumer on the prepare path. The conditional lives here, in
@@ -253,8 +233,8 @@ function commandRequirements(
 }
 
 // Tool preflight; never touches Codex state. Requirements are specific to the
-// selected command; a POSIX shell is required only for commands the DISPATCH
-// gate still spawns, not for in-process commands.
+// selected command. No command requires a POSIX shell: slice 4b flipped the
+// last spawned command in-process, so there is no shell to discover.
 function preflight(
   cmd: Subcommand,
   env: NodeJS.ProcessEnv,
@@ -279,38 +259,8 @@ function preflight(
       );
     }
   }
-  if (DISPATCH[cmd] !== "spawn") {
-    if (errors.length) return { ok: false, errors };
-    return { ok: true, dispatch: "in-process" };
-  }
-  const shell = discoverShell(env, platform);
-  if (!shell) {
-    errors.push(
-      platform === "win32"
-        ? "no POSIX shell found — install Git for Windows (provides bash) or use WSL2"
-        : "required command not found: sh",
-    );
-    return { ok: false, errors };
-  }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, dispatch: "spawn", shell };
-}
-
-// POSIX executes the script directly (#!/bin/sh shebang); Windows cannot
-// spawn extensionless scripts, so the discovered shell runs the script as
-// its first argument.
-function buildSpawn(
-  cmd: Subcommand,
-  args: string[],
-  root: string,
-  shell: string,
-  platform: NodeJS.Platform,
-): SpawnDescriptor {
-  const script = path.join(root, "scripts", cmd);
-  if (platform === "win32") {
-    return { file: shell, argv: [script, ...args] };
-  }
-  return { file: script, argv: args };
+  return { ok: true };
 }
 
 function usage(): string {
@@ -369,68 +319,41 @@ async function main(): Promise<never> {
     for (const e of pf.errors) console.error(`error: ${e}`);
     process.exit(1);
   }
-  if (pf.dispatch === "in-process") {
-    // `pf.dispatch === "in-process"` narrows only the preflight result, not
-    // `parsed.cmd`'s type: PreflightResult carries no command, so `cmd` stays
-    // the wider Subcommand here. The registry is keyed by the narrower
-    // InProcessCommand, so this cast is required to index it. The
-    // exhaustiveness check on IN_PROCESS_HANDLERS makes this branch
-    // unreachable through the real DISPATCH table; the `!handler` guard below
-    // is the runtime backstop for that guarantee, and is unreachable through
-    // production code but covered by a fixture that patches the dispatch
-    // table directly (Task 3, Step 5).
-    const handler: InProcessHandler | undefined =
-      IN_PROCESS_HANDLERS[parsed.cmd as InProcessCommand];
-    if (!handler) {
-      console.error(
-        `error: no in-process handler registered for: ${parsed.cmd}`,
-      );
-      process.exit(1);
-    }
-    const ctx: CommandContext = {
-      root,
-      env: process.env,
-      stdout: process.stdout,
-      stderr: process.stderr,
-      // The ONLY place runAdapter is bound to a context. Every command module
-      // reaches the adapter through this field; none imports runAdapter
-      // itself. tests/unit/ctx-adapter-provenance.test.js gates both halves.
-      adapter: runAdapter,
-    };
-    let status: number;
-    try {
-      status = await handler(parsed.args, ctx);
-    } catch (cause) {
-      // Belt-and-suspenders: every registered handler already catches its own
-      // failures and returns a status code (see src/commands/unpin.ts). This
-      // re-emits a subordinate module's own diagnostic if one somehow escapes.
-      console.error(`error: ${oneLine(cause)}`);
-      process.exit(1);
-    }
-    process.exit(status);
-  }
-  const script = path.join(root, "scripts", parsed.cmd);
-  if (!fs.existsSync(script)) {
-    console.error(`error: missing script: ${script}`);
+  // Dispatch is no longer a branch: slice 4b flipped the last spawned command,
+  // so every subcommand runs here. `parsed.cmd` is the wider Subcommand and the
+  // registry is keyed by the narrower InProcessCommand, so this cast is
+  // required to index it. The exhaustiveness check on IN_PROCESS_HANDLERS makes
+  // an unregistered handler a compile error through the real DISPATCH table;
+  // the `!handler` guard below is the runtime backstop for that guarantee. It
+  // is unreachable through production code, and no fixture reaches it either
+  // now that DISPATCH is 8/8 in-process (slice 4b, Task 8, Step 5a).
+  const handler: InProcessHandler | undefined =
+    IN_PROCESS_HANDLERS[parsed.cmd as InProcessCommand];
+  if (!handler) {
+    console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
     process.exit(1);
   }
-  const spawn = buildSpawn(
-    parsed.cmd,
-    parsed.args,
+  const ctx: CommandContext = {
     root,
-    pf.shell,
-    process.platform,
-  );
-  // env is inherited wholesale, so every SUPERPOWERS_* override passes through.
-  const res = spawnSync(spawn.file, spawn.argv, {
-    stdio: "inherit",
     env: process.env,
-  });
-  if (res.error) {
-    console.error(`error: cannot run ${spawn.file}: ${res.error.message}`);
+    stdout: process.stdout,
+    stderr: process.stderr,
+    // The ONLY place runAdapter is bound to a context. Every command module
+    // reaches the adapter through this field; none imports runAdapter
+    // itself. tests/unit/ctx-adapter-provenance.test.js gates both halves.
+    adapter: runAdapter,
+  };
+  let status: number;
+  try {
+    status = await handler(parsed.args, ctx);
+  } catch (cause) {
+    // Belt-and-suspenders: every registered handler already catches its own
+    // failures and returns a status code (see src/commands/unpin.ts). This
+    // re-emits a subordinate module's own diagnostic if one somehow escapes.
+    console.error(`error: ${oneLine(cause)}`);
     process.exit(1);
   }
-  process.exit(res.status === null ? 1 : res.status);
+  process.exit(status);
 }
 
 export {
@@ -438,10 +361,8 @@ export {
   isMain,
   parseArgs,
   findTool,
-  discoverShell,
   commandRequirements,
   preflight,
-  buildSpawn,
   usage,
   main,
   DISPATCH,

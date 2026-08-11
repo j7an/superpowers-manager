@@ -396,32 +396,52 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assert.ok(out.includes("uninstall complete"), out);
   });
 
-  void test("missing python3: clear requirement error, no Codex calls (:192-212)", async () => {
+  // Rewritten in place at PR 11.5 slice 4b, Task 8. Items 7, 8 and 9 are
+  // RETIRED at the gap in tests/migration-inventory/uninstall-commands.md: the
+  // shell's `spw_require_command python3` (scripts/uninstall:10) has no port,
+  // and `COMMAND_REQUIREMENTS.uninstall` drops from `["python3", "codex"]` to
+  // `["codex"]` at the flip, because `python3` was only ever required so
+  // `spw_invoke_adapter` could run validate-adapter-response.py per call
+  // (scripts/core/adapter.sh:37-44). The condition those three items asserted —
+  // uninstall fails, names python3, and reaches no Codex — can no longer occur
+  // in either direction, and its inverse is a wholly new property with no shell
+  // counterpart, so this case is kept as one `test(` site carrying the
+  // successor instead of being deleted.
+  //
+  // The PATH-stripping is unchanged and still load-bearing: it is what makes
+  // `python3`'s absence real rather than declared, and it is also the case that
+  // proves runScript's retarget onto `process.execPath` kept the absolute-path
+  // property the old `/bin/sh` launch had (a bare `node` would not resolve
+  // through a PATH holding only `dirname`).
+  void test("no python3 on PATH: uninstall runs anyway and reaches Codex (:192-212 retired)", async () => {
+    // The default fixture state: the manager plugin and marketplace both
+    // present, so the run has real removals to make and the sequence below is
+    // the full one rather than a pair of skips.
     const c = uninstallCase({});
     const stripped = join(c.dir, "no-python");
     mkdirSync(stripped, { recursive: true });
     symlinkSync("/usr/bin/dirname", join(stripped, "dirname"));
-    // runScript launches /bin/sh by absolute path, so a PATH holding only
-    // `dirname` still reaches the subject — the point of the case. A bare "sh"
-    // resolved through this PATH would fail to launch instead.
     const result = await runScript(c, "uninstall", { path: stripped });
-    // :198-202
-    assert.notEqual(
-      result.status,
-      0,
-      "expected uninstall to fail when python3 is missing",
+    const out = result.stdout + result.stderr;
+    assert.equal(result.status, 0, out);
+    // The successor to item 8: the diagnostic it pinned must be ABSENT, and
+    // that absence is non-vacuous because the Codex sequence below proves the
+    // run got all the way through.
+    assert.ok(
+      !out.includes("required command not found: python3"),
+      `uninstall must no longer require python3:\n${out}`,
     );
-    // :203-207
-    assert.match(
-      result.stdout + result.stderr,
-      /required command not found: python3/,
-    );
-    // :208-212
-    assert.deepEqual(
-      readLog(c.codexLog),
-      [],
-      "expected no Codex calls when python3 is missing",
-    );
+    // The successor to item 9, inverted: Codex is reached, exactly. The shell
+    // asserted an EMPTY log here; the port asserts the full ownership /
+    // remove / re-inspect sequence, which an empty log cannot satisfy.
+    assert.deepEqual(readLog(c.codexLog), [
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin remove superpowers@superpowers-manager",
+      "plugin marketplace remove superpowers-manager",
+      "plugin list --json",
+      "plugin marketplace list --json",
+    ]);
   });
 
   void test("missing Codex: controlled ownership-inspect failure (:214-232)", async () => {

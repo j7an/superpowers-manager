@@ -18,6 +18,17 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 /** @type {typeof import("../../src/cli.js")} */
 const cli = await import(new URL("../../dist/cli.js", import.meta.url).href);
 
+// DISPATCH is declared `as const`, so its value types are literals. With PR
+// 11.5 slice 4b's flip they are all "in-process", and a direct
+// `DISPATCH[key] === "spawn"` becomes TS2367 ("no overlap") under
+// `pnpm run typecheck:js`. The comparison is kept rather than replaced by a
+// constant `"no"`: it is the derivation of record for the POSIX `sh` column, so
+// an entry that ever went back to "spawn" would put `yes` in the README without
+// anyone editing this file. Widening the read to the exported DispatchMode is
+// all that is needed to keep it compiling.
+/** @type {Record<string, import("../../src/cli.js").DispatchMode>} */
+const DISPATCH = cli.DISPATCH;
+
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
 // Column heading -> the COMMAND_REQUIREMENTS token it reports on. The POSIX sh
@@ -51,7 +62,7 @@ function derive() {
           ? "only with SUPERPOWERS_VALIDATOR"
           : "no";
     }
-    row["POSIX `sh`"] = cli.DISPATCH[key] === "spawn" ? "yes" : "no";
+    row["POSIX `sh`"] = DISPATCH[key] === "spawn" ? "yes" : "no";
     return row;
   });
 }

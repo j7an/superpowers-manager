@@ -66,9 +66,19 @@ function readStringField(
 // shared: the two modules' call sites differ in argv shape and neither is a
 // dependency of the other. See uninstall.ts's header comment for the full
 // five-clause rationale.
+// The failure variant carries the AdapterResult whenever one exists, which is
+// every failure except a ctx.adapter throw. Stage 4 needs it: the shell handed
+// its inspect result to spw_verify_installed_fingerprint unconditionally
+// (scripts/install:57) and let that function's own :91 guard turn a failed
+// inspection into the post-install verification diagnostic. Every other stage
+// ignores the field and short-circuits on `ok` alone.
 type StageResult =
   | { readonly ok: true; readonly result: AdapterResult }
-  | { readonly ok: false; readonly message: string | null };
+  | {
+      readonly ok: false;
+      readonly message: string | null;
+      readonly result: AdapterResult | null;
+    };
 
 async function invoke(
   ctx: CommandContext,
@@ -83,6 +93,7 @@ async function invoke(
     return {
       ok: false,
       message: `cannot invoke Codex adapter for ${argv.join(" ")}`,
+      result: null,
     };
   }
   // Clause 1: replay every envelope, on both the success and the failure
@@ -98,6 +109,7 @@ async function invoke(
       message: envelope.ok
         ? `adapter reported a failure status for ${argv.join(" ")}`
         : null,
+      result,
     };
   }
   return { ok: true, result };
@@ -233,18 +245,38 @@ async function gatherInstallStages(
         if (!install.ok) return failed(install.message);
 
         // Stage 4: inspect fingerprint, to verify the mutation actually took.
+        //
+        // Deliberately NOT short-circuited on `!inspected.ok`, unlike stages
+        // 1-3. scripts/install:57 handed the inspect result to
+        // spw_verify_installed_fingerprint whatever it contained, and that
+        // function's first guard (scripts/core/lifecycle.sh:91-94) is what
+        // turns a failed inspection into "error: installed manager fingerprint
+        // inspection failed after install." verifyInstalledFingerprint's
+        // "call-failed" arm (src/lifecycle.ts:147-156) exists for exactly this
+        // and is reachable only from here. Returning failed() instead reported
+        // the adapter's own generic diagnostic and dropped the post-install
+        // verification claim -- a mutation had already been issued at stage 3,
+        // so "the install could not be verified" is the contract, not "an
+        // adapter call failed". A ctx.adapter THROW is the one case with no
+        // result to verify against, and keeps the short-circuit.
         const inspected = await invoke(
           ctx,
           env,
           ["inspect", "--view", "fingerprint"],
           envelopes,
         );
-        if (!inspected.ok) return failed(inspected.message);
+        let inspectResult: AdapterResult;
+        if (inspected.ok) {
+          inspectResult = inspected.result;
+        } else {
+          if (inspected.result === null) return failed(inspected.message);
+          inspectResult = inspected.result;
+        }
 
         const verdict = verifyInstalledFingerprint(
           desiredCommit,
           install.result,
-          inspected.result,
+          inspectResult,
         );
         return {
           kind: "verified",

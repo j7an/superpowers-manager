@@ -776,7 +776,20 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
   assert.equal(calls.length, 6);
 });
 
-void test("stage 4 (post-install inspect fingerprint) failure stops with ONLY the replayed diagnostic", async () => {
+// Rewritten at PR 11.5 slice 4b, Task 8. This case previously asserted the
+// stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
+// rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
+// reached verifyInstalledFingerprint, leaving that function's "call-failed" arm
+// (src/lifecycle.ts:147-156) dead and dropping the post-install verification
+// claim entirely. The shell handed its inspect result to
+// spw_verify_installed_fingerprint unconditionally (scripts/install:57) and
+// printed BOTH lines — the adapter's own error and
+// scripts/core/lifecycle.sh:92's. The flip surfaced it: the shell-parity case
+// at tests/bin/install-commands.test.js:1406, green against /bin/sh through
+// this same channel before Task 8, went red the moment the subject changed.
+// Both lines are asserted here, in order, so the divergence cannot come back in
+// either direction.
+void test("stage 4 (post-install inspect fingerprint) failure reports the replayed diagnostic AND the verification failure", async () => {
   const out = sink();
   const err = sink();
   const { adapter, calls } = scriptedAdapter([
@@ -802,7 +815,49 @@ void test("stage 4 (post-install inspect fingerprint) failure stops with ONLY th
   assert.equal(status, 1);
   assert.equal(
     err.chunks.join(""),
-    "error: cannot inspect fingerprint after install\n",
+    "error: cannot inspect fingerprint after install\n" +
+      "error: installed manager fingerprint inspection failed after install.\n",
+  );
+  assert.equal(calls.length, 7);
+});
+
+// The OTHER arm of the same guard, added with it (PR 11.5 slice 4b, Task 8).
+// Stage 4 no longer short-circuits on `!inspected.ok`, but it still does on the
+// one failure `invoke()` cannot produce a result for: `ctx.adapter` itself
+// throwing. Without its own case, a mutant collapsing the two arms — sending
+// the throw path into verifyInstalledFingerprint too, or restoring the blanket
+// short-circuit — would die to only one of them and falsely certify both. The
+// distinguishing observation is the stderr: a throw has no envelope to replay
+// and no result to verify, so it must produce invoke()'s own hand-written
+// diagnostic and NOTHING else.
+void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter throw as an invocation failure, alone", async () => {
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    ...PROBE_OK,
+    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+    successResult("install", {}, []),
+  ]);
+  /** @type {import("../../src/commands/context.js").CommandContext["adapter"]} */
+  const throwingAdapter = async (argv, adapterCtx) => {
+    if (argv.join(" ") === "inspect --view fingerprint" && calls.length >= 6) {
+      calls.push([...argv]);
+      throw new Error("synthetic adapter transport failure");
+    }
+    return await adapter(argv, adapterCtx);
+  };
+  const ctx = makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    throwingAdapter,
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: cannot invoke Codex adapter for inspect --view fingerprint\n",
   );
   assert.equal(calls.length, 7);
 });

@@ -5,7 +5,6 @@ import * as assert from "node:assert";
 import * as cp from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { vehicleCommand } from "./dispatch-mode.js";
 /** @type {typeof import('../../src/cli.js')} */
 const bin = await import(new URL("../../dist/cli.js", import.meta.url).href);
 
@@ -101,7 +100,10 @@ const requirements = bin.commandRequirements({});
 assert.deepStrictEqual(requirements.pin, ["git"]);
 assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
-assert.deepStrictEqual(requirements.uninstall, ["python3", "codex"]);
+// `python3` left uninstall at slice 4b's flip: it was required only because
+// every adapter call ran validate-adapter-response.py (scripts/core/adapter.sh),
+// and the in-process path has no validator process. `codex` stays.
+assert.deepStrictEqual(requirements.uninstall, ["codex"]);
 // Independent coverage of the conditional, which CLI-PREFLIGHT-01 cannot
 // provide: it derives from this same accessor, so it follows the conditional
 // automatically and can never detect a wrong one (slice 3, D5).
@@ -116,21 +118,13 @@ assert.deepStrictEqual(
   ["git"],
 );
 
-// --- vehicleCommand: the dispatch vehicles pick their own subject ----------
-// Two tests below need "some command DISPATCH still spawns" and assert nothing
-// about which. Hardcoding one meant re-pointing it at every flip -- `probe` to
-// `prepare` at slice 2, `prepare` to something else here -- and buildSpawn is a
-// pure path computation, so a stale literal kept passing while describing a
-// command that is no longer spawned. Deriving it also makes both tests fail
-// loudly in slice 4, when nothing is spawned and they should be deleted.
-assert.strictEqual(
-  vehicleCommand({ pin: "in-process", update: "spawn", probe: "in-process" }),
-  "update",
-);
-assert.throws(
-  () => vehicleCommand({ pin: "in-process", probe: "in-process" }),
-  /no spawned command remains/,
-);
+// --- vehicleCommand's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ------
+// They asserted that vehicleCommand picks a spawned command and throws when
+// none remains. DISPATCH is now 8/8 in-process, so the second case is the
+// permanent state of the world and the first can only be satisfied by a
+// hand-written table that describes nothing. vehicleCommand itself is deleted
+// with tests/bin/dispatch-mode.js, exactly as its own doc comment instructed:
+// "delete it rather than re-point it". No successor.
 
 // --- usage separates saving selection intent from applying it ---
 const help = bin.usage();
@@ -147,37 +141,12 @@ assert.ok(help.includes("SUPERPOWERS_CONFIG_DIR"));
 assert.ok(help.includes("$XDG_CONFIG_HOME/superpowers-manager"));
 assert.ok(help.includes("$HOME/.config/superpowers-manager"));
 
-// --- buildSpawn: POSIX executes the script directly ---
-// Vehicle only. This asserts buildSpawn's path construction and argv
-// passthrough, not anything specific to the command it names — it just has to
-// be one DISPATCH still spawns, which vehicleCommand now guarantees rather
-// than a literal that has to be maintained. It dies with buildSpawn in slice 4,
-// and vehicleCommand throws at exactly that moment.
-//
-// The argv is arbitrary and stays non-empty on purpose: buildSpawn is a pure
-// function that forwards whatever it is handed, so passing `[]` here would
-// drop the passthrough half of the contract on the ground.
-const spawned = vehicleCommand(bin.DISPATCH);
-const posix = bin.buildSpawn(
-  spawned,
-  ["--ref", "test"],
-  "/root",
-  "/bin/sh",
-  "linux",
-);
-assert.strictEqual(posix.file, path.join("/root", "scripts", spawned));
-assert.deepStrictEqual(posix.argv, ["--ref", "test"]);
-
-// --- buildSpawn: Windows dispatches through the discovered shell:
-// <shell> scripts/<cmd> [args...]. path.join is used on both sides so the
-// assertion holds on any host separator.
-const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
-const win = bin.buildSpawn(spawned, ["-x"], "C:\\pkg", gitBash, "win32");
-assert.strictEqual(win.file, gitBash);
-assert.deepStrictEqual(win.argv, [
-  path.join("C:\\pkg", "scripts", spawned),
-  "-x",
-]);
+// --- buildSpawn's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ---------
+// They asserted buildSpawn's POSIX path construction, its win32
+// shell-plus-script form, and its argv passthrough. `buildSpawn` is deleted
+// from src/cli.ts with the last spawned command, along with `discoverShell`
+// and `GIT_BASH_CANDIDATES`. There is no successor: the CLI computes no child
+// command line at all any more, so nothing inherits the contract.
 
 // --- resolvePackageRoot walks up to package.json from the bin's real path ---
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -190,7 +159,7 @@ assert.strictEqual(root, REPOSITORY_ROOT);
 // scripts/install:18 and scripts/update:8 still execute `scripts/probe
 // --porcelain`, so deleting it breaks both commands before they reach their
 // lifecycle logic. Delete the script, its two callers' probe steps, and
-// tests/test_probe.sh together in the slice that ports install and update.
+// tests/test_probe.sh together in slice 4c, which removes scripts/ entirely.
 // Asserting the RELATIONSHIP rather than a line number keeps this stable
 // against edits to either caller.
 assert.ok(
@@ -215,11 +184,10 @@ for (const caller of ["install", "update"]) {
 // os.execv's SPW_BASELINE_RUNTIME_ADAPTER, the real shipped adapter that
 // tests/baseline/support.js:590 provisions. It is a logging DELEGATOR for
 // build, and synthetic only for install and uninstall.
-// What remains is the lifecycle path: `install` and `update` still spawn
-// (src/cli.ts:74-76), and their test fakes stub SPW_ADAPTER — a seam only
-// scripts/core/adapter.sh honours and the in-process runAdapter does not.
-// Slice 3.5 re-bases those fakes and records the irreducible residue in
-// tests/bin/adapter-seam.js; SLICE 4 deletes this script, beside scripts/probe.
+// Slice 4b flipped `install`, `update` and `uninstall` in-process
+// (src/cli.ts's DISPATCH is now 8/8 "in-process"), so no CLI path reaches
+// scripts/prepare any more — only the surviving shell callers below do.
+// SLICE 4c deletes this script, beside scripts/probe.
 // Asserting the RELATIONSHIP rather than a line number keeps this stable
 // against edits to either caller.
 assert.ok(
@@ -231,6 +199,24 @@ for (const caller of ["install", "update"]) {
     fs.readFileSync(path.join(REPOSITORY_ROOT, "scripts", caller), "utf8"),
     /sh "\$root\/scripts\/prepare"/,
     `scripts/${caller} must still invoke scripts/prepare`,
+  );
+}
+
+// --- scripts/install, scripts/update and scripts/uninstall outlive this slice ---
+// New at PR 11.5 slice 4b, Task 8, and deleted in 4c together with the three
+// scripts it guards. The two guards above assert a RELATIONSHIP — that a
+// surviving caller still executes the script — and that form is no longer
+// available for these three: after the flip nothing executes them at all.
+// src/cli.ts dispatches all eight commands in-process, the lifecycle fixture
+// launches bin/superpowers-manager.js (tests/bin/lifecycle-fixture.js's
+// runScript), and tests/bin/bin-dispatch.test.js no longer routes anything to a
+// scripts/ file. Deleting any of the three would therefore be invisible to the
+// whole tree until 4c meant to do it, which is precisely what this guard exists
+// to prevent. Bare existence is all that is left to assert.
+for (const retained of ["install", "update", "uninstall"]) {
+  assert.ok(
+    fs.existsSync(path.join(REPOSITORY_ROOT, "scripts", retained)),
+    `scripts/${retained} is retained for slice 4c; nothing executes it any more`,
   );
 }
 

@@ -48,6 +48,8 @@ import {
 // (tests/run-node-suites.js:15).
 import { caseEnv, seedCodex } from "./probe-fixture.js";
 import { capture } from "../unit/helpers/command-harness.js";
+import { caseContext } from "../bin/command-context.js";
+import { shQuote } from "../lib/git-egress.js";
 
 /** @type {typeof import("../../src/commands/probe.js")} */
 const { runProbe } = await import(
@@ -56,6 +58,10 @@ const { runProbe } = await import(
 /** @type {typeof import("../../src/adapter.js")} */
 const { runAdapter } = await import(
   new URL("../../dist/adapter.js", import.meta.url).href
+);
+/** @type {typeof import("../../src/commands/update.js")} */
+const { runUpdate } = await import(
+  new URL("../../dist/commands/update.js", import.meta.url).href
 );
 
 /** @typedef {import('./support.js').Sandbox} Sandbox */
@@ -199,6 +205,13 @@ function writeListingCodex(sandbox) {
     tool,
     [
       "#!/bin/sh",
+      // Recording came in at PR 11.5 slice 4b (Task 8). Before the flip, the
+      // lifecycle commands were observed through the dispatch stub's own JSON
+      // record; in-process they reach Codex through runAdapter instead, so the
+      // `codex` invocation sequence is what is left to observe them by. Every
+      // invocation is recorded, including the rejected ones, so a case can
+      // pin the exact sequence rather than only its accepted prefix.
+      `printf '%s\\n' "$*" >> ${shQuote(sandbox.codexLog)}`,
       'case "$*" in',
       "  'plugin list --json') printf '%s\\n' '{\"installed\":[]}' ;;",
       "  'plugin marketplace list --json')",
@@ -212,7 +225,17 @@ function writeListingCodex(sandbox) {
     "utf8",
   );
   chmodSync(tool, 0o755);
+  writeFileSync(sandbox.codexLog, "", "utf8");
   return tool;
+}
+
+/**
+ * The `codex` invocations writeListingCodex recorded, in order.
+ * @param {Sandbox} sandbox
+ * @returns {string[]}
+ */
+function listingCodexCalls(sandbox) {
+  return readFileSync(sandbox.codexLog, "utf8").split("\n").filter(Boolean);
 }
 
 /**
@@ -608,13 +631,61 @@ void test("CLI-MODE-VERSION-01 version mode routes through dist", () => {
   });
 });
 
+// Rewritten, not re-pointed (PR 11.5 slice 4b, Task 8): `update` dispatches
+// in-process now, so the dispatch record this used to read
+// (`assertOnlyDispatch(sandbox, "update", [])`) can never be written. The ID,
+// the test name and the traceability row are unchanged, and so is the contract
+// — docs/baseline/behavioral-inventory.md states it as "No arguments is the
+// third distinct mode and is exactly equivalent to dispatching `update` with no
+// arguments", which is what the equivalence below asserts literally.
+//
+// Both invocations run in the SAME sandbox so their diagnostics name the same
+// paths; the bare run goes first, and the `update` run second, so a bare
+// invocation that somehow mutated state could only make the two differ, never
+// agree. `writeListingCodex` is deliberately NOT used: with no `codex` able to
+// answer, both runs stop at the very first adapter call, which keeps them cheap
+// and keeps the comparison free of the prepare/clone machinery. That is enough
+// to discriminate — a bare invocation that fell through to `help`, `probe` or a
+// usage error would differ in status, stdout or stderr.
 void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
   withSandbox({ stubScripts: true }, (sandbox) => {
-    const result = runCli(sandbox, [], dispatchEnvironment(sandbox));
-    assertCleanResult(result);
-    assert.equal(result.stdout, "");
-    assert.equal(result.stderr, "");
-    assertOnlyDispatch(sandbox, "update", []);
+    writeNoopTool(sandbox);
+    // A local upstream and a 40-hex ref, for the reason CLI-COMMANDS-01's
+    // `probe` row states: `update` resolves its effective selection before it
+    // ever reaches Codex, and without these it stops at the sandbox git shim's
+    // egress refusal against the packaged default URL rather than at the
+    // adapter. The comparison would still hold there, but the shared result
+    // would say nothing about `update`.
+    const upstream = createReleaseRepo(sandbox);
+    const overrides = {
+      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+    };
+    const bare = runCli(sandbox, [], overrides);
+    assert.deepEqual(readDispatchLog(sandbox), []);
+    clearDispatchLog(sandbox);
+    const explicit = runCli(sandbox, ["update"], overrides);
+    assert.deepEqual(readDispatchLog(sandbox), []);
+    assert.equal(bare.error, undefined);
+    assert.equal(bare.signal, null);
+    assert.deepEqual(
+      { status: bare.status, stdout: bare.stdout, stderr: bare.stderr },
+      {
+        status: explicit.status,
+        stdout: explicit.stdout,
+        stderr: explicit.stderr,
+      },
+    );
+    // Non-vacuity: two runs that both produced nothing at all would satisfy
+    // the equality above. `update` reaches its own probe and fails closed on
+    // the noop `codex`'s unparseable output, so the shared result is a
+    // specific, non-empty one.
+    assert.equal(bare.status, 1);
+    assert.equal(
+      bare.stderr,
+      "error: cannot parse output of 'codex plugin list --json'\n",
+    );
   });
 });
 
@@ -638,6 +709,25 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   // by construction and is therefore always a subset of it.
   assert.deepEqual(Object.keys(DISPATCH).sort(), [...COMMANDS].sort());
 
+  // PR 11.5 slice 4b, Task 8. Every command is in-process now, so
+  // IN_PROCESS_COMMANDS covers all eight and the loop below would take its
+  // in-process branch for these three as well — but they cannot reach
+  // `assertCleanResult` in a shared sandbox: each one runs a real probe, a real
+  // prepare and a real Codex mutation, and the shared sandbox's state carries
+  // between iterations. They are handled after the loop instead, one fresh
+  // sandbox each, and pinned by the exact `codex` invocation sequence they
+  // produce. That sequence is what replaces the dispatch record's `command`
+  // field as the per-command discriminator: it differs for all three, so a
+  // routing regression that ran the wrong module is still caught.
+  //
+  // Restated here rather than derived, because no production table records
+  // "needs its own sandbox". Staleness is loud, not silent: a name that stopped
+  // belonging here would be skipped by the loop and asserted nowhere, which the
+  // `assert.deepEqual` over `handled` below turns into a failure.
+  const OWN_SANDBOX = ["install", "update", "uninstall"];
+  /** @type {string[]} */
+  const handled = [];
+
   withSandbox({ stubScripts: true }, (sandbox) => {
     // `pin` is the first in-process command whose success genuinely depends
     // on resolving against its source (track-latest/unpin never touch git):
@@ -657,6 +747,8 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     // conveniences.
     writeListingCodex(sandbox);
     for (const [command, argv] of cases) {
+      if (OWN_SANDBOX.includes(command)) continue;
+      handled.push(command);
       clearDispatchLog(sandbox);
       const overrides =
         command === "pin"
@@ -711,6 +803,89 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
       }
     }
   });
+
+  // The three lifecycle commands, one fresh sandbox each. Each is pinned by the
+  // exact `codex` invocation sequence its module produces against an empty
+  // Codex: `install` probes, prepares, re-gates and mutates (7 calls);
+  // `update` does its own probe first and then everything `install` does (10);
+  // `uninstall` inspects ownership, finds nothing owned to remove, and
+  // re-inspects (4). Nothing else in the tree makes those three sequences
+  // interchangeable, so this is a genuine per-command discriminator and not
+  // merely "the module reached Codex".
+  //
+  // `install` and `update` stop where the sandbox's `codex` refuses the
+  // marketplace mutation; that failure is the fixture's boundary, not a claim
+  // of this ID, so only the sequence and the absence of a dispatch are
+  // asserted. `uninstall` completes, and its exit status IS asserted.
+  /** @type {Record<string, string[]>} */
+  const expectedCodex = {
+    install: [
+      "plugin list --json", // probe: fingerprint
+      "plugin list --json", // probe: ownership
+      "plugin marketplace list --json", // probe: ownership
+      "plugin list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // adapter install's marketplace lookup
+      "plugin marketplace add",
+    ],
+    update: [
+      "plugin list --json", // update's own probe: fingerprint
+      "plugin list --json", // update's own probe: ownership
+      "plugin marketplace list --json", // update's own probe: ownership
+      "plugin list --json", // install's own probe: fingerprint
+      "plugin list --json", // install's own probe: ownership
+      "plugin marketplace list --json", // install's own probe: ownership
+      "plugin list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // adapter install's marketplace lookup
+      "plugin marketplace add",
+    ],
+    uninstall: [
+      "plugin list --json", // ownership
+      "plugin marketplace list --json", // ownership
+      "plugin list --json", // post-removal ownership re-inspect
+      "plugin marketplace list --json", // post-removal ownership re-inspect
+    ],
+  };
+  for (const command of OWN_SANDBOX) {
+    handled.push(command);
+    withSandbox({ stubScripts: true }, (sandbox) => {
+      const upstream = createReleaseRepo(sandbox);
+      writeListingCodex(sandbox);
+      const result = runCli(
+        sandbox,
+        [command, .../** @type {string[]} */ (cases.get(command))],
+        {
+          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+          SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+          SUPERPOWERS_REF: upstream.RAW_COMMIT,
+        },
+      );
+      assert.equal(result.error, undefined);
+      assert.equal(result.signal, null);
+      assert.deepEqual(
+        readDispatchLog(sandbox).map((e) => e.command),
+        [],
+        `${command} must not spawn a script`,
+      );
+      // The marketplace-add argv carries the sandbox package root, so the
+      // recorded line is trimmed back to its operation before comparison.
+      assert.deepEqual(
+        listingCodexCalls(sandbox).map((line) =>
+          line.startsWith("plugin marketplace add ")
+            ? "plugin marketplace add"
+            : line,
+        ),
+        expectedCodex[command],
+      );
+      if (command === "uninstall") assertCleanResult(result);
+    });
+  }
+
+  // Every one of the eight is asserted somewhere above: the loop skips exactly
+  // the names OWN_SANDBOX claims, and this proves the two halves partition
+  // COMMANDS rather than overlapping or leaving a gap.
+  assert.deepEqual([...handled].sort(), [...COMMANDS].sort());
 });
 
 void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => {
@@ -877,6 +1052,15 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // the whole Record<Subcommand, string[]>; index it per command. These cases
   // configure no validator, so the empty env is the right derivation for them.
   const declared = commandRequirements({});
+  // DISPATCH is declared `as const` in production, so its value types are
+  // literals; at 8/8 "in-process" (PR 11.5 slice 4b) a direct `=== "spawn"` is
+  // TS2367 under `pnpm run typecheck:js`. The derivation is kept rather than
+  // collapsed to `[...declared[key]]`, for the same reason
+  // tests/bin/readme-requirements.test.js keeps its copy: it is what would put
+  // `sh` back into a command's requirement list if an entry ever went back to
+  // "spawn", with no edit here.
+  /** @type {Record<string, import("../../src/cli.js").DispatchMode>} */
+  const dispatch = DISPATCH;
   const requirements = new Map(
     COMMANDS.map((command) => {
       // COMMANDS is a plain string[]; CLI-COMMANDS-01 above asserts it agrees
@@ -885,7 +1069,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
       const key = /** @type {keyof typeof DISPATCH} */ (command);
       return [
         command,
-        DISPATCH[key] === "spawn"
+        dispatch[key] === "spawn"
           ? [...declared[key], "sh"]
           : [...declared[key]],
       ];
@@ -937,89 +1121,136 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   }
 });
 
-// Vehicle only. These five cases test buildSpawn — inherited stdio, child
-// exit status, child signal death, and the ENOENT diagnostic — not anything
-// specific to `install`. They moved off `probe` when slice 2 flipped it
-// in-process, and they die with buildSpawn in slice 4. Do not read the
-// choice of `install` as a contract.
+// PR 11.5 slice 4b, Task 8, §6.2.2. Two `void test(` blocks stood here and the
+// comment above them said of their five scenarios, "Vehicle only … they die
+// with buildSpawn in slice 4." That obligation is discharged as follows.
+//
+// `CLI-ENV-CODEX-PREFLIGHT-01` — ID, test name, contract and traceability row
+// all RETAINED. It is not a child-handling property: a custom
+// `SUPERPOWERS_CODEX` satisfying launcher preflight with `codex` absent from
+// PATH is a requirement-checking contract the flip does not touch. Only the
+// body changed, because it ended in `assertOnlyDispatch(sandbox, "install",
+// [])` and there is no dispatch record to read any more. See the case below.
+//
+// `CLI-CHILD-STATUS-01` and all FOUR of its scenarios — RETIRED at the gap,
+// with its rows removed from docs/baseline/traceability.md and
+// docs/baseline/behavioral-inventory.md in this same commit. The subject is
+// gone, not relocated: after the flip the CLI spawns no delegated child, so
+// inherited stdio, a propagated raw child status (the ID drove
+// `SPW_BASELINE_DELEGATE_EXIT: "42"`), signal-death normalisation, and the
+// `spawnSync … ENOENT` diagnostic have no referent at all. Post-flip a Codex
+// failure arrives through `runAdapter` and lifecycle handling, which is a
+// DIFFERENT observable contract, so the ID may not be reused for it. No
+// successor ID is minted here: one would need a fully specified contract of its
+// own, and the exit-status half is already covered per command by
+// tests/unit/commands-{install,update,uninstall}.test.js, which assert the
+// status each handler returns, and by src/cli.ts's single
+// `process.exit(status)`.
 void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight", () => {
   withSandbox({ stubScripts: true }, (sandbox) => {
-    const customCodex = writeNoopTool(sandbox, "baseline-custom-codex");
-    removeTool(sandbox, "codex");
-    const result = runCli(
-      sandbox,
-      ["install"],
-      dispatchEnvironment(sandbox, {
-        SUPERPOWERS_CODEX: customCodex,
-      }),
-    );
-    assertCleanResult(result);
-    assert.equal(result.stdout, "");
-    assert.equal(result.stderr, "");
-    assertOnlyDispatch(sandbox, "install", []);
-  });
-});
-
-void test("CLI-CHILD-STATUS-01 delegated child status is preserved", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
-    const result = runCli(
-      sandbox,
-      ["install"],
-      dispatchEnvironment(sandbox, { SPW_BASELINE_DELEGATE_EXIT: "42" }),
-    );
-    assertCleanResult(result, 42);
-    assertOnlyDispatch(sandbox, "install", []);
-  });
-
-  withSandbox({ stubScripts: true }, (sandbox) => {
-    const script = join(sandbox.pkg, "scripts", "install");
+    // A RECORDING custom codex, not `writeNoopTool`'s silent `exit 0`. The
+    // dispatch record used to be the positive evidence that preflight admitted
+    // the command; in-process the equivalent positive evidence is that the
+    // command got far enough to invoke the override. An absence check
+    // ("stderr carries no `required command not found`") would pass just as
+    // well if the run died for some unrelated reason before preflight.
+    const contacted = join(sandbox.root, "custom-codex.log");
+    const customCodex = join(sandbox.bin, "baseline-custom-codex");
     writeFileSync(
-      script,
-      '#!/bin/sh\nprintf "child stdout: %s\\n" "$SPW_CHILD_SENTINEL"\n' +
-        'printf "child stderr\\n" >&2\nexit 7\n',
+      customCodex,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' "$*" >> ${shQuote(contacted)}`,
+        "exit 0",
+        "",
+      ].join("\n"),
       "utf8",
     );
-    chmodSync(script, 0o755);
+    chmodSync(customCodex, 0o755);
+    writeFileSync(contacted, "", "utf8");
+    removeTool(sandbox, "codex");
+    // A local upstream and a 40-hex ref: `install` resolves its effective
+    // selection before its first adapter call, so without these it stops at
+    // the sandbox git shim's egress refusal and never contacts the override at
+    // all — which would make the recording below vacuous.
+    const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_CHILD_SENTINEL: "inherited",
+      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+      SUPERPOWERS_CODEX: customCodex,
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
     });
-    assertCleanResult(result, 7);
-    assert.equal(result.stdout, "child stdout: inherited\n");
-    assert.equal(result.stderr, "child stderr\n");
-  });
-
-  withSandbox({ stubScripts: true }, (sandbox) => {
-    const script = join(sandbox.pkg, "scripts", "install");
-    writeFileSync(script, "#!/bin/sh\nkill -TERM $$\n", "utf8");
-    chmodSync(script, 0o755);
-    const result = runCli(sandbox, ["install"], {
-      SPW_ADAPTER: sandbox.adapter,
-    });
-    assertCleanResult(result, 1);
-  });
-
-  withSandbox({ stubScripts: true }, (sandbox) => {
-    const script = join(sandbox.pkg, "scripts", "install");
-    writeFileSync(script, "#!/no/such/interpreter\n", "utf8");
-    chmodSync(script, 0o755);
-    const result = runCli(sandbox, ["install"], {
-      SPW_ADAPTER: sandbox.adapter,
-    });
-    assertCleanResult(result, 1);
-    assert.match(
-      result.stderr,
-      /^error: cannot run .*\/scripts\/install: spawnSync .* ENOENT\n$/,
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    // Preflight admitted the command and `install` reached its first adapter
+    // view through the override — exactly, not merely "was contacted".
+    assert.deepEqual(
+      readFileSync(contacted, "utf8").split("\n").filter(Boolean),
+      ["plugin list --json"],
     );
+    // The override is an `exit 0` recorder, so its empty output is unparseable
+    // and install fails closed at that first inspection. That failure belongs
+    // to the fixture's boundary, not to this ID; what this ID owns is that the
+    // failure is NOT the preflight one.
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      "Note: remove or disable conflicting Superpowers providers yourself before relying on manager skills.\n",
+    );
+    // The diagnostic names the OVERRIDE, not `codex` — a second, independent
+    // witness that preflight resolved SUPERPOWERS_CODEX rather than a PATH
+    // lookup, and the reason this literal is built from `customCodex`.
+    assert.equal(
+      result.stderr,
+      `error: cannot parse output of '${customCodex} plugin list --json'\n`,
+    );
+    assert.deepEqual(readDispatchLog(sandbox), []);
   });
 });
 
 void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
   withSandbox({ stubScripts: true }, (sandbox) => {
-    const customCodex = writeNoopTool(sandbox, "custom-codex");
+    // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
+    // spawns `scripts/update`, so the dispatch stub that used to record the
+    // child's environment is never invoked. The ID, the test name, the
+    // traceability row and the contract are unchanged —
+    // docs/baseline/behavioral-inventory.md states it as "The CLI inherits its
+    // controlled invocation environment wholesale, including the ten public
+    // SUPERPOWERS_* overrides; it does not synthesize unrelated XDG_*, npm, or
+    // Codex variables" — and there is still exactly one child to observe it on:
+    // the `codex` process runAdapter spawns (src/adapter.ts's runCommand). The
+    // recording shim below is that child, so the claim is asserted against a
+    // real child environment the CLI actually constructs, not against the
+    // manager's own inherited process.env.
+    //
+    // The ten values are placeholders, never paths this test writes to; the
+    // custom `codex` is the one exception and must be a real executable
+    // because SUPERPOWERS_CODEX is what runAdapter execs.
+    const dumped = join(sandbox.root, "codex-env.json");
+    const customCodex = join(sandbox.bin, "custom-codex");
+    writeFileSync(
+      customCodex,
+      [
+        "#!/bin/sh",
+        // python3 is a SANDBOX_TOOLS member (tests/baseline/support.js) and is
+        // how support.js's own dispatchStub produced this same JSON shape.
+        `exec python3 -c 'import json,os,sys; json.dump({"passthrough": {n: os.environ.get(n) for n in json.loads(sys.argv[1])}, "superpowers_env": {n: v for n, v in os.environ.items() if n.startswith("SUPERPOWERS_")}, "xdg_env": {n: v for n, v in os.environ.items() if n.startswith("XDG_")}, "npm_env": {n: v for n, v in os.environ.items() if n.upper().startswith("NPM_CONFIG_")}, "codex_env": {n: v for n, v in os.environ.items() if n.startswith("CODEX_")}}, open(sys.argv[2], "w"))' ${shQuote(JSON.stringify(PASSTHROUGH_VARIABLES))} ${shQuote(dumped)}`,
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    chmodSync(customCodex, 0o755);
+    // SUPERPOWERS_REF and SUPERPOWERS_UPSTREAM_URL are the two values that
+    // stopped being free placeholders at slice 4b's flip: `update` resolves its
+    // effective selection before its first adapter call, so a non-resolvable
+    // pair stops the run at the sandbox git shim and the child never runs. A
+    // real local repository and its 40-hex commit are just as distinctive as
+    // the `v9.8.7-rc.1` / `upstream source` placeholders they replace — the
+    // assertions below still pin the exact values the child saw.
+    const upstream = createReleaseRepo(sandbox, "upstream source");
     const values = {
-      SUPERPOWERS_REF: "v9.8.7-rc.1",
-      SUPERPOWERS_UPSTREAM_URL: join(sandbox.root, "upstream source"),
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_CODEX: customCodex,
       SUPERPOWERS_CACHE_DIR: join(sandbox.root, "custom cache"),
       SUPERPOWERS_CONFIG_DIR: join(sandbox.root, "custom config"),
@@ -1035,11 +1266,10 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     process.env.SUPERPOWERS_BASELINE_LEAK = "must-not-pass";
     let result;
     try {
-      result = runCli(
-        sandbox,
-        ["update"],
-        dispatchEnvironment(sandbox, values),
-      );
+      result = runCli(sandbox, ["update"], {
+        SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+        ...values,
+      });
     } finally {
       if (previousLeak === undefined) {
         delete process.env.SUPERPOWERS_BASELINE_LEAK;
@@ -1048,8 +1278,14 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
       }
     }
 
-    assertCleanResult(result);
-    const [record] = readDispatchLog(sandbox);
+    assert.equal(result.error, undefined);
+    assert.equal(result.signal, null);
+    // No script was spawned: the environment reached a child, but not that one.
+    assert.deepEqual(readDispatchLog(sandbox), []);
+    // Non-vacuity: the record exists only because the CLI actually spawned the
+    // child and handed it an environment.
+    assert.equal(existsSync(dumped), true, "the codex child never ran");
+    const record = JSON.parse(readFileSync(dumped, "utf8"));
     assert.deepEqual(record.passthrough, values);
     assert.deepEqual(record.superpowers_env, values);
     assert.deepEqual(record.xdg_env, {});
@@ -1782,53 +2018,67 @@ function lifecycleCodexCase(options) {
 }
 
 /**
- * A hand-written `SPW_ADAPTER` override, used only by UPDATE-CONTROL-01's
- * "unsupported"/"malformed" branches: the REAL adapter's `inspect --view
- * update-control` is hardcoded to "managed" (src/adapter.ts:782), with no
- * lever to answer otherwise, so those two branches need SOME interception.
- * This is intentionally NOT `createCase`'s own `adapterSeam: "intercept"` —
- * see `lifecycleCodexCase`'s comment for why — so it answers only the one
- * call it exists to fake and delegates every other adapter operation
- * (fingerprint, ownership, install, uninstall, build) to the real
- * `scripts/adapters/codex/adapter` under the case's own package root,
- * unconditionally.
+ * Answers `inspect --view update-control` with evidence the real adapter
+ * cannot produce, and DELEGATES every other operation to the real in-process
+ * `runAdapter` — the exact role the `exec "$realAdapter"` tail of the old
+ * `SPW_ADAPTER` shell override played before PR 11.5 slice 4b's flip.
  *
- * Pre-flip-only evidence: `SPW_ADAPTER` is honoured only by
- * `scripts/core/adapter.sh`, so this lever — and therefore these two
- * branches — stop being reachable at all once Task 8 flips `update` to
- * in-process dispatch, at which point `ctx.adapter` is a direct function
- * call with no environment seam left to answer through.
- * @param {import("../bin/lifecycle-fixture.js").CaseEnv} c
+ * Converted, not retired (Task 8, Step 5b). The lever this replaces was a
+ * hand-written `SPW_ADAPTER` script, and `SPW_ADAPTER` is honoured only by
+ * `scripts/core/adapter.sh`: the moment `update` dispatches in-process it is
+ * inert, and both subcases would silently become the third subcase below with
+ * the opposite assertion. Injection is not a `seamDependency`, so no gate
+ * widens and this file still must not join `SEAM_SOURCE_FILES`
+ * (tests/bin/adapter-seam.js).
+ *
+ * The real adapter's update-control view is hardcoded to "managed"
+ * (src/adapter.ts:782), which is why interception is needed at all and why the
+ * third subcase needs none.
+ *
+ * `"malformed"` re-anchors onto the port's own reader rather than the shell's.
+ * The shell fixture printed a bare `{`, which `validate-adapter-response.py`
+ * rejected with `invalid adapter response` — a diagnostic that exists nowhere
+ * under `src/`. An injected double returns a structured `AdapterResult`, so
+ * the analogue at the same decision point is evidence the reader cannot
+ * interpret: a well-formed envelope whose `update_control` is not a string,
+ * which `src/commands/probe.ts`'s `inspect()` fails closed on. The ID's
+ * contract — "Unsupported, unknown, or malformed evidence fails without
+ * mutation" — is unchanged; only the wording of the diagnostic is the port's.
+ *
+ * Carries a `calls` array so it satisfies the same shape `caseContext` takes
+ * from `recordingAdapter` (tests/bin/command-context.js).
  * @param {"unsupported" | "malformed"} response
- * @returns {string}
  */
-function writeUpdateControlOverride(c, response) {
-  const path = join(c.dir, "adapter-override");
-  const realAdapter = join(c.pkg, "scripts", "adapters", "codex", "adapter");
-  const envelope = JSON.stringify({
-    protocol: 1,
-    operation: "inspect",
-    ok: true,
-    messages: [],
-    result: { view: "update-control", update_control: response },
-    error: null,
-  });
-  writeFileSync(
-    path,
-    [
-      "#!/bin/sh",
-      'if [ "$1" = "inspect" ] && [ "$2" = "--view" ] && [ "$3" = "update-control" ]; then',
-      response === "malformed"
-        ? "  printf '%s' '{'"
-        : `  printf '%s\\n' '${envelope}'`,
-      "  exit 0",
-      "fi",
-      `exec "${realAdapter}" "$@"`,
-      "",
-    ].join("\n"),
-    { mode: 0o755 },
-  );
-  return path;
+function updateControlAdapter(response) {
+  /** @type {string[][]} */
+  const calls = [];
+  /**
+   * @param {readonly string[]} argv
+   * @param {import("../../src/adapter-protocol.js").AdapterContext} adapterCtx
+   * @returns {Promise<import("../../src/adapter-protocol.js").AdapterResult>}
+   */
+  const adapter = async (argv, adapterCtx) => {
+    calls.push([...argv]);
+    if (argv.join(" ") === "inspect --view update-control") {
+      return {
+        status: 0,
+        envelope: {
+          protocol: 1,
+          operation: "inspect",
+          ok: true,
+          messages: [],
+          result: {
+            view: "update-control",
+            update_control: response === "malformed" ? 42 : response,
+          },
+          error: null,
+        },
+      };
+    }
+    return await runAdapter(argv, adapterCtx);
+  };
+  adapter.calls = calls;
+  return adapter;
 }
 
 void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", async () => {
@@ -1890,26 +2140,35 @@ void test("INSTALL-ORDER-01 install prepares and validates before adapter mutati
 void test("UPDATE-CONTROL-01 update requires current managed control evidence", async () => {
   {
     const c = lifecycleCodexCase({ fakes: "install" });
-    const result = await runScript(c, "update", {
-      env: { SPW_ADAPTER: writeUpdateControlOverride(c, "unsupported") },
+    const { ctx, stdout, stderr } = caseContext(c, {
+      adapter: updateControlAdapter("unsupported"),
     });
-    const out = result.stdout + result.stderr;
-    assert.notEqual(result.status, 0, `expected update to fail:\n${out}`);
+    const status = await runUpdate([], ctx);
+    const out = stdout() + stderr();
+    assert.notEqual(status, 0, `expected update to fail:\n${out}`);
     assert.match(
-      result.stderr,
+      stderr(),
       /adapter cannot guarantee manager-controlled updates/,
     );
+    // Still read through the case's fake `codex`, not the double: every
+    // operation other than the intercepted view goes to the real runAdapter,
+    // which execs that fake, so the mutation claim is made against the same
+    // channel the third subcase below uses.
     assertNoCodexMutation(codexOperations(c));
   }
 
   {
     const c = lifecycleCodexCase({ fakes: "install" });
-    const result = await runScript(c, "update", {
-      env: { SPW_ADAPTER: writeUpdateControlOverride(c, "malformed") },
+    const { ctx, stdout, stderr } = caseContext(c, {
+      adapter: updateControlAdapter("malformed"),
     });
-    const out = result.stdout + result.stderr;
-    assert.notEqual(result.status, 0, `expected update to fail:\n${out}`);
-    assert.match(result.stderr, /invalid adapter response/);
+    const status = await runUpdate([], ctx);
+    const out = stdout() + stderr();
+    assert.notEqual(status, 0, `expected update to fail:\n${out}`);
+    assert.match(
+      stderr(),
+      /adapter returned a non-string update_control for inspect --view update-control/,
+    );
     assertNoCodexMutation(codexOperations(c));
   }
 
