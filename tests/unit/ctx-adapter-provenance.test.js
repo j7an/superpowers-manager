@@ -33,12 +33,19 @@ function tsFiles(dir) {
 // LIMITS, stated rather than implied: this pattern catches a direct named,
 // aliased, or default import of `runAdapter` (`import { runAdapter } …`,
 // `import { runAdapter as ra } …`, `import runAdapter from …`) and a dynamic
-// `import(...).runAdapter(...)` in the same statement-free stretch. It does
-// NOT catch a namespace import used to reach the same binding
-// (`import * as adapterMod from "../adapter.js"; … adapterMod.runAdapter(…)`)
-// or a re-export (`export { runAdapter } from "../adapter.js";`) — both are
-// real imports of `runAdapter` into a command module and would sail through
-// this gate uncaught.
+// `import(...)` whose OWN expression also names `runAdapter` before the next
+// `; , { }` — e.g. `(await import(…)).runAdapter(…)` or
+// `import(…).then(m => m.runAdapter(…))`. It does NOT catch:
+//   - a namespace import used to reach the same binding
+//     (`import * as adapterMod from "../adapter.js"; … adapterMod.runAdapter(…)`);
+//   - a re-export (`export { runAdapter } from "../adapter.js";`);
+//   - the idiomatic destructured dynamic import
+//     (`const { runAdapter } = await import("../adapter.js");`) — here the
+//     bound identifier PRECEDES the `import` keyword, so `\bimport\b[^;]*
+//     \brunAdapter\b` never sees `runAdapter` after `import` in the same
+//     statement.
+// All three are real imports of `runAdapter` into a command module and would
+// sail through this gate uncaught.
 void test("no module under src/commands/ imports runAdapter", () => {
   const offenders = tsFiles("src/commands").filter((relative) =>
     /\bimport\b[^;]*\brunAdapter\b/s.test(
