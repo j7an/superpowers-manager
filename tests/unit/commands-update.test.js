@@ -1,5 +1,6 @@
 // @ts-check
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -72,6 +73,7 @@ const INSTALL_NOTE =
  * @param {{
  *   desiredCommit: string,
  *   generatedCommit?: string,
+ *   extraEnv?: Record<string, string>,
  * }} opts
  * @param {ReturnType<typeof sink>} out
  * @param {ReturnType<typeof sink>} err
@@ -105,6 +107,7 @@ function makeCtx(opts, out, err, adapter) {
       SUPERPOWERS_CONFIG_DIR: configDir,
       SUPERPOWERS_UPSTREAM_URL: "https://example.invalid/upstream",
       SUPERPOWERS_REF: opts.desiredCommit,
+      ...opts.extraEnv,
     },
     stdout: out.stream,
     stderr: err.stream,
@@ -130,6 +133,112 @@ function probeNeedsInstall() {
     successResult("inspect", { identity_state: "manager" }, []),
     successResult("inspect", { update_control: "managed" }, []),
   ];
+}
+
+// Per-invocation identity flags only -- these write no git config at any
+// scope. GIT_CONFIG_GLOBAL deliberately names a file that does not exist and
+// GIT_CONFIG_NOSYSTEM suppresses the system file, so the fixture repository is
+// not machine-dependent. Same arrangement as
+// tests/baseline/prepare-fixture.js:32-67, and the reason it is needed here is
+// the same: `core.hooksPath` or `init.templateDir` inherited from the
+// developer would change what this repository ends up containing.
+const GIT_HOME = join(SCRATCH, "fixture-git-home");
+mkdirSync(GIT_HOME, { recursive: true });
+const GIT_IDENTITY = [
+  "-c",
+  "user.name=superpowers-manager",
+  "-c",
+  "user.email=superpowers-manager@example.invalid",
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  "tag.gpgsign=false",
+];
+const GIT_ENV = {
+  HOME: GIT_HOME,
+  PATH: process.env.PATH ?? "",
+  GIT_CONFIG_GLOBAL: join(GIT_HOME, "gitconfig"),
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
+/**
+ * @param {string} cwd
+ * @param {readonly string[]} args
+ * @returns {string}
+ */
+function git(cwd, args) {
+  const ran = spawnSync("git", [...args], {
+    cwd,
+    env: GIT_ENV,
+    encoding: "utf8",
+  });
+  assert.equal(ran.status, 0, `fixture git ${args.join(" ")}: ${ran.stderr}`);
+  return ran.stdout;
+}
+
+/**
+ * A local upstream repository carrying every REQUIRED_UPSTREAM path
+ * (src/commands/prepare.ts:21-26), so runPrepare's clone-checkout-copy
+ * pipeline can succeed without a network. Hermetic: a local clone, no remote.
+ *
+ * @returns {{ path: string, commit: string }}
+ */
+function makeUpstreamRepo() {
+  const path = mkdtempSync(join(SCRATCH, "upstream-"));
+  mkdirSync(join(path, "skills", "brainstorming"), { recursive: true });
+  writeFileSync(
+    join(path, "skills", "brainstorming", "SKILL.md"),
+    "---\nname: brainstorming\ndescription: Fake upstream skill\n---\n",
+  );
+  writeFileSync(join(path, "LICENSE"), "license\n");
+  writeFileSync(join(path, "README.md"), "readme\n");
+  writeFileSync(join(path, "CODE_OF_CONDUCT.md"), "code\n");
+  git(SCRATCH, ["init", path]);
+  git(path, ["add", "skills", "LICENSE", "README.md", "CODE_OF_CONDUCT.md"]);
+  git(path, [...GIT_IDENTITY, "commit", "-m", "fake upstream"]);
+  return { path, commit: git(path, ["rev-parse", "HEAD"]).trim() };
+}
+
+/**
+ * runPrepare's fallback manifest template at its default location
+ * (src/commands/prepare.ts:262-269). Read before the adapter build, so the
+ * atomic swap that later replaces the plugin root does not race it.
+ *
+ * @param {string} root
+ */
+function writeManifestTemplate(root) {
+  const dir = join(root, "plugins", "superpowers", ".codex-plugin");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "plugin.template.json"), '{"name":"superpowers"}\n');
+}
+
+// Built once: every case below clones it into its own cache, so they share the
+// source without sharing any state the subject writes.
+const UPSTREAM = makeUpstreamRepo();
+
+/**
+ * A fixture whose status is "needs prepare" -- no generated metadata is written
+ * -- and whose prepare would SUCCEED if it were reached. That second half is
+ * what makes the pre-switch guard cases below load-bearing: a guard wrongly
+ * relocated into the `current` arm lets this status run runPrepare, whose
+ * adapter build call then shows up in `calls`.
+ *
+ * @param {ReturnType<typeof sink>} out
+ * @param {ReturnType<typeof sink>} err
+ * @param {import("../../src/commands/context.js").CommandContext["adapter"]} adapter
+ */
+function makePreparableCtx(out, err, adapter) {
+  const ctx = makeCtx(
+    {
+      desiredCommit: UPSTREAM.commit,
+      extraEnv: { SUPERPOWERS_UPSTREAM_URL: UPSTREAM.path },
+    },
+    out,
+    err,
+    adapter,
+  );
+  writeManifestTemplate(ctx.root);
+  return ctx;
 }
 
 // --- The four-way switch ---
@@ -262,6 +371,71 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
   // Only gatherProbe's own three calls: prepare fails before issuing any
   // adapter call of its own, and install is never reached.
   assert.equal(calls.length, 3);
+});
+
+void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall, not by a bare success", async () => {
+  // scripts/update:23-24 -- prepare THEN install. The sibling case above only
+  // reaches the first of the two, because its prepare fails; this one is the
+  // only proof that the second statement of the arm exists at all. Replacing
+  // `return await runInstall([], ctx)` with `return 0` leaves update
+  // preparing a fresh tree, skipping the install, and reporting success for
+  // state it never installed -- so the assertion has to be the recorded
+  // adapter sequence, not the exit status, which the defect reproduces
+  // exactly.
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    // update's own probe. No generated tree exists yet, so statusForCommits
+    // returns "needs prepare" whatever the installed fingerprint says.
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+    // runPrepare's single adapter call. runPrepare itself creates and fills
+    // the candidate root, so a scripted success is enough for the swap that
+    // follows to find a real tree.
+    successResult("build", {}, []),
+    // runInstall's own probe, which now sees the freshly prepared tree.
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+    // runInstall's four mutation stages.
+    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+    successResult("install", {}, []),
+    successResult("inspect", { fingerprint: UPSTREAM.commit }, []),
+  ]);
+  const ctx = makePreparableCtx(out, err, adapter);
+
+  const status = await runUpdate([], ctx);
+  assert.equal(status, 0);
+  assert.equal(err.chunks.join(""), "");
+  // runPrepare's own success line, then runInstall's. Neither is written by
+  // update, so the presence of the second one is itself evidence the second
+  // statement of the arm ran.
+  assert.equal(
+    out.chunks.join(""),
+    `prepared ${UPSTREAM.commit} at ${UPSTREAM.commit}\n` +
+      `${INSTALL_NOTE}desired_commit=${UPSTREAM.commit}\n` +
+      `installed_commit=${UPSTREAM.commit}\nmanager updated\n`,
+  );
+  assert.equal(calls.length, 11);
+  assert.deepEqual(calls.slice(0, 3), [
+    ["inspect", "--view", "fingerprint"],
+    ["inspect", "--view", "ownership"],
+    ["inspect", "--view", "update-control"],
+  ]);
+  // The build call's --candidate-root is a fresh workspace path, so only its
+  // operation is stable; everything on either side of it is asserted exactly.
+  assert.equal(calls[3][0], "build");
+  assert.deepEqual(calls.slice(4), [
+    ["inspect", "--view", "fingerprint"],
+    ["inspect", "--view", "ownership"],
+    ["inspect", "--view", "update-control"],
+    ["inspect", "--view", "ownership"],
+    ["inspect", "--view", "update-control"],
+    ["install", "--package-root", ctx.root],
+    ["inspect", "--view", "fingerprint"],
+  ]);
 });
 
 void test("needs install: delegates to runInstall alone, and a success propagates as status 0", async () => {
@@ -423,8 +597,9 @@ void test("a legacy identity state stops before the update-control guard even ru
   );
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
-  // scripts/core/lifecycle.sh:50-53 returns 1 without spw_die: three bare
-  // lines to stderr, no `error: ` prefix.
+  // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
+  // lines to stderr, no `error: ` prefix; :54 is the `return 1` that follows
+  // it, reached without spw_die.
   assert.equal(
     err.chunks.join(""),
     "Legacy superpowers-wrapper Codex state is installed.\n" +
@@ -485,6 +660,90 @@ void test("an empty probe-reported update-control capability fails closed, and r
     err,
     adapter,
   );
+  const status = await runUpdate([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: probe did not report adapter update-control capability\n",
+  );
+  assert.equal(out.chunks.join(""), "");
+  assert.deepEqual(calls, [
+    ["inspect", "--view", "fingerprint"],
+    ["inspect", "--view", "ownership"],
+    ["inspect", "--view", "update-control"],
+  ]);
+});
+
+// --- The same three guards, driven by a NON-`current` status ---
+//
+// §4.4's correction is a placement claim: both emptiness checks and the
+// legacy-identity guard run BEFORE the switch, not inside the `current` arm.
+// Every case above uses a `current` fixture, so none of them can tell the two
+// arrangements apart -- each guard fires either way. These cases use a
+// "needs prepare" fixture whose prepare would succeed, so a guard relocated
+// into the `current` arm lets update reach runPrepare: the adapter build call
+// appears in `calls` and scripting only gatherProbe's three responses makes
+// that arrival loud. What must not happen is exactly what scripts/update:10-14
+// refuses -- a real generated-tree write under an identity or an update-control
+// capability the command has not accepted.
+
+void test("needs prepare: an empty identity state refuses before prepare, not inside the current arm", async () => {
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: null }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+  ]);
+  const ctx = makePreparableCtx(out, err, adapter);
+  const status = await runUpdate([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: probe did not report adapter identity state\n",
+  );
+  assert.equal(out.chunks.join(""), "");
+  assert.deepEqual(calls, [
+    ["inspect", "--view", "fingerprint"],
+    ["inspect", "--view", "ownership"],
+    ["inspect", "--view", "update-control"],
+  ]);
+});
+
+void test("needs prepare: a legacy identity state refuses before prepare, not inside the current arm", async () => {
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: "both" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+  ]);
+  const ctx = makePreparableCtx(out, err, adapter);
+  const status = await runUpdate([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "Legacy superpowers-wrapper Codex state is installed.\n" +
+      "Run: npx superpowers-wrapper@0.1.1 uninstall\n" +
+      "Then run: npx superpowers-manager install\n",
+  );
+  assert.equal(out.chunks.join(""), "");
+  assert.deepEqual(calls, [
+    ["inspect", "--view", "fingerprint"],
+    ["inspect", "--view", "ownership"],
+    ["inspect", "--view", "update-control"],
+  ]);
+});
+
+void test("needs prepare: an empty update control refuses before prepare, not inside the current arm", async () => {
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", { update_control: null }, []),
+  ]);
+  const ctx = makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(

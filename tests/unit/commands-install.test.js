@@ -421,8 +421,9 @@ void test("a legacy identity state stops before the workspace is created", async
   );
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  // scripts/core/lifecycle.sh:50-53 returns 1 without spw_die: three bare
-  // lines to stderr, no `error: ` prefix.
+  // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
+  // lines to stderr, no `error: ` prefix; :54 is the `return 1` that follows
+  // it, reached without spw_die.
   assert.equal(
     err.chunks.join(""),
     "Legacy superpowers-wrapper Codex state is installed.\n" +

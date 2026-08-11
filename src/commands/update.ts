@@ -100,8 +100,9 @@ export async function runUpdate(
   // scripts/update:11.
   const legacy = requireNoLegacyState(facts.identityState);
   if (legacy.kind === "blocked") {
-    // scripts/core/lifecycle.sh:50-53 returns 1 without spw_die: three bare
-    // lines to stderr, no `error: ` prefix.
+    // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
+    // lines to stderr, no `error: ` prefix; :54 is the `return 1` that
+    // follows it, reached without spw_die.
     for (const line of legacy.lines) ctx.stderr.write(`${line}\n`);
     return 1;
   }
