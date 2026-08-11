@@ -282,7 +282,10 @@ type ProbeOutcome =
 // replays them, in collection order, after the try/catch has resolved. The
 // operator-visible result is identical -- probe emits nothing else until the
 // very end -- and the EPIPE hazard never exists.
-async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
+// Exported for src/commands/install.ts and src/commands/update.ts, which need
+// probe's FACTS rather than its rendering. scripts/core/lifecycle.sh:39-41
+// awk-parsed the porcelain back into fields; that round trip is gone.
+export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
   // Order mirrors scripts/probe:24-40 exactly.
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
   const generatedCommit = await generatedCommitOrEmpty(ctx.root);

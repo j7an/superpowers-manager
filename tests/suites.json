@@ -36,6 +36,7 @@
     "tests/unit/atomic.test.js",
     "tests/unit/codex-json.test.js",
     "tests/unit/codex-state.test.js",
+    "tests/unit/commands-install.test.js",
     "tests/unit/commands-pin.test.js",
     "tests/unit/commands-prepare.test.js",
     "tests/unit/commands-probe.test.js",

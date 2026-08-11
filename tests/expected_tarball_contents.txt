@@ -15,6 +15,7 @@ dist/cli.js
 dist/codex-json.js
 dist/codex-state.js
 dist/commands/context.js
+dist/commands/install.js
 dist/commands/pin.js
 dist/commands/prepare.js
 dist/commands/probe.js
