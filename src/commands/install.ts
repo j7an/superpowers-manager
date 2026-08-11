@@ -327,13 +327,23 @@ export async function runInstall(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // src/commands/probe.ts:369-439's runProbe catch is the first, and its
-    // long comment there (particularly the three documented foreign-text
-    // exceptions at :385-413: git's own combined stdout+stderr on both the
-    // non-pinned and pinned resolution paths, and src/selection-store.ts's
-    // grandfathered errno-interpolating read-path wording) is exactly the
-    // set of things that can reach THIS stream too, since both consumers
-    // wrap the identical function. Not repeated here; read it there.
+    // src/commands/probe.ts:369-439's runProbe catch is the first. Because
+    // both consumers wrap the identical function, its long comment there
+    // enumerates exactly what can reach THIS stream too, including the three
+    // foreign-text exceptions at :385-413:
+    //   1. :386-391 -- resolveRef splices git's own combined stdout+stderr
+    //      into its text. Reached on probe's DEFAULT path, which that comment
+    //      defines as every invocation NOT resolving a saved pin: a 40-hex
+    //      ref returns a "raw-commit" resolution at src/upstream.ts:160-162
+    //      before any git call, so it reaches no splice at all.
+    //   2. :392-403 -- src/selection-store.ts's read path interpolates the
+    //      caught error's own message, so Node errno prose can appear.
+    //      AGENTS.md grandfathers that module's wording.
+    //   3. :404-413 -- a SPAWN-level git failure, a different channel from
+    //      exception 1's exit-status one: on the non-ENOENT arm of
+    //      src/git.ts:47-52, runGit rejects with "cannot run git: " followed
+    //      by the Node spawn error's own message.
+    // Not repeated in full here; read it there.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }

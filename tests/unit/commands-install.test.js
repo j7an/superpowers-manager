@@ -633,6 +633,42 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
   assert.equal(calls.length, 4);
 });
 
+void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested", async () => {
+  // The sibling case above drives requireNoLegacyState's `"blocked"` arm; this
+  // one drives its `"unknown"` arm (src/lifecycle.ts:57, reached for any
+  // identity_state outside the four known ones). Both arms need their own
+  // case: a mutant that disables BOTH at once dies to the `"blocked"` case
+  // alone, which proves only that one of the two is live. Disabling just the
+  // `"unknown"` arm previously survived the whole suite, and the survivor was
+  // a live fail-open -- re-inspect, receive an unrecognised answer, then
+  // install anyway and exit 0. gatherProbe's own ownership inspect reports
+  // "manager" here, so the unrecognised value is the RE-inspection's own
+  // evidence, not the outer pre-workspace check's.
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    ...PROBE_OK,
+    successResult("inspect", { identity_state: "chaos" }, []),
+  ]);
+  const ctx = makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  // scripts/core/lifecycle.sh:57 calls spw_die, which DOES prefix `error: `.
+  assert.equal(
+    err.chunks.join(""),
+    "error: unknown adapter identity state: chaos\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  // Stops at the re-inspection: no update-control inspect, no install, no
+  // fingerprint inspect.
+  assert.equal(calls.length, 4);
+});
+
 void test("stage 2 (inspect update-control) failure stops before the install mutation", async () => {
   const out = sink();
   const err = sink();
