@@ -13,11 +13,6 @@ const {
   verifyUninstalledResources,
 } = await import(new URL("../../dist/lifecycle.js", import.meta.url).href);
 
-/** @type {typeof import("../../src/adapter-protocol.js")} */
-const { successResult, failureResult } = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
-);
-
 // Frozen operator text. scripts/core/lifecycle.sh:50-53 and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
 // they are whole-line exact and this suite keeps them that way.
@@ -281,8 +276,8 @@ void test("an unparseable fingerprint result names parsing, not inspection", () 
   // satisfiable.
   const verdict = verifyInstalledFingerprint(
     "abcdef1234567890abcdef1234567890abcdef12",
-    successResult("install", {}, []),
-    successResult("inspect", "not-an-object", []),
+    ok({}),
+    ok("not-an-object"),
   );
   assert.equal(verdict.ok, false);
   assert.deepEqual(verdict.stderr, [
@@ -296,8 +291,8 @@ void test("a non-string fingerprint is unparseable, not empty", () => {
   // any non-null scalar. Pinned so the branch cannot be deleted as dead.
   const verdict = verifyInstalledFingerprint(
     "abcdef1234567890abcdef1234567890abcdef12",
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: 42 }, []),
+    ok({}),
+    ok({ fingerprint: 42 }),
   );
   assert.equal(verdict.ok, false);
   assert.deepEqual(verdict.stderr, [
@@ -308,9 +303,7 @@ void test("a non-string fingerprint is unparseable, not empty", () => {
 void test("an unreadable ownership inspection names reading, with its text", () => {
   // Reached today, but the existing case asserts only ok === false, so the
   // operator string was unpinned.
-  const verdict = verifyUninstalledResources(
-    failureResult("inspect", "inspect-failed", "boom", [], []),
-  );
+  const verdict = verifyUninstalledResources(failed());
   assert.equal(verdict.ok, false);
   assert.equal(
     verdict.ok === false ? verdict.message : "",
@@ -322,11 +315,7 @@ void test("the marketplace Boolean check names its own key", () => {
   // The loop covers both keys but only the `plugin` interpolation was
   // asserted, so a template that hardcoded "plugin" would have passed.
   const verdict = verifyUninstalledResources(
-    successResult(
-      "inspect",
-      { resources: { plugin: false, marketplace: "yes" } },
-      [],
-    ),
+    ok({ resources: { plugin: false, marketplace: "yes" } }),
   );
   assert.equal(verdict.ok, false);
   assert.equal(
@@ -340,7 +329,7 @@ void test("a non-object resources falls through to the Boolean message", () => {
   // tests/test_marketplace_reconcile.sh:224 writes. The distinct
   // "expected an object adapter result at resources" message was DELETED by
   // spec §6.2.3 item 3a; this case is what stops it coming back.
-  const verdict = verifyUninstalledResources(successResult("inspect", {}, []));
+  const verdict = verifyUninstalledResources(ok({}));
   assert.equal(verdict.ok, false);
   assert.equal(
     verdict.ok === false ? verdict.message : "",
