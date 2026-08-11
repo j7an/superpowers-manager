@@ -433,6 +433,42 @@ void test("a legacy identity state stops before the workspace is created", async
   assert.equal(calls.length, 3);
 });
 
+void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
+  // The sibling case above drives the outer guard's `"blocked"` arm
+  // (src/commands/install.ts:380-385); this one drives its `"unknown"` arm
+  // (:386-389). Each arm needs its own case: a mutant disabling the guard as a
+  // whole dies to the `"blocked"` case alone and so proves only that one of
+  // the two is live -- the same blind spot that let the stage-1 re-inspection's
+  // `"unknown"` arm survive as a fail-open. Distinct from the empty-state gate
+  // at :371-374, which fires first and has its own text: "chaos" is non-empty,
+  // so it clears that gate and reaches requireNoLegacyState's catch-all
+  // (src/lifecycle.ts:57).
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", { identity_state: "chaos" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+  ]);
+  const ctx = makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  // scripts/core/lifecycle.sh:57 calls spw_die, which DOES prefix `error: ` --
+  // unlike the bare three lines the `"blocked"` arm writes.
+  assert.equal(
+    err.chunks.join(""),
+    "error: unknown adapter identity state: chaos\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  // Stops before the workspace: only gatherProbe's own three calls.
+  assert.equal(calls.length, 3);
+});
+
 void test("an unsupported update-control capability refuses before any install mutation", async () => {
   const out = sink();
   const err = sink();
