@@ -236,7 +236,7 @@ or "counterpart" claim is quoted inline in that item.
     fingerprint inspection result after install."` — matching
     `scripts/core/lifecycle.sh:95-97`'s branch and satisfying
     `tests/test_marketplace_reconcile.sh:312`'s `grep -Fq "parse"`. Pinned by
-    item 26 below (`tests/unit/lifecycle.test.js:277-292`, "an unparseable
+    item 26 below (`tests/unit/lifecycle.test.js:272-287`, "an unparseable
     fingerprint result names parsing, not inspection"). **Slice 4c's
     `marketplace-reconcile.md` must disposition `:312` as mapped by that
     test, not as an open divergence** — the paragraphs above are kept as
@@ -328,7 +328,7 @@ or "counterpart" claim is quoted inline in that item.
 26. **New, this commit.** `verifyInstalledFingerprint` returns `ok: false`
     with `stderr` naming "cannot parse", not "inspection failed", when the
     inspect call *succeeds* but its `result` is not an object (a string,
-    here). Port: `tests/unit/lifecycle.test.js:277-292` ("an unparseable
+    here). Port: `tests/unit/lifecycle.test.js:272-287` ("an unparseable
     fingerprint result names parsing, not inspection"). This is the test
     that resolves item 14's divergence callout above: it is what makes
     `tests/test_marketplace_reconcile.sh:312`'s live `grep -Fq "parse"`
@@ -339,7 +339,7 @@ or "counterpart" claim is quoted inline in that item.
 27. **New, this commit.** `verifyInstalledFingerprint` fails closed on a
     non-string, non-null `fingerprint` (e.g. `42`) with the same "cannot
     parse" message as item 26's case, rather than coercing it. Port:
-    `tests/unit/lifecycle.test.js:294-306` ("a non-string fingerprint is
+    `tests/unit/lifecycle.test.js:289-301` ("a non-string fingerprint is
     unparseable, not empty"). **No shell counterpart is possible**:
     `scripts/core/provenance.sh:62`'s `spw_json_get` stringifies any
     non-null scalar before `spw_verify_installed_fingerprint` ever sees it,
@@ -352,7 +352,7 @@ or "counterpart" claim is quoted inline in that item.
     is exactly `"cannot read the adapter ownership inspection after
     removal"` when the inspection call itself failed — the same case item
     25 covers, which asserted only `ok === false` and left the operator
-    string unpinned. Port: `tests/unit/lifecycle.test.js:308-319` ("an
+    string unpinned. Port: `tests/unit/lifecycle.test.js:303-312` ("an
     unreadable ownership inspection names reading, with its text"). No
     counterpart in either driver, same rationale as item 25.
 29. **New, this commit.** The `["plugin", "marketplace"]` Boolean-check loop
@@ -361,7 +361,7 @@ or "counterpart" claim is quoted inline in that item.
     result at resources.marketplace"`, not a template that hardcoded
     `"plugin"` (which item 24 alone could not have caught, since item 24
     only ever supplies a non-Boolean `plugin`). Port:
-    `tests/unit/lifecycle.test.js:321-336` ("the marketplace Boolean check
+    `tests/unit/lifecycle.test.js:314-325` ("the marketplace Boolean check
     names its own key"). No counterpart in either driver: `grep -cE
     "resources\.marketplace" tests/test_marketplace_reconcile.sh` returns 0.
 30. **This commit; removes a port-only divergence rather than adding one.**
@@ -370,7 +370,7 @@ or "counterpart" claim is quoted inline in that item.
     as a present-but-wrong-type field, emitting `"expected a Boolean adapter
     result at resources.plugin"` rather than the now-deleted distinct
     `"expected an object adapter result at resources"` message. Port:
-    `tests/unit/lifecycle.test.js:338-349` ("a non-object resources falls
+    `tests/unit/lifecycle.test.js:327-338` ("a non-object resources falls
     through to the Boolean message"). Before spec §6.2.3 item 3a, the
     deleted message was a **live-shell-tested divergence**, not a harmless
     hardening: `scripts/core/adapter.sh:70` emits this same "expected Boolean
