@@ -33,9 +33,12 @@ function tsFiles(dir) {
 // LIMITS, stated rather than implied: this pattern catches a direct named,
 // aliased, or default import of `runAdapter` (`import { runAdapter } …`,
 // `import { runAdapter as ra } …`, `import runAdapter from …`) and a dynamic
-// `import(...)` whose OWN expression also names `runAdapter` before the next
-// `; , { }` — e.g. `(await import(…)).runAdapter(…)` or
-// `import(…).then(m => m.runAdapter(…))`. It does NOT catch:
+// `import(...)` whose OWN statement also names `runAdapter` before the next
+// `;` — e.g. `(await import(…)).runAdapter(…)` or
+// `import(…).then(m => m.runAdapter(…))`. Note this gap is `[^;]*`, not the
+// `[^;,{}]` used by the provenance gate below: it DOES cross `,`, `{` and `}`,
+// so a braced `.then(m => { return m.runAdapter(x) })` body is caught too.
+// It does NOT catch:
 //   - a namespace import used to reach the same binding
 //     (`import * as adapterMod from "../adapter.js"; … adapterMod.runAdapter(…)`);
 //   - a re-export (`export { runAdapter } from "../adapter.js";`);
