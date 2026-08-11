@@ -34,11 +34,15 @@ import {
   removeTool,
   runCli,
   runScenario,
-  writeAdapterState,
   writeCodexLogTool,
   writeNoopTool,
 } from "./support.js";
-import { createCase, UPSTREAM } from "../bin/lifecycle-fixture.js";
+import {
+  createCase,
+  readLog,
+  runScript,
+  UPSTREAM,
+} from "../bin/lifecycle-fixture.js";
 // From the NON-TEST helper, not from probe.test.js: importing a *.test.js
 // module re-executes and re-registers its tests inside this suite
 // (tests/run-node-suites.js:15).
@@ -445,30 +449,69 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
   assertNoCodexContact(sandbox);
 }
 
+// Rewritten for PR 11.5 slice 4b Task 7 (D5). The five lifecycle behaviour
+// IDs below no longer drive the baseline sandbox's `stateful-adapter` (the
+// `SPW_ADAPTER` seam `scripts/core/adapter.sh` honours) through
+// `withSandbox`/`runCli`: `tests/baseline/support.js`'s own
+// `validateEnvironment` (`:309-346`) refuses a `SUPERPOWERS_CODEX` override
+// that resolves outside the sandbox root, and the lifecycle fixture's fake
+// `codex` lives under its own scratch tree
+// (`tests/bin/lifecycle-fixture.js`'s `SCRATCH`), never under a baseline
+// sandbox. The two fixtures are siloed on purpose, so these five move onto
+// `createCase`/`runScript` instead — the same machinery
+// `tests/bin/install-commands.test.js` and
+// `tests/bin/uninstall-commands.test.js` already drive
+// `scripts/install`/`update`/`uninstall` through, still via `/bin/sh`, still
+// the shell subject Task 8 has not yet flipped.
+
 /**
- * @param {Sandbox} sandbox
- * @param {Record<string, string>} upstream
- * @param {Record<string, string>} [overrides]
+ * The fixture's own `codex` log, in place of `adapterOperations(sandbox)`.
+ * Every mutation the real adapter performs reaches Codex through `codexBin`
+ * (src/adapter.ts:559-700, `runInstall`'s marketplace/plugin `listingCommand`/
+ * `mutationCommand` calls), so this is the channel that survives Task 8's
+ * flip: `readLog` throws closed on a missing file only via `existsSync`
+ * inside it returning false -> `[]`, which the presence-form assertions
+ * below turn into a loud failure rather than a silent pass, because each one
+ * requires specific lines to be present, not merely absent.
+ * @param {import("../bin/lifecycle-fixture.js").CaseEnv} c
+ * @returns {string[]}
  */
-function lifecycleEnvironment(sandbox, upstream, overrides = {}) {
-  return {
-    SPW_ADAPTER: sandbox.adapter,
-    SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-    SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
-    SPW_BASELINE_FINGERPRINT: upstream.STABLE_COMMIT,
-    SUPERPOWERS_REF: "v1.1.0",
-    SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-    ...overrides,
-  };
+function codexOperations(c) {
+  return readLog(c.codexLog);
 }
 
-/** @param {Sandbox} sandbox */
-function adapterOperations(sandbox) {
-  if (!existsSync(sandbox.adapterLog)) return [];
-  return readFileSync(sandbox.adapterLog, "utf8")
-    .trimEnd()
-    .split("\n")
-    .filter(Boolean);
+/**
+ * `grep -Fq` over a log: substring match on any line.
+ * @param {string[]} log
+ * @param {string} needle
+ * @returns {boolean}
+ */
+function has(log, needle) {
+  return log.some((line) => line.includes(needle));
+}
+
+// Verbatim from tests/bin/install-commands.test.js's own CODEX_MUTATION:
+// anchored so "plugin marketplace add" is not also a "plugin add" hit.
+const CODEX_MUTATION =
+  /^plugin (add|remove) |^plugin marketplace (add|remove) /;
+
+/**
+ * Port of tests/bin/install-commands.test.js's `assertNoCodexMutation`. The
+ * length check is the non-vacuity guard: an empty log means the fake never
+ * ran at all, which would make "no mutation line" trivially true.
+ * @param {string[]} log
+ */
+function assertNoCodexMutation(log) {
+  assert.ok(
+    log.length > 0,
+    "codex log is empty — the fake never ran, so 'no mutation' would pass vacuously",
+  );
+  const offenders = log.filter((line) => CODEX_MUTATION.test(line));
+  assert.deepEqual(
+    offenders,
+    [],
+    `expected no Codex mutation:\n${log.join("\n")}`,
+  );
 }
 
 void test("CLI-MODE-HELP-01 help modes", () => {
@@ -1671,257 +1714,409 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   assert.deepEqual(snapshotTree(c.home), homeBefore, "case HOME");
 });
 
-void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", () => {
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(
-      sandbox,
-      ["install"],
-      lifecycleEnvironment(sandbox, upstream, {
-        SUPERPOWERS_VALIDATOR: writeFailingValidator(
-          sandbox,
-          "reject-install-candidate.py",
-        ),
-      }),
-    );
-    assertCleanResult(result, 1);
-    assert.match(result.stderr, /error: additional plugin validation failed/);
-    assert.deepEqual(adapterOperations(sandbox), [
-      "inspect fingerprint",
-      "inspect ownership",
-      "inspect update-control",
-      "build",
-    ]);
-  });
+// Fixture JSON for the lifecycle fixture's fake `codex`, kept verbatim from
+// the shapes tests/bin/uninstall-commands.test.js already exercises against
+// the real adapter's ownership parser (installedListingHas), plus a
+// "version" field on the manager entry: unlike uninstall, `install`'s own
+// fingerprint inspect calls activePluginVersionFromJson (src/codex-json.ts:103),
+// which fails closed ("active plugin version is invalid") without one.
+const FIXTURE_PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}';
+const FIXTURE_MARKETPLACE_ABSENT = '{"marketplaces":[]}';
+const FIXTURE_MANAGER_PLUGIN_PRESENT =
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0","name":"superpowers","marketplaceName":"superpowers-manager"}],"available":[]}';
+const FIXTURE_MANAGER_MARKETPLACE_PRESENT =
+  '{"marketplaces":[{"name":"superpowers-manager","root":"/y"}]}';
+const FIXTURE_LEGACY_PLUGIN_PRESENT =
+  '{"installed":[{"pluginId":"superpowers@superpowers-wrapper","version":"0.1.1","name":"superpowers","marketplaceName":"superpowers-wrapper"}],"available":[]}';
+const FIXTURE_LEGACY_MARKETPLACE_PRESENT =
+  '{"marketplaces":[{"name":"superpowers-wrapper","root":"/legacy"}]}';
+const FIXTURE_BOTH_PLUGINS_PRESENT =
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0","name":"superpowers","marketplaceName":"superpowers-manager"},{"pluginId":"superpowers@superpowers-wrapper","version":"0.1.1","name":"superpowers","marketplaceName":"superpowers-wrapper"}],"available":[]}';
+const FIXTURE_BOTH_MARKETPLACES_PRESENT =
+  '{"marketplaces":[{"name":"superpowers-manager","root":"/manager"},{"name":"superpowers-wrapper","root":"/legacy"}]}';
 
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(
-      sandbox,
-      ["install"],
-      lifecycleEnvironment(sandbox, upstream),
-    );
-    assertCleanResult(result);
-    assert.deepEqual(adapterOperations(sandbox), [
-      "inspect fingerprint",
-      "inspect ownership",
-      "inspect update-control",
-      "build",
-      "inspect ownership",
-      "inspect update-control",
-      "install",
-      "inspect fingerprint",
-    ]);
-    assert.match(result.stdout, /generated plugin validation passed:/);
-    assert.match(result.stdout, /prepared v1\.1\.0 at [0-9a-f]{40}/);
-    assert.match(result.stdout, /manager updated/);
+/**
+ * Builds a lifecycle-fixture case and seeds its fake `codex`'s two listing
+ * answers. `createCase` itself only builds the fake executables and the
+ * state directory; the listings are the case's own precondition, exactly as
+ * `installCase`/`uninstallCase` in tests/bin/{install,uninstall}-commands.test.js
+ * seed them for the same fakes.
+ *
+ * `adapterSeam`/`seamDependency` are deliberately NOT accepted here.
+ * `createCase`'s "intercept" mode requires a `seamDependency` declaration
+ * (createCase's own eager validation), and
+ * `tests/bin/adapter-seam.test.js`'s "every file declaring a seamDependency
+ * is in SEAM_SOURCE_FILES" gate scans the whole `tests/` tree for that exact
+ * literal and fails any file outside the declared set — verified: adding one
+ * here failed that gate. `writeUpdateControlOverride` below is how
+ * UPDATE-CONTROL-01 answers `inspect --view update-control` without going
+ * through that machinery at all.
+ * @param {object} options
+ * @param {"install" | "uninstall"} options.fakes
+ * @param {Record<string, unknown>} [options.config]
+ * @param {string} [options.plugins]
+ * @param {string} [options.marketplaces]
+ * @returns {import("../bin/lifecycle-fixture.js").CaseEnv}
+ */
+function lifecycleCodexCase(options) {
+  const c = createCase({ fakes: options.fakes, config: options.config ?? {} });
+  writeFileSync(
+    join(c.state, "plugin_list.json"),
+    `${options.plugins ?? FIXTURE_PLUGIN_LIST_EMPTY}\n`,
+  );
+  writeFileSync(
+    join(c.state, "marketplace_list.json"),
+    `${options.marketplaces ?? FIXTURE_MARKETPLACE_ABSENT}\n`,
+  );
+  return c;
+}
+
+/**
+ * A hand-written `SPW_ADAPTER` override, used only by UPDATE-CONTROL-01's
+ * "unsupported"/"malformed" branches: the REAL adapter's `inspect --view
+ * update-control` is hardcoded to "managed" (src/adapter.ts:782), with no
+ * lever to answer otherwise, so those two branches need SOME interception.
+ * This is intentionally NOT `createCase`'s own `adapterSeam: "intercept"` —
+ * see `lifecycleCodexCase`'s comment for why — so it answers only the one
+ * call it exists to fake and delegates every other adapter operation
+ * (fingerprint, ownership, install, uninstall, build) to the real
+ * `scripts/adapters/codex/adapter` under the case's own package root,
+ * unconditionally.
+ *
+ * Pre-flip-only evidence: `SPW_ADAPTER` is honoured only by
+ * `scripts/core/adapter.sh`, so this lever — and therefore these two
+ * branches — stop being reachable at all once Task 8 flips `update` to
+ * in-process dispatch, at which point `ctx.adapter` is a direct function
+ * call with no environment seam left to answer through.
+ * @param {import("../bin/lifecycle-fixture.js").CaseEnv} c
+ * @param {"unsupported" | "malformed"} response
+ * @returns {string}
+ */
+function writeUpdateControlOverride(c, response) {
+  const path = join(c.dir, "adapter-override");
+  const realAdapter = join(c.pkg, "scripts", "adapters", "codex", "adapter");
+  const envelope = JSON.stringify({
+    protocol: 1,
+    operation: "inspect",
+    ok: true,
+    messages: [],
+    result: { view: "update-control", update_control: response },
+    error: null,
   });
+  writeFileSync(
+    path,
+    [
+      "#!/bin/sh",
+      'if [ "$1" = "inspect" ] && [ "$2" = "--view" ] && [ "$3" = "update-control" ]; then',
+      response === "malformed"
+        ? "  printf '%s' '{'"
+        : `  printf '%s\\n' '${envelope}'`,
+      "  exit 0",
+      "fi",
+      `exec "${realAdapter}" "$@"`,
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  return path;
+}
+
+void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", async () => {
+  {
+    const c = lifecycleCodexCase({ fakes: "install" });
+    const validator = join(c.dir, "reject-install-candidate.py");
+    writeFileSync(validator, "import sys\nsys.exit(1)\n");
+    const result = await runScript(c, "install", {
+      env: { SUPERPOWERS_VALIDATOR: validator },
+    });
+    const out = result.stdout + result.stderr;
+    assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
+    assert.match(out, /additional plugin validation failed/);
+    // The probe triple (fingerprint: one listing; ownership: two listings)
+    // runs before prepare's `build` step rejects the candidate — build issues
+    // no Codex command of its own (src/adapter.ts:303-557, `runBuild`), so a
+    // mutation line appearing here would prove the reject happened too late.
+    assert.deepEqual(codexOperations(c), [
+      "plugin list --json",
+      "plugin list --json",
+      "plugin marketplace list --json",
+    ]);
+  }
+
+  {
+    const c = lifecycleCodexCase({ fakes: "install" });
+    const result = await runScript(c, "install");
+    const out = result.stdout + result.stderr;
+    assert.equal(result.status, 0, out);
+    assert.ok(
+      existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
+    );
+    assert.match(result.stdout, /generated plugin validation passed:/);
+    assert.match(result.stdout, /prepared v1\.0\.0 at [0-9a-f]{40}/);
+    assert.match(result.stdout, /manager updated/);
+    // Exact, not merely ordered: an assertOrder-style check over these same
+    // needles passed even after a mutation trial moved the FRESH ownership
+    // and update-control re-inspect (scripts/install's own gate immediately
+    // before `spw_adapter_install`) to AFTER the mutation — the first
+    // occurrence of each needle is still the one the initial probe produces,
+    // so relative-order checks over repeated needles cannot see a dropped
+    // repeat. The exact 9-line array can, and did: with the reorder in
+    // place, line 5 below would be missing, and every following list would
+    // fail closed to a deepEqual mismatch instead of passing.
+    assert.deepEqual(codexOperations(c), [
+      "plugin list --json", // fingerprint (initial probe)
+      "plugin list --json", // ownership (initial probe)
+      "plugin marketplace list --json", // ownership (initial probe)
+      "plugin list --json", // ownership (install's fresh gate, before mutation)
+      "plugin marketplace list --json", // ownership (install's fresh gate, before mutation)
+      "plugin marketplace list --json", // adapter install's own marketplace lookup
+      `plugin marketplace add ${c.pkg}`,
+      "plugin add superpowers@superpowers-manager",
+      "plugin list --json", // fingerprint verification, after mutation
+    ]);
+  }
 });
 
-void test("UPDATE-CONTROL-01 update requires current managed control evidence", () => {
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    writeAdapterState(sandbox, {
-      plugin: false,
-      marketplace: false,
-      legacy_plugin: false,
-      legacy_marketplace: false,
-      update_control: "unsupported",
-      fingerprint: null,
+void test("UPDATE-CONTROL-01 update requires current managed control evidence", async () => {
+  {
+    const c = lifecycleCodexCase({ fakes: "install" });
+    const result = await runScript(c, "update", {
+      env: { SPW_ADAPTER: writeUpdateControlOverride(c, "unsupported") },
     });
-    const result = runCli(
-      sandbox,
-      ["update"],
-      lifecycleEnvironment(sandbox, upstream),
-    );
-    assertCleanResult(result, 1);
+    const out = result.stdout + result.stderr;
+    assert.notEqual(result.status, 0, `expected update to fail:\n${out}`);
     assert.match(
       result.stderr,
       /adapter cannot guarantee manager-controlled updates/,
     );
-    assert.equal(adapterOperations(sandbox).includes("install"), false);
-    assert.equal(adapterOperations(sandbox).includes("uninstall"), false);
-  });
+    assertNoCodexMutation(codexOperations(c));
+  }
 
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(
-      sandbox,
-      ["update"],
-      lifecycleEnvironment(sandbox, upstream, {
-        SPW_BASELINE_UPDATE_CONTROL_RESPONSE: "malformed",
-      }),
-    );
-    assertCleanResult(result, 1);
-    assert.match(result.stderr, /invalid adapter response/);
-    assert.equal(adapterOperations(sandbox).includes("install"), false);
-    assert.equal(adapterOperations(sandbox).includes("uninstall"), false);
-  });
-
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(
-      sandbox,
-      ["update"],
-      lifecycleEnvironment(sandbox, upstream),
-    );
-    assertCleanResult(result);
-    assert.equal(adapterOperations(sandbox).includes("install"), true);
-    assert.equal(adapterOperations(sandbox).includes("uninstall"), false);
-    assert.equal(
-      JSON.parse(readFileSync(join(sandbox.adapterState, "state.json"), "utf8"))
-        .fingerprint,
-      upstream.STABLE_COMMIT,
-    );
-  });
-});
-
-void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources", () => {
-  for (const managerPresent of [true, false]) {
-    withSandbox({}, (sandbox) => {
-      const generatedBefore = snapshotTree(sandbox.plugin);
-      const cacheBefore = snapshotTree(sandbox.cache);
-      writeAdapterState(sandbox, {
-        plugin: managerPresent,
-        marketplace: managerPresent,
-        legacy_plugin: true,
-        legacy_marketplace: true,
-        update_control: "managed",
-        fingerprint: managerPresent ? "0123456" : null,
-      });
-      const result = runCli(sandbox, ["uninstall"], {
-        SPW_ADAPTER: sandbox.adapter,
-        SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-        SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
-      });
-      assertCleanResult(result);
-      assert.match(
-        result.stdout,
-        /Legacy superpowers-wrapper Codex state remains installed\./,
-      );
-      assert.match(result.stdout, /uninstall complete/);
-      assert.doesNotMatch(
-        readFileSync(sandbox.adapterLog, "utf8"),
-        /superpowers-wrapper|other@/,
-      );
-      assert.deepEqual(adapterOperations(sandbox), [
-        "inspect ownership",
-        "uninstall",
-        "inspect ownership",
-      ]);
-      assert.deepEqual(
-        JSON.parse(
-          readFileSync(join(sandbox.adapterState, "state.json"), "utf8"),
-        ),
-        {
-          plugin: false,
-          marketplace: false,
-          legacy_plugin: true,
-          legacy_marketplace: true,
-          update_control: "managed",
-          fingerprint: null,
-        },
-      );
-      assert.deepEqual(snapshotTree(sandbox.plugin), generatedBefore);
-      assert.deepEqual(snapshotTree(sandbox.cache), cacheBefore);
+  {
+    const c = lifecycleCodexCase({ fakes: "install" });
+    const result = await runScript(c, "update", {
+      env: { SPW_ADAPTER: writeUpdateControlOverride(c, "malformed") },
     });
+    const out = result.stdout + result.stderr;
+    assert.notEqual(result.status, 0, `expected update to fail:\n${out}`);
+    assert.match(result.stderr, /invalid adapter response/);
+    assertNoCodexMutation(codexOperations(c));
+  }
+
+  {
+    // Delegate mode (the default): the real adapter's update-control view
+    // always answers "managed" (src/adapter.ts:782), which is exactly what
+    // this branch needs, so no interception is wired at all.
+    const c = lifecycleCodexCase({ fakes: "install" });
+    const result = await runScript(c, "update");
+    const out = result.stdout + result.stderr;
+    assert.equal(result.status, 0, out);
+    assert.match(result.stdout, /manager updated/);
+    // Exact, matching INSTALL-ORDER-01's own reasoning: `update`'s needs-prepare
+    // branch runs its OWN probe (fingerprint, ownership), then prepare's
+    // `build`, then `scripts/install` in full — which repeats the same
+    // sequence INSTALL-ORDER-01 pins (its own probe, its own fresh gate,
+    // then the mutation triple, then the final fingerprint verify).
+    assert.deepEqual(codexOperations(c), [
+      "plugin list --json", // update's own probe: fingerprint
+      "plugin list --json", // update's own probe: ownership
+      "plugin marketplace list --json", // update's own probe: ownership
+      "plugin list --json", // install's own probe: fingerprint
+      "plugin list --json", // install's own probe: ownership
+      "plugin marketplace list --json", // install's own probe: ownership
+      "plugin list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // adapter install's own marketplace lookup
+      `plugin marketplace add ${c.pkg}`,
+      "plugin add superpowers@superpowers-manager",
+      "plugin list --json", // fingerprint verification, after mutation
+    ]);
+    // The desired commit update just prepared, and the commit the fake
+    // codex's cache now reports installed, must be the SAME value — a
+    // stronger, fixture-independent replacement for asserting a specific
+    // upstream commit literal that this shared, single-tag fixture does not
+    // have two of.
+    const generated = JSON.parse(
+      readFileSync(
+        join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
+        "utf8",
+      ),
+    );
+    const installed = JSON.parse(
+      readFileSync(
+        join(
+          c.state,
+          "codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0/.superpowers-upstream.json",
+        ),
+        "utf8",
+      ),
+    );
+    assert.equal(installed.commit, generated.commit);
   }
 });
 
-void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", () => {
-  withSandbox({}, (sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(
-      sandbox,
-      ["install"],
-      lifecycleEnvironment(sandbox, upstream, {
-        SPW_BASELINE_INSTALLED_FINGERPRINT: upstream.BASE_COMMIT,
-      }),
+void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources", async () => {
+  for (const managerPresent of [true, false]) {
+    const c = lifecycleCodexCase({
+      fakes: "uninstall",
+      plugins: managerPresent
+        ? FIXTURE_BOTH_PLUGINS_PRESENT
+        : FIXTURE_LEGACY_PLUGIN_PRESENT,
+      marketplaces: managerPresent
+        ? FIXTURE_BOTH_MARKETPLACES_PRESENT
+        : FIXTURE_LEGACY_MARKETPLACE_PRESENT,
+    });
+    const generatedBefore = existsSync(join(c.pkg, "plugins/superpowers"))
+      ? readdirSync(join(c.pkg, "plugins/superpowers"))
+      : null;
+    const result = await runScript(c, "uninstall");
+    const out = result.stdout + result.stderr;
+    assert.equal(result.status, 0, out);
+    assert.match(
+      result.stdout,
+      /Legacy superpowers-wrapper Codex state remains installed\./,
     );
-    assertCleanResult(result, 1);
+    assert.match(result.stdout, /uninstall complete/);
+    const codex = codexOperations(c);
+    assert.ok(
+      !has(codex, "superpowers@superpowers-wrapper") &&
+        !has(codex, "marketplace remove superpowers-wrapper"),
+      `uninstall must never touch the legacy plugin or marketplace:\n${codex.join("\n")}`,
+    );
+    // Exact: ownership inspect (list + marketplace list), then the mutation
+    // uninstall issues ONLY for what ownership reported present (both, when
+    // managerPresent; neither, when not — src/adapter.ts:702-772,
+    // `runUninstall`), then the post-removal ownership re-inspect.
+    assert.deepEqual(
+      codex,
+      managerPresent
+        ? [
+            "plugin list --json",
+            "plugin marketplace list --json",
+            "plugin remove superpowers@superpowers-manager",
+            "plugin marketplace remove superpowers-manager",
+            "plugin list --json",
+            "plugin marketplace list --json",
+          ]
+        : [
+            "plugin list --json",
+            "plugin marketplace list --json",
+            "plugin list --json",
+            "plugin marketplace list --json",
+          ],
+    );
+    // Uninstall never touches the generated tree
+    // (scripts/uninstall's own closing note: "local generated artifacts ...
+    // were left in place").
+    assert.deepEqual(
+      existsSync(join(c.pkg, "plugins/superpowers"))
+        ? readdirSync(join(c.pkg, "plugins/superpowers"))
+        : null,
+      generatedBefore,
+    );
+  }
+});
+
+void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", async () => {
+  {
+    // `pluginAdd: "stale"` makes the fake Codex's install branch write a
+    // deliberately wrong cached commit (install-fakes.js:145-150), so the
+    // post-install fingerprint verification finds a real, installed, but
+    // MISMATCHED commit — install's own verification failure, not a fixture
+    // fault.
+    const c = lifecycleCodexCase({
+      fakes: "install",
+      config: { pluginAdd: "stale" },
+    });
+    const result = await runScript(c, "install");
+    const out = result.stdout + result.stderr;
+    assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
     assert.match(
       result.stderr,
       /installed manager fingerprint does not match .* after install/,
     );
-    assert.deepEqual(adapterOperations(sandbox).slice(-2), [
-      "install",
-      "inspect fingerprint",
+    assert.ok(!out.includes("manager updated"), out);
+    assert.deepEqual(codexOperations(c).slice(-2), [
+      "plugin add superpowers@superpowers-manager",
+      "plugin list --json",
     ]);
-  });
+  }
 
-  withSandbox({}, (sandbox) => {
-    writeAdapterState(sandbox, {
-      plugin: true,
-      marketplace: true,
-      legacy_plugin: false,
-      legacy_marketplace: false,
-      update_control: "managed",
-      fingerprint: "0123456",
+  {
+    // `removesMutateState: false` ports the shell driver's `remove_noop`
+    // marker (tests/bin/lifecycle-config.js:17-24): the adapter's uninstall
+    // op runs and reports success, but the fake Codex's listings never
+    // change, so the post-removal ownership re-inspect still finds the
+    // manager plugin installed.
+    const c = lifecycleCodexCase({
+      fakes: "uninstall",
+      plugins: FIXTURE_MANAGER_PLUGIN_PRESENT,
+      marketplaces: FIXTURE_MANAGER_MARKETPLACE_PRESENT,
+      config: { removesMutateState: false },
     });
-    const result = runCli(sandbox, ["uninstall"], {
-      SPW_ADAPTER: sandbox.adapter,
-      SPW_BASELINE_ADAPTER_STATE: sandbox.adapterState,
-      SPW_BASELINE_ADAPTER_LOG: sandbox.adapterLog,
-      SPW_BASELINE_UNINSTALL_NOOP: "1",
-    });
-    assertCleanResult(result, 1);
+    const result = await runScript(c, "uninstall");
+    const out = result.stdout + result.stderr;
+    assert.notEqual(result.status, 0, `expected uninstall to fail:\n${out}`);
     assert.match(
       result.stderr,
       /owned plugin resource is still installed after removal/,
     );
-    assert.deepEqual(adapterOperations(sandbox), [
-      "inspect ownership",
-      "uninstall",
-      "inspect ownership",
+    assert.deepEqual(codexOperations(c), [
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin remove superpowers@superpowers-manager",
+      "plugin marketplace remove superpowers-manager",
+      "plugin list --json",
+      "plugin marketplace list --json",
     ]);
-  });
+  }
 });
 
-void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", () => {
-  withSandbox({}, (sandbox) => {
-    const topology = scenarioValues(
-      runScenario(
-        sandbox,
-        "interrupted-install-state",
-        join(sandbox.root, "interrupted-install"),
-      ),
-    );
-    const upstream = createReleaseRepo(sandbox);
-    writeFileSync(
-      join(topology.ROOT, "state.json"),
-      `${JSON.stringify({
-        plugin: true,
-        marketplace: true,
-        legacy_plugin: true,
-        legacy_marketplace: true,
-        update_control: "managed",
-        fingerprint: upstream.STABLE_COMMIT,
-      })}\n`,
-      { encoding: "utf8", mode: 0o600 },
-    );
-    const before = snapshotTree(topology.ROOT);
-    const result = runCli(
-      sandbox,
-      ["install"],
-      lifecycleEnvironment(sandbox, upstream, {
-        SPW_BASELINE_ADAPTER_STATE: topology.ROOT,
-      }),
-    );
-    assertCleanResult(result, 1);
-    assert.match(
-      result.stderr,
-      /Legacy superpowers-wrapper Codex state is installed\./,
-    );
-    assert.doesNotMatch(result.stdout, /manager updated|uninstall complete/);
-    assert.deepEqual(adapterOperations(sandbox), [
-      "inspect fingerprint",
-      "inspect ownership",
-      "inspect update-control",
-    ]);
-    assert.deepEqual(snapshotTree(topology.ROOT), before);
-    assert.equal(
-      readFileSync(topology.OPERATION_MARKER, "utf8"),
-      "install interrupted before verification\n",
-    );
+void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", async () => {
+  const c = lifecycleCodexCase({
+    fakes: "install",
+    plugins: FIXTURE_BOTH_PLUGINS_PRESENT,
+    marketplaces: FIXTURE_BOTH_MARKETPLACES_PRESENT,
   });
+  // The manager plugin listing claims version 1.0.0 is installed, so the
+  // fingerprint inspect that runs before the legacy-state check
+  // (src/adapter.ts:784-855, the "fingerprint" view) needs a matching cached
+  // tree to read, or it fails on a DIFFERENT diagnostic ("cannot inspect
+  // active Codex plugin fingerprint") than this ID's own contract. The
+  // commit value itself is irrelevant: the legacy check runs on
+  // identity_state alone and never reads it.
+  const cache = join(
+    c.state,
+    "codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0",
+  );
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(
+    join(cache, ".superpowers-upstream.json"),
+    `${JSON.stringify({ commit: "0".repeat(40) })}\n`,
+  );
+  const result = await runScript(c, "install");
+  const out = result.stdout + result.stderr;
+  assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
+  assert.match(
+    result.stderr,
+    /Legacy superpowers-wrapper Codex state is installed\./,
+  );
+  assert.doesNotMatch(result.stdout, /manager updated|uninstall complete/);
+  // The legacy-state check (scripts/install's own
+  // `spw_require_no_legacy_state`) runs immediately after the initial probe
+  // triple and before the status-based prepare branch, so the generated tree
+  // must never come to exist and no mutation can have reached Codex — a
+  // structural replacement for the old fixture-only "ROOT is untouched"
+  // check, which asserted something the STATEFUL adapter owned, not
+  // something this subject's real side effects ever touched.
+  assert.equal(
+    existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
+    false,
+  );
+  assertNoCodexMutation(codexOperations(c));
+  assert.deepEqual(codexOperations(c), [
+    "plugin list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
+  ]);
 });
