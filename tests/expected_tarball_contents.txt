@@ -22,6 +22,7 @@ dist/commands/probe.js
 dist/commands/track-latest.js
 dist/commands/uninstall.js
 dist/commands/unpin.js
+dist/commands/update.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
 dist/effective-selection.js
