@@ -282,8 +282,21 @@ async function gatherInstallStages(
 // ProbeFacts.status is typed `string`, not that three-literal union, and a
 // future caller that builds facts by hand (as this module's own unit test
 // does, directly) must still see it fail closed rather than silently
-// proceed. Exported for that direct coverage; not part of the interface Task
-// 5 or Task 8 consume.
+// proceed.
+//
+// Exported specifically so a direct test can reach it. That is ONE STEP
+// FURTHER than src/commands/probe.ts:355-360's own precedent: that comment
+// licenses RETAINING an unreachable branch inside an already-public
+// function (runProbe was public before that comment existed), not EXPORTING
+// a new one. This module does the latter, deliberately, because runInstall
+// itself has no way to construct the unreachable input. Not part of the
+// interface Task 5 or Task 8 consume.
+//
+// A test against this export proves the two writes below are correct for a
+// given `facts`. It does NOT prove that runInstall's own `else if` branch
+// actually reaches and calls this function, or that runInstall returns 1
+// afterward -- those are properties of the call site, not of this function,
+// and need their own coverage there.
 export function renderUnknownProbeStatus(
   facts: ProbeFacts,
   ctx: CommandContext,
@@ -312,6 +325,15 @@ export async function runInstall(
     // this catch cannot also be reached by an EPIPE from install's own
     // output: the NOTE line above already left the try, and everything below
     // runs only after this try/catch has resolved.
+    //
+    // This is a SECOND consumer of gatherProbe's throw channel --
+    // src/commands/probe.ts:369-439's runProbe catch is the first, and its
+    // long comment there (particularly the three documented foreign-text
+    // exceptions at :385-413: git's own combined stdout+stderr on both the
+    // non-pinned and pinned resolution paths, and src/selection-store.ts's
+    // grandfathered errno-interpolating read-path wording) is exactly the
+    // set of things that can reach THIS stream too, since both consumers
+    // wrap the identical function. Not repeated here; read it there.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }

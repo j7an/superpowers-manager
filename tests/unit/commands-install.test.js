@@ -300,6 +300,77 @@ void test("an unparseable generated commit is never treated as success", async (
   );
 });
 
+// --- gatherProbe's own failure (:320-325) is a stop, not a fall-through ---
+//
+// Mutation testing found this relay completely unexercised: a mutant that
+// never stops on probe.status === 1 falls straight through into
+// requireNoLegacyState on an undefined `facts`, then (if that somehow
+// survived) into runPrepare and the install mutation itself -- the worst
+// direction for this relay to fail in. Two cases: one where the failing
+// call's envelope is ok (clause 3, so probe.message is a hand-written,
+// non-null string) and one where it is not (clause 2, so probe.message is
+// null and replayEnvelope alone carries the diagnostic). Together they pin
+// both "the stop happens" (calls never grows past gatherProbe's own failing
+// call -- no prepare, no workspace, no install mutation) and "the message
+// is not dropped" for the one shape where there is a message to drop.
+
+void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
+  const out = sink();
+  const err = sink();
+  /** @type {readonly import("../../src/adapter-protocol.js").AdapterResult[]} */
+  const responses = [
+    {
+      status: 1,
+      envelope: {
+        protocol: 1,
+        operation: "inspect",
+        ok: true,
+        messages: [],
+        result: null,
+        error: null,
+      },
+    },
+  ];
+  const { adapter, calls } = scriptedAdapter(responses);
+  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: adapter reported a failure status for inspect --view fingerprint\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  // gatherProbe's OWN structure returns immediately on its first failing
+  // call, before the ownership or update-control inspects run at all --
+  // never mind runPrepare or the workspace stage's four.
+  assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
+});
+
+void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the replayed diagnostic", async () => {
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    failureResult(
+      "inspect",
+      "E_ADAPTER",
+      "cannot inspect fingerprint",
+      ["check codex is installed"],
+      [],
+    ),
+  ]);
+  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  // No second, command-authored line: replayEnvelope already wrote the
+  // adapter's own error:/hint: lines, and probe.message is null here.
+  assert.equal(
+    err.chunks.join(""),
+    "error: cannot inspect fingerprint\nhint: check codex is installed\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
+});
+
 // --- Named parity cases ---
 
 void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
@@ -526,6 +597,42 @@ void test("stage 1 clause 3: envelope.ok but status !== 0 gets its own hand-writ
   assert.equal(calls.length, 4);
 });
 
+void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested", async () => {
+  // Rule 1 (`calls.slice(3)`) only proves the re-inspection HAPPENS. Nothing
+  // in the suite before this proved its ANSWER is acted on: a mutant that
+  // ignores requireNoLegacyState's verdict on the re-inspected value would
+  // sail through to update-control and the install mutation with a legacy
+  // identity re-confirmed one line above. gatherProbe's own ownership
+  // inspect reports "manager" (clean) here -- only the RE-inspection inside
+  // the workspace reports "legacy" -- so this is the stage-1 re-check
+  // failing on its own evidence, not a repeat of the outer, pre-workspace
+  // legacy-state case above.
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    ...PROBE_OK,
+    successResult("inspect", { identity_state: "legacy" }, []),
+  ]);
+  const ctx = makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "Legacy superpowers-wrapper Codex state is installed.\n" +
+      "Run: npx superpowers-wrapper@0.1.1 uninstall\n" +
+      "Then run: npx superpowers-manager install\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  // Stops at the re-inspection: no update-control inspect, no install, no
+  // fingerprint inspect.
+  assert.equal(calls.length, 4);
+});
+
 void test("stage 2 (inspect update-control) failure stops before the install mutation", async () => {
   const out = sink();
   const err = sink();
@@ -625,6 +732,90 @@ void test("stage 4 (post-install inspect fingerprint) failure stops with ONLY th
     "error: cannot inspect fingerprint after install\n",
   );
   assert.equal(calls.length, 7);
+});
+
+// --- A fingerprint MISMATCH, not just an inspection failure (:244-255) ---
+//
+// Every stage-4 case above tests the INSPECT CALL failing. None of them ever
+// let verifyInstalledFingerprint actually RUN and come back `ok: false` --
+// so nothing pinned that a mismatch (a) still returns status 1, not 0
+// (`verdict.ok ? 0 : 1`), and (b) still writes BOTH `desired_commit=` and
+// `installed_commit=` to stdout, not just on the success path. (b) is
+// spec §4.3's own explicit prohibition ("the port must not move them into
+// the success branch") -- this is the case that would notice a port that
+// violated it.
+
+void test("a fingerprint MISMATCH still reports both commit lines, then fails closed (not 0)", async () => {
+  const Y = "3".repeat(40); // unrelated to X: no shared 7-char prefix.
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([
+    ...PROBE_OK,
+    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", { update_control: "managed" }, []),
+    successResult("install", {}, []),
+    successResult("inspect", { fingerprint: Y }, []),
+  ]);
+  const ctx = makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    out.chunks.join(""),
+    `${NOTE}desired_commit=${X}\ninstalled_commit=${Y}\n`,
+  );
+  assert.equal(
+    err.chunks.join(""),
+    "error: installed manager fingerprint does not match the prepared plugin after install.\n",
+  );
+  assert.equal(calls.length, 7);
+});
+
+// --- The STRICT reader, not the LENIENT one, and the empty-desiredCommit
+// gate it feeds (:372-392) ---
+//
+// Both src/provenance.ts profiles agree on an ordinary flat JSON value, so a
+// plain {"commit": "<hex>"} file cannot tell readStrictProvenanceField
+// (maxDepth: 256) apart from the lenient reader gatherProbe already used
+// (unbounded depth) -- the two would read back the identical string. The one
+// place they can disagree is depth: a document nested past 256 containers
+// parses fine under the lenient profile and fails closed under the strict
+// one. The fixture below adds such nesting under an UNUSED sibling key, so
+// gatherProbe's own (lenient) generatedCommit still resolves to X -- keeping
+// facts.status at "needs install", never "needs prepare" -- while install's
+// own (strict) re-read of the SAME file throws and desiredCommit stays "".
+// If a change relaxed the strict call back to the lenient one, this fixture
+// would read a commit and sail into the workspace stage instead of stopping
+// here with zero further adapter calls.
+
+void test("the STRICT provenance reader, not the lenient one, feeds desiredCommit -- and its own absence still fails closed", async () => {
+  const out = sink();
+  const err = sink();
+  const { adapter, calls } = scriptedAdapter([...PROBE_OK]);
+  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  /** @type {unknown[]} */
+  let junk = [];
+  for (let depth = 0; depth < 300; depth += 1) junk = [junk];
+  const generatedDir = join(ctx.root, "plugins", "superpowers");
+  mkdirSync(generatedDir, { recursive: true });
+  writeFileSync(
+    join(generatedDir, ".superpowers-upstream.json"),
+    JSON.stringify({ commit: X, junk }),
+    "utf8",
+  );
+  const status = await runInstall([], ctx);
+  assert.equal(status, 1);
+  assert.equal(
+    err.chunks.join(""),
+    "error: generated metadata missing desired commit after prepare\n",
+  );
+  assert.equal(out.chunks.join(""), NOTE);
+  // Zero calls past the probe's own three: the workspace stage never runs.
+  assert.equal(calls.length, 3);
 });
 
 void test('argv is ignored, matching scripts/install never reading "$@"', async () => {
