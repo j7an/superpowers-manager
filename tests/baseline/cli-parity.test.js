@@ -469,25 +469,17 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
  * Every mutation the real adapter performs reaches Codex through `codexBin`
  * (src/adapter.ts:559-700, `runInstall`'s marketplace/plugin `listingCommand`/
  * `mutationCommand` calls), so this is the channel that survives Task 8's
- * flip: `readLog` throws closed on a missing file only via `existsSync`
- * inside it returning false -> `[]`, which the presence-form assertions
- * below turn into a loud failure rather than a silent pass, because each one
- * requires specific lines to be present, not merely absent.
+ * flip. `readLog` itself (tests/bin/lifecycle-fixture.js:354-360) does NOT
+ * fail closed and never throws: it wraps the `readFileSync` in a bare
+ * try/catch and returns `[]` for ANY read error, a missing log included. The
+ * presence-form assertions below are what turn that `[]` into a loud failure
+ * rather than a silent pass, because each one requires specific lines to be
+ * present, not merely absent.
  * @param {import("../bin/lifecycle-fixture.js").CaseEnv} c
  * @returns {string[]}
  */
 function codexOperations(c) {
   return readLog(c.codexLog);
-}
-
-/**
- * `grep -Fq` over a log: substring match on any line.
- * @param {string[]} log
- * @param {string} needle
- * @returns {boolean}
- */
-function has(log, needle) {
-  return log.some((line) => line.includes(needle));
 }
 
 // Verbatim from tests/bin/install-commands.test.js's own CODEX_MUTATION:
@@ -1751,6 +1743,24 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * here failed that gate. `writeUpdateControlOverride` below is how
  * UPDATE-CONTROL-01 answers `inspect --view update-control` without going
  * through that machinery at all.
+ *
+ * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
+ * discipline — `nextPluginList` (tests/bin/lifecycle-fakes.js:145), which
+ * fails closed when a fixture makes more listing calls than it configured —
+ * is NOT in force for these five IDs, and is deliberately not simulated.
+ * `respondToListing` consults `nextPluginList` only when its caller passes
+ * `sequencePluginList` (tests/bin/lifecycle-fakes.js:86-88), and only
+ * tests/bin/probe-fakes.js:40 passes it; the install and uninstall fakes read
+ * the flat `plugin_list.json` this helper writes. Adopting it here would mean
+ * setting that flag in both lifecycle fakes, which every existing case in
+ * tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js
+ * would then have to be reworked for — a fixture change well outside this
+ * slice. What supplies the same guarantee instead: every subcase of the five
+ * IDs is guarded either by an exact `deepEqual` on `codexOperations(c)`
+ * (which an empty log fails immediately) or by `assertNoCodexMutation`, whose
+ * own `log.length > 0` check above rejects an empty log by name. A fake that
+ * never ran is therefore a failure here too — by a different mechanism, not
+ * by the one the sequence counter provides.
  * @param {object} options
  * @param {"install" | "uninstall"} options.fakes
  * @param {Record<string, unknown>} [options.config]
@@ -1966,9 +1976,19 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
         ? FIXTURE_BOTH_MARKETPLACES_PRESENT
         : FIXTURE_LEGACY_MARKETPLACE_PRESENT,
     });
-    const generatedBefore = existsSync(join(c.pkg, "plugins/superpowers"))
-      ? readdirSync(join(c.pkg, "plugins/superpowers"))
-      : null;
+    // Deep and content-bearing, restoring both claims the pre-rewrite version
+    // made with `snapshotTree(sandbox.plugin)` and `snapshotTree(sandbox.cache)`.
+    // The WHOLE package root is snapshotted rather than just
+    // `plugins/superpowers`, because under this fixture that single snapshot
+    // carries both: the generated tree is at `c.pkg/plugins/superpowers`, and
+    // the manager's upstream cache — its own directory in the baseline, via
+    // SUPERPOWERS_CACHE_DIR — defaults to `$root/.cache/upstream`
+    // (scripts/prepare:12, src/commands/prepare.ts:255), which is inside
+    // `c.pkg` here because `runScript` sets no SUPERPOWERS_CACHE_DIR
+    // (tests/bin/lifecycle-fixture.js:296-312). A readdirSync of top-level
+    // names would see neither a change inside `.codex-plugin/` nor a cache
+    // appearing. Same form as PROBE-READONLY-01's own `snapshotTree(c.pkg)`.
+    const pkgBefore = snapshotTree(c.pkg);
     const result = await runScript(c, "uninstall");
     const out = result.stdout + result.stderr;
     assert.equal(result.status, 0, out);
@@ -1978,11 +1998,10 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     );
     assert.match(result.stdout, /uninstall complete/);
     const codex = codexOperations(c);
-    assert.ok(
-      !has(codex, "superpowers@superpowers-wrapper") &&
-        !has(codex, "marketplace remove superpowers-wrapper"),
-      `uninstall must never touch the legacy plugin or marketplace:\n${codex.join("\n")}`,
-    );
+    // "Never touches the legacy plugin or marketplace" is not asserted
+    // separately: the exact `deepEqual` below is a superset of it — no line
+    // naming `superpowers@superpowers-wrapper` or `superpowers-wrapper` can
+    // appear in a log pinned to these exact entries.
     // Exact: ownership inspect (list + marketplace list), then the mutation
     // uninstall issues ONLY for what ownership reported present (both, when
     // managerPresent; neither, when not — src/adapter.ts:702-772,
@@ -2005,15 +2024,10 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
             "plugin marketplace list --json",
           ],
     );
-    // Uninstall never touches the generated tree
+    // Uninstall never touches the generated tree or the cache
     // (scripts/uninstall's own closing note: "local generated artifacts ...
     // were left in place").
-    assert.deepEqual(
-      existsSync(join(c.pkg, "plugins/superpowers"))
-        ? readdirSync(join(c.pkg, "plugins/superpowers"))
-        : null,
-      generatedBefore,
-    );
+    assert.deepEqual(snapshotTree(c.pkg), pkgBefore, "package root");
   }
 });
 
