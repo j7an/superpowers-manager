@@ -12,6 +12,27 @@ Shell line references below are `:N` against the deleted
 `tests/test_install_commands.sh`; port line references are `:N` against
 `tests/bin/install-commands.test.js`.
 
+**STALE POINTER WARNING — port `:N` pointers, as of 2026-08-11.** Commit
+`1abd231` (PR 11.5 slice 4b, Task 6) rewrote
+`tests/bin/install-commands.test.js` from 1472 to 1579 lines and remapped only
+the pointers of the items it converted. Those carry an explicit ``(was
+`:N`)`` note and are current. Every OTHER item's `Port:` pointer still names
+the line it occupied at `7db289d` and no longer resolves. Measured: **80
+pointers across 76 items** name a line whose content has moved; 76 of the 81
+never-updated pointers landed on an assertion-shaped line at `7db289d` and
+only 3 still do at HEAD. What is NOT affected: item numbering, the
+retained/retired accounting, the merge enumeration, and everything
+`tests/bin/migration-inventory.test.js` gates — none of which read a `:N`
+pointer. Item 80 below is a separate, older, deliberately-unremapped pointer
+with its own note. **Before trusting any `Port:` pointer in this file,
+re-derive it** — the assertion text each item quotes is the reliable key, and
+`git diff 7db289d..HEAD -- tests/bin/install-commands.test.js` gives the
+shift. A wholesale remap is deferred to its own task rather than folded into a
+prose fix: outside the mapped region, telling a port pointer from a shell
+pointer needs item-by-item judgement, and a mechanically-offset pointer that
+lands on an unrelated but assertion-shaped line is the exact failure item 80
+records.
+
 ## Counting rules applied
 
 The first six rules are reproduced from `bin-dispatch.md:10-25`, unchanged:
@@ -27,7 +48,7 @@ The first six rules are reproduced from `bin-dispatch.md:10-25`, unchanged:
   exactly like a bare `grep`, is counted the same way — one assertion each.
   Three such bare tests exist here: `:388`, `:399`, and `:415`.
 
-Rules 7 and 8 are reproduced from `uninstall-commands.md:33-49`, unchanged:
+Rules 7 and 8 are reproduced from `uninstall-commands.md:54-70`, unchanged:
 
 - **Rule 7 — assertion helpers count at the call site, not at the
   definition.** This driver factors three assertion helpers out of its
@@ -186,14 +207,56 @@ process boundary. `ctx.adapter` (`CommandContext.adapter`,
 already-typed `AdapterResult` object; there is no serialization step between
 the command module and its adapter for a double to corrupt, so nothing can
 reproduce "the adapter emitted invalid JSON" through this seam. The covering
-case for "an adapter response can be reported as a failure" now lives at the
-production layer that still has a real transport: `tests/unit/adapter.test.js`
-exercises `runAdapter` (the REAL adapter, `src/adapter.ts`) returning a
-non-zero status from a genuinely malformed Codex listing, which is the
-in-process analogue of "the thing downstream of the adapter sees a failure it
-must report, not silently swallow." No port test( call site carries this
-case any longer; `tests/bin/install-commands.test.js`'s static count dropped
-by one for it (32 → 30, shared with item 107-111's retirement below).
+cases for "an adapter response can be reported as a failure" now live at the
+production layer that still has a real transport — `tests/unit/adapter.test.js`,
+which drives `runAdapter` (the REAL adapter, `src/adapter.ts`) against a
+genuinely unparseable Codex listing. Named explicitly, as Task 6's brief
+requires, rather than described:
+
+- **"the fingerprint view rejects an invalid-UTF-8 plugin listing"**
+  (`tests/unit/adapter.test.js:421-437`) — asserts `envelope.ok === false`,
+  `error.code === "inspect-failed"`, and the exact message
+  `cannot parse output of '<codex> plugin list --json'`.
+- **"the ownership view rejects an invalid-UTF-8 plugin listing"**
+  (`tests/unit/adapter.test.js:442-458`) — the same three claims for the
+  ownership view, whose fail-open would otherwise be silent.
+- **"install rejects an invalid-UTF-8 marketplace listing without mutating"**
+  (`tests/unit/adapter.test.js:464-485`) — `error.code === "install-failed"`,
+  the parse diagnostic for `plugin marketplace list --json`, and
+  `deepStrictEqual(await sandbox.commands(), ["plugin marketplace list
+  --json"])`, i.e. no mutation followed the unparseable read.
+
+Together these are the in-process analogue of "the thing downstream of the
+adapter sees a failure it must report, not silently swallow", with the parse
+failure occurring at the one boundary that still has a real transport. Note
+that the shell's own diagnostic literal, `invalid adapter response`, exists in
+exactly one place in the product — `scripts/core/validate-adapter-response.py:279`,
+a shell-only artefact — so the retired subject has no in-process producer to
+cover. No port `test(`
+call site carries this case any longer; `tests/bin/install-commands.test.js`'s
+static count dropped by one for it (32 → 30, shared with item 107-111's
+retirement below).
+
+**There are exactly TWO Class-2 retirements, not three — recorded here so
+slice 4c does not go looking for a missing third.** Task 6's brief predicted
+three transport-fault cases. Two exist: this one and "Scenario 8b — malformed
+fingerprint inspection output" below. The transport-fault lever is a fixture
+config that makes the FAKE ADAPTER PROCESS write a bare `{` to stdout, and the
+whole fixture schema offers exactly two — `updateControl: "malformed"`
+(`tests/bin/install-fakes.js:222-226`) and `fingerprintInspect: "malformed"`
+(`tests/bin/install-fakes.js:273-277`). Those are also the only two
+`process.stdout.write("{")` sites anywhere under `tests/bin/`.
+`tests/bin/lifecycle-config.js:38-57` pins the enum surface that can reach
+them: `updateControl` accepts `managed`, `unsupported`, `malformed`, `failure`,
+`managed-then-unsupported`; `fingerprintInspect` accepts `ok` and `malformed`.
+The uninstall driver has no such lever at all — its malformed-evidence cases
+write malformed *files*, not malformed adapter transport
+(`tests/bin/lifecycle-config.js:75`). The brief's third was almost certainly
+`updateControl: "failure"` ("Failed update-control inspection exits exactly 1",
+items 25-27 below), which emits a well-formed `ok: false` envelope
+(`tests/bin/install-fakes.js:227-241`) rather than a transport fault, and was
+therefore CONVERTED rather than retired — the correct disposition. Nothing was
+missed.
 
 22. Install does not succeed (`:357-362`). **No port counterpart — gap,
     accepted above.**
@@ -292,9 +355,10 @@ because the adapter's build operation issues no Codex command at all — is now
 44/50's Codex-mutation claim is dropped as a SEPARATE assertion: there is no
 `codex.log` at all in-process (nothing here spawns a Codex fake), and the
 double never reaching `install` structurally means the adapter's own
-unconditional `codex plugin add` (`src/adapter.ts:650-656`) was impossible to
-reach either — the same fact items 43/49 and 44/50 both named is now proven
-once, not twice.
+unconditional `codex plugin add` (`src/adapter.ts:668-673`, the
+`["plugin", "add", PLUGIN_ID]` mutation at `:671`) was impossible to reach
+either — the same fact items 43/49 and 44/50 both named is now proven once,
+not twice.
 
 39. Install rejects the `legacy` identity state (`:438-441`). Port: within
     `:547-608` (helper body, was `:410`).
@@ -371,7 +435,7 @@ no residue. `assertTmpEmpty(c)` inspects one case's own TMPDIR, because
 at both call sites: it still catches a leak in the scenario that makes it, but
 no longer sweeps up the scenarios that ran before it. This is an unavoidable
 consequence of per-case isolation, not an oversight; it mirrors the identical
-narrowing recorded at `uninstall-commands.md:157-170`.
+narrowing recorded at `uninstall-commands.md:316-329`.
 
 ### Scenario 1b — a current manager is reconciled, not skipped (`:514-532`)
 
@@ -432,9 +496,12 @@ narrowing recorded at `uninstall-commands.md:157-170`.
     **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
     re-anchored scenario 3b onto `codex.log`: the adapter-log negative and
     its `nonEmpty` guard were both deleted, subsumed into the
-    `assertNoCodexMutation` call item 81 cites. `:947` is assertion-shaped
-    at HEAD but is an unrelated `assertOrder`, so it reads as valid and is
-    not. Re-deriving the claim is a re-disposition, not a pointer fix.
+    `assertNoCodexMutation` call item 81 cites. `:947` reads as valid and is
+    not: at the time this note was written it landed on an unrelated
+    `assertOrder`, and at HEAD (after Task 6) it lands on the closing `);` of
+    the "no call named install reached the double" guard in the fresh-gate
+    case — a different unrelated site. Re-deriving the claim is a
+    re-disposition, not a pointer fix.
 81. No Codex mutation (`:600-602`). Port: `:1066`. **Divergence:** the shell
     wrapped the helper in `[ ! -s "$log" ] ||`, so an empty Codex log
     satisfied the scenario. The port drops that escape hatch —
@@ -660,7 +727,7 @@ the defect this migration exists to eliminate.
 `assert` calls inside `prepareGeneratedTree` (`:212`, `:219`, `:223`) and
 `seedInstalledCurrent` (`:123`) verify that the fixture reached the state the
 shell inherited. They are claims about the harness, not about the subject,
-and follow `uninstall-commands.md:51-61`'s treatment of `command -v`
+and follow `uninstall-commands.md:72-82`'s treatment of `command -v`
 resolution.
 
 ## Port-only assertions (outside the 1:1 mapping)
@@ -880,7 +947,7 @@ which catches a leaked workspace or a sidecar dropped beside it. They do
 **not** assert that the adapter created no temporary files at all. That is
 narrower than the brief assumed, it is narrower again than the per-case
 narrowing already recorded at `:256-264`, and forward pointers are carried at
-both items. Identical in mechanism to `uninstall-commands.md:473-485`.
+both items. Identical in mechanism to `uninstall-commands.md:564-576`.
 
 **Row 8 — predicted RED at the brief's cases 26 and 27 (c27 and c28); observed
 RED only in c28, and at a positive rather than a negative.** Dropping the
@@ -1136,8 +1203,8 @@ truncation `reset` performed is load-bearing and not decorative.
   static sites produce 30 runtime cases. The `for legacy_state in legacy
   both` loop at `:426` is still expanded into two explicit call sites
   (`:950`, `:959`) sharing one helper.
-- Reconciliation: **119 of 124** shell items retain a port counterpart; the
-  remaining **5** are retired at the gap, each recorded at its own entry
+- Reconciliation: **116 of 124** shell items retain a port counterpart; the
+  remaining **8** are retired at the gap, each recorded at its own entry
   above with its reasoning rather than renumbered away — items 22-24
   ("Malformed update-control output exits exactly 1") and items 107-111
   ("Scenario 8b — malformed fingerprint inspection output"). Both retired
@@ -1149,16 +1216,31 @@ truncation `reset` performed is load-bearing and not decorative.
   item's own entry states plainly that it has no port counterpart, rather
   than being silently dropped from the list.
 
-  Of the 119 that survive, the mapping is **not** 1:1 throughout. 104 items
-  map onto a port assertion of their own; the remaining 15 share 7, across
-  seven merges recorded inline. Two are status merges — items 22/23 and
-  25/26 each collapse onto one `assert.equal(status, 1)`, since `=== 1`
-  implies `!== 0` (item 22/23's merge is now moot, retired with its case;
-  item 25/26's survives). Five are rule-9 ordering guards — items 58-59,
+  Of the 116 that survive, the mapping is **not** 1:1 throughout. **103**
+  items map onto a port assertion of their own; the remaining **13 share 6**,
+  across six merges recorded inline. One is a status merge — items 25/26
+  collapse onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`.
+  (Items 22/23 were a seventh merge of exactly that kind before Task 6. Both
+  numbers are retired with their case, so that merge leaves the count
+  entirely rather than staying in it as a moot entry — the arithmetic here is
+  over surviving items only.) Five are rule-9 ordering guards — items 58-59,
   66-67, 69-70, 75-76, and 112-114 — each collapsing onto one `assertOrder`
   call, which asserts every one of those ordering claims plus the presence
   of each needle. Two orderings differ from the shell: items 71-73 and items
   62-64 assert the positive claim before the negatives that depend on it.
+
+  **How to reproduce these three figures**, since the gate does not read this
+  prose and an earlier revision of this paragraph was wrong by three: retired
+  = the items whose entry says "No port counterpart" (22, 23, 24, 107, 108,
+  109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
+  merges enumerated in the previous paragraph (25/26 plus the five rule-9
+  guards = **13** items over **6** merges), so own = 116 − 13 = **103**.
+  Items that share only a static line because the port loops over a literal
+  tuple (2-5 at one `assert.ok`, 7-8, 9-11) are **not** merges — counting
+  rule 4 makes each iteration its own assertion — and are counted in the 103.
+  So are the three SUBSUMED items (44, 50, 85), which are retained because
+  the claim survives inside a sibling item's structural assertion, not
+  because each has a private line; the SUBSUMED note below is the detail.
 
   Several items changed **channel**, not **behaviour** — a distinction
   worth stating explicitly, per Task 6's own instruction, because a reader

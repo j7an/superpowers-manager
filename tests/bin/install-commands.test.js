@@ -574,7 +574,7 @@ async function assertLegacyIdentityStops(c, identityState) {
   // there is no codex.log at all in-process, since nothing here spawns a
   // Codex fake -- but it is subsumed: the double never reaching "install"
   // means the adapter's own unconditional `codex plugin add`
-  // (src/adapter.ts:650-656) was structurally impossible to reach either.
+  // (src/adapter.ts:671) was structurally impossible to reach either.
   assert.ok(
     adapter.calls.some((call) => call.join(" ") === "inspect --view ownership"),
     "adapter never inspected ownership, so 'no build or install' would pass vacuously",
@@ -1408,7 +1408,7 @@ void describe("install commands", { concurrency: true }, () => {
     // its claim. The shell fixture made the FAKE adapter print
     // "fingerprint inspection failed in adapter fixture" and exit 99, so :695's
     // `out.includes("fingerprint inspection")` matched the fixture's own stderr
-    // line — tests/migration-inventory/install-commands.md:704-714 records this
+    // line — tests/migration-inventory/install-commands.md:771-781 records this
     // as item 104: it proves the string appears, not that the subject produced
     // it.
     //

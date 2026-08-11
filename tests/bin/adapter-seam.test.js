@@ -1,10 +1,17 @@
 // @ts-check
-// Two gates, plus the four cases that keep them from going vacuous. Without
-// them, the 9 literal readLog(c.adapterLog) reader sites in the SEAM_SOURCES
-// files, and the 30 cases that declare a seamDependency, go vacuous when slice
-// 4 removes the seam, in exactly the way five cli-parity assertions did in
-// slice 3.4 — silently, with the suite still green. Both numbers are counted
-// from the tree; the count case below re-derives the 30 on every run.
+// Two gates, plus the four cases that keep them from going vacuous. PRESENT
+// STATE, as of PR 11.5 slice 4b Task 6 (2026-08-10): the residue these gates
+// exist to find is ZERO — no literal readLog(c.adapterLog) reader site and no
+// seamDependency declaration is left in the SEAM_SOURCES files, and every
+// SEAM_DEPENDENT entry is { intercept: 0, log: 0 }. Both numbers are still
+// counted from the tree, so the count case below re-derives that 0 on every
+// run and will re-derive whatever nonzero value a future declaration
+// reintroduces.
+//
+// HISTORY, which is why the gates were written: before Task 6 there were 9
+// reader sites and 30 declaring cases, and both would have gone vacuous when
+// slice 4 removed the seam, in exactly the way five cli-parity assertions did
+// in slice 3.4 — silently, with the suite still green.
 //
 // The two gates are "every script with seam-dependent cases still exists" and
 // "no adapter-log reader is left unclassified". The other four cases exist

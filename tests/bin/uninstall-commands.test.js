@@ -161,7 +161,7 @@ function assertNoRemoves(log) {
  * How many ownership inspections reached Codex.
  *
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
- * then one `codex plugin marketplace list --json` (src/adapter.ts:842-873).
+ * then one `codex plugin marketplace list --json` (src/adapter.ts:871, :883).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
  * --json` does not contain it as a substring, and nothing else scripts/uninstall
  * runs issues either listing.
@@ -562,26 +562,26 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
-    // `plugin list --json` and one `plugin marketplace list --json`
-    // (src/adapter.ts:855-873); `ownershipInspections` (below) already counts
-    // the former. The adapter uninstall op itself issues no listing, only the
-    // two removes asserted at :277-281 further down, so :268-271's presence
-    // and exact-count claims collapse into `ownershipInspections(codex) === 2`
-    // -- the same pattern `assertAdapterUninstallRan` already names elsewhere
-    // in this file.
+    // `plugin list --json` (src/adapter.ts:871) and one
+    // `plugin marketplace list --json` (:883); `ownershipInspections` (below)
+    // already counts the former. The adapter uninstall op itself issues no
+    // listing, only the two removes asserted at :277-281 further down, so
+    // :268-270's presence and exactly-twice claims collapse into
+    // `ownershipInspections(codex) === 2`. :271's EXACTLY-ONCE claim does NOT
+    // survive that collapse -- see the note at the call below; it is a drop,
+    // recorded at uninstall-commands.md item 28.
     //
     // :288-289, "adapter uninstall must receive booleans, not provider names",
-    // is DROPPED rather than re-anchored: it has no Codex footprint (Codex
-    // never sees the adapter's own argv), and it is redundant with the
-    // assertions that remain. `uninstallCase()`'s presence booleans are always
-    // typed `boolean` (src/commands/uninstall.ts's `presenceFlag`), so the
-    // only way a provider name could reach the adapter's argv is a defect the
-    // REAL adapter already rejects closed, before any Codex call
-    // (src/adapter.ts:710-715, "--plugin-present must be true or false") --
-    // which would make `result.status` non-zero and the two Codex removes
-    // below absent, contradicting them. A regression that could make this
-    // negative fail without ALSO failing an assertion that remains does not
-    // exist.
+    // is DROPPED because it could never have failed: its needle `other@x` is
+    // defined by no fixture in this repository (it occurs nowhere in tests/,
+    // src/ or scripts/ outside the inventory's own prose about it), so no
+    // behaviour of the subject, correct or defective, could ever have put it
+    // in a log. Two arguments that look like they work here do NOT: (1)
+    // `presenceFlag` (src/commands/uninstall.ts) is not in this case's path --
+    // this is the case that KEEPS `runScript`, so its subject is
+    // scripts/uninstall, not the TypeScript module; (2) "the surrounding
+    // assertions would catch it" is wrong, since a leak emits
+    // `superpowers@superpowers-manager`, which `other@x` never matched.
     const c = uninstallCase({});
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -590,10 +590,10 @@ void describe("uninstall commands", { concurrency: true }, () => {
 
     // :267
     assertTmpEmpty(c);
-    // :268-271, re-anchored: two ownership inspections is the Codex-level
-    // witness that the fresh re-inspect (scripts/uninstall:29) ran, which
-    // happens only once the adapter uninstall op (with both flags true) has
-    // completed.
+    // :268-270, re-anchored: two ownership inspections is the Codex-level
+    // witness that the fresh re-inspect (scripts/uninstall:29) ran. :271's
+    // exactly-once claim is DROPPED here: a duplicate op adds `plugin remove`
+    // lines `has()` does not count, and leaves this count at 2 regardless.
     assertAdapterUninstallRan(
       codex,
       "both-present uninstall must reach a completed adapter uninstall",

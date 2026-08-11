@@ -12,6 +12,27 @@ Shell line references below are `:N` against the deleted
 `tests/test_uninstall_commands.sh`; port line references are `:N` against
 `tests/bin/uninstall-commands.test.js`.
 
+**STALE POINTER WARNING — port `:N` pointers, as of 2026-08-11.** Commit
+`1abd231` (PR 11.5 slice 4b, Task 6) rewrote
+`tests/bin/uninstall-commands.test.js` from 841 to 913 lines and remapped only
+the pointers of the items it converted. Those carry an explicit ``(was
+`:N`)`` note and are current. Every OTHER item's `Port:` pointer still names
+the line it occupied at `7db289d` and no longer resolves. Measured: **74
+pointers across 63 items** name a line whose content has moved; 68 of the 74
+landed on an assertion-shaped line at `7db289d` and only 18 still do at HEAD
+(and at least one of those 18 lands on an unrelated assertion, which is worse
+than landing on nothing: item 45's `:623` describes a TMPDIR-emptiness check
+in the plugin-list-fails scenario, but `:623` at HEAD is the
+`has(codex, "plugin marketplace remove superpowers-manager")` membership check
+in the both-present scenario). What is NOT affected: item
+numbering, the retained/dropped accounting, the merge enumeration, and
+everything `tests/bin/migration-inventory.test.js` gates — none of which read
+a `:N` pointer. **Before trusting any `Port:` pointer in this file, re-derive
+it** — the assertion text each item quotes is the reliable key, and
+`git diff 7db289d..HEAD -- tests/bin/uninstall-commands.test.js` gives the
+shift. A wholesale remap is deferred to its own task rather than folded into a
+prose fix. The same warning applies to `install-commands.md`.
+
 ## Counting rules applied
 
 The first six rules are reproduced from `bin-dispatch.md:10-25`, unchanged:
@@ -147,6 +168,29 @@ Codex is never reached by construction, so `codex.log` would be empty
 regardless of channel — which is why item 11 has no re-anchor option and
 instead moves to the double's own recorded calls.
 
+**What item 12 proves after the conversion, and where the other half is
+covered.** The case now *supplies* the exact message it then asserts (the
+double builds `` required Codex command not found: <path> `` and the port
+greps for `error: ` + that string), so item 12 proves RELAY — that the
+command surfaces the adapter's diagnostic verbatim on its output — and no
+longer proves PRODUCTION, that the real adapter emits that text for a missing
+binary. That half is covered independently, and was verified against the tree
+rather than assumed:
+
+- `tests/unit/adapter.test.js:532-546` asserts that `mapCodexLaunchFailure`
+  throws a failure whose `message` equals
+  `` `required Codex command not found: ${codexBin}` `` for both `ENOENT` and
+  `EACCES`; that literal is at `:542`.
+- `tests/test_adapter_protocol.sh` runs the REAL adapter with
+  `SUPERPOWERS_CODEX` pointing at a missing binary and requires the exact
+  stderr line `error: required Codex command not found: $missing_codex` at
+  `:672` (the `install` operation), `:692` (`inspect --view fingerprint`) and
+  `:722` (inside the `for missing_case in ownership uninstall` loop, so both
+  the ownership inspect this case uses and the uninstall op).
+
+Neither is a `dist/` consumer, so neither is reachable by mutating `dist/`;
+they are the production-side witnesses this case stopped being.
+
 10. Uninstall fails when the Codex binary is missing (`:220-225`). Port:
     `:451` (was `:385`).
 11. The adapter log holds the exact line `inspect --view ownership`
@@ -196,35 +240,73 @@ instead moves to the double's own recorded calls.
 
 ### Both present: both removed, plugin before marketplace (`:261-289`)
 
-**Channel changed for items 25-30; item 35 DROPPED (Task 6, D4, 2026-08-10).**
-Unlike the two cases above, `runScript` is KEPT here (this case still
-dispatches through the shell and the real fake-adapter/fake-Codex pipeline):
-every surviving live claim in this section has a genuine Codex-level
-footprint, so items 25-30 re-anchor onto `codex.log` rather than converting
-to a double. `inspect --view ownership` issues one `plugin list --json` and
-one `plugin marketplace list --json` (`src/adapter.ts:855-873`); the adapter
-uninstall op itself issues no listing, only the two removes items 31-32
-already witness — so items 25-28's presence-and-exact-count claims collapse
-into `ownershipInspections(codex) === 2`, the same `assertAdapterUninstallRan`
+**Channel changed for items 25-27 and 29-30; items 28 and 35 DROPPED (Task 6,
+D4, 2026-08-10).** Unlike the two cases above, `runScript` is KEPT here (this
+case still dispatches through the shell and the real fake-adapter/fake-Codex
+pipeline): every surviving live claim in this section has a genuine
+Codex-level footprint, so those claims re-anchor onto `codex.log` rather than
+converting to a double. `inspect --view ownership` issues one
+`plugin list --json` (`src/adapter.ts:871`) and then one
+`plugin marketplace list --json` (`src/adapter.ts:883`), both inside
+`:868-885`; the adapter uninstall op itself issues no listing, only the two
+removes items 31-32 already witness — so items 25-27's
+presence-and-exactly-twice claims collapse into
+`ownershipInspections(codex) === 2`, the same `assertAdapterUninstallRan`
 pattern this file already uses for the legacy-only, plugin-absent, both-
 absent, remove-noop, and verify-after-drift cases. Items 29-30's bracketing
 claim re-anchors onto the SAME two `plugin list --json` occurrences,
 `firstIndex`/`lastIndex` against the plugin remove rather than against the
 adapter's own `uninstall --plugin-present …` line.
 
+**Item 28 is a DROP, not part of that collapse.** Items 25-28 were presented
+together as "collapsing into" one assertion; that is accurate for 25, 26 and
+27 and false for 28. Item 28's claim is that the adapter uninstall op appears
+**exactly once**. Nothing surviving in the port observes it: a duplicated
+adapter uninstall would emit duplicate `plugin remove` lines, which the
+`has()` checks are membership tests and do not count, and
+`ownershipInspections(codex)` would still be 2 because `scripts/uninstall`
+brackets the op between exactly two ownership inspections either way. The
+loss is narrow — items 25-27 and 31-33 still pin that the op ran, reached
+Codex, and did so in order — but it is a loss, and recording it as a collapse
+would overstate what survives. Restoring it would mean counting
+`plugin remove superpowers@superpowers-manager` occurrences in `codex.log`
+rather than testing membership; that is a strictly stronger assertion than
+the shell had at this call site and is not proposed here.
+
 Item 35 ("the adapter log never names `other@x`") is DROPPED outright, not
-re-anchored: it never had a Codex footprint (Codex never sees the adapter's
-own argv, which is exactly why its own entry below already called it
-inherited-inert), and it is now redundant with the assertions that survive.
-`presenceFlag` (`src/commands/uninstall.ts`) always produces a `boolean`, so
-the only way a provider name could reach the adapter's argv is a defect the
-REAL adapter already rejects closed, before any Codex call
-(`src/adapter.ts:710-715`, `"--plugin-present must be true or false"`) —
-which would make `result.status` non-zero and the two Codex removes items
-31-32 assert absent, contradicting them. No regression can turn item 35 red
-without also turning an assertion that survives red; see the port's own
-comment (`tests/bin/uninstall-commands.test.js:573-584`) for the argument in
-full.
+re-anchored, and the reason is stronger than "redundant": **it could never
+have failed.** The needle `other@x` is defined by no fixture anywhere in this
+repository — it occurs nowhere in `tests/`, `src/` or `scripts/` outside this
+inventory's own prose about it — so no behaviour of the subject, correct or
+defective, could ever have put it in the adapter log. The assertion was a
+tautology; dropping it loses exactly zero coverage. Two weaker arguments were
+recorded here previously and are **wrong on their own terms**, kept only so
+they are not reinstated:
+
+- `presenceFlag` (`src/commands/uninstall.ts`) is not in this case's path.
+  This is the one uninstall case that keeps `runScript`, so its subject is
+  `scripts/uninstall`, not the TypeScript command module. The real adapter's
+  own closed rejection (`src/adapter.ts:710-715`, `"--plugin-present must be
+  true or false"`) is a true fact about the adapter, but it is not what makes
+  item 35 inert here.
+- "A defect would already fail the surrounding assertions" is beside the
+  point, and slightly wrong: a presence-flag leak would put
+  `superpowers@superpowers-manager` in the argv, not `other@x`, so item 35
+  would not have caught it either.
+
+See the port's own comment in the "both present" case
+(`tests/bin/uninstall-commands.test.js`) for the same argument at the call
+site.
+
+**Not reachable by `dist/` mutation, and why that is fine here.** This case
+keeps `runScript`, so its subject is `scripts/uninstall` plus the real
+adapter and fake Codex — mutating `dist/**/*.js` cannot make it fail, and a
+mutation sample taken against `dist/` will show it surviving every mutation.
+That is the intended consequence of the hybrid disposition, not an absence of
+coverage: while the shell is still the dispatched subject, a case that
+exercises the shell is exactly what this file should keep. The other Task 6
+conversion outside `dist/`'s reach is "Missing Codex"; see that section for
+where its production-side witnesses live.
 
 24. The invocation TMPDIR is left empty — no leaked workspace or adapter
     sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:592` (was
@@ -255,10 +337,19 @@ design than the shell had; it is not proposed here.
     (the verify-after re-query) reachable at all.
 27. `inspect --view ownership` appears exactly twice (`:270`, bare `[ ... ]`
     per rule 6). Port: within `:597-600` (was `:517`), same call as items
-    25-26.
+    25-26. This is the one exact-count claim of the four that the re-anchor
+    does preserve — `ownershipInspections(codex) === 2` is a count, on the
+    Codex-level witness of the same inspection. Item 28's is not; see its
+    entry.
 28. `uninstall --plugin-present true --marketplace-present true` appears
-    exactly once (`:271`, bare `[ ... ]`). Port: within `:597-600` (was
-    `:521`), same call.
+    exactly once (`:271`, bare `[ ... ]`). **No port counterpart as of Task 6
+    (PR 11.5 slice 4b, 2026-08-10) — DROPPED, not collapsed with items 25-27.**
+    `ownershipInspections(codex) === 2` is insensitive to a duplicated adapter
+    uninstall op (the duplicate emits extra `plugin remove` lines, which the
+    surviving checks test for membership rather than count, and leaves the
+    ownership-inspection count at 2), so no surviving assertion witnesses the
+    exactly-once claim. See the section note above for why this is recorded as
+    a narrow deliberate loss rather than papered over as part of the collapse.
 29. The first ownership inspect precedes the adapter uninstall (`:275`).
     Port: within `:607-620` (was `:537`), now
     `firstIndex(codex, "plugin list --json") < firstIndex(codex, "plugin remove …")`.
@@ -846,14 +937,37 @@ rows O1-O3.
   slice 4b, 2026-08-10): three cases converted in place (selection-independent
   recovery and missing-Codex to an injected double; both-present re-anchored
   onto `codex.log`, still via `runScript`), so the static count neither grew
-  nor shrank. They carry 82 of the 83 shell assertions 1:1-mapped, with no
-  merges, plus 20 port-only assertions; item 35 (below) has no port
-  counterpart as of that same task.
-- Reconciliation: 1:1 for 82 of the 83 shell items; item 35 ("the adapter log
-  never names `other@x`") is DROPPED as of Task 6, its number retained and
-  its entry marked rather than renumbered away — see its entry and the "Both
-  present" section note for the argument that nothing it caught was not
-  already caught by a surviving assertion. Two orderings differ from the
+  nor shrank. They carry **81 of the 83** shell assertions, **75 of them
+  1:1** and **6 sharing 2** merged assertions, plus 20 port-only assertions;
+  items 28 and 35 (below) have no port counterpart as of that same task.
+- Reconciliation: **81 of the 83** shell items retain a port counterpart;
+  **2 are dropped** — item 35 ("the adapter log never names `other@x`") and
+  item 28 ("the adapter uninstall op appears exactly once"). Both keep their
+  numbers and are marked at their own entries rather than renumbered away.
+  Item 35 is dropped because it was inert: its needle is defined by no
+  fixture in this repository, so nothing the subject could do would have
+  turned it red. Item 28 is a genuine, narrow loss: the re-anchor that
+  collapses items 25-27 does not observe an exactly-once count. Both
+  arguments are at the entries and in the "Both present" section note.
+
+  The remaining 81 are **not** 1:1 throughout, contrary to what this bullet
+  claimed before Task 6: **75 items map onto a port assertion of their own**
+  and **6 share 2**, across the two merges this task created and recorded
+  inline —
+
+  - items **3, 4, 5** collapse onto the single `assert.deepEqual` over the
+    double's recorded call sequence at `:386`; and
+  - items **25, 26, 27** collapse onto the single `assertAdapterUninstallRan`
+    call at `:597-600` (`ownershipInspections(codex) === 2`).
+
+  **How to reproduce these figures**, since the gate does not read this
+  prose: dropped = the items whose entry says "No port counterpart" (28 and
+  35 — **2**), so retained = 83 − 2 = **81**; shared = the two merges above
+  (**6** items over **2** merges), so own = 81 − 6 = **75**. Items 29 and 30
+  are *not* a merge despite the ranges they cite: they are two distinct
+  `assert.ok` calls inside the same re-anchored block.
+
+  Two orderings differ from the
   shell — items 36/38 and items 79-82 — because the port asserts the
   positive claim before the negative one that depends on it; the set of
   assertions is otherwise unchanged. Three further fidelity notes are
@@ -865,4 +979,4 @@ rows O1-O3.
   double, or adapter-log read → codex.log re-anchor) without changing what
   they assert — each section's own note says which. None of this changes the
   count. The 20 port-only assertions are strictly additive and are excluded
-  from the 83/83 arithmetic above.
+  from the 83-item arithmetic above.

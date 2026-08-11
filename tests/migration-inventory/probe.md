@@ -20,8 +20,8 @@ Source read in full (631 lines). Ported to `tests/baseline/probe.test.js`,
 - **A bare `run_*` with no status test is not counted.** `:390`, `:437`,
   `:454`, `:462`, `:490-493`, `:508`, `:556`, `:562`, `:568`, `:579`, `:590`,
   `:598`, `:607`, and `:616` all take the form `output=$(run_probe)`, leaving
-  the exit status to `set -e`. `install-commands.md:68`,
-  `bin-dispatch.md:314-318`, and `uninstall-commands.md:355` all treat that as
+  the exit status to `set -e`. `install-commands.md:89`,
+  `bin-dispatch.md:314-318`, and `uninstall-commands.md:446` all treat that as
   implicit. Same treatment here: the port's explicit
   `assert.equal(result.status, 0, result.stderr)` and
   `assert.equal(result.stderr, "")` on every successful run are additive, but
@@ -615,7 +615,7 @@ string in `tests/**/*.js`, because a spawn assumption expressed as
 | Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — the no-registered-handler backstop | Re-pointed to `prepare`: `probe` now has a registered handler, so overriding its dispatch entry no longer reaches the backstop |
 | Executable spawn assumption | `tests/bin/units.test.js:150-169` ("buildSpawn: POSIX executes the script directly") | `buildSpawn` path construction and argv passthrough, re-pointed to `prepare` at this slice. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned. Slice 3.4 replaced the `prepare` literal with a `vehicleCommand(DISPATCH)` derivation, which is why the block no longer names a command |
 | Historical prose | `src/commands/probe.ts` (7 sites), `src/effective-selection.ts:70`, `:91` | Provenance citations into the shell original, which still exists, so every citation still resolves |
-| Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:679`, `:693`, `selection-state.md:237` | The migration record of what the shell did |
+| Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:746`, `:760`, `selection-state.md:237` | The migration record of what the shell did |
 | Historical prose | `tests/unit/commands-probe.test.js:70`, `:77`, `:106`; `tests/baseline/probe.test.js:4`, `:155`, `:234`, `:398`; `tests/bin/probe-fakes.js:4`; `tests/baseline/selection-location.test.js:26`, `:788` | Comments citing the shell original as the source of a ported contract |
 | Historical prose | `AGENTS.md:46` | "Keep `scripts/probe` read-only" still binds the surviving script, and `PROBE-READONLY-01` now holds the same property for the in-process command |
 

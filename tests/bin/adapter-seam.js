@@ -72,7 +72,13 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //     intercept (6): two ("malformed update-control output exits exactly 1",
 //                "malformed fingerprint output is rejected by response
 //                validation") are RETIRED, not converted — see
-//                tests/migration-inventory/install-commands.md items 26-27.
+//                tests/migration-inventory/install-commands.md items 22-24 and
+//                107-111, the two retirement notes that own them. (Items 26-27,
+//                cited here before, belong to the FAILED update-control case,
+//                which converted.) These two are the ONLY transport-fault
+//                retirements: the whole fixture schema offers exactly two
+//                levers that make the fake adapter process emit non-JSON —
+//                install-fakes.js:222 and :273 — so there is no third.
 //                Both fixture configs forced the FAKE ADAPTER PROCESS to write
 //                a bare `{` to stdout: a transport-level, non-JSON-parseable
 //                fault. `ctx.adapter` is an in-process function call that
@@ -129,10 +135,14 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //                its claims re-anchor onto codex.log (ownership inspection has
 //                a Codex-level footprint via `plugin list --json`), and the
 //                one claim that does not ("adapter uninstall must receive
-//                booleans, not provider names") is dropped as redundant with
-//                the assertions that remain — see
-//                tests/migration-inventory/uninstall-commands.md's entry for
-//                the full argument.
+//                booleans, not provider names") is dropped because it was
+//                inert — its needle `other@x` is defined by no fixture in this
+//                repository, so no behaviour of the subject could ever have
+//                produced it. One further claim in that case, the
+//                exactly-once count on the adapter uninstall op, is a genuine
+//                (narrow) DROP rather than a re-anchor — see
+//                tests/migration-inventory/uninstall-commands.md items 28 and
+//                35 for both arguments.
 //   prepare:
 //     log (1):   "prepare is capability-independent" converts: the double
 //                answers only `build` and fails the case by exhaustion on any
@@ -210,9 +220,12 @@ export const SEAM_SOURCE_FILES = [
  * real entry is legitimately zero: with the real map, `total === 0` skips
  * every script before the existence check ever runs, and there is no longer
  * a nonzero entry to inject a missing script against. The parameter is never
- * used to feed a real gate call a non-default map — both call sites in
- * adapter-seam.test.js's other proofs, and the one in "every script with
- * seam-dependent cases still exists", all take the default.
+ * used to feed a real gate call a non-default map: adapter-seam.test.js holds
+ * exactly TWO call sites, and the only non-default one is the injection proof
+ * itself, "the gate fails when a depended-on script is gone"
+ * (adapter-seam.test.js:108). The other — "every script with seam-dependent
+ * cases still exists" (adapter-seam.test.js:79), the real gate — takes the
+ * default.
  * @param {string} root repository root
  * @param {(path: string) => boolean} exists
  * @param {Record<string, { intercept: number, log: number }>} [dependent]
