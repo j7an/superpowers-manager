@@ -40,6 +40,7 @@
     "tests/unit/commands-prepare.test.js",
     "tests/unit/commands-probe.test.js",
     "tests/unit/commands-track-latest.test.js",
+    "tests/unit/commands-uninstall.test.js",
     "tests/unit/commands-unpin.test.js",
     "tests/unit/ctx-adapter-provenance.test.js",
     "tests/unit/domain.test.js",

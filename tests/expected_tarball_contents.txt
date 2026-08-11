@@ -19,6 +19,7 @@ dist/commands/pin.js
 dist/commands/prepare.js
 dist/commands/probe.js
 dist/commands/track-latest.js
+dist/commands/uninstall.js
 dist/commands/unpin.js
 dist/domain/fingerprint.js
 dist/domain/refs.js
