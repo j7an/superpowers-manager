@@ -19,6 +19,7 @@
     "tests/bin/assert-matcher-gate.test.js",
     "tests/bin/bin-dispatch.test.js",
     "tests/bin/bootstrap.test.js",
+    "tests/bin/command-context.test.js",
     "tests/bin/container-contract.test.js",
     "tests/bin/install-commands.test.js",
     "tests/bin/lifecycle-fakes.test.js",

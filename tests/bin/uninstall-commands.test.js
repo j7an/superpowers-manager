@@ -32,8 +32,22 @@ import {
   readLog,
   runScript,
 } from "./lifecycle-fixture.js";
+import { caseContext, recordingAdapter } from "./command-context.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
+// Dynamic, matching tests/unit/commands-uninstall.test.js's own convention:
+// these tests run against the BUILT output. Task 6 calls `runUninstall`
+// in-process, directly, with an injected recording adapter for the seam-
+// dependent cases below -- the shell is still what
+// bin/superpowers-manager.js dispatches to; these specific cases just no
+// longer go through it. See tests/bin/command-context.js.
+const { runUninstall } = await import(
+  new URL("../../dist/commands/uninstall.js", import.meta.url).href
+);
+const { successResult, failureResult } = await import(
+  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+);
 
 // Fixture JSON, verbatim from tests/test_uninstall_commands.sh:101-108.
 const PLUGIN_PRESENT =
@@ -298,15 +312,23 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("selection-independent recovery: malformed selection, no git, unsupported update control (:162-190)", async () => {
-    const c = uninstallCase({
-      config: { updateControl: "unsupported" },
-      adapterSeam: "intercept",
-      // Seam-dependent on the interception AND on the log: :185-189 below reads
-      // adapter.log for an update-control inspection, and that operation issues
-      // no Codex command at all (src/adapter.ts:757-759), so its absence has no
-      // Codex-level witness either.
-      seamDependency: { reason: "intercept", script: "uninstall" },
-    });
+    // Converted (Task 6, D4): calls `runUninstall` in-process. The old
+    // `updateControl: "unsupported"` fixture config is gone along with it:
+    // `runUninstall` (src/commands/uninstall.ts) never calls gatherProbe and
+    // structurally never issues an `inspect --view update-control` call at
+    // all -- unlike install/update, it does not route through gatherProbe --
+    // so the property this case names ("uninstall must not inspect update
+    // control") is now a fact about which operations the double answers
+    // (ownership and uninstall only), not about a fixture value that used to
+    // make a fake adapter refuse to answer that call.
+    //
+    // The malformed saved selection and the git-less PATH are kept for the
+    // same reason the case is named "selection-independent": uninstall reads
+    // neither (gatherUninstall never calls computeEffectiveSelection or runs
+    // git), so proving it succeeds despite both is still meaningful
+    // documentation even though the in-process double below does not route
+    // through either mechanism.
+    const c = uninstallCase({});
     // :168-170 — a malformed saved selection under the case-local
     // XDG_CONFIG_HOME the fixture already exports.
     const selectionDir = join(c.home, ".config", "superpowers-manager");
@@ -322,22 +344,56 @@ void describe("uninstall commands", { concurrency: true }, () => {
     symlinkSync(realPython3(), join(noGit, "python3"));
     symlinkSync(realpathSync(process.execPath), join(noGit, "node"));
 
-    const result = await runScript(c, "uninstall", { path: noGit });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-
-    const codex = readLog(c.codexLog);
-    const adapter = readLog(c.adapterLog);
-    // :183-184
-    assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
-    assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
-    // :185-189 — non-vacuous because the two assertions above prove the
-    // adapter ran (only the adapter issues those Codex calls).
-    assert.ok(
-      !has(adapter, "inspect --view update-control"),
-      "uninstall must not inspect update control",
+    let ownershipCalls = 0;
+    const adapter = recordingAdapter((argv) => {
+      const joined = argv.join(" ");
+      if (joined === "inspect --view ownership") {
+        ownershipCalls += 1;
+        // First call is pre-removal (both present); second is verify-after,
+        // post-removal (src/commands/uninstall.ts's own second inspection) --
+        // both flipped to false is what lets `verifyUninstalledResources`
+        // succeed.
+        const present = ownershipCalls === 1;
+        return successResult(
+          "inspect",
+          {
+            view: "ownership",
+            resources: { plugin: present, marketplace: present },
+            legacy_resources: { plugin: false, marketplace: false },
+            identity_state: present ? "manager" : "neither",
+          },
+          [],
+        );
+      }
+      if (
+        joined === "uninstall --plugin-present true --marketplace-present true"
+      ) {
+        return successResult("uninstall", {}, []);
+      }
+      return undefined;
+    });
+    const { ctx, stdout, stderr } = caseContext(c, {
+      adapter,
+      env: { PATH: noGit },
+    });
+    const status = await runUninstall([], ctx);
+    const out = stdout() + stderr();
+    assert.equal(status, 0, out);
+    // :183-184, :185-189 combined, structural: the double answers exactly
+    // ownership, then uninstall (with both flags true, which is what issues
+    // the two Codex removes on the real adapter), then ownership again --
+    // and nothing else, including "inspect --view update-control".
+    assert.deepEqual(
+      adapter.calls.map((call) => call.join(" ")),
+      [
+        "inspect --view ownership",
+        "uninstall --plugin-present true --marketplace-present true",
+        "inspect --view ownership",
+      ],
+      "uninstall must not inspect update control -- structurally, it never issues that call at all",
     );
     // :190
-    assert.ok(result.stdout.includes("uninstall complete"), result.stdout);
+    assert.ok(out.includes("uninstall complete"), out);
   });
 
   void test("missing python3: clear requirement error, no Codex calls (:192-212)", async () => {
@@ -369,26 +425,41 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("missing Codex: controlled ownership-inspect failure (:214-232)", async () => {
-    // Seam-dependent with no re-anchor available: the case removes Codex, so
-    // codex.log is empty by construction and cannot witness anything. :226's
-    // adapter-log read is the only evidence that the subject reached the
-    // ownership inspection before failing.
-    const c = uninstallCase({
-      seamDependency: { reason: "log", script: "uninstall" },
-    });
+    // Converted (Task 6, D4): calls `runUninstall` in-process, with the
+    // double answering the ownership inspect exactly as the real adapter's
+    // requireCodex check does for a missing binary (src/adapter.ts:267-273,
+    // ":180") -- a well-formed ok:false envelope, not a transport-level
+    // fault. There is no re-anchor onto codex.log available for this case
+    // either way: Codex is never reached by construction, so codex.log would
+    // be empty regardless of channel.
+    const c = uninstallCase({});
     const missingCodex = join(c.dir, "missing-codex");
-    const result = await runScript(c, "uninstall", {
-      env: { SUPERPOWERS_CODEX: missingCodex },
+    const adapter = recordingAdapter((argv) => {
+      assert.equal(argv.join(" "), "inspect --view ownership");
+      return failureResult(
+        "inspect",
+        "command-not-found",
+        `required Codex command not found: ${missingCodex}`,
+        [],
+        [],
+      );
     });
-    const out = result.stdout + result.stderr;
+    const { ctx, stdout, stderr } = caseContext(c, { adapter });
+    const status = await runUninstall([], ctx);
+    const out = stdout() + stderr();
     // :220-225
     assert.notEqual(
-      result.status,
+      status,
       0,
       "expected uninstall to fail when Codex is missing",
     );
-    // :226
-    assert.ok(readLog(c.adapterLog).includes("inspect --view ownership"));
+    // :226, structural: ownership was inspected -- it is the only call the
+    // double answers before exhaustion would fail the case on anything else.
+    assert.deepEqual(
+      adapter.calls.map((call) => call.join(" ")),
+      ["inspect --view ownership"],
+      "ownership must be the only call made before the missing-Codex failure stops uninstall",
+    );
     // :227
     assert.ok(
       hasLine(out, `error: required Codex command not found: ${missingCodex}`),
@@ -488,58 +559,63 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("both present: both removed, plugin before marketplace (:261-289)", async () => {
-    // Seam-dependent, and deliberately left reading adapter.log rather than
-    // half-re-anchored. Most of this case's adapter claims do have Codex
-    // footprints, but :288-289 does not: "adapter uninstall must receive
-    // booleans, not provider names" is a claim about the adapter's OWN argv,
-    // and Codex never sees it. Re-expressing it over codex.log would assert
-    // something weaker (at best, that the run succeeded), so the case declares
-    // instead and slice 4 re-bases the whole block at once.
-    const c = uninstallCase({
-      seamDependency: { reason: "log", script: "uninstall" },
-    });
+    // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
+    // `runScript` -- unlike the two cases above, every live claim here has a
+    // Codex-level footprint. `inspect --view ownership` issues one
+    // `plugin list --json` and one `plugin marketplace list --json`
+    // (src/adapter.ts:855-873); `ownershipInspections` (below) already counts
+    // the former. The adapter uninstall op itself issues no listing, only the
+    // two removes asserted at :277-281 further down, so :268-271's presence
+    // and exact-count claims collapse into `ownershipInspections(codex) === 2`
+    // -- the same pattern `assertAdapterUninstallRan` already names elsewhere
+    // in this file.
+    //
+    // :288-289, "adapter uninstall must receive booleans, not provider names",
+    // is DROPPED rather than re-anchored: it has no Codex footprint (Codex
+    // never sees the adapter's own argv), and it is redundant with the
+    // assertions that remain. `uninstallCase()`'s presence booleans are always
+    // typed `boolean` (src/commands/uninstall.ts's `presenceFlag`), so the
+    // only way a provider name could reach the adapter's argv is a defect the
+    // REAL adapter already rejects closed, before any Codex call
+    // (src/adapter.ts:710-715, "--plugin-present must be true or false") --
+    // which would make `result.status` non-zero and the two Codex removes
+    // below absent, contradicting them. A regression that could make this
+    // negative fail without ALSO failing an assertion that remains does not
+    // exist.
+    const c = uninstallCase({});
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
 
-    const adapter = readLog(c.adapterLog);
     const codex = readLog(c.codexLog);
 
     // :267
     assertTmpEmpty(c);
-    // :268-269 presence
-    assert.ok(adapter.includes("inspect --view ownership"));
+    // :268-271, re-anchored: two ownership inspections is the Codex-level
+    // witness that the fresh re-inspect (scripts/uninstall:29) ran, which
+    // happens only once the adapter uninstall op (with both flags true) has
+    // completed.
+    assertAdapterUninstallRan(
+      codex,
+      "both-present uninstall must reach a completed adapter uninstall",
+    );
+    // :272-276, re-anchored onto the SAME two ownership-inspect occurrences:
+    // the first `plugin list --json` must precede the plugin remove, and the
+    // plugin remove must precede the second `plugin list --json` -- the
+    // Codex-level form of "ownership inspect brackets the adapter uninstall".
+    // firstIndex and lastIndex are distinct here on purpose, mirroring the
+    // shell's `head -n1` and `tail -n1`.
+    const firstInspect = firstIndex(codex, "plugin list --json");
+    const pluginRemoveAt = firstIndex(
+      codex,
+      "plugin remove superpowers@superpowers-manager",
+    );
+    const lastInspect = lastIndex(codex, "plugin list --json");
     assert.ok(
-      adapter.includes(
-        "uninstall --plugin-present true --marketplace-present true",
-      ),
-    );
-    // :270-271 exact counts
-    assert.equal(
-      adapter.filter((l) => l === "inspect --view ownership").length,
-      2,
-    );
-    assert.equal(
-      adapter.filter(
-        (l) =>
-          l === "uninstall --plugin-present true --marketplace-present true",
-      ).length,
-      1,
-    );
-    // :272-276 ownership inspect brackets the adapter uninstall. firstIndex and
-    // lastIndex are distinct here on purpose — the shell used head -n1 then
-    // tail -n1.
-    const firstInspect = firstIndex(adapter, "inspect --view ownership");
-    const uninstallAt = firstIndex(
-      adapter,
-      "uninstall --plugin-present true --marketplace-present true",
-    );
-    const lastInspect = lastIndex(adapter, "inspect --view ownership");
-    assert.ok(
-      firstInspect < uninstallAt,
+      firstInspect < pluginRemoveAt,
       "ownership inspect must precede adapter uninstall",
     );
     assert.ok(
-      uninstallAt < lastInspect,
+      pluginRemoveAt < lastInspect,
       "ownership re-inspect must follow adapter uninstall",
     );
     // :277-281 both removes, in order
@@ -553,14 +629,10 @@ void describe("uninstall commands", { concurrency: true }, () => {
       ],
       "plugin remove must precede marketplace remove",
     );
-    // :282-289 negatives
+    // :282-285
     assert.ok(
       !has(codex, "openai-curated"),
       "uninstall must never name openai-curated",
-    );
-    assert.ok(
-      !has(adapter, "other@x"),
-      "adapter uninstall must receive booleans, not provider names",
     );
   });
 

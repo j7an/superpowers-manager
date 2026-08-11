@@ -79,15 +79,40 @@ port reads `ROOT` rather than the copied package root.
 Malformed saved selection, no `git` on PATH, and `unsupported` update control
 must not prevent owned-resource removal and verification.
 
+**Channel changed (Task 6, D4, 2026-08-10).** Calls `runUninstall`
+in-process through an injected recording adapter
+(`tests/bin/command-context.js`) rather than spawning `scripts/uninstall`
+through the SPW_ADAPTER seam in `intercept` mode. The `updateControl:
+"unsupported"` fixture config is gone with it: `runUninstall`
+(`src/commands/uninstall.ts`) never calls `gatherProbe` and structurally
+never issues an `inspect --view update-control` call at all — unlike
+install/update, it does not route through probe — so item 5's claim is now a
+fact about which operations the double answers (ownership and uninstall
+only) rather than about a fixture value that used to make a fake adapter
+refuse to answer that call. The malformed selection.json and the git-less
+PATH are KEPT in the port (`tests/bin/uninstall-commands.test.js:332-345`)
+for the property the case is named for — "selection-independent" — even
+though the in-process double does not route through either mechanism; see
+the port's own comment for why that is still meaningful documentation.
+
 3. The plugin remove reaches Codex: `plugin remove
-   superpowers@superpowers-manager` (`:183`). Port: `:331`.
+   superpowers@superpowers-manager` (`:183`). Port: `:386` (was `:331`), now
+   the double's own recorded argv
+   `uninstall --plugin-present true --marketplace-present true` — the same
+   fact, since the adapter's `plugin remove` on the real Codex side is issued
+   only when the adapter uninstall op it receives carries `--plugin-present
+   true` (`src/adapter.ts:725-731`).
 4. The marketplace remove reaches Codex: `plugin marketplace remove
-   superpowers-manager` (`:184`). Port: `:332`.
+   superpowers-manager` (`:184`). Port: `:386` (was `:332`), same reasoning
+   as item 3, for `--marketplace-present true`.
 5. Update control is never inspected — the adapter log holds no
-   `inspect --view update-control` (`:185-189`). Port: `:335`. Non-vacuous
-   because items 3-4 prove the adapter ran: only the adapter issues those
-   Codex calls.
-6. Stdout contains `uninstall complete` (`:190`). Port: `:340`.
+   `inspect --view update-control` (`:185-189`). Port: `:386` (was `:335`),
+   now `assert.deepEqual(adapter.calls.map(...), [ownership, uninstall,
+   ownership])` — structurally stronger than the log negative it replaces:
+   `runUninstall` cannot make the call at all, and the double would fail the
+   case by exhaustion if it somehow tried. Non-vacuous for the same reason as
+   before: items 3-4 are witnessed by the same exact-sequence assertion.
+6. Stdout contains `uninstall complete` (`:190`). Port: `:396` (was `:340`).
 
 ### Missing python3: clear requirement error, no Codex calls (`:192-212`)
 
@@ -110,16 +135,31 @@ anywhere else — every other scenario set it in the shell too.
 
 ### Missing Codex is a controlled ownership-inspect failure (`:214-232`)
 
+**Channel changed (Task 6, D4, 2026-08-10).** Calls `runUninstall`
+in-process. The double answers the ownership inspect with the same
+well-formed `failureResult` (`command-not-found`,
+`` required Codex command not found: <path> ``) the real adapter's
+`requireCodex` check produces for a missing binary
+(`src/adapter.ts:267-273`, `:180`) — not a transport-level fault, so it is
+reachable through a double exactly as it was through the fixture. There was
+never a re-anchor onto `codex.log` available for this case either way —
+Codex is never reached by construction, so `codex.log` would be empty
+regardless of channel — which is why item 11 has no re-anchor option and
+instead moves to the double's own recorded calls.
+
 10. Uninstall fails when the Codex binary is missing (`:220-225`). Port:
-    `:385`.
+    `:451` (was `:385`).
 11. The adapter log holds the exact line `inspect --view ownership`
-    (`:226`). Port: `:391`.
+    (`:226`). Port: `:458-462` (was `:391`), now
+    `adapter.calls.map((c) => c.join(" ")) === ["inspect --view ownership"]`
+    — stronger than the original: it also proves this was the ONLY call
+    made, where the log read proved only that this line appeared somewhere.
 12. Output holds the exact line `error: required Codex command not found:
-    <path>` (`:227`). Port: `:393`.
+    <path>` (`:227`). Port: `:464-467` (was `:393`).
 13. Output does **not** contain `error: invalid adapter response:` — a
     missing Codex must stay a controlled inspect failure (`:228-232`). Port:
-    `:399`. Non-vacuous because item 12 proves the output carries the
-    adapter's diagnostics.
+    within `:427-472` (was `:399`). Non-vacuous because item 12 proves the
+    output carries the adapter's diagnostics.
 
 ### Legacy-only state is never mutated and leaves guidance (`:234-242`)
 
@@ -156,10 +196,40 @@ anywhere else — every other scenario set it in the shell too.
 
 ### Both present: both removed, plugin before marketplace (`:261-289`)
 
+**Channel changed for items 25-30; item 35 DROPPED (Task 6, D4, 2026-08-10).**
+Unlike the two cases above, `runScript` is KEPT here (this case still
+dispatches through the shell and the real fake-adapter/fake-Codex pipeline):
+every surviving live claim in this section has a genuine Codex-level
+footprint, so items 25-30 re-anchor onto `codex.log` rather than converting
+to a double. `inspect --view ownership` issues one `plugin list --json` and
+one `plugin marketplace list --json` (`src/adapter.ts:855-873`); the adapter
+uninstall op itself issues no listing, only the two removes items 31-32
+already witness — so items 25-28's presence-and-exact-count claims collapse
+into `ownershipInspections(codex) === 2`, the same `assertAdapterUninstallRan`
+pattern this file already uses for the legacy-only, plugin-absent, both-
+absent, remove-noop, and verify-after-drift cases. Items 29-30's bracketing
+claim re-anchors onto the SAME two `plugin list --json` occurrences,
+`firstIndex`/`lastIndex` against the plugin remove rather than against the
+adapter's own `uninstall --plugin-present …` line.
+
+Item 35 ("the adapter log never names `other@x`") is DROPPED outright, not
+re-anchored: it never had a Codex footprint (Codex never sees the adapter's
+own argv, which is exactly why its own entry below already called it
+inherited-inert), and it is now redundant with the assertions that survive.
+`presenceFlag` (`src/commands/uninstall.ts`) always produces a `boolean`, so
+the only way a provider name could reach the adapter's argv is a defect the
+REAL adapter already rejects closed, before any Codex call
+(`src/adapter.ts:710-715`, `"--plugin-present must be true or false"`) —
+which would make `result.status` non-zero and the two Codex removes items
+31-32 assert absent, contradicting them. No regression can turn item 35 red
+without also turning an assertion that survives red; see the port's own
+comment (`tests/bin/uninstall-commands.test.js:573-584`) for the argument in
+full.
+
 24. The invocation TMPDIR is left empty — no leaked workspace or adapter
-    sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:508`, helper at
-    `:236`. **Scope narrowed twice — see the note below, and the further
-    narrowing the mutation proof's row 6a records.**
+    sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:592` (was
+    `:508`), helper at `:236`. **Scope narrowed twice — see the note below,
+    and the further narrowing the mutation proof's row 6a records.**
 
 **TMPDIR scope narrowing (items 24 and 45).** The shell created
 `$uninstall_tmp` once at `:20-21` and never cleared it in `reset`
@@ -176,36 +246,54 @@ remove — not an oversight. Restoring the wider claim would mean asserting an
 empty TMPDIR in all 18 cases, which is a different (and strictly stronger)
 design than the shell had; it is not proposed here.
 25. The adapter log holds the exact line `inspect --view ownership`
-    (`:268`). Port: `:510`.
+    (`:268`). Port: within `:597-600` (was `:510`), now
+    `ownershipInspections(codex) === 2` via `assertAdapterUninstallRan`.
 26. The adapter log holds the exact line `uninstall --plugin-present true
-    --marketplace-present true` (`:269`). Port: `:511`.
+    --marketplace-present true` (`:269`). Port: within `:597-600` (was
+    `:511`), same re-anchored assertion as item 25: the adapter uninstall op
+    with both flags true is what makes the SECOND ownership inspection
+    (the verify-after re-query) reachable at all.
 27. `inspect --view ownership` appears exactly twice (`:270`, bare `[ ... ]`
-    per rule 6). Port: `:517`.
+    per rule 6). Port: within `:597-600` (was `:517`), same call as items
+    25-26.
 28. `uninstall --plugin-present true --marketplace-present true` appears
-    exactly once (`:271`, bare `[ ... ]`). Port: `:521`.
+    exactly once (`:271`, bare `[ ... ]`). Port: within `:597-600` (was
+    `:521`), same call.
 29. The first ownership inspect precedes the adapter uninstall (`:275`).
-    Port: `:537`.
+    Port: within `:607-620` (was `:537`), now
+    `firstIndex(codex, "plugin list --json") < firstIndex(codex, "plugin remove …")`.
 30. The adapter uninstall precedes the last ownership inspect (`:276`).
-    Port: `:541`. Items 29-30 use `firstIndex` and `lastIndex` respectively,
-    mirroring the shell's `head -n1` and `tail -n1`.
-31. The plugin remove reaches Codex (`:277`). Port: `:546`.
-32. The marketplace remove reaches Codex (`:278`). Port: `:547`.
+    Port: within `:607-620` (was `:541`). Items 29-30 still use `firstIndex`
+    and `lastIndex` respectively, mirroring the shell's `head -n1` and
+    `tail -n1`, now against `codex.log` rather than `adapter.log`.
+31. The plugin remove reaches Codex (`:277`). Port: `:623` (was `:546`).
+32. The marketplace remove reaches Codex (`:278`). Port: `:624` (was `:547`).
 33. The plugin remove precedes the marketplace remove (`:281`). Port:
-    `:548`, via `assertOrder`.
-34. The Codex log never names `openai-curated` (`:282-285`). Port: `:557`.
-    Non-vacuous and reachable: `openai-curated` is a real marketplace in
+    `:625-631` (was `:548`), via `assertOrder`.
+34. The Codex log never names `openai-curated` (`:282-285`). Port: `:633-636`
+    (was `:557`). Non-vacuous and reachable: `openai-curated` is a real
+    marketplace in
     `MARKETPLACE_PRESENT`, so an over-broad marketplace removal would log
     `plugin marketplace remove openai-curated` and turn this red.
 35. The adapter log never names `other@x` — the adapter uninstall receives
-    booleans, not provider names (`:286-289`). Port: `:561`.
-    **Inherited-inert; adjudicated below.**
+    booleans, not provider names (`:286-289`). **No port counterpart as of
+    Task 6 (PR 11.5 slice 4b, 2026-08-10) — DROPPED, not retired at a gap in
+    the Class-2 sense install-commands.md items 22-24/107-111 use: this item
+    was already adjudicated inherited-inert below BEFORE Task 6 touched it,
+    and Task 6's removal is that same adjudication acted on rather than a new
+    finding. See the section note above ("Both present...") for the full
+    argument that no regression can turn it red without also turning
+    something that survives red.**
 
-**Item 35 adjudication: inherited-inert.** The port is faithful — the shell
-assertion at `:286-289` was equally inert, and porting it unchanged was the
-right call — but it is not a live check, and recording it as merely
-"non-vacuous" would be false. It gets the same two-part treatment this file's
-adjudication section applies to every contested item, because that is what
-this is.
+**Item 35 adjudication: inherited-inert (pre-Task-6 finding; the item is now
+dropped, not merely inert — see its entry above).** The port was faithful
+before Task 6 — the shell assertion at `:286-289` was equally inert, and
+porting it unchanged was the right call at the time — but it was not a live
+check, and recording it as merely "non-vacuous" would have been false. It got
+the same two-part treatment this file's adjudication section applies to
+every contested item, because that is what this was. Retained below as the
+record of that finding, which is what motivated Task 6 to drop the item
+rather than re-anchor it.
 
 *(1) Why the violation is unreachable here.* The needle `other@x` appears in no
 fixture in the port. The only plugin ids any fixture defines are
@@ -231,9 +319,13 @@ which names a string a real fixture supplies and is therefore live.
   assertion would need to name one of the fixture ids to catch it — as written
   it would still pass.
 
-Decision: **kept, unchanged, and flagged**. The formal mutation-proof pass in
-the next task carries the adjudication of record for boundary guards; this
-entry exists so no reader mistakes item 35 for a live check in the meantime.
+Decision at the time: **kept, unchanged, and flagged**. The formal
+mutation-proof pass in the next task (below) carried the adjudication of
+record for boundary guards. **Superseded by Task 6 (2026-08-10): dropped.**
+An inherited-inert guard that stays flagged forever is exactly the kind of
+residue this file's own adjudication convention exists to surface for a
+later task to act on, and Task 6 is that later task acting on it — see the
+"Both present" section note above.
 
 ### Plugin absent, marketplace present (`:291-302`)
 
@@ -489,6 +581,21 @@ A guard that stays GREEN under an injection that genuinely violates it is not
 proven — it is a boundary guard, and it is adjudicated below rather than
 "proved" by breaking its own text.
 
+**Historical as of Task 6 (PR 11.5 slice 4b, 2026-08-10).** Everything below
+this line describes the tree as it stood before Task 6 converted three
+seam-dependent cases (selection-independent recovery, missing-Codex, and
+both-present) and dropped item 35. The 18/18 GREEN figure below is unchanged
+in count — Task 6 converted cases in place rather than adding or removing a
+`test(` call site — but rows D4, 2, 3, and D3, which target the
+SPW_ADAPTER-intercepted fixture surface those three cases used
+(`install-fakes.js`/`uninstall-fakes.js` `runAdapter` interception, the
+`updateControl` config, and the log lines items 25-28 used to name), no
+longer describe a mechanism those cases route through. Retained because it
+is the record of the mutation-testing pass that certified the PRE-Task-6
+port, and later readers auditing that certification need to know what it
+certified and when. Re-running this exact matrix against the current tree is
+not proposed here.
+
 Every mutation was applied to a tracked file, run with
 `node --test tests/bin/uninstall-commands.test.js`, observed, then restored by
 **editing the file back** (never `git checkout --`). `git diff --stat` was
@@ -735,16 +842,27 @@ rows O1-O3.
 - Port (`tests/bin/uninstall-commands.test.js`): 18 static `test(` call sites,
   one per shell scenario (17 `reset` call sites plus the source-guard block at
   `:9-16`, which precedes the first `reset`). No call site is data-driven, so
-  the 18 static sites produce 18 runtime cases. They carry 83 assertions
-  1:1-mapped to the shell, with no merges and no drops, plus 20 port-only
-  assertions.
-- Reconciliation: 1:1 for all 83 shell items. Two orderings differ from the
+  the 18 static sites produce 18 runtime cases. Unchanged by Task 6 (PR 11.5
+  slice 4b, 2026-08-10): three cases converted in place (selection-independent
+  recovery and missing-Codex to an injected double; both-present re-anchored
+  onto `codex.log`, still via `runScript`), so the static count neither grew
+  nor shrank. They carry 82 of the 83 shell assertions 1:1-mapped, with no
+  merges, plus 20 port-only assertions; item 35 (below) has no port
+  counterpart as of that same task.
+- Reconciliation: 1:1 for 82 of the 83 shell items; item 35 ("the adapter log
+  never names `other@x`") is DROPPED as of Task 6, its number retained and
+  its entry marked rather than renumbered away — see its entry and the "Both
+  present" section note for the argument that nothing it caught was not
+  already caught by a surviving assertion. Two orderings differ from the
   shell — items 36/38 and items 79-82 — because the port asserts the
   positive claim before the negative one that depends on it; the set of
-  assertions is unchanged. Three fidelity notes are recorded inline rather
-  than left implicit: item 35 is **inherited-inert** (faithful to the shell,
-  but unable to fail against any current fixture — full adjudication at its
-  entry), items 24 and 45 carry a **narrowed TMPDIR scope** forced by per-case
-  isolation, and the missing-python3 scenario runs with `SPW_ADAPTER` set where
-  the shell left it unset. None changes the count. The 20 port-only assertions
-  are strictly additive and are excluded from the 83/83 arithmetic above.
+  assertions is otherwise unchanged. Three further fidelity notes are
+  recorded inline rather than left implicit: items 24 and 45 carry a
+  **narrowed TMPDIR scope** forced by per-case isolation, the missing-python3
+  scenario runs with `SPW_ADAPTER` set where the shell left it unset, and
+  several items in the selection-independent-recovery, missing-Codex, and
+  both-present sections changed **channel** (adapter-log read → injected
+  double, or adapter-log read → codex.log re-anchor) without changing what
+  they assert — each section's own note says which. None of this changes the
+  count. The 20 port-only assertions are strictly additive and are excluded
+  from the 83/83 arithmetic above.

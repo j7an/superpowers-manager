@@ -85,9 +85,22 @@ void test("the gate fails when a depended-on script is gone", () => {
   // reintroduces the bug commit 0d9a53c fixed: the gate would probe a
   // double-slash spelling the predicate never matches, and would silently
   // stop observing its own failure mode.
+  //
+  // A throwaway, nonzero third argument — NOT the real, gated SEAM_DEPENDENT,
+  // which PR 11.5 slice 4b Task 6 discharged to zero everywhere — is required
+  // as of that discharge: `assertSeamScriptsPresent`'s own `total === 0 ->
+  // continue` skip would otherwise pass "install" over before the existence
+  // check below ever runs, since the real map's install entry is now
+  // `{ intercept: 0, log: 0 }`. This proves the same throw path the real gate
+  // uses the moment any script's count is legitimately nonzero again; it
+  // asserts nothing about the real registry's current value, which the count
+  // case above already pins.
   const gone = join(ROOT, "scripts", "install");
   assert.throws(
-    () => assertSeamScriptsPresent(ROOT, (p) => p !== gone && existsSync(p)),
+    () =>
+      assertSeamScriptsPresent(ROOT, (p) => p !== gone && existsSync(p), {
+        install: { intercept: 1, log: 0 },
+      }),
     /scripts\/install is gone, but \d+ of its cases still depend on the SPW_ADAPTER seam/,
   );
 });
