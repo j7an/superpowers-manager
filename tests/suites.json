@@ -43,6 +43,7 @@
     "tests/unit/commands-track-latest.test.js",
     "tests/unit/commands-uninstall.test.js",
     "tests/unit/commands-unpin.test.js",
+    "tests/unit/commands-update.test.js",
     "tests/unit/ctx-adapter-provenance.test.js",
     "tests/unit/domain.test.js",
     "tests/unit/effective-selection.test.js",
