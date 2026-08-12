@@ -448,8 +448,10 @@ or "counterpart" claim is quoted inline in that item.
   cases appear in the file: 26-28 (`:272-287`), 29-30 (`:289-301`), 31-32
   (`:303-312`), 33-34 (`:314-325`) and 35-36 (`:327-338`), summing
   3+2+2+2+2 = 11. Case by case: items 26-28 are the test that resolves item
-  14's divergence callout — see the amendment there — and have a
-  counterpart in `tests/test_marketplace_reconcile.sh:304-316`; items 29-30
+  14's divergence callout — see the amendment there — of which items 26 and
+  27 have a counterpart in `tests/test_marketplace_reconcile.sh:304-316`
+  while item 28 has only a partial one at `:313-314` (see its own entry);
+  items 29-30
   have no counterpart in either driver (see item 29 for why the shell
   cannot construct the trigger); items 31-32 pin message text for the same
   failed-inspection case item 25 already covered by `ok` alone; items 33-34
