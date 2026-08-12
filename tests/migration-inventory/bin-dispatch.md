@@ -187,8 +187,17 @@ Port-only region — additive JS assertions that map no shell item, numbered
     and recorded as port-only item 59. The "is still `update`" half is not
     observable through this fixture once nothing dispatches; it is asserted
     end to end by `tests/baseline/cli-parity.test.js`'s
-    `CLI-MODE-DEFAULT-01`, which compares a bare invocation against an
-    explicit `update` invocation in the same sandbox.
+    `CLI-MODE-DEFAULT-01` — specifically by that case's *second* half, which
+    runs a bare invocation against a recording `codex` and pins the exact
+    ten-call `codex` invocation sequence `update` produces. Its first half,
+    which compares a bare invocation against an explicit `update` invocation in
+    the same sandbox, does not carry that claim on its own and must not be cited
+    for it: under a silent `exit 0` `codex` a bare invocation that fell through
+    to `probe` produces the same status, the same empty stdout and the same
+    `error: cannot parse output of 'codex plugin list --json'`, so the two runs
+    agree either way. That is measured, not supposed — a mutant flipping
+    `parseArgs`' bare default to `probe` survived an earlier form of the case
+    that had only the comparison.
 
 Each of items 7-14 is one `grep -Fqx` in the shell. The port's per-case
 `assert.equal(result.status, 0)` had no shell counterpart (the shell
@@ -444,14 +453,19 @@ in shape, and has not been for several slices — read each entry, not this
 preamble, for what it asserts:
 
 - Most entries are an `assert.equal(result.status, 0)` the shell left implicit.
-- Item 1 is a structural array-length guard with no shell analogue at all.
+- Item 1 *was* a structural array-length guard with no shell analogue at all.
+  It is `Dropped` as of slice 4b's flip and asserts nothing: the `ROUTING_CASES`
+  table it measured is gone.
 - Entries added for the in-process flips assert `result.log` is empty — a
   property the shell could not express, since it always dispatched and logged.
-- Items 41-43 and 47-50 assert stderr text or a non-zero status: the in-process
-  runtime backstop, `patchDispatch`'s no-op rejection, and `prepare`'s
-  conditional `python3` requirement have no `status === 0` form.
-- Items 3 and 20 assert nothing at all. They are records of an assertion
-  removed, kept numbered so the removal is visible rather than silent.
+- Items 47-50 assert stderr text or a non-zero status: `prepare`'s conditional
+  `python3` requirement has no `status === 0` form. Items 41-43 did the same for
+  the in-process runtime backstop and `patchDispatch`'s no-op rejection until
+  slice 4b's flip `Dropped` all three; they assert nothing now.
+- Eleven entries — items 1, 3, 7, 8, 9, 12, 15, 20, 41, 42 and 43 — assert
+  nothing at all. Each is a record of an assertion removed, kept numbered so the
+  removal is visible rather than silent. Items 3 and 20 were `Dropped` before
+  slice 4b; the other nine at its flip.
 - Items 53, 54, and 56 assert against the sentinel *file* the `gitSentinel`
   option creates, not against `result.status`/`result.log`/`result.stderr`:
   item 53 is `existsSync` on the path, item 54 is
@@ -899,14 +913,19 @@ preamble, for what it asserts:
   slice 3.4, and `ROUTING_CASES` and `NO_GIT_CASES` emptied at slice 4b's flip
   (Task 8) when `install`, `uninstall` and `update` went in-process — each
   deleted outright rather than left iterating over `[]`, which reports success
-  without asserting anything. That same task removed four call sites and added
-  four: out went the exit-code-propagation case (item 29), the env-passthrough
-  case (items 30-31), the missing-script case (items 52-53), the
-  unregistered-handler backstop and the `dispatchOverride` no-op case
-  (port-only items 41-43); in came `install`, `uninstall` and bare-invocation
-  in-process routing cases (port-only items 57-59) and `uninstall` with `git`
-  absent (port-only items 60-61); net 37 − 6 + 3 = 34, the three
-  loop-expansions having been runtime cases rather than call sites. The matrix
+  without asserting anything. That same task removed **seven** static call sites
+  and added **four**. Out went, in file order: the `ROUTING_CASES` loop header;
+  the unregistered-handler backstop (port-only items 41-42); the
+  `dispatchOverride` no-op case (port-only item 43); the exit-code-propagation
+  case (item 29); the env-passthrough case (items 30-31); the `NO_GIT_CASES`
+  loop header; and the missing-script case (items 52-53). In came `install`,
+  `uninstall` and bare-invocation in-process routing cases (port-only items
+  57-59) and `uninstall` with `git` absent (port-only items 60-61). Net
+  37 − 7 + 4 = 34. The two deleted loop headers were each one static site but
+  more than one runtime case, which is the whole of the difference between the
+  37 static sites before and the 39 runtime cases before: `ROUTING_CASES` held
+  three entries (one site, three cases, +2) and `NO_GIT_CASES` held one (one
+  site, one case, +0). The matrix
   row 13 regression case PR 11.5 slice 4a Task 7 added survives, its five
   assert calls being port-only items 52-56 — one entry per assertion, not one
   per case, matching items 32-34's precedent below. The 34 sites carry

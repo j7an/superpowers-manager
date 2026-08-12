@@ -252,7 +252,7 @@ async function gatherInstallStages(
         // function's first guard (scripts/core/lifecycle.sh:91-94) is what
         // turns a failed inspection into "error: installed manager fingerprint
         // inspection failed after install." verifyInstalledFingerprint's
-        // "call-failed" arm (src/lifecycle.ts:147-156) exists for exactly this
+        // "call-failed" arm (src/lifecycle.ts:148-156) exists for exactly this
         // and is reachable only from here. Returning failed() instead reported
         // the adapter's own generic diagnostic and dropped the post-install
         // verification claim -- a mutation had already been issued at stage 3,

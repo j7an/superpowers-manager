@@ -7,8 +7,9 @@
 //
 // The base is shared but NOT literally immutable, and has not been since PR
 // 11.5 slice 3.4 flipped `prepare` in-process. No case configures the base --
-// `scripts`, `missingScripts`, and `dispatchOverride` still take a per-case
-// copy -- but the subject under test now writes into it: runPrepare's
+// `scripts` and `missingScripts` still take a per-case copy (:301), and
+// `dispatchOverride`, which used to be the third, went with `patchDispatch` at
+// slice 4b's flip -- but the subject under test now writes into it: runPrepare's
 // gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
 // opens a `.superpowers.prepare.*` workspace there, all at
 // src/commands/prepare.ts:274-281 and all BEFORE computeEffectiveSelection.

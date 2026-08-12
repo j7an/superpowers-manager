@@ -639,23 +639,38 @@ void test("CLI-MODE-VERSION-01 version mode routes through dist", () => {
 // third distinct mode and is exactly equivalent to dispatching `update` with no
 // arguments", which is what the equivalence below asserts literally.
 //
-// Both invocations run in the SAME sandbox so their diagnostics name the same
-// paths; the bare run goes first, and the `update` run second, so a bare
-// invocation that somehow mutated state could only make the two differ, never
-// agree. `writeListingCodex` is deliberately NOT used: with no `codex` able to
-// answer, both runs stop at the very first adapter call, which keeps them cheap
-// and keeps the comparison free of the prepare/clone machinery. That is enough
-// to discriminate — a bare invocation that fell through to `help`, `probe` or a
-// usage error would differ in status, stdout or stderr.
+// Two halves, because no single observable carries both directions of it.
+//
+// Half A — equivalence. Both invocations run in the SAME sandbox so their
+// diagnostics name the same paths; the bare run goes first and the `update` run
+// second, so a bare invocation that somehow mutated state could only make the
+// two differ, never agree. Half A on its own does NOT name the command: under
+// `writeNoopTool`'s silent `exit 0` codex a bare invocation that fell through
+// to `probe` produces status 1, empty stdout and the identical
+// `error: cannot parse output of 'codex plugin list --json'`, so the two runs
+// still agree. That is not a hypothesis — a mutant flipping `parseArgs`' bare
+// default from `update` to `probe` was verified to survive an earlier form of
+// this case that had only half A.
+//
+// Half B — identification. The recorded `codex` invocation sequence, the same
+// discriminator CLI-COMMANDS-01 uses to tell the three lifecycle commands
+// apart, and the only observable left that NAMES the command a bare invocation
+// ran: `update` produces exactly the ten calls below, `probe` three, `install`
+// seven, `uninstall` four, and `--help`, `--version` and a usage error none.
+// It needs `writeListingCodex` — a `codex` that answers, so the run reaches the
+// end of its command — and therefore a fresh sandbox of its own: a `codex` that
+// answers lets `update` complete its prepare, and a second `update` over the
+// already-prepared tree prints less on stdout than the first, which is exactly
+// the equality half A asserts. Half A stays cheap and unpolluted; half B pays
+// for one real run.
 void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
+  // A local upstream and a 40-hex ref in both halves, for the reason
+  // CLI-COMMANDS-01's `probe` row states: `update` resolves its effective
+  // selection before it ever reaches Codex, and without these it stops at the
+  // sandbox git shim's egress refusal against the packaged default URL rather
+  // than at the adapter.
   withSandbox({ stubScripts: true }, (sandbox) => {
     writeNoopTool(sandbox);
-    // A local upstream and a 40-hex ref, for the reason CLI-COMMANDS-01's
-    // `probe` row states: `update` resolves its effective selection before it
-    // ever reaches Codex, and without these it stops at the sandbox git shim's
-    // egress refusal against the packaged default URL rather than at the
-    // adapter. The comparison would still hold there, but the shared result
-    // would say nothing about `update`.
     const upstream = createReleaseRepo(sandbox);
     const overrides = {
       SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
@@ -678,14 +693,58 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
       },
     );
     // Non-vacuity: two runs that both produced nothing at all would satisfy
-    // the equality above. `update` reaches its own probe and fails closed on
-    // the noop `codex`'s unparseable output, so the shared result is a
-    // specific, non-empty one.
+    // the equality above. Both reach a probe and fail closed on the noop
+    // `codex`'s unparseable output, so the shared result is a specific,
+    // non-empty one.
     assert.equal(bare.status, 1);
+    assert.equal(bare.stdout, "");
     assert.equal(
       bare.stderr,
       "error: cannot parse output of 'codex plugin list --json'\n",
     );
+  });
+
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const upstream = createReleaseRepo(sandbox);
+    writeListingCodex(sandbox);
+    // Restated here rather than shared with CLI-COMMANDS-01's `expectedCodex`.
+    // This case's whole claim is that a bare invocation produces `update`'s
+    // sequence; reading that sequence out of a constant the other case can edit
+    // would let the two drift into agreement on a wrong one.
+    const updateCodex = [
+      "plugin list --json", // update's own probe: fingerprint
+      "plugin list --json", // update's own probe: ownership
+      "plugin marketplace list --json", // update's own probe: ownership
+      "plugin list --json", // install's own probe: fingerprint
+      "plugin list --json", // install's own probe: ownership
+      "plugin marketplace list --json", // install's own probe: ownership
+      "plugin list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // install's fresh gate: ownership
+      "plugin marketplace list --json", // adapter install's marketplace lookup
+      "plugin marketplace add",
+    ];
+    const bare = runCli(sandbox, [], {
+      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+    });
+    assert.equal(bare.error, undefined);
+    assert.equal(bare.signal, null);
+    assert.deepEqual(readDispatchLog(sandbox), []);
+    // The marketplace-add argv carries the sandbox package root, so the
+    // recorded line is trimmed back to its operation, as CLI-COMMANDS-01 does.
+    assert.deepEqual(
+      listingCodexCalls(sandbox).map((line) =>
+        line.startsWith("plugin marketplace add ")
+          ? "plugin marketplace add"
+          : line,
+      ),
+      updateCodex,
+    );
+    // Where the run stopped is the fixture's boundary — the sandbox `codex`
+    // refuses the marketplace mutation — not a claim of this ID. Asserted only
+    // so the sequence above cannot have been produced by some other path.
+    assert.equal(bare.status, 1);
   });
 });
 
@@ -1223,9 +1282,16 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     // real child environment the CLI actually constructs, not against the
     // manager's own inherited process.env.
     //
-    // The ten values are placeholders, never paths this test writes to; the
-    // custom `codex` is the one exception and must be a real executable
-    // because SUPERPOWERS_CODEX is what runAdapter execs.
+    // "Wholesale" is true of the manager's own process but NOT of this witness:
+    // runAdapter's runCommand deletes NODE_OPTIONS and NODE_PATH from the child
+    // environment before execFile (src/adapter.ts:120-122, landed by this
+    // slice's Task 1). The dump below therefore covers those two names as well
+    // and asserts they are ABSENT, so the row's word is qualified by the test
+    // that certifies it rather than quietly contradicted by it. It is also the
+    // only place in the tree where that scrub is observable end to end at the
+    // CLI level — tests/unit/adapter.test.js pins it at the unit level, and the
+    // two surviving shell pins (tests/baseline/ref-resolution.test.js and
+    // tests/baseline/selection-location.test.js) drive scripts/ directly.
     const dumped = join(sandbox.root, "codex-env.json");
     const customCodex = join(sandbox.bin, "custom-codex");
     writeFileSync(
@@ -1234,12 +1300,29 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
         "#!/bin/sh",
         // python3 is a SANDBOX_TOOLS member (tests/baseline/support.js) and is
         // how support.js's own dispatchStub produced this same JSON shape.
-        `exec python3 -c 'import json,os,sys; json.dump({"passthrough": {n: os.environ.get(n) for n in json.loads(sys.argv[1])}, "superpowers_env": {n: v for n, v in os.environ.items() if n.startswith("SUPERPOWERS_")}, "xdg_env": {n: v for n, v in os.environ.items() if n.startswith("XDG_")}, "npm_env": {n: v for n, v in os.environ.items() if n.upper().startswith("NPM_CONFIG_")}, "codex_env": {n: v for n, v in os.environ.items() if n.startswith("CODEX_")}}, open(sys.argv[2], "w"))' ${shQuote(JSON.stringify(PASSTHROUGH_VARIABLES))} ${shQuote(dumped)}`,
+        `exec python3 -c 'import json,os,sys; json.dump({"passthrough": {n: os.environ.get(n) for n in json.loads(sys.argv[1])}, "superpowers_env": {n: v for n, v in os.environ.items() if n.startswith("SUPERPOWERS_")}, "xdg_env": {n: v for n, v in os.environ.items() if n.startswith("XDG_")}, "npm_env": {n: v for n, v in os.environ.items() if n.upper().startswith("NPM_CONFIG_")}, "codex_env": {n: v for n, v in os.environ.items() if n.startswith("CODEX_")}, "node_env": {n: v for n, v in os.environ.items() if n in ("NODE_OPTIONS", "NODE_PATH")}}, open(sys.argv[2], "w"))' ${shQuote(JSON.stringify(PASSTHROUGH_VARIABLES))} ${shQuote(dumped)}`,
         "",
       ].join("\n"),
       "utf8",
     );
     chmodSync(customCodex, 0o755);
+    // Non-vacuity for the two scrubbed names, which is the whole difficulty
+    // with asserting an absence: "absent from the child" says nothing unless
+    // the manager itself had them. NODE_OPTIONS is witnessed by node honouring
+    // it — the preload runs in the manager process and leaves a marker — and
+    // NODE_PATH arrives through the same `overrides` channel as the ten values
+    // whose arrival at the child is asserted below, so the channel is proven to
+    // deliver and the deletion is attributable to runCommand.
+    const preload = join(sandbox.root, "node-preload.cjs");
+    const preloadMarker = join(sandbox.root, "node-preload-marker");
+    // NODE_OPTIONS is split on whitespace by node, so a preload path containing
+    // any would silently become two unusable tokens rather than failing here.
+    assert.equal(/\s/.test(preload), false, "preload path must have no spaces");
+    writeFileSync(
+      preload,
+      `require("node:fs").writeFileSync(${JSON.stringify(preloadMarker)}, "loaded\\n");\n`,
+      "utf8",
+    );
     // SUPERPOWERS_REF and SUPERPOWERS_UPSTREAM_URL are the two values that
     // stopped being free placeholders at slice 4b's flip: `update` resolves its
     // effective selection before its first adapter call, so a non-resolvable
@@ -1268,6 +1351,8 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     try {
       result = runCli(sandbox, ["update"], {
         SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
+        NODE_OPTIONS: `--require ${preload}`,
+        NODE_PATH: join(sandbox.root, "custom-node-path"),
         ...values,
       });
     } finally {
@@ -1285,12 +1370,35 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     // Non-vacuity: the record exists only because the CLI actually spawned the
     // child and handed it an environment.
     assert.equal(existsSync(dumped), true, "the codex child never ran");
+    // `assertCleanResult` was dropped when this ID moved onto the codex child —
+    // the child is an env recorder whose empty output `update` cannot parse, so
+    // a zero status is simply false now. It is re-derived rather than deleted:
+    // where the run stops is the fixture's boundary and not this ID's contract,
+    // but pinning it exactly is what proves the dump above came from the first
+    // adapter view and not from some later, differently-built invocation. The
+    // diagnostic naming SUPERPOWERS_CODEX is a second witness that the override
+    // is the child whose environment was recorded.
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(
+      result.stderr,
+      `error: cannot parse output of '${customCodex} plugin list --json'\n`,
+    );
     const record = JSON.parse(readFileSync(dumped, "utf8"));
     assert.deepEqual(record.passthrough, values);
     assert.deepEqual(record.superpowers_env, values);
     assert.deepEqual(record.xdg_env, {});
     assert.deepEqual(record.npm_env, {});
     assert.deepEqual(record.codex_env, {});
+    // The manager honoured NODE_OPTIONS, so both names were genuinely present
+    // in the environment the child inherited from...
+    assert.equal(
+      existsSync(preloadMarker),
+      true,
+      "NODE_OPTIONS never reached the manager process",
+    );
+    // ...and neither survived runCommand's scrub into the child itself.
+    assert.deepEqual(record.node_env, {});
   });
 });
 

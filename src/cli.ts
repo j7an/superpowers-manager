@@ -56,9 +56,11 @@ export type DispatchMode = "spawn" | "in-process";
 // `buildSpawn`, `discoverShell` and `GIT_BASH_CANDIDATES` were deleted with the
 // last "spawn" entry (slice 4b). This table SURVIVES that deletion — it is not
 // vestigial. It keys `InProcessCommand`, which is what makes an unregistered
-// handler a compile error; `tests/bin/readme-requirements.test.js:54` derives
-// the README's POSIX `sh` column from it; and `tests/bin/dispatch-fixture.js`'s
-// `dispatchOverride` patches a compiled copy of it. Slice 6 deletes it with
+// handler a compile error; `tests/bin/readme-requirements.test.js:65` derives
+// the README's POSIX `sh` column from it, and `tests/baseline/cli-parity.test.js`'s
+// `CLI-PREFLIGHT-01` derives the same column a second way; and
+// `tests/bin/dispatch-fixture.js:119-121` derives `DISPATCH_COMMANDS`, the
+// subcommand list that fixture stubs, from its keys. Slice 6 deletes it with
 // `DispatchMode` once the README table goes.
 const DISPATCH = {
   pin: "in-process",
