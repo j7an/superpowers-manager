@@ -56,7 +56,7 @@ const EMPTY_PLUGINS = '{"installed":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than cli-parity.test.js:188's mode- and symlink-aware snapshot:
+ * smaller than cli-parity.test.js:267's mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  * @param {string} root
@@ -90,7 +90,7 @@ async function saveSelection(c, record) {
 
 /**
  * A per-case copy of the shared fixture upstream. `UPSTREAM` is built once and
- * shared across the whole run (tests/bin/lifecycle-fixture.js:87-129), so a
+ * shared across the whole run (tests/bin/lifecycle-fixture.js:91-133), so a
  * case that renames its source away must rename a copy — renaming the original
  * would break every concurrently running case.
  * @param {CaseEnv} c
@@ -146,7 +146,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // src/commands/probe.ts:329-330: an absent saved source stays empty rather
+  // src/commands/probe.ts:336-337: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (src/selection.ts:69-79 rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
@@ -169,7 +169,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
   // A TAG pin, not the shell's all-three-equal raw-commit pin: it makes
   // requested_ref/resolved_ref ("v1.0.0") textually different from
   // desired_commit and saved_commit (the 40-hex SHA), so a swapped field in
-  // the EffectiveSelection -> ProbeFacts mapping (src/commands/probe.ts:310-335)
+  // the EffectiveSelection -> ProbeFacts mapping (src/commands/probe.ts:317-342)
   // cannot pass. The schema forbids requested_ref and resolved_ref differing
   // for a tag pin (src/selection.ts:173-176), so those two are the one pair no
   // valid fixture can tell apart.
@@ -303,7 +303,7 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
   // track-latest is the one saved mode that still resolves through Git, and it
   // resolved: requested_ref, resolved_ref, and desired_commit are three
   // different values here, which is what makes the mapping at
-  // src/commands/probe.ts:310-316 discriminating.
+  // src/commands/probe.ts:317-323 discriminating.
   assert.match(result.stdout, /^requested_ref=latest-release$/m);
   assert.match(result.stdout, /^resolved_ref=v1\.0\.0$/m);
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
@@ -567,7 +567,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // messages reach stderr BEFORE its error line, exactly as
 // scripts/core/validate-adapter-response.py:268-270 ordered them
 // (tests/unit/commands-probe.test.js proves replayEnvelope only in isolation).
-// Second: nextPluginList (tests/bin/lifecycle-fakes.js:145-167) FAILS CLOSED
+// Second: nextPluginList (tests/bin/lifecycle-fakes.js:148-170) FAILS CLOSED
 // when the configured sequence runs out instead of repeating its last entry --
 // if it repeated, the ownership inspection would succeed and this run would
 // exit 0.
