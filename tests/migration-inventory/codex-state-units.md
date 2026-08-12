@@ -236,8 +236,9 @@ or "counterpart" claim is quoted inline in that item.
     fingerprint inspection result after install."` — matching
     `scripts/core/lifecycle.sh:95-97`'s branch and satisfying
     `tests/test_marketplace_reconcile.sh:312`'s `grep -Fq "parse"`. Pinned by
-    item 26 below (`tests/unit/lifecycle.test.js:272-287`, "an unparseable
-    fingerprint result names parsing, not inspection"). **Slice 4c's
+    items 26-28 below (`tests/unit/lifecycle.test.js:272-287`, "an unparseable
+    fingerprint result names parsing, not inspection"), of which item 27 is
+    the `stderr` assertion that carries the "cannot parse" text. **Slice 4c's
     `marketplace-reconcile.md` must disposition `:312` as mapped by that
     test, not as an open divergence** — the paragraphs above are kept as
     history (per this file's own convention of amending rather than
@@ -313,7 +314,7 @@ or "counterpart" claim is quoted inline in that item.
     before spec §6.2.3 item 3a, that shape reached a *different*, port-only
     branch (`"expected an object adapter result at resources"`, not ported
     among these 14 tests); that branch is now deleted and `{}` falls through
-    to this same Boolean check — see item 30 below. The shell's `:222-228`
+    to this same Boolean check — see items 35-36 below. The shell's `:222-228`
     case still never checks message text, only that the call fails.
 25. `verifyUninstalledResources` fails closed when the inspection itself
     failed (`AdapterResult.status !== 0`). Port:
@@ -326,52 +327,80 @@ or "counterpart" claim is quoted inline in that item.
     constructs is a real file, well-formed or not, never a captured nonzero
     exit status.
 26. **New, this commit.** `verifyInstalledFingerprint` returns `ok: false`
-    with `stderr` naming "cannot parse", not "inspection failed", when the
-    inspect call *succeeds* but its `result` is not an object (a string,
-    here). Port: `tests/unit/lifecycle.test.js:272-287` ("an unparseable
-    fingerprint result names parsing, not inspection"). This is the test
-    that resolves item 14's divergence callout above: it is what makes
-    `tests/test_marketplace_reconcile.sh:312`'s live `grep -Fq "parse"`
-    satisfiable, per the `readResult`/`ResultRead` split of spec §6.2.3
-    item 3b. Counterpart in `tests/test_marketplace_reconcile.sh:304-316`
-    (see item 14's resolution paragraph for the full trace); no counterpart
-    in `tests/test_codex_state_units.sh`.
-27. **New, this commit.** `verifyInstalledFingerprint` fails closed on a
-    non-string, non-null `fingerprint` (e.g. `42`) with the same "cannot
-    parse" message as item 26's case, rather than coercing it. Port:
-    `tests/unit/lifecycle.test.js:289-301` ("a non-string fingerprint is
-    unparseable, not empty"). **No shell counterpart is possible**:
+    when the inspect call *succeeds* but its `result` is not an object (a
+    string, here). Port: `tests/unit/lifecycle.test.js:272-287` ("an
+    unparseable fingerprint result names parsing, not inspection").
+    Counterpart in `tests/test_marketplace_reconcile.sh:304-316` (see item
+    14's resolution paragraph for the full trace); no counterpart in
+    `tests/test_codex_state_units.sh`.
+27. Same case's `stderr` is exactly `["error: cannot parse installed manager
+    fingerprint inspection result after install."]` — naming "cannot parse",
+    not "inspection failed". Port: `tests/unit/lifecycle.test.js:272-287`.
+    This is the assertion that resolves item 14's divergence callout above:
+    it is what makes `tests/test_marketplace_reconcile.sh:312`'s live
+    `grep -Fq "parse"` satisfiable, per the `readResult`/`ResultRead` split
+    of spec §6.2.3 item 3b. Counterpart in
+    `tests/test_marketplace_reconcile.sh:304-316`; no counterpart in
+    `tests/test_codex_state_units.sh`.
+28. Same case's `stdout` is exactly `[]`. Port:
+    `tests/unit/lifecycle.test.js:272-287`. No counterpart in
+    `tests/test_codex_state_units.sh`. Partial counterpart in
+    `tests/test_marketplace_reconcile.sh:313-314`, which forbids the
+    "manager updated" line on this path but reads one combined output
+    capture and so never asserts that the call produced no stdout at all.
+29. **New, this commit.** `verifyInstalledFingerprint` fails closed on a
+    non-string, non-null `fingerprint` (e.g. `42`) rather than coercing it.
+    Port: `tests/unit/lifecycle.test.js:289-301` ("a non-string fingerprint
+    is unparseable, not empty"). **No shell counterpart is possible**:
     `scripts/core/provenance.sh:62`'s `spw_json_get` stringifies any
     non-null scalar before `spw_verify_installed_fingerprint` ever sees it,
     so a non-string `fingerprint` value cannot reach the shell function this
     ports. The branch itself already existed unchanged at the pre-commit
     `src/lifecycle.ts:142-150` (spec §6.2.3 item 3c keeps it unchanged) but
-    was previously unpinned by any test; this item and its test close that
+    was previously unpinned by any test; this item and item 30 close that
     gap.
-28. **New, this commit.** `verifyUninstalledResources`'s failure `message`
-    is exactly `"cannot read the adapter ownership inspection after
-    removal"` when the inspection call itself failed — the same case item
-    25 covers, which asserted only `ok === false` and left the operator
-    string unpinned. Port: `tests/unit/lifecycle.test.js:303-312` ("an
-    unreadable ownership inspection names reading, with its text"). No
-    counterpart in either driver, same rationale as item 25.
-29. **New, this commit.** The `["plugin", "marketplace"]` Boolean-check loop
-    names its own key in the failure message: with `plugin` valid and
-    `marketplace` non-Boolean, the message is `"expected a Boolean adapter
-    result at resources.marketplace"`, not a template that hardcoded
-    `"plugin"` (which item 24 alone could not have caught, since item 24
-    only ever supplies a non-Boolean `plugin`). Port:
+30. Same case's `stderr` is exactly `["error: cannot parse installed manager
+    fingerprint inspection result after install."]` — the same operator
+    string item 27 pins for the unparseable-result case, so the two distinct
+    triggers are confirmed to share one message rather than drifting apart.
+    Port: `tests/unit/lifecycle.test.js:289-301`. No shell counterpart is
+    possible, same rationale as item 29.
+31. **New, this commit.** `verifyUninstalledResources` returns `ok: false`
+    when the inspection call itself failed — the same case item 25 covers,
+    which asserted only `ok === false` and left the operator string
+    unpinned. Port: `tests/unit/lifecycle.test.js:303-312` ("an unreadable
+    ownership inspection names reading, with its text"). No counterpart in
+    either driver, same rationale as item 25.
+32. Same case's failure `message` is exactly `"cannot read the adapter
+    ownership inspection after removal"`. This is the assertion that closes
+    the operator-string gap item 25 left open. Port:
+    `tests/unit/lifecycle.test.js:303-312`. No counterpart in either driver,
+    same rationale as item 25.
+33. **New, this commit.** `verifyUninstalledResources` returns `ok: false`
+    when the `["plugin", "marketplace"]` Boolean-check loop meets a valid
+    `plugin` and a non-Boolean `marketplace`. Port:
     `tests/unit/lifecycle.test.js:314-325` ("the marketplace Boolean check
     names its own key"). No counterpart in either driver: `grep -cE
     "resources\.marketplace" tests/test_marketplace_reconcile.sh` returns 0.
-30. **This commit; removes a port-only divergence rather than adding one.**
-    `verifyUninstalledResources` on a non-object (or wholly absent)
-    `resources` key (input `{}`) now falls through to the same Boolean check
-    as a present-but-wrong-type field, emitting `"expected a Boolean adapter
-    result at resources.plugin"` rather than the now-deleted distinct
-    `"expected an object adapter result at resources"` message. Port:
+34. Same case's failure `message` is exactly `"expected a Boolean adapter
+    result at resources.marketplace"` — the loop names its own key rather
+    than using a template that hardcoded `"plugin"` (which item 24 alone
+    could not have caught, since item 24 only ever supplies a non-Boolean
+    `plugin`). Port: `tests/unit/lifecycle.test.js:314-325`. No counterpart
+    in either driver, same rationale as item 33.
+35. **This commit; removes a port-only divergence rather than adding one.**
+    `verifyUninstalledResources` returns `ok: false` on a non-object (or
+    wholly absent) `resources` key (input `{}`), falling through to the same
+    Boolean check as a present-but-wrong-type field. Port:
     `tests/unit/lifecycle.test.js:327-338` ("a non-object resources falls
-    through to the Boolean message"). Before spec §6.2.3 item 3a, the
+    through to the Boolean message"). No counterpart in
+    `tests/test_codex_state_units.sh`; `tests/test_marketplace_reconcile.sh`
+    exercises the identical `{}` input at `:222-228`, but checks only that
+    the call fails, never its message text.
+36. Same case's failure `message` is exactly `"expected a Boolean adapter
+    result at resources.plugin"`, rather than the now-deleted distinct
+    `"expected an object adapter result at resources"` message. Port:
+    `tests/unit/lifecycle.test.js:327-338`. Before spec §6.2.3 item 3a, the
     deleted message was a **live-shell-tested divergence**, not a harmless
     hardening: `scripts/core/adapter.sh:70` emits this same "expected Boolean
     adapter result at resources.plugin" text for the identical `{}` input
@@ -387,7 +416,7 @@ or "counterpart" claim is quoted inline in that item.
 ```json inventory
 {
   "shellOriginal": 16,
-  "portOnly": 30,
+  "portOnly": 36,
   "ports": { "tests/unit/lifecycle.test.js": 25 }
 }
 ```
@@ -400,8 +429,8 @@ or "counterpart" claim is quoted inline in that item.
   carrying all 16 shell assertions (each of the four `void test(...)` cases
   covering `neither`/`manager`/`legacy`/`both` groups multiple shell
   assertions behind one `assert.deepEqual`, since the port returns a verdict
-  object rather than writing text line by line), plus 30 port-only assertions
-  (items 1-30 above): items 1-4 cover the `*)` arm neither shell case
+  object rather than writing text line by line), plus 36 port-only assertions
+  (items 1-36 above): items 1-4 cover the `*)` arm neither shell case
   statement ever reached, and items 5-25 are the 21 assertions across the 14
   original new `void test(...)` cases for `requireManagedUpdateControl`,
   `verifyInstalledFingerprint`, and `verifyUninstalledResources`
@@ -413,22 +442,37 @@ or "counterpart" claim is quoted inline in that item.
   the inventory that maps `tests/test_marketplace_reconcile.sh`'s own
   assertions onto these same ten items; this file makes no claim beyond
   "port-only relative to `test_codex_state_units.sh`" for any of the 21.
-  Items 26-30 are five further port-only assertions, one per new
-  `void test(...)` case added by the commit that reconciles operator text
+  Items 26-36 are eleven further port-only assertions across the five new
+  `void test(...)` cases added by the commit that reconciles operator text
   with the shell original (spec §6.2.3 items 3 and 6), in the order those
-  cases appear in the file: item 26 is the test that resolves item 14's
-  divergence callout — see the amendment there — and has a counterpart in
-  `tests/test_marketplace_reconcile.sh:304-316`; item 27 has no counterpart
-  in either driver (see its own entry for why the shell cannot construct the
-  trigger); item 28 pins message text for the same failed-inspection case
-  item 25 already covered by `ok` alone; item 29 pins the loop's second
-  (`marketplace`) key, which item 24 alone never exercised; item 30 removes
-  a port-only divergence that previously existed only as an aside inside
-  item 24's prose, not as its own numbered item. Item 14's own
-  classification earlier in this paragraph (`New`, no counterpart in either
-  driver) is unchanged, because item 14 still names the "inspection failed"
-  case, not the newly satisfiable "cannot parse" case that item 26 now
-  covers.
+  cases appear in the file: 26-28 (`:272-287`), 29-30 (`:289-301`), 31-32
+  (`:303-312`), 33-34 (`:314-325`) and 35-36 (`:327-338`), summing
+  3+2+2+2+2 = 11. Case by case: items 26-28 are the test that resolves item
+  14's divergence callout — see the amendment there — and have a
+  counterpart in `tests/test_marketplace_reconcile.sh:304-316`; items 29-30
+  have no counterpart in either driver (see item 29 for why the shell
+  cannot construct the trigger); items 31-32 pin message text for the same
+  failed-inspection case item 25 already covered by `ok` alone; items 33-34
+  pin the loop's second (`marketplace`) key, which item 24 alone never
+  exercised; items 35-36 remove a port-only divergence that previously
+  existed only as an aside inside item 24's prose, not as its own numbered
+  item. Item 14's own classification earlier in this paragraph (`New`, no
+  counterpart in either driver) is unchanged, because item 14 still names
+  the "inspection failed" case, not the newly satisfiable "cannot parse"
+  case that items 26-28 now cover.
+
+  ***Amended 2026-08-12:*** *these five cases were previously carried as five
+  items, 26-30 — one row per **case**, while items 12-25 above use one row
+  per **assertion**. The five were split into eleven, 26-36, and `portOnly` moved
+  from 30 to 36, so that a single convention governs the whole region and
+  the declared count means the same thing at both ends of it. No item text
+  was retired and no cited range moved — each new row reuses its case's
+  existing `tests/unit/lifecycle.test.js` range, exactly as the 15/16, 17/18
+  and 19/20 pairs already do. The port-only region carries its own
+  `1..portOnly` numbering, and item 30 was the highest number in the file,
+  so nothing later is renumbered. `shellOriginal` (16) and `ports` (25) are
+  facts about the deleted shell driver and about static `test(` sites
+  respectively, and neither changes.*
 - Reconciliation: 16 of 16 shell items are mapped 1:1, no merges, no drops of
   assertion coverage. One distinction the shell driver captured is not
   preserved as an assertion here, and is called out rather than silently

@@ -1294,31 +1294,49 @@ truncation `reset` performed is load-bearing and not decorative.
   item's own entry states plainly that it has no port counterpart, rather
   than being silently dropped from the list.
 
-  Of the 116 that survive, the mapping is **not** 1:1 throughout. **103**
-  items map onto a port assertion of their own; the remaining **13 share 6**,
-  across six merges recorded inline. One is a status merge — items 25/26
+  Of the 116 that survive, the mapping is **not** 1:1 throughout. **100**
+  items map onto a port assertion of their own; the remaining **16 share 7**,
+  across seven merges recorded inline. One is a status merge — items 25/26
   collapse onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`.
-  (Items 22/23 were a seventh merge of exactly that kind before Task 6. Both
+  (Items 22/23 were an eighth merge of exactly that kind before Task 6. Both
   numbers are retired with their case, so that merge leaves the count
   entirely rather than staying in it as a moot entry — the arithmetic here is
   over surviving items only.) Five are rule-9 ordering guards — items 58-59,
   66-67, 69-70, 75-76, and 112-114 — each collapsing onto one `assertOrder`
   call, which asserts every one of those ordering claims plus the presence
-  of each needle. Two orderings differ from the shell: items 71-73 and items
-  62-64 assert the positive claim before the negatives that depend on it.
+  of each needle. The seventh is the adapter-log collapse: items 13, 14 and
+  15 all name the one
+  `deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
+  `prepareGeneratedTree`, which witnesses each of the three claims. Two
+  orderings differ from the shell: items 71-73 and items 62-64 assert the
+  positive claim before the negatives that depend on it.
 
   **How to reproduce these three figures**, since the gate does not read this
-  prose and an earlier revision of this paragraph was wrong by three: retired
+  prose and earlier revisions of this paragraph were wrong twice: retired
   = the items whose entry says "No port counterpart" (22, 23, 24, 107, 108,
   109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
-  merges enumerated in the previous paragraph (25/26 plus the five rule-9
-  guards = **13** items over **6** merges), so own = 116 − 13 = **103**.
-  Items that share only a static line because the port loops over a literal
-  tuple (2-5 at one `assert.ok`, 7-8, 9-11) are **not** merges — counting
-  rule 4 makes each iteration its own assertion — and are counted in the 103.
+  merges enumerated in the previous paragraph (25/26, the five rule-9 guards,
+  and 13/14/15 = **16** items over **7** merges), so own = 116 − 16 = **100**.
+
+  **The counting rule, stated so that a third reading cannot open.** An item
+  is **shared** when it carries a live `Port:` pointer and that pointer names
+  the same single assertion call as another item's pointer. An item counts as
+  its **own** in three cases: it carries a live pointer no other item names;
+  or it shares only a static line because the port loops over a literal tuple
+  (2-5 at one `assert.ok`, 7-8, 9-11), where counting rule 4 makes each
+  iteration its own assertion; or it carries **no** `Port:` pointer at all,
+  because a sibling's structural assertion subsumes the claim outright — the
+  three `**Subsumed…**` items, 44, 50 and 85. The line between a merge and
+  either carve-out is therefore mechanical rather than editorial: group the
+  124 mapped items by their live pointer, discount the retired eight and the
+  literal-tuple loops, and read the merges off the groups that remain. Doing
+  exactly that over the whole mapped region — not a sampled section — is what
+  produced 7, and it is reproducible without re-reading the prose.
 
   ***DISCREPANCY, found 2026-08-11 at slice 4b's closeout and recorded rather
-  than silently re-derived. The three figures above are left as they stand.***
+  than silently re-derived. RESOLVED 2026-08-12 — this reading was adopted and
+  the three figures above now reflect it; see the amendment below. The note is
+  kept because it is the record of how the second reading was found.***
   *Task 6 collapsed items **13, 14 and 15** onto a single assertion —
   `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
   `prepareGeneratedTree` — and each of the three entries says so in its own
@@ -1331,21 +1349,30 @@ truncation `reset` performed is load-bearing and not decorative.
   three items, the figures would become **16 shared over 7 merges** and
   **116 − 16 = 100 own**.*
 
-  *Why the numbers are not changed here. The buckets in this paragraph are
-  convention-dependent — literal-tuple loops are excluded by counting rule 4,
-  and marked-subsumed items are deliberately counted in "own" despite having no
-  private line — so deciding whether a structural `deepEqual` over a double is a
-  "merge" is a counting-rule decision, not an arithmetic one, and it plausibly
-  applies to other Task-6 conversions this pass did not enumerate. Changing
-  103/13/6 on a partial enumeration is exactly how two compensating errors land
-  on a total that reads as confirmation. **The owning task is Task 6**, which
-  made the collapse and did not move the accounting; a full re-derivation of the
-  three figures across every converted section belongs with the deferred pointer
-  remap named in the STALE POINTER WARNING at the top of this file, not here.
-  None of `shellOriginal`, `portOnly` or `ports` is affected — the gate reads
-  those and not this paragraph.*
-  So are the three items carrying an explicit `**Subsumed…**` marker (44, 50,
-  85), which are retained because the claim survives inside a sibling item's
+  ***Amended 2026-08-12:*** *the second reading is the right one, and the
+  figures above moved from 103/13/6 to 100/16/7. The note above deferred the
+  change for one good reason — that deciding whether a structural `deepEqual`
+  is a "merge" is a counting-rule decision, and that settling it from a partial
+  enumeration is how two compensating errors land on a total that reads as
+  confirmation. That objection is answered by method, not by assertion: the
+  merges were re-derived by grouping all 124 mapped items by their live `Port:`
+  pointer across the whole region, so the enumeration is no longer partial.
+  That sweep finds exactly one assertion-level merge the previous count had
+  missed — 13/14/15 — plus the three literal-tuple loops and the three
+  pointerless `**Subsumed…**` items, both already carved out above; no other
+  Task-6 conversion produces a shared pointer. The deciding argument is the
+  head sentence's own wording — "map onto a port assertion of their own" —
+  which items 13, 14 and 15 do not, each carrying a live pointer to the one
+  same call, which is the shape of every one of the six merges already
+  recorded. The marked-subsumed three are different in kind — they carry no
+  pointer at all — so excluding 13/14/15 would need a fourth category,
+  "subsumed but pointer-bearing", that this file never defines and that would
+  contain nothing else. None of `shellOriginal`, `portOnly` or `ports` is
+  affected: the gate reads those and not this paragraph, and 124 is unchanged.*
+
+  Also counted in the 100 are the three items carrying an explicit
+  `**Subsumed…**` marker (44, 50, 85),
+  which are retained because the claim survives inside a sibling item's
   structural assertion, not because each has a private line; the note below is
   the detail. ***Disambiguated 2026-08-11 at slice 4b's closeout.*** *This
   sentence said "the three SUBSUMED items" and the note fifteen lines below said

@@ -32,9 +32,9 @@ const DISPATCH = cli.DISPATCH;
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
 // Column heading -> the COMMAND_REQUIREMENTS token it reports on. The POSIX sh
-// column has no token: preflight derives it from DISPATCH (src/cli.ts:281-292),
-// which is exactly the second encoding of dispatch that slice 2 removed from
-// CLI-PREFLIGHT-01's hand-written map.
+// column has no token: `derive()` reads it off the DISPATCH map at `:65` below,
+// where a "spawn" entry means the command still shells out and so needs a
+// POSIX sh. Nothing in src/cli.ts restates the column.
 const TOOL_COLUMNS = [
   ["git", "git"],
   ["Python 3", "python3"],
