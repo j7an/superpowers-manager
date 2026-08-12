@@ -122,7 +122,7 @@ export function respondToListing(request) {
  *
  *   inspect --view fingerprint -> plugin list --json          (src/adapter.ts:797)
  *   inspect --view ownership   -> plugin list --json,         (src/adapter.ts:871)
- *                                 plugin marketplace list --json  (:867)
+ *                                 plugin marketplace list --json  (:883)
  *
  * They are separate runAdapter calls, so this fake is a fresh PROCESS each
  * time and the argv is byte-identical -- there is nothing to branch on. A

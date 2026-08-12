@@ -111,7 +111,7 @@ ownership inspection would succeed and the run would exit 0.
 **Why the identity matrix and scenario 1 need two listings per run.** Probe
 issues `codex plugin list --json` twice per run — once for
 `inspect --view fingerprint` (`src/adapter.ts:797`), once for
-`inspect --view ownership` (`:855`) — as two separate processes with
+`inspect --view ownership` (`:871`) — as two separate processes with
 byte-identical argv. The shell driver stubbed the *adapter* and so could feed
 the two views independently (`SPW_PROBE_FINGERPRINT_JSON` vs
 `SPW_PROBE_PLUGIN_JSON`, `:212-215`). The in-process port stubs only `codex`,

@@ -1416,7 +1416,7 @@ void describe("install commands", { concurrency: true }, () => {
     // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
     // plugin as installed at 1.0.0 without materialising its cached tree, so
     // the REAL adapter's fingerprint handler resolves an active version
-    // (src/adapter.ts:806-813), builds the installed root for it (:815-820),
+    // (src/adapter.ts:806-813), builds the installed root for it (:831-836),
     // and finds nothing readable there — installedCommitFromRoot returns ""
     // (src/codex-state.ts:67-84) — and fails with a controlled inspect-failed
     // envelope. The case therefore needs no interception and is not

@@ -94,7 +94,7 @@ export const SHORT = DESIRED.slice(0, 7);
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
  * Probe issues that command twice per run and the two calls need different
  * answers -- `inspect --view fingerprint` (src/adapter.ts:797) then
- * `inspect --view ownership` (:855). With a single listing, a manager version
+ * `inspect --view ownership` (:871). With a single listing, a manager version
  * present for `installed_commit` also forces `identity_state=manager`, so
  * scenario 1 and the four-state identity matrix could not be written at all.
  * The fake fails closed if a run asks for more listings than are configured,
