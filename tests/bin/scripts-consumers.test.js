@@ -15,6 +15,9 @@
 // hand at Task 10 and are recorded in that task's report.
 
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -139,4 +142,29 @@ void test("the reconciliation fails when a declaration outlives its hit", () => 
   assert.deepEqual(stale, [
     'tests/bin/retired.test.js :: cpSync(join(ROOT, "scripts"), dest); :: #1',
   ]);
+});
+
+void test("a D2a audit that cannot run raises instead of reporting zero rows", () => {
+  // The fourth mutation case, and the one 4c depends on. The other three ask
+  // whether reconciliation notices a wrong set; this asks whether the audit
+  // can tell "found nothing" from "did not run". 4c's exit check asserts zero
+  // rows, so the two must not be the same observable.
+  //
+  // Driven by the root, the one input runScriptsAudit takes. An empty
+  // directory has no tests/, so AUDIT_COMMAND's producing grep exits 2 with a
+  // diagnostic on stderr while the trailing `grep -v` exits 1 — a status the
+  // guard above reads as "matched nothing". No tracked file is touched and
+  // nothing outside mkdtemp is written.
+  //
+  // Against the pre-fix implementation this returned [] and threw nothing,
+  // which is the fail-open it exists to pin.
+  const empty = mkdtempSync(join(tmpdir(), "spw-audit-cannot-run-"));
+  try {
+    assert.throws(
+      () => runScriptsAudit(empty),
+      /the D2a audit command wrote to stderr, so the audit did not run to completion/,
+    );
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
 });

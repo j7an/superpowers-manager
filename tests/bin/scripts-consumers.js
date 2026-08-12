@@ -158,6 +158,23 @@ export function auditKey(hit) {
  * condition. Any other status throws rather than reporting an empty audit,
  * because an audit that failed to run and an audit that found nothing are the
  * same value otherwise.
+ *
+ * The exit-status guard alone does NOT deliver that, and cannot.
+ * AUDIT_COMMAND is a three-stage pipeline; POSIX `sh` reports only the last
+ * stage's status and `pipefail` is not POSIX, so a producing `grep` that dies
+ * — an unreadable or missing `tests/`, a traversal error mid-walk — is masked
+ * behind the trailing `grep -v`'s own status 1. Before this guard,
+ * `runScriptsAudit` on a root with no `tests/` returned zero rows and threw
+ * nothing. That is harmless for 4b, whose every call goes through
+ * scripts-consumers.test.js's `observe()` and its `rows.length > 0` check,
+ * and a live fail-open for 4c, whose exit check asserts the OPPOSITE — zero
+ * rows — and would read a broken audit as the exit condition met.
+ *
+ * A failing stage writes a diagnostic to stderr while a legitimately empty
+ * match is silent, so a non-empty stderr is the signal the status cannot
+ * carry. It is fatal here. That keeps AUDIT_COMMAND a single byte-identical
+ * literal for 4c to import, which decomposing the pipeline into per-stage
+ * spawns would not.
  * @param {string} root repository root the command runs in
  * @returns {AuditHit[]}
  */
@@ -173,6 +190,13 @@ export function runScriptsAudit(root) {
   if (result.status !== 0 && result.status !== 1) {
     throw new Error(
       `scripts-consumers: the D2a audit command exited ${String(result.status)}`,
+    );
+  }
+  if (result.stderr !== "") {
+    throw new Error(
+      "scripts-consumers: the D2a audit command wrote to stderr, so the " +
+        "audit did not run to completion and its rows cannot be trusted:\n" +
+        result.stderr,
     );
   }
   /** @type {AuditHit[]} */
