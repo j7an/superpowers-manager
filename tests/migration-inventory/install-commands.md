@@ -1312,8 +1312,10 @@ truncation `reset` performed is load-bearing and not decorative.
   positive claim before the negatives that depend on it.
 
   **How to reproduce these three figures**, since the gate does not read this
-  prose and this paragraph has been wrong twice — an early revision was wrong
-  by three, and the revision that replaced it missed a merge entirely: retired
+  prose and this paragraph has been wrong twice on its figures — an early
+  revision was wrong by three, and the revision that replaced it missed a merge
+  entirely — and once more on the strength of its claims, per the Corrected
+  note below: retired
   = the items whose entry says "No port counterpart" (22, 23, 24, 107, 108,
   109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
   merges enumerated in the previous paragraph (25/26, the five rule-9 guards,
@@ -1334,8 +1336,11 @@ truncation `reset` performed is load-bearing and not decorative.
   merge can hide, but it does not by itself decide one, and it is not a
   substitute for reading the entries. Three steps, in order. **One:** group by
   live pointer and keep the groups whose pointer is an exact single-line
-  citation — that yields the six literal-tuple and rule-9 groups plus 13/14/15,
-  and it is the step that found the merge earlier counts missed. **Two:** hand
+  citation — that yields the three literal-tuple groups and the five rule-9
+  groups, plus 13/14/15: **nine groups covering 24 items**, the same figure the
+  Corrected note below records. It is the step that found the merge earlier
+  counts missed, and note that nine groups is not seven merges — three of the
+  nine are literal-tuple carve-outs, and 25/26 is not among them. **Two:** hand
   check the range-pointer groups, because a range collects a whole scenario and
   cannot show sharing on its own; this is the only way 25/26 is recoverable, as
   items 25, 26 **and** 27 all carry `within :792-818` and only the first two
@@ -1388,9 +1393,12 @@ truncation `reset` performed is load-bearing and not decorative.
   so they cannot be "sharing" anything, and the file already elects to count
   them as own. A fourth category — subsumed, pointer-bearing, carrying no
   marker — **does** exist, contrary to what a first version of this amendment
-  asserted when it claimed such a category "would contain nothing else". It
-  contains exactly one item, 80, and its disposition is deferred rather than
-  counted; see the two notes below.*
+  asserted when it claimed such a category "would contain nothing else". Items
+  13 and 80 both sit in it, and they are settled differently: item 13's pointer
+  names the assertion that absorbed its claim, so it is counted as a merge
+  above, while item 80's names an unrelated site, so its disposition is
+  deferred rather than counted. Item 80 is the only member of that second,
+  unsettleable kind; see the two notes below.*
 
   ***Corrected 2026-08-12, same day, before this paragraph had been relied
   on.*** *A first version of this amendment claimed the merge set had been
@@ -1424,8 +1432,15 @@ truncation `reset` performed is load-bearing and not decorative.
   18 shared over 8 merges, and the 22/23 aside above becomes "a ninth merge".*
 
   ***Scope of that exception, measured the same day so the next reader is not
-  left to guess.*** *Item 80 is the only item in the mapped region that is both
-  pointer-bearing and declared subsumed into a named sibling's assertion. It is
+  left to guess.*** *Item 80 is the only item in the mapped region that is
+  pointer-bearing, declared subsumed into a named sibling's assertion, **and
+  whose pointer does not name that absorbing assertion**. The final clause is
+  what makes it an exception, and it is load-bearing: item 13 meets the first
+  two conditions — it carries* `Port: :697`*, no marker, and says the claim is
+  subsumed into the* `deepEqual` *check items 14 and 15 also map onto — but its
+  pointer names that very call, so grouping catches it and it is counted as a
+  merge above. Item 80's pointer names an unrelated site instead, which is
+  exactly why grouping misfiles it and why it cannot be settled here. It is*
   **not** the only item whose pointer the file declares invalid: items 65, 68,
   80, 120 and 124 all carry a **"Pointer stale, deliberately not remapped"**
   note, all five from slice 3.5's re-anchoring of these assertions onto*
