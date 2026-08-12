@@ -568,7 +568,8 @@ before the status switch that would otherwise report it).
 97. Output contains `does not match the prepared plugin` (`:670`). Port:
     `:1218`.
 98. Output contains `SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add` (`:671`).
-    Port: `:1222`. The hint text is owned by `src/adapter.ts:641-643` and
+    Port: `:1222`. The hint text is owned by `src/adapter.ts:682`, inside
+    the `verification_hints` object at `:677-687`, and
     replayed from the adapter result by `scripts/core/lifecycle.sh:109,121`;
     core holds no copy of it.
 99. Output does **not** contain `manager updated` (`:672-674`). Port:
@@ -579,7 +580,7 @@ before the status switch that would otherwise report it).
 100. Install fails (`:683`). Port: `:1242`.
 101. Output contains `fingerprint is not detectable` (`:684`). Port: `:1248`.
 102. Output contains `verify with 'codex plugin list --json'` (`:685`,
-     `src/adapter.ts:645`). Port: `:1250`.
+     `src/adapter.ts:685`). Port: `:1250`.
 
 ### Scenario 8a — fingerprint inspection command failure (`:687-700`)
 
@@ -596,7 +597,8 @@ before the status switch that would otherwise report it).
      `pluginAdd: "orphan"` makes the fake CODEX register the plugin as
      installed at 1.0.0 without materialising its cached tree, so the **real**
      adapter's fingerprint handler resolves an active version
-     (`src/adapter.ts:790-797`), builds the installed root for it (`:815-820`),
+     (`activePluginVersionFromJson`, called at `src/adapter.ts:806-817`), builds
+     the installed root for it (`installedRootForVersion`, called at `:831-836`),
      finds nothing readable there — `installedCommitFromRoot` returns `""`
      (`src/codex-state.ts:67-84`) — and returns a controlled `inspect-failed`
      envelope. The port now asserts the **subject-owned** whole line
@@ -769,6 +771,44 @@ spawn rather than through the subject, because post-flip no subject can
 produce one; what changed is that the direct spawn now runs inside the case
 whose emptiness claim depends on it, with that case's own executable, state
 and seam.
+
+***Port-only entries 1-4, 7, 9, 11-13, 15, 20 and 34 describe channels that no
+longer exist. Recorded 2026-08-11 at slice 4b's closeout; the numbering and the
+`portOnly` count are unchanged, and no entry is renumbered or removed.*** *Task 6
+converted eight whole sections to an injected recording double and updated the
+**mapped** region carefully — item 19 at its own entry, items 44, 50 and 85 at
+theirs — but left the port-only region describing the pre-conversion channel. The
+file already carries one such disclosure, at port-only entry 31; these are its
+twelve siblings, and they went unlabelled only because nobody re-read this list.
+Three groups, each verifiable from the port file rather than from this prose:*
+
+- ***The nine `assertNoCodexMutation` emptiness guards at entries 3, 4, 9, 11,
+  12, 13, 15, 20 and 34 are gone.*** *Thirteen entries in this list name that
+  guard; `grep -c 'assertNoCodexMutation(readLog' tests/bin/install-commands.test.js`
+  returns **4**. The four that survive are entries 21, 22, 32 and 38, whose cases
+  were not converted. Every one of the nine that is gone belongs to a section
+  this file's own Cardinality paragraph lists as converted — 13-15, 16-21, 25-27,
+  28-32, 33-35, 36-38, 39-50, 82-85 — and a case called directly with a double
+  spawns no Codex fake at all, so there is no `codex.log` left for an emptiness
+  guard to read. The claim did not weaken: the double fails the case by
+  exhaustion on any unexpected call, which each converted section's own note
+  states. Entry 12 is a step further removed still — its case,* "malformed
+  adapter response must exit 1"*, is one of the two transport-fault cases retired
+  outright at Task 6 (mapped items 22-24), so its guard did not move channel; it
+  went with its case.*
+- ***Entries 1 and 2 name the wrong channel, not a missing assertion.***
+  *`assertLegacyIdentityStops`'s non-vacuity guard still exists and still hoists
+  the negative it always hoisted, but it now reads the double —*
+  `adapter.calls.some((call) => call.join(" ") === "inspect --view ownership")` *—
+  rather than `readLog(c.adapterLog)`. Mapped item 43 records the same channel
+  change; port-only entry 33 already words it neutrally as "adapter ownership
+  non-vacuity guard", which is the wording these two should have taken.*
+- ***Entry 7's adapter-log hoist is gone, and its successor is stronger.*** *The
+  `build --upstream-root` membership read was replaced at Task 6 by*
+  `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` *in
+  `prepareGeneratedTree`, which is what now hoists items 13-15 above a
+  never-called double. Mapped item 13 records the replacement; this entry did
+  not.*
 
 <!-- inventory:port-only:start -->
 
@@ -1276,9 +1316,45 @@ truncation `reset` performed is load-bearing and not decorative.
   Items that share only a static line because the port loops over a literal
   tuple (2-5 at one `assert.ok`, 7-8, 9-11) are **not** merges — counting
   rule 4 makes each iteration its own assertion — and are counted in the 103.
-  So are the three SUBSUMED items (44, 50, 85), which are retained because
-  the claim survives inside a sibling item's structural assertion, not
-  because each has a private line; the SUBSUMED note below is the detail.
+
+  ***DISCREPANCY, found 2026-08-11 at slice 4b's closeout and recorded rather
+  than silently re-derived. The three figures above are left as they stand.***
+  *Task 6 collapsed items **13, 14 and 15** onto a single assertion —
+  `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
+  `prepareGeneratedTree` — and each of the three entries says so in its own
+  words ("subsumed into the same `deepEqual` … items 14 and 15 also map onto";
+  "same `deepEqual` call as item 13"). Before Task 6 the three had three
+  separate adapter-log assertions. **That collapse is not in the "13 share 6"
+  enumeration**, which names only 25/26 plus the five rule-9 ordering pairs, and
+  it is not covered by either carve-out above: it is not a literal-tuple loop,
+  and items 13-14 carry no `**Subsumed…**` marker. Read as a seventh merge of
+  three items, the figures would become **16 shared over 7 merges** and
+  **116 − 16 = 100 own**.*
+
+  *Why the numbers are not changed here. The buckets in this paragraph are
+  convention-dependent — literal-tuple loops are excluded by counting rule 4,
+  and marked-subsumed items are deliberately counted in "own" despite having no
+  private line — so deciding whether a structural `deepEqual` over a double is a
+  "merge" is a counting-rule decision, not an arithmetic one, and it plausibly
+  applies to other Task-6 conversions this pass did not enumerate. Changing
+  103/13/6 on a partial enumeration is exactly how two compensating errors land
+  on a total that reads as confirmation. **The owning task is Task 6**, which
+  made the collapse and did not move the accounting; a full re-derivation of the
+  three figures across every converted section belongs with the deferred pointer
+  remap named in the STALE POINTER WARNING at the top of this file, not here.
+  None of `shellOriginal`, `portOnly` or `ports` is affected — the gate reads
+  those and not this paragraph.*
+  So are the three items carrying an explicit `**Subsumed…**` marker (44, 50,
+  85), which are retained because the claim survives inside a sibling item's
+  structural assertion, not because each has a private line; the note below is
+  the detail. ***Disambiguated 2026-08-11 at slice 4b's closeout.*** *This
+  sentence said "the three SUBSUMED items" and the note fifteen lines below said
+  "Four items … are SUBSUMED", for the same concept, in the same section. Both
+  are right about different sets and neither said which: **three** is the count
+  of marked items — `grep -c '\*\*Subsumed' ` returns 3 — and **four** is that
+  set plus item 15's Codex-emptiness half, which is subsumed in substance but
+  carries no marker because its entry already argues the point in prose. The
+  arithmetic in this paragraph is over the marked three.*
 
   Several items changed **channel**, not **behaviour** — a distinction
   worth stating explicitly, per Task 6's own instruction, because a reader
@@ -1292,7 +1368,8 @@ truncation `reset` performed is load-bearing and not decorative.
   `tests/bin/command-context.js`) rather than a `readLog(c.adapterLog)` read
   — each section's own note above states which channel it moved to and why
   no behavioural change accompanies it. Four items (44, 50, 85, and item
-  15's Codex-emptiness half) are SUBSUMED rather than separately witnessed
+  15's Codex-emptiness half — three marked, one argued in prose; see the
+  disambiguation above) are subsumed rather than separately witnessed
   in-process: there is no `codex.log` at all when the whole command is
   called directly with a double, so a claim that used to be witnessed twice
   (once at the adapter level, once at the Codex level) is now witnessed once,

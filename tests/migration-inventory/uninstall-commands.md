@@ -135,9 +135,32 @@ the port's own comment for why that is still meaningful documentation.
    before: items 3-4 are witnessed by the same exact-sequence assertion.
 6. Stdout contains `uninstall complete` (`:190`). Port: `:396` (was `:340`).
 
+**Port-only divergence in the second closing line (PR 11.5 slice 4b, Task 3;
+recorded here at Task 10).** `scripts/uninstall:34-35` prints two lines after a
+successful uninstall. The first (`uninstall complete`) ports verbatim and is
+item 6 above. The second ends *"…remove them manually or regenerate with
+`scripts/prepare`."*; the port ends *"…regenerate with
+`npx superpowers-manager prepare`."* (`src/commands/uninstall.ts:279-283`). The
+change is deliberate, per spec §3.6: the line is operator-facing output that
+names a script 4c deletes, so the port must not instruct an operator to run it.
+It is **not** one of the three frozen legacy-state strings
+(`src/lifecycle.ts:26-40`), whose `npx superpowers-wrapper@0.1.1 uninstall`
+remains a historical package coordinate and is never re-derived.
+
+Recorded as prose rather than as a numbered item for two reasons, both of which
+would otherwise put a number on something this inventory does not map. The
+shell driver asserted no closing-note text at all — item 6 covers only
+`uninstall complete` — so within the 1:1 mapping there is nothing for the new
+wording to diverge *from*. And the assertion that pins the new wording,
+*"the two closing lines port verbatim except for the prepare invocation"*, lives
+in `tests/unit/commands-uninstall.test.js`, which is not this inventory's port
+file (`tests/bin/migration-inventory.test.js`'s `DECLARED` maps
+`uninstall-commands.md` to `tests/bin/uninstall-commands.test.js` alone).
+Neither `shellOriginal`, `portOnly` nor `ports` moves.
+
 ### Missing python3: clear requirement error, no Codex calls (`:192-212`)
 
-**Environment divergence.** The shell invoked this one scenario without
+**Environment divergence — a shell-era note, kept as history.** *Marked as such 2026-08-11: every sentence in this paragraph is still true, but its subject is the shell scenario, and the scenario itself is retired by the note immediately below. Its neighbours carry historical markers and this one did not, which made it read as a live claim about the port.* The shell invoked this one scenario without
 `SPW_ADAPTER` (`:198` sets only `PATH` and `SUPERPOWERS_CODEX`); the port's
 `runScript` always exports `SPW_ADAPTER`, so it is set at `:266`. Immaterial to
 all three assertions: `spw_require_command python3` runs at `scripts/uninstall:10`,
@@ -260,11 +283,22 @@ they are the production-side witnesses this case stopped being.
 ### Both present: both removed, plugin before marketplace (`:261-289`)
 
 **Channel changed for items 25-27 and 29-30; items 28 and 35 DROPPED (Task 6,
-D4, 2026-08-10).** Unlike the two cases above, `runScript` is KEPT here (this
-case still dispatches through the shell and the real fake-adapter/fake-Codex
-pipeline): every surviving live claim in this section has a genuine
-Codex-level footprint, so those claims re-anchor onto `codex.log` rather than
-converting to a double. `inspect --view ownership` issues one
+D4, 2026-08-10).** Unlike the two cases above, `runScript` is KEPT here: every
+surviving live claim in this section has a genuine Codex-level footprint, so
+those claims re-anchor onto `codex.log` rather than converting to a double.
+
+***Corrected 2026-08-11 at slice 4b's closeout.*** *The sentence above read
+"`runScript` is KEPT here (this case still dispatches through the shell and the
+real fake-adapter/fake-Codex pipeline)". Keeping `runScript` is still true; what
+`runScript` launches is not. Task 8's flip retargeted it to*
+`process.execPath bin/superpowers-manager.js <command>`
+*(`tests/bin/lifecycle-fixture.js:341-346`), and `src/cli.ts:73` dispatches*
+`uninstall` *in-process, so this case's subject is `src/commands/uninstall.ts`
+and the fake adapter is not in its path at all — which this file's own port-only
+item 21 asserts directly, on this same scenario, by requiring the adapter log to
+be empty. The `codex.log` re-anchor is unaffected: the fake Codex is still the
+observation channel, because* `runUninstall` *reaches Codex through the same two
+ownership inspections.* `inspect --view ownership` issues one
 `plugin list --json` (`src/adapter.ts:871`) and then one
 `plugin marketplace list --json` (`src/adapter.ts:883`), both inside
 `:868-885`; the adapter uninstall op itself issues no listing, only the two
@@ -302,12 +336,19 @@ tautology; dropping it loses exactly zero coverage. Two weaker arguments were
 recorded here previously and are **wrong on their own terms**, kept only so
 they are not reinstated:
 
-- `presenceFlag` (`src/commands/uninstall.ts`) is not in this case's path.
-  This is the one uninstall case that keeps `runScript`, so its subject is
-  `scripts/uninstall`, not the TypeScript command module. The real adapter's
-  own closed rejection (`src/adapter.ts:710-715`, `"--plugin-present must be
-  true or false"`) is a true fact about the adapter, but it is not what makes
-  item 35 inert here.
+- `presenceFlag` (`src/commands/uninstall.ts`) is not in this case's path. As
+  recorded at Task 6 this argument ran: "this is the one uninstall case that
+  keeps `runScript`, so its subject is `scripts/uninstall`, not the TypeScript
+  command module." It was the wrong reason for item 35's inertness even then,
+  and Task 8's flip made it **factually false as well** — `runScript` launches
+  `bin/superpowers-manager.js`, `uninstall` dispatches in-process
+  (`src/cli.ts:73`), and `presenceFlag` is squarely in this case's path.
+  *Restated 2026-08-11; the original wording is quoted above rather than
+  silently replaced, because this bullet exists to stop the argument being
+  reinstated.* The real adapter's own closed rejection
+  (`src/adapter.ts:710-715`, `"--plugin-present must be true or false"`) is a
+  true fact about the adapter, but neither it nor the path question is what
+  makes item 35 inert. The tautology argument above is.
 - "A defect would already fail the surrounding assertions" is beside the
   point, and slightly wrong: a presence-flag leak would put
   `superpowers@superpowers-manager` in the argv, not `other@x`, so item 35
@@ -317,15 +358,23 @@ See the port's own comment in the "both present" case
 (`tests/bin/uninstall-commands.test.js`) for the same argument at the call
 site.
 
-**Not reachable by `dist/` mutation, and why that is fine here.** This case
-keeps `runScript`, so its subject is `scripts/uninstall` plus the real
-adapter and fake Codex — mutating `dist/**/*.js` cannot make it fail, and a
-mutation sample taken against `dist/` will show it surviving every mutation.
-That is the intended consequence of the hybrid disposition, not an absence of
-coverage: while the shell is still the dispatched subject, a case that
-exercises the shell is exactly what this file should keep. The other Task 6
-conversion outside `dist/`'s reach is "Missing Codex"; see that section for
-where its production-side witnesses live.
+**Reachable by `dist/` mutation as of Task 8's flip. This paragraph said the
+opposite until 2026-08-11, and the exemption it granted is withdrawn.** It read:
+*"This case keeps `runScript`, so its subject is `scripts/uninstall` plus the
+real adapter and fake Codex — mutating `dist/**/*.js` cannot make it fail, and a
+mutation sample taken against `dist/` will show it surviving every mutation …
+while the shell is still the dispatched subject, a case that exercises the shell
+is exactly what this file should keep."* That was accurate at Task 6 and is
+false now. `runScript` launches
+`process.execPath bin/superpowers-manager.js uninstall`
+(`tests/bin/lifecycle-fixture.js:341-346`), which loads `dist/cli.js`, and
+`src/cli.ts:73` dispatches `uninstall` in-process — so a `dist/**/*.js` mutation
+sample **does** reach this case. **No future mutation sweep may skip it on this
+paragraph's authority.** The same correction applies to the "Missing Codex"
+section, which this paragraph paired itself with: its converted case calls
+`runUninstall` imported from `dist/commands/uninstall.js`
+(`tests/bin/uninstall-commands.test.js:46-48`), so it is inside `dist/`'s reach
+too. See that section for where its production-side witnesses live.
 
 24. The invocation TMPDIR is left empty — no leaked workspace or adapter
     sidecar (`:267`, `assert_uninstall_tmp_empty`). Port: `:592` (was

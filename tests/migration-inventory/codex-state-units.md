@@ -439,10 +439,19 @@ or "counterpart" claim is quoted inline in that item.
   to stdout (`scripts/core/lifecycle.sh:53` has `>&2`; `:75-77` does not).
   `LegacyVerdict` is a pure verdict by design (see `src/lifecycle.ts`'s
   header comment) — it carries no stream and no exit status — so nothing in
-  this repo witnesses that stdout/stderr split after this commit. This is a
-  deferral, not a drop: the command-path caller that consumes
-  `LegacyVerdict.lines`, landing in **slice 4b**, must pin the report path's
-  lines to stdout and the block path's lines to stderr, and that is where the
-  distinction becomes assertable again. The 30 port-only entries (items 1-30)
+  this repo witnessed that stdout/stderr split at the commit that landed this
+  file. That was recorded as a deferral, not a drop: the command-path caller
+  that consumes `LegacyVerdict.lines`, landing in **slice 4b**, had to pin the
+  report path's lines to stdout and the block path's lines to stderr.
+  ***Deferral discharged 2026-08-11, in the slice it named; recorded here at
+  that slice's closeout so the bullet stops reading as outstanding.*** *Both
+  halves landed, in the two command modules that consume the two arms.* **Block
+  path → stderr:** *`tests/unit/commands-install.test.js`'s legacy-blocked case
+  asserts stderr is exactly the three `BLOCKED_LINES` and stdout carries only
+  the unrelated note (`:427-433`).* **Report path → stdout, with its converse:**
+  *`tests/unit/commands-uninstall.test.js` asserts both report lines are in
+  stdout and then asserts stderr does **not** contain `remains installed`
+  (`:84-101`) — the half that would otherwise pass silently if a caller wrote
+  both verdicts to stderr.* The 30 port-only entries (items 1-30)
   are strictly additive test coverage — not a reconciliation of any shell
   assertion — and are excluded from the 16/16 arithmetic above.

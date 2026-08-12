@@ -276,7 +276,20 @@ and was not counted here.
 32. Exit status is `1` when `git` is absent from `PATH` (`:160`). Port:
     `:191`.
 33. Stderr contains `required command not found: git` (`:161`). Port:
-    `:192`.
+    `:192`. **Strengthened to exact equality (PR 11.5 slice 4b, Task 8;
+    recorded here at Task 10, with port-only item 33, its counterpart in the
+    `pin` case).** The port makes no substring assertion on this needle any
+    more: both git-preflight cases assert the whole of stderr equals
+    `error: required command not found: git — install git and re-run\n`.
+    The port file records the measurement that forced it — in-process,
+    `install` reaches `gatherProbe`, whose ref resolution shells out to `git`
+    and emits its own suffix-less `error: required command not found: git`, so
+    the substring form was satisfied by either producer and still passed with
+    `git` removed from `COMMAND_REQUIREMENTS.install` in a mutated `dist/`. The
+    prose above stays *entailed* by the new assertion rather than contradicted
+    by it, which is why this is a note and not a rewrite. The identical
+    strengthening for `python3` is already labelled at port-only item 49; these
+    two were its unlabelled siblings.
 34. The dispatch log is empty — preflight failure must not dispatch (`:162`).
     Port: `:193`.
 
