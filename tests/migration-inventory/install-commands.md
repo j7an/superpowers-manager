@@ -747,6 +747,13 @@ described in the section above.
 
 Item 41 extends the shell's install-path provenance check to the update path.
 
+Item 42 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
+the shell had no in-process subject whose non-spawning could be guarded, so
+there is nothing for it to be additive, non-vacuous, or channel-changed
+*relative to*. It is row 18's first genuine consumer — see
+`tests/bin/lifecycle-fakes.js`'s `tripwireTriggered` and its callers in
+`tests/bin/install-fakes.js`.
+
 <!-- inventory:port-only:start -->
 
 1. `assertLegacyIdentityStops` adapter-log non-vacuity guard (`:435`) at the
@@ -802,6 +809,14 @@ Item 41 extends the shell's install-path provenance check to the update path.
     remediation path (`:1470`). The shell ran this check only for install
     (`:759-768`); update reaches the same remediation through
     `scripts/update:22-25`, so the same claim is asserted there.
+42. `adapterSeam: "tripwire"` armed on a fresh install: the subject's own exit
+    status is 0 AND the fake adapter's log holds no line at all (`:1598`,
+    within `:1598-1615`). Appended at the end of the file rather than beside
+    the fresh-install case it is thematically closest to, so adding it does
+    not shift any other item's pointer. Two things, not one — an exit status
+    alone cannot distinguish "refused" from "delegated, then failed" —
+    mirroring `tests/bin/lifecycle-fakes.test.js`'s own precedent for the
+    same subject.
 
 <!-- inventory:port-only:end -->
 
@@ -1176,8 +1191,8 @@ truncation `reset` performed is load-bearing and not decorative.
 ```json inventory
 {
   "shellOriginal": 124,
-  "portOnly": 41,
-  "ports": { "tests/bin/install-commands.test.js": 30 }
+  "portOnly": 42,
+  "ports": { "tests/bin/install-commands.test.js": 31 }
 }
 ```
 
@@ -1193,15 +1208,16 @@ truncation `reset` performed is load-bearing and not decorative.
   sum: 6+6+3+4+2+3+3+5+3+3+12+3+3+8+3+3+4+4+3+4+4+2+4+4+3+4+5+4+2+4+3 = 124).
   Unchanged by Task 6: this is a fact about the deleted shell file, not about
   the port.
-- Port (`tests/bin/install-commands.test.js`): **30** static `test(` call
-  sites as of Task 6 (PR 11.5 slice 4b, 2026-08-10; was 32), counted with
-  `migration-inventory.test.js`'s own `stripInert` +
-  `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. The drop of
-  two is the two retirements below, each deleting its case's `test(` call
-  site outright rather than converting it — no other task-6 change added or
-  removed a call site. No remaining call site is data-driven, so the 30
-  static sites produce 30 runtime cases. The `for legacy_state in legacy
-  both` loop at `:426` is still expanded into two explicit call sites
+- Port (`tests/bin/install-commands.test.js`): **31** static `test(` call
+  sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 32 before Task 6, then
+  30, now 31), counted with `migration-inventory.test.js`'s own `stripInert` +
+  `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. Task 6's drop
+  of two was the two retirements below, each deleting its case's `test(` call
+  site outright rather than converting it. Task 9 added exactly one call
+  site — the row-18 tripwire case, port-only item 42 — and no other task
+  between them added or removed one. No remaining call site is data-driven,
+  so the 31 static sites produce 31 runtime cases. The `for legacy_state in
+  legacy both` loop at `:426` is still expanded into two explicit call sites
   (`:950`, `:959`) sharing one helper.
 - Reconciliation: **116 of 124** shell items retain a port counterpart; the
   remaining **8** are retired at the gap, each recorded at its own entry
@@ -1264,6 +1280,6 @@ truncation `reset` performed is load-bearing and not decorative.
   Two fidelity notes carried over from before Task 6 are unaffected by it:
   items 61 and 94 carry a **narrowed TMPDIR scope** forced by per-case
   isolation, and item 81 **drops the shell's empty-log escape hatch**,
-  making the claim strictly stronger. Neither changes the count. The 41
-  port-only assertions are strictly additive and are excluded from the
-  124-item accounting above.
+  making the claim strictly stronger. Neither changes the count. The 42
+  port-only assertions (41 before Task 9, plus item 42's tripwire case) are
+  strictly additive and are excluded from the 124-item accounting above.

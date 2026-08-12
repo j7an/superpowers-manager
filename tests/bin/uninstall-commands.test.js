@@ -930,4 +930,42 @@ void describe("uninstall commands", { concurrency: true }, () => {
       "marketplace failure must not mutate unrelated providers",
     );
   });
+
+  // Port-only (no shell original): row 18's first genuine consumer. The shell
+  // had no in-process subject to guard, so this case has nothing to port —
+  // see tests/migration-inventory/uninstall-commands.md's port-only section.
+  // Appended at the end of the file, rather than beside the both-present case
+  // it is thematically closest to, so it does not shift the line number of
+  // any existing item — most of this inventory's `Port:` pointers are already
+  // stale (see the file's own STALE POINTER WARNING) and inserting in the
+  // middle would silently break the ones that are not.
+  //
+  // adapterSeam: "tripwire" used to matter to the OLD shell-spawned adapter;
+  // post-flip it is inert (lifecycle-fixture.js:293-300 says so explicitly).
+  // Arming it here and still getting a normal both-present uninstall proves
+  // the in-process port never reaches tests/bin/uninstall-fakes.js's adapter
+  // role at all, tripwire armed or not — uninstall-fakes.js's own runAdapter
+  // now refuses that role unconditionally (tests/bin/lifecycle-fakes.js's
+  // tripwireTriggered with `always: true`), so if the port ever regressed to
+  // spawning it, this case's adapter.log would carry a line and its stderr
+  // would carry "fixture: uninstall must not spawn the adapter" instead.
+  void test("both-present uninstall never reaches the fake adapter, tripwire armed or not (row 18)", async () => {
+    const c = uninstallCase({ adapterSeam: "tripwire" });
+    const result = await runScript(c, "uninstall");
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    // Two things, not one: the subject's own exit status, and the absence of
+    // the tripwire's marker. readLog returns [] for a missing file, which is
+    // exactly the property being proven here, not a vacuous read — nothing
+    // in-process ever invokes the fake adapter's role body, so adapter.log is
+    // never created at all.
+    assert.deepEqual(
+      readLog(c.adapterLog),
+      [],
+      "the in-process port must never reach the fake adapter executable",
+    );
+    assert.ok(
+      !result.stderr.includes("must not spawn the adapter"),
+      `the tripwire's own message leaked onto the subject's stderr:\n${result.stderr}`,
+    );
+  });
 });

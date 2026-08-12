@@ -645,6 +645,13 @@ before filtering it; every call site runs a subject that reaches
 `codex plugin list` (and, for the adapter, `inspect --view ownership`), so an
 empty log there is a fixture fault, never a legitimate state.
 
+Item 21 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
+the shell had no in-process subject whose non-spawning could be guarded, so
+there is nothing for it to be additive, non-vacuous, or channel-changed
+*relative to*. It is row 18's first genuine consumer — see
+`tests/bin/lifecycle-fakes.js`'s `tripwireTriggered` and its callers in
+`tests/bin/uninstall-fakes.js`.
+
 <!-- inventory:port-only:start -->
 
 1. Selection-independent recovery: `result.status === 0` (`:326`).
@@ -680,6 +687,14 @@ empty log there is a fixture fault, never a legitimate state.
     malformed-marketplace-entry call site (`:702`).
 20. `assertNoAdapterUninstall` non-vacuity guard at the
     malformed-marketplace-list call site (`:725`).
+21. `adapterSeam: "tripwire"` armed on a both-present uninstall: the subject's
+    own exit status is 0 AND the fake adapter's log holds no line at all
+    (`:952`, within `:952-969`). Appended at the end of the file rather than
+    beside the both-present case it is thematically closest to, so adding it
+    does not shift any other item's pointer. Two things, not one — an exit
+    status alone cannot distinguish "refused" from "delegated, then failed" —
+    mirroring `tests/bin/lifecycle-fakes.test.js`'s own precedent for the
+    same subject.
 
 <!-- inventory:port-only:end -->
 
@@ -936,8 +951,8 @@ rows O1-O3.
 ```json inventory
 {
   "shellOriginal": 83,
-  "portOnly": 20,
-  "ports": { "tests/bin/uninstall-commands.test.js": 18 }
+  "portOnly": 21,
+  "ports": { "tests/bin/uninstall-commands.test.js": 19 }
 }
 ```
 
@@ -949,21 +964,25 @@ rows O1-O3.
   malformed-marketplace-list, 5 remove-noop, 5 verify-after-drift, 9
   marketplace-remove-fails; sum:
   2+4+3+4+4+6+12+4+4+4+3+4+3+4+3+5+5+9 = 83).
-- Port (`tests/bin/uninstall-commands.test.js`): 18 static `test(` call sites,
-  one per shell scenario (17 `reset` call sites plus the source-guard block at
-  `:9-16`, which precedes the first `reset`). No call site is data-driven, so
-  the 18 static sites produce 18 runtime cases. Unchanged by Task 6 (PR 11.5
-  slice 4b, 2026-08-10): three cases converted in place (selection-independent
-  recovery and missing-Codex to an injected double; both-present re-anchored
-  onto `codex.log`, still via `runScript`), so the static count neither grew
-  nor shrank. Unchanged by Task 8 (PR 11.5 slice 4b, 2026-08-11) for the same
-  reason: the missing-python3 case was rewritten in place onto the inverse
-  property when the flip removed `python3` from
+- Port (`tests/bin/uninstall-commands.test.js`): **19** static `test(` call
+  sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 18 before Task 9), one
+  per shell scenario plus one port-only case with no shell scenario at all
+  (17 `reset` call sites, the source-guard block at `:9-16` which precedes the
+  first `reset`, and Task 9's row-18 tripwire case). No call site is
+  data-driven, so the 19 static sites produce 19 runtime cases. Unchanged by
+  Task 6 (PR 11.5 slice 4b, 2026-08-10): three cases converted in place
+  (selection-independent recovery and missing-Codex to an injected double;
+  both-present re-anchored onto `codex.log`, still via `runScript`), so the
+  static count neither grew nor shrank. Unchanged by Task 8 (PR 11.5 slice 4b,
+  2026-08-11) for the same reason: the missing-python3 case was rewritten in
+  place onto the inverse property when the flip removed `python3` from
   `COMMAND_REQUIREMENTS.uninstall`, so again the static count neither grew nor
-  shrank. They carry **78 of the 83** shell assertions, **72 of them
-  1:1** and **6 sharing 2** merged assertions, plus 20 port-only assertions;
-  items 28 and 35 (below) have no port counterpart as of Task 6, and items 7,
-  8 and 9 are retired as of Task 8.
+  shrank. Task 9 added exactly one call site — the row-18 tripwire case,
+  port-only item 21 — and no other task besides Task 9 added or removed one.
+  The 18 pre-Task-9 sites carry **78 of the 83** shell assertions, **72 of
+  them 1:1** and **6 sharing 2** merged assertions, plus 21 port-only
+  assertions (20 before Task 9); items 28 and 35 (below) have no port
+  counterpart as of Task 6, and items 7, 8 and 9 are retired as of Task 8.
 - Reconciliation: **78 of the 83** shell items retain a port counterpart;
   **2 are dropped** — item 35 ("the adapter log never names `other@x`") and
   item 28 ("the adapter uninstall op appears exactly once") — and **3 retired
@@ -1005,5 +1024,6 @@ rows O1-O3.
   both-present sections changed **channel** (adapter-log read → injected
   double, or adapter-log read → codex.log re-anchor) without changing what
   they assert — each section's own note says which. None of this changes the
-  count. The 20 port-only assertions are strictly additive and are excluded
-  from the 83-item arithmetic above.
+  count. The 21 port-only assertions (20 before Task 9, plus item 21's
+  tripwire case) are strictly additive and are excluded from the 83-item
+  arithmetic above.

@@ -6,6 +6,9 @@
 // named as this extraction's trigger. Slice 4a added the outer shell the two
 // mutating fakes also duplicated: runFake, its FakeContext, the Decision 5
 // injection toggle, the adapter tripwire, and the real-adapter delegation.
+// Slice 4b's Task 9 gives probe-fakes.js the same outer shell (matrix row 20)
+// and widens the adapter tripwire so install and uninstall can trip
+// unconditionally too (row 18), matching the guard probe already carried.
 //
 // Every response-then-exit site here uses `process.exitCode` plus a normal
 // return, never `process.exit()`. `process.exit()` truncates a pending write
@@ -222,7 +225,7 @@ function makeContext(state, config) {
  * respondToListing above returns a boolean instead of exiting.
  *
  * @param {{
- *   kind: "install" | "uninstall",
+ *   kind: "install" | "uninstall" | "probe",
  *   codex: (ctx: FakeContext) => void,
  *   adapter: (ctx: FakeContext) => void,
  * }} fake
@@ -279,18 +282,31 @@ export function injectSpuriousMutation(ctx, forbiddenLine) {
  * row 18): once install/update/uninstall dispatch in-process, runAdapter is a
  * function call and this executable must never be reached.
  *
+ * `options.always` drops the `ctx.seam === "tripwire"` gate entirely. Probe
+ * has fired unconditionally since before this task — in-process probe calls
+ * `runAdapter` as a plain function, so no seam value makes reaching this
+ * executable legitimate. Install and uninstall get the same treatment here:
+ * post-flip, `ctx.seam` (`SPW_FIXTURE_ADAPTER_SEAM`) no longer selects
+ * anything a real dispatch can reach, so the two mutating fakes' adapter role
+ * refuses regardless of what seam a case happens to pass. Without `always`,
+ * the seam-gated form is still there for a fake that legitimately needs it.
+ *
  * The caller MUST `return` on true. Setting `process.exitCode` does not halt
  * execution, so a missing return falls through into the delegation below and
  * spawns the real adapter — the exact inverse of a tripwire.
  *
  * @param {FakeContext} ctx
+ * @param {{ always?: boolean, message?: string }} [options]
  * @returns {boolean} true when the caller must stop
  */
-export function tripwireTriggered(ctx) {
-  if (ctx.seam !== "tripwire") {
+export function tripwireTriggered(ctx, options = {}) {
+  const { always = false, message } = options;
+  if (!always && ctx.seam !== "tripwire") {
     return false;
   }
-  process.stderr.write("fixture: this command must not spawn the adapter\n");
+  process.stderr.write(
+    `${message ?? "fixture: this command must not spawn the adapter"}\n`,
+  );
   process.exitCode = 94;
   return true;
 }
