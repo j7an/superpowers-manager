@@ -191,7 +191,7 @@ function createReleaseRepo(sandbox, name = "upstream") {
 
 /**
  * A `codex` that answers the two listing commands the in-process probe's
- * adapter views issue (`src/adapter.ts:797`, `:855`, `:867` — the argument
+ * adapter views issue (`src/adapter.ts:797`, `:871`, `:883` — the argument
  * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
  * `tests/migration-inventory/probe.md` cite them) with empty inventories, and
  * rejects anything else. `writeNoopTool`'s `exit 0` stub is
@@ -490,7 +490,7 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
 /**
  * The fixture's own `codex` log, in place of `adapterOperations(sandbox)`.
  * Every mutation the real adapter performs reaches Codex through `codexBin`
- * (src/adapter.ts:575-716, `runInstall`'s marketplace/plugin `listingCommand`/
+ * (src/adapter.ts:559-700, `runInstall`'s marketplace/plugin `listingCommand`/
  * `mutationCommand` calls), so this is the channel that survives Task 8's
  * flip. `readLog` itself (tests/bin/lifecycle-fixture.js:354-360) does NOT
  * fail closed and never throws: it wraps the `readFileSync` in a bare
@@ -1284,7 +1284,7 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     //
     // "Wholesale" is true of the manager's own process but NOT of this witness:
     // runAdapter's runCommand deletes NODE_OPTIONS and NODE_PATH from the child
-    // environment before execFile (src/adapter.ts:132-134, landed by this
+    // environment before execFile (src/adapter.ts:120-122, landed by this
     // slice's Task 1). The dump below therefore covers those two names as well
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
@@ -2140,7 +2140,7 @@ function lifecycleCodexCase(options) {
  * (tests/bin/adapter-seam.js).
  *
  * The real adapter's update-control view is hardcoded to "managed"
- * (src/adapter.ts:798), which is why interception is needed at all and why the
+ * (src/adapter.ts:782), which is why interception is needed at all and why the
  * third subcase needs none.
  *
  * `"malformed"` re-anchors onto the port's own reader rather than the shell's.
@@ -2202,7 +2202,7 @@ void test("INSTALL-ORDER-01 install prepares and validates before adapter mutati
     assert.match(out, /additional plugin validation failed/);
     // The probe triple (fingerprint: one listing; ownership: two listings)
     // runs before prepare's `build` step rejects the candidate — build issues
-    // no Codex command of its own (src/adapter.ts:319-573, `runBuild`), so a
+    // no Codex command of its own (src/adapter.ts:303-557, `runBuild`), so a
     // mutation line appearing here would prove the reject happened too late.
     assert.deepEqual(codexOperations(c), [
       "plugin list --json",
@@ -2282,7 +2282,7 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
 
   {
     // Delegate mode (the default): the real adapter's update-control view
-    // always answers "managed" (src/adapter.ts:798), which is exactly what
+    // always answers "managed" (src/adapter.ts:782), which is exactly what
     // this branch needs, so no interception is wired at all.
     const c = lifecycleCodexCase({ fakes: "install" });
     const result = await runScript(c, "update");
@@ -2371,7 +2371,7 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     // appear in a log pinned to these exact entries.
     // Exact: ownership inspect (list + marketplace list), then the mutation
     // uninstall issues ONLY for what ownership reported present (both, when
-    // managerPresent; neither, when not — src/adapter.ts:718-788,
+    // managerPresent; neither, when not — src/adapter.ts:702-772,
     // `runUninstall`), then the post-removal ownership re-inspect.
     assert.deepEqual(
       codex,
@@ -2461,7 +2461,7 @@ void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", 
   });
   // The manager plugin listing claims version 1.0.0 is installed, so the
   // fingerprint inspect that runs before the legacy-state check
-  // (src/adapter.ts:800-871, the "fingerprint" view) needs a matching cached
+  // (src/adapter.ts:784-855, the "fingerprint" view) needs a matching cached
   // tree to read, or it fails on a DIFFERENT diagnostic ("cannot inspect
   // active Codex plugin fingerprint") than this ID's own contract. The
   // commit value itself is irrelevant: the legacy check runs on

@@ -23,7 +23,7 @@ const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 // its `string | Uint8Array` parameter both predate the Codex-adapter port
 // byte-for-byte, so no mutation of that decode says anything about the port.
 // The behavioural half of that adoption is the adapter passing raw `Buffer`
-// stdout at `src/adapter.ts:552`, `:741`, and `:830`-`:856` instead of a
+// stdout at `src/adapter.ts:604`, `:809`, and `:898`-`:924` instead of a
 // lossily decoded string; a regression there stays green here and needs an
 // adapter-boundary test, not another case in this file.
 void test("marketplace reader rejects invalid UTF-8 bytes", () => {

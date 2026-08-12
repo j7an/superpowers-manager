@@ -207,7 +207,7 @@ function assertNoCodexMutation(log) {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (src/adapter.ts:449-468). The
+ * candidate into `plugins/superpowers` (src/adapter.ts:433-452). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -575,7 +575,7 @@ async function assertLegacyIdentityStops(c, identityState) {
   // there is no codex.log at all in-process, since nothing here spawns a
   // Codex fake -- but it is subsumed: the double never reaching "install"
   // means the adapter's own unconditional `codex plugin add`
-  // (src/adapter.ts:687) was structurally impossible to reach either.
+  // (src/adapter.ts:671) was structurally impossible to reach either.
   assert.ok(
     adapter.calls.some((call) => call.join(" ") === "inspect --view ownership"),
     "adapter never inspected ownership, so 'no build or install' would pass vacuously",
@@ -1297,7 +1297,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (src/adapter.ts:626-633).
+    // the previous root it already removed (src/adapter.ts:650-657).
     assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
     assert.ok(out.includes(otherRoot), out);
     // :632-634
@@ -1373,7 +1373,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :670
     assert.ok(out.includes("does not match the prepared plugin"), out);
-    // :671 — the hint text lives in src/adapter.ts:681-682 and is replayed
+    // :671 — the hint text lives in src/adapter.ts:681-683 and is replayed
     // from the adapter result by scripts/core/lifecycle.sh:109,121; core owns
     // no copy of it.
     assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
@@ -1400,7 +1400,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — src/adapter.ts:661, replayed through the install result.
+    // :685 — src/adapter.ts:685, replayed through the install result.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
   });
 
@@ -1467,7 +1467,7 @@ void describe("install commands", { concurrency: true }, () => {
     const c = installCase();
     await prepareGeneratedTree(c);
     clearLogs(c);
-    // :724 — src/adapter.ts:549 reads this; `add-only` is the default.
+    // :724 — src/adapter.ts:573 reads this; `add-only` is the default.
     const result = await runScript(c, "install", {
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add" },
     });

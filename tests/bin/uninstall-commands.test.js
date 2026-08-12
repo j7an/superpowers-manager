@@ -162,7 +162,7 @@ function assertNoRemoves(log) {
  * How many ownership inspections reached Codex.
  *
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
- * then one `codex plugin marketplace list --json` (src/adapter.ts:887, :883).
+ * then one `codex plugin marketplace list --json` (src/adapter.ts:871, :883).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
  * --json` does not contain it as a substring, and nothing else scripts/uninstall
  * runs issues either listing.
@@ -227,7 +227,7 @@ function assertNoAdapterUninstall(codex, message) {
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
- * (src/adapter.ts:740, :741).
+ * (src/adapter.ts:740, :757).
  *
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
@@ -448,7 +448,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   void test("missing Codex: controlled ownership-inspect failure (:214-232)", async () => {
     // Converted (Task 6, D4): calls `runUninstall` in-process, with the
     // double answering the ownership inspect exactly as the real adapter's
-    // requireCodex check does for a missing binary (src/adapter.ts:283-289,
+    // requireCodex check does for a missing binary (src/adapter.ts:267-273,
     // ":180") -- a well-formed ok:false envelope, not a transport-level
     // fault. There is no re-anchor onto codex.log available for this case
     // either way: Codex is never reached by construction, so codex.log would
@@ -509,7 +509,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
-    // of each (src/adapter.ts:740, :741) — so together they pin both the call
+    // of each (src/adapter.ts:740, :757) — so together they pin both the call
     // and the both-false pair. The completion check is kept beneath them as the
     // ordering witness it actually is.
     assert.ok(
@@ -583,7 +583,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
-    // `plugin list --json` (src/adapter.ts:887) and one
+    // `plugin list --json` (src/adapter.ts:871) and one
     // `plugin marketplace list --json` (:883); `ownershipInspections` (below)
     // already counts the former. The adapter uninstall op itself issues no
     // listing, only the two removes asserted at :277-281 further down, so

@@ -1020,18 +1020,18 @@ and supported it with two citations: that
 `grep -rn 'NODE_OPTIONS\|NODE_PATH' src/` returns **zero hits**, and that
 `runCommand` passes the `env` it is handed straight into `execFile` untouched.
 **Both are now false**, and the paragraph is corrected here rather than
-softened. `runCommand` (`src/adapter.ts:114-172`) copies the environment it is
+softened. `runCommand` (`src/adapter.ts:110-156`) copies the environment it is
 given and `delete`s `NODE_OPTIONS` and `NODE_PATH` before `execFile`
 (`:120-122`); the same grep now returns **three** hits, all in
 `src/adapter.ts` — the explanatory comment at `:116` and those two deletes. The
 change is covered by `tests/unit/adapter.test.js:549`, *"runCommand strips
 NODE_OPTIONS and NODE_PATH from the child env"*, which drives the real
-`runCommand` through an exported test alias (`src/adapter.ts:174-176`) rather
+`runCommand` through an exported test alias (`src/adapter.ts:158-160`) rather
 than restating the deletes.
 
 **What closed, and what did not.** The property is child-clean-ness, and it now
 holds for the only child the in-process path spawns: `runCommand`'s single
-caller is the Codex binary launch at `src/adapter.ts:223`. It does **not** hold
+caller is the Codex binary launch at `src/adapter.ts:207`. It does **not** hold
 for the child items 161-163 were written about — a `node adapter-cli.js`
 launch — because in-process `prepare` performs no such launch at all, which is
 exactly why item 161's vacuity guard retires structurally. Items 162-163
@@ -1059,12 +1059,12 @@ beside this one — items 83-85, 113-120, and 125/127/128 — and narrowed item
      longer retired *against nothing*, as this entry said until PR 11.5 slice
      4b: the property has a successor at the child that does exist —
      `runCommand` deletes `NODE_OPTIONS` before spawning `codexBin`
-     (`src/adapter.ts:132-134`, called at `:207`), pinned by
+     (`src/adapter.ts:120-122`, called at `:207`), pinned by
      `tests/unit/adapter.test.js:549`. The §11 citation still does *not* cover
      this, because §11 declines the *dispatcher* boundary, not the child's;
      it no longer needs to. See the cluster note above.
 163. `NODE_PATH` was unset for that launch (`:1272`). **Retired**, same
-     reasoning and the same successor: `src/adapter.ts:134` deletes
+     reasoning and the same successor: `src/adapter.ts:122` deletes
      `NODE_PATH` on that same path, under the same unit test.
 
 <!-- inventory:mapped:end -->
@@ -1254,11 +1254,11 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
      `scripts/core/common.sh:71` gives it to the shell path. This entry read
      **OPEN** until now, on two citations that were true when written and are
      false today: that `src/` scrubs neither variable anywhere, and that
-     `runCommand` passes `env` through untouched. `src/adapter.ts:132-134`
+     `runCommand` passes `env` through untouched. `src/adapter.ts:120-122`
      copies the environment and deletes both variables before `execFile`, with
      `tests/unit/adapter.test.js:549` as its witness. What closed is the
      property, at the only child the in-process path spawns
-     (`src/adapter.ts:223`). What is **not** resurrected is items 162-163
+     (`src/adapter.ts:207`). What is **not** resurrected is items 162-163
      themselves: the `adapter-cli.js` launch they observed does not occur
      in-process, so they stay retired, now with a successor rather than
      against nothing. §11's "not scheduled" still covers only the *dispatcher*

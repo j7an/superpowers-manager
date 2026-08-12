@@ -515,7 +515,7 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    `mktemp -d` workspace and any adapter sidecar left in the same directory.
    In-process probe creates no workspace at all, and the adapter's workspaces
    are rooted at `os.tmpdir()` — read from the *runner's* environment by
-   `withWorkspace`'s caller (`src/adapter.ts:789`, `:847`), not from the
+   `withWorkspace`'s caller (`src/adapter.ts:789`, `:863`), not from the
    context env a case controls — so an equivalent assertion on the case's own
    `TMPDIR` would be vacuously true no matter what either component did.
    The surviving property, that `withWorkspace` removes what it created, is

@@ -534,7 +534,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
 // (src/adapter.ts:1009) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (src/adapter.ts:244-251, :251-258), and
+// `command-not-found` AdapterFailure (src/adapter.ts:244-251, :267-274), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:190-195) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
