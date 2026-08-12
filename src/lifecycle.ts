@@ -95,27 +95,46 @@ export function requireManagedUpdateControl(value: string): Check {
   };
 }
 
-// A successful envelope's result object, or null when the call failed or the
-// result is not an object. Callers distinguish "failed" from "absent field"
-// themselves, because the two produce different operator text.
-function resultObject(
-  adapterResult: AdapterResult,
-): Record<string, unknown> | null {
-  if (adapterResult.status !== 0) return null;
+// scripts/core/lifecycle.sh drew a line the first port collapsed. The shell
+// reaches "inspection failed" only when the inspect CALL failed (:91), and
+// "cannot parse" when the call succeeded but its content is unusable (:95).
+// Callers need both, because the two produce different operator text.
+// Spec §6.2.3 item 3.
+type ResultRead =
+  | { readonly kind: "object"; readonly value: Record<string, unknown> }
+  // The call itself failed: non-zero status, or an ok:false envelope.
+  | { readonly kind: "call-failed" }
+  // The call succeeded and the result is not a usable object.
+  | { readonly kind: "unusable" };
+
+function readResult(adapterResult: AdapterResult): ResultRead {
+  if (adapterResult.status !== 0) return { kind: "call-failed" };
   const envelope = adapterResult.envelope;
-  if (!envelope.ok) return null;
+  if (!envelope.ok) return { kind: "call-failed" };
   const value = envelope.result;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
+    return { kind: "unusable" };
   }
-  return value as Record<string, unknown>;
+  return { kind: "object", value: value as Record<string, unknown> };
 }
 
-export interface FingerprintVerdict {
-  readonly ok: boolean;
-  readonly stdout: readonly string[];
-  readonly stderr: readonly string[];
-}
+// A discriminated union on a LITERAL `ok`, matching `Check`. A plain
+// `boolean` gives callers no narrowing where `Check` gives it, and that
+// asymmetry gets papered over with a cast at the first call site. The three
+// result conventions in this module stay three shapes on purpose —
+// LegacyVerdict keeps its `kind` tag and its deliberate stream-freedom — but
+// each one narrows. Spec §6.2.3 item 7.
+export type FingerprintVerdict =
+  | {
+      readonly ok: true;
+      readonly stdout: readonly string[];
+      readonly stderr: readonly string[];
+    }
+  | {
+      readonly ok: false;
+      readonly stdout: readonly string[];
+      readonly stderr: readonly string[];
+    };
 
 // scripts/core/lifecycle.sh:87-124. The shell performed the inspection itself
 // at :91; a pure function cannot, so the caller performs it and a failure
@@ -125,8 +144,8 @@ export function verifyInstalledFingerprint(
   installResult: AdapterResult,
   inspectResult: AdapterResult,
 ): FingerprintVerdict {
-  const inspected = resultObject(inspectResult);
-  if (inspected === null) {
+  const inspected = readResult(inspectResult);
+  if (inspected.kind === "call-failed") {
     return {
       ok: false,
       stdout: [],
@@ -135,10 +154,31 @@ export function verifyInstalledFingerprint(
       ],
     };
   }
-  const raw = inspected.fingerprint;
+  if (inspected.kind === "unusable") {
+    // A well-formed envelope whose `result` is not an object is the port's
+    // analogue of the shell's own split: the inspect call SUCCEEDED and only
+    // the content is unusable. This is what makes
+    // tests/test_marketplace_reconcile.sh:312's live `grep -Fq "parse"`
+    // satisfiable at all. Spec §6.2.3 items 3 and 4.
+    return {
+      ok: false,
+      stdout: [],
+      stderr: [
+        "error: cannot parse installed manager fingerprint inspection result after install.",
+      ],
+    };
+  }
+  const raw = inspected.value.fingerprint;
   // The Python reader printed the empty string for a JSON null, and
   // `fingerprint` is null whenever no plugin version is active
-  // (src/adapter.ts:802). Anything non-string and non-null is unparseable.
+  // (src/adapter.ts:818). Anything non-string and non-null is unparseable.
+  //
+  // PORT-ONLY, and intentional. The shell cannot construct this trigger:
+  // scripts/core/provenance.sh:62 stringifies any non-null scalar, so a
+  // non-string fingerprint never reaches spw_verify_installed_fingerprint.
+  // The port CAN encounter the shape and must fail closed rather than
+  // coerce. Pinned by a test below and recorded in
+  // tests/migration-inventory/codex-state-units.md. Spec §6.2.3 item 3.
   if (raw !== null && raw !== undefined && typeof raw !== "string") {
     return {
       ok: false,
@@ -167,8 +207,9 @@ export function verifyInstalledFingerprint(
 
   // :106-113 — which hint key is read depends on whether a commit was
   // detected at all, and the hint is optional in both directions.
-  const installed = resultObject(installResult);
-  const hints = installed === null ? null : installed.verification_hints;
+  const installed = readResult(installResult);
+  const hints =
+    installed.kind === "object" ? installed.value.verification_hints : null;
   let hint = "";
   if (typeof hints === "object" && hints !== null && !Array.isArray(hints)) {
     const key = installedCommit.length > 0 ? "mismatch" : "missing";
@@ -191,25 +232,27 @@ export function verifyInstalledFingerprint(
 export function verifyUninstalledResources(
   inspectResult: AdapterResult,
 ): Check {
-  const inspected = resultObject(inspectResult);
-  if (inspected === null) {
+  const read = readResult(inspectResult);
+  if (read.kind !== "object") {
     return {
       ok: false,
       message: "cannot read the adapter ownership inspection after removal",
     };
   }
+  const inspected = read.value;
+  // A missing or non-object `resources` falls THROUGH to the Boolean check
+  // rather than getting its own message. scripts/core/adapter.sh:70 emits
+  // "expected Boolean adapter result at resources.plugin" for input {} —
+  // the input tests/test_marketplace_reconcile.sh:224 actually writes — so a
+  // distinct "not an object" message here would be a port-only divergence on
+  // a live shell-tested case. Parity, not divergence. Spec §6.2.3 item 3.
   const resources = inspected.resources;
-  if (
-    typeof resources !== "object" ||
-    resources === null ||
-    Array.isArray(resources)
-  ) {
-    return {
-      ok: false,
-      message: "expected an object adapter result at resources",
-    };
-  }
-  const bag = resources as Record<string, unknown>;
+  const bag: Record<string, unknown> =
+    typeof resources === "object" &&
+    resources !== null &&
+    !Array.isArray(resources)
+      ? (resources as Record<string, unknown>)
+      : {};
   for (const key of ["plugin", "marketplace"] as const) {
     if (typeof bag[key] !== "boolean") {
       return {

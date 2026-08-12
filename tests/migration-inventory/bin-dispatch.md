@@ -159,35 +159,50 @@ Port-only region — additive JS assertions that map no shell item, numbered
     case then shifted the correct line to `:111`) and recorded
     as port-only item 21, since it is a different property than "reaches its
     script with its args".
-12. `install --dry-run` → logs `install --dry-run ref=` (`:92-94`). Port:
-    `:82`, `ROUTING_CASES[0]`. **Index updated** (PR 11.5 slice 3.4) from
-    `ROUTING_CASES[1]` to `[0]`: the table shrank by one more when `prepare`
-    (formerly index 0) was also removed — see item 8's retirement note.
-    (Slice 2's Task 6 had already updated this from `[2]` to `[1]` when
-    `probe` (formerly index 0) was removed — see item 7's retirement
-    note. Slice 1's Task 7 had already updated this from `[3]` to `[2]` when
-    `pin` was removed — see item 9's retirement note. Its Task 6 had already
-    updated this from `[4]` to `[3]` when `track-latest` was removed — see
-    item 10's retirement note. Its Task 5 had already updated this from `[5]`
-    to `[4]` when `unpin` was removed — see item 11's retirement note.)
-    **Citation corrected** in the same pass: items 12, 13 and 14 read `:80` at
-    `162acb3`, which was the loop's `assert.deepEqual(result.log, [expected])`
-    and therefore right; slice 3.4 rewrote the token to `:79` while updating
-    the `ROUTING_CASES` indices, and `:79` is the `void test(` line. The
-    assertion these three items map to now sits at `:82`. (`:81` is the
-    per-case `assert.equal(result.status, 0)`, cited correctly in the paragraph
-    that closes items 7-14.)
-13. `uninstall --purge` → logs `uninstall --purge ref=` (`:96-98`). Port:
-    `:82`, `ROUTING_CASES[1]`. **Index updated** (PR 11.5 slice 3.4)
-    from `ROUTING_CASES[2]` to `[1]`, same cause as item 12.
+12. `install --dry-run` → logs `install --dry-run ref=` (`:92-94`).
+    **Retired** (PR 11.5 slice 4b, Task 8): `install` flipped to an in-process
+    command (`src/cli.ts` `DISPATCH.install`), so it never invokes
+    `scripts/install` and never logs to the dispatch log — the condition this
+    item asserted can no longer occur, in either direction. It was
+    `ROUTING_CASES`'s first surviving entry; with items 13 and 14 leaving in
+    the same commit the table emptied and it, its loop, and port-only item 1's
+    length guard were deleted outright rather than left with zero iterations
+    (the reasoning slice 3.4 applied to `NO_CODEX_CASES`). The analogous
+    in-process property ("runs without ever reaching its script") is covered by
+    `tests/bin/bin-dispatch.test.js`'s `` `install` runs in-process and
+    dispatches nothing `` and recorded as port-only item 57. Like item 8, and
+    unlike items 9, 10 and 11, the replacement case asserts no exit status:
+    this fixture's tool stubs are `exit 0` one-liners and its package root has
+    no upstream to clone, so `install` cannot succeed here.
+13. `uninstall --purge` → logs `uninstall --purge ref=` (`:96-98`).
+    **Retired** (PR 11.5 slice 4b, Task 8), same cause and same shape as item
+    12. The analogous in-process property is covered by
+    `` `uninstall` runs in-process and dispatches nothing `` and recorded as
+    port-only item 58.
 14. A bare invocation routes to `update` → logs `update  ref=` (`:101-103`).
-    Port: `:82`, `ROUTING_CASES[2]`. **Index updated** (PR 11.5 slice 3.4)
-    from `ROUTING_CASES[3]` to `[2]`, same cause as item 12.
+    **Retired** (PR 11.5 slice 4b, Task 8), same cause as item 12. The
+    surviving half — a bare invocation is still `update`, and it reaches no
+    script — is covered by
+    `` a bare invocation routes to `update`, in-process, dispatching nothing ``
+    and recorded as port-only item 59. The "is still `update`" half is not
+    observable through this fixture once nothing dispatches; it is asserted
+    end to end by `tests/baseline/cli-parity.test.js`'s
+    `CLI-MODE-DEFAULT-01` — specifically by that case's *second* half, which
+    runs a bare invocation against a recording `codex` and pins the exact
+    ten-call `codex` invocation sequence `update` produces. Its first half,
+    which compares a bare invocation against an explicit `update` invocation in
+    the same sandbox, does not carry that claim on its own and must not be cited
+    for it: under a silent `exit 0` `codex` a bare invocation that fell through
+    to `probe` produces the same status, the same empty stdout and the same
+    `error: cannot parse output of 'codex plugin list --json'`, so the two runs
+    agree either way. That is measured, not supposed — a mutant flipping
+    `parseArgs`' bare default to `probe` survived an earlier form of the case
+    that had only the comparison.
 
 Each of items 7-14 is one `grep -Fqx` in the shell. The port's per-case
-`assert.equal(result.status, 0)` at `:81` has no shell counterpart (the shell
+`assert.equal(result.status, 0)` had no shell counterpart (the shell
 never explicitly checked routing's exit status — see port-only entries 2-9)
-and is not counted here.
+and was not counted here.
 
 ### An unknown subcommand fails with usage and dispatches nothing (`:105-114`)
 
@@ -223,31 +238,58 @@ and is not counted here.
 ### Exit-code propagation (`:138-145`)
 
 29. A script's exit code (`42`) propagates unchanged through `probe`
-    (`:144-145`). Port: `:234`. The port's vehicle moved from `probe` to
-    `install` (PR 11.5 slice 2, Task 6): the property under test is that a
-    spawned child's status reaches the caller unchanged, and an in-process
-    command has no child whose status could propagate. The item stays mapped
-    — only the command carrying it changed — and the port carries an inline
-    comment saying so.
+    (`:144-145`). The port's vehicle had already moved from `probe` to
+    `install` (PR 11.5 slice 2, Task 6), the property under test being that a
+    spawned child's status reaches the caller unchanged. **Retired** (PR 11.5
+    slice 4b, Task 8): with the last spawned command flipped, the CLI starts no
+    child for any command, so there is no child status to propagate and the
+    condition cannot occur in either direction. There is no successor of the
+    same kind — `main` exits with the value its in-process handler returns,
+    which is a property of each handler rather than of dispatch, and is
+    asserted per command by
+    `tests/unit/commands-{install,update,uninstall}.test.js`. The
+    `scripts` option on `runDispatch` that this case used survives with no
+    consumer.
 
 ### Env passthrough (`:147-154`)
 
 30. `SUPERPOWERS_REF=abc123` reaches the dispatched script: log line
-    `update  ref=abc123` (`:153`). Port: `:178-181` (**merged** — see item
-    31).
+    `update  ref=abc123` (`:153`). **Retired** (PR 11.5 slice 4b, Task 8) —
+    see item 31. The merge these two items used to share is gone with them.
 31. `SUPERPOWERS_VALIDATOR=/tmp/custom-validator.py` reaches the dispatched
     script: log line `update validator=/tmp/custom-validator.py` (`:154`).
-    Port: `:178-181`. Items 30-31 are two separate `grep -Fqx` calls in the
-    shell; the port asserts both lines in one `assert.deepEqual` over the
-    full two-line log array, so both shell assertions map onto one JS
-    assertion.
+    **Retired** (PR 11.5 slice 4b, Task 8). Items 30-31 were two separate
+    `grep -Fqx` calls in the shell that the port asserted in one
+    `assert.deepEqual` over the two-line log array. `update` is in-process now,
+    so no environment is handed to a child of the manager at all: the command
+    reads `ctx.env`, which is `process.env` itself. "Passthrough to the
+    dispatched script" therefore has no referent, in either direction. The
+    surviving half — that a `SUPERPOWERS_*` variable actually changes what a
+    command does — is carried by the two `prepare` cases in this file
+    (`SUPERPOWERS_VALIDATOR` flipping preflight's `python3` requirement,
+    port-only items 47-51), and, for the full ten-variable set against the one
+    child the manager still spawns, by
+    `tests/baseline/cli-parity.test.js`'s `CLI-ENV-01`.
 
 ### Preflight: missing git fails before any dispatch, names the tool (`:156-162`)
 
 32. Exit status is `1` when `git` is absent from `PATH` (`:160`). Port:
     `:191`.
 33. Stderr contains `required command not found: git` (`:161`). Port:
-    `:192`.
+    `:192`. **Strengthened to exact equality (PR 11.5 slice 4b, Task 8;
+    recorded here at Task 10, with port-only item 33, its counterpart in the
+    `pin` case).** The port makes no substring assertion on this needle any
+    more: both git-preflight cases assert the whole of stderr equals
+    `error: required command not found: git — install git and re-run\n`.
+    The port file records the measurement that forced it — in-process,
+    `install` reaches `gatherProbe`, whose ref resolution shells out to `git`
+    and emits its own suffix-less `error: required command not found: git`, so
+    the substring form was satisfied by either producer and still passed with
+    `git` removed from `COMMAND_REQUIREMENTS.install` in a mutated `dist/`. The
+    prose above stays *entailed* by the new assertion rather than contradicted
+    by it, which is why this is a note and not a rewrite. The identical
+    strengthening for `python3` is already labelled at port-only item 49; these
+    two were its unlabelled siblings.
 34. The dispatch log is empty — preflight failure must not dispatch (`:162`).
     Port: `:193`.
 
@@ -279,11 +321,17 @@ and is not counted here.
     `track-latest`'s own standalone case immediately above it) and recorded
     as port-only item 22.
 40. `uninstall` dispatches with `git` absent from `PATH` (loop iteration 3).
-    Port: `:242`, `NO_GIT_CASES[0]`. **Index updated** (PR 11.5, Task 6) from
-    `NO_GIT_CASES[1]` to `[0]`: the table shrank by one more when
-    `track-latest` (formerly index 0) was also removed — see item 38's
-    retirement note. (Task 5 had already updated this from `[2]` to `[1]`
-    when `unpin` was removed — see item 39's retirement note.)
+    **Retired** (PR 11.5 slice 4b, Task 8): `uninstall` is now in-process and
+    never logs to the dispatch log, so "dispatches ... and logs
+    `uninstall  ref=`" can no longer occur. It was `NO_GIT_CASES`'s last
+    entry, so the table and its `for` loop were deleted outright rather than
+    left with zero iterations — the same treatment `NO_CODEX_CASES` got at
+    slice 3.4. The property this item actually protected (preflight does not
+    require `git` for `uninstall`) is covered by
+    `` `uninstall` runs in-process with git absent from PATH `` and recorded
+    as port-only items 60-61. Like item 51's replacement, and unlike items 38
+    and 39's, that case asserts no exit status: the `exit 0` `codex` stub
+    answers no listing, so `runUninstall` fails closed on it.
 
 ### Missing python does not block unpin (`:181-186`)
 
@@ -392,8 +440,17 @@ properties) — see each item's retirement/relocation note.
 ### Missing script file: diagnostic, non-zero exit (`:217-222`)
 
 52. Exit status is `1` when `scripts/uninstall` is missing (`:220`, bare
-    `[ "$rc" -eq 1 ]`). Port: `:434`.
-53. Stderr contains `missing script` (`:221`). Port: `:435`.
+    `[ "$rc" -eq 1 ]`). **Retired** (PR 11.5 slice 4b, Task 8) — see item 53.
+53. Stderr contains `missing script` (`:221`). **Retired** (PR 11.5 slice 4b,
+    Task 8). `main` no longer looks for a `scripts/<command>` file for any
+    command: the `existsSync` check and the `error: missing script: <path>`
+    diagnostic it guarded were deleted from `src/cli.ts` with the spawn path,
+    so neither condition can occur in either direction. There is no successor
+    — a missing command module is an ESM import failure at load, which
+    `bin/superpowers-manager.js` reports through the two dist-integrity cases
+    at the top of this file (items 2-6), not through a per-command existence
+    check. The `missingScripts` option on `runDispatch` survives with no
+    consumer, and goes in slice 4c with `scripts/` itself.
 
 <!-- inventory:mapped:end -->
 
@@ -409,14 +466,19 @@ in shape, and has not been for several slices — read each entry, not this
 preamble, for what it asserts:
 
 - Most entries are an `assert.equal(result.status, 0)` the shell left implicit.
-- Item 1 is a structural array-length guard with no shell analogue at all.
+- Item 1 *was* a structural array-length guard with no shell analogue at all.
+  It is `Dropped` as of slice 4b's flip and asserts nothing: the `ROUTING_CASES`
+  table it measured is gone.
 - Entries added for the in-process flips assert `result.log` is empty — a
   property the shell could not express, since it always dispatched and logged.
-- Items 41-43 and 47-50 assert stderr text or a non-zero status: the in-process
-  runtime backstop, `patchDispatch`'s no-op rejection, and `prepare`'s
-  conditional `python3` requirement have no `status === 0` form.
-- Items 3 and 20 assert nothing at all. They are records of an assertion
-  removed, kept numbered so the removal is visible rather than silent.
+- Items 47-50 assert stderr text or a non-zero status: `prepare`'s conditional
+  `python3` requirement has no `status === 0` form. Items 41-43 did the same for
+  the in-process runtime backstop and `patchDispatch`'s no-op rejection until
+  slice 4b's flip `Dropped` all three; they assert nothing now.
+- Eleven entries — items 1, 3, 7, 8, 9, 12, 15, 20, 41, 42 and 43 — assert
+  nothing at all. Each is a record of an assertion removed, kept numbered so the
+  removal is visible rather than silent. Items 3 and 20 were `Dropped` before
+  slice 4b; the other nine at its flip.
 - Items 53, 54, and 56 assert against the sentinel *file* the `gitSentinel`
   option creates, not against `result.status`/`result.log`/`result.stderr`:
   item 53 is `existsSync` on the path, item 54 is
@@ -441,7 +503,12 @@ preamble, for what it asserts:
    Task 7 had already dropped the literal from 6 to 5 when
    `pin` was removed — see item 9's retirement note; its Task 6 from 7 to 6
    for `track-latest`, item 10; its Task 5 from 8 to 7 for `unpin`, item 11.)
-   The guard itself, and its rationale, are unchanged.
+   **Dropped** (PR 11.5 slice 4b, Task 8): `install`, `uninstall` and `update`
+   left `ROUTING_CASES` in one commit (items 12-14), emptying the table, and
+   `dispatch-fixture.js`'s `SPAWN_COMMANDS` — the production-derived subset
+   this guard compared against — is permanently empty at 8/8 in-process and is
+   deleted with it. `0 === 0` over two things that can never differ again is a
+   guard that cannot fail, so it goes rather than staying green forever.
 2. Routing case `probe --porcelain`: `result.status === 0` (`ROUTING_CASES[0]`
    as it then was). **Relocated** (PR 11.5 slice 2, Task 6): `probe` left
    `ROUTING_CASES` (see item 7's retirement note), and — unlike items 4, 5,
@@ -480,22 +547,22 @@ preamble, for what it asserts:
    when Task 6 added `track-latest`'s own standalone case immediately
    above it). Same underlying property (`unpin` succeeds); same rationale
    as item 2, just no longer a loop iteration.
-7. Routing case `install --dry-run`: `result.status === 0` (`:81`,
-   `ROUTING_CASES[0]`). Port-only — same rationale as item 2. **Index
-   updated** (PR 11.5 slice 3.4) from `ROUTING_CASES[1]` to `[0]`: the table
-   shrank by one more when `prepare` (formerly index 0) was also removed.
-   (Slice 2's Task 6 had already updated this from `[2]` to `[1]` when `probe`
-   was removed; slice 1's Task 7 from `[3]` to `[2]` for `pin`; its Task 6
-   from `[4]` to `[3]` for `track-latest`; its Task 5 from `[5]` to `[4]` for
-   `unpin`.)
-8. Routing case `uninstall --purge`: `result.status === 0` (`:81`,
-   `ROUTING_CASES[1]`). Port-only — same rationale as item 2. **Index
-   updated** (PR 11.5 slice 3.4) from `ROUTING_CASES[2]` to `[1]`, same
-   cause as item 7.
-9. Routing case bare invocation (`update`): `result.status === 0` (`:81`,
-   `ROUTING_CASES[2]`). Port-only — same rationale as item 2. **Index
-   updated** (PR 11.5 slice 3.4) from `ROUTING_CASES[3]` to `[2]`, same
-   cause as item 7.
+7. Routing case `install --dry-run`: `result.status === 0` (`ROUTING_CASES[0]`
+   as it then was). **Dropped** (PR 11.5 slice 4b, Task 8), and deliberately
+   not carried into `install`'s standalone in-process case: `install` really
+   runs there, against `exit 0` tool stubs and a package root with no upstream
+   to clone, so it cannot succeed. Asserting a status would pin an outcome the
+   fixture cannot produce — item 3's reasoning for `prepare`, verbatim. The
+   routing property item 12 carried survives as port-only item 57. Being
+   port-only, this entry was strictly additive coverage, so the mapped
+   reconciliation below is unaffected.
+8. Routing case `uninstall --purge`: `result.status === 0` (`ROUTING_CASES[1]`
+   as it then was). **Dropped** (PR 11.5 slice 4b, Task 8), same reasoning as
+   item 7; the routing property item 13 carried survives as port-only item 58.
+9. Routing case bare invocation (`update`): `result.status === 0`
+   (`ROUTING_CASES[2]` as it then was). **Dropped** (PR 11.5 slice 4b, Task
+   8), same reasoning as item 7; the routing property item 14 carried survives
+   as port-only item 59.
 10. `--version` (no symlink): `result.status === 0` (`tests/bin/bin-dispatch.test.js:140`,
     corrected from a stale `:120` citation that predated PR 11.5's in-process
     flips — citation predates PR 11.5, left as found until this correction).
@@ -507,10 +574,10 @@ preamble, for what it asserts:
     (`tests/bin/bin-dispatch.test.js:150`, corrected from a stale `:130`
     citation — same pre-existing-citation history as item 10). Port-only —
     same rationale as item 10, for the shell's `:135` symlinked invocation.
-12. Env passthrough: `result.status === 0` (`tests/bin/bin-dispatch.test.js:177`,
-    corrected from a stale `:157` citation — same pre-existing-citation
-    history as item 10). Port-only — the shell's bare env-prefixed invocation
-    at `:149-152` has no explicit exit-status test.
+12. Env passthrough: `result.status === 0`. Port-only — the shell's bare
+    env-prefixed invocation at `:149-152` had no explicit exit-status test.
+    **Dropped** (PR 11.5 slice 4b, Task 8) with the case it belonged to; see
+    items 30-31's retirement note.
 13. `NO_GIT_CASES` iteration `track-latest`: `result.status === 0`.
     **Relocated** (PR 11.5, Task 6): `track-latest` left `NO_GIT_CASES` (see
     item 38's retirement note) for its own standalone case,
@@ -523,12 +590,14 @@ preamble, for what it asserts:
     position when Task 6 added `track-latest`'s own standalone case
     immediately above it). Same underlying property; same rationale as
     item 13, just no longer a loop iteration.
-15. `NO_GIT_CASES` iteration `uninstall`: `result.status === 0` (`:247`).
-    Port-only — the shell's `for` loop body at `:174-178` is a bare
-    `run_bin "$cmd" >/dev/null` with no explicit exit-status test. **Index
-    updated** (PR 11.5, Task 6): `NO_GIT_CASES` now has a single entry
-    (`uninstall`) after `track-latest` also left the table — see item 13's
-    relocation note.
+15. `NO_GIT_CASES` iteration `uninstall`: `result.status === 0`. Port-only —
+    the shell's `for` loop body at `:174-178` is a bare
+    `run_bin "$cmd" >/dev/null` with no explicit exit-status test. **Dropped**
+    (PR 11.5 slice 4b, Task 8), and deliberately not carried into
+    `uninstall`'s standalone git-absent case, for item 7's reason: the
+    `exit 0` `codex` stub answers no listing, so the in-process `uninstall`
+    fails closed and no status is assertable. The property item 40 carried
+    survives as port-only items 60-61.
 16. `unpin` succeeds in-process with `python3` absent: `result.status === 0`
     (`:284`). **Relocated** (PR 11.5) from a bare `run_bin unpin >/dev/null`
     at shell `:184`; the property is unchanged ("succeeds with `python3`
@@ -674,12 +743,25 @@ preamble, for what it asserts:
     that hand-maintained literal with `vehicleCommand`
     (`tests/bin/dispatch-mode.js`), which derives the vehicle from the live
     table, so no future flip needs a manual re-point here again.
+    **Dropped** (PR 11.5 slice 4b, Task 8, Step 5a): at 8/8 in-process there is
+    no `"spawn"` mode literal for `patchDispatch` to rewrite, and it rejected a
+    no-op override by design (item 43), so `dispatchOverride` could not
+    construct the condition at all — `vehicleCommand` throws by design at
+    exactly this moment, and `tests/bin/dispatch-mode.js` is deleted with its
+    last consumer. The decision recorded for the backstop is option (b): the
+    compile-time exhaustiveness of
+    `IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler>` is
+    accepted as the whole protection, and `src/cli.ts`'s `!handler` guard stays
+    as an unreachable, documented fail-closed backstop rather than being
+    deleted. Reaching it now would require surgically deleting a key from a
+    compiled registry, which asserts only that a hand-mutilated build reports
+    rather than crashes.
 42. **New** (PR 11.5 slice 2, Task 3). Same case: stderr is exactly
     `error: no in-process handler registered for: ${spawned}\n`, where
-    `spawned` is item 41's derived vehicle command
-    (`tests/bin/bin-dispatch.test.js:149-151`). Port-only, same rationale as
-    item 41; the command named in that string is whatever `vehicleCommand`
-    currently derives, not a literal to keep in sync by hand.
+    `spawned` is item 41's derived vehicle command. Port-only, same rationale
+    as item 41; the command named in that string was whatever `vehicleCommand`
+    currently derived, not a literal to keep in sync by hand. **Dropped** (PR
+    11.5 slice 4b, Task 8, Step 5a) with item 41.
 43. **New** (PR 11.5 slice 3.4, Task 3). `dispatchOverride` rejects an
     override that changes nothing: `runDispatch` throws
     (`tests/bin/bin-dispatch.test.js:166-174`). Port-only, with no shell
@@ -695,7 +777,12 @@ preamble, for what it asserts:
     (Task 3, this slice) — a pure path computation with no path through
     `patchDispatch` at all — which kept passing silently while naming a
     command no longer spawned. This asserts the mechanism itself refuses a
-    no-op, not just that one victim was re-pointed.
+    no-op, not just that one victim was re-pointed. **Dropped** (PR 11.5 slice
+    4b, Task 8, Step 5a): with items 41-42 gone, this was `dispatchOverride`'s
+    only remaining consumer and it is a test *of the fixture*, not of the
+    subject. `dispatchOverride` and `patchDispatch` are deleted from
+    `tests/bin/dispatch-fixture.js` with it — a fixture whose only remaining
+    test is a test of itself is residue, not coverage.
 44. **New** (PR 11.5 slice 3.4). Routing case `prepare`: `result.log` is empty
     (`tests/bin/bin-dispatch.test.js:95`). Port-only, with no shell
     counterpart of any kind, same rationale as item 21: the shell always
@@ -785,6 +872,32 @@ preamble, for what it asserts:
     (`src/commands/pin.ts:50`) only `ls-remote` can land, from
     `resolveExactTag`'s single git call (`src/upstream.ts:209`), and `tag`
     matches merely as a substring of that call's `--tags`/`refs/tags/` argv.
+57. **New** (PR 11.5 slice 4b, Task 8). `install` runs in-process:
+    `result.log` is empty. Port-only, with no shell counterpart of any kind,
+    same rationale as item 21: the shell always dispatched to
+    `scripts/install` and logged something for this case, so "ran without ever
+    dispatching" was not expressible through it. This is the whole of what
+    survives item 12 — the case asserts no status, for the reason recorded in
+    port-only item 7.
+58. **New** (PR 11.5 slice 4b, Task 8). `uninstall` runs in-process:
+    `result.log` is empty. Port-only, same rationale as item 57; the whole of
+    what survives item 13.
+59. **New** (PR 11.5 slice 4b, Task 8). A bare invocation runs in-process:
+    `result.log` is empty. Port-only, same rationale as item 57; the whole of
+    what survives item 14 *in this file*. That the bare invocation is
+    specifically `update` is asserted elsewhere — see item 14's retirement
+    note.
+60. **New** (PR 11.5 slice 4b, Task 8). `uninstall` with `git` absent: stderr
+    does not contain `required command not found: git`. Port-only. The shell
+    observed the same preflight fact indirectly, through a successful dispatch
+    (item 40); with no dispatch left to observe, the assertion moves onto the
+    diagnostic preflight would have emitted — the same substitution item 45
+    made for `prepare` and `codex`.
+61. **New** (PR 11.5 slice 4b, Task 8). Same case: `result.log` is empty.
+    Port-only, same rationale as item 21, and the half that distinguishes
+    "preflight admitted `uninstall` without `git`" from "preflight never ran a
+    `git` check because it dispatched instead" — exactly the pairing items
+    45-46 and 47/51 already use.
 
 <!-- inventory:port-only:end -->
 
@@ -793,8 +906,8 @@ preamble, for what it asserts:
 ```json inventory
 {
   "shellOriginal": 53,
-  "portOnly": 56,
-  "ports": { "tests/bin/bin-dispatch.test.js": 37 }
+  "portOnly": 61,
+  "ports": { "tests/bin/bin-dispatch.test.js": 34 }
 }
 ```
 
@@ -807,33 +920,52 @@ preamble, for what it asserts:
   1+2+3+8+5+4+3+1+1+1+2+3+3+3+1+3+3+1+3+2 = 53). This count is historical —
   it describes the deleted shell script as it stood at the time it was
   ported — and does not change when the port's own structure changes.
-- Port (`tests/bin/bin-dispatch.test.js`): 37 static `test(` call sites (2 of
-  them data-driven loops — `ROUTING_CASES` ×3 and `NO_GIT_CASES` ×1, both
-  smaller than before PR 11.5 flipped `pin`, `track-latest`, `unpin`, `probe`,
-  and `prepare` to in-process and removed all five from every table they used
-  to occupy; `NO_CODEX_CASES` is gone entirely, emptied by the same flips —
-  expanding to 39 runtime cases; PR 11.5 slice 4a Task 7 added the 37th, a
-  matrix row 13 regression case with no shell-original counterpart, whose
-  five assert calls are port-only items 52-56 — one entry per assertion, not
-  one per case, matching items 32-34's and 41-42's precedent below), carrying
-  **41** of the 53 shell assertions
-  mapped (two recorded merges:
-  item 15 into the port's `status === 2` check, and items 30-31 into the
-  port's two-line `assert.deepEqual`), plus **12 retired items** (7, 8, 9, 10,
-  11, 38, 39, 41, 48, 49, 50, 51 — items 7, 8, 9, 10, 38, and 49 each asserted
-  that `probe`, `prepare`, `pin`, or `track-latest` "dispatches ... and logs
-  `<name>  ref=`"; items 11, 39, and 50 each asserted the analogous condition
-  for `unpin`; item 48 asserted `pin` dispatches with `codex` absent and logs
-  `pin v6.1.1 ref=`, and item 51 the same for `prepare`; item 41 asserted
-  `unpin` dispatches with `python3`
-  absent. PR 11.5's in-process flips (slice 1's Task 5 for `unpin`, Task 6
-  for `track-latest`, and Task 7 for `pin`; slice 2's Task 6 for `probe`;
-  slice 3.4's Task 5 for `prepare`)
-  mean none of the five commands ever invokes its script or logs to the
-  dispatch log any more, so each specific condition can no longer occur in
-  either direction, and no JS assertion enforces any of them any more; see
-  each item's retirement note for the analogous in-process property and where
-  it is now tested). 41 mapped + 12 retired = 53. Plus 56 port-only
+- Port (`tests/bin/bin-dispatch.test.js`): 34 static `test(` call sites, none
+  of them data-driven, so the 34 static sites produce 34 runtime cases. Every
+  data-driven table this file ever had is now gone: `NO_CODEX_CASES` emptied at
+  slice 3.4, and `ROUTING_CASES` and `NO_GIT_CASES` emptied at slice 4b's flip
+  (Task 8) when `install`, `uninstall` and `update` went in-process — each
+  deleted outright rather than left iterating over `[]`, which reports success
+  without asserting anything. That same task removed **seven** static call sites
+  and added **four**. Out went, in file order: the `ROUTING_CASES` loop header;
+  the unregistered-handler backstop (port-only items 41-42); the
+  `dispatchOverride` no-op case (port-only item 43); the exit-code-propagation
+  case (item 29); the env-passthrough case (items 30-31); the `NO_GIT_CASES`
+  loop header; and the missing-script case (items 52-53). In came `install`,
+  `uninstall` and bare-invocation in-process routing cases (port-only items
+  57-59) and `uninstall` with `git` absent (port-only items 60-61). Net
+  37 − 7 + 4 = 34. The two deleted loop headers were each one static site but
+  more than one runtime case, which is the whole of the difference between the
+  37 static sites before and the 39 runtime cases before: `ROUTING_CASES` held
+  three entries (one site, three cases, +2) and `NO_GIT_CASES` held one (one
+  site, one case, +0). The matrix
+  row 13 regression case PR 11.5 slice 4a Task 7 added survives, its five
+  assert calls being port-only items 52-56 — one entry per assertion, not one
+  per case, matching items 32-34's precedent below. The 34 sites carry
+  **32** of the 53 shell assertions
+  mapped (**1** recorded merges:
+  item 15 into the port's `status === 2` check), plus **21 retired items** (7,
+  8, 9, 10, 11, 12, 13, 14, 29, 30, 31, 38, 39, 40, 41, 48, 49, 50, 51, 52, 53
+  — items 7, 8, 9, 10, 12, 13, 14, 38, 40, and 49 each asserted that `probe`,
+  `prepare`, `pin`, `track-latest`, `install`, `uninstall`, or `update`
+  "dispatches ... and logs `<name>  ref=`"; items 11, 39, and 50 each asserted
+  the analogous condition for `unpin`; item 48 asserted `pin` dispatches with
+  `codex` absent and logs `pin v6.1.1 ref=`, and item 51 the same for
+  `prepare`; item 41 asserted `unpin` dispatches with `python3` absent; items
+  30-31 asserted that two `SUPERPOWERS_*` variables reach a dispatched script's
+  environment; item 29 asserted a spawned child's exit status propagates
+  unchanged; and items 52-53 asserted the diagnostic for a missing
+  `scripts/<command>` file. PR 11.5's in-process flips (slice 1's Task 5 for
+  `unpin`, Task 6 for `track-latest`, and Task 7 for `pin`; slice 2's Task 6
+  for `probe`; slice 3.4's Task 5 for `prepare`; slice 4b's Task 8 for
+  `install`, `update` and `uninstall`, which also deleted the spawn path
+  itself) mean no command ever invokes a script or logs to the dispatch log any
+  more, no child exists whose status could propagate, no environment is handed
+  to such a child, and no `scripts/<command>` file is looked for at all — so
+  each specific condition can no longer occur in either direction, and no JS
+  assertion enforces any of them any more; see each item's retirement note for
+  the analogous in-process property and where it is now tested). 32 mapped + 21
+  retired = 53. Plus 61 port-only
   assertions (47 additive `result.status === 0` / `result.log` / stderr
   checks the shell left implicit under `set -e` or that have no shell
   counterpart at all, plus 3 checks against the `gitSentinel` *file* rather
@@ -844,15 +976,19 @@ preamble, for what it asserts:
   counterpart of any kind — see items 41-42, plus 1 assertion covering
   `patchDispatch`'s rejection of a no-op override — see item 43, plus 2
   entries, items 3 and 20, that record their own assertion's removal rather
-  than an assertion) with no shell counterpart.
-- Reconciliation: 41 of the 53 shell items are mapped (some 1:1 to their own
-  JS assertion, two pairs sharing one JS assertion via the recorded merges
-  above), 12 are retired (noted above) — not *silent* drops, since a
+  than an assertion, plus 5 entries, items 57-61, added at slice 4b's flip).
+  Eleven of those 61 — items 1, 7, 8, 9, 12, 15, 41, 42 and 43 at slice 4b's
+  flip, and items 3 and 20 before it — are `Dropped` records rather than live
+  assertions; being port-only, none of them participates in the mapped
+  arithmetic either way.
+- Reconciliation: 32 of the 53 shell items are mapped (some 1:1 to their own
+  JS assertion, one pair sharing one JS assertion via the recorded merge
+  above), 21 are retired (noted above) — not *silent* drops, since a
   retirement is recorded with its own note explaining why no replacement
   assertion is possible, rather than disappearing unremarked. That is the only
   sense in which "drop" is pejorative here: it names an unrecorded
-  disappearance, not the port-only `Dropped` category, whose two entries
-  (items 3 and 20) are recorded exactly as carefully and are not shell items at
-  all. 41 + 12 = 53. The 56 port-only
+  disappearance, not the port-only `Dropped` category, whose entries
+  are recorded exactly as carefully and are not shell items at
+  all. 32 + 21 = 53. The 61 port-only
   entries are strictly additive test coverage — not a reconciliation of
-  any shell assertion — and are excluded from the 41/53 arithmetic above.
+  any shell assertion — and are excluded from the 32/53 arithmetic above.

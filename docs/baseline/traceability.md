@@ -17,7 +17,6 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-COMMANDS-01` | `tests/baseline/cli-parity.test.js::CLI-COMMANDS-01 eight named commands dispatch` | — |
 | `CLI-USAGE-01` | `tests/baseline/cli-parity.test.js::CLI-USAGE-01 invalid command and stray flag fail with exit 2` | — |
 | `CLI-PREFLIGHT-01` | `tests/baseline/cli-parity.test.js::CLI-PREFLIGHT-01 missing tools fail before dispatch` | — |
-| `CLI-CHILD-STATUS-01` | `tests/baseline/cli-parity.test.js::CLI-CHILD-STATUS-01 delegated child status is preserved` | — |
 | `CLI-ENV-CODEX-PREFLIGHT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight` | — |
 | `CLI-ENV-CODEX-LISTING-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
 | `CLI-ENV-CODEX-MUTATION-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-MUTATION-01 install mutation uses Codex override` | — |

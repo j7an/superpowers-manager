@@ -268,3 +268,71 @@ void test("verifyUninstalledResources fails closed on a failed inspection", () =
   const verdict = verifyUninstalledResources(failed());
   assert.equal(verdict.ok, false);
 });
+
+void test("an unparseable fingerprint result names parsing, not inspection", () => {
+  // Previously unreached by any test. Reachable since the resultObject split
+  // (spec §6.2.3 item 3b): the envelope is well-formed, the result is not an
+  // object. This is the branch that makes the shell's `grep -Fq "parse"`
+  // satisfiable.
+  const verdict = verifyInstalledFingerprint(
+    "abcdef1234567890abcdef1234567890abcdef12",
+    ok({}),
+    ok("not-an-object"),
+  );
+  assert.equal(verdict.ok, false);
+  assert.deepEqual(verdict.stderr, [
+    "error: cannot parse installed manager fingerprint inspection result after install.",
+  ]);
+  assert.deepEqual(verdict.stdout, []);
+});
+
+void test("a non-string fingerprint is unparseable, not empty", () => {
+  // PORT-ONLY. The shell cannot construct this: provenance.sh:62 stringifies
+  // any non-null scalar. Pinned so the branch cannot be deleted as dead.
+  const verdict = verifyInstalledFingerprint(
+    "abcdef1234567890abcdef1234567890abcdef12",
+    ok({}),
+    ok({ fingerprint: 42 }),
+  );
+  assert.equal(verdict.ok, false);
+  assert.deepEqual(verdict.stderr, [
+    "error: cannot parse installed manager fingerprint inspection result after install.",
+  ]);
+});
+
+void test("an unreadable ownership inspection names reading, with its text", () => {
+  // Reached today, but the existing case asserts only ok === false, so the
+  // operator string was unpinned.
+  const verdict = verifyUninstalledResources(failed());
+  assert.equal(verdict.ok, false);
+  assert.equal(
+    verdict.ok === false ? verdict.message : "",
+    "cannot read the adapter ownership inspection after removal",
+  );
+});
+
+void test("the marketplace Boolean check names its own key", () => {
+  // The loop covers both keys but only the `plugin` interpolation was
+  // asserted, so a template that hardcoded "plugin" would have passed.
+  const verdict = verifyUninstalledResources(
+    ok({ resources: { plugin: false, marketplace: "yes" } }),
+  );
+  assert.equal(verdict.ok, false);
+  assert.equal(
+    verdict.ok === false ? verdict.message : "",
+    "expected a Boolean adapter result at resources.marketplace",
+  );
+});
+
+void test("a non-object resources falls through to the Boolean message", () => {
+  // Parity with scripts/core/adapter.sh:70 for input {} — the input
+  // tests/test_marketplace_reconcile.sh:224 writes. The distinct
+  // "expected an object adapter result at resources" message was DELETED by
+  // spec §6.2.3 item 3a; this case is what stops it coming back.
+  const verdict = verifyUninstalledResources(ok({}));
+  assert.equal(verdict.ok, false);
+  assert.equal(
+    verdict.ok === false ? verdict.message : "",
+    "expected a Boolean adapter result at resources.plugin",
+  );
+});

@@ -5,7 +5,11 @@ import assert from "node:assert/strict";
 import { chmodSync, writeFileSync, symlinkSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { capture, withPackage } from "./helpers/command-harness.js";
+import {
+  capture,
+  notCalledAdapter,
+  withPackage,
+} from "./helpers/command-harness.js";
 
 // A static import from `dist/` fails the `typecheck:js` gate: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
@@ -27,6 +31,7 @@ void test("unpin removes an existing selection and names the packaged fallback",
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: out.stream,
       stderr: capture().stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
     assert.equal(existsSync(state), false);
@@ -45,6 +50,7 @@ void test("unpin reports the fallback when no selection was saved", async () => 
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: out.stream,
       stderr: capture().stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
     assert.equal(
@@ -66,6 +72,7 @@ void test("unpin refuses a symlinked state path instead of following it", async 
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: capture().stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
     assert.match(err.text(), /selection state path is not a regular file/);
@@ -86,6 +93,7 @@ void test("unpin reports active overrides after removal", async () => {
       },
       stdout: out.stream,
       stderr: capture().stream,
+      adapter: notCalledAdapter,
     });
     // The fallback is the packaged ref, not the override.
     assert.match(out.text(), /packaged fallback is v6\.1\.1\n/);
@@ -112,6 +120,7 @@ void test("unpin fails closed when the state path cannot be inspected", async ()
         env: { SUPERPOWERS_CONFIG_DIR: dir },
         stdout: capture().stream,
         stderr: err.stream,
+        adapter: notCalledAdapter,
       });
       // Not "no saved upstream selection" and not exit 0: unverifiable state is
       // never reported as success.

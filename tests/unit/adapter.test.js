@@ -8,7 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/adapter.js")} */
-const { runAdapter, mapCodexLaunchFailure } = await import(
+const { runAdapter, mapCodexLaunchFailure, runCommandForTest } = await import(
   new URL("../../dist/adapter.js", import.meta.url).href
 );
 
@@ -38,8 +38,8 @@ async function buildWorkspace(t) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:324`,
-  // `:381`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:362`,
+  // `:449`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -126,7 +126,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (src/adapter.ts:356) must surface exactly `cannot read manifest JSON
+// call (src/adapter.ts:396) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/hooks.ts) must keep succeeding, so this exercises the read at
@@ -409,7 +409,7 @@ async function codexSandbox(t) {
 }
 
 // The adapter reads `codex plugin list --json` as raw bytes
-// (`src/adapter.ts:93`, `:741`). `@@BAD@@` is a raw 0xff byte inside an
+// (`src/adapter.ts:106`, `:809`). `@@BAD@@` is a raw 0xff byte inside an
 // otherwise well-formed JSON string, so a lossy `.toString()` at the call site
 // would parse successfully and yield a fabricated version instead of failing
 // closed. Asserting the exact parse diagnostic is what distinguishes the two.
@@ -457,7 +457,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/adapter.ts:535`) is the destructive
+// The install reconciliation read (`src/adapter.ts:603`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -544,4 +544,34 @@ void test("mapCodexLaunchFailure carries a validated errno, guards free-form cod
       },
     );
   }
+});
+
+void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", async (t) => {
+  // scripts/core/common.sh:71 was the only scrubbing site in the system and
+  // dies with scripts/ in 4c. The property that was load-bearing is that the
+  // CHILD is clean; the part that was never true is that the dispatcher
+  // scrubbed itself. Carried matrix row 11.
+  const scratch = await mkdtemp(join(tmpdir(), "spw-adapter-env-"));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const script = join(scratch, "print-env.js");
+  await writeFile(
+    script,
+    "process.stdout.write(JSON.stringify({\n" +
+      "  NODE_OPTIONS: process.env.NODE_OPTIONS ?? null,\n" +
+      "  NODE_PATH: process.env.NODE_PATH ?? null,\n" +
+      "  MARKER: process.env.MARKER ?? null,\n" +
+      "}));\n",
+  );
+  const result = await runCommandForTest(process.execPath, [script], {
+    NODE_OPTIONS: "--max-old-space-size=64",
+    NODE_PATH: "/nowhere",
+    MARKER: "kept",
+    PATH: process.env.PATH ?? "",
+  });
+  assert.deepEqual(JSON.parse(result.stdout.toString("utf8")), {
+    NODE_OPTIONS: null,
+    NODE_PATH: null,
+    // The scrub is targeted, not a whitelist: everything else passes through.
+    MARKER: "kept",
+  });
 });

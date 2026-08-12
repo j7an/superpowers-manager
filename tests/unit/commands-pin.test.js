@@ -5,7 +5,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { capture, withGitUpstream } from "./helpers/command-harness.js";
+import {
+  capture,
+  notCalledAdapter,
+  withGitUpstream,
+} from "./helpers/command-harness.js";
 
 // A static import from `dist/` fails the `typecheck:js` gate: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
@@ -28,6 +32,7 @@ void test("a tag pin writes the resolved record and prints the confirmation", as
       },
       stdout: out.stream,
       stderr: capture().stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
     assert.equal(
@@ -58,6 +63,7 @@ void test("a mixed-case 40-hex ref is lowercased in the written record", async (
       },
       stdout: capture().stream,
       stderr: capture().stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
     const written = JSON.parse(
@@ -81,6 +87,7 @@ void test("an invalid saved record rejects before any resolution", async () => {
       },
       stdout: capture().stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
     // src/selection-store.ts's JSON-parse-failure translation is one of
@@ -106,6 +113,7 @@ void test("a source that cannot supply the commit fails and writes nothing", asy
       },
       stdout: capture().stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
     assert.match(err.text(), /source cannot supply requested commit/);

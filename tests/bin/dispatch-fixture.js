@@ -7,8 +7,9 @@
 //
 // The base is shared but NOT literally immutable, and has not been since PR
 // 11.5 slice 3.4 flipped `prepare` in-process. No case configures the base --
-// `scripts`, `missingScripts`, and `dispatchOverride` still take a per-case
-// copy -- but the subject under test now writes into it: runPrepare's
+// `scripts` and `missingScripts` still take a per-case copy (:301), and
+// `dispatchOverride`, which used to be the third, went with `patchDispatch` at
+// slice 4b's flip -- but the subject under test now writes into it: runPrepare's
 // gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
 // opens a `.superpowers.prepare.*` workspace there, all at
 // src/commands/prepare.ts:274-281 and all BEFORE computeEffectiveSelection.
@@ -111,11 +112,6 @@ const { DISPATCH } = await import(
   new URL("../../dist/cli.js", import.meta.url).href
 );
 
-// Exported so bin-dispatch.test.js can derive its vehicle command without a
-// second dynamic `dist/cli.js` import, which would recreate the drift the
-// derivations in this file remove.
-export { DISPATCH };
-
 /**
  * The subcommands the real bin dispatches to. Derived, never restated: a
  * third hand-maintained copy of the eight names can agree with itself while
@@ -123,17 +119,6 @@ export { DISPATCH };
  */
 export const DISPATCH_COMMANDS = /** @type {(keyof typeof DISPATCH)[]} */ (
   Object.keys(DISPATCH)
-);
-
-/**
- * The subset the real bin still spawns. Exported here so
- * tests/bin/bin-dispatch.test.js can size ROUTING_CASES from production
- * instead of a literal — it imports only from this fixture today, and adding
- * a second dynamic `dist/cli.js` import there would recreate the drift this
- * derivation removes.
- */
-export const SPAWN_COMMANDS = DISPATCH_COMMANDS.filter(
-  (command) => DISPATCH[command] === "spawn",
 );
 
 /**
@@ -164,42 +149,14 @@ function writeExecutable(dir, name, body) {
   return path;
 }
 
-/**
- * Patches a case-local copy of dist/cli.js's compiled DISPATCH table —
- * never the shared dist/ this fixture copies from, and never src/cli.ts.
- * Used to simulate a DISPATCH entry the real IN_PROCESS_HANDLERS registry
- * does not carry: src/cli.ts's exhaustiveness check makes that state
- * unreachable through the real table, so this is the only way to exercise
- * the runtime backstop that remains for it.
- * @param {string} cliPath
- * @param {Record<string, "spawn" | "in-process">} overrides
- */
-function patchDispatch(cliPath, overrides) {
-  let text = readFileSync(cliPath, "utf8");
-  for (const [command, mode] of Object.entries(overrides)) {
-    // The leading negative lookbehind anchors the key: without it, `pin`
-    // matches inside `unpin:` too (`pin` is a suffix of `unpin`), and
-    // `String.match` silently returns whichever entry sorts first in the
-    // table instead of throwing "no DISPATCH entry found".
-    const pattern = new RegExp(
-      `(?<![\\w$])(["']?${command}["']?:\\s*)"(spawn|in-process)"`,
-    );
-    const match = text.match(pattern);
-    if (!match) {
-      throw new Error(
-        `dispatchOverride: no DISPATCH entry found for "${command}" in ${cliPath}`,
-      );
-    }
-    if (match[2] === mode) {
-      throw new Error(
-        `dispatchOverride: "${command}" is already "${mode}" in ${cliPath}; ` +
-          "an override that changes nothing is a vehicle that cannot fail",
-      );
-    }
-    text = text.replace(pattern, `$1"${mode}"`);
-  }
-  writeFileSync(cliPath, text, "utf8");
-}
+// `patchDispatch` and the `dispatchOverride` option stood here until PR 11.5
+// slice 4b (Task 8, Step 5a). They existed to put one command into a DISPATCH
+// state src/cli.ts's IN_PROCESS_HANDLERS registry does not carry, by rewriting
+// a "spawn" mode literal to "in-process" in a case-local copy of the compiled
+// table. With DISPATCH at 8/8 in-process there is no "spawn" literal to rewrite
+// and `patchDispatch` rejected a no-op override by design, so the mechanism
+// could not construct that state at all. Its one consumer retired with it; the
+// only other test that used it tested the fixture itself.
 
 /**
  * @param {string} kind "real" copies the built dist/, "none" omits it,
@@ -258,9 +215,10 @@ export function makePackageRoot(kind) {
 /**
  * @typedef {object} DispatchOptions
  * @property {string[]} tools tools present on PATH. `sh` and `node` are always
- *   added — src/cli.ts:247-255 resolves `sh` as a required tool, so its
- *   presence is itself under test and must be stated, not assumed absent. Set
- *   `omitShell` to state its absence instead.
+ *   added. `sh` is no longer a preflight requirement for any command — slice
+ *   4b's flip deleted `discoverShell` — but it stays stated rather than assumed
+ *   so the cases asserting its absence is harmless keep a stated counterpart.
+ *   Set `omitShell` to state its absence instead.
  * @property {string[]} args argv passed to the bin
  * @property {Record<string, string>} [env] extra environment variables
  * @property {Record<string, string>} [scripts] scripts/<name> bodies to override
@@ -278,12 +236,6 @@ export function makePackageRoot(kind) {
  *   resolving something. `git` must not also appear in `tools` when this is
  *   set. Every other tool's presence or absence is still stated by `tools`
  *   exactly as the file header promises.
- * @property {Record<string, "spawn" | "in-process">} [dispatchOverride]
- *   patches the case-local copy of dist/cli.js's compiled DISPATCH table for
- *   the named commands — never the real src/cli.ts. The only way to put a
- *   command into a DISPATCH state src/cli.ts's IN_PROCESS_HANDLERS registry
- *   does not carry, which is otherwise a compile error and thus unreachable
- *   through the real table.
  * @property {boolean} [gitSentinel] wraps the case's git in a recording stub
  *   so a case can prove the egress refusal happened before git ran.
  */
@@ -346,10 +298,9 @@ export function runDispatch(options) {
   mkdirSync(configDir, { recursive: true });
 
   let packageRoot = options.packageRoot ?? PACKAGE_ROOT;
-  if (options.scripts || options.missingScripts || options.dispatchOverride) {
-    // Overrides mutate scripts/ or dist/, so this case gets its own copy of
-    // the root rather than editing the shared base out from under other
-    // cases.
+  if (options.scripts || options.missingScripts) {
+    // Overrides mutate scripts/, so this case gets its own copy of the root
+    // rather than editing the shared base out from under other cases.
     const copy = join(caseDir, "pkg");
     cpSync(packageRoot, copy, { recursive: true });
     for (const [name, body] of Object.entries(options.scripts ?? {})) {
@@ -357,9 +308,6 @@ export function runDispatch(options) {
     }
     for (const name of options.missingScripts ?? []) {
       rmSync(join(copy, "scripts", name), { force: true });
-    }
-    if (options.dispatchOverride) {
-      patchDispatch(join(copy, "dist", "cli.js"), options.dispatchOverride);
     }
     packageRoot = copy;
   }

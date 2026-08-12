@@ -20,8 +20,8 @@ Source read in full (631 lines). Ported to `tests/baseline/probe.test.js`,
 - **A bare `run_*` with no status test is not counted.** `:390`, `:437`,
   `:454`, `:462`, `:490-493`, `:508`, `:556`, `:562`, `:568`, `:579`, `:590`,
   `:598`, `:607`, and `:616` all take the form `output=$(run_probe)`, leaving
-  the exit status to `set -e`. `install-commands.md:68`,
-  `bin-dispatch.md:314-318`, and `uninstall-commands.md:355` all treat that as
+  the exit status to `set -e`. `install-commands.md:89`,
+  `bin-dispatch.md:314-318`, and `uninstall-commands.md:446` all treat that as
   implicit. Same treatment here: the port's explicit
   `assert.equal(result.status, 0, result.stderr)` and
   `assert.equal(result.stderr, "")` on every successful run are additive, but
@@ -98,7 +98,7 @@ executable declaration below.
 `tests/baseline/probe.test.js`'s "adapter messages precede the error line on a
 controlled failure" needs a *controlled* adapter failure whose envelope also
 carries messages. The obvious lever, `pluginListRc: 1`, cannot supply one:
-`listingCommand` (`src/adapter.ts:217-226`) logs only the child's **stderr**,
+`listingCommand` (`src/adapter.ts:233-242`) logs only the child's **stderr**,
 and the fake writes nothing there when it is merely returning a non-zero
 status, so the envelope carries no messages at all and `error:` lands at index
 0 — an ordering assertion built on it would pass vacuously or fail for the
@@ -110,8 +110,8 @@ ownership inspection would succeed and the run would exit 0.
 
 **Why the identity matrix and scenario 1 need two listings per run.** Probe
 issues `codex plugin list --json` twice per run — once for
-`inspect --view fingerprint` (`src/adapter.ts:781`), once for
-`inspect --view ownership` (`:855`) — as two separate processes with
+`inspect --view fingerprint` (`src/adapter.ts:797`), once for
+`inspect --view ownership` (`:871`) — as two separate processes with
 byte-identical argv. The shell driver stubbed the *adapter* and so could feed
 the two views independently (`SPW_PROBE_FINGERPRINT_JSON` vs
 `SPW_PROBE_PLUGIN_JSON`, `:212-215`). The in-process port stubs only `codex`,
@@ -369,7 +369,7 @@ case that does put a bare relative `-upstream` on a Git command line is
     `SPW_EXPECTED_UPDATE_CONTROL=unsupported`). **Retired**: the shell
     injected the value through the recording `SPW_ADAPTER` (`:216-227`).
     In-process, `runInspect` answers the `update-control` view itself and
-    returns the literal `managed` (`src/adapter.ts:765-767`), so no seam to
+    returns the literal `managed` (`src/adapter.ts:781-783`), so no seam to
     inject through survives.
 
     **Slice 5, read this before retiring anything.** The single surviving
@@ -515,7 +515,7 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    `mktemp -d` workspace and any adapter sidecar left in the same directory.
    In-process probe creates no workspace at all, and the adapter's workspaces
    are rooted at `os.tmpdir()` — read from the *runner's* environment by
-   `withWorkspace`'s caller (`src/adapter.ts:773`, `:847`), not from the
+   `withWorkspace`'s caller (`src/adapter.ts:789`, `:863`), not from the
    context env a case controls — so an equivalent assertion on the case's own
    `TMPDIR` would be vacuously true no matter what either component did.
    The surviving property, that `withWorkspace` removes what it created, is
@@ -615,7 +615,7 @@ string in `tests/**/*.js`, because a spawn assumption expressed as
 | Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — the no-registered-handler backstop | Re-pointed to `prepare`: `probe` now has a registered handler, so overriding its dispatch entry no longer reaches the backstop |
 | Executable spawn assumption | `tests/bin/units.test.js:150-169` ("buildSpawn: POSIX executes the script directly") | `buildSpawn` path construction and argv passthrough, re-pointed to `prepare` at this slice. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned. Slice 3.4 replaced the `prepare` literal with a `vehicleCommand(DISPATCH)` derivation, which is why the block no longer names a command |
 | Historical prose | `src/commands/probe.ts` (7 sites), `src/effective-selection.ts:70`, `:91` | Provenance citations into the shell original, which still exists, so every citation still resolves |
-| Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:679`, `:693`, `selection-state.md:237` | The migration record of what the shell did |
+| Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:746`, `:760`, `selection-state.md:237` | The migration record of what the shell did |
 | Historical prose | `tests/unit/commands-probe.test.js:70`, `:77`, `:106`; `tests/baseline/probe.test.js:4`, `:155`, `:234`, `:398`; `tests/bin/probe-fakes.js:4`; `tests/baseline/selection-location.test.js:26`, `:788` | Comments citing the shell original as the source of a ported contract |
 | Historical prose | `AGENTS.md:46` | "Keep `scripts/probe` read-only" still binds the surviving script, and `PROBE-READONLY-01` now holds the same property for the in-process command |
 

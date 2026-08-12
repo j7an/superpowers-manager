@@ -6,6 +6,9 @@
 // named as this extraction's trigger. Slice 4a added the outer shell the two
 // mutating fakes also duplicated: runFake, its FakeContext, the Decision 5
 // injection toggle, the adapter tripwire, and the real-adapter delegation.
+// Slice 4b's Task 9 gives probe-fakes.js the same outer shell (matrix row 20)
+// and widens the adapter tripwire so install and uninstall can trip
+// unconditionally too (row 18), matching the guard probe already carried.
 //
 // Every response-then-exit site here uses `process.exitCode` plus a normal
 // return, never `process.exit()`. `process.exit()` truncates a pending write
@@ -117,9 +120,9 @@ export function respondToListing(request) {
  * Probe issues `codex plugin list --json` TWICE per run, from two different
  * inspections that need different answers:
  *
- *   inspect --view fingerprint -> plugin list --json          (src/adapter.ts:781)
- *   inspect --view ownership   -> plugin list --json,         (src/adapter.ts:855)
- *                                 plugin marketplace list --json  (:867)
+ *   inspect --view fingerprint -> plugin list --json          (src/adapter.ts:797)
+ *   inspect --view ownership   -> plugin list --json,         (src/adapter.ts:871)
+ *                                 plugin marketplace list --json  (:883)
  *
  * They are separate runAdapter calls, so this fake is a fresh PROCESS each
  * time and the argv is byte-identical -- there is nothing to branch on. A
@@ -222,7 +225,7 @@ function makeContext(state, config) {
  * respondToListing above returns a boolean instead of exiting.
  *
  * @param {{
- *   kind: "install" | "uninstall",
+ *   kind: "install" | "uninstall" | "probe",
  *   codex: (ctx: FakeContext) => void,
  *   adapter: (ctx: FakeContext) => void,
  * }} fake
@@ -279,18 +282,37 @@ export function injectSpuriousMutation(ctx, forbiddenLine) {
  * row 18): once install/update/uninstall dispatch in-process, runAdapter is a
  * function call and this executable must never be reached.
  *
- * The caller MUST `return` on true. Setting `process.exitCode` does not halt
- * execution, so a missing return falls through into the delegation below and
- * spawns the real adapter — the exact inverse of a tripwire.
+ * `options.always` drops the `ctx.seam === "tripwire"` gate entirely. Probe
+ * has fired unconditionally since before this task — in-process probe calls
+ * `runAdapter` as a plain function, so no seam value makes reaching this
+ * executable legitimate. Install and uninstall get the same treatment here:
+ * post-flip, `ctx.seam` (`SPW_FIXTURE_ADAPTER_SEAM`) no longer selects
+ * anything a real dispatch can reach, so the two mutating fakes' adapter role
+ * refuses regardless of what seam a case happens to pass. That leaves the
+ * `!always` arm below with no caller at all — all three call sites
+ * (install-fakes.js:191, uninstall-fakes.js:93, probe-fakes.js:63) pass
+ * `always: true`. It stays only because removing it is part of removing the
+ * seam it reads, which slice 4c owns; do not read it as a form some fake
+ * still uses.
+ *
+ * A caller with anything after this call MUST `return` on true. Setting
+ * `process.exitCode` does not halt execution, so a missing return falls
+ * through into the delegation the two mutating fakes make below and spawns
+ * the real adapter — the exact inverse of a tripwire. probe-fakes.js is the
+ * one caller with nothing following, and says so at its own call site.
  *
  * @param {FakeContext} ctx
+ * @param {{ always?: boolean, message?: string }} [options]
  * @returns {boolean} true when the caller must stop
  */
-export function tripwireTriggered(ctx) {
-  if (ctx.seam !== "tripwire") {
+export function tripwireTriggered(ctx, options = {}) {
+  const { always = false, message } = options;
+  if (!always && ctx.seam !== "tripwire") {
     return false;
   }
-  process.stderr.write("fixture: this command must not spawn the adapter\n");
+  process.stderr.write(
+    `${message ?? "fixture: this command must not spawn the adapter"}\n`,
+  );
   process.exitCode = 94;
   return true;
 }

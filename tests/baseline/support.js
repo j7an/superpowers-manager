@@ -658,10 +658,22 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
 // restates a fact DISPATCH owns, and a copy can disagree with its source. This
 // records something DISPATCH does not know -- which commands' *test sites* have
 // been migrated off the dead seam -- so there is no source for it to disagree
-// with. Slice 4 adds install/update/uninstall as it cleans each; slice 6
-// deletes this with the seam.
+// with. Slice 4b's flip added install/update/uninstall (Task 8, Step 5b);
+// slice 6 deletes this with the seam.
+//
+// All eight commands are now in-process, so this set is the whole command list
+// and any SPW_ADAPTER override reaching runCli is inert by construction. It is
+// still NOT collapsed into "always throw": the set records which test sites
+// have been CLEANED, which is a different fact from which commands are
+// in-process, and spelling it out is what keeps the two from being conflated
+// when slice 6 removes the seam.
 /** @type {Set<string>} */
-const ADAPTER_SEAM_RETIRED = new Set(["prepare"]);
+const ADAPTER_SEAM_RETIRED = new Set([
+  "prepare",
+  "install",
+  "update",
+  "uninstall",
+]);
 const ADAPTER_SEAM_KEYS = [
   "SPW_ADAPTER",
   "SPW_BASELINE_ADAPTER_STATE",

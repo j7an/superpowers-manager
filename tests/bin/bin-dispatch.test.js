@@ -12,13 +12,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync, existsSync } from "node:fs";
-import {
-  DISPATCH,
-  makePackageRoot,
-  runDispatch,
-  SPAWN_COMMANDS,
-} from "./dispatch-fixture.js";
-import { vehicleCommand } from "./dispatch-mode.js";
+import { makePackageRoot, runDispatch } from "./dispatch-fixture.js";
 
 const ALL_TOOLS = ["git", "python3", "codex"];
 
@@ -56,33 +50,19 @@ void test("a dist/cli.js that throws keeps its real error and is not relabelled"
 
 // --- inventory items 7-14: routing ----------------------------------------
 
-// `track-latest` (formerly item 10), `unpin` (formerly item 11), `pin`
-// (formerly item 9), and `probe` (formerly item 7) are no longer in this
-// table: PR 11.5 flipped all four to in-process commands (src/cli.ts
-// DISPATCH), so none of them ever reaches its `scripts/<name>` and none of
-// them ever logs to the dispatch log. `prepare` (formerly item 8) left the
-// same way in slice 3.4. See the retirement notes for items 7, 8, 9, 10, and
-// 11 in tests/migration-inventory/bin-dispatch.md and the dedicated in-process
-// routing cases just below this loop.
-/** @type {Array<[string[], string]>} */
-const ROUTING_CASES = [
-  [["install", "--dry-run"], "install --dry-run ref="],
-  [["uninstall", "--purge"], "uninstall --purge ref="],
-  [[], "update  ref="],
-];
-assert.equal(
-  ROUTING_CASES.length,
-  SPAWN_COMMANDS.length,
-  "ROUTING_CASES lost or gained a case — update tests/migration-inventory/bin-dispatch.md",
-);
-
-for (const [args, expected] of ROUTING_CASES) {
-  void test(`routing: \`${args.join(" ") || "(bare)"}\` reaches its script with its args`, () => {
-    const result = runDispatch({ tools: ALL_TOOLS, args });
-    assert.equal(result.status, 0);
-    assert.deepEqual(result.log, [expected]);
-  });
-}
+// The `ROUTING_CASES` table and its loop stood here until PR 11.5 slice 4b
+// (Task 8) flipped the last three spawned commands in-process. `probe`
+// (formerly item 7), `prepare` (formerly item 8), `pin` (formerly item 9),
+// `track-latest` (formerly item 10) and `unpin` (formerly item 11) had already
+// left it one flip at a time; `install` (item 12), `uninstall` (item 13) and
+// `update` (item 14) leave now, emptying it. The table and its loop are deleted
+// rather than left with zero entries, because a `for` over `[]` reports success
+// without asserting anything — the same reasoning that deleted `NO_CODEX_CASES`
+// at slice 3.4. `SPAWN_COMMANDS`, which sized the table from production, is
+// deleted from tests/bin/dispatch-fixture.js with it: at 8/8 in-process the
+// subset is permanently empty. See the retirement notes for items 7-14 in
+// tests/migration-inventory/bin-dispatch.md and the dedicated in-process
+// routing cases below.
 
 void test("`prepare` runs in-process and dispatches nothing", () => {
   // The fake `git` from `tools` exits 0 and produces nothing, so prepare fails
@@ -124,56 +104,64 @@ void test("routing: `pin` succeeds in-process and never reaches its script", () 
   assert.deepEqual(result.log, []);
 });
 
-// New (PR 11.5, Task 3): src/cli.ts's IN_PROCESS_HANDLERS registry is now
-// exhaustive over the commands DISPATCH marks "in-process", so a real flip
-// without a registered handler is a compile error and cannot happen through
-// the shipped table. The runtime backstop that reports instead of crashing
-// still has zero other coverage, so this reaches it the only way left: by
-// patching a case-local copy of the compiled dispatch table directly.
-// Vehicle only. The command named here must be one DISPATCH still marks
-// "spawn", so that patching its entry to "in-process" reaches a name
-// IN_PROCESS_HANDLERS does not carry. vehicleCommand derives it, so this no
-// longer needs re-pointing at each flip; in slice 4 it throws instead, which
-// is when this test should be deleted.
-void test("an in-process command with no registered handler fails closed", () => {
-  // The compile-time guard (src/cli.ts's InProcessHandler registry) makes this
-  // unreachable through the real table. The fixture reaches it by dispatching
-  // a name the registry does not carry, which is the only way to prove the
-  // runtime backstop still reports rather than crashing.
-  const spawned = vehicleCommand(DISPATCH);
+// Item 12's successor. `install` cannot succeed through this fixture — the
+// `tools` stubs are `exit 0` one-liners and the package root carries no
+// upstream to clone — so, exactly as for `prepare` above, the routing property
+// is all that survives and no exit status is asserted. The shared
+// `loggingStub` still logs unconditionally on invocation, so an empty log is
+// what discriminates "ran in-process" from "dispatched scripts/install".
+void test("`install` runs in-process and dispatches nothing", () => {
   const result = runDispatch({
     tools: ALL_TOOLS,
-    args: [spawned],
-    dispatchOverride: { [spawned]: "in-process" },
+    args: ["install", "--dry-run"],
   });
-  assert.equal(result.status, 1);
-  assert.equal(
-    result.stderr,
-    `error: no in-process handler registered for: ${spawned}\n`,
-  );
+  assert.deepEqual(result.log, []);
 });
 
-// patchDispatch happily rewrote a literal to itself, so a vehicle naming a
-// command that had since flipped silently became a no-op. Fixing the one
-// victim without fixing the mechanism is what let it recur.
-//
-// `pin` here is a hardcoded literal, not a derived vehicle. Unlike
-// `buildSpawn`'s vehicle, that is fine: staleness in this one is loud, not
-// silent — if `pin` ever stops being the "in-process" command this test
-// needs, the test fails visibly instead of quietly describing something
-// untrue, so it carries none of the risk vehicleCommand exists to
-// eliminate.
-void test("dispatchOverride rejects an override that changes nothing", () => {
-  assert.throws(
-    () =>
-      runDispatch({
-        tools: ALL_TOOLS,
-        args: ["pin"],
-        dispatchOverride: { pin: "in-process" },
-      }),
-    /is already "in-process"/,
-  );
+// Item 13's successor, same shape and same reason.
+void test("`uninstall` runs in-process and dispatches nothing", () => {
+  const result = runDispatch({
+    tools: ALL_TOOLS,
+    args: ["uninstall", "--purge"],
+  });
+  assert.deepEqual(result.log, []);
 });
+
+// Item 14's successor: a bare invocation still routes to `update`, which now
+// runs in-process. The routing half of the shell's claim is what survives —
+// that the default subcommand is `update` and that it reaches no script.
+void test("a bare invocation routes to `update`, in-process, dispatching nothing", () => {
+  const result = runDispatch({ tools: ALL_TOOLS, args: [] });
+  assert.deepEqual(result.log, []);
+});
+
+// The unregistered-handler backstop case stood here until PR 11.5 slice 4b
+// (Task 8, Step 5a) and is RETIRED at the gap, with `dispatchOverride`,
+// `patchDispatch` and the "dispatchOverride rejects an override that changes
+// nothing" test that followed it.
+//
+// It reached src/cli.ts's `!handler` guard by patching a case-local copy of the
+// compiled DISPATCH table, flipping a "spawn" entry to "in-process" so the name
+// dispatched was one IN_PROCESS_HANDLERS does not carry. At 8/8 in-process
+// there is no "spawn" entry left to flip, and `patchDispatch` rejected a no-op
+// override by design, so the fixture could not construct the condition at all.
+// The test's own comment had already scheduled this: "in slice 4 it throws
+// instead, which is when this test should be deleted."
+//
+// Decision (Step 5a, option (b)): the compile-time exhaustiveness guard —
+// `IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler>` keyed by
+// exactly the DISPATCH entries reading "in-process" — is accepted as the whole
+// protection. Reaching the runtime guard would now require surgically deleting
+// a key from a compiled registry, which asserts only that a hand-mutilated
+// build reports rather than crashes. `src/cli.ts`'s `!handler` guard STAYS as
+// an unreachable, documented fail-closed backstop; it is three lines and its
+// removal would trade a named diagnostic for a TypeError.
+//
+// `dispatchOverride`'s only other consumer was a test of the fixture itself
+// ("rejects an override that changes nothing"), so it goes with it: a fixture
+// whose only remaining test is a test of itself is residue, not coverage. See
+// the retirement notes for port-only items 41-43 in
+// tests/migration-inventory/bin-dispatch.md.
 
 // --- inventory items 15-19: unknown subcommand -----------------------------
 
@@ -221,48 +209,54 @@ void test("--version through a symlink resolves, as npm and npx invoke bins", ()
 });
 
 // --- inventory item 29: exit-code propagation --------------------------------
-
-// Vehicle only. This case tests that a spawned child's exit status reaches
-// the caller unchanged, not anything specific to `install`. It moved off
-// `probe` when slice 2 flipped it in-process, and it dies with the spawn path
-// in slice 4. Do not read the choice of `install` as a contract.
-void test("a script's exit code propagates unchanged", () => {
-  const result = runDispatch({
-    tools: ALL_TOOLS,
-    args: ["install"],
-    scripts: { install: "#!/bin/sh\nexit 42\n" },
-  });
-  assert.equal(result.status, 42);
-});
+//
+// RETIRED at the gap (PR 11.5 slice 4b, Task 8). The case asserted that a
+// spawned child's exit status reaches the caller unchanged, using `install` as
+// a vehicle and a `scripts: { install: "exit 42" }` override to produce the
+// status. The CLI spawns no child for any command now, so there is no child
+// status to propagate: `main` exits with the value its in-process handler
+// returns. That successor property is not this one — it is asserted per command
+// by the unit suites (tests/unit/commands-{install,update,uninstall}.test.js)
+// and by the exit statuses every case in this file already checks. `scripts` as
+// a `runDispatch` option survives; nothing in this file uses it any more.
 
 // --- inventory items 30-31: env passthrough ---------------------------------
-
-void test("SUPERPOWERS_* env vars reach the dispatched script", () => {
-  const result = runDispatch({
-    tools: ALL_TOOLS,
-    args: ["update"],
-    env: {
-      SUPERPOWERS_REF: "abc123",
-      // Opaque passthrough value, never a path this test writes to.
-      SUPERPOWERS_VALIDATOR: "/tmp/custom-validator.py",
-    },
-  });
-  assert.equal(result.status, 0);
-  assert.deepEqual(result.log, [
-    "update  ref=abc123",
-    "update validator=/tmp/custom-validator.py",
-  ]);
-});
+//
+// RETIRED at the gap (PR 11.5 slice 4b, Task 8). The case asserted that
+// SUPERPOWERS_REF and SUPERPOWERS_VALIDATOR reach `scripts/update`'s
+// environment, observed through the dispatch log the stub writes. `update` is
+// in-process, so no environment is handed to a child at all: the command reads
+// `ctx.env`, which is `process.env` itself (src/cli.ts's single CommandContext
+// construction site). There is no "passthrough" left to break. The surviving
+// property — that a SUPERPOWERS_* variable actually changes what the command
+// does — is asserted directly by the two `prepare` cases below
+// (SUPERPOWERS_VALIDATOR flipping preflight's `python3` requirement) and, for
+// the full ten-variable set, by tests/baseline/cli-parity.test.js's
+// CLI-ENV-PASSTHROUGH-01.
 
 // --- inventory items 32-34: preflight, git absent ---------------------------
 
+// Item 33's substring check became EXACT at PR 11.5 slice 4b, Task 8, and both
+// git cases below carry the change. Before the flip, `install` with `git`
+// absent could only fail at preflight, because the command was spawned and the
+// spawn never happened. In-process it reaches `gatherProbe`, whose ref
+// resolution shells out to `git` and emits its own
+// `error: required command not found: git` — no em-dash suffix — so a
+// substring check is satisfied by either producer. Measured: with `git`
+// removed from `COMMAND_REQUIREMENTS.install` in a mutated `dist/`, the old
+// substring form still passed. Preflight's own diagnostic is the contract
+// here, so the assertion pins its exact text, as port-only item 49 already
+// does for `python3`.
 void test("missing git fails before dispatch and names the tool", () => {
   const result = runDispatch({
     tools: ["python3", "codex"],
     args: ["install"],
   });
   assert.equal(result.status, 1);
-  assert.ok(result.stderr.includes("required command not found: git"));
+  assert.equal(
+    result.stderr,
+    "error: required command not found: git — install git and re-run\n",
+  );
   assert.deepEqual(result.log, []);
 });
 
@@ -279,7 +273,13 @@ void test("`pin` fails preflight when git is absent from PATH", () => {
     args: ["pin", "v1.0.0"],
   });
   assert.equal(result.status, 1);
-  assert.ok(result.stderr.includes("required command not found: git"));
+  // Exact, for the reason recorded on the `install` case above: `pin`'s own
+  // ref resolution shells out to `git` too, so a substring check no longer
+  // discriminates preflight's diagnostic from the resolver's.
+  assert.equal(
+    result.stderr,
+    "error: required command not found: git — install git and re-run\n",
+  );
   assert.deepEqual(result.log, []);
 });
 
@@ -303,24 +303,31 @@ void test("an invalid pin ref is a usage error decided before any tool lookup", 
 
 // --- inventory items 38-40: commands that need no git -----------------------
 
-// `track-latest` (formerly item 38) and `unpin` (formerly item 39) are no
-// longer in this table: both are in-process now and never log to the
-// dispatch log regardless of `git`'s presence. See the retirement notes for
-// items 38 and 39 in tests/migration-inventory/bin-dispatch.md and the
-// dedicated cases just below this loop.
-/** @type {Array<[string, string]>} */
-const NO_GIT_CASES = [["uninstall", "uninstall  ref="]];
+// The `NO_GIT_CASES` table and its loop stood here. `track-latest` (formerly
+// item 38) and `unpin` (formerly item 39) left it as each went in-process;
+// `uninstall` (formerly item 40) — its last entry — left the same way at slice
+// 4b's flip, so the table and its loop are deleted rather than left with zero
+// entries, for the same reason `NO_CODEX_CASES` was. See the retirement notes
+// for items 38, 39 and 40 in tests/migration-inventory/bin-dispatch.md and the
+// dedicated cases just below.
 
-for (const [command, expected] of NO_GIT_CASES) {
-  void test(`\`${command}\` dispatches with git absent from PATH`, () => {
-    const result = runDispatch({
-      tools: ["python3", "codex"],
-      args: [command],
-    });
-    assert.equal(result.status, 0);
-    assert.deepEqual(result.log, [expected]);
+// Item 40's successor. `uninstall`'s shell contract was that preflight does not
+// require `git` for it, observed through a dispatch. In-process there is no
+// dispatch, and the command cannot succeed here either — the `exit 0` `codex`
+// stub answers no listing, so `runUninstall` fails closed — so the surviving
+// contract is the one item 40 actually protected: preflight admits the command
+// with `git` absent, and no script is spawned.
+void test("`uninstall` runs in-process with git absent from PATH", () => {
+  const result = runDispatch({
+    tools: ["python3", "codex"],
+    args: ["uninstall"],
   });
-}
+  assert.ok(
+    !result.stderr.includes("required command not found: git"),
+    `preflight must not require git for uninstall: ${result.stderr}`,
+  );
+  assert.deepEqual(result.log, []);
+});
 
 void test("`track-latest` succeeds in-process with git absent from PATH", () => {
   const result = runDispatch({
@@ -586,13 +593,14 @@ void test("the pin dispatch fixture refuses a network git remote before git runs
 });
 
 // --- inventory items 52-53: missing script file ------------------------------
-
-void test("a missing script file produces a diagnostic and a non-zero exit", () => {
-  const result = runDispatch({
-    tools: ALL_TOOLS,
-    args: ["uninstall"],
-    missingScripts: ["uninstall"],
-  });
-  assert.equal(result.status, 1);
-  assert.ok(result.stderr.includes("missing script"));
-});
+//
+// RETIRED at the gap (PR 11.5 slice 4b, Task 8). The case removed
+// `scripts/uninstall` from a case-local package root and asserted the bin
+// reported `missing script` and exited 1. `main` no longer looks for a
+// `scripts/<command>` file for any command — the `existsSync` check and the
+// diagnostic it guarded are deleted from src/cli.ts with the spawn path — so
+// the condition cannot occur in either direction. There is no successor: a
+// missing command module is now an ESM import failure at load, which
+// `bin/superpowers-manager.js` already reports through the two dist-integrity
+// cases at the top of this file. `missingScripts` as a `runDispatch` option
+// survives with no consumer, and is deleted in 4c with `scripts/` itself.

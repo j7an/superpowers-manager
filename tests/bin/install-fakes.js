@@ -106,7 +106,7 @@ function runCodex(ctx) {
       // Codex reports the plugin installed at 1.0.0, but no cached tree is
       // ever written for it. The real adapter's fingerprint handler then
       // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — src/adapter.ts:815-828 — so it returns a
+      // finds nothing to read there — src/adapter.ts:831-844 — so it returns a
       // controlled inspect-failed envelope. No adapter interception needed.
       ctx.writeJson("plugin_list.json", {
         installed: [
@@ -180,10 +180,21 @@ function runCodex(ctx) {
  */
 function runAdapter(ctx) {
   ctx.log("adapter.log", ctx.args.join(" "));
-  // The return is load-bearing: process.exitCode does not halt execution, so
-  // falling through here would reach delegateToRealAdapter below and spawn the
-  // very adapter the tripwire exists to forbid.
-  if (tripwireTriggered(ctx)) return;
+  // Post-flip, install dispatches in-process: `ctx.adapter` is a direct call
+  // into src/adapter.ts's runAdapter, never a spawn of this executable, so no
+  // seam value makes reaching it legitimate any more. `always: true` refuses
+  // unconditionally, matching probe-fakes.js's own adapter role. The return
+  // is still load-bearing: process.exitCode does not halt execution, so
+  // falling through here would reach delegateToRealAdapter below and spawn
+  // the very adapter the tripwire exists to forbid.
+  if (
+    tripwireTriggered(ctx, {
+      always: true,
+      message: "fixture: install must not spawn the adapter",
+    })
+  ) {
+    return;
+  }
   const joined = ctx.args.join(" ");
 
   if (ctx.seam === "intercept" && joined === "inspect --view update-control") {

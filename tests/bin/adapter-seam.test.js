@@ -1,10 +1,37 @@
 // @ts-check
-// Two gates, plus the four cases that keep them from going vacuous. Without
-// them, the 9 literal readLog(c.adapterLog) reader sites in the SEAM_SOURCES
-// files, and the 30 cases that declare a seamDependency, go vacuous when slice
-// 4 removes the seam, in exactly the way five cli-parity assertions did in
-// slice 3.4 — silently, with the suite still green. Both numbers are counted
-// from the tree; the count case below re-derives the 30 on every run.
+// Two gates, plus the four cases that keep them from going vacuous. PRESENT
+// STATE, re-derived 2026-08-11 (PR 11.5 slice 4b Task 9): every
+// SEAM_DEPENDENT entry is { intercept: 0, log: 0 }, and no parseable
+// seamDependency DECLARATION is left in the SEAM_SOURCES files — Task 6
+// (2026-08-10) discharged all thirty, and the count case below re-derives
+// that 0 on every run.
+//
+// The reader count is no longer zero, and was not zero at Task 9 either:
+// tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js
+// each hold literal readLog(c.adapterLog) sites again, every one of them
+// inside that file's row-18 tripwire case (the exact tally stays out of this
+// prose — adapter-seam.js's own opening paragraph is where a reader count is
+// asserted). They are the inverse of the residue these
+// gates hunt. One asserts the log is EMPTY because the in-process subject
+// never spawns the fake adapter; the other asserts the line a directly
+// spawned fake adapter leaves before the tripwire refuses it. Neither can
+// quietly keep passing once the seam goes: the whole case is built on the
+// fake adapter and disappears with it in slice 4c/6.
+//
+// Know this before trusting the classification gate below. Its property is
+// `readers === 0 || declared > 0`, so with readers nonzero the second
+// disjunct is the one holding it up — and `declared` counts the bare string
+// `seamDependency:`, which in both files matches only the case builder's
+// passthrough (`seamDependency: options.seamDependency`), never a
+// declaration. That gate therefore cannot fail for these two files at
+// present. Left as is deliberately: the pattern it shares with the count case
+// is what slice 4c reads when it retires the seam, and narrowing it is that
+// task's call, not a fix to smuggle in under a tripwire case.
+//
+// HISTORY, which is why the gates were written: before Task 6 there were 9
+// reader sites and 30 declaring cases, and both would have gone vacuous when
+// slice 4 removed the seam, in exactly the way five cli-parity assertions did
+// in slice 3.4 — silently, with the suite still green.
 //
 // The two gates are "every script with seam-dependent cases still exists" and
 // "no adapter-log reader is left unclassified". The other four cases exist
@@ -85,9 +112,22 @@ void test("the gate fails when a depended-on script is gone", () => {
   // reintroduces the bug commit 0d9a53c fixed: the gate would probe a
   // double-slash spelling the predicate never matches, and would silently
   // stop observing its own failure mode.
+  //
+  // A throwaway, nonzero third argument — NOT the real, gated SEAM_DEPENDENT,
+  // which PR 11.5 slice 4b Task 6 discharged to zero everywhere — is required
+  // as of that discharge: `assertSeamScriptsPresent`'s own `total === 0 ->
+  // continue` skip would otherwise pass "install" over before the existence
+  // check below ever runs, since the real map's install entry is now
+  // `{ intercept: 0, log: 0 }`. This proves the same throw path the real gate
+  // uses the moment any script's count is legitimately nonzero again; it
+  // asserts nothing about the real registry's current value, which the count
+  // case above already pins.
   const gone = join(ROOT, "scripts", "install");
   assert.throws(
-    () => assertSeamScriptsPresent(ROOT, (p) => p !== gone && existsSync(p)),
+    () =>
+      assertSeamScriptsPresent(ROOT, (p) => p !== gone && existsSync(p), {
+        install: { intercept: 1, log: 0 },
+      }),
     /scripts\/install is gone, but \d+ of its cases still depend on the SPW_ADAPTER seam/,
   );
 });

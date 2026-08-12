@@ -167,7 +167,7 @@ or is broken` (`:460`, `:493`), and `generated hook symlink escapes or is
 broken` (the validator's own, `tests/unit/generated-plugin.test.js:714`).
 
 *(b) `hook classification failed:` — the adapter's wrapper prefix.*
-`src/adapter.ts:364` emits it, and until slice 3.5 the eight shell lines items
+`src/adapter.ts:380` emits it, and until slice 3.5 the eight shell lines items
 113-120 record were the only assertions of it anywhere. It is now witnessed by
 `tests/baseline/prepare.test.js`'s "a classification failure reaches stderr
 through the adapter wrapper". **What moved is the wrapper, not the causes.**
@@ -176,7 +176,7 @@ unit test it cites and still is; those unit tests are untouched. The one case
 above adds the half no unit test could reach — that a classification failure
 travels out through the adapter carrying this prefix — and one reaching it is
 enough, because the prefix does not vary by cause. The materialization twin
-`src/adapter.ts:373` was witnessed all along, by
+`src/adapter.ts:389` was witnessed all along, by
 `tests/baseline/prepare.test.js:338` and
 `tests/baseline/cli-parity.test.js:1613`.
 
@@ -774,7 +774,7 @@ generated tree preserved.
 
 **Items 113-120: the wrapper is now witnessed; the causes never moved.** All
 eight shell diagnostics begin `hook classification failed:` —
-`src/adapter.ts:364`'s wrapper — and that prefix was asserted nowhere outside
+`src/adapter.ts:380`'s wrapper — and that prefix was asserted nowhere outside
 this shell file until slice 3.5 added
 `tests/baseline/prepare.test.js`'s "a classification failure reaches stderr
 through the adapter wrapper"; see note (b) above.
@@ -1010,25 +1010,37 @@ cannot scrub itself — the preload has already run. The parent spec's §11 list
 so that half is retired with that citation rather than silently. This half is
 settled.
 
-**The child-clean boundary, which is NOT settled.** `scripts/core/common.sh:71`
-runs helpers as `exec /bin/sh -c 'unset NODE_OPTIONS NODE_PATH; exec node "$@"'`,
-so on the shell path the Codex subprocess really is spawned from a scrubbed
-environment. **The TypeScript path has no equivalent today.**
-`grep -rn 'NODE_OPTIONS\|NODE_PATH' src/` returns **zero hits**, and
-`runCommand` (`src/adapter.ts:106-142`) passes the `env` it is handed straight
-into `execFile` untouched; `common.sh:71` is the only scrubbing site in the
-system. The parent spec's paragraph that reads "`runCommand` … therefore
-deletes `NODE_OPTIONS` and `NODE_PATH` … covered by a unit test" is written in
-the **prescriptive** voice — it is the change the spec schedules, and two lines
-earlier the same paragraph states the current fact, "`src/` filters these
-variables nowhere". **This branch has not landed that change.** So items
-161-163 retire assertions about a property the shell path has and the
-TypeScript path does not yet have. **This one outlived the driver's deletion
-and is still open.** Slice 3.5 closed the three missing-test gaps this file
-flagged beside it — items 83-85, 113-120, and 125/127/128 — and narrowed item
-111 with a reason. This is the remaining flagged finding, and the only one of
-the set that is a behaviour regression rather than a missing test, so no test
-can close it: it needs the scrub `src/` does not perform.
+**The child-clean boundary, CLOSED by PR 11.5 slice 4b Task 1 — against a
+different child.** `scripts/core/common.sh:71` runs helpers as
+`exec /bin/sh -c 'unset NODE_OPTIONS NODE_PATH; exec node "$@"'`, so on the
+shell path a helper is spawned from a scrubbed environment.
+
+This paragraph previously read *"The TypeScript path has no equivalent today"*
+and supported it with two citations: that
+`grep -rn 'NODE_OPTIONS\|NODE_PATH' src/` returns **zero hits**, and that
+`runCommand` passes the `env` it is handed straight into `execFile` untouched.
+**Both are now false**, and the paragraph is corrected here rather than
+softened. `runCommand` (`src/adapter.ts:110-156`) copies the environment it is
+given and `delete`s `NODE_OPTIONS` and `NODE_PATH` before `execFile`
+(`:120-122`); the same grep now returns **three** hits, all in
+`src/adapter.ts` — the explanatory comment at `:116` and those two deletes. The
+change is covered by `tests/unit/adapter.test.js:549`, *"runCommand strips
+NODE_OPTIONS and NODE_PATH from the child env"*, which drives the real
+`runCommand` through an exported test alias (`src/adapter.ts:158-160`) rather
+than restating the deletes.
+
+**What closed, and what did not.** The property is child-clean-ness, and it now
+holds for the only child the in-process path spawns: `runCommand`'s single
+caller is the Codex binary launch at `src/adapter.ts:207`. It does **not** hold
+for the child items 161-163 were written about — a `node adapter-cli.js`
+launch — because in-process `prepare` performs no such launch at all, which is
+exactly why item 161's vacuity guard retires structurally. Items 162-163
+therefore stay retired, but no longer *against nothing*: the property they
+asserted has a successor, at the child that does exist, with its own test. The
+dispatcher half above is untouched by this and remains declined by the parent
+spec's §11. Slice 3.5 closed the three missing-test gaps this file flagged
+beside this one — items 83-85, 113-120, and 125/127/128 — and narrowed item
+111 with a reason.
 
 159. The adapter really routes through `spw_node_cli` rather than bare `node`
      (`:1216`) — the structural half. **Retired**: the seam is
@@ -1042,12 +1054,18 @@ can close it: it needs the scrub `src/` does not perform.
      adapter runs in-process.
 162. `NODE_OPTIONS` was unset for that launch (`:1267`) — the behavioural
      half, and a **child-clean** assertion, not a dispatcher one.
-     **Retired**, against nothing: `src/` scrubs `NODE_OPTIONS` nowhere, so the
-     property this line asserted does not hold on the in-process path. The §11
-     citation does *not* cover this — §11 declines to restore the *dispatcher*
-     boundary, whereas this asserts the child's. See the cluster note above.
-163. `NODE_PATH` was unset for that launch (`:1272`). **Retired**, against
-     nothing, same reasoning: zero `NODE_PATH` references in `src/`.
+     **Retired**: the `node adapter-cli.js` launch it observed does not occur
+     in-process (item 161), so this exact assertion has no subject. It is no
+     longer retired *against nothing*, as this entry said until PR 11.5 slice
+     4b: the property has a successor at the child that does exist —
+     `runCommand` deletes `NODE_OPTIONS` before spawning `codexBin`
+     (`src/adapter.ts:120-122`, called at `:207`), pinned by
+     `tests/unit/adapter.test.js:549`. The §11 citation still does *not* cover
+     this, because §11 declines the *dispatcher* boundary, not the child's;
+     it no longer needs to. See the cluster note above.
+163. `NODE_PATH` was unset for that launch (`:1272`). **Retired**, same
+     reasoning and the same successor: `src/adapter.ts:122` deletes
+     `NODE_PATH` on that same path, under the same unit test.
 
 <!-- inventory:mapped:end -->
 
@@ -1079,7 +1097,7 @@ map onto.
    The one child `prepare` still spawns — the additional validator — keeps that
    fidelity, because `runValidator` builds an explicit child environment and
    sets `TMPDIR` to the workspace. The adapter does not: `runAdapter` runs
-   in-process, `src/adapter.ts:318-320` calls `withWorkspace(tmpdir(), …)`, and
+   in-process, `src/adapter.ts:334-336` calls `withWorkspace(tmpdir(), …)`, and
    `os.tmpdir()` reads `process.env` rather than the `env` it is handed, so the
    build workspace lands in the ambient temp directory. The residue is bounded
    — `withWorkspace` removes the adapter's own workspace on both the success
@@ -1227,18 +1245,26 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   clusters — to the removal of the seam the assertion read through, naming the
   suite that still covers the underlying behaviour. 80 + 83 = 163. Plus 6
   port-only assertions with no shell counterpart.
-- **Four of the five findings this file flagged for slice 3.5 are now
-  settled; one is not.** Ordered by severity, because the open one is not a
-  missing test:
-  1. **OPEN.** Items 162-163 — the **child-clean** `NODE_OPTIONS`/`NODE_PATH`
-     property. `scripts/core/common.sh:71` gives it to the shell path; `src/`
-     scrubs neither variable anywhere, and `runCommand` passes `env` through
-     untouched. This is a behaviour difference the parent spec prescribes
-     closing and no branch has closed, not merely an unwitnessed one.
-     §11's "not scheduled" covers only the *dispatcher* half. No test can
-     settle it; the scrub has to exist first.
+- **Of the five findings this file flagged for slice 3.5, the one that stood
+  OPEN is now closed; of the remaining four, three are settled and one is
+  narrowed.** Ordered as they stood while the first was open, so the history
+  stays readable:
+  1. **CLOSED** by PR 11.5 slice 4b Task 1; recorded here at Task 10. Items
+     162-163 — the **child-clean** `NODE_OPTIONS`/`NODE_PATH` property.
+     `scripts/core/common.sh:71` gives it to the shell path. This entry read
+     **OPEN** until now, on two citations that were true when written and are
+     false today: that `src/` scrubs neither variable anywhere, and that
+     `runCommand` passes `env` through untouched. `src/adapter.ts:120-122`
+     copies the environment and deletes both variables before `execFile`, with
+     `tests/unit/adapter.test.js:549` as its witness. What closed is the
+     property, at the only child the in-process path spawns
+     (`src/adapter.ts:207`). What is **not** resurrected is items 162-163
+     themselves: the `adapter-cli.js` launch they observed does not occur
+     in-process, so they stay retired, now with a successor rather than
+     against nothing. §11's "not scheduled" still covers only the *dispatcher*
+     half, which remains declined.
   2. **Settled.** Items 113-120 — `hook classification failed:`
-     (`src/adapter.ts:364`), the adapter's wrapper prefix. Witnessed by
+     (`src/adapter.ts:380`), the adapter's wrapper prefix. Witnessed by
      "a classification failure reaches stderr through the adapter wrapper".
      The eight inner classification messages stayed where they were, exact in
      their cited unit tests; it is the wrapper that gained a witness.

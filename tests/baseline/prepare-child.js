@@ -5,7 +5,7 @@
 // runPrepare is called in a child process, not in the test process, because
 // ctx.env does not govern what its dependencies actually run under: runGit
 // (src/git.ts:22) spreads process.env and never sees ctx.env, and runBuild's
-// os.tmpdir() (src/adapter.ts:319) reads process.env too. Spawning with the
+// os.tmpdir() (src/adapter.ts:335) reads process.env too. Spawning with the
 // case's environment as the child's REAL process.env is what makes PATH,
 // TMPDIR, and git configuration hermetic.
 //
@@ -15,6 +15,10 @@
 /** @type {typeof import("../../src/commands/prepare.js")} */
 const { runPrepare } = await import(
   new URL("../../dist/commands/prepare.js", import.meta.url).href
+);
+/** @type {typeof import("../../src/adapter.js")} */
+const { runAdapter } = await import(
+  new URL("../../dist/adapter.js", import.meta.url).href
 );
 
 const root = process.argv[2];
@@ -28,4 +32,8 @@ process.exitCode = await runPrepare(process.argv.slice(3), {
   env: process.env,
   stdout: process.stdout,
   stderr: process.stderr,
+  // Real, not a double: this is the end-to-end fixture, and gatherPrepare's
+  // build call must reach the case's fake `codex` on PATH the same way it
+  // did before ctx.adapter existed.
+  adapter: runAdapter,
 });

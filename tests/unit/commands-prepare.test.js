@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { capture } from "./helpers/command-harness.js";
+import { capture, notCalledAdapter } from "./helpers/command-harness.js";
 
 /** @type {typeof import("../../src/commands/prepare.js")} */
 const { runPrepare, readUpstreamManifestVersion } = await import(
@@ -114,6 +114,11 @@ void test("readUpstreamManifestVersion delegates every read and parse failure to
 /**
  * A ctx whose selection resolves without touching git: a 40-hex SUPERPOWERS_REF
  * is a raw-commit resolution (src/upstream.ts:160-162).
+ *
+ * `adapter: notCalledAdapter` is safe for every case below: each fails
+ * closed (a missing manifest template, a failed clone) before gatherPrepare
+ * ever reaches the `ctx.adapter` build call. End-to-end coverage of that
+ * call lives in tests/baseline/prepare.test.js.
  * @param {string} dir
  * @param {Record<string, string>} [extra]
  */
@@ -139,6 +144,7 @@ function unitContext(dir, extra = {}) {
       },
       stdout: out.stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     },
   };
 }
@@ -177,9 +183,21 @@ void test("runPrepare emits no errno or multi-line git text when the clone fails
   // The clone of a nonexistent upstream fails first, so the validator's own
   // -f branch (a directory at SUPERPOWERS_VALIDATOR) is never reached here --
   // that predicate is exercised end-to-end in tests/baseline/prepare.test.js.
-  // This case only asserts that no errno, stack frame, or multi-line git text
-  // reached the stream.
+  //
+  // Exact equality, not just doesNotMatch(/ENOENT|errno|Error:|\n.*\n.*\n/):
+  // notCalledAdapter's throw is caught by gatherPrepare's own `catch` at
+  // src/commands/prepare.ts:404-414 and turned into a *different*,
+  // still-single-line, still-errno-free diagnostic
+  // ("cannot build the generated plugin candidate"). A loose doesNotMatch
+  // cannot tell that diagnostic apart from this one, so it would stay green
+  // even if a future change made this case wrongly reach the adapter. Pinning
+  // the exact clone-failure text is what makes reaching ctx.adapter here
+  // observable.
   assert.doesNotMatch(err.text(), /ENOENT|errno|Error:|\n.*\n.*\n/);
+  assert.equal(
+    err.text(),
+    `error: cannot clone upstream repo: ${join(dir, "no-such-upstream")}\n`,
+  );
 });
 
 void test("runPrepare takes the clone branch, not fetch, when the cache's .git is a regular file", async () => {

@@ -1,4 +1,3 @@
-import { runAdapter } from "../adapter.js";
 import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
 import { oneLine } from "../cli-arguments.js";
 import { computeEffectiveSelection } from "../effective-selection.js";
@@ -200,9 +199,14 @@ type Inspection =
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
-// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:993).
+// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:1009).
 // That is caught here rather than in runProbe's outer catch, because the two
 // need different diagnostics -- see spec §3.3a.
+//
+// Reached through ctx.adapter, not a direct module-level dependency on the
+// adapter module: src/commands/prepare.ts and this module are the two the
+// injected double must observe, because install reaches the adapter through
+// gatherProbe and runPrepare. Spec §4.5.
 async function inspect(
   view: string,
   key: string,
@@ -210,7 +214,7 @@ async function inspect(
 ): Promise<Inspection> {
   let result: AdapterResult;
   try {
-    result = await runAdapter(["inspect", "--view", view], {
+    result = await ctx.adapter(["inspect", "--view", view], {
       root: ctx.root,
       env: ctx.env,
     });
@@ -242,7 +246,7 @@ async function inspect(
   const value = (envelope.result as Record<string, unknown> | null)?.[key];
   // The Python reader printed the empty string for a JSON null
   // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (src/adapter.ts:802).
+  // whenever no plugin version is active (src/adapter.ts:818).
   if (value === null || value === undefined) {
     return { ok: true, value: "", envelope };
   }
@@ -278,7 +282,10 @@ type ProbeOutcome =
 // replays them, in collection order, after the try/catch has resolved. The
 // operator-visible result is identical -- probe emits nothing else until the
 // very end -- and the EPIPE hazard never exists.
-async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
+// Exported for src/commands/install.ts and src/commands/update.ts, which need
+// probe's FACTS rather than its rendering. scripts/core/lifecycle.sh:39-41
+// awk-parsed the porcelain back into fields; that round trip is gone.
+export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
   // Order mirrors scripts/probe:24-40 exactly.
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
   const generatedCommit = await generatedCommitOrEmpty(ctx.root);
@@ -421,7 +428,7 @@ export async function runProbe(
     // readGeneratedCommitLenient (src/provenance.ts:78-94), which catches
     // every failure and returns "".
     //
-    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:993) does
+    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:1009) does
     // NOT reach here: inspect() catches it and converts it to a hand-written
     // message, because a rethrown cause is exactly the failure src/adapter.ts
     // declined to own and its text must never reach this stream. See §3.3a.

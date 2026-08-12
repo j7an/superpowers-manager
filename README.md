@@ -53,17 +53,18 @@ change, in the same pull request.
 | `unpin` | no | no | no | no |
 | `prepare` | yes | only with SUPERPOWERS_VALIDATOR | no | no |
 | `probe` | yes | no | no | yes |
-| `install` | yes | yes | yes | yes |
-| `update` | yes | yes | yes | yes |
-| `uninstall` | no | yes | yes | yes |
+| `install` | yes | no | no | yes |
+| `update` | yes | no | no | yes |
+| `uninstall` | no | no | no | yes |
 <!-- requirements:end -->
 
 See `docs/baseline/behavioral-inventory.md`'s `CLI-PREFLIGHT-01` for the
 behaviour this table describes.
 
 macOS and Linux are tested. WSL2 is supported. The native Windows path is
-untested; the launcher looks for Git Bash, `git`, and `python3`, but path
-handling between MSYS and Codex remains a known risk area.
+untested; the launcher no longer looks for Git Bash at all — every command runs
+in-process, so no POSIX shell is discovered or required — but path handling
+between MSYS and Codex remains a known risk area.
 
 Network needs depend on the saved policy. `pin` verifies its target;
 `track-latest` and invocation overrides resolve from upstream when applied; and

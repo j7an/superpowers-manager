@@ -23,7 +23,7 @@ Source read in full (242 lines). Ported to
   instance exists, at `:91`.
 - A bare invocation of the subject under test with no explicit status check
   (`:90`, `spw_fetch_exact_commit ...`; `:236`, `spw_resolve_ref ... main`) is
-  **not** counted — `install-commands.md:68`'s rule ("a bare `run_*` with no
+  **not** counted — `install-commands.md:89`'s rule ("a bare `run_*` with no
   status test is not counted") applies unchanged: `set -eu` catches a
   non-zero exit either way, but that is not itself an assertion about what
   the call produced.

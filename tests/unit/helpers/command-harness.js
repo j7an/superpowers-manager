@@ -16,6 +16,30 @@ import {
 } from "../../baseline/support.js";
 
 /**
+ * A ctx.adapter stand-in for command modules that never reach the adapter
+ * (pin, track-latest, unpin, and the prepare/probe cases that fail before
+ * inspecting or building).
+ *
+ * The throw is loud only for a caller that does not catch it. Neither
+ * prepare nor probe is such a caller: src/commands/prepare.ts:404-414 and
+ * src/commands/probe.ts:216-227 both wrap the adapter call in a `catch` that
+ * turns any thrown error — this one included — into a hand-written,
+ * status-1 diagnostic. So on those two paths, reaching this double by
+ * mistake does NOT surface as an uncaught throw; it surfaces only if the
+ * test's own assertions are tight enough to notice the resulting diagnostic
+ * (e.g. an exact `stderr` match) rather than a loose one (e.g. `status === 1`
+ * plus a `doesNotMatch`, which a build-call diagnostic still satisfies).
+ * Callers that route this double through prepare or probe MUST assert
+ * precisely enough to make that diagnostic visible — the double alone does
+ * not guarantee it.
+ * @param {readonly string[]} _argv
+ * @returns {Promise<never>}
+ */
+export async function notCalledAdapter(_argv) {
+  throw new Error("ctx.adapter must not be called by this command path");
+}
+
+/**
  * A minimal writable-stream stand-in that records every chunk written to it,
  * for asserting exact CLI output without touching real stdout/stderr.
  * @returns {{ stream: any, text: () => string }}

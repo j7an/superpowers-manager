@@ -16,6 +16,7 @@ import {
   AdapterMessageLog,
   failureResult,
   successResult,
+  type AdapterContext,
   type AdapterResult,
 } from "./adapter-protocol.js";
 import {
@@ -47,10 +48,13 @@ const MARKETPLACE_NAME = "superpowers-manager";
 const LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";
 const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 
-export interface AdapterContext {
-  readonly root: string;
-  readonly env?: NodeJS.ProcessEnv;
-}
+// Re-exported so existing importers of AdapterContext from this module are
+// unaffected: the interface itself now lives in adapter-protocol.js, grouped
+// with the other protocol types (AdapterResult, AdapterEnvelope) rather than
+// with this module's implementation. Not a cycle avoidance — see
+// adapter-protocol.ts's comment on AdapterContext for why a cycle was never
+// possible here regardless of import direction.
+export type { AdapterContext };
 
 class AdapterFailure extends Error {
   constructor(
@@ -108,13 +112,21 @@ function runCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
 ): Promise<CommandResult> {
+  // scripts/core/common.sh:71 is the system's only scrubbing site and it dies
+  // with scripts/ in 4c. Without this, NODE_OPTIONS would NEWLY reach codex.
+  // Preserves the property that was load-bearing — the child is clean — and
+  // drops the part that was never true, that the dispatcher scrubbed itself.
+  // Carried matrix row 11.
+  const childEnv = { ...env };
+  delete childEnv.NODE_OPTIONS;
+  delete childEnv.NODE_PATH;
   return new Promise((resolve, reject) => {
     execFile(
       file,
       [...args],
       {
         encoding: "buffer",
-        env,
+        env: childEnv,
         maxBuffer: Infinity,
         shell: false,
         windowsHide: true,
@@ -142,6 +154,10 @@ function runCommand(
     );
   });
 }
+
+// Exported only so tests/unit/adapter.test.js can assert the env scrub
+// directly. No production caller uses this name.
+export { runCommand as runCommandForTest };
 
 function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;

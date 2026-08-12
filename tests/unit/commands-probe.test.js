@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capture } from "./helpers/command-harness.js";
+import { capture, notCalledAdapter } from "./helpers/command-harness.js";
 
 /** @type {typeof import("../../src/commands/probe.js")} */
 const {
@@ -140,6 +140,7 @@ void test("an unrecognised argument is a usage error on stderr", async () => {
       env: {},
       stdout: out.stream,
       stderr: err.stream,
+      adapter: notCalledAdapter,
     });
     assert.equal(status, 2);
     assert.equal(out.text(), "");
@@ -157,6 +158,7 @@ void test("a thrown selection failure is an operational failure", async () => {
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    adapter: notCalledAdapter,
   });
   assert.equal(status, 1);
   assert.equal(out.text(), "");
@@ -200,7 +202,13 @@ void test("replay writes each message to its declared stream in array order", ()
         { channel: "stdout", text: "third" },
       ],
     }),
-    { root: "/unused", env: {}, stdout: out.stream, stderr: err.stream },
+    {
+      root: "/unused",
+      env: {},
+      stdout: out.stream,
+      stderr: err.stream,
+      adapter: notCalledAdapter,
+    },
   );
   // Per-stream sequence, so a reversal inside one stream is caught. The
   // cross-stream interleave is not observable through separate captures and
@@ -223,7 +231,13 @@ void test("replay emits the error line then one hint line per hint", () => {
         hints: ["a", "b"],
       },
     }),
-    { root: "/unused", env: {}, stdout: out.stream, stderr: err.stream },
+    {
+      root: "/unused",
+      env: {},
+      stdout: out.stream,
+      stderr: err.stream,
+      adapter: notCalledAdapter,
+    },
   );
   assert.equal(out.text(), "");
   // Whole-string equality: the messages precede the error, and the hints
@@ -240,6 +254,7 @@ void test("replay on a clean success envelope writes nothing", () => {
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    adapter: notCalledAdapter,
   });
   assert.equal(out.text(), "");
   assert.equal(err.text(), "");

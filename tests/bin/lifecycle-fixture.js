@@ -43,7 +43,11 @@ registerScratch(SCRATCH);
  */
 function buildSnapshot() {
   const snapshot = mkdtempSync(join(SCRATCH, "snapshot-"));
-  for (const entry of ["scripts", "config", "dist"]) {
+  // `bin` joined the list at PR 11.5 slice 4b's flip: the subject runScript
+  // launches is now the Node entrypoint bin/superpowers-manager.js, not a
+  // scripts/ file. `scripts` stays until 4c deletes it — tests/bin/units.test.js
+  // guards that it is still present here.
+  for (const entry of ["bin", "scripts", "config", "dist"]) {
     cpSync(join(ROOT, entry), join(snapshot, entry), { recursive: true });
   }
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
@@ -286,6 +290,24 @@ export async function runScript(caseEnv, script, options = {}) {
       `refusing to run ${script} against a package root outside the fixture scratch tree: ${caseEnv.pkg}`,
     );
   }
+  // The runScript-side counterpart of tests/baseline/support.js's
+  // assertSeamRetired, added at PR 11.5 slice 4b's flip (Task 8, Step 5b).
+  // That guard fires only from runCli / runCliWithoutEnvironment, which is why
+  // it did not catch the two UPDATE-CONTROL-01 subcases that reached the dying
+  // seam through this function instead. It rejects a CALLER-supplied override
+  // only: the fixture's own SPW_ADAPTER below is a surviving default that
+  // nothing in-process reads, kept until slice 6 deletes the seam with the
+  // fake adapter machinery it selects.
+  for (const key of ["SPW_ADAPTER", "SPW_ADAPTER_RESPONSE_VALIDATOR"]) {
+    if (options.env && Object.hasOwn(options.env, key)) {
+      throw new Error(
+        `runScript: ${script}'s adapter seam is retired: remove ${key} from ` +
+          "this call. Every command dispatches in-process, so the in-process " +
+          "runAdapter ignores it and the override is inert — inject a " +
+          "ctx.adapter double instead (tests/bin/command-context.js).",
+      );
+    }
+  }
   // An explicit allowlist, not process.env. The shell drivers used
   // `env VAR=… sh …`, which inherits the developer's whole environment.
   //
@@ -310,15 +332,18 @@ export async function runScript(caseEnv, script, options = {}) {
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(caseEnv.state, "codex-home"),
     ...options.env,
   };
-  // /bin/sh by absolute path, never a bare "sh" resolved through the child's
-  // PATH: the stripped-PATH cases set PATH to a directory holding only
-  // `dirname`, where a bare "sh" fails to launch and the case never reaches
-  // the assertion it exists to make. The shell driver used /bin/sh for the
-  // same reason (tests/test_uninstall_commands.sh:198).
+  // process.execPath, never a bare "node" resolved through the child's PATH:
+  // the stripped-PATH cases set PATH to a directory holding only `dirname`,
+  // where a bare "node" fails to launch and the case never reaches the
+  // assertion it exists to make. process.execPath is absolute, so the argument
+  // that made /bin/sh-by-absolute-path correct before slice 4b's flip carries
+  // over unchanged to the Node entrypoint.
   return await new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn("/bin/sh", [join(caseEnv.pkg, "scripts", script)], {
-      env,
-    });
+    const child = spawn(
+      process.execPath,
+      [join(caseEnv.pkg, "bin", "superpowers-manager.js"), script],
+      { env },
+    );
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -334,7 +359,9 @@ export async function runScript(caseEnv, script, options = {}) {
     // as a case that ran and failed.
     child.on("error", (error) => {
       rejectPromise(
-        new Error(`failed to launch /bin/sh for ${script}: ${error.message}`),
+        new Error(
+          `failed to launch the manager bin for ${script}: ${error.message}`,
+        ),
       );
     });
     child.on("close", (code, signal) => {
@@ -412,4 +439,59 @@ export function assertOrder(log, needles, message) {
       );
     }
   }
+}
+
+/**
+ * Invokes a case's own fake adapter directly — the executable a regressed
+ * subject would have spawned, with the state, seam and package root that case
+ * runs under.
+ *
+ * Why a tripwire case needs it. `readLog` returns `[]` for a missing file, so
+ * "the adapter log holds no line" is the same observation whether the subject
+ * refused to spawn the fake or the log path was never the one the fake writes
+ * to (the argument at tests/migration-inventory/install-commands.md's
+ * port-only preamble). Post-flip nothing the subject does can produce a
+ * positive control on that channel, because the subject calls runAdapter
+ * in-process and never spawns anything. This supplies the control from the
+ * other side: run the fake adapter for real, and assert it refuses with the
+ * tripwire's own exit status and message and that the refusal lands in
+ * caseEnv.adapterLog. A caller that asserts both halves fails if the tripwire
+ * stops firing, which the emptiness assertion alone cannot do.
+ *
+ * The fake process reads exactly three variables — SPW_FIXTURE_STATE
+ * (lifecycle-fakes.js:235), SPW_FIXTURE_ADAPTER_SEAM (:209) and
+ * SPW_TEST_PKG_ROOT (:333, plus install-fakes.js:41 in the codex role). The
+ * rest of the allowlist below is inert while the tripwire holds and exists
+ * only for the mutation this helper is meant to die under: a disarmed
+ * tripwire falls through to delegateToRealAdapter, and these keep that
+ * delegation inside the case's own scratch tree instead of the developer's
+ * environment. It is spelled out here rather than shared with runScript's
+ * literal because extracting a common builder renumbers lines other files
+ * cite; divergence fails closed, since the caller asserts an exact status and
+ * an exact stderr rather than a substring.
+ *
+ * @param {CaseEnv} caseEnv
+ * @param {string[]} args
+ * @returns {{ status: number | null, stdout: string, stderr: string }}
+ */
+export function spawnFakeAdapter(caseEnv, args) {
+  const result = spawnSync(caseEnv.adapterBin, args, {
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      HOME: caseEnv.home,
+      XDG_CONFIG_HOME: join(caseEnv.home, ".config"),
+      TMPDIR: caseEnv.tmp,
+      SPW_FIXTURE_ADAPTER_SEAM: caseEnv.adapterSeam,
+      SPW_FIXTURE_STATE: caseEnv.state,
+      SPW_TEST_PKG_ROOT: caseEnv.pkg,
+      SUPERPOWERS_CODEX: caseEnv.codexBin,
+      SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(caseEnv.state, "codex-home"),
+    },
+  });
+  return {
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
 }

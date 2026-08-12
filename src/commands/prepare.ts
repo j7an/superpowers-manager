@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { runAdapter } from "../adapter.js";
 import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
 import { atomicReplaceDir } from "../atomic.js";
 import { oneLine } from "../cli-arguments.js";
@@ -135,7 +134,7 @@ export async function readUpstreamManifestVersion(
   if (value === undefined || value === null) return "";
   if (typeof value !== "string") {
     // The shell stringified any other type through Python's print()
-    // (provenance.sh:63), so `"version": 6` became "6" and flowed into both the
+    // (provenance.sh:62), so `"version": 6` became "6" and flowed into both the
     // provenance record and --upstream-manifest-version. Fail closed instead.
     // Spec divergence 7.
     throw prepareError(`upstream manifest version is not a string: ${path}`);
@@ -205,7 +204,7 @@ function replayEnvelope(envelope: AdapterEnvelope, ctx: CommandContext): void {
 //
 // scripts/prepare:35-36 exported TMPDIR="$prepare_workspace" so every child
 // confined its temporary files to the tree the workspace trap removed. This
-// child still does. The in-process adapter build does NOT: src/adapter.ts:319
+// child still does. The in-process adapter build does NOT: src/adapter.ts:335
 // calls withWorkspace(tmpdir(), ...) and os.tmpdir() reads process.env, never
 // ctx.env, so its build workspace lands in the ambient temp dir. Setting
 // process.env.TMPDIR around the call would be a process-global mutation inside
@@ -392,7 +391,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
 
       let built: AdapterResult;
       try {
-        built = await runAdapter(
+        built = await ctx.adapter(
           [
             "build",
             "--upstream-root",
@@ -415,9 +414,9 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
           { root: ctx.root, env },
         );
       } catch {
-        // runAdapter reports CONTROLLED failures by return value
+        // ctx.adapter reports CONTROLLED failures by return value
         // (src/adapter-protocol.ts:34-37) but still THROWS for a
-        // non-AdapterFailure cause (src/adapter.ts:993). That cause is by
+        // non-AdapterFailure cause (src/adapter.ts:1009). That cause is by
         // construction the one failure src/adapter.ts declined to own, so its
         // text must never reach ctx.stderr. Caught here rather than in
         // runPrepare's outer catch, the same treatment
@@ -554,7 +553,7 @@ export async function runPrepare(
     // of git text rather than the arbitrarily many the shell original
     // allowed.
     //
-    // runAdapter's rethrow (src/adapter.ts:993) does NOT arrive here -- the
+    // runAdapter's rethrow (src/adapter.ts:1009) does NOT arrive here -- the
     // call site catches it and converts it to a hand-written message.
     //
     // gatherPrepare performs no writes of its own, so this catch cannot also be

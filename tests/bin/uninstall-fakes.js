@@ -82,10 +82,21 @@ function runCodex(ctx) {
  */
 function runAdapter(ctx) {
   ctx.log("adapter.log", ctx.args.join(" "));
-  // The return is load-bearing: process.exitCode does not halt execution, so
-  // falling through here would reach delegateToRealAdapter below and spawn the
-  // very adapter the tripwire exists to forbid.
-  if (tripwireTriggered(ctx)) return;
+  // Post-flip, uninstall dispatches in-process: `ctx.adapter` is a direct
+  // call into src/adapter.ts's runAdapter, never a spawn of this executable,
+  // so no seam value makes reaching it legitimate any more. `always: true`
+  // refuses unconditionally, matching probe-fakes.js's own adapter role. The
+  // return is still load-bearing: process.exitCode does not halt execution,
+  // so falling through here would reach delegateToRealAdapter below and spawn
+  // the very adapter the tripwire exists to forbid.
+  if (
+    tripwireTriggered(ctx, {
+      always: true,
+      message: "fixture: uninstall must not spawn the adapter",
+    })
+  ) {
+    return;
+  }
   if (
     ctx.seam === "intercept" &&
     ctx.args.join(" ") === "inspect --view update-control"

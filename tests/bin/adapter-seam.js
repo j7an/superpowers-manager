@@ -6,15 +6,23 @@
 // runAdapter ignores it. Every assertion reading a fake adapter's log or
 // depending on its interception dies silently when the seam goes — the same
 // shape that left five cli-parity assertions vacuous in slice 3.4, at a larger
-// scale. Both numbers are counted from the tree, not from the design: the two
-// SEAM_SOURCES files hold 9 literal readLog(c.adapterLog) sites, and 30 cases
-// declare a seamDependency (the sum of SEAM_DEPENDENT below). The two differ
-// because one case can hold several readers and a case can be seam-dependent
-// through interception without reading the log at all.
+// scale. At their peak (027c42e, before PR 11.5 slice 4b Task 6) the two
+// SEAM_SOURCES files held 9 literal readLog(c.adapterLog) sites and 30 cases
+// declared a seamDependency (the sum of SEAM_DEPENDENT below); the two
+// differed because one case could hold several readers and a case could be
+// seam-dependent through interception without reading the log at all. Task 6
+// discharged all thirty and all nine — see the dated comment above
+// SEAM_DEPENDENT below for how each one went. Both counts are re-derived from
+// the tree on every test run (adapter-seam.test.js), not carried as history:
+// this paragraph is the only place either number is now asserted in prose.
 //
-// Most of those re-anchor onto codex.log, because every mutation the adapter
-// performs reaches Codex through codexBin (src/adapter.ts:575-660). What
-// cannot re-anchor is declared here.
+// Most re-anchored onto codex.log, because every mutation the adapter
+// performs reaches Codex through codexBin (src/adapter.ts:591-676). What
+// could not re-anchor converted to an injected recording double instead
+// (tests/bin/command-context.js) or, for the two genuinely unreachable
+// transport-fault cases, retired at the gap. SEAM_DEPENDENT stays declared
+// rather than deleted, at zero, because an emptied gate — not an absent one —
+// is what proves the seam's removal is safe.
 
 import { join } from "node:path";
 
@@ -46,57 +54,111 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 // test-support residue that outlives the seam on purpose, because an emptied
 // gate is what proves slice 4 finished.
 //
-// Counted per script and per reason from the seamDependency declarations
-// actually written — adapter-seam.test.js's "each declared count matches the
-// declarations in its sources" is the derivation of record, re-run on every
-// test invocation; a `grep -c` over SEAM_SOURCES only reproduces the
-// per-script total, not the intercept/log split this constant now declares.
-// Cases are named, not line-numbered, because these two files move under edit:
+// 2026-08-10, Task 6 of PR 11.5 slice 4b: all thirty discharged, none by
+// deleting a map entry. Every case that declared a seamDependency now either
+// calls its command function (`runInstall` / `runUpdate` / `runUninstall` /
+// `runPrepare`) in-process through an injected recording adapter
+// (tests/bin/command-context.js), asserting a structural claim about which
+// operations the double answered, or — for the two cases below marked
+// RETIRED — has no surviving subject to convert at all. The shell is still
+// what `bin/superpowers-manager.js` dispatches to for every other case in
+// these two files; only the cases that were declared here bypass it, calling
+// the ported TypeScript module directly. The reasoning below is preserved
+// because it explains WHY each class had no surviving channel other than a
+// double, which the mechanical fact "converted" does not; 4c and slice 6 read
+// it when they delete the seam and this registry.
 //
 //   install:
-//     intercept: "unsupported update control blocks a direct install";
-//                "malformed update-control output exits exactly 1";
-//                "needs-prepare install reinspects after prepare and rejects
-//                 drift"; "needs-install path inspects ownership then update
-//                 control, then installs" (count only, default config);
+//     intercept (6): two ("malformed update-control output exits exactly 1",
+//                "malformed fingerprint output is rejected by response
+//                validation") are RETIRED, not converted — see
+//                tests/migration-inventory/install-commands.md items 22-24 and
+//                107-111, the two retirement notes that own them. (Items 26-27,
+//                cited here before, belong to the FAILED update-control case,
+//                which converted.) These two are the ONLY transport-fault
+//                retirements: the whole fixture schema offers exactly two
+//                levers that make the fake adapter process emit non-JSON —
+//                install-fakes.js:222 and :273 — so there is no third.
+//                Both fixture configs forced the FAKE ADAPTER PROCESS to write
+//                a bare `{` to stdout: a transport-level, non-JSON-parseable
+//                fault. `ctx.adapter` is an in-process function call that
+//                returns an already-typed AdapterResult, with no
+//                serialization boundary for a double to corrupt, so the
+//                subject these two cases tested no longer exists. The other
+//                four ("...blocks a direct install", "needs-prepare install
+//                reinspects after prepare and rejects drift", "needs-install
+//                path inspects ownership then update control, then installs",
 //                "the fresh gate, not the initial probe, controls mutation
-//                 authority"; "malformed fingerprint output is rejected by
-//                 response validation".
-//     log:       the two identity-state cases, legacy and both, which reach
-//                assertLegacyIdentityStops — its `^build ` negative has no
-//                Codex-level footprint because the adapter's build operation
-//                issues no Codex command at all. THIRTEEN more come from a
-//                single shared helper: prepareGeneratedTree reads adapter.log
-//                to prove prepare did not inspect update control, and that
-//                property is observable nowhere else. Re-basing that one
-//                helper collapses most of this number at once.
+//                authority") convert cleanly: each is now a double answering
+//                `inspect --view update-control` with a fixed or call-counted
+//                value, asserted over the double's own recorded `calls`.
+//     log (15):  the two identity-state cases, legacy and both, converted by
+//                converting their shared helper (`assertLegacyIdentityStops`)
+//                to call `runInstall` in-process — its `^build ` negative,
+//                which had no Codex-level footprint because the adapter's
+//                build operation issues no Codex command at all, is now
+//                `!adapter.calls.some((c) => c[0] === "build" || c[0] ===
+//                "install")`. THIRTEEN more came from a single shared helper,
+//                `prepareGeneratedTree`, converted the same way: it now calls
+//                `runPrepare` in-process and asserts its double's calls are
+//                exactly `["build"]`, discharging all thirteen callers'
+//                declarations at once without touching the callers
+//                themselves (they still dispatch their OWN subject call
+//                however they did before).
 //   update:
-//     intercept: "unsupported update control blocks the update fast path";
-//                "failed update-control inspection exits exactly 1".
-//     log:       "update rejects mixed legacy state even when the fingerprint
-//                is current" (same `^build ` negative), plus the two
-//                prepareGeneratedTree callers that run `update`.
+//     intercept (2): both convert. "unsupported update control blocks the
+//                update fast path" and "failed update-control inspection
+//                exits exactly 1" both answer `inspect --view update-control`
+//                directly — the second with a well-formed `ok: false`
+//                envelope (`failureResult`), which is NOT the transport fault
+//                the two install retirements above were, and is reachable
+//                through a double exactly as it was through the fixture.
+//     log (3):   "update rejects mixed legacy state even when the fingerprint
+//                is current" converts the same way as the two identity-state
+//                cases above (inline, not through the shared helper, because
+//                it dispatches `update` rather than `install`), plus the two
+//                `prepareGeneratedTree` callers that run `update` — already
+//                discharged by that helper's own conversion.
 //   uninstall:
-//     intercept: "selection-independent recovery".
-//     log:       "missing Codex" (codex.log is empty by construction, so it
-//                can witness nothing); "both present" (asserts the adapter's
-//                own argv shape, which Codex never sees).
+//     intercept (1): "selection-independent recovery" converts: `runUninstall`
+//                (unlike install/update) never calls gatherProbe and
+//                structurally never issues an update-control inspect at all,
+//                so the double's own construction (answering only ownership
+//                and uninstall) now IS the proof.
+//     log (2):   "missing Codex" converts: the double answers the ownership
+//                inspect with the same well-formed failureResult the real
+//                adapter's requireCodex check would produce for a missing
+//                binary, and the double's own call list (exactly one call)
+//                replaces the adapter-log read as evidence codex.log could
+//                never supply (Codex is unreached by construction either
+//                way). "both present" does NOT convert to a double: most of
+//                its claims re-anchor onto codex.log (ownership inspection has
+//                a Codex-level footprint via `plugin list --json`), and the
+//                one claim that does not ("adapter uninstall must receive
+//                booleans, not provider names") is dropped because it was
+//                inert — its needle `other@x` is defined by no fixture in this
+//                repository, so no behaviour of the subject could ever have
+//                produced it. One further claim in that case, the
+//                exactly-once count on the adapter uninstall op, is a genuine
+//                (narrow) DROP rather than a re-anchor — see
+//                tests/migration-inventory/uninstall-commands.md items 28 and
+//                35 for both arguments.
 //   prepare:
-//     log:       "prepare is capability-independent" — adapter operation names
-//                on a path that makes no Codex call at all, which is the very
-//                property the case asserts.
+//     log (1):   "prepare is capability-independent" converts: the double
+//                answers only `build` and fails the case by exhaustion on any
+//                other call, including `inspect --view update-control` and
+//                `install --package-root` — structurally stronger than the
+//                adapter-log negatives it replaces.
 /**
  * Per script, split by the reason a case cannot survive the seam's removal.
- * The split was prose in a comment until slice 4a; nothing detected a case
- * whose reason changed, which is matrix row 19. It is now the gated shape and
- * the count gate matches `reason:` as well as `script:`.
+ * All thirty discharged as of 2026-08-10 — see the comment above.
  * @type {Record<string, { intercept: number, log: number }>}
  */
 export const SEAM_DEPENDENT = {
-  install: { intercept: 6, log: 15 },
-  update: { intercept: 2, log: 3 },
-  uninstall: { intercept: 1, log: 2 },
-  prepare: { intercept: 0, log: 1 },
+  install: { intercept: 0, log: 0 },
+  update: { intercept: 0, log: 0 },
+  uninstall: { intercept: 0, log: 0 },
+  prepare: { intercept: 0, log: 0 },
 };
 
 /** @type {Record<string, string[]>} */
@@ -147,17 +209,46 @@ export const SEAM_SOURCE_FILES = [
 ];
 
 /**
- * The live condition for a lifecycle case is the SCRIPT's existence, not its
- * dispatch mode: runScript spawns /bin/sh scripts/<script> directly
- * (tests/bin/lifecycle-fixture.js:266) and never routes through
- * bin/superpowers, so DISPATCH does not govern these cases at all.
+ * A lifecycle case's live condition is the NODE entrypoint, not a script's
+ * existence. runScript spawns process.execPath with
+ * bin/superpowers-manager.js and the subcommand as its argument
+ * (tests/bin/lifecycle-fixture.js:342-345), so every lifecycle case routes
+ * through src/cli.ts's DISPATCH, which PR 11.5 slice 4b flipped to
+ * "in-process" for all eight subcommands (src/cli.ts:65-74). DISPATCH now
+ * governs these cases entirely, and deleting scripts/<script> does not
+ * affect them.
  *
+ * Before that flip runScript spawned /bin/sh scripts/<script> directly and
+ * script existence WAS the condition — that is the history SEAM_DEPENDENT's
+ * keying by script name still reflects, and the reason this gate is written
+ * over script paths at all. Read together with the paragraph below: with
+ * every SEAM_DEPENDENT total at zero, the existence check never runs, so the
+ * gate is dormant rather than merely unnecessary. It re-arms if a nonzero
+ * count reappears, which is what keeps it worth carrying into slice 4c.
+ *
+ * `dependent` defaults to the real, gated SEAM_DEPENDENT but is injectable so
+ * adapter-seam.test.js's mutation proof ("the gate fails when a depended-on
+ * script is gone") can still exercise the throw path below now that every
+ * real entry is legitimately zero: with the real map, `total === 0` skips
+ * every script before the existence check ever runs, and there is no longer
+ * a nonzero entry to inject a missing script against. The parameter is never
+ * used to feed a real gate call a non-default map: adapter-seam.test.js holds
+ * exactly TWO call sites, and the only non-default one is the injection proof
+ * itself, "the gate fails when a depended-on script is gone"
+ * (adapter-seam.test.js:102). The other — "every script with seam-dependent
+ * cases still exists" (adapter-seam.test.js:98), the real gate — takes the
+ * default.
  * @param {string} root repository root
  * @param {(path: string) => boolean} exists
+ * @param {Record<string, { intercept: number, log: number }>} [dependent]
  * @returns {void}
  */
-export function assertSeamScriptsPresent(root, exists) {
-  for (const [script, counts] of Object.entries(SEAM_DEPENDENT)) {
+export function assertSeamScriptsPresent(
+  root,
+  exists,
+  dependent = SEAM_DEPENDENT,
+) {
+  for (const [script, counts] of Object.entries(dependent)) {
     const total = counts.intercept + counts.log;
     if (total === 0) continue;
     // Named before it is used: without this, a key added to SEAM_DEPENDENT and

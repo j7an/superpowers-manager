@@ -12,6 +12,27 @@ Shell line references below are `:N` against the deleted
 `tests/test_install_commands.sh`; port line references are `:N` against
 `tests/bin/install-commands.test.js`.
 
+**STALE POINTER WARNING — port `:N` pointers, as of 2026-08-11.** Commit
+`1abd231` (PR 11.5 slice 4b, Task 6) rewrote
+`tests/bin/install-commands.test.js` from 1472 to 1579 lines and remapped only
+the pointers of the items it converted. Those carry an explicit ``(was
+`:N`)`` note and are current. Every OTHER item's `Port:` pointer still names
+the line it occupied at `7db289d` and no longer resolves. Measured: **80
+pointers across 76 items** name a line whose content has moved; 76 of the 81
+never-updated pointers landed on an assertion-shaped line at `7db289d` and
+only 3 still do at HEAD. What is NOT affected: item numbering, the
+retained/retired accounting, the merge enumeration, and everything
+`tests/bin/migration-inventory.test.js` gates — none of which read a `:N`
+pointer. Item 80 below is a separate, older, deliberately-unremapped pointer
+with its own note. **Before trusting any `Port:` pointer in this file,
+re-derive it** — the assertion text each item quotes is the reliable key, and
+`git diff 7db289d..HEAD -- tests/bin/install-commands.test.js` gives the
+shift. A wholesale remap is deferred to its own task rather than folded into a
+prose fix: outside the mapped region, telling a port pointer from a shell
+pointer needs item-by-item judgement, and a mechanically-offset pointer that
+lands on an unrelated but assertion-shaped line is the exact failure item 80
+records.
+
 ## Counting rules applied
 
 The first six rules are reproduced from `bin-dispatch.md:10-25`, unchanged:
@@ -27,7 +48,7 @@ The first six rules are reproduced from `bin-dispatch.md:10-25`, unchanged:
   exactly like a bare `grep`, is counted the same way — one assertion each.
   Three such bare tests exist here: `:388`, `:399`, and `:415`.
 
-Rules 7 and 8 are reproduced from `uninstall-commands.md:33-49`, unchanged:
+Rules 7 and 8 are reproduced from `uninstall-commands.md:54-70`, unchanged:
 
 - **Rule 7 — assertion helpers count at the call site, not at the
   definition.** This driver factors three assertion helpers out of its
@@ -119,103 +140,256 @@ port reads `ROOT`.
 
 ### Prepare is capability-independent (`:321-336`)
 
+**Channel changed (Task 6, D4, 2026-08-10).** This case now calls
+`runPrepare` in-process through an injected recording adapter
+(`tests/bin/command-context.js`) instead of spawning `scripts/prepare`
+through the SPW_ADAPTER seam. All three items below survive as structural
+claims over the double's own recorded `calls` rather than as reads of
+`adapter.log` or `codex.log` — a channel change, not a behaviour change: the
+double answers ONLY a `build` call and fails the case by exhaustion on any
+other call, which is a stronger, not weaker, form of the same three
+negatives. There is no `codex.log` at all in-process (nothing here spawns a
+Codex fake), so item 15's claim is now subsumed by the double's own
+exhaustiveness rather than witnessed by an empty file.
+
 13. The adapter log holds no `inspect --view update-control` (`:326-330`).
-    Port: `:545`.
+    Port: `:697` (was `:545`), now
+    `!adapter.calls.some((c) => c.join(" ") === "inspect --view update-control")`,
+    subsumed into the same `deepEqual(calls.map((c) => c[0]), ["build"])`
+    check items 14 and 15 also map onto.
 14. The adapter log holds no `install --package-root` (`:331-335`). Port:
-    `:550`.
-15. No Codex mutation (`:336`, `assert_no_codex_mutation`). Port: `:557`,
-    which asserts the strictly stronger property that the Codex log is
-    **empty** — prepare makes no Codex call at all, and unlike the helper's
-    form that claim is non-vacuous on its own.
+    `:697` (was `:550`), same `deepEqual` call as item 13.
+15. No Codex mutation (`:336`, `assert_no_codex_mutation`). Port: `:697`
+    (was `:557`). The strictly-stronger claim survives structurally: the
+    double's own construction makes any call other than `build` fail the
+    case by exhaustion, which is stronger than an empty-log read because it
+    also rejects an unexpected SECOND `build` call the empty-log form could
+    not see.
 
 ### Unsupported update control blocks the update fast path (`:338-347`)
 
-16. Update fails (`:344`). Port: `:582`.
+**Channel changed (Task 6, D4, 2026-08-10).** Calls `runUpdate` in-process
+with a double answering `inspect --view update-control` with `unsupported`,
+reachable through the real production switch
+(`src/lifecycle.ts`'s `requireManagedUpdateControl`) exactly as it was
+through the fixture. "current" is now established by answering the
+fingerprint inspect with the commit `prepareGeneratedTree` wrote, replacing
+`seedInstalledCurrent`'s real fake-Codex-cache seed.
+
+16. Update fails (`:344`). Port: within `:705-757` (was `:582`).
 17. Output contains `adapter cannot guarantee manager-controlled updates`
-    (`:345`). Port: `:587`.
-18. Output does **not** contain `manager is current` (`:346`). Port: `:594`.
-    Non-vacuous: item 17 proves the output carries the subject's diagnostics.
-19. No Codex mutation (`:347`). Port: `:599`.
+    (`:345`). Port: within `:705-757` (was `:587`).
+18. Output does **not** contain `manager is current` (`:346`). Port: within
+    `:705-757` (was `:594`). Non-vacuous: item 17 proves the output carries
+    the subject's diagnostics.
+19. No Codex mutation (`:347`). Port: within `:705-757` (was `:599`), now
+    `!adapter.calls.some((c) => c[0] === "install" || c[0] === "build")` —
+    there is no `codex.log` at all in-process, so the claim re-anchors onto
+    the double's own calls rather than onto Codex.
 
 ### Unsupported update control blocks a direct install (`:349-352`)
 
-20. Install fails (`:351`). Port: `:614`.
-21. No Codex mutation (`:352`). Port: `:618`.
+**Channel changed (Task 6, D4).** Calls `runInstall` in-process with the same
+`unsupported` double, on the needs-install path (fingerprint defaults to
+`null`).
 
-### Malformed update-control output exits exactly 1 (`:354-364`)
+20. Install fails (`:351`). Port: within `:759-791` (was `:614`).
+21. No Codex mutation (`:352`). Port: within `:759-791` (was `:618`), same
+    structural re-anchor as item 19.
 
-22. Install does not succeed (`:357-362`). Port: `:630`.
-23. The exit status is exactly 1 (`:363`). Port: `:630`. **Merged:** one
-    `assert.equal(result.status, 1, …)` carries items 22 and 23 together,
-    because `status === 1` implies `status !== 0`.
-24. No Codex mutation (`:364`). Port: `:636`.
+### Malformed update-control output exits exactly 1 (`:354-364`) — **RETIRED**
+
+**RETIRED at the gap (Task 6, D4, 2026-08-10).** This case's subject is
+gone: `updateControl: "malformed"` drove the FAKE ADAPTER PROCESS to write a
+bare `{` to stdout — a transport-level, non-JSON-parseable fault at the OS
+process boundary. `ctx.adapter` (`CommandContext.adapter`,
+`src/commands/context.ts`) is an in-process function call that returns an
+already-typed `AdapterResult` object; there is no serialization step between
+the command module and its adapter for a double to corrupt, so nothing can
+reproduce "the adapter emitted invalid JSON" through this seam. The covering
+cases for "an adapter response can be reported as a failure" now live at the
+production layer that still has a real transport — `tests/unit/adapter.test.js`,
+which drives `runAdapter` (the REAL adapter, `src/adapter.ts`) against a
+genuinely unparseable Codex listing. Named explicitly, as Task 6's brief
+requires, rather than described:
+
+- **"the fingerprint view rejects an invalid-UTF-8 plugin listing"**
+  (`tests/unit/adapter.test.js:421-437`) — asserts `envelope.ok === false`,
+  `error.code === "inspect-failed"`, and the exact message
+  `cannot parse output of '<codex> plugin list --json'`.
+- **"the ownership view rejects an invalid-UTF-8 plugin listing"**
+  (`tests/unit/adapter.test.js:442-458`) — the same three claims for the
+  ownership view, whose fail-open would otherwise be silent.
+- **"install rejects an invalid-UTF-8 marketplace listing without mutating"**
+  (`tests/unit/adapter.test.js:464-485`) — `error.code === "install-failed"`,
+  the parse diagnostic for `plugin marketplace list --json`, and
+  `deepStrictEqual(await sandbox.commands(), ["plugin marketplace list
+  --json"])`, i.e. no mutation followed the unparseable read.
+
+Together these are the in-process analogue of "the thing downstream of the
+adapter sees a failure it must report, not silently swallow", with the parse
+failure occurring at the one boundary that still has a real transport. Note
+that the shell's own diagnostic literal, `invalid adapter response`, exists in
+exactly one place in the product — `scripts/core/validate-adapter-response.py:279`,
+a shell-only artefact — so the retired subject has no in-process producer to
+cover. No port `test(`
+call site carries this case any longer; `tests/bin/install-commands.test.js`'s
+static count dropped by one for it (32 → 30, shared with item 107-111's
+retirement below).
+
+**There are exactly TWO Class-2 retirements, not three — recorded here so
+slice 4c does not go looking for a missing third.** Task 6's brief predicted
+three transport-fault cases. Two exist: this one and "Scenario 8b — malformed
+fingerprint inspection output" below. The transport-fault lever is a fixture
+config that makes the FAKE ADAPTER PROCESS write a bare `{` to stdout, and the
+whole fixture schema offers exactly two — `updateControl: "malformed"`
+(`tests/bin/install-fakes.js:222-226`) and `fingerprintInspect: "malformed"`
+(`tests/bin/install-fakes.js:273-277`). Those are also the only two
+`process.stdout.write("{")` sites anywhere under `tests/bin/`.
+`tests/bin/lifecycle-config.js:38-57` pins the enum surface that can reach
+them: `updateControl` accepts `managed`, `unsupported`, `malformed`, `failure`,
+`managed-then-unsupported`; `fingerprintInspect` accepts `ok` and `malformed`.
+The uninstall driver has no such lever at all — its malformed-evidence cases
+write malformed *files*, not malformed adapter transport
+(`tests/bin/lifecycle-config.js:75`). The brief's third was almost certainly
+`updateControl: "failure"` ("Failed update-control inspection exits exactly 1",
+items 25-27 below), which emits a well-formed `ok: false` envelope
+(`tests/bin/install-fakes.js:227-241`) rather than a transport fault, and was
+therefore CONVERTED rather than retired — the correct disposition. Nothing was
+missed.
+
+22. Install does not succeed (`:357-362`). **No port counterpart — gap,
+    accepted above.**
+23. The exit status is exactly 1 (`:363`). **No port counterpart — gap,
+    accepted above.**
+24. No Codex mutation (`:364`). **No port counterpart — gap, accepted
+    above.**
 
 ### Failed update-control inspection exits exactly 1 (`:366-375`)
 
-25. Update does not succeed (`:368-373`). Port: `:647`.
-26. The exit status is exactly 1 (`:374`). Port: `:647`. Merged with item 25,
-    as items 22-23 were.
-27. No Codex mutation (`:375`). Port: `:653`.
+**Channel changed (Task 6, D4).** Calls `runUpdate` in-process.
+`updateControl: "failure"` is NOT the transport fault items 22-24 named: the
+fixture answered it with a well-formed `ok: false` envelope, which is exactly
+what `failureResult(...)` (`dist/adapter-protocol.js`) builds directly —
+reachable through a double with no loss of fidelity.
+
+25. Update does not succeed (`:368-373`). Port: within `:792-818` (was
+    `:647`).
+26. The exit status is exactly 1 (`:374`). Port: within `:792-818` (was
+    `:647`). Merged with item 25, as before.
+27. No Codex mutation (`:375`). Port: within `:792-818` (was `:653`), same
+    structural re-anchor as item 19.
 
 ### A needs-prepare install reinspects after prepare (`:377-392`)
 
-28. Install rejects capability drift after prepare (`:383-386`). Port:
-    `:672`.
-29. Stdout contains `prepared v1.0.0` (`:387`). Port: `:678`.
+**Channel changed (Task 6, D4).** Calls `runInstall` in-process.
+`runInstall` calls `runPrepare` internally on the needs-prepare branch,
+through the SAME `ctx.adapter`, so the double also answers `build`. The
+`managed-then-unsupported` drift is now a call-counted function
+(`(call) => call === 1 ? "managed" : "unsupported"`) rather than a
+fixture-side counter file.
+
+28. Install rejects capability drift after prepare (`:383-386`). Port: within
+    `:819-868` (was `:672`).
+29. Stdout contains `prepared v1.0.0` (`:387`). Port: within `:819-868` (was
+    `:678`).
 30. Update control was inspected exactly twice (`:388`, bare `[ ... ]` per
-    rule 6). Port: `:680`.
+    rule 6). Port: within `:819-868` (was `:680`), now
+    `adapter.calls.filter((c) => c.join(" ") === "inspect --view update-control").length === 2`.
 31. The build line precedes the second update-control inspection (`:391`).
-    Port: `:690`. `head -n1` for the build line, `tail -n1` for the second
-    inspection, as the shell did.
-32. No Codex mutation (`:392`). Port: `:695`.
+    Port: within `:819-868` (was `:690`), now `firstIndex`/`lastIndex` over
+    `adapter.calls.map((c) => c.join(" "))` rather than over `adapter.log`.
+32. No Codex mutation (`:392`). Port: within `:819-868` (was `:695`), now
+    `!adapter.calls.some((c) => c[0] === "install")` — build itself is
+    expected here (that is the point of the case), so only the mutation
+    stage, not the whole `ADAPTER_MUTATION` class, is excluded.
 
 ### The needs-install path inspects freshly, then installs (`:394-404`)
 
+**Channel changed (Task 6, D4).** Calls `runInstall` in-process. The
+interceptor's on-disk `update-control-count` file is gone; the double's own
+`calls` array supplies the count directly, and the fingerprint answer is
+call-counted (`null` on probe's initial inspect, the generated commit on
+gatherInstallStages' post-install re-inspect).
+
 33. Update control was inspected exactly twice (`:399`, bare `[ ... ]`).
-    Port: `:713`.
+    Port: within `:869-915` (was `:713`).
 34. The last ownership inspection precedes the last update-control gate
-    (`:403`). Port: `:720`.
+    (`:403`). Port: within `:869-915` (was `:720`).
 35. The last update-control gate precedes the adapter install (`:404`). Port:
-    `:724`.
+    within `:869-915` (was `:724`).
 
 ### The fresh gate, not the probe, controls mutation authority (`:406-416`)
 
+**Channel changed (Task 6, D4).** Calls `runInstall` in-process on the
+needs-install path, with the same call-counted `managed-then-unsupported`
+double as items 28-32.
+
 36. Install rejects capability drift before adapter install (`:411-414`).
-    Port: `:741`.
+    Port: within `:916-949` (was `:741`).
 37. Update control was inspected exactly twice (`:415`, bare `[ ... ]`).
-    Port: `:750`.
-38. No Codex mutation (`:416`). Port: `:752`.
+    Port: within `:916-949` (was `:750`).
+38. No Codex mutation (`:416`). Port: within `:916-949` (was `:752`), now
+    `!adapter.calls.some((c) => c[0] === "install")`.
 
 ### Legacy and mixed identity state stop before mutation (`:425-451`)
 
 The `for legacy_state in legacy both` loop contributes 6 assertions per
 iteration (rule 4). Items 39-44 are the `legacy` iteration, items 45-50 the
-`both` iteration. Both port to the shared helper at `:406-446`; the call sites
-are `:762` and `:774`.
+`both` iteration. Both port to the shared helper, `assertLegacyIdentityStops`;
+the call sites are `:950` and `:959`.
 
-39. Install rejects the `legacy` identity state (`:438-441`). Port: `:410`.
+**Channel changed (Task 6, D4, 2026-08-10).** The helper itself now calls
+`runInstall` in-process (was: `runScript(c, "install")`, spawning the shell
+through the SPW_ADAPTER seam), with an injected double supplying
+`identity_state` directly (`"legacy"` or `"both"`) rather than driving it
+through real `plugin_list.json`/`marketplace_list.json` fixtures and the real
+adapter's ownership computation. `runInstall` calls `gatherProbe`
+unconditionally, so the double answers all three of probe's own inspects
+(fingerprint, ownership, update-control); `requireNoLegacyState` fires
+immediately after, before any workspace or adapter mutation stage, so those
+three calls are the only ones that should ever reach the double. Item
+43/49's `^build `/`^install ` negative — which had no Codex-level footprint
+because the adapter's build operation issues no Codex command at all — is now
+`!adapter.calls.some((c) => c[0] === "build" || c[0] === "install")`, and item
+44/50's Codex-mutation claim is dropped as a SEPARATE assertion: there is no
+`codex.log` at all in-process (nothing here spawns a Codex fake), and the
+double never reaching `install` structurally means the adapter's own
+unconditional `codex plugin add` (`src/adapter.ts:668-673`, the
+`["plugin", "add", PLUGIN_ID]` mutation at `:671`) was impossible to reach
+either — the same fact items 43/49 and 44/50 both named is now proven once,
+not twice.
+
+39. Install rejects the `legacy` identity state (`:438-441`). Port: within
+    `:547-608` (helper body, was `:410`).
 40. Output holds the exact line `Legacy superpowers-wrapper Codex state is
-    installed.` (`:442`). Port: `:419`.
+    installed.` (`:442`). Port: within `:547-608` (was `:419`).
 41. Output holds the exact line `Run: npx superpowers-wrapper@0.1.1
-    uninstall` (`:443`). Port: `:423`. This literal is user-facing guidance
-    owned by `scripts/core/lifecycle.sh:52`, not a dependency version that
-    moves on someone else's schedule — the exact text is the contract.
+    uninstall` (`:443`). Port: within `:547-608` (was `:423`). This literal is
+    user-facing guidance owned by `scripts/core/lifecycle.sh:52`, not a
+    dependency version that moves on someone else's schedule — the exact
+    text is the contract.
 42. Output holds the exact line `Then run: npx superpowers-manager install`
-    (`:444`). Port: `:424`.
+    (`:444`). Port: within `:547-608` (was `:424`).
 43. The adapter log holds no `^build ` or `^install ` line (`:445-449`).
-    Port: `:439`.
-44. No Codex mutation (`:450`). Port: `:445`.
-45. Install rejects the `both` identity state (`:438-441`, iteration 2).
-    Port: `:410` via `:774`.
+    Port: within `:547-608` (was `:439`), now
+    `!adapter.calls.some((c) => c[0] === "build" || c[0] === "install")`.
+44. No Codex mutation (`:450`). **Subsumed into item 43's structural form —
+    see the channel-change note above; not a separately witnessed claim
+    in-process.**
+45. Install rejects the `both` identity state (`:438-441`, iteration 2). Port:
+    within `:547-608` (helper) via `:959` (was `:410` via `:774`).
 46. The same exact `Legacy superpowers-wrapper …` line (`:442`, iteration 2).
-    Port: `:419` via `:774`.
+    Port: within `:547-608` via `:959` (was `:419` via `:774`).
 47. The same exact `Run: npx superpowers-wrapper@0.1.1 uninstall` line
-    (`:443`, iteration 2). Port: `:423` via `:774`.
+    (`:443`, iteration 2). Port: within `:547-608` via `:959` (was `:423` via
+    `:774`).
 48. The same exact `Then run: npx superpowers-manager install` line (`:444`,
-    iteration 2). Port: `:424` via `:774`.
+    iteration 2). Port: within `:547-608` via `:959` (was `:424` via `:774`).
 49. No `^build ` or `^install ` adapter line (`:445-449`, iteration 2). Port:
-    `:439` via `:774`.
-50. No Codex mutation (`:450`, iteration 2). Port: `:445` via `:774`.
+    within `:547-608` via `:959` (was `:439` via `:774`).
+50. No Codex mutation (`:450`, iteration 2). **Subsumed into item 49's
+    structural form, same as item 44.**
 
 ### Built-in validation failure leaves Codex untouched (`:453-476`)
 
@@ -261,7 +435,7 @@ no residue. `assertTmpEmpty(c)` inspects one case's own TMPDIR, because
 at both call sites: it still catches a leak in the scenario that makes it, but
 no longer sweeps up the scenarios that ran before it. This is an unavoidable
 consequence of per-case isolation, not an oversight; it mirrors the identical
-narrowing recorded at `uninstall-commands.md:157-170`.
+narrowing recorded at `uninstall-commands.md:316-329`.
 
 ### Scenario 1b — a current manager is reconciled, not skipped (`:514-532`)
 
@@ -322,9 +496,12 @@ narrowing recorded at `uninstall-commands.md:157-170`.
     **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
     re-anchored scenario 3b onto `codex.log`: the adapter-log negative and
     its `nonEmpty` guard were both deleted, subsumed into the
-    `assertNoCodexMutation` call item 81 cites. `:947` is assertion-shaped
-    at HEAD but is an unrelated `assertOrder`, so it reads as valid and is
-    not. Re-deriving the claim is a re-disposition, not a pointer fix.
+    `assertNoCodexMutation` call item 81 cites. `:947` reads as valid and is
+    not: at the time this note was written it landed on an unrelated
+    `assertOrder`, and at HEAD (after Task 6) it lands on the closing `);` of
+    the "no call named install reached the double" guard in the fresh-gate
+    case — a different unrelated site. Re-deriving the claim is a
+    re-disposition, not a pointer fix.
 81. No Codex mutation (`:600-602`). Port: `:1066`. **Divergence:** the shell
     wrapped the helper in `[ ! -s "$log" ] ||`, so an empty Codex log
     satisfied the scenario. The port drops that escape hatch —
@@ -335,12 +512,25 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 
 ### Scenario 3c — update rejects mixed legacy state while current (`:604-620`)
 
-82. Update fails (`:610-613`). Port: `:1088`.
+**Channel changed (Task 6, D4, 2026-08-10).** Same treatment as the
+legacy/mixed identity helper above, inlined rather than shared (this case
+dispatches `runUpdate`, not `runInstall`, so it cannot reuse
+`assertLegacyIdentityStops`). Calls `runUpdate` in-process with a double
+supplying `identity_state: "both"` and the fingerprint the fixture's
+`seedInstalledCurrent` used to establish through a real Codex cache (the case
+is named "even when the fingerprint is current": the legacy check runs
+before the status switch that would otherwise report it).
+
+82. Update fails (`:610-613`). Port: within `:1236-1274` (was `:1088`).
 83. Output holds the exact line `Then run: npx superpowers-manager install`
-    (`:614`, `grep -Fxq`). Port: `:1094`.
+    (`:614`, `grep -Fxq`). Port: within `:1236-1274` (was `:1094`).
 84. The adapter log holds no `^build ` or `^install ` line (`:615-619`).
-    Port: `:1102`.
-85. No Codex mutation (`:620`). Port: `:1108`.
+    Port: within `:1236-1274` (was `:1102`), now
+    `!adapter.calls.some((c) => c[0] === "build" || c[0] === "install")`.
+85. No Codex mutation (`:620`). **Subsumed into item 84's structural form —
+    same reasoning as items 44/50 above: there is no `codex.log` at all
+    in-process, and the double never reaching `install` already proves the
+    Codex mutation is unreachable.**
 
 ### Scenario 4 — remove succeeds, add fails (`:622-634`)
 
@@ -378,7 +568,8 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 97. Output contains `does not match the prepared plugin` (`:670`). Port:
     `:1218`.
 98. Output contains `SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add` (`:671`).
-    Port: `:1222`. The hint text is owned by `src/adapter.ts:641-643` and
+    Port: `:1222`. The hint text is owned by `src/adapter.ts:682`, inside
+    the `verification_hints` object at `:677-687`, and
     replayed from the adapter result by `scripts/core/lifecycle.sh:109,121`;
     core holds no copy of it.
 99. Output does **not** contain `manager updated` (`:672-674`). Port:
@@ -389,7 +580,7 @@ narrowing recorded at `uninstall-commands.md:157-170`.
 100. Install fails (`:683`). Port: `:1242`.
 101. Output contains `fingerprint is not detectable` (`:684`). Port: `:1248`.
 102. Output contains `verify with 'codex plugin list --json'` (`:685`,
-     `src/adapter.ts:645`). Port: `:1250`.
+     `src/adapter.ts:685`). Port: `:1250`.
 
 ### Scenario 8a — fingerprint inspection command failure (`:687-700`)
 
@@ -406,7 +597,8 @@ narrowing recorded at `uninstall-commands.md:157-170`.
      `pluginAdd: "orphan"` makes the fake CODEX register the plugin as
      installed at 1.0.0 without materialising its cached tree, so the **real**
      adapter's fingerprint handler resolves an active version
-     (`src/adapter.ts:790-797`), builds the installed root for it (`:815-820`),
+     (`activePluginVersionFromJson`, called at `src/adapter.ts:806-817`), builds
+     the installed root for it (`installedRootForVersion`, called at `:831-836`),
      finds nothing readable there — `installedCommitFromRoot` returns `""`
      (`src/codex-state.ts:67-84`) — and returns a controlled `inspect-failed`
      envelope. The port now asserts the **subject-owned** whole line
@@ -424,15 +616,27 @@ narrowing recorded at `uninstall-commands.md:157-170`.
      since the re-base, it does: the line it matches has exactly one emitter
      and that emitter is `scripts/core/lifecycle.sh`, not the fixture.
 
-### Scenario 8b — malformed fingerprint inspection output (`:702-716`)
+### Scenario 8b — malformed fingerprint inspection output (`:702-716`) — **RETIRED**
 
-107. Install fails (`:709`). Port: `:1322`.
-108. Output contains `invalid adapter response` (`:710`). Port: `:1328`.
-109. Output contains `fingerprint inspection` (`:711`). Port: `:1330`.
+**RETIRED at the gap (Task 6, D4, 2026-08-10).** Same reasoning as
+"Malformed update-control output exits exactly 1" (items 22-24) above:
+`fingerprintInspect: "malformed"` drove the FAKE ADAPTER PROCESS to write a
+bare `{` to stdout — a transport-level fault with no analogue through
+`ctx.adapter`, which returns an already-typed `AdapterResult` with nothing to
+garble in between. `tests/bin/install-commands.test.js`'s static `test(`
+count dropped by one for this retirement, alongside items 22-24's (32 → 30
+combined).
+
+107. Install fails (`:709`). **No port counterpart — gap, accepted above.**
+108. Output contains `invalid adapter response` (`:710`). **No port
+     counterpart — gap, accepted above.**
+109. Output contains `fingerprint inspection` (`:711`). **No port
+     counterpart — gap, accepted above.**
 110. Output does **not** contain `fingerprint is not detectable` (`:712`,
-     first grep of the rule-8 chain). Port: `:1332`.
+     first grep of the rule-8 chain). **No port counterpart — gap, accepted
+     above.**
 111. Output does **not** contain `manager updated` (`:713`, second grep).
-     Port: `:1336`.
+     **No port counterpart — gap, accepted above.**
 
 ### Scenario 9 — remove-add refresh mode (`:718-736`)
 
@@ -525,7 +729,7 @@ the defect this migration exists to eliminate.
 `assert` calls inside `prepareGeneratedTree` (`:212`, `:219`, `:223`) and
 `seedInstalledCurrent` (`:123`) verify that the fixture reached the state the
 shell inherited. They are claims about the harness, not about the subject,
-and follow `uninstall-commands.md:51-61`'s treatment of `command -v`
+and follow `uninstall-commands.md:72-82`'s treatment of `command -v`
 resolution.
 
 ## Port-only assertions (outside the 1:1 mapping)
@@ -544,6 +748,67 @@ Items 8, 10, 17, 19, 25, and 27 are `assertNoPrepareRan` precondition guards,
 described in the section above.
 
 Item 41 extends the shell's install-path provenance check to the update path.
+
+Item 42 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
+the shell had no in-process subject whose non-spawning could be guarded, so
+there is nothing for it to be additive, non-vacuous, or channel-changed
+*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.js`'s
+`tripwireTriggered` and its callers in `tests/bin/install-fakes.js`.
+
+Be precise about what that consumer witnesses, because the obvious reading is
+wrong. A subject that never spawns the adapter cannot, by running correctly,
+observe the tripwire fire: on the passing path the fake adapter's process does
+not exist. As first committed (`94794bd`) the case therefore passed unchanged
+with `tripwireTriggered` forced to return `false` — it constrained the port,
+not the tripwire. The case now carries a second half that spawns the SAME
+case's fake adapter directly, through `lifecycle-fixture.js`'s
+`spawnFakeAdapter`, and pins the refusal: exit 94, the tripwire's own message
+on stderr, and the recorded line in the log the first half required to be
+empty. That half dies when the tripwire is disarmed, which is what earns the
+first half its meaning — the same non-vacuity argument items 7-20 above make
+for their own logs. The tripwire firing is still observed through a direct
+spawn rather than through the subject, because post-flip no subject can
+produce one; what changed is that the direct spawn now runs inside the case
+whose emptiness claim depends on it, with that case's own executable, state
+and seam.
+
+***Port-only entries 1-4, 7, 9, 11-13, 15, 20 and 34 describe channels that no
+longer exist. Recorded 2026-08-11 at slice 4b's closeout; the numbering and the
+`portOnly` count are unchanged, and no entry is renumbered or removed.*** *Task 6
+converted eight whole sections to an injected recording double and updated the
+**mapped** region carefully — item 19 at its own entry, items 44, 50 and 85 at
+theirs — but left the port-only region describing the pre-conversion channel. The
+file already carries one such disclosure, at port-only entry 31; these are its
+twelve siblings, and they went unlabelled only because nobody re-read this list.
+Three groups, each verifiable from the port file rather than from this prose:*
+
+- ***The nine `assertNoCodexMutation` emptiness guards at entries 3, 4, 9, 11,
+  12, 13, 15, 20 and 34 are gone.*** *Thirteen entries in this list name that
+  guard; `grep -c 'assertNoCodexMutation(readLog' tests/bin/install-commands.test.js`
+  returns **4**. The four that survive are entries 21, 22, 32 and 38, whose cases
+  were not converted. Every one of the nine that is gone belongs to a section
+  this file's own Cardinality paragraph lists as converted — 13-15, 16-21, 25-27,
+  28-32, 33-35, 36-38, 39-50, 82-85 — and a case called directly with a double
+  spawns no Codex fake at all, so there is no `codex.log` left for an emptiness
+  guard to read. The claim did not weaken: the double fails the case by
+  exhaustion on any unexpected call, which each converted section's own note
+  states. Entry 12 is a step further removed still — its case,* "malformed
+  adapter response must exit 1"*, is one of the two transport-fault cases retired
+  outright at Task 6 (mapped items 22-24), so its guard did not move channel; it
+  went with its case.*
+- ***Entries 1 and 2 name the wrong channel, not a missing assertion.***
+  *`assertLegacyIdentityStops`'s non-vacuity guard still exists and still hoists
+  the negative it always hoisted, but it now reads the double —*
+  `adapter.calls.some((call) => call.join(" ") === "inspect --view ownership")` *—
+  rather than `readLog(c.adapterLog)`. Mapped item 43 records the same channel
+  change; port-only entry 33 already words it neutrally as "adapter ownership
+  non-vacuity guard", which is the wording these two should have taken.*
+- ***Entry 7's adapter-log hoist is gone, and its successor is stronger.*** *The
+  `build --upstream-root` membership read was replaced at Task 6 by*
+  `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` *in
+  `prepareGeneratedTree`, which is what now hoists items 13-15 above a
+  never-called double. Mapped item 13 records the replacement; this entry did
+  not.*
 
 <!-- inventory:port-only:start -->
 
@@ -600,6 +865,20 @@ Item 41 extends the shell's install-path provenance check to the update path.
     remediation path (`:1470`). The shell ran this check only for install
     (`:759-768`); update reaches the same remediation through
     `scripts/update:22-25`, so the same claim is asserted there.
+42. `adapterSeam: "tripwire"` armed on a fresh install: the subject's own exit
+    status is 0, the fake adapter's log holds no line at all, and a direct
+    spawn of that same case's fake adapter is then refused with exit 94 and
+    the tripwire's own message, leaving in the log the one line the emptiness
+    check demanded be absent (`:1609`, within `:1609-1639`). Appended at the
+    end of the file rather than beside the fresh-install case it is
+    thematically closest to, so adding it does not shift any other item's
+    pointer. Two things, not one — an exit status alone cannot distinguish
+    "refused" from "delegated, then failed" — mirroring
+    `tests/bin/lifecycle-fakes.test.js`'s own precedent for the same subject.
+    Counted as ONE port-only item, as it was when it held three assertions:
+    the added half is this item's own non-vacuity guard, not a separate
+    claim, and splitting it would move `portOnly` for no change in what the
+    inventory maps.
 
 <!-- inventory:port-only:end -->
 
@@ -610,6 +889,20 @@ the fixture, not into the assertion**, then observe which assertions turn RED.
 A guard that stays GREEN under an injection that genuinely violates it is not
 proven — it is a boundary guard, and it is adjudicated below rather than
 "proved" by breaking its own text.
+
+**Historical as of Task 6 (PR 11.5 slice 4b, 2026-08-10).** Everything below
+this line describes the tree as it stood before Task 6 converted the seam-
+dependent cases and retired two of them: "32/32 GREEN" below is what the
+suite reported THEN, against 32 cases; the file now has 30. None of the
+injections below still target the fixture mechanism they describe for the
+cases Task 6 converted (`INSTALL_DEFAULTS.spuriousMutation`, the
+`updateControl`/`fingerprintInspect` config surface reached through
+SPW_ADAPTER interception, and the `update-control-count` sidecar file) —
+those cases now inject through a double's own handler instead, and re-running
+this exact matrix against the current tree is not proposed here. Retained
+because it is the record of the mutation-testing pass that certified the
+PRE-Task-6 port, and later readers auditing that certification need to know
+what it certified and when.
 
 Every mutation was applied to a tracked file, run with
 `node --test tests/bin/install-commands.test.js`, observed, then restored by
@@ -731,7 +1024,7 @@ which catches a leaked workspace or a sidecar dropped beside it. They do
 **not** assert that the adapter created no temporary files at all. That is
 narrower than the brief assumed, it is narrower again than the per-case
 narrowing already recorded at `:256-264`, and forward pointers are carried at
-both items. Identical in mechanism to `uninstall-commands.md:473-485`.
+both items. Identical in mechanism to `uninstall-commands.md:564-576`.
 
 **Row 8 — predicted RED at the brief's cases 26 and 27 (c27 and c28); observed
 RED only in c28, and at a positive rather than a negative.** Dropping the
@@ -960,8 +1253,8 @@ truncation `reset` performed is load-bearing and not decorative.
 ```json inventory
 {
   "shellOriginal": 124,
-  "portOnly": 41,
-  "ports": { "tests/bin/install-commands.test.js": 32 }
+  "portOnly": 42,
+  "ports": { "tests/bin/install-commands.test.js": 31 }
 }
 ```
 
@@ -975,24 +1268,117 @@ truncation `reset` performed is load-bearing and not decorative.
   scenario 5, 4 scenario 6, 4 scenario 7, 3 scenario 8, 4 scenario 8a, 5
   scenario 8b, 4 scenario 9, 2 scenario 10, 4 scenario 11, 3 scenario 12;
   sum: 6+6+3+4+2+3+3+5+3+3+12+3+3+8+3+3+4+4+3+4+4+2+4+4+3+4+5+4+2+4+3 = 124).
-- Port (`tests/bin/install-commands.test.js`): 32 static `test(` call sites,
-  counted with `migration-inventory.test.js`'s own `stripInert` +
-  `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. No call site
-  is data-driven, so the 32 static sites produce 32 runtime cases. The
-  `for legacy_state in legacy both` loop at `:426` is expanded into two
-  explicit call sites (`:755`, `:765`) sharing one helper.
-- Reconciliation: all 124 shell items are accounted for and none is dropped,
-  but the mapping is **not** 1:1 throughout. 109 items map onto a port
-  assertion of their own; the remaining 15 share 7, across seven merges
-  recorded inline. Two are status merges — items 22/23 and 25/26 each collapse
-  onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`. Five are
-  rule-9 ordering guards — items 58-59, 66-67, 69-70, 75-76, and 112-114 —
-  each collapsing onto one `assertOrder` call, which asserts every one of
-  those ordering claims plus the presence of each needle. Two orderings
-  differ from the shell: items 71-73 and items 62-64 assert the positive claim
-  before the negatives that depend on it. Two fidelity notes are recorded
-  inline rather than left implicit: items 61 and 94 carry a **narrowed TMPDIR
-  scope** forced by per-case isolation, and item 81 **drops the shell's
-  empty-log escape hatch**, making the claim strictly stronger. Neither
-  changes the count. The 41 port-only assertions are strictly additive and are
-  excluded from the 124-item accounting above.
+  Unchanged by Task 6: this is a fact about the deleted shell file, not about
+  the port.
+- Port (`tests/bin/install-commands.test.js`): **31** static `test(` call
+  sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 32 before Task 6, then
+  30, now 31), counted with `migration-inventory.test.js`'s own `stripInert` +
+  `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. Task 6's drop
+  of two was the two retirements below, each deleting its case's `test(` call
+  site outright rather than converting it. Task 9 added exactly one call
+  site — the row-18 tripwire case, port-only item 42 — and no other task
+  between them added or removed one. No remaining call site is data-driven,
+  so the 31 static sites produce 31 runtime cases. The `for legacy_state in
+  legacy both` loop at `:426` is still expanded into two explicit call sites
+  (`:950`, `:959`) sharing one helper.
+- Reconciliation: **116 of 124** shell items retain a port counterpart; the
+  remaining **8** are retired at the gap, each recorded at its own entry
+  above with its reasoning rather than renumbered away — items 22-24
+  ("Malformed update-control output exits exactly 1") and items 107-111
+  ("Scenario 8b — malformed fingerprint inspection output"). Both retired
+  cases shared the same root cause: their fixture drove the FAKE ADAPTER
+  PROCESS to emit non-JSON bytes across a process boundary that no longer
+  exists once `ctx.adapter` is an in-process function call returning an
+  already-typed `AdapterResult`. Numbers are never reused — the mapped region
+  below still runs `1..124` with no gap and no duplicate, and each retired
+  item's own entry states plainly that it has no port counterpart, rather
+  than being silently dropped from the list.
+
+  Of the 116 that survive, the mapping is **not** 1:1 throughout. **103**
+  items map onto a port assertion of their own; the remaining **13 share 6**,
+  across six merges recorded inline. One is a status merge — items 25/26
+  collapse onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`.
+  (Items 22/23 were a seventh merge of exactly that kind before Task 6. Both
+  numbers are retired with their case, so that merge leaves the count
+  entirely rather than staying in it as a moot entry — the arithmetic here is
+  over surviving items only.) Five are rule-9 ordering guards — items 58-59,
+  66-67, 69-70, 75-76, and 112-114 — each collapsing onto one `assertOrder`
+  call, which asserts every one of those ordering claims plus the presence
+  of each needle. Two orderings differ from the shell: items 71-73 and items
+  62-64 assert the positive claim before the negatives that depend on it.
+
+  **How to reproduce these three figures**, since the gate does not read this
+  prose and an earlier revision of this paragraph was wrong by three: retired
+  = the items whose entry says "No port counterpart" (22, 23, 24, 107, 108,
+  109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
+  merges enumerated in the previous paragraph (25/26 plus the five rule-9
+  guards = **13** items over **6** merges), so own = 116 − 13 = **103**.
+  Items that share only a static line because the port loops over a literal
+  tuple (2-5 at one `assert.ok`, 7-8, 9-11) are **not** merges — counting
+  rule 4 makes each iteration its own assertion — and are counted in the 103.
+
+  ***DISCREPANCY, found 2026-08-11 at slice 4b's closeout and recorded rather
+  than silently re-derived. The three figures above are left as they stand.***
+  *Task 6 collapsed items **13, 14 and 15** onto a single assertion —
+  `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
+  `prepareGeneratedTree` — and each of the three entries says so in its own
+  words ("subsumed into the same `deepEqual` … items 14 and 15 also map onto";
+  "same `deepEqual` call as item 13"). Before Task 6 the three had three
+  separate adapter-log assertions. **That collapse is not in the "13 share 6"
+  enumeration**, which names only 25/26 plus the five rule-9 ordering pairs, and
+  it is not covered by either carve-out above: it is not a literal-tuple loop,
+  and items 13-14 carry no `**Subsumed…**` marker. Read as a seventh merge of
+  three items, the figures would become **16 shared over 7 merges** and
+  **116 − 16 = 100 own**.*
+
+  *Why the numbers are not changed here. The buckets in this paragraph are
+  convention-dependent — literal-tuple loops are excluded by counting rule 4,
+  and marked-subsumed items are deliberately counted in "own" despite having no
+  private line — so deciding whether a structural `deepEqual` over a double is a
+  "merge" is a counting-rule decision, not an arithmetic one, and it plausibly
+  applies to other Task-6 conversions this pass did not enumerate. Changing
+  103/13/6 on a partial enumeration is exactly how two compensating errors land
+  on a total that reads as confirmation. **The owning task is Task 6**, which
+  made the collapse and did not move the accounting; a full re-derivation of the
+  three figures across every converted section belongs with the deferred pointer
+  remap named in the STALE POINTER WARNING at the top of this file, not here.
+  None of `shellOriginal`, `portOnly` or `ports` is affected — the gate reads
+  those and not this paragraph.*
+  So are the three items carrying an explicit `**Subsumed…**` marker (44, 50,
+  85), which are retained because the claim survives inside a sibling item's
+  structural assertion, not because each has a private line; the note below is
+  the detail. ***Disambiguated 2026-08-11 at slice 4b's closeout.*** *This
+  sentence said "the three SUBSUMED items" and the note fifteen lines below said
+  "Four items … are SUBSUMED", for the same concept, in the same section. Both
+  are right about different sets and neither said which: **three** is the count
+  of marked items — `grep -c '\*\*Subsumed' ` returns 3 — and **four** is that
+  set plus item 15's Codex-emptiness half, which is subsumed in substance but
+  carries no marker because its entry already argues the point in prose. The
+  arithmetic in this paragraph is over the marked three.*
+
+  Several items changed **channel**, not **behaviour** — a distinction
+  worth stating explicitly, per Task 6's own instruction, because a reader
+  who cannot tell the two apart cannot audit the slice. Every item in the
+  "Prepare is capability-independent" (13-15), "Unsupported update control…"
+  (16-21), "Failed update-control inspection…" (25-27), "A needs-prepare
+  install reinspects…" (28-32), "The needs-install path…" (33-35), "The
+  fresh gate…" (36-38), "Legacy and mixed identity state…" (39-50), and
+  "Scenario 3c…" (82-85) sections now asserts a structural claim over an
+  injected recording adapter's own recorded calls (Task 6, D4,
+  `tests/bin/command-context.js`) rather than a `readLog(c.adapterLog)` read
+  — each section's own note above states which channel it moved to and why
+  no behavioural change accompanies it. Four items (44, 50, 85, and item
+  15's Codex-emptiness half — three marked, one argued in prose; see the
+  disambiguation above) are subsumed rather than separately witnessed
+  in-process: there is no `codex.log` at all when the whole command is
+  called directly with a double, so a claim that used to be witnessed twice
+  (once at the adapter level, once at the Codex level) is now witnessed once,
+  structurally, and the second witness is recorded as subsumed rather than
+  silently dropped.
+
+  Two fidelity notes carried over from before Task 6 are unaffected by it:
+  items 61 and 94 carry a **narrowed TMPDIR scope** forced by per-case
+  isolation, and item 81 **drops the shell's empty-log escape hatch**,
+  making the claim strictly stronger. Neither changes the count. The 42
+  port-only assertions (41 before Task 9, plus item 42's tripwire case) are
+  strictly additive and are excluded from the 124-item accounting above.
