@@ -25,7 +25,7 @@ import { UPSTREAM } from "../bin/lifecycle-fixture.js";
 /**
  * Every environment name runProbe's dependencies read. Declared, never
  * derived: a predicate would also accept an env that lost a name.
- * runAdapter merges process.env (src/adapter.ts:961) and runGit spreads it
+ * runAdapter merges process.env (src/adapter.ts:977) and runGit spreads it
  * (src/git.ts:31), so an unset name here leaks the developer's shell into a
  * supposedly hermetic case.
  */
@@ -58,7 +58,7 @@ export function caseEnv(c, extra = {}) {
     // (tests/bin/probe-fakes.js:12-16) exactly as runScript supplies it for
     // the spawned lifecycle ports (tests/bin/lifecycle-fixture.js:254).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
-    // (src/adapter.ts:961), so this is the only channel that reaches it.
+    // (src/adapter.ts:977), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with
     // `fixture: SPW_FIXTURE_STATE is unset` -- which is why the declared
     // hermeticity guard does not need to cover it.
@@ -93,7 +93,7 @@ export const SHORT = DESIRED.slice(0, 7);
  * `pluginListings` is an ARRAY, one entry per `codex plugin list --json`
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
  * Probe issues that command twice per run and the two calls need different
- * answers -- `inspect --view fingerprint` (src/adapter.ts:781) then
+ * answers -- `inspect --view fingerprint` (src/adapter.ts:797) then
  * `inspect --view ownership` (:855). With a single listing, a manager version
  * present for `installed_commit` also forces `identity_state=manager`, so
  * scenario 1 and the four-state identity matrix could not be written at all.

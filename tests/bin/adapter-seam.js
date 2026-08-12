@@ -17,7 +17,7 @@
 // this paragraph is the only place either number is now asserted in prose.
 //
 // Most re-anchored onto codex.log, because every mutation the adapter
-// performs reaches Codex through codexBin (src/adapter.ts:575-660). What
+// performs reaches Codex through codexBin (src/adapter.ts:591-676). What
 // could not re-anchor converted to an injected recording double instead
 // (tests/bin/command-context.js) or, for the two genuinely unreachable
 // transport-fault cases, retired at the gap. SEAM_DEPENDENT stays declared

@@ -67,7 +67,7 @@ function presenceFlag(
 // null` -- replayEnvelope already wrote the adapter's own error:/hint:
 // lines); envelope.ok && status !== 0 gets a hand-written message naming the
 // operation; a stop issues no further calls; and an unrelated throw (a
-// non-AdapterFailure cause -- src/adapter.ts:993) gets a hand-written
+// non-AdapterFailure cause -- src/adapter.ts:1009) gets a hand-written
 // message naming the operation too, never the caught error's own text
 // (AGENTS.md). `argv` here is always this module's own literal, bounded
 // construction -- never adapter-controlled text -- so naming it is safe.
@@ -243,7 +243,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<UninstallOutcome> {
         // present, non-null, NON-STRING value is a distinct, fail-closed
         // "malformed" case with its own text -- never silently stringified.
         // (A previous draft of this comment claimed parity with the shell's
-        // stringify-and-compare behaviour at scripts/core/provenance.sh:61;
+        // stringify-and-compare behaviour at scripts/core/provenance.sh:62;
         // that was wrong on inspection, and it cited these same two call
         // sites as support even though both of them fail closed on a
         // non-string value rather than stringifying it. AGENTS.md's
@@ -322,7 +322,7 @@ export async function runUninstall(
     // the only thing that can throw here, and it always wraps -- but this
     // catch does not assume that invariant blindly.
     //
-    // ctx.adapter's non-AdapterFailure rethrow (src/adapter.ts:993) does NOT
+    // ctx.adapter's non-AdapterFailure rethrow (src/adapter.ts:1009) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.

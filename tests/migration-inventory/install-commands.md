@@ -355,7 +355,7 @@ because the adapter's build operation issues no Codex command at all — is now
 44/50's Codex-mutation claim is dropped as a SEPARATE assertion: there is no
 `codex.log` at all in-process (nothing here spawns a Codex fake), and the
 double never reaching `install` structurally means the adapter's own
-unconditional `codex plugin add` (`src/adapter.ts:668-673`, the
+unconditional `codex plugin add` (`src/adapter.ts:684-689`, the
 `["plugin", "add", PLUGIN_ID]` mutation at `:671`) was impossible to reach
 either — the same fact items 43/49 and 44/50 both named is now proven once,
 not twice.
@@ -568,7 +568,7 @@ before the status switch that would otherwise report it).
 97. Output contains `does not match the prepared plugin` (`:670`). Port:
     `:1218`.
 98. Output contains `SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add` (`:671`).
-    Port: `:1222`. The hint text is owned by `src/adapter.ts:682`, inside
+    Port: `:1222`. The hint text is owned by `src/adapter.ts:698`, inside
     the `verification_hints` object at `:677-687`, and
     replayed from the adapter result by `scripts/core/lifecycle.sh:109,121`;
     core holds no copy of it.
@@ -597,7 +597,7 @@ before the status switch that would otherwise report it).
      `pluginAdd: "orphan"` makes the fake CODEX register the plugin as
      installed at 1.0.0 without materialising its cached tree, so the **real**
      adapter's fingerprint handler resolves an active version
-     (`activePluginVersionFromJson`, called at `src/adapter.ts:806-817`), builds
+     (`activePluginVersionFromJson`, called at `src/adapter.ts:822-833`), builds
      the installed root for it (`installedRootForVersion`, called at `:831-836`),
      finds nothing readable there — `installedCommitFromRoot` returns `""`
      (`src/codex-state.ts:67-84`) — and returns a controlled `inspect-failed`

@@ -203,7 +203,7 @@ in-process. The double answers the ownership inspect with the same
 well-formed `failureResult` (`command-not-found`,
 `` required Codex command not found: <path> ``) the real adapter's
 `requireCodex` check produces for a missing binary
-(`src/adapter.ts:267-273`, `:180`) — not a transport-level fault, so it is
+(`src/adapter.ts:283-289`, `:180`) — not a transport-level fault, so it is
 reachable through a double exactly as it was through the fixture. There was
 never a re-anchor onto `codex.log` available for this case either way —
 Codex is never reached by construction, so `codex.log` would be empty
@@ -299,8 +299,8 @@ item 21 asserts directly, on this same scenario, by requiring the adapter log to
 be empty. The `codex.log` re-anchor is unaffected: the fake Codex is still the
 observation channel, because* `runUninstall` *reaches Codex through the same two
 ownership inspections.* `inspect --view ownership` issues one
-`plugin list --json` (`src/adapter.ts:871`) and then one
-`plugin marketplace list --json` (`src/adapter.ts:883`), both inside
+`plugin list --json` (`src/adapter.ts:887`) and then one
+`plugin marketplace list --json` (`src/adapter.ts:899`), both inside
 `:868-885`; the adapter uninstall op itself issues no listing, only the two
 removes items 31-32 already witness — so items 25-27's
 presence-and-exactly-twice claims collapse into
@@ -346,7 +346,7 @@ they are not reinstated:
   *Restated 2026-08-11; the original wording is quoted above rather than
   silently replaced, because this bullet exists to stop the argument being
   reinstated.* The real adapter's own closed rejection
-  (`src/adapter.ts:710-715`, `"--plugin-present must be true or false"`) is a
+  (`src/adapter.ts:726-731`, `"--plugin-present must be true or false"`) is a
   true fact about the adapter, but neither it nor the path question is what
   makes item 35 inert. The tautology argument above is.
 - "A defect would already fail the surrounding assertions" is beside the

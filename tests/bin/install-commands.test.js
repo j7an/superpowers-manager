@@ -207,7 +207,7 @@ function assertNoCodexMutation(log) {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (src/adapter.ts:433-452). The
+ * candidate into `plugins/superpowers` (src/adapter.ts:449-468). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -575,7 +575,7 @@ async function assertLegacyIdentityStops(c, identityState) {
   // there is no codex.log at all in-process, since nothing here spawns a
   // Codex fake -- but it is subsumed: the double never reaching "install"
   // means the adapter's own unconditional `codex plugin add`
-  // (src/adapter.ts:671) was structurally impossible to reach either.
+  // (src/adapter.ts:687) was structurally impossible to reach either.
   assert.ok(
     adapter.calls.some((call) => call.join(" ") === "inspect --view ownership"),
     "adapter never inspected ownership, so 'no build or install' would pass vacuously",
@@ -1091,7 +1091,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (src/adapter.ts:575-656), and the second of them
+    // the three commands below (src/adapter.ts:591-672), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
@@ -1140,7 +1140,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // src/adapter.ts:586 compares the two through `pathsEqual`, so a
+    // src/adapter.ts:626 compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1223,7 +1223,7 @@ void describe("install commands", { concurrency: true }, () => {
     // :595-599, re-anchored onto codex.log. `install --package-root` absent
     // from the adapter log and "no Codex mutation" are the same claim here:
     // the adapter install operation unconditionally reaches
-    // `codex plugin add superpowers@superpowers-manager` (src/adapter.ts:650),
+    // `codex plugin add superpowers@superpowers-manager` (src/adapter.ts:671),
     // which CODEX_MUTATION matches, so :600-602 below already excludes it —
     // and it carries its own emptiness guard, which is what `nonEmpty` gave
     // the adapter-log form.
@@ -1297,7 +1297,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (src/adapter.ts:610-617).
+    // the previous root it already removed (src/adapter.ts:626-633).
     assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
     assert.ok(out.includes(otherRoot), out);
     // :632-634
@@ -1373,7 +1373,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :670
     assert.ok(out.includes("does not match the prepared plugin"), out);
-    // :671 — the hint text lives in src/adapter.ts:641-643 and is replayed
+    // :671 — the hint text lives in src/adapter.ts:681-682 and is replayed
     // from the adapter result by scripts/core/lifecycle.sh:109,121; core owns
     // no copy of it.
     assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
@@ -1400,7 +1400,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — src/adapter.ts:645, replayed through the install result.
+    // :685 — src/adapter.ts:661, replayed through the install result.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
   });
 
@@ -1416,7 +1416,7 @@ void describe("install commands", { concurrency: true }, () => {
     // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
     // plugin as installed at 1.0.0 without materialising its cached tree, so
     // the REAL adapter's fingerprint handler resolves an active version
-    // (src/adapter.ts:790-797), builds the installed root for it (:815-820),
+    // (src/adapter.ts:806-813), builds the installed root for it (:815-820),
     // and finds nothing readable there — installedCommitFromRoot returns ""
     // (src/codex-state.ts:67-84) — and fails with a controlled inspect-failed
     // envelope. The case therefore needs no interception and is not
@@ -1467,7 +1467,7 @@ void describe("install commands", { concurrency: true }, () => {
     const c = installCase();
     await prepareGeneratedTree(c);
     clearLogs(c);
-    // :724 — src/adapter.ts:533 reads this; `add-only` is the default.
+    // :724 — src/adapter.ts:549 reads this; `add-only` is the default.
     const result = await runScript(c, "install", {
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add" },
     });
@@ -1532,7 +1532,7 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
-    // (src/adapter.ts:575-656): the marketplace add carries the same package
+    // (src/adapter.ts:591-672): the marketplace add carries the same package
     // root the original needle pinned, and the plugin add is unconditional.
     // clearLogs above means both lines can only have come from this run.
     assertOrder(

@@ -38,7 +38,7 @@ async function buildWorkspace(t) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:324`,
+  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:340`,
   // `:381`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
@@ -126,7 +126,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (src/adapter.ts:356) must surface exactly `cannot read manifest JSON
+// call (src/adapter.ts:375) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/hooks.ts) must keep succeeding, so this exercises the read at
@@ -409,7 +409,7 @@ async function codexSandbox(t) {
 }
 
 // The adapter reads `codex plugin list --json` as raw bytes
-// (`src/adapter.ts:93`, `:741`). `@@BAD@@` is a raw 0xff byte inside an
+// (`src/adapter.ts:97`, `:741`). `@@BAD@@` is a raw 0xff byte inside an
 // otherwise well-formed JSON string, so a lossy `.toString()` at the call site
 // would parse successfully and yield a fabricated version instead of failing
 // closed. Asserting the exact parse diagnostic is what distinguishes the two.
@@ -457,7 +457,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/adapter.ts:535`) is the destructive
+// The install reconciliation read (`src/adapter.ts:551`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.

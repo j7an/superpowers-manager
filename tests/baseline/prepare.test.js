@@ -346,13 +346,13 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P1 — the adapter's classification wrapper (src/adapter.ts:364). Ported from
+// P1 — the adapter's classification wrapper (src/adapter.ts:380). Ported from
 // tests/test_prepare_with_fake_upstream.sh:1001-1022, which held the only
 // witness of this prefix anywhere in the repository. The eight inner causes
 // those shell lines also asserted are already message-exact in
 // tests/unit/hooks.test.js and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
-// with this prefix intact. Its materialization twin (src/adapter.ts:373) is
+// with this prefix intact. Its materialization twin (src/adapter.ts:389) is
 // asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
 void test("a classification failure reaches stderr through the adapter wrapper", async () => {
   const c = createCase({ fakes: "probe" });

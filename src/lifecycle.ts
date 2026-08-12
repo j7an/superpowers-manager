@@ -171,7 +171,7 @@ export function verifyInstalledFingerprint(
   const raw = inspected.value.fingerprint;
   // The Python reader printed the empty string for a JSON null, and
   // `fingerprint` is null whenever no plugin version is active
-  // (src/adapter.ts:802). Anything non-string and non-null is unparseable.
+  // (src/adapter.ts:818). Anything non-string and non-null is unparseable.
   //
   // PORT-ONLY, and intentional. The shell cannot construct this trigger:
   // scripts/core/provenance.sh:62 stringifies any non-null scalar, so a

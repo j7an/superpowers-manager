@@ -199,7 +199,7 @@ type Inspection =
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
-// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:993).
+// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:1009).
 // That is caught here rather than in runProbe's outer catch, because the two
 // need different diagnostics -- see spec §3.3a.
 //
@@ -246,7 +246,7 @@ async function inspect(
   const value = (envelope.result as Record<string, unknown> | null)?.[key];
   // The Python reader printed the empty string for a JSON null
   // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (src/adapter.ts:802).
+  // whenever no plugin version is active (src/adapter.ts:818).
   if (value === null || value === undefined) {
     return { ok: true, value: "", envelope };
   }
@@ -428,7 +428,7 @@ export async function runProbe(
     // readGeneratedCommitLenient (src/provenance.ts:78-94), which catches
     // every failure and returns "".
     //
-    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:993) does
+    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:1009) does
     // NOT reach here: inspect() catches it and converts it to a hand-written
     // message, because a rethrown cause is exactly the failure src/adapter.ts
     // declined to own and its text must never reach this stream. See §3.3a.

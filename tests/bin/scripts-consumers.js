@@ -274,7 +274,7 @@ export const SCRIPTS_CONSUMERS = [
     ordinal: 1,
     disposition: "re-express",
     target:
-      "tests/unit/adapter.test.js's NODE_OPTIONS/NODE_PATH scrub case over src/adapter.ts:116-122. The git-child half of the case has no TypeScript subject - src/git.ts:32 pins LC_ALL and GIT_TERMINAL_PROMPT and does not scrub NODE_* - and lands as a divergence note in tests/migration-inventory/ref-resolution.md.",
+      "tests/unit/adapter.test.js's NODE_OPTIONS/NODE_PATH scrub case over src/adapter.ts:128-134. The git-child half of the case has no TypeScript subject - src/git.ts:32 pins LC_ALL and GIT_TERMINAL_PROMPT and does not scrub NODE_* - and lands as a divergence note in tests/migration-inventory/ref-resolution.md.",
   },
   {
     file: "tests/baseline/ref-resolution.test.js",
@@ -282,7 +282,7 @@ export const SCRIPTS_CONSUMERS = [
     ordinal: 1,
     disposition: "re-express",
     target:
-      "tests/unit/adapter.test.js's NODE_OPTIONS/NODE_PATH scrub case over src/adapter.ts:116-122. The git-child half of the case has no TypeScript subject - src/git.ts:32 pins LC_ALL and GIT_TERMINAL_PROMPT and does not scrub NODE_* - and lands as a divergence note in tests/migration-inventory/ref-resolution.md.",
+      "tests/unit/adapter.test.js's NODE_OPTIONS/NODE_PATH scrub case over src/adapter.ts:128-134. The git-child half of the case has no TypeScript subject - src/git.ts:32 pins LC_ALL and GIT_TERMINAL_PROMPT and does not scrub NODE_* - and lands as a divergence note in tests/migration-inventory/ref-resolution.md.",
   },
   // tests/baseline/selection-location.test.js (4)
   {
@@ -1290,7 +1290,7 @@ export const SCRIPTS_CONSUMERS = [
     ordinal: 1,
     disposition: "retire",
     target:
-      "the driver is retired in 4c (spec section 5.4); its one surviving case is the NODE_OPTIONS/NODE_PATH scrub unit test 4b added over src/adapter.ts:116-122, recorded in the new tests/migration-inventory/node-cli-helper.md (spec section 5.5).",
+      "the driver is retired in 4c (spec section 5.4); its one surviving case is the NODE_OPTIONS/NODE_PATH scrub unit test 4b added over src/adapter.ts:128-134, recorded in the new tests/migration-inventory/node-cli-helper.md (spec section 5.5).",
   },
   // tests/test_probe.sh (11)
   {

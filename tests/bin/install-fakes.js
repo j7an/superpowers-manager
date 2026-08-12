@@ -106,7 +106,7 @@ function runCodex(ctx) {
       // Codex reports the plugin installed at 1.0.0, but no cached tree is
       // ever written for it. The real adapter's fingerprint handler then
       // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — src/adapter.ts:815-828 — so it returns a
+      // finds nothing to read there — src/adapter.ts:831-844 — so it returns a
       // controlled inspect-failed envelope. No adapter interception needed.
       ctx.writeJson("plugin_list.json", {
         installed: [

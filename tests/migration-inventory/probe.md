@@ -98,7 +98,7 @@ executable declaration below.
 `tests/baseline/probe.test.js`'s "adapter messages precede the error line on a
 controlled failure" needs a *controlled* adapter failure whose envelope also
 carries messages. The obvious lever, `pluginListRc: 1`, cannot supply one:
-`listingCommand` (`src/adapter.ts:217-226`) logs only the child's **stderr**,
+`listingCommand` (`src/adapter.ts:233-242`) logs only the child's **stderr**,
 and the fake writes nothing there when it is merely returning a non-zero
 status, so the envelope carries no messages at all and `error:` lands at index
 0 — an ordering assertion built on it would pass vacuously or fail for the
@@ -110,7 +110,7 @@ ownership inspection would succeed and the run would exit 0.
 
 **Why the identity matrix and scenario 1 need two listings per run.** Probe
 issues `codex plugin list --json` twice per run — once for
-`inspect --view fingerprint` (`src/adapter.ts:781`), once for
+`inspect --view fingerprint` (`src/adapter.ts:797`), once for
 `inspect --view ownership` (`:855`) — as two separate processes with
 byte-identical argv. The shell driver stubbed the *adapter* and so could feed
 the two views independently (`SPW_PROBE_FINGERPRINT_JSON` vs
@@ -369,7 +369,7 @@ case that does put a bare relative `-upstream` on a Git command line is
     `SPW_EXPECTED_UPDATE_CONTROL=unsupported`). **Retired**: the shell
     injected the value through the recording `SPW_ADAPTER` (`:216-227`).
     In-process, `runInspect` answers the `update-control` view itself and
-    returns the literal `managed` (`src/adapter.ts:765-767`), so no seam to
+    returns the literal `managed` (`src/adapter.ts:781-783`), so no seam to
     inject through survives.
 
     **Slice 5, read this before retiring anything.** The single surviving
@@ -515,7 +515,7 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    `mktemp -d` workspace and any adapter sidecar left in the same directory.
    In-process probe creates no workspace at all, and the adapter's workspaces
    are rooted at `os.tmpdir()` — read from the *runner's* environment by
-   `withWorkspace`'s caller (`src/adapter.ts:773`, `:847`), not from the
+   `withWorkspace`'s caller (`src/adapter.ts:789`, `:847`), not from the
    context env a case controls — so an equivalent assertion on the case's own
    `TMPDIR` would be vacuously true no matter what either component did.
    The surviving property, that `withWorkspace` removes what it created, is
