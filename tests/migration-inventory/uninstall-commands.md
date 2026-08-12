@@ -15,23 +15,23 @@ Shell line references below are `:N` against the deleted
 **POINTER PROVENANCE — port `:N` pointers.** An item's identity is the
 assertion text it quotes, not its line number; re-derive a pointer from that
 text before relying on it. These numbers are not maintained. Slice 4b
-remapped an unrecorded subset of them in `1abd231`, against
-`tests/bin/uninstall-commands.test.js` as it stood at `733f4b5`, where that
-file was 913 lines — the ``(was `:N`)`` notes mark part of that subset but
-not all of it. No pointer has been re-derived since; later slice-4b commits
-only dropped the pointers of retired items. (Both SHAs are pre-squash
-slice-4b commits; slice 4b merged as `79851ea`.) The port file is 994 lines
-at HEAD and grew in three places, so the shift is not uniform: `0` to about
-old line 33, `+1` through the early file, `+21` from about old line 425,
-and an irregular stretch between. No single offset applies and none is
-offered — each pointer has to be re-derived on its own. Shell `:N`
-references are unresolvable by construction:
+remapped an unrecorded subset of the mapped region's pointers in `1abd231`,
+against `tests/bin/uninstall-commands.test.js` as it stood at `733f4b5`,
+where that file was 913 lines — the ``(was `:N`)`` notes mark part of that
+subset but not all of it, and no mapped-region pointer has been re-derived
+since. Neither SHA is reachable from `main`; slice 4b squash-merged as
+`79851ea`. The port file is 994 lines at HEAD and grew in three places, so
+the shift is not uniform: `0` to about old line 33, `+1` through the early
+file, `+21` from about old line 425, and an irregular stretch between. No
+single offset applies and none is offered. The port-only region below mixes
+derivation states: item 21's pointers were added at `79851ea`, against the
+994-line file. Shell `:N` references are unresolvable by construction:
 `tests/test_uninstall_commands.sh` is deleted, so they are historical claims
 about a file that no longer exists, which is intended, not a defect. Nothing
 in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
 validates the `json inventory` block's counts, this file's entry numbering
-and its region structure, and never parses a `Port:` line. A wrong pointer
-cannot fail a test, so this note is the only provenance record there is.
+and its region structure, and never parses a pointer. Some items below mark
+their own pointer stale and deliberately not remapped.
 
 ## Counting rules applied
 

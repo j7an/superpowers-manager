@@ -938,7 +938,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // Appended at the end of the file, rather than beside the both-present case
   // it is thematically closest to, so it does not shift the line number of
   // any existing item — most of this inventory's `Port:` pointers are already
-  // stale (see the file's own STALE POINTER WARNING) and inserting in the
+  // stale (see the file's own POINTER PROVENANCE note) and inserting in the
   // middle would silently break the ones that are not.
   //
   // `adapterSeam: "tripwire"` reaches the FAKE only. runScript exports it as
