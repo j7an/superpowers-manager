@@ -159,14 +159,19 @@ interface StageRun {
   readonly outcome: StageOutcome;
   // Carries a post-success workspace-removal failure WITHOUT discarding the
   // outcome the callback already computed. See the header comment on
-  // withWorkspace's onCleanupFailure option (src/workspace.ts) and the report
-  // for why install's shape lets this go further than
-  // src/commands/uninstall.ts's GatherFailure does: this callback never
-  // throws (invoke() catches every ctx.adapter failure and every predicate
-  // here is pure), so the only way withWorkspace's cleanup failure can
-  // collide with a real outcome is the post-SUCCESS case this option exists
-  // to catch -- there is no "callback also failed" case to lose the message
-  // to.
+  // withWorkspace's onCleanupFailure option (src/workspace.ts).
+  //
+  // The precondition is that this callback never throws: invoke() catches
+  // every ctx.adapter failure and every predicate here is pure, so the only
+  // way withWorkspace's cleanup failure can collide with a real outcome is
+  // the post-SUCCESS case this option exists to catch -- there is no
+  // "callback also failed" case to lose the message to.
+  //
+  // An earlier draft offered that precondition as the reason install's shape
+  // "lets this go further than src/commands/uninstall.ts's GatherFailure
+  // does". It does not discriminate: uninstall's callback asserts and holds
+  // the same property, so uninstall now carries the identical GatherRun
+  // retrofit rather than dropping its closing lines. The two modules agree.
   readonly cleanupWarning: string | null;
 }
 

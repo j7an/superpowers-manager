@@ -6,7 +6,7 @@ import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
 import { oneLine } from "../cli-arguments.js";
 import type { Check } from "../lifecycle.js";
 import { reportLegacyState, verifyUninstalledResources } from "../lifecycle.js";
-import { withWorkspace } from "../workspace.js";
+import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
 import { replayEnvelope } from "./probe.js";
 
@@ -120,15 +120,19 @@ type UninstallOutcome =
       readonly lines: readonly string[];
     };
 
-// withWorkspace can throw AFTER its callback has already returned a fully
-// computed UninstallOutcome: a post-success cleanup failure
-// (workspaceRemovalFailure, src/workspace.ts:25-27) discards that return
-// value entirely and rejects instead (src/workspace.ts:134-141). A bare
-// re-throw would silently drop every envelope collected before that point --
-// a narrow DIAG-ADAPTER-01 regression the shell never had, since it replayed
-// each adapter response as it went rather than batching replay to the end.
-// This carries the envelopes collected so far alongside the original cause,
-// so runUninstall's catch can still replay them before reporting the cause.
+// withWorkspace throws for mkdtemp failure before the callback ever runs
+// ("cannot create workspace", src/workspace.ts:120). A bare re-throw would
+// silently drop every envelope collected before that point -- a narrow
+// DIAG-ADAPTER-01 regression the shell never had, since it replayed each
+// adapter response as it went rather than batching replay to the end. This
+// carries the envelopes collected so far alongside the original cause, so
+// runUninstall's catch can still replay them before reporting the cause.
+//
+// The post-success cleanup failure no longer reaches here: onCleanupFailure
+// below suppresses withWorkspace's throw for that case and records the
+// warning as data, so the computed UninstallOutcome survives it. The
+// envelope-carrying is still load-bearing for mkdtemp, and the shape stays
+// identical to src/commands/install.ts's GatherFailure.
 class GatherFailure extends Error {
   constructor(
     readonly inner: unknown,
@@ -138,11 +142,28 @@ class GatherFailure extends Error {
   }
 }
 
+// Mirrors src/commands/install.ts's StageRun, and for the same reason:
+// carries a post-success workspace-removal failure WITHOUT discarding the
+// outcome the callback already computed.
+//
+// scripts/uninstall:34-35 echoed both closing lines before the exit trap ran,
+// and spw_cleanup_workspace_trap (scripts/core/common.sh:25-30) is
+// `rm -rf "$path" || :` -- the shell swallowed the removal failure outright
+// and kept its exit status. So the shell reported the removal it was asked to
+// perform on this path, and a port that drops "uninstall complete" is the one
+// that diverges. The port still exits 1 and names the leaked workspace, which
+// the shell did not; that half is the deliberate fail-closed divergence
+// install already carries.
+interface GatherRun {
+  readonly outcome: UninstallOutcome;
+  readonly cleanupWarning: string | null;
+}
+
 // Every step that can throw or fail closed, returning the outcome as data and
 // performing NO writes. Same shape as gatherProbe (src/commands/probe.ts:285)
 // and for the same reason: a write inside this try could raise EPIPE, be
 // caught here, and be relabelled as a domain failure.
-async function gatherUninstall(ctx: CommandContext): Promise<UninstallOutcome> {
+async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
   // scripts/uninstall:20-21 exported TMPDIR="$uninstall_workspace" so every
   // child confined its temporary files to the tree the workspace trap
   // removed. The AdapterContext passed to ctx.adapter below does the same.
@@ -154,8 +175,9 @@ async function gatherUninstall(ctx: CommandContext): Promise<UninstallOutcome> {
   // collected yet) and a post-success cleanup failure (everything the
   // callback collected) reach this same array.
   const envelopes: AdapterEnvelope[] = [];
+  let cleanupWarning: string | null = null;
   try {
-    return await withWorkspace(
+    const outcome = await withWorkspace(
       parent,
       "superpowers-manager.uninstall.",
       async (workspace): Promise<UninstallOutcome> => {
@@ -283,17 +305,26 @@ async function gatherUninstall(ctx: CommandContext): Promise<UninstallOutcome> {
         );
         return { status: 0, envelopes, lines };
       },
+      {
+        // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure,
+        // so the UninstallOutcome the callback already computed still comes
+        // back as `outcome` instead of being discarded. Runs synchronously,
+        // as the option requires (src/workspace.ts).
+        onCleanupFailure: (path) => {
+          cleanupWarning = workspaceRemovalFailure(path);
+        },
+      },
     );
+    return { outcome, cleanupWarning };
   } catch (cause) {
-    // withWorkspace's own throws (mkdtemp failure -- "cannot create
-    // workspace", src/workspace.ts:120 -- or the post-success cleanup
-    // failure named above) are the only ones reachable here: every
-    // ctx.adapter throw is already caught inside invoke(), and
-    // presenceFlag/verifyUninstalledResources/reportLegacyState are pure
-    // (src/lifecycle.ts's header comment). Wrapping with the envelopes
-    // collected so far -- zero for the mkdtemp case, whatever the callback
-    // gathered for the cleanup case -- is what lets runUninstall's catch
-    // replay them instead of discarding them with a bare re-throw.
+    // Reachable only for mkdtemp failure, with nothing collected yet: this
+    // callback never throws -- every ctx.adapter throw is already caught
+    // inside invoke(), and presenceFlag/verifyUninstalledResources/
+    // reportLegacyState are pure (src/lifecycle.ts's header comment) -- so a
+    // post-success cleanup failure is handled by onCleanupFailure above and
+    // cannot reach here. Wrapping with `envelopes` anyway keeps the class
+    // total over its declared contract rather than assuming the callback's
+    // purity at the throw site.
     throw new GatherFailure(cause, envelopes);
   }
 }
@@ -306,21 +337,23 @@ export async function runUninstall(
   // ignored -- the same asymmetry runPrepare documents
   // (src/commands/prepare.ts:507).
   void argv;
-  let outcome: UninstallOutcome;
+  let run: GatherRun;
   try {
-    outcome = await gatherUninstall(ctx);
+    run = await gatherUninstall(ctx);
   } catch (cause) {
     // gatherUninstall throws exactly one shape: GatherFailure, wrapping
-    // withWorkspace's own SafetyErrors -- "cannot create workspace"
-    // (src/workspace.ts:120) or workspaceRemovalFailure()'s "cannot remove
-    // workspace <path>" (src/workspace.ts:25-27, :33-35) -- alongside
-    // whatever envelopes were collected before that throw. Replaying those
-    // FIRST, before reporting the cause, is what keeps a post-success
-    // cleanup failure from silently dropping every adapter message the
-    // operator would otherwise see (DIAG-ADAPTER-01). The `instanceof` guard
-    // is defensive rather than load-bearing -- gatherUninstall's own catch is
-    // the only thing that can throw here, and it always wraps -- but this
-    // catch does not assume that invariant blindly.
+    // withWorkspace's "cannot create workspace" SafetyError
+    // (src/workspace.ts:120), alongside whatever envelopes were collected
+    // before that throw -- none, for that cause. Replaying first, before
+    // reporting the cause, keeps the arm honest for any envelope-bearing
+    // throw the class is declared to carry (DIAG-ADAPTER-01). The
+    // post-success cleanup failure no longer arrives here: gatherUninstall's
+    // onCleanupFailure records it as `cleanupWarning` and the computed
+    // outcome survives, which is what scripts/uninstall:34-35 did. The
+    // `instanceof` guard is defensive rather than load-bearing --
+    // gatherUninstall's own catch is the only thing that can throw here, and
+    // it always wraps -- but this catch does not assume that invariant
+    // blindly.
     //
     // ctx.adapter's non-AdapterFailure rethrow (src/adapter.ts:1009) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
@@ -337,20 +370,35 @@ export async function runUninstall(
     ctx.stderr.write(`error: ${oneLine(inner)}\n`);
     return 1;
   }
+  const { outcome, cleanupWarning } = run;
   // Replay first, on both paths: the shell validator replayed every
   // response's messages whether or not that response was a failure
   // (scripts/core/validate-adapter-response.py:268).
   for (const envelope of outcome.envelopes) replayEnvelope(envelope, ctx);
+  let status: number;
   if (outcome.status === 1) {
     // null means replayEnvelope already emitted the adapter's own error:
     // and hint: lines for the failing envelope.
     if (outcome.message !== null) {
       ctx.stderr.write(`error: ${outcome.message}\n`);
     }
+    status = 1;
+  } else {
+    for (const line of outcome.lines) {
+      ctx.stdout.write(`${line}\n`);
+    }
+    status = 0;
+  }
+  if (cleanupWarning !== null) {
+    // Mirrors src/commands/install.ts's closing arm. A leaked workspace is
+    // reported even when the domain outcome above was a success: the
+    // uninstall and its verification already completed against the adapter
+    // before cleanup ran, so it is not being reported as unverified -- but
+    // something did still go wrong, and AGENTS.md's fail-closed rule extends
+    // to it. The operator keeps "uninstall complete", which is the one line
+    // telling them whether the removal they asked for happened.
+    ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }
-  for (const line of outcome.lines) {
-    ctx.stdout.write(`${line}\n`);
-  }
-  return 0;
+  return status;
 }

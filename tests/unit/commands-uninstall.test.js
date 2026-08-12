@@ -487,18 +487,25 @@ void test('argv is ignored, matching scripts/uninstall never reading "$@"', asyn
   assert.equal(status, 0);
 });
 
-// --- Post-success withWorkspace cleanup failure (GatherFailure) ---
+// --- Post-success withWorkspace cleanup failure (onCleanupFailure) ---
 //
-// src/workspace.ts:134-141: a post-success cleanup failure
-// (workspaceRemovalFailure, reachable because uninstall.ts passes no
-// `onCleanupFailure`) discards withWorkspace's callback return value entirely
-// and rejects instead. GatherFailure exists so runUninstall's catch can still
-// replay every envelope collected before that throw. A bare re-throw would
-// silently drop them -- a narrow DIAG-ADAPTER-01 regression the shell never
-// had, since it replayed each adapter response as it went rather than
-// batching replay to the end.
+// src/workspace.ts:134-141: with `onCleanupFailure` supplied and the callback
+// not failed, a post-success cleanup failure is suppressed and the callback's
+// return value survives. uninstall.ts passes it, so the UninstallOutcome the
+// callback computed still reaches the operator, and the leaked workspace is
+// reported on stderr with exit 1 on top of it.
+//
+// This is what scripts/uninstall did. It echoed "uninstall complete" and the
+// note at :34-35 before the exit trap ran, and spw_cleanup_workspace_trap
+// (scripts/core/common.sh:25-30) is `rm -rf "$path" || :`, so the removal
+// failure never suppressed either line. An earlier port dropped both, frozen
+// by this test asserting stdout was the first inspection's note alone; the
+// shell is the authority and that assertion was pinning the defect.
+//
+// Envelopes collected before the cleanup failure still replay, which is the
+// property this case originally existed to hold (DIAG-ADAPTER-01).
 
-void test("a post-success withWorkspace cleanup failure still replays every envelope collected before the throw", async () => {
+void test("a post-success withWorkspace cleanup failure keeps the computed outcome and every envelope before it", async () => {
   if (process.getuid?.() === 0) return; // chmod does not gate root
   const parent = mkdtempSync(join(tmpdir(), "spw-uninstall-workspace-"));
   try {
@@ -541,10 +548,18 @@ void test("a post-success withWorkspace cleanup failure still replays every enve
     });
     assert.equal(status, 1);
     assert.equal(calls.length, 3);
-    // The envelope collected from the FIRST call -- well before the throw --
-    // still reaches stdout. A bare re-throw that dropped `envelopes` would
-    // leave this empty.
-    assert.equal(out.chunks.join(""), "note: first inspection ran\n");
+    // The envelope collected from the FIRST call -- well before the cleanup
+    // failure -- still reaches stdout, AND the domain outcome survives it,
+    // exactly as scripts/uninstall:34-35 behaved. Dropping either half is a
+    // divergence from the shell.
+    assert.equal(
+      out.chunks.join(""),
+      "note: first inspection ran\n" +
+        "uninstall complete\n" +
+        "note: local generated artifacts under plugins/superpowers/ and " +
+        ".cache/upstream/ were left in place; remove them manually or " +
+        "regenerate with npx superpowers-manager prepare.\n",
+    );
     const entries = readdirSync(parent);
     assert.equal(
       entries.length,
