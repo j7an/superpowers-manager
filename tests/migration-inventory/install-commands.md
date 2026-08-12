@@ -1307,9 +1307,17 @@ truncation `reset` performed is load-bearing and not decorative.
   of each needle. The seventh is the adapter-log collapse: items 13, 14 and
   15 all name the one
   `deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
-  `prepareGeneratedTree`, which witnesses each of the three claims. Two
-  orderings differ from the shell: items 71-73 and items 62-64 assert the
-  positive claim before the negatives that depend on it.
+  `prepareGeneratedTree`, which witnesses each of the three claims. One
+  ordering differs from the shell: items 71-73, where the port hoists the
+  positive claim above the negatives that depend on it, so neither negative can
+  pass on an empty log. ***Corrected 2026-08-12:*** *this sentence read "Two
+  orderings differ … items 71-73 and items 62-64". Items 62-64 do **not**
+  differ: recovering the shell from* `343534b^` *shows*
+  `test_install_commands.sh:497-501` *asserting the ordering chain and*
+  `:504-512` *the three negatives, so the shell already ran positive-first and
+  the port preserves that order end to end. Only 71-73 hoists — the shell put
+  its negatives at* `:561` *above the positive at* `:564`*, and the port
+  reverses them, as item 73's own entry and the port comment both record.*
 
   **How to reproduce these three figures**, since the gate does not read this
   prose and this paragraph has been wrong twice on its figures — an early
@@ -1338,9 +1346,12 @@ truncation `reset` performed is load-bearing and not decorative.
   live pointer and keep the groups whose pointer is an exact single-line
   citation — that yields the three literal-tuple groups and the five rule-9
   groups, plus 13/14/15: **nine groups covering 24 items**, the same figure the
-  Corrected note below records. It is the step that found the merge earlier
-  counts missed, and note that nine groups is not seven merges — three of the
-  nine are literal-tuple carve-outs, and 25/26 is not among them. **Two:** hand
+  Corrected note below records. Summing the item lists quoted above gives 23,
+  not 24 — the twenty-fourth is item 80, which rides in the `:947` group behind
+  a pointer its own entry marks invalid, and is the reason step three exists.
+  This is the step that found the merge earlier counts missed, and note that
+  nine groups is not seven merges — three of the nine are literal-tuple
+  carve-outs, and 25/26 is not among them. **Two:** hand
   check the range-pointer groups, because a range collects a whole scenario and
   cannot show sharing on its own; this is the only way 25/26 is recoverable, as
   items 25, 26 **and** 27 all carry `within :792-818` and only the first two
@@ -1394,11 +1405,11 @@ truncation `reset` performed is load-bearing and not decorative.
   them as own. A fourth category — subsumed, pointer-bearing, carrying no
   marker — **does** exist, contrary to what a first version of this amendment
   asserted when it claimed such a category "would contain nothing else". Items
-  13 and 80 both sit in it, and they are settled differently: item 13's pointer
-  names the assertion that absorbed its claim, so it is counted as a merge
-  above, while item 80's names an unrelated site, so its disposition is
-  deferred rather than counted. Item 80 is the only member of that second,
-  unsettleable kind; see the two notes below.*
+  13, 15 and 80 all sit in it, and they are settled differently: items 13 and 15
+  carry pointers that name the assertion which absorbed their claim, so both are
+  counted in the merge above, while item 80's names an unrelated site, so its
+  disposition is deferred rather than counted. Item 80 is the only member of
+  that second, unsettleable kind; see the two notes below.*
 
   ***Corrected 2026-08-12, same day, before this paragraph had been relied
   on.*** *A first version of this amendment claimed the merge set had been
@@ -1435,11 +1446,11 @@ truncation `reset` performed is load-bearing and not decorative.
   left to guess.*** *Item 80 is the only item in the mapped region that is
   pointer-bearing, declared subsumed into a named sibling's assertion, **and
   whose pointer does not name that absorbing assertion**. The final clause is
-  what makes it an exception, and it is load-bearing: item 13 meets the first
-  two conditions — it carries* `Port: :697`*, no marker, and says the claim is
-  subsumed into the* `deepEqual` *check items 14 and 15 also map onto — but its
-  pointer names that very call, so grouping catches it and it is counted as a
-  merge above. Item 80's pointer names an unrelated site instead, which is
+  what makes it an exception, and it is load-bearing: items 13 and 15 both meet
+  the first two conditions — each carries* `Port: :697` *and no marker, and
+  each says the claim is subsumed into the* `deepEqual` *check the three of them
+  map onto — but their pointers name that very call, so grouping catches them
+  and both are counted in the merge above. Item 80's pointer names an unrelated site instead, which is
   exactly why grouping misfiles it and why it cannot be settled here. It is*
   **not** the only item whose pointer the file declares invalid: items 65, 68,
   80, 120 and 124 all carry a **"Pointer stale, deliberately not remapped"**
@@ -1462,10 +1473,17 @@ truncation `reset` performed is load-bearing and not decorative.
   sentence said "the three SUBSUMED items" and the note fifteen lines below said
   "Four items … are SUBSUMED", for the same concept, in the same section. Both
   are right about different sets and neither said which: **three** is the count
-  of marked items — `grep -c '\*\*Subsumed' ` returns 3 — and **four** is that
+  of marked items — `grep -c '^[0-9]*\. .*\*\*Subsumed'` returns 3 — and
+  **four** is that
   set plus item 15's Codex-emptiness half, which is subsumed in substance but
   carries no marker because its entry already argues the point in prose. The
-  arithmetic in this paragraph is over the marked three.*
+  arithmetic in this paragraph is over the marked three.* ***Recipe corrected
+  2026-08-12:*** *the note above originally ran* `grep -c '\*\*Subsumed'`*,
+  which returns **7** at HEAD — the three item markers plus four prose
+  references to the marker in this section, including two added the same day.
+  The count of three was always right; the recipe offered to verify it was not,
+  so it is now anchored to the start of an item line. The substantive claim is
+  unchanged.*
 
   Several items changed **channel**, not **behaviour** — a distinction
   worth stating explicitly, per Task 6's own instruction, because a reader
