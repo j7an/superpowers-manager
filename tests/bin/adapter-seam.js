@@ -209,10 +209,22 @@ export const SEAM_SOURCE_FILES = [
 ];
 
 /**
- * The live condition for a lifecycle case is the SCRIPT's existence, not its
- * dispatch mode: runScript spawns /bin/sh scripts/<script> directly
- * (tests/bin/lifecycle-fixture.js:266) and never routes through
- * bin/superpowers, so DISPATCH does not govern these cases at all.
+ * A lifecycle case's live condition is the NODE entrypoint, not a script's
+ * existence. runScript spawns process.execPath with
+ * bin/superpowers-manager.js and the subcommand as its argument
+ * (tests/bin/lifecycle-fixture.js:342-345), so every lifecycle case routes
+ * through src/cli.ts's DISPATCH, which PR 11.5 slice 4b flipped to
+ * "in-process" for all eight subcommands (src/cli.ts:65-74). DISPATCH now
+ * governs these cases entirely, and deleting scripts/<script> does not
+ * affect them.
+ *
+ * Before that flip runScript spawned /bin/sh scripts/<script> directly and
+ * script existence WAS the condition — that is the history SEAM_DEPENDENT's
+ * keying by script name still reflects, and the reason this gate is written
+ * over script paths at all. Read together with the paragraph below: with
+ * every SEAM_DEPENDENT total at zero, the existence check never runs, so the
+ * gate is dormant rather than merely unnecessary. It re-arms if a nonzero
+ * count reappears, which is what keeps it worth carrying into slice 4c.
  *
  * `dependent` defaults to the real, gated SEAM_DEPENDENT but is injectable so
  * adapter-seam.test.js's mutation proof ("the gate fails when a depended-on
@@ -223,8 +235,8 @@ export const SEAM_SOURCE_FILES = [
  * used to feed a real gate call a non-default map: adapter-seam.test.js holds
  * exactly TWO call sites, and the only non-default one is the injection proof
  * itself, "the gate fails when a depended-on script is gone"
- * (adapter-seam.test.js:108). The other — "every script with seam-dependent
- * cases still exists" (adapter-seam.test.js:79), the real gate — takes the
+ * (adapter-seam.test.js:102). The other — "every script with seam-dependent
+ * cases still exists" (adapter-seam.test.js:98), the real gate — takes the
  * default.
  * @param {string} root repository root
  * @param {(path: string) => boolean} exists

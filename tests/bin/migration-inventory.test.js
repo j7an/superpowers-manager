@@ -96,12 +96,23 @@ const NUMBER_TOKEN = `(\\d+|${Object.keys(WORD_NUMBERS).join("|")})`;
 // "retired" or "merged" elsewhere (e.g. "bin-dispatch.md's retired items",
 // which names no count) can match, because there is no number token
 // immediately before the phrase.
+//
+// MARKUP is allowed at every seam an author can bold or code-quote: before
+// the number, between the number and the phrase, and after the phrase. It is
+// not cosmetic tolerance. RECORDED_MERGES_RE previously allowed markup
+// nowhere, so when a8a11df reformatted bin-dispatch.md's count to
+// "**1** recorded merges" the pattern stopped matching, the check hit its
+// `stated.length === 0` early return, and the only non-exempt file it covered
+// for merges went unwatched while the suite stayed green. RETIRED_ITEMS_RE
+// allowed markup only around the whole phrase, so it would have failed the
+// same way on "**1** retired items". Both seams are now covered.
+const MARKUP = "[*`]{0,2}";
 const RECORDED_MERGES_RE = new RegExp(
-  `\\b${NUMBER_TOKEN}\\s+recorded merges\\b`,
+  `${MARKUP}\\b${NUMBER_TOKEN}\\b${MARKUP}\\s+recorded merges\\b${MARKUP}`,
   "gi",
 );
 const RETIRED_ITEMS_RE = new RegExp(
-  `\\*{0,2}${NUMBER_TOKEN}\\s+retired items\\*{0,2}`,
+  `${MARKUP}\\b${NUMBER_TOKEN}\\b${MARKUP}\\s+retired items\\b${MARKUP}`,
   "gi",
 );
 
