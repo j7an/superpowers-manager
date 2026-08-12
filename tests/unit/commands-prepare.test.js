@@ -155,7 +155,7 @@ void test("runPrepare rejects a directory as the fallback manifest template", as
   mkdirSync(template, { recursive: true });
   // scripts/prepare:42 is `[ -f ]`, not `[ -e ]`. A stat-only predicate would
   // accept this directory and hand it to the adapter as --fallback-manifest;
-  // tests/baseline/cli-parity.test.js:1190 already forbids that.
+  // tests/baseline/cli-parity.test.js:1589 already forbids that.
   const { out, err, ctx } = unitContext(dir, {
     SUPERPOWERS_MANIFEST_TEMPLATE: template,
   });

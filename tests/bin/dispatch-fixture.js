@@ -12,7 +12,7 @@
 // slice 4b's flip -- but the subject under test now writes into it: runPrepare's
 // gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
 // opens a `.superpowers.prepare.*` workspace there, all at
-// src/commands/prepare.ts:274-281 and all BEFORE computeEffectiveSelection.
+// src/commands/prepare.ts:273-280 and all BEFORE computeEffectiveSelection.
 // Every `prepare` case that clears preflight therefore leaves an empty
 // `<PACKAGE_ROOT>/plugins/` behind -- three of the four. The exception is the
 // `SUPERPOWERS_VALIDATOR` case, which withholds `python3` so that preflight

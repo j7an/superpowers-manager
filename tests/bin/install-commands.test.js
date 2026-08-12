@@ -8,8 +8,8 @@
 // has no counterpart here, and why each case must state the preconditions the
 // shell inherited from the scenario above it. See the inventory for those.
 
-// Two statements, not one. tests/bin/migration-inventory.test.js:23 matches
-// /^import test from "node:test";$/m and asserts it at :331-334, because the
+// Two statements, not one. tests/bin/migration-inventory.test.js:57 matches
+// /^import test from "node:test";$/m and asserts it at :529-532, because the
 // static call-site counter recognises exactly one binding form and fails closed
 // rather than miscount. Both `import { describe, test } from "node:test";` and
 // `import test, { describe } from "node:test";` FAIL that regex.
@@ -238,7 +238,7 @@ function copyFallbackManifestIntoCandidate(argv) {
  * Reconstructs the generated-tree precondition the shell driver inherited from
  * the scenario above it. `scripts/core/status.sh:15-16` returns "needs prepare"
  * whenever the package root carries no `.superpowers-upstream.json`, and
- * lifecycle-fixture.js:46-57 copies only `plugin.template.json` into the
+ * lifecycle-fixture.js:50-61 copies only `plugin.template.json` into the
  * snapshot — so a fresh `c.pkg` always probes as "needs prepare". In the shell
  * the prepare at :325 (and again inside the install at :383) left a valid
  * generated tree in the shared `$pkg`, and `reset` cleared Codex state but
@@ -784,7 +784,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   // "malformed update-control output exits exactly 1" (:354-364) is RETIRED
-  // at the gap: tests/migration-inventory/install-commands.md item 26.
+  // at the gap: tests/migration-inventory/install-commands.md items 22-24.
   // Its subject -- an adapter transport emitting non-JSON bytes across a
   // process boundary -- cannot occur through `ctx.adapter`, an in-process
   // function call that returns an already-typed AdapterResult with no
@@ -1409,7 +1409,7 @@ void describe("install commands", { concurrency: true }, () => {
     // its claim. The shell fixture made the FAKE adapter print
     // "fingerprint inspection failed in adapter fixture" and exit 99, so :695's
     // `out.includes("fingerprint inspection")` matched the fixture's own stderr
-    // line — tests/migration-inventory/install-commands.md:771-781 records this
+    // line — tests/migration-inventory/install-commands.md:588 records this
     // as item 104: it proves the string appears, not that the subject produced
     // it.
     //
@@ -1458,7 +1458,7 @@ void describe("install commands", { concurrency: true }, () => {
 
   // "malformed fingerprint output is rejected by response validation"
   // (:702-716) is RETIRED at the gap: tests/migration-inventory/
-  // install-commands.md item 27. Same reasoning as item 26 above: a bare `{`
+  // install-commands.md items 107-111. Same as items 22-24 above: a bare `{`
   // on stdout is a transport-level fault with no analogue through
   // `ctx.adapter`, which returns an already-typed AdapterResult with nothing
   // to garble in between.
@@ -1525,7 +1525,7 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :756 — `v1.0.0` is the fixture's own tag (lifecycle-fixture.js:116-125),
+    // :756 — `v1.0.0` is the fixture's own tag (lifecycle-fixture.js:120-129),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757
@@ -1584,7 +1584,7 @@ void describe("install commands", { concurrency: true }, () => {
   // Appended at the end of the file, rather than beside the fresh-install
   // case it is thematically closest to, so it does not shift the line number
   // of any existing item — most of this inventory's `Port:` pointers are
-  // already stale (see the file's own STALE POINTER WARNING) and inserting
+  // already stale (see the file's own POINTER PROVENANCE note) and inserting
   // in the middle would silently break the ones that are not.
   //
   // `adapterSeam: "tripwire"` reaches the FAKE only. runScript exports it as

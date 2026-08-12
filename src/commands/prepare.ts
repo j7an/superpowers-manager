@@ -65,7 +65,7 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 // `[ -f ]` — regular file. scripts/prepare:42, :80, and :108 all use -f, and
-// tests/baseline/cli-parity.test.js:1190 asserts a DIRECTORY passed as
+// tests/baseline/cli-parity.test.js:1589 asserts a DIRECTORY passed as
 // SUPERPOWERS_MANIFEST_TEMPLATE is rejected before any adapter build. A
 // stat-only predicate would accept it.
 async function regularFileExists(path: string): Promise<boolean> {
@@ -420,7 +420,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
         // construction the one failure src/adapter.ts declined to own, so its
         // text must never reach ctx.stderr. Caught here rather than in
         // runPrepare's outer catch, the same treatment
-        // src/commands/probe.ts:206-228 gives it.
+        // src/commands/probe.ts:210-232 gives it.
         return failed("cannot build the generated plugin candidate");
       }
       const envelopes = [built.envelope];

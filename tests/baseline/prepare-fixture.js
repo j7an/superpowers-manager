@@ -87,7 +87,7 @@ function git(repo, args) {
 
 /**
  * The fixture's own view of a repository, for an assertion message.
- * src/commands/prepare.ts:330-335 names only the source when a clone fails and
+ * src/commands/prepare.ts:329-334 names only the source when a clone fails and
  * discards git's output by contract, so a case whose clone fails for an
  * unexpected reason cannot say why. This does not change that contract; it adds
  * the fixture's side of the story to the failure message. Deliberately does not
@@ -318,7 +318,7 @@ function buildUpstream() {
   //
   // `.git` is the target for the same reason the retired shell fixture used
   // it: it exists in the upstream checkout, so assertExistingContained accepts
-  // it at :358, and it is absent from src/commands/prepare.ts:29-35's five
+  // it at :358, and it is absent from src/commands/prepare.ts:28-34's five
   // copied paths, so the symlink recreated at src/hooks.ts:359-360 dangles in
   // the candidate. Any target outside those five works; this one keeps the
   // ported case recognisable against the file it replaces.
@@ -334,7 +334,7 @@ function buildUpstream() {
   // P4 — a CONTAINED relative hooks-root symlink, which src/hooks.ts:359-360
   // recreates in the candidate rather than dereferencing.
   //
-  // The target must live under `assets/`. src/commands/prepare.ts:29-35 copies
+  // The target must live under `assets/`. src/commands/prepare.ts:28-34 copies
   // exactly five paths into the candidate — skills, assets, LICENSE,
   // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
   // directory would dangle in the candidate and fail the SECOND

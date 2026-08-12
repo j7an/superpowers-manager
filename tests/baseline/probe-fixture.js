@@ -55,8 +55,8 @@ export function caseEnv(c, extra = {}) {
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(c.home, ".codex"),
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
-    // (tests/bin/probe-fakes.js:12-16) exactly as runScript supplies it for
-    // the spawned lifecycle ports (tests/bin/lifecycle-fixture.js:254).
+    // (tests/bin/lifecycle-fakes.js:235-241) exactly as runScript supplies it for
+    // the spawned lifecycle ports (tests/bin/lifecycle-fixture.js:328).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
     // (src/adapter.ts:977), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with

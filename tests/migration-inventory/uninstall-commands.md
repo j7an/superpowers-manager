@@ -12,26 +12,26 @@ Shell line references below are `:N` against the deleted
 `tests/test_uninstall_commands.sh`; port line references are `:N` against
 `tests/bin/uninstall-commands.test.js`.
 
-**STALE POINTER WARNING — port `:N` pointers, as of 2026-08-11.** Commit
-`1abd231` (PR 11.5 slice 4b, Task 6) rewrote
-`tests/bin/uninstall-commands.test.js` from 841 to 913 lines and remapped only
-the pointers of the items it converted. Those carry an explicit ``(was
-`:N`)`` note and are current. Every OTHER item's `Port:` pointer still names
-the line it occupied at `7db289d` and no longer resolves. Measured: **74
-pointers across 63 items** name a line whose content has moved; 68 of the 74
-landed on an assertion-shaped line at `7db289d` and only 18 still do at HEAD
-(and at least one of those 18 lands on an unrelated assertion, which is worse
-than landing on nothing: item 45's `:623` describes a TMPDIR-emptiness check
-in the plugin-list-fails scenario, but `:623` at HEAD is the
-`has(codex, "plugin marketplace remove superpowers-manager")` membership check
-in the both-present scenario). What is NOT affected: item
-numbering, the retained/dropped accounting, the merge enumeration, and
-everything `tests/bin/migration-inventory.test.js` gates — none of which read
-a `:N` pointer. **Before trusting any `Port:` pointer in this file, re-derive
-it** — the assertion text each item quotes is the reliable key, and
-`git diff 7db289d..HEAD -- tests/bin/uninstall-commands.test.js` gives the
-shift. A wholesale remap is deferred to its own task rather than folded into a
-prose fix. The same warning applies to `install-commands.md`.
+**POINTER PROVENANCE — port `:N` pointers.** An item's identity is the
+assertion text it quotes, not its line number; re-derive a pointer from that
+text before relying on it. These numbers are not maintained. Slice 4b remapped
+an unrecorded subset of the mapped region's pointers in `1abd231`, against
+`tests/bin/uninstall-commands.test.js` as it stood at `733f4b5`, where that
+file was 913 lines — the ``(was `:N`)`` notes mark part of that subset but not
+all of it; no mapped-region pointer has been re-derived since, and later
+slice-4b commits only dropped retired items' pointers. Neither SHA is
+reachable from `main`; slice 4b squash-merged as `79851ea`. The port file is
+994 lines at HEAD and grew in three places, so the shift is not uniform: `0`
+to old line 33, `+1` through the early file, `+21` from about old line 425,
+irregular between. No single offset applies. The port-only region below is
+worse: only item 21's pointers were added at `79851ea`; the rest predate slice
+4b, when that file was 723-841 lines. Shell `:N` references are unresolvable
+by construction: `tests/test_uninstall_commands.sh` is deleted, so they are
+historical claims about a file that no longer exists, which is intended, not a
+defect. Nothing in CI reads any of these numbers:
+`tests/bin/migration-inventory.test.js` validates the `json inventory` block's
+counts, this file's entry numbering and its region structure, and never parses
+one. Some items below mark their own pointer stale.
 
 ## Counting rules applied
 

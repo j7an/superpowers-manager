@@ -501,7 +501,7 @@ void test("prepare clones once and then fetches into the same cache", async () =
   const second = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
   assert.equal(second.status, 0, second.stderr);
   // Same inode: the second run took the fetch branch
-  // (src/commands/prepare.ts:310) instead of removing and re-cloning.
+  // (src/commands/prepare.ts:309) instead of removing and re-cloning.
   assert.equal(statSync(cacheRepo(c)).ino, inode);
 });
 
@@ -527,7 +527,7 @@ void test("prepare rejects an upstream missing any required path", async () => {
       SUPERPOWERS_UPSTREAM_URL: source,
       SUPERPOWERS_REF: commit,
     });
-    // src/commands/prepare.ts:330-335 names only the source when a clone fails
+    // src/commands/prepare.ts:329-334 names only the source when a clone fails
     // and discards git's output by contract, so an unexpected failure here
     // cannot say why on its own. Attach the fixture's own view of the source —
     // computed only once the expectation has already failed, so a passing run
@@ -764,10 +764,10 @@ void test("prepare rejects a directory as the fallback manifest template before 
   assertNoLeakedInternals(result.stderr);
 
   // No adapter build ran: the same contract
-  // tests/baseline/cli-parity.test.js:1190-1209 asserts for the spawned path.
+  // tests/baseline/cli-parity.test.js:1589-1608 asserts for the spawned path.
   // An adapter build always replays `generated plugin validation passed: …`
   // onto stdout, and the template check precedes the cache mkdir
-  // (src/commands/prepare.ts:292-299), so neither is present.
+  // (src/commands/prepare.ts:291-298), so neither is present.
   assert.equal(result.stdout, "");
   assert.equal(existsSync(join(c.dir, "cache")), false);
 
@@ -841,7 +841,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   };
 
   // Non-pinned: the cache already exists, so this is the fetch branch
-  // (src/commands/prepare.ts:311-328), whose diagnostic names the source and
+  // (src/commands/prepare.ts:310-327), whose diagnostic names the source and
   // nothing else. Exact equality is the assertion — one hand-written line.
   const env = createCase({ fakes: "probe" });
   const commit = commitOf(REFS.fallback);
@@ -883,7 +883,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   // So this half asserts the exact message, which is strictly stronger than the
   // single-line shape check the task text asked for. The same string is already
   // pinned at tests/unit/upstream.test.js:404 and
-  // tests/baseline/selection-commands.test.js:645.
+  // tests/baseline/selection-commands.test.js:655.
   const pinned = createCase({ fakes: "probe" });
   const pinnedBefore = seedSentinel(pinned);
   const pinnedHostile = nonRepository(pinned);

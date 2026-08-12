@@ -417,8 +417,8 @@ export async function runProbe(
     // many scripts/probe's `set -eu` plumbing allowed.
     //
     // fetchExactCommit is deliberately NOT in this list, unlike
-    // src/commands/prepare.ts:530's exception 2. Its only callers are
-    // src/upstream-cli.ts:83 and src/commands/prepare.ts:302, so probe never
+    // src/commands/prepare.ts:529's exception 2. Its only callers are
+    // src/upstream-cli.ts:83 and src/commands/prepare.ts:301, so probe never
     // reaches it and its splice sites cannot appear on this stream. Do not
     // add it back by symmetry with prepare.
     //

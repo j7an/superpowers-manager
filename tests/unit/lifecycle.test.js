@@ -193,7 +193,7 @@ void test("verifyInstalledFingerprint reports a mismatch and surfaces its hint",
 void test("verifyInstalledFingerprint reports an undetectable fingerprint and its own hint", () => {
   // scripts/core/lifecycle.sh:108-112 chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
-  // the Python reader's behaviour for JSON null (src/commands/probe.ts:243-248).
+  // the Python reader's behaviour for JSON null (src/commands/probe.ts:247-252).
   const verdict = verifyInstalledFingerprint(
     "f".repeat(40),
     ok({ verification_hints: { missing: "codex reported nothing" } }),

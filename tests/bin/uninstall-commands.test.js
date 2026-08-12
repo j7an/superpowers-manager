@@ -5,8 +5,8 @@
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup.
 
-// Two statements, not one. tests/bin/migration-inventory.test.js:23 matches
-// /^import test from "node:test";$/m and asserts it at :331-334, because the
+// Two statements, not one. tests/bin/migration-inventory.test.js:57 matches
+// /^import test from "node:test";$/m and asserts it at :529-532, because the
 // static call-site counter recognises exactly one binding form and fails closed
 // rather than miscount. Both `import { describe, test } from "node:test";` and
 // `import test, { describe } from "node:test";` FAIL that regex — verified.
@@ -938,7 +938,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // Appended at the end of the file, rather than beside the both-present case
   // it is thematically closest to, so it does not shift the line number of
   // any existing item — most of this inventory's `Port:` pointers are already
-  // stale (see the file's own STALE POINTER WARNING) and inserting in the
+  // stale (see the file's own POINTER PROVENANCE note) and inserting in the
   // middle would silently break the ones that are not.
   //
   // `adapterSeam: "tripwire"` reaches the FAKE only. runScript exports it as

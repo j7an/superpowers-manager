@@ -1106,7 +1106,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // DISPATCH a second time through the presence of "sh", forty lines below
   // this same file's correct derived usage.
   //
-  // commandRequirements(env) (src/cli.ts:244) takes the environment — `prepare`
+  // commandRequirements(env) (src/cli.ts:227) takes the environment — `prepare`
   // requires python3 only when SUPERPOWERS_VALIDATOR names one — and returns
   // the whole Record<Subcommand, string[]>; index it per command. These cases
   // configure no validator, so the empty env is the right derivation for them.
@@ -2029,7 +2029,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   const err = capture();
   const status = await runProbe(["--porcelain"], {
     root: c.pkg,
-    // `v1.0.0` is the annotated tag lifecycle-fixture.js:116-125 creates on
+    // `v1.0.0` is the annotated tag lifecycle-fixture.js:120-129 creates on
     // UPSTREAM; both values come from the fixture, neither is invented.
     env: caseEnv(c, {
       SUPERPOWERS_REF: "v1.0.0",
@@ -2089,12 +2089,12 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * through that machinery at all.
  *
  * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
- * discipline — `nextPluginList` (tests/bin/lifecycle-fakes.js:145), which
+ * discipline — `nextPluginList` (tests/bin/lifecycle-fakes.js:148), which
  * fails closed when a fixture makes more listing calls than it configured —
  * is NOT in force for these five IDs, and is deliberately not simulated.
  * `respondToListing` consults `nextPluginList` only when its caller passes
- * `sequencePluginList` (tests/bin/lifecycle-fakes.js:86-88), and only
- * tests/bin/probe-fakes.js:40 passes it; the install and uninstall fakes read
+ * `sequencePluginList` (tests/bin/lifecycle-fakes.js:89-91), and only
+ * tests/bin/probe-fakes.js:33 passes it; the install and uninstall fakes read
  * the flat `plugin_list.json` this helper writes. Adopting it here would mean
  * setting that flag in both lifecycle fakes, which every existing case in
  * tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js

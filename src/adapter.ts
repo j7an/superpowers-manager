@@ -189,7 +189,7 @@ export function mapCodexLaunchFailure(
     signal: null,
     stdout: Buffer.alloc(0),
     // Trailing newline matches how a real process writes stderr; appendBytes
-    // (src/adapter-protocol.ts:121) splits on newlines and terminates the
+    // (src/adapter-protocol.ts:135) splits on newlines and terminates the
     // final chunk at end-of-buffer either way.
     stderr: Buffer.from(
       `cannot launch Codex command ${codexBin}${detail}\n`,

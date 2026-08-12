@@ -78,7 +78,7 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //                which converted.) These two are the ONLY transport-fault
 //                retirements: the whole fixture schema offers exactly two
 //                levers that make the fake adapter process emit non-JSON —
-//                install-fakes.js:222 and :273 — so there is no third.
+//                install-fakes.js:234 and :285 — so there is no third.
 //                Both fixture configs forced the FAKE ADAPTER PROCESS to write
 //                a bare `{` to stdout: a transport-level, non-JSON-parseable
 //                fault. `ctx.adapter` is an in-process function call that

@@ -12,26 +12,26 @@ Shell line references below are `:N` against the deleted
 `tests/test_install_commands.sh`; port line references are `:N` against
 `tests/bin/install-commands.test.js`.
 
-**STALE POINTER WARNING — port `:N` pointers, as of 2026-08-11.** Commit
-`1abd231` (PR 11.5 slice 4b, Task 6) rewrote
-`tests/bin/install-commands.test.js` from 1472 to 1579 lines and remapped only
-the pointers of the items it converted. Those carry an explicit ``(was
-`:N`)`` note and are current. Every OTHER item's `Port:` pointer still names
-the line it occupied at `7db289d` and no longer resolves. Measured: **80
-pointers across 76 items** name a line whose content has moved; 76 of the 81
-never-updated pointers landed on an assertion-shaped line at `7db289d` and
-only 3 still do at HEAD. What is NOT affected: item numbering, the
-retained/retired accounting, the merge enumeration, and everything
-`tests/bin/migration-inventory.test.js` gates — none of which read a `:N`
-pointer. Item 80 below is a separate, older, deliberately-unremapped pointer
-with its own note. **Before trusting any `Port:` pointer in this file,
-re-derive it** — the assertion text each item quotes is the reliable key, and
-`git diff 7db289d..HEAD -- tests/bin/install-commands.test.js` gives the
-shift. A wholesale remap is deferred to its own task rather than folded into a
-prose fix: outside the mapped region, telling a port pointer from a shell
-pointer needs item-by-item judgement, and a mechanically-offset pointer that
-lands on an unrelated but assertion-shaped line is the exact failure item 80
-records.
+**POINTER PROVENANCE — port `:N` pointers.** An item's identity is the
+assertion text it quotes, not its line number; re-derive a pointer from that
+text before relying on it. These numbers are not maintained. Slice 4b remapped
+an unrecorded subset of the mapped region's pointers in `1abd231`, against
+`tests/bin/install-commands.test.js` as it stood at `733f4b5`, where that file
+was 1579 lines — the ``(was `:N`)`` notes mark part of that subset but not all
+of it, and no mapped-region pointer has changed since. Neither SHA is
+reachable from `main`; slice 4b squash-merged as `79851ea`. The port file is
+1640 lines at HEAD: one line inserted near the top, sixty appended at the end.
+A mapped-region pointer is therefore usually off by `+1` — a hint for
+re-deriving one, never an offset to apply in bulk, and no claim any pointer is
+right. The port-only region below is worse: only item 42's pointers were added
+at `79851ea`; the rest predate slice 4b, when that file was 1270-1472 lines.
+Shell `:N` references are unresolvable by construction:
+`tests/test_install_commands.sh` is deleted, so they are historical claims
+about a file that no longer exists, which is intended, not a defect. Nothing
+in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
+validates the `json inventory` block's counts, this file's entry numbering and
+its region structure, and never parses one. Some items below mark their own
+pointer stale and deliberately not remapped.
 
 ## Counting rules applied
 
@@ -1294,31 +1294,78 @@ truncation `reset` performed is load-bearing and not decorative.
   item's own entry states plainly that it has no port counterpart, rather
   than being silently dropped from the list.
 
-  Of the 116 that survive, the mapping is **not** 1:1 throughout. **103**
-  items map onto a port assertion of their own; the remaining **13 share 6**,
-  across six merges recorded inline. One is a status merge — items 25/26
+  Of the 116 that survive, the mapping is **not** 1:1 throughout. **100**
+  items map onto a port assertion of their own; the remaining **16 share 7**,
+  across seven merges recorded inline. One is a status merge — items 25/26
   collapse onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`.
-  (Items 22/23 were a seventh merge of exactly that kind before Task 6. Both
+  (Items 22/23 were an eighth merge of exactly that kind before Task 6. Both
   numbers are retired with their case, so that merge leaves the count
   entirely rather than staying in it as a moot entry — the arithmetic here is
   over surviving items only.) Five are rule-9 ordering guards — items 58-59,
   66-67, 69-70, 75-76, and 112-114 — each collapsing onto one `assertOrder`
   call, which asserts every one of those ordering claims plus the presence
-  of each needle. Two orderings differ from the shell: items 71-73 and items
-  62-64 assert the positive claim before the negatives that depend on it.
+  of each needle. The seventh is the adapter-log collapse: items 13, 14 and
+  15 all name the one
+  `deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
+  `prepareGeneratedTree`, which witnesses each of the three claims. One
+  ordering differs from the shell: items 71-73, where the port hoists the
+  positive claim above the negatives that depend on it, so neither negative can
+  pass on an empty log. ***Corrected 2026-08-12:*** *this sentence read
+  "Two orderings differ … items 71-73 and items 62-64". Items 62-64 do **not**
+  differ: recovering the shell from* `343534b^` *shows*
+  `test_install_commands.sh:497-501` *asserting the ordering chain and*
+  `:504-512` *the three negatives, so the shell already ran positive-first and
+  the port preserves that order end to end. Only 71-73 hoists — the shell put
+  its negatives at* `:561` *above the positive at* `:564`*, and the port
+  reverses them, as item 73's own entry and the port comment both record.*
 
   **How to reproduce these three figures**, since the gate does not read this
-  prose and an earlier revision of this paragraph was wrong by three: retired
-  = the items whose entry says "No port counterpart" (22, 23, 24, 107, 108,
-  109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
-  merges enumerated in the previous paragraph (25/26 plus the five rule-9
-  guards = **13** items over **6** merges), so own = 116 − 13 = **103**.
-  Items that share only a static line because the port loops over a literal
-  tuple (2-5 at one `assert.ok`, 7-8, 9-11) are **not** merges — counting
-  rule 4 makes each iteration its own assertion — and are counted in the 103.
+  prose and this accounting has a correction history: it was wrong twice on its
+  figures (an early revision was wrong by three; the revision that replaced it
+  missed a merge entirely), and once on a matter of fact about the deleted
+  shell, where it named items 62-64 as an ordering that differs from the shell
+  when the shell already ran positive-first (the Corrected note above).
+  Retired = the items whose entry says "No port counterpart" (22, 23, 24, 107,
+  108, 109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
+  merges enumerated in the previous paragraph (25/26, the five rule-9 guards,
+  and 13/14/15 = **16** items over **7** merges), so own = 116 − 16 = **100**.
+
+  **The counting rule, stated so that a third reading cannot open.** An item
+  is **shared** when it carries a live `Port:` pointer and that pointer names
+  the same single assertion call as another item's pointer. An item counts as
+  its **own** in three cases: it carries a live pointer no other item names;
+  or it shares only a static line because the port loops over a literal tuple
+  (2-5 at one `assert.ok`, 7-8, 9-11), where counting rule 4 makes each
+  iteration its own assertion; or it carries **no** `Port:` pointer at all,
+  because a sibling's structural assertion subsumes the claim outright — the
+  three `**Subsumed…**` items, 44, 50 and 85.
+
+  **How the 7 was actually derived, and what the procedure cannot do.**
+  Grouping the 124 mapped items by their live `Port:` pointer narrows where a
+  merge can hide, but it does not by itself decide one, and it is not a
+  substitute for reading the entries. Three steps, in order. **One:** group by
+  live pointer and keep the groups whose pointer is an exact single-line
+  citation — that yields the three literal-tuple groups and the five rule-9
+  groups, plus 13/14/15: **nine groups covering 24 items**. Summing the item
+  lists quoted above gives 23, not 24 — the twenty-fourth is item 80, which
+  rides in the `:947` group behind
+  a pointer its own entry marks invalid, and is the reason step three exists.
+  This is the step that found the merge earlier counts missed, and note that
+  nine groups is not seven merges — three of the nine are literal-tuple
+  carve-outs, and 25/26 is not among them. **Two:** hand
+  check the range-pointer groups, because a range collects a whole scenario and
+  cannot show sharing on its own; this is the only way 25/26 is recoverable, as
+  items 25, 26 **and** 27 all carry `within :792-818` and only the first two
+  merge. **Three:** hand check every item whose entry declares its pointer
+  stale, since grouping silently misfiles those — see the deferred-exception
+  note below, which is exactly such a case. A reader who runs step one alone
+  and stops will get a different, wrong answer.
 
   ***DISCREPANCY, found 2026-08-11 at slice 4b's closeout and recorded rather
-  than silently re-derived. The three figures above are left as they stand.***
+  than silently re-derived. RESOLVED 2026-08-12 — this reading was
+  adopted and the three figures above now reflect it; see the amendment below.
+  The note is kept because it is the record of how the second reading was
+  found.***
   *Task 6 collapsed items **13, 14 and 15** onto a single assertion —
   `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
   `prepareGeneratedTree` — and each of the three entries says so in its own
@@ -1331,30 +1378,125 @@ truncation `reset` performed is load-bearing and not decorative.
   three items, the figures would become **16 shared over 7 merges** and
   **116 − 16 = 100 own**.*
 
-  *Why the numbers are not changed here. The buckets in this paragraph are
-  convention-dependent — literal-tuple loops are excluded by counting rule 4,
-  and marked-subsumed items are deliberately counted in "own" despite having no
-  private line — so deciding whether a structural `deepEqual` over a double is a
-  "merge" is a counting-rule decision, not an arithmetic one, and it plausibly
-  applies to other Task-6 conversions this pass did not enumerate. Changing
-  103/13/6 on a partial enumeration is exactly how two compensating errors land
-  on a total that reads as confirmation. **The owning task is Task 6**, which
-  made the collapse and did not move the accounting; a full re-derivation of the
-  three figures across every converted section belongs with the deferred pointer
-  remap named in the STALE POINTER WARNING at the top of this file, not here.
-  None of `shellOriginal`, `portOnly` or `ports` is affected — the gate reads
-  those and not this paragraph.*
-  So are the three items carrying an explicit `**Subsumed…**` marker (44, 50,
-  85), which are retained because the claim survives inside a sibling item's
+  ***Amended 2026-08-12:*** *the second reading is adopted and the
+  figures above moved from 103/13/6 to 100/16/7. The deciding argument is the
+  head sentence's own wording — "map onto a port assertion of their own" —
+  which items 13, 14 and 15 do not, each carrying a live pointer to one and the
+  same call, the shape of every one of the six merges already recorded. The
+  marked-subsumed three are different in kind: they carry no pointer at all,
+  so they cannot be "sharing" anything, and the file already elects to count
+  them as own. A fourth category — subsumed, pointer-bearing, carrying no
+  marker — **does** exist. Under the membership test stated in the note that
+  follows, the category holds items
+  13, 14, 15 and 80, and they are settled differently: items 13, 14 and 15
+  carry pointers that name the assertion which absorbed their claim, so all
+  three are counted in the merge above, while item 80's names an unrelated
+  site, so its disposition is deferred rather than counted. Item 80 is the only
+  member of that second, unsettleable kind; see the notes that follow.*
+
+  ***Membership test for that fourth category, stated 2026-08-12 because
+  three different tests were in play and this file named none of
+  them.*** *An item is in the category when it (i) carries a live* `Port:`
+  *pointer, (ii) carries none of the bold subsumed-markers that items 44, 50
+  and 85 carry, and (iii) is recorded somewhere in this file as absorbed into
+  another assertion rather than separately witnessed. Condition (iii) is
+  documentary, and the record may sit in the item's own entry, in the
+  channel-change note heading its case, or in this accounting. It is
+  deliberately **not** a test of the item line's wording, and it is **not** the
+  port's wording either; on items 13-15 those two disagree with each other and
+  each takes only one of the three. Of the three entries only item 13's uses
+  the word "subsumed" — item 14's says just "same* `deepEqual` *call as item
+  13" and item 15's says its claim "survives structurally" — so an
+  entry-wording test takes item 13 and drops 14 and 15. The port's comment on
+  the* `prepare is capability-independent` *case runs the other way: it names
+  items 13 and 14 as covered by the double's exhaustion and reserves the word
+  "subsumed" for item 15, so a port-wording test takes item 15 and drops 13 and
+  14. Neither can decide item 80 at all, since item 80's claim was deleted from
+  the port and its entry is the only record of where the claim went — which is
+  the whole reason this category exists. Applying (i)-(iii) across the mapped
+  region — search every item for
+  absorption language ("subsum", "absorb", "witness", "no longer asserted",
+  "survives structurally", "same … call as item", "maps onto"), then keep the
+  hits that are pointer-bearing and unmarked and read each one — returns
+  exactly four items: 13, 14, 15 and 80. The search returns eight others, all
+  correctly excluded: items 65, 68, 120 and 124 fail (iii), their entries
+  saying the claim "is no longer asserted anywhere", which is the opposite of
+  absorbed; item 104 fails (iii) too, its entry recording a re-basing rather
+  than an absorption; and items 44, 50 and 85 carry the marker and no* `Port:`
+  *pointer at all, failing both (i) and (ii).*
+
+  ***Deferred exception, recorded 2026-08-12 rather than folded in:
+  item 80.*** *Item 80 carries* `Port: :947`*, which items 69 and 70 also
+  carry, so live-pointer grouping places it in* `{69, 70, 80}`*. It does not
+  belong there: item 80's
+  own entry marks the pointer **stale and deliberately not remapped**, and says
+  the claim was "subsumed into the `assertNoCodexMutation` call item 81 cites."
+  So item 80 is a genuine instance of the category — subsumed, pointer-bearing,
+  carrying no* `**Subsumed…**` *marker — and it is **not** counted as a seventh
+  merge with item 81 here, for a reason and not by oversight: items 80 and 81 do
+  not share a pointer at all (81 cites* `:1066`*), so treating them as a merge
+  means overriding a pointer with prose and then verifying that a Codex-log
+  helper really does witness an adapter-log claim. That is a re-derivation, and
+  item 80's own text already rules on who owns it: "Re-deriving the claim and
+  its pointer together is a re-disposition, not a pointer fix." **Slice 4c owns
+  item 80's disposition.** If 4c rules it a merge, the figures become 98 own and
+  18 shared over 8 merges, and the 22/23 aside above becomes "a ninth merge".*
+
+  ***Scope of that exception, measured 2026-08-12.*** *Item 80 is the only item
+  in the mapped region that is pointer-bearing, declared subsumed into a named
+  sibling's assertion, **and whose pointer does not name that absorbing
+  assertion**. The final clause is what makes it an exception, and it is
+  load-bearing: items 13, 14 and 15 all meet the first two conditions and, like
+  item 80, carry no marker — each carries* `Port: :697`*, and this file records
+  all three as absorbed into the one* `deepEqual` *check they map onto (item
+  13's entry says so and names the other two; the channel-change note heading
+  their case says so of item 15). But their pointers name that very call, so
+  grouping catches them and all three are counted in the merge above. Item 80's
+  pointer names an unrelated site instead, which is exactly why grouping
+  misfiles it and why it cannot be settled here. It is* **not** *the only item
+  whose pointer the file declares invalid: items 65, 68,
+  80, 120 and 124 all carry a **"Pointer stale, deliberately not remapped"**
+  note, all five from slice 3.5's re-anchoring of these assertions onto*
+  `codex.log`*. The other four differ from 80 in disposition — each says its
+  claim "is no longer asserted anywhere and no line number can honestly stand in
+  for it", rather than naming a sibling that absorbed it — so they are not
+  merge candidates, but their pointers are equally unusable for grouping. For
+  those five items the own/shared partition is provisional in principle, since
+  "own" presupposes a port assertion the pointer no longer locates. Settling
+  them is the same 4c re-disposition, not a counting-rule question. None of*
+  `shellOriginal`*,* `portOnly` *or* `ports` *is affected by any of this: the
+  gate reads those and not this paragraph, and 124 is unchanged.*
+
+  **A citation that was wrong when it was written is a separate class from one
+  that drifted, and only drift has ever been swept for here.** A pointer that
+  never named what it claimed is byte-identical in every commit, so comparing
+  this file against an earlier one cannot see it. Two such citations into this
+  file were found on 2026-08-12: `tests/bin/install-commands.test.js:787` and
+  `:1461` named items 26-27 for the two retirements that items 22-24 and
+  107-111 own, contradicted all along by `tests/bin/adapter-seam.js:74-79`.
+  They are corrected; assume others remain, and check a citation against what
+  it points at rather than against whether it moved.
+
+  Also counted in the 100 are the three items carrying an explicit
+  `**Subsumed…**` marker (44, 50, 85),
+  which are retained because the claim survives inside a sibling item's
   structural assertion, not because each has a private line; the note below is
   the detail. ***Disambiguated 2026-08-11 at slice 4b's closeout.*** *This
-  sentence said "the three SUBSUMED items" and the note fifteen lines below said
-  "Four items … are SUBSUMED", for the same concept, in the same section. Both
+  sentence said "the three SUBSUMED items" and the channel-change note below
+  said "Four items … are SUBSUMED", for the same concept, in the same section.
+  Both
   are right about different sets and neither said which: **three** is the count
-  of marked items — `grep -c '\*\*Subsumed' ` returns 3 — and **four** is that
+  of marked items — `grep -c '^[0-9]*\. .*\*\*Subsumed'` returns 3 — and
+  **four** is that
   set plus item 15's Codex-emptiness half, which is subsumed in substance but
   carries no marker because its entry already argues the point in prose. The
-  arithmetic in this paragraph is over the marked three.*
+  arithmetic in this paragraph is over the marked three.* ***Recipe corrected
+  2026-08-12, in place inside this 2026-08-11 note:*** *the note above
+  originally ran* `grep -c '\*\*Subsumed'`*, which returns **7** at HEAD — the
+  three item markers plus four prose references to the marker in this section.
+  The count of three was always right; the recipe offered to verify it was not,
+  so it is now anchored to the start of an item line. The substantive claim is
+  unchanged.*
 
   Several items changed **channel**, not **behaviour** — a distinction
   worth stating explicitly, per Task 6's own instruction, because a reader
