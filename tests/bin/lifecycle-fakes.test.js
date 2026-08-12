@@ -3,11 +3,15 @@
 // nothing else in the tree asserts.
 //
 // `process.exitCode = 94` does not halt execution. Drop the `return` after
-// `tripwireTriggered(ctx, …)` in any fake and the tripwire still reports, then
-// falls through and spawns `scripts/adapters/codex/adapter` for real — the
-// exact inverse of what the tripwire is for, and a breach of the Layer 1-3
+// `tripwireTriggered(ctx, …)` in either MUTATING fake — install-fakes.js and
+// uninstall-fakes.js, the two whose adapter role still calls
+// delegateToRealAdapter after the tripwire — and the tripwire still reports,
+// then falls through and spawns `scripts/adapters/codex/adapter` for real —
+// the exact inverse of what the tripwire is for, and a breach of the Layer 1-3
 // hermeticity rule rather than merely a wrong exit code. It would not turn any
-// suite red: the real adapter's own status simply overwrites the 94.
+// suite red: the real adapter's own status simply overwrites the 94. (Not all
+// three fakes: probe-fakes.js's adapter role has no delegation after its
+// tripwire call and discards the return, which its own comment explains.)
 //
 // So each tripwire case asserts BOTH halves — the 94 AND the absence of a
 // delegation footprint. The exit code alone proves nothing, because a
@@ -42,14 +46,18 @@
 // are reachable through any fake's normal role dispatch any more, now that
 // all three fakes' adapter roles trip unconditionally.
 //
-// No committed case passes adapterSeam: "tripwire" through runScript
-// (tests/bin/lifecycle-fixture.js) — every declared seam is "intercept" or
-// the "delegate" default. Every case below spawns a fake, or calls
-// delegateToRealAdapter, directly instead, which is also what keeps this file
-// independent of tests/bin/install-commands.test.js and
-// tests/bin/uninstall-commands.test.js's own new tripwire-armed cases (Task
-// 9, Step 3) — those two are row 18's genuine consumer, driving the real
-// subject; this file exercises the fixture's own contract in isolation.
+// Nothing here goes through runScript (tests/bin/lifecycle-fixture.js), or
+// through a CaseEnv at all: every case below spawns a fake executable
+// directly, or calls delegateToRealAdapter in a child process, with an env it
+// builds itself. Two committed cases DO arm adapterSeam: "tripwire" through
+// runScript — tests/bin/install-commands.test.js:1609 and
+// tests/bin/uninstall-commands.test.js:963, row 18's consumer (Task 9,
+// Step 3). They drive the real subject, prove it never spawns the fake
+// adapter, and pair that with an armed-witness spawn of their own case's fake
+// (lifecycle-fixture.js's spawnFakeAdapter) so the emptiness half cannot pass
+// on a disarmed tripwire. This file is the complement, not a duplicate: it
+// exercises the fixture's own contract with no subject in the picture, which
+// is how the exit codes below stay reachable at all.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -105,6 +113,33 @@ function makePkgRoot() {
 }
 
 /**
+ * The one env builder both halves of this file use. Shared deliberately: the
+ * loop cases' `delegated === false` is only meaningful if the harness they run
+ * in CAN observe a delegation, and the case that proves it can
+ * ("delegateToRealAdapter spawns the real adapter and the marker proves it")
+ * used to construct its env separately. With two builders, breaking
+ * runAdapterRole's SPW_TEST_PKG_ROOT left all ten cases green — the loop's
+ * marker check silently stopped witnessing anything while its own control kept
+ * passing. One builder makes that mutation kill the control.
+ *
+ * Both variables are deleted before being conditionally set, rather than left
+ * alone: an ambient seam or package root in the developer's shell would
+ * otherwise decide what these cases test.
+ *
+ * @param {{ state: string, pkgRoot?: string, seam?: string }} request
+ * @returns {NodeJS.ProcessEnv}
+ */
+function fakeEnv(request) {
+  /** @type {NodeJS.ProcessEnv} */
+  const env = { ...process.env, SPW_FIXTURE_STATE: request.state };
+  delete env.SPW_FIXTURE_ADAPTER_SEAM;
+  delete env.SPW_TEST_PKG_ROOT;
+  if (request.pkgRoot !== undefined) env.SPW_TEST_PKG_ROOT = request.pkgRoot;
+  if (request.seam !== undefined) env.SPW_FIXTURE_ADAPTER_SEAM = request.seam;
+  return env;
+}
+
+/**
  * @param {"install" | "uninstall"} kind
  * @param {string | undefined} seam
  * @returns {{
@@ -118,16 +153,7 @@ function makePkgRoot() {
 function runAdapterRole(kind, seam) {
   const state = mkdtempSync(join(SCRATCH, `${kind}-`));
   writeFileSync(join(state, "config.json"), "{}");
-  /** @type {NodeJS.ProcessEnv} */
-  const env = {
-    ...process.env,
-    SPW_FIXTURE_STATE: state,
-    SPW_TEST_PKG_ROOT: makePkgRoot(),
-  };
-  // Deleted rather than left alone: an ambient seam in the developer's shell
-  // would otherwise decide what these cases test.
-  delete env.SPW_FIXTURE_ADAPTER_SEAM;
-  if (seam !== undefined) env.SPW_FIXTURE_ADAPTER_SEAM = seam;
+  const env = fakeEnv({ state, pkgRoot: makePkgRoot(), seam });
   const result = spawnSync(
     process.execPath,
     [
@@ -232,8 +258,17 @@ void test("runFake refuses an unknown role (exit 98)", () => {
 // control the retired per-kind test used to provide: it proves the STANDIN +
 // marker mechanism this file relies on genuinely observes a delegation when
 // one happens, now that no fake's own adapter role can be made to delegate.
+// It carries that load only because it runs on the same env fakeEnv builds
+// for the loop cases above — see fakeEnv's own comment for the mutation that
+// otherwise survives.
 // ============================================================================
 
+// Emitted as a source STRING, so this module's body is invisible to prettier,
+// oxlint and tsc: nothing formats it, no rule runs over it, and a type error
+// inside it surfaces only as a failing case at runtime. Kept anyway — the
+// alternative is a committed .mjs whose only reason to exist is to be spawned
+// — but keep the body to the two statements below, because everything written
+// here is unchecked.
 const DIRECT_DELEGATE_SCRIPT = join(SCRATCH, "direct-delegate.mjs");
 writeFileSync(
   DIRECT_DELEGATE_SCRIPT,
@@ -262,11 +297,7 @@ function runDirectDelegate(env) {
 
 void test("delegateToRealAdapter spawns the real adapter and the marker proves it", () => {
   const state = mkdtempSync(join(SCRATCH, "direct-delegate-ok-"));
-  const run = runDirectDelegate({
-    ...process.env,
-    SPW_FIXTURE_STATE: state,
-    SPW_TEST_PKG_ROOT: makePkgRoot(),
-  });
+  const run = runDirectDelegate(fakeEnv({ state, pkgRoot: makePkgRoot() }));
   assert.equal(run.status, STANDIN_STATUS);
   assert.equal(
     run.delegated,
@@ -277,10 +308,9 @@ void test("delegateToRealAdapter spawns the real adapter and the marker proves i
 
 void test("delegateToRealAdapter refuses when SPW_TEST_PKG_ROOT is unset (exit 95)", () => {
   const state = mkdtempSync(join(SCRATCH, "direct-delegate-95-"));
-  /** @type {NodeJS.ProcessEnv} */
-  const env = { ...process.env, SPW_FIXTURE_STATE: state };
-  delete env.SPW_TEST_PKG_ROOT;
-  const run = runDirectDelegate(env);
+  // fakeEnv deletes SPW_TEST_PKG_ROOT unless a pkgRoot is supplied, so
+  // omitting it here is what makes this case's precondition.
+  const run = runDirectDelegate(fakeEnv({ state }));
   assert.equal(run.status, 95);
   assert.equal(run.stderr, "fixture: SPW_TEST_PKG_ROOT is unset\n");
   assert.equal(run.delegated, false);
@@ -290,11 +320,7 @@ void test("delegateToRealAdapter refuses when the real adapter is missing (exit 
   const state = mkdtempSync(join(SCRATCH, "direct-delegate-96-"));
   const pkgRoot = mkdtempSync(join(SCRATCH, "pkg-empty-"));
   const real = join(pkgRoot, "scripts", "adapters", "codex", "adapter");
-  const run = runDirectDelegate({
-    ...process.env,
-    SPW_FIXTURE_STATE: state,
-    SPW_TEST_PKG_ROOT: pkgRoot,
-  });
+  const run = runDirectDelegate(fakeEnv({ state, pkgRoot }));
   assert.equal(run.status, 96);
   assert.equal(run.stderr, `fixture: real adapter is missing at ${real}\n`);
   assert.equal(run.delegated, false);
@@ -310,11 +336,7 @@ void test("delegateToRealAdapter falls back to 97 when spawnSync reports no stat
   const pkgRoot = mkdtempSync(join(SCRATCH, "pkg-unexecutable-"));
   const real = join(pkgRoot, "scripts", "adapters", "codex", "adapter");
   mkdirSync(real, { recursive: true });
-  const run = runDirectDelegate({
-    ...process.env,
-    SPW_FIXTURE_STATE: state,
-    SPW_TEST_PKG_ROOT: pkgRoot,
-  });
+  const run = runDirectDelegate(fakeEnv({ state, pkgRoot }));
   assert.equal(run.status, 97);
   assert.equal(run.delegated, false);
 });

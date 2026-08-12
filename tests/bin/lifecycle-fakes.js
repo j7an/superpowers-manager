@@ -288,12 +288,18 @@ export function injectSpuriousMutation(ctx, forbiddenLine) {
  * executable legitimate. Install and uninstall get the same treatment here:
  * post-flip, `ctx.seam` (`SPW_FIXTURE_ADAPTER_SEAM`) no longer selects
  * anything a real dispatch can reach, so the two mutating fakes' adapter role
- * refuses regardless of what seam a case happens to pass. Without `always`,
- * the seam-gated form is still there for a fake that legitimately needs it.
+ * refuses regardless of what seam a case happens to pass. That leaves the
+ * `!always` arm below with no caller at all — all three call sites
+ * (install-fakes.js:191, uninstall-fakes.js:93, probe-fakes.js:63) pass
+ * `always: true`. It stays only because removing it is part of removing the
+ * seam it reads, which slice 4c owns; do not read it as a form some fake
+ * still uses.
  *
- * The caller MUST `return` on true. Setting `process.exitCode` does not halt
- * execution, so a missing return falls through into the delegation below and
- * spawns the real adapter — the exact inverse of a tripwire.
+ * A caller with anything after this call MUST `return` on true. Setting
+ * `process.exitCode` does not halt execution, so a missing return falls
+ * through into the delegation the two mutating fakes make below and spawns
+ * the real adapter — the exact inverse of a tripwire. probe-fakes.js is the
+ * one caller with nothing following, and says so at its own call site.
  *
  * @param {FakeContext} ctx
  * @param {{ always?: boolean, message?: string }} [options]

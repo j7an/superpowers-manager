@@ -1,12 +1,32 @@
 // @ts-check
 // Two gates, plus the four cases that keep them from going vacuous. PRESENT
-// STATE, as of PR 11.5 slice 4b Task 6 (2026-08-10): the residue these gates
-// exist to find is ZERO — no literal readLog(c.adapterLog) reader site and no
-// seamDependency declaration is left in the SEAM_SOURCES files, and every
-// SEAM_DEPENDENT entry is { intercept: 0, log: 0 }. Both numbers are still
-// counted from the tree, so the count case below re-derives that 0 on every
-// run and will re-derive whatever nonzero value a future declaration
-// reintroduces.
+// STATE, re-derived 2026-08-11 (PR 11.5 slice 4b Task 9): every
+// SEAM_DEPENDENT entry is { intercept: 0, log: 0 }, and no parseable
+// seamDependency DECLARATION is left in the SEAM_SOURCES files — Task 6
+// (2026-08-10) discharged all thirty, and the count case below re-derives
+// that 0 on every run.
+//
+// The reader count is no longer zero, and was not zero at Task 9 either:
+// tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js
+// each hold literal readLog(c.adapterLog) sites again, every one of them
+// inside that file's row-18 tripwire case (the exact tally stays out of this
+// prose — adapter-seam.js's own opening paragraph is where a reader count is
+// asserted). They are the inverse of the residue these
+// gates hunt. One asserts the log is EMPTY because the in-process subject
+// never spawns the fake adapter; the other asserts the line a directly
+// spawned fake adapter leaves before the tripwire refuses it. Neither can
+// quietly keep passing once the seam goes: the whole case is built on the
+// fake adapter and disappears with it in slice 4c/6.
+//
+// Know this before trusting the classification gate below. Its property is
+// `readers === 0 || declared > 0`, so with readers nonzero the second
+// disjunct is the one holding it up — and `declared` counts the bare string
+// `seamDependency:`, which in both files matches only the case builder's
+// passthrough (`seamDependency: options.seamDependency`), never a
+// declaration. That gate therefore cannot fail for these two files at
+// present. Left as is deliberately: the pattern it shares with the count case
+// is what slice 4c reads when it retires the seam, and narrowing it is that
+// task's call, not a fix to smuggle in under a tripwire case.
 //
 // HISTORY, which is why the gates were written: before Task 6 there were 9
 // reader sites and 30 declaring cases, and both would have gone vacuous when

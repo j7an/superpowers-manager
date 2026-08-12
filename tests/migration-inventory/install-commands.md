@@ -750,9 +750,25 @@ Item 41 extends the shell's install-path provenance check to the update path.
 Item 42 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
 the shell had no in-process subject whose non-spawning could be guarded, so
 there is nothing for it to be additive, non-vacuous, or channel-changed
-*relative to*. It is row 18's first genuine consumer — see
-`tests/bin/lifecycle-fakes.js`'s `tripwireTriggered` and its callers in
-`tests/bin/install-fakes.js`.
+*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.js`'s
+`tripwireTriggered` and its callers in `tests/bin/install-fakes.js`.
+
+Be precise about what that consumer witnesses, because the obvious reading is
+wrong. A subject that never spawns the adapter cannot, by running correctly,
+observe the tripwire fire: on the passing path the fake adapter's process does
+not exist. As first committed (`94794bd`) the case therefore passed unchanged
+with `tripwireTriggered` forced to return `false` — it constrained the port,
+not the tripwire. The case now carries a second half that spawns the SAME
+case's fake adapter directly, through `lifecycle-fixture.js`'s
+`spawnFakeAdapter`, and pins the refusal: exit 94, the tripwire's own message
+on stderr, and the recorded line in the log the first half required to be
+empty. That half dies when the tripwire is disarmed, which is what earns the
+first half its meaning — the same non-vacuity argument items 7-20 above make
+for their own logs. The tripwire firing is still observed through a direct
+spawn rather than through the subject, because post-flip no subject can
+produce one; what changed is that the direct spawn now runs inside the case
+whose emptiness claim depends on it, with that case's own executable, state
+and seam.
 
 <!-- inventory:port-only:start -->
 
@@ -810,13 +826,19 @@ there is nothing for it to be additive, non-vacuous, or channel-changed
     (`:759-768`); update reaches the same remediation through
     `scripts/update:22-25`, so the same claim is asserted there.
 42. `adapterSeam: "tripwire"` armed on a fresh install: the subject's own exit
-    status is 0 AND the fake adapter's log holds no line at all (`:1598`,
-    within `:1598-1615`). Appended at the end of the file rather than beside
-    the fresh-install case it is thematically closest to, so adding it does
-    not shift any other item's pointer. Two things, not one — an exit status
-    alone cannot distinguish "refused" from "delegated, then failed" —
-    mirroring `tests/bin/lifecycle-fakes.test.js`'s own precedent for the
-    same subject.
+    status is 0, the fake adapter's log holds no line at all, and a direct
+    spawn of that same case's fake adapter is then refused with exit 94 and
+    the tripwire's own message, leaving in the log the one line the emptiness
+    check demanded be absent (`:1609`, within `:1609-1639`). Appended at the
+    end of the file rather than beside the fresh-install case it is
+    thematically closest to, so adding it does not shift any other item's
+    pointer. Two things, not one — an exit status alone cannot distinguish
+    "refused" from "delegated, then failed" — mirroring
+    `tests/bin/lifecycle-fakes.test.js`'s own precedent for the same subject.
+    Counted as ONE port-only item, as it was when it held three assertions:
+    the added half is this item's own non-vacuity guard, not a separate
+    claim, and splitting it would move `portOnly` for no change in what the
+    inventory maps.
 
 <!-- inventory:port-only:end -->
 

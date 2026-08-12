@@ -648,9 +648,25 @@ empty log there is a fixture fault, never a legitimate state.
 Item 21 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
 the shell had no in-process subject whose non-spawning could be guarded, so
 there is nothing for it to be additive, non-vacuous, or channel-changed
-*relative to*. It is row 18's first genuine consumer — see
-`tests/bin/lifecycle-fakes.js`'s `tripwireTriggered` and its callers in
-`tests/bin/uninstall-fakes.js`.
+*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.js`'s
+`tripwireTriggered` and its callers in `tests/bin/uninstall-fakes.js`.
+
+Be precise about what that consumer witnesses, because the obvious reading is
+wrong. A subject that never spawns the adapter cannot, by running correctly,
+observe the tripwire fire: on the passing path the fake adapter's process does
+not exist. As first committed (`94794bd`) the case therefore passed unchanged
+with `tripwireTriggered` forced to return `false` — it constrained the port,
+not the tripwire. The case now carries a second half that spawns the SAME
+case's fake adapter directly, through `lifecycle-fixture.js`'s
+`spawnFakeAdapter`, and pins the refusal: exit 94, the tripwire's own message
+on stderr, and the recorded line in the log the first half required to be
+empty. That half dies when the tripwire is disarmed, which is what earns the
+first half its meaning — the same non-vacuity argument items 7-20 above make
+for their own logs. The tripwire firing is still observed through a direct
+spawn rather than through the subject, because post-flip no subject can
+produce one; what changed is that the direct spawn now runs inside the case
+whose emptiness claim depends on it, with that case's own executable, state
+and seam.
 
 <!-- inventory:port-only:start -->
 
@@ -688,13 +704,19 @@ there is nothing for it to be additive, non-vacuous, or channel-changed
 20. `assertNoAdapterUninstall` non-vacuity guard at the
     malformed-marketplace-list call site (`:725`).
 21. `adapterSeam: "tripwire"` armed on a both-present uninstall: the subject's
-    own exit status is 0 AND the fake adapter's log holds no line at all
-    (`:952`, within `:952-969`). Appended at the end of the file rather than
-    beside the both-present case it is thematically closest to, so adding it
-    does not shift any other item's pointer. Two things, not one — an exit
-    status alone cannot distinguish "refused" from "delegated, then failed" —
-    mirroring `tests/bin/lifecycle-fakes.test.js`'s own precedent for the
-    same subject.
+    own exit status is 0, the fake adapter's log holds no line at all, and a
+    direct spawn of that same case's fake adapter is then refused with exit 94
+    and the tripwire's own message, leaving in the log the one line the
+    emptiness check demanded be absent (`:963`, within `:963-993`). Appended
+    at the end of the file rather than beside the both-present case it is
+    thematically closest to, so adding it does not shift any other item's
+    pointer. Two things, not one — an exit status alone cannot distinguish
+    "refused" from "delegated, then failed" — mirroring
+    `tests/bin/lifecycle-fakes.test.js`'s own precedent for the same subject.
+    Counted as ONE port-only item, as it was when it held three assertions:
+    the added half is this item's own non-vacuity guard, not a separate
+    claim, and splitting it would move `portOnly` for no change in what the
+    inventory maps.
 
 <!-- inventory:port-only:end -->
 
@@ -980,9 +1002,11 @@ rows O1-O3.
   shrank. Task 9 added exactly one call site — the row-18 tripwire case,
   port-only item 21 — and no other task besides Task 9 added or removed one.
   The 18 pre-Task-9 sites carry **78 of the 83** shell assertions, **72 of
-  them 1:1** and **6 sharing 2** merged assertions, plus 21 port-only
-  assertions (20 before Task 9); items 28 and 35 (below) have no port
-  counterpart as of Task 6, and items 7, 8 and 9 are retired as of Task 8.
+  them 1:1** and **6 sharing 2** merged assertions, plus **20** of the 21
+  port-only assertions; the 21st is item 21, which lives in the 19th site
+  and is the only port-only assertion Task 9 added. Items 28 and 35 (below)
+  have no port counterpart as of Task 6, and items 7, 8 and 9 are retired as
+  of Task 8.
 - Reconciliation: **78 of the 83** shell items retain a port counterpart;
   **2 are dropped** — item 35 ("the adapter log never names `other@x`") and
   item 28 ("the adapter uninstall op appears exactly once") — and **3 retired

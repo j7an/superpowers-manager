@@ -31,6 +31,7 @@ import {
   lastIndex,
   readLog,
   runScript,
+  spawnFakeAdapter,
 } from "./lifecycle-fixture.js";
 import { caseContext, recordingAdapter } from "./command-context.js";
 
@@ -940,24 +941,29 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // stale (see the file's own STALE POINTER WARNING) and inserting in the
   // middle would silently break the ones that are not.
   //
-  // adapterSeam: "tripwire" used to matter to the OLD shell-spawned adapter;
-  // post-flip it is inert (lifecycle-fixture.js:293-300 says so explicitly).
-  // Arming it here and still getting a normal both-present uninstall proves
-  // the in-process port never reaches tests/bin/uninstall-fakes.js's adapter
-  // role at all, tripwire armed or not — uninstall-fakes.js's own runAdapter
-  // now refuses that role unconditionally (tests/bin/lifecycle-fakes.js's
-  // tripwireTriggered with `always: true`), so if the port ever regressed to
-  // spawning it, this case's adapter.log would carry a line and its stderr
-  // would carry "fixture: uninstall must not spawn the adapter" instead.
+  // `adapterSeam: "tripwire"` reaches the FAKE only. runScript exports it as
+  // SPW_FIXTURE_ADAPTER_SEAM (lifecycle-fixture.js:327, whose own comment at
+  // :324-326 states nothing under src/ may read it), and uninstall-fakes.js's
+  // adapter role now refuses whatever its value (tests/bin/lifecycle-fakes.js's
+  // tripwireTriggered with `always: true`). What the SUBJECT does is
+  // unaffected: the SPW_ADAPTER seam runScript still defaults (:323) is
+  // retired, which is why its guard at :301-310 rejects a caller-supplied
+  // override outright.
+  //
+  // The case therefore asserts two halves, and the second is what makes the
+  // first mean anything. A regression that made the port spawn the adapter
+  // again would leave a line in adapter.log and the tripwire's message on
+  // stderr — but `readLog` returns [] for a missing file, so the emptiness
+  // check alone would also pass if the tripwire had been disarmed, or if
+  // c.adapterLog were simply not the path this case's fake writes to. The
+  // armed-witness half runs that fake for real, through the same executable
+  // and environment a regressed spawn would have used, and pins the refusal
+  // it produces. Disarm the tripwire and the witness dies; that is the
+  // property the emptiness check borrows.
   void test("both-present uninstall never reaches the fake adapter, tripwire armed or not (row 18)", async () => {
     const c = uninstallCase({ adapterSeam: "tripwire" });
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // Two things, not one: the subject's own exit status, and the absence of
-    // the tripwire's marker. readLog returns [] for a missing file, which is
-    // exactly the property being proven here, not a vacuous read — nothing
-    // in-process ever invokes the fake adapter's role body, so adapter.log is
-    // never created at all.
     assert.deepEqual(
       readLog(c.adapterLog),
       [],
@@ -966,6 +972,23 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assert.ok(
       !result.stderr.includes("must not spawn the adapter"),
       `the tripwire's own message leaked onto the subject's stderr:\n${result.stderr}`,
+    );
+    // Armed witness, after the emptiness assertion above and never before it:
+    // this call is the one thing in the case that writes to c.adapterLog.
+    const witness = spawnFakeAdapter(c, ["inspect", "--view", "ownership"]);
+    assert.equal(
+      witness.status,
+      94,
+      `the armed tripwire did not refuse a real spawn of this case's fake adapter:\n${witness.stderr}`,
+    );
+    assert.equal(
+      witness.stderr,
+      "fixture: uninstall must not spawn the adapter\n",
+    );
+    assert.deepEqual(
+      readLog(c.adapterLog),
+      ["inspect --view ownership"],
+      "c.adapterLog is not the path this case's fake adapter records to, so the emptiness assertion above proves nothing",
     );
   });
 });

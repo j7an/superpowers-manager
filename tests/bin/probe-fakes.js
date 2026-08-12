@@ -50,17 +50,20 @@ function runAdapter(ctx) {
   ctx.log("adapter.log", ctx.args.join(" "));
   // In-process probe calls runAdapter as a function. Reaching the adapter
   // executable means the port regressed to spawning, so `always: true` fails
-  // loudly regardless of `ctx.seam` rather than quietly succeeding. The
-  // return is load-bearing even though `always: true` makes it unconditional
-  // here — see tripwireTriggered's own doc comment.
-  if (
-    tripwireTriggered(ctx, {
-      always: true,
-      message: "fixture: probe must not spawn the adapter",
-    })
-  ) {
-    return;
-  }
+  // loudly regardless of `ctx.seam` rather than quietly succeeding.
+  //
+  // The return value is discarded, and that is specific to THIS fake. The
+  // "caller MUST return on true" rule in tripwireTriggered's own doc comment
+  // is about falling through into `delegateToRealAdapter`; probe's adapter
+  // role neither imports nor calls it, and this is the last statement in the
+  // function, so there is nothing here to fall through into. Add any
+  // statement below this call and the guard has to come back — as an
+  // `if (…) return;`, the shape install-fakes.js and uninstall-fakes.js
+  // carry — before that statement can be trusted not to run after a trip.
+  tripwireTriggered(ctx, {
+    always: true,
+    message: "fixture: probe must not spawn the adapter",
+  });
 }
 
 runFake({ kind: "probe", codex: runCodex, adapter: runAdapter });
