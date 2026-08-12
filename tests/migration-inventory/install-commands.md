@@ -14,24 +14,24 @@ Shell line references below are `:N` against the deleted
 
 **POINTER PROVENANCE — port `:N` pointers.** An item's identity is the
 assertion text it quotes, not its line number; re-derive a pointer from that
-text before relying on it. These numbers are not maintained. Slice 4b
-remapped an unrecorded subset of the mapped region's pointers in `1abd231`,
-against `tests/bin/install-commands.test.js` as it stood at `733f4b5`, where
-that file was 1579 lines — the ``(was `:N`)`` notes mark part of that subset
-but not all of it, and no mapped-region pointer has changed since. Neither
-SHA is reachable from `main`; slice 4b squash-merged as `79851ea`. The port
-file is 1640 lines at HEAD: one line inserted near the top, sixty appended
-at the end. A mapped-region pointer is therefore usually off by `+1` — a
-hint for re-deriving one, never an offset to apply in bulk, and no claim
-that any particular pointer is right. The port-only region below mixes
-derivation states: item 42's pointers were added at `79851ea`, against the
-1640-line file. Shell `:N` references are unresolvable by construction:
+text before relying on it. These numbers are not maintained. Slice 4b remapped
+an unrecorded subset of the mapped region's pointers in `1abd231`, against
+`tests/bin/install-commands.test.js` as it stood at `733f4b5`, where that file
+was 1579 lines — the ``(was `:N`)`` notes mark part of that subset but not all
+of it, and no mapped-region pointer has changed since. Neither SHA is
+reachable from `main`; slice 4b squash-merged as `79851ea`. The port file is
+1640 lines at HEAD: one line inserted near the top, sixty appended at the end.
+A mapped-region pointer is therefore usually off by `+1` — a hint for
+re-deriving one, never an offset to apply in bulk, and no claim any pointer is
+right. The port-only region below is worse: only item 42's pointers were added
+at `79851ea`; the rest predate slice 4b, when that file was 1270-1472 lines.
+Shell `:N` references are unresolvable by construction:
 `tests/test_install_commands.sh` is deleted, so they are historical claims
 about a file that no longer exists, which is intended, not a defect. Nothing
 in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
-validates the `json inventory` block's counts, this file's entry numbering
-and its region structure, and never parses a pointer. Some items below mark
-their own pointer stale and deliberately not remapped.
+validates the `json inventory` block's counts, this file's entry numbering and
+its region structure, and never parses one. Some items below mark their own
+pointer stale and deliberately not remapped.
 
 ## Counting rules applied
 
@@ -1467,13 +1467,24 @@ truncation `reset` performed is load-bearing and not decorative.
   `shellOriginal`*,* `portOnly` *or* `ports` *is affected by any of this: the
   gate reads those and not this paragraph, and 124 is unchanged.*
 
+  **A citation that was wrong when it was written is a separate class from one
+  that drifted, and only drift has ever been swept for here.** A pointer that
+  never named what it claimed is byte-identical in every commit, so comparing
+  this file against an earlier one cannot see it. Two such citations into this
+  file were found on 2026-08-12: `tests/bin/install-commands.test.js:787` and
+  `:1461` named items 26-27 for the two retirements that items 22-24 and
+  107-111 own, contradicted all along by `tests/bin/adapter-seam.js:74-79`.
+  They are corrected; assume others remain, and check a citation against what
+  it points at rather than against whether it moved.
+
   Also counted in the 100 are the three items carrying an explicit
   `**Subsumed…**` marker (44, 50, 85),
   which are retained because the claim survives inside a sibling item's
   structural assertion, not because each has a private line; the note below is
   the detail. ***Disambiguated 2026-08-11 at slice 4b's closeout.*** *This
-  sentence said "the three SUBSUMED items" and the note fifteen lines below said
-  "Four items … are SUBSUMED", for the same concept, in the same section. Both
+  sentence said "the three SUBSUMED items" and the channel-change note below
+  said "Four items … are SUBSUMED", for the same concept, in the same section.
+  Both
   are right about different sets and neither said which: **three** is the count
   of marked items — `grep -c '^[0-9]*\. .*\*\*Subsumed'` returns 3 — and
   **four** is that

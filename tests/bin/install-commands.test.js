@@ -784,7 +784,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   // "malformed update-control output exits exactly 1" (:354-364) is RETIRED
-  // at the gap: tests/migration-inventory/install-commands.md item 26.
+  // at the gap: tests/migration-inventory/install-commands.md items 22-24.
   // Its subject -- an adapter transport emitting non-JSON bytes across a
   // process boundary -- cannot occur through `ctx.adapter`, an in-process
   // function call that returns an already-typed AdapterResult with no
@@ -1458,7 +1458,7 @@ void describe("install commands", { concurrency: true }, () => {
 
   // "malformed fingerprint output is rejected by response validation"
   // (:702-716) is RETIRED at the gap: tests/migration-inventory/
-  // install-commands.md item 27. Same reasoning as item 26 above: a bare `{`
+  // install-commands.md items 107-111. Same as items 22-24 above: a bare `{`
   // on stdout is a transport-level fault with no analogue through
   // `ctx.adapter`, which returns an already-typed AdapterResult with nothing
   // to garble in between.
