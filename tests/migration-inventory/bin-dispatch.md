@@ -3,12 +3,12 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 3aad181b824ae8b1e34592f87fd087c940af5815:tests/test_bin_dispatch.sh -->
 
-Source read in full (224 lines). Ported to `tests/bin/bin-dispatch.test.js`.
+Source read in full (223 lines). Ported to `tests/bin/bin-dispatch.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_bin_dispatch` (confirmed by `grep -c '^\| *\`' docs/baseline/traceability.md`
-returning 121 with zero `test_bin_dispatch` hits). This inventory, not the
-121-ID count, is the evidence that no assertion was dropped.
+returning 120 with zero `test_bin_dispatch` hits). This inventory, not the
+120-ID count, is the evidence that no assertion was dropped.
 
 ## Counting rules applied
 

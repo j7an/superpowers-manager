@@ -73,10 +73,11 @@ through this anchor, not at `HEAD`.
     **Retired at the gap**: existing lifecycle adapter failure coverage.
 17. Add-failure diagnostics name both roots (`:202-204`). **Merged** into item
     16's failure-envelope coverage.
-18. A remove failure returns non-zero (`:206-216`). **Retired at the gap**:
-    existing adapter failure coverage.
+18. A remove failure returns non-zero (`:206-216`). Port: `a marketplace
+    remove failure stops install before either add`.
 19. A failed remove never proceeds to add (`:217-220`). **Merged** into item
-    18's command-order coverage.
+    18's exact command-order assertion, which stops after marketplace list and
+    manager-marketplace remove with no marketplace or plugin add.
 20. Malformed ownership verification fails closed (`:222-228`). Port:
     `UNINSTALL-VERIFY-01 both manager resources must be absent`.
 21. A surviving plugin is rejected after uninstall (`:230-250`). Port:
@@ -110,17 +111,18 @@ through this anchor, not at `HEAD`.
 {
   "shellOriginal": 31,
   "portOnly": 0,
-  "ports": { "tests/baseline/marketplace-reconcile.test.js": 5 }
+  "ports": { "tests/baseline/marketplace-reconcile.test.js": 6 }
 }
 ```
 
 - Shell original: **31** assertions (the mechanical predicate count used by
   the migration inventories; helper call-site and loop conventions are stated
   above). The anchor commit preserves all shell-original citations.
-- Port (`tests/baseline/marketplace-reconcile.test.js`): 5 static `node:test`
+- Port (`tests/baseline/marketplace-reconcile.test.js`): 6 static `node:test`
   cases: the three retained behavior IDs plus focused list-failure and
-  unrelated-root reconciliation cases. Repeated fixture rows are merged within
-  those cases only where the expected command or diagnostic is the same.
+  unrelated-root reconciliation cases, and the install-reconciliation remove
+  failure. Repeated fixture rows are merged within those cases only where the
+  expected command or diagnostic is the same.
 - Reconciliation: all 31 shell items are accounted for by a port, an explicit
   merge note, or an explicit retirement note at the numbered gap. No number is
   reused.

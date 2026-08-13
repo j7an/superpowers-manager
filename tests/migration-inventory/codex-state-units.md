@@ -7,8 +7,8 @@ Source read in full (47 lines). Ported to `tests/unit/lifecycle.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_codex_state_units` (confirmed by `grep -c '^| *\`' docs/baseline/traceability.md`
-returning 121 with zero `test_codex_state_units` hits). This inventory, not the
-121-ID count, is the evidence that no assertion was dropped.
+returning 120 with zero `test_codex_state_units` hits). This inventory, not the
+120-ID count, is the evidence that no assertion was dropped.
 
 ## Counting rules applied
 

@@ -1,7 +1,14 @@
 // @ts-check
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -206,6 +213,72 @@ void test("unrelated marketplace roots do not block manager registration", async
       );
     });
   }
+});
+
+void test("a marketplace remove failure stops install before either add", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const packageRoot = join(sandbox.base, "requested");
+  const registeredRoot = join(sandbox.base, "registered");
+  const failingCodex = join(sandbox.base, "codex-remove-fails");
+  await mkdir(packageRoot);
+  await writeFile(
+    failingCodex,
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> "$FAKE_CODEX_LOG"
+case "$*" in
+  "plugin marketplace list --json")
+    printf '%s\\n' "$FAKE_CODEX_MARKETPLACE_LIST"
+    ;;
+  "plugin marketplace remove superpowers-manager")
+    printf '%s\\n' 'synthetic marketplace remove failure' >&2
+    exit 42
+    ;;
+  "plugin marketplace add "* | "plugin add "*)
+    ;;
+  *)
+    printf '%s\\n' "unexpected fake Codex command: $*" >&2
+    exit 99
+    ;;
+esac
+`,
+    "utf8",
+  );
+  await chmod(failingCodex, 0o755);
+
+  const result = await runAdapter(["install", "--package-root", packageRoot], {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({
+      SUPERPOWERS_CODEX: failingCodex,
+      FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({
+        marketplaces: [{ name: "superpowers-manager", root: registeredRoot }],
+      }),
+    }),
+  });
+
+  assert.equal(result.status, 1);
+  assert.deepEqual(result.envelope, {
+    protocol: 1,
+    operation: "install",
+    ok: false,
+    messages: [
+      {
+        channel: "stdout",
+        text: `marketplace superpowers-manager registered at ${registeredRoot}; re-registering at ${packageRoot}`,
+      },
+      { channel: "stderr", text: "synthetic marketplace remove failure" },
+    ],
+    result: null,
+    error: {
+      code: "install-failed",
+      message: `codex marketplace remove failed for superpowers-manager (registered at ${registeredRoot})`,
+      hints: [],
+    },
+  });
+  assert.deepEqual((await readFile(sandbox.log, "utf8")).trim().split("\n"), [
+    "plugin marketplace list --json",
+    "plugin marketplace remove superpowers-manager",
+  ]);
 });
 
 void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (t) => {

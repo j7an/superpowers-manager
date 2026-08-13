@@ -3,7 +3,7 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_bootstrap.sh -->
 
-Source read in full (224 lines). Ported to `tests/bin/bootstrap.test.js`.
+Source read in full (226 lines). Ported to `tests/bin/bootstrap.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references `test_bootstrap`
 (confirmed by grep on 2026-07-31 — zero matches). This inventory, not the

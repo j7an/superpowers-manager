@@ -3,7 +3,7 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_node_tooling.sh -->
 
-Source read in full (23 lines). Ported to `tests/bin/node-tooling.test.js`.
+Source read in full (22 lines). Ported to `tests/bin/node-tooling.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_node_tooling` (confirmed by grep on 2026-07-31 — zero matches). This
