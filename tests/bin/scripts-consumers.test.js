@@ -30,14 +30,24 @@ import {
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-/** A root with one known hit, so a zero real-tree audit cannot be a broken command. */
+/**
+ * A root with one known hit for every AUDIT_COMMAND alternative, so a zero
+ * real-tree audit cannot be a broken or partially deleted command.
+ */
 function positiveControl() {
   const root = mkdtempSync(join(tmpdir(), "spw-audit-control-"));
   try {
     mkdirSync(join(root, "tests"), { recursive: true });
     writeFileSync(
       join(root, "tests", "probe.test.js"),
-      'const p = "scripts/core/common.sh";\n',
+      'const core = "scripts/core/common.sh";\n' +
+        'const adapter = "scripts/adapters/legacy.sh";\n' +
+        'const directory = "scripts";\n' +
+        'const probe = "scripts/probe";\n' +
+        'const prepare = "scripts/prepare";\n' +
+        'const install = "scripts/install";\n' +
+        'const update = "scripts/update";\n' +
+        'const uninstall = "scripts/uninstall";\n',
     );
     return runScriptsAudit(root);
   } finally {
@@ -45,8 +55,20 @@ function positiveControl() {
   }
 }
 
-void test("the audit still matches, so an empty real-tree result means the tree", () => {
-  assert.equal(positiveControl().length, 1);
+void test("every audit alternative matches, so an empty real-tree result means the tree", () => {
+  assert.deepEqual(
+    positiveControl().map(({ normalized }) => normalized),
+    [
+      'const core = "scripts/core/common.sh";',
+      'const adapter = "scripts/adapters/legacy.sh";',
+      'const directory = "scripts";',
+      'const probe = "scripts/probe";',
+      'const prepare = "scripts/prepare";',
+      'const install = "scripts/install";',
+      'const update = "scripts/update";',
+      'const uninstall = "scripts/uninstall";',
+    ],
+  );
 });
 
 void test("scripts/ is gone, so the audit and the declaration map are both empty", () => {

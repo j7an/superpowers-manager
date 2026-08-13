@@ -30,11 +30,10 @@
 // slice 4 removed the seam, in exactly the way five cli-parity assertions did
 // in slice 3.4 — silently, with the suite still green.
 //
-// The surviving gate is "no adapter-log reader is left unclassified". The
-// other three cases keep it from going vacuous: the count case ties
-// SEAM_DEPENDENT to the declarations it claims to protect, and the two
-// membership cases keep SEAM_SOURCE_FILES — the scan set the gate walks — from
-// being emptied ahead of the residue it is supposed to find.
+// The surviving gate is "no adapter-log reader is left unclassified". It
+// derives reader-bearing files from the tree, independently of the mutable
+// seam registries. The other three cases keep the registries reconciled with
+// the declarations and reader files that the tree scan finds.
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -75,6 +74,10 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const DECLARATION = /seamDependency:\s*\{[^}]*\}/;
 const REASON_FIELD = /reason:\s*"(\w+)"/;
 const SCRIPT_FIELD = /script:\s*"(\w+)"/;
+// A canonical executable reader is a standalone argument followed by a
+// comma. Anchoring the whole line excludes prose and string/regex constants;
+// this file is separately excluded from the tree walk below.
+const ADAPTER_LOG_READER = /^[\t ]*readLog\(c\.adapterLog\),[\t ]*$/gm;
 
 // Declared, never derived. These are the intentional row-18 tripwire
 // readers: with no live seam declarations left, an added reader must not hide
@@ -159,28 +162,40 @@ void test("adapter-log readers have a declaration or their explicit non-seam bas
   // therefore keeps the old weak classification. A file without one must be
   // empty unless it has an explicit intentional-reader baseline.
   //
-  // Scans SEAM_SOURCE_FILES for the reason test 3 above does: the derived set
-  // would stop visiting a file exactly when slice 4 empties its SEAM_DEPENDENT
-  // entry, leaving live readers unclassified with this loop body never run.
+  // Reader discovery is deliberately independent of SEAM_SOURCE_FILES and
+  // SEAM_SOURCES. Coordinated removal from those mutable registries must not
+  // hide readers that remain in the tree.
   //
   // A file slice 4 has legitimately emptied of both readers and declarations
   // is not a defect, so its implicit baseline is zero. The two row-18
   // tripwire files state their intentional readers above; any other reader in
   // a declaration-free file fails rather than being covered by a bare
   // `seamDependency:` mention in the case builder.
-  for (const relative of SEAM_SOURCE_FILES) {
-    const source = readFileSync(join(ROOT, relative), "utf8");
-    const readers = (source.match(/readLog\(c\.adapterLog\)/g) ?? []).length;
-    const declared = (source.match(new RegExp(DECLARATION, "g")) ?? []).length;
-    if (declared > 0) continue;
-    const expected = INTENTIONAL_NON_SEAM_READERS.get(relative) ?? 0;
-    assert.equal(
-      readers,
-      expected,
-      `${relative} has ${readers} adapter-log readers and no seamDependency ` +
-        `declarations; its explicit non-seam baseline is ${expected}`,
+  const readers = readerFiles();
+  const declared = new Set(declaringFiles());
+
+  for (const relative of readers.keys()) {
+    assert.ok(
+      SEAM_SOURCE_FILES.includes(relative),
+      `${relative} has adapter-log readers but is absent from ` +
+        "SEAM_SOURCE_FILES, so the seam registry no longer represents it",
     );
   }
+
+  const undeclaredReaders = new Map(
+    [...readers].filter(([relative]) => !declared.has(relative)),
+  );
+  const expected = new Map(
+    [...INTENTIONAL_NON_SEAM_READERS].filter(
+      ([relative]) => !declared.has(relative),
+    ),
+  );
+  assert.deepEqual(
+    undeclaredReaders,
+    expected,
+    "declaration-free adapter-log reader files must exactly match the " +
+      "intentional non-seam baseline",
+  );
 });
 
 void test("every SEAM_SOURCES file is listed in SEAM_SOURCE_FILES", () => {
@@ -253,4 +268,30 @@ function declaringFiles() {
     if (DECLARATION.test(readFileSync(absolute, "utf8"))) found.push(relative);
   }
   return found;
+}
+
+/**
+ * Every test JavaScript file with canonical executable adapter-log readers,
+ * mapped to its exact reader count. The gate file is excluded by absolute
+ * identity so its comments and detector cannot become observations.
+ *
+ * @returns {Map<string, number>}
+ */
+function readerFiles() {
+  const self = fileURLToPath(import.meta.url);
+  /** @type {[string, number][]} */
+  const found = [];
+  for (const entry of readdirSync(join(ROOT, "tests"), { recursive: true })) {
+    const relative = join("tests", String(entry));
+    if (!relative.endsWith(".js")) continue;
+    if (relative.split("/").includes("node_modules")) continue;
+    const absolute = join(ROOT, relative);
+    if (absolute === self || !statSync(absolute).isFile()) continue;
+    const count = (
+      readFileSync(absolute, "utf8").match(ADAPTER_LOG_READER) ?? []
+    ).length;
+    if (count > 0) found.push([relative, count]);
+  }
+  found.sort(([left], [right]) => left.localeCompare(right));
+  return new Map(found);
 }
