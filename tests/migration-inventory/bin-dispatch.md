@@ -218,7 +218,10 @@ and was not counted here.
     `:113`.
 17. Stderr contains `unknown subcommand: bogus` (`:112`). Port: `:114`.
 18. Stderr contains `usage:` (`:113`). Port: `:115`.
-19. The dispatch log is empty — nothing was dispatched (`:114`). Port: `:116`.
+19. The dispatch log is empty — nothing was dispatched (`:114`). **Retired**
+    (PR #69): this was an assertion against the fixture-only dispatch-log
+    channel, which no production command writes. The retained case still
+    asserts the unknown-command status and diagnostics.
 
 ### A stray flag must not fall through to update (`:116-122`)
 
@@ -226,7 +229,10 @@ and was not counted here.
     `:123`.
 21. Stderr contains `unknown subcommand: --porcelain` (`:120`). Port: `:124`.
 22. Stderr contains `usage:` (`:121`). Port: `:125`.
-23. The dispatch log is empty (`:122`, bare `[ ! -s "$log" ]`). Port: `:126`.
+23. The dispatch log is empty (`:122`, bare `[ ! -s "$log" ]`). **Retired**
+    (PR #69): this was an assertion against the fixture-only dispatch-log
+    channel. The retained case still asserts the stray-flag status and
+    diagnostics.
 
 ### `--help` and `--version` (`:124-136`)
 
@@ -294,7 +300,9 @@ and was not counted here.
     strengthening for `python3` is already labelled at port-only item 49; these
     two were its unlabelled siblings.
 34. The dispatch log is empty — preflight failure must not dispatch (`:162`).
-    Port: `:193`.
+    **Retired** (PR #69): the port's fixture-only observation channel is
+    removed. The retained case still pins the preflight status and exact
+    diagnostic.
 
 ### Invalid pin syntax precedes preflight (`:164-172`)
 
@@ -304,7 +312,9 @@ and was not counted here.
     `pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit`
     (`:169-170`). Port: `:223-227`.
 37. The dispatch log is empty — an invalid pin ref must not dispatch
-    (`:171`). Port: `:228`.
+    (`:171`). **Retired** (PR #69): the port's fixture-only observation
+    channel is removed. The retained case still pins the usage status and
+    diagnostic.
 
 ### Commands that need no git (`:174-178`)
 
@@ -369,32 +379,15 @@ and was not counted here.
 43. Stderr contains `required command not found: codex` for `probe` (`:199`).
     Port: `:442`.
 44. The dispatch log is empty — missing codex must not dispatch `probe`
-    (`:200`). Port: `:443`. The per-case `scripts` override that mirrored the
-    shell's `"probe ran"` stub was removed in PR 11.5 slice 2, Task 6: an
-    in-process `probe` reaches no script, so a stub for one could never log
-    and the override proved nothing. The shared `PACKAGE_ROOT`'s default
-    `loggingStub` still logs unconditionally on invocation, so the assertion
-    keeps its teeth exactly the way item 47's `install` case does.
+    (`:200`). **Retired** (PR #69): the fixture-only observation channel is
+    removed. The retained case still pins the preflight status and diagnostic.
 45. Exit status is `1` when `codex` is absent and `install` is run (`:203`,
     bare `[ "$rc" -eq 1 ]`). Port: `:451`.
 46. Stderr contains `required command not found: codex` for `install`
     (`:204`). Port: `:452`.
 47. The dispatch log is empty — missing codex must not dispatch `install`
-    (`:205`). Port: `:453`. The shell proves this with a `probe` override
-    that logs unconditionally before its own logic runs (`:191-196`,
-    `"probe ran"`), so "did not dispatch" is proven rather than assumed. The
-    port's `install` case takes no `scripts` override and runs against the
-    shared `PACKAGE_ROOT`'s default stub instead — but that default stub
-    (`dispatch-fixture.js`'s `loggingStub`, `:139-154`) *also* logs
-    unconditionally on invocation, before checking anything. That is what
-    makes the assertion load-bearing here too: if `install` were mistakenly
-    dispatched despite the missing-codex preflight, the default stub would
-    still append to the log, and `assert.deepEqual(result.log, [])` at
-    `:453` would catch it. It is sound; it is just less visually obvious
-    than the shell's explicit override, because the "logs unconditionally"
-    property comes from the shared fixture rather than from a per-case
-    script. Since PR 11.5 slice 2 the port's `probe` case (item 44) rests on
-    the same shared stub, for the reason recorded there.
+    (`:205`). **Retired** (PR #69): the fixture-only observation channel is
+    removed. The retained case still pins the preflight status and diagnostic.
 
 ### Commands that need no codex (`:207-215`)
 
@@ -472,18 +465,22 @@ preamble, for what it asserts:
 - Item 1 *was* a structural array-length guard with no shell analogue at all.
   It is `Dropped` as of slice 4b's flip and asserts nothing: the `ROUTING_CASES`
   table it measured is gone.
-- Entries added for the in-process flips assert `result.log` is empty — a
-  property the shell could not express, since it always dispatched and logged.
+- PR #69 removes the fixture-only dispatch-log observation channel. Every
+  entry below that names `result.log` is historical evidence of the assertion
+  it once recorded, not current coverage. Eighteen such assertions were
+  removed from otherwise independently meaningful cases; the four cases whose
+  sole assertions were that log — items 44 and 57-59 — are explicitly marked
+  `Dropped` below.
 - Items 47-50 assert stderr text or a non-zero status: `prepare`'s conditional
   `python3` requirement has no `status === 0` form. Items 41-43 did the same for
   the in-process runtime backstop and `patchDispatch`'s no-op rejection until
   slice 4b's flip `Dropped` all three; they assert nothing now.
-- Eleven entries — items 1, 3, 7, 8, 9, 12, 15, 20, 41, 42 and 43 — assert
-  nothing at all. Each is a record of an assertion removed, kept numbered so the
-  removal is visible rather than silent. Items 3 and 20 were `Dropped` before
-  slice 4b; the other nine at its flip.
+- Thirty-three entries are records of assertions that are no longer live: items
+  1, 3, 7, 8, 9, 12, 15, 20, 21-24, 26-29, 31, 34, 36-38, 40-44, 46, 50-51,
+  and 57-59 and 61. Each remains numbered so the removal is visible rather
+  than silent.
 - Items 53, 54, and 56 assert against the sentinel *file* the `gitSentinel`
-  option creates, not against `result.status`/`result.log`/`result.stderr`:
+  option creates, not against `result.status` or `result.stderr`:
   item 53 is `existsSync` on the path, item 54 is
   `readFileSync(...).trim().length`, and item 56 is `assert.match` over the
   file's contents. No shell analogue is possible — the shell had no
@@ -642,14 +639,21 @@ preamble, for what it asserts:
     "successfully ran without ever dispatching" was not an expressible
     property. If routing regressed and dispatched `scripts/unpin` anyway,
     the shared `loggingStub` would append a line here, catching it.
+    **Retired** (PR #69): this fixture-only observation was removed with the
+    dispatch-log channel, so the record is historical rather than live
+    coverage.
 22. **New** (PR 11.5). `unpin` with `git` absent: `result.log` is empty
     (`:267`, moved from `:223`-equivalent position). Port-only, same
-    rationale as item 21.
+    rationale as item 21. **Retired** (PR #69): this fixture-only observation
+    is historical; the assertion was removed with the dispatch-log channel.
 23. **New** (PR 11.5). `unpin` with `python3` absent: `result.log` is empty
-    (`:285`). Port-only, same rationale as item 21.
+    (`:285`). Port-only, same rationale as item 21. **Retired** (PR #69): this
+    fixture-only observation is historical; the assertion was removed with the
+    dispatch-log channel.
 24. **New** (PR 11.5). `unpin` with `codex` absent: `result.log` is empty
     (`:413`, moved from `:306`-equivalent position). Port-only, same
-    rationale as item 21.
+    rationale as item 21. **Retired** (PR #69): this fixture-only observation
+    is historical; the assertion was removed with the dispatch-log channel.
 25. **New** (PR 11.5). `unpin` succeeds with no POSIX shell on `PATH`:
     `result.status === 0` (`:294`). Port-only, with no shell counterpart of
     any kind: the shell driver itself required `sh` to execute at all, so
@@ -659,17 +663,23 @@ preamble, for what it asserts:
     `PATH` unconditionally).
 26. **New** (PR 11.5). `unpin` succeeds with no POSIX shell on `PATH`:
     `result.log` is empty (`:295`). Port-only, same rationale as items 21
-    and 25.
+    and 25. **Retired** (PR #69): this fixture-only observation is historical;
+    the assertion was removed with the dispatch-log channel.
 27. **New** (PR 11.5, Task 6). Routing case `track-latest`: `result.log` is
     empty (`tests/bin/bin-dispatch.test.js:86`). Port-only, with no shell
     counterpart of any kind, same rationale as item 21: the shell always
     dispatched to `scripts/track-latest` and logged something for this case,
     so "successfully ran without ever dispatching" was not expressible
-    through it.
+    through it. **Retired** (PR #69): this fixture-only observation is
+    historical; the assertion was removed with the dispatch-log channel.
 28. **New** (PR 11.5, Task 6). `track-latest` with `git` absent: `result.log`
-    is empty (`:258`). Port-only, same rationale as item 27.
+    is empty (`:258`). Port-only, same rationale as item 27. **Retired** (PR
+    #69): this fixture-only observation is historical; the assertion was
+    removed with the dispatch-log channel.
 29. **New** (PR 11.5, Task 6). `track-latest` with `codex` absent:
     `result.log` is empty (`:407`). Port-only, same rationale as item 27.
+    **Retired** (PR #69): this fixture-only observation is historical; the
+    assertion was removed with the dispatch-log channel.
 30. **New** (PR 11.5, Task 6). `track-latest` succeeds with `python3` and no
     POSIX shell on `PATH`: `result.status === 0` (`:312`). Port-only, with
     no shell counterpart of any kind: unlike `unpin`, the shell's
@@ -681,7 +691,8 @@ preamble, for what it asserts:
     items 25-26.
 31. **New** (PR 11.5, Task 6). `track-latest` succeeds with `python3` and no
     POSIX shell on `PATH`: `result.log` is empty (`:313`). Port-only, same
-    rationale as item 30.
+    rationale as item 30. **Retired** (PR #69): this fixture-only observation
+    is historical; the assertion was removed with the dispatch-log channel.
 32. **New** (PR 11.5, Task 7). `pin` fails preflight when `git` is absent
     from `PATH`: `result.status === 1` (`tests/bin/bin-dispatch.test.js:208`).
     Port-only, with no shell counterpart of any kind: the shell's generic
@@ -693,7 +704,9 @@ preamble, for what it asserts:
     `required command not found: git` (`:209`). Port-only, same rationale as
     item 32.
 34. **New** (PR 11.5, Task 7). Same case: `result.log` is empty (`:210`).
-    Port-only, same rationale as item 32.
+    Port-only, same rationale as item 32. **Retired** (PR #69): this
+    fixture-only observation is historical; the assertion was removed with the
+    dispatch-log channel.
 35. **New** (PR 11.5, Task 7). `pin` succeeds in-process with `python3`
     absent from `PATH` while `codex` stays present: `result.status === 0`
     (`tests/bin/bin-dispatch.test.js:335`). Port-only, with no shell
@@ -707,13 +720,16 @@ preamble, for what it asserts:
     listed in `tools`) instead of merely restating the routing case under a
     different name.
 36. **New** (PR 11.5, Task 7). Same case: `result.log` is empty (`:336`).
-    Port-only, same rationale as item 35.
+    Port-only, same rationale as item 35. **Retired** (PR #69): this
+    fixture-only observation is historical; the assertion was removed with the
+    dispatch-log channel.
 37. **New** (PR 11.5, Task 7). Routing case `pin`: `result.log` is empty
     (`tests/bin/bin-dispatch.test.js:106`). Port-only, with no shell
     counterpart of any kind, same rationale as item 21: the shell always
     dispatched to `scripts/pin` and logged something for this case, so
     "successfully ran without ever dispatching" was not expressible through
-    it.
+    it. **Retired** (PR #69): this fixture-only observation is historical; the
+    assertion was removed with the dispatch-log channel.
 38. **New** (PR 11.5, Task 7). `pin` succeeds in-process with `codex` absent
     from `PATH` while `python3` stays present: `result.log` is empty
     (`:423`). Port-only, same rationale as item 37; the corresponding
@@ -721,6 +737,8 @@ preamble, for what it asserts:
     since that property already existed in the shell (item 48). This case
     discriminates the same way item 35 does — `python3` stays listed in
     `tools` — rather than merely restating item 35 under a different name.
+    **Retired** (PR #69): this fixture-only observation is historical; the
+    assertion was removed with the dispatch-log channel.
 39. **New** (PR 11.5, Task 7). `pin` succeeds in-process with no POSIX shell
     on `PATH` while `python3` and `codex` both stay present:
     `result.status === 0` (`tests/bin/bin-dispatch.test.js:350`). Port-only,
@@ -728,7 +746,9 @@ preamble, for what it asserts:
     `sh` to execute at all, matching items 25/30's rationale rather than any
     numbered shell item.
 40. **New** (PR 11.5, Task 7). Same case: `result.log` is empty (`:351`).
-    Port-only, same rationale as item 39.
+    Port-only, same rationale as item 39. **Retired** (PR #69): this
+    fixture-only observation is historical; the assertion was removed with the
+    dispatch-log channel.
 41. **New** (PR 11.5 slice 2, Task 3). An in-process command with no
     registered handler fails closed: `result.status === 1`
     (`tests/bin/bin-dispatch.test.js:148`). Port-only, with no shell
@@ -792,7 +812,8 @@ preamble, for what it asserts:
     dispatched to `scripts/prepare` and logged something for this case, so
     "ran without ever dispatching" was not expressible through it. This is
     the whole of what survives item 8 — the case asserts no status, for the
-    reason recorded in item 3.
+    reason recorded in item 3. **Dropped** (PR #69): this was the case's sole
+    assertion, and the fixture-only observation channel is removed.
 45. **New** (PR 11.5 slice 3.4). `prepare` with `codex` absent: stderr does
     not contain `required command not found: codex`
     (`tests/bin/bin-dispatch.test.js:503-506`). Port-only. The shell observed
@@ -801,7 +822,9 @@ preamble, for what it asserts:
     diagnostic preflight would have emitted, which is a direct statement of
     the property rather than a proxy for it.
 46. **New** (PR 11.5 slice 3.4). Same case: `result.log` is empty (`:507`).
-    Port-only, same rationale as item 21.
+    Port-only, same rationale as item 21. **Retired** (PR #69): this
+    fixture-only observation is historical; the assertion was removed with the
+    dispatch-log channel.
 47. **New** (PR 11.5 slice 3.4). `prepare` does not require `python3` when no
     validator is configured: stderr does not contain
     `required command not found: python3`
@@ -829,13 +852,17 @@ preamble, for what it asserts:
     prepare-path failure that merely mentions `python3`.
 50. **New** (PR 11.5 slice 3.4). Same case: `result.log` is empty (`:482`).
     Port-only, same rationale as item 21 — preflight completes before dispatch
-    and before any Git or build effect.
+    and before any Git or build effect. **Retired** (PR #69): this fixture-only
+    observation is historical; the assertion was removed with the dispatch-log
+    channel.
 51. **New** (PR 11.5 slice 3.4). Back on item 47's no-validator case:
     `result.log` is empty (`:467`). Port-only, same rationale as item 21. Item
     47's stderr check alone cannot distinguish "preflight admitted `prepare`
     without `python3`" from "preflight never ran a `python3` check because it
     dispatched instead"; this is the half that pins the second reading out,
     and it is the shape items 46 and 50 already give their own cases.
+    **Retired** (PR #69): this fixture-only observation is historical; the
+    assertion was removed with the dispatch-log channel.
 52. **New** (PR 11.5 slice 4a Task 7). Matrix row 13: `pinUpstream`'s `git`
     sits behind the same egress refusal `createSandbox` uses, instead of a
     symlink to a real, unfiltered `git`. `runDispatch({ pinUpstream: true,
@@ -881,15 +908,18 @@ preamble, for what it asserts:
     `scripts/install` and logged something for this case, so "ran without ever
     dispatching" was not expressible through it. This is the whole of what
     survives item 12 — the case asserts no status, for the reason recorded in
-    port-only item 7.
+    port-only item 7. **Dropped** (PR #69): this was the case's sole assertion,
+    and the fixture-only observation channel is removed.
 58. **New** (PR 11.5 slice 4b, Task 8). `uninstall` runs in-process:
     `result.log` is empty. Port-only, same rationale as item 57; the whole of
-    what survives item 13.
+    what survives item 13. **Dropped** (PR #69): this was the case's sole
+    assertion, and the fixture-only observation channel is removed.
 59. **New** (PR 11.5 slice 4b, Task 8). A bare invocation runs in-process:
     `result.log` is empty. Port-only, same rationale as item 57; the whole of
     what survives item 14 *in this file*. That the bare invocation is
     specifically `update` is asserted elsewhere — see item 14's retirement
-    note.
+    note. **Dropped** (PR #69): this was the case's sole assertion, and the
+    fixture-only observation channel is removed.
 60. **New** (PR 11.5 slice 4b, Task 8). `uninstall` with `git` absent: stderr
     does not contain `required command not found: git`. Port-only. The shell
     observed the same preflight fact indirectly, through a successful dispatch
@@ -900,7 +930,9 @@ preamble, for what it asserts:
     Port-only, same rationale as item 21, and the half that distinguishes
     "preflight admitted `uninstall` without `git`" from "preflight never ran a
     `git` check because it dispatched instead" — exactly the pairing items
-    45-46 and 47/51 already use.
+    45-46 and 47/51 already use. **Retired** (PR #69): this fixture-only
+    observation is historical; the assertion was removed with the dispatch-log
+    channel.
 
 <!-- inventory:port-only:end -->
 
@@ -910,7 +942,7 @@ preamble, for what it asserts:
 {
   "shellOriginal": 53,
   "portOnly": 61,
-  "ports": { "tests/bin/bin-dispatch.test.js": 34 }
+  "ports": { "tests/bin/bin-dispatch.test.js": 30 }
 }
 ```
 
@@ -923,8 +955,8 @@ preamble, for what it asserts:
   1+2+3+8+5+4+3+1+1+1+2+3+3+3+1+3+3+1+3+2 = 53). This count is historical —
   it describes the deleted shell script as it stood at the time it was
   ported — and does not change when the port's own structure changes.
-- Port (`tests/bin/bin-dispatch.test.js`): 34 static `test(` call sites, none
-  of them data-driven, so the 34 static sites produce 34 runtime cases. Every
+- Port (`tests/bin/bin-dispatch.test.js`): 30 static `test(` call sites, none
+  of them data-driven, so the 30 static sites produce 30 runtime cases. Every
   data-driven table this file ever had is now gone: `NO_CODEX_CASES` emptied at
   slice 3.4, and `ROUTING_CASES` and `NO_GIT_CASES` emptied at slice 4b's flip
   (Task 8) when `install`, `uninstall` and `update` went in-process — each
@@ -944,11 +976,14 @@ preamble, for what it asserts:
   site, one case, +0). The matrix
   row 13 regression case PR 11.5 slice 4a Task 7 added survives, its five
   assert calls being port-only items 52-56 — one entry per assertion, not one
-  per case, matching items 32-34's precedent below. The 34 sites carry
-  **32** of the 53 shell assertions
+  per case, matching items 32-34's precedent below. PR #69 then removed four
+  log-only sites (port-only items 44 and 57-59), so 34 − 4 = 30. The 30 sites
+  carry **26** of the 53 shell assertions
   mapped (**1** recorded merges:
-  item 15 into the port's `status === 2` check), plus **21 retired items** (7,
-  8, 9, 10, 11, 12, 13, 14, 29, 30, 31, 38, 39, 40, 41, 48, 49, 50, 51, 52, 53
+  item 15 into the port's `status === 2` check). The inventory records **45
+  retired items**: **27** mapped shell assertion records (7, 8, 9, 10, 11,
+  12, 13, 14, 19, 23, 29, 30, 31, 34, 37, 38, 39, 40, 41, 44, 47, 48, 49, 50,
+  51, 52, 53
   — items 7, 8, 9, 10, 12, 13, 14, 38, 40, and 49 each asserted that `probe`,
   `prepare`, `pin`, `track-latest`, `install`, `uninstall`, or `update`
   "dispatches ... and logs `<name>  ref=`"; items 11, 39, and 50 each asserted
@@ -967,31 +1002,24 @@ preamble, for what it asserts:
   to such a child, and no `scripts/<command>` file is looked for at all — so
   each specific condition can no longer occur in either direction, and no JS
   assertion enforces any of them any more; see each item's retirement note for
-  the analogous in-process property and where it is now tested). 32 mapped + 21
-  retired = 53. Plus 61 port-only
-  assertions (47 additive `result.status === 0` / `result.log` / stderr
-  checks the shell left implicit under `set -e` or that have no shell
-  counterpart at all, plus 3 checks against the `gitSentinel` *file* rather
-  than `result.status`/`result.log`/`result.stderr` — see items 53, 54, and
-  56, which have no shell analogue since the shell had no equivalent of a
-  fixture-side recording stub — plus one structural array-length guard, plus
-  2 assertions covering the in-process runtime backstop with no shell
-  counterpart of any kind — see items 41-42, plus 1 assertion covering
-  `patchDispatch`'s rejection of a no-op override — see item 43, plus 2
-  entries, items 3 and 20, that record their own assertion's removal rather
-  than an assertion, plus 5 entries, items 57-61, added at slice 4b's flip).
-  Eleven of those 61 — items 1, 7, 8, 9, 12, 15, 41, 42 and 43 at slice 4b's
-  flip, and items 3 and 20 before it — are `Dropped` records rather than live
-  assertions; being port-only, none of them participates in the mapped
-  arithmetic either way.
-- Reconciliation: 32 of the 53 shell items are mapped (some 1:1 to their own
+  the analogous in-process property and where it is now tested). PR #69 also
+  retired the six mapped fixture-log observations. The other **18** retirement
+  records are port-only items 21-24, 26-29, 31, 34, 36-38, 40, 46, 50-51, and
+  61: historical fixture-log assertions removed from otherwise meaningful
+  cases. 26 mapped + 27 retired = 53. Plus 61 port-only historical entries,
+  including live additive
+  status/stdout/stderr checks, sentinel-file checks, and records of assertions
+  removed with their test-only observation channel. Thirty-three port-only
+  entries are historical records rather than live assertions; being port-only,
+  none participates in the mapped arithmetic either way.
+- Reconciliation: 26 of the 53 shell items are mapped (some 1:1 to their own
   JS assertion, one pair sharing one JS assertion via the recorded merge
-  above), 21 are retired (noted above) — not *silent* drops, since a
+  above), 27 are retired (noted above) — not *silent* drops, since a
   retirement is recorded with its own note explaining why no replacement
   assertion is possible, rather than disappearing unremarked. That is the only
   sense in which "drop" is pejorative here: it names an unrecorded
   disappearance, not the port-only `Dropped` category, whose entries
   are recorded exactly as carefully and are not shell items at
-  all. 32 + 21 = 53. The 61 port-only
-  entries are strictly additive test coverage — not a reconciliation of
-  any shell assertion — and are excluded from the 32/53 arithmetic above.
+  all. 26 + 27 = 53. The 61 port-only entries are a historical record of
+  additive test coverage — not a reconciliation of any shell assertion — and
+  are excluded from the 26/53 arithmetic above.

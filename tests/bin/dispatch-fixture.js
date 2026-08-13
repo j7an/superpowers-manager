@@ -31,7 +31,6 @@ import {
   cpSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -217,7 +216,7 @@ export function makePackageRoot(kind) {
 
 /**
  * @param {DispatchOptions} options
- * @returns {{ status: number, stdout: string, stderr: string, log: string[], gitSentinel: string }}
+ * @returns {{ status: number, stdout: string, stderr: string, gitSentinel: string }}
  */
 export function runDispatch(options) {
   const caseDir = mkdtempSync(join(SCRATCH, "case-"));
@@ -260,15 +259,11 @@ export function runDispatch(options) {
   if (!options.omitShell) symlinkSync("/bin/sh", join(fakeBin, "sh"));
   symlinkSync(process.execPath, join(fakeBin, "node"));
 
-  const logPath = join(caseDir, "dispatch.log");
-  writeFileSync(logPath, "");
-
   // In-process commands (e.g. unpin) resolve their selection-state path via
   // src/effective-selection.ts's selectionConfigDir, which requires
   // SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME, or HOME. None of those are ever
-  // otherwise set here, so every case gets a private, empty config dir —
-  // mirroring SPW_DISPATCH_LOG's always-set pattern — rather than each
-  // in-process case having to supply one itself.
+  // otherwise set here, so every case gets a private, empty config dir rather
+  // than each in-process case having to supply one itself.
   const configDir = join(caseDir, "config");
   mkdirSync(configDir, { recursive: true });
 
@@ -285,7 +280,6 @@ export function runDispatch(options) {
     encoding: "utf8",
     env: {
       PATH: fakeBin,
-      SPW_DISPATCH_LOG: logPath,
       SUPERPOWERS_CONFIG_DIR: configDir,
       ...(options.pinUpstream
         ? { SUPERPOWERS_UPSTREAM_URL: PIN_UPSTREAM }
@@ -294,12 +288,10 @@ export function runDispatch(options) {
     },
   });
 
-  const log = readFileSync(logPath, "utf8").split("\n").filter(Boolean);
   return {
     status: result.status ?? -1,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
-    log,
     gitSentinel: sentinelPath,
   };
 }
