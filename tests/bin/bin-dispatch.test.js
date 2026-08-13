@@ -602,5 +602,5 @@ void test("the pin dispatch fixture refuses a network git remote before git runs
 // the condition cannot occur in either direction. There is no successor: a
 // missing command module is now an ESM import failure at load, which
 // `bin/superpowers-manager.js` already reports through the two dist-integrity
-// cases at the top of this file. `missingScripts` as a `runDispatch` option
-// survives with no consumer, and is deleted in 4c with `scripts/` itself.
+// cases at the top of this file. The unused `missingScripts` `runDispatch`
+// option was deleted in 4c with the `scripts/` fixture tree itself.

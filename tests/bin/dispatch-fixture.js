@@ -1,15 +1,14 @@
 // @ts-check
 // Shared base package root plus per-case PATH overlays for the bin-dispatch
-// port. The expensive operation (copying the real dist/) happens once; the
-// state a case configures (a directory of two-line stub scripts) is per case
-// and declarative, so each case states the tool set it needs at the assertion
-// rather than inheriting it from a mutation twenty lines earlier.
+// port. The expensive operation (copying the real dist/) happens once; each
+// case states the tool set it needs at the assertion rather than inheriting it
+// from a mutation twenty lines earlier.
 //
 // The base is shared but NOT literally immutable, and has not been since PR
-// 11.5 slice 3.4 flipped `prepare` in-process. No case configures the base --
-// `scripts` and `missingScripts` still take a per-case copy (:301), and
-// `dispatchOverride`, which used to be the third, went with `patchDispatch` at
-// slice 4b's flip -- but the subject under test now writes into it: runPrepare's
+// 11.5 slice 3.4 flipped `prepare` in-process. The `scripts` and
+// `missingScripts` per-case copy options went away with the
+// scripts tree in slice 4c. The subject under test still writes into the base:
+// runPrepare's
 // gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
 // opens a `.superpowers.prepare.*` workspace there, all at
 // src/commands/prepare.ts:273-280 and all BEFORE computeEffectiveSelection.
@@ -33,7 +32,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -122,23 +120,6 @@ export const DISPATCH_COMMANDS = /** @type {(keyof typeof DISPATCH)[]} */ (
 );
 
 /**
- * A stub script that appends its invocation to $SPW_DISPATCH_LOG. Mirrors the
- * shell fixture at tests/test_bin_dispatch.sh:19-26.
- * @param {string} command
- */
-function loggingStub(command) {
-  return [
-    "#!/bin/sh",
-    `printf '%s\\n' "${command} $* ref=\${SUPERPOWERS_REF:-}" >> "$SPW_DISPATCH_LOG"`,
-    'if [ -n "${SUPERPOWERS_VALIDATOR:-}" ]; then',
-    `  printf '%s\\n' "${command} validator=\${SUPERPOWERS_VALIDATOR}" >> "$SPW_DISPATCH_LOG"`,
-    "fi",
-    "exit 0",
-    "",
-  ].join("\n");
-}
-
-/**
  * @param {string} dir
  * @param {string} name
  * @param {string} body
@@ -166,7 +147,6 @@ function writeExecutable(dir, name, body) {
 function buildPackageRoot(kind) {
   const root = mkdtempSync(join(SCRATCH, `pkg-${kind}-`));
   mkdirSync(join(root, "bin"), { recursive: true });
-  mkdirSync(join(root, "scripts"), { recursive: true });
   writeFileSync(
     join(root, "package.json"),
     `${JSON.stringify({ name: "superpowers-manager", version: "9.9.9-test", type: "module" })}\n`,
@@ -183,9 +163,6 @@ function buildPackageRoot(kind) {
     join(ROOT, "config", "upstream-ref"),
     join(root, "config", "upstream-ref"),
   );
-  for (const command of DISPATCH_COMMANDS) {
-    writeExecutable(join(root, "scripts"), command, loggingStub(command));
-  }
   if (kind === "real") {
     // Read-only, from the real working tree, exactly as the shell driver did
     // (tests/test_bin_dispatch.sh:69). tests/run-node-suites.js already fails
@@ -201,7 +178,7 @@ function buildPackageRoot(kind) {
   return root;
 }
 
-/** The shared base: real bin, real dist, logging stubs for every subcommand. */
+/** The shared base: real bin and real dist. */
 export const PACKAGE_ROOT = buildPackageRoot("real");
 
 /**
@@ -221,8 +198,6 @@ export function makePackageRoot(kind) {
  *   Set `omitShell` to state its absence instead.
  * @property {string[]} args argv passed to the bin
  * @property {Record<string, string>} [env] extra environment variables
- * @property {Record<string, string>} [scripts] scripts/<name> bodies to override
- * @property {string[]} [missingScripts] scripts/<name> files to remove
  * @property {string} [packageRoot] defaults to PACKAGE_ROOT
  * @property {boolean} [viaSymlink] invoke through a symlink to the bin, as npx does
  * @property {boolean} [omitShell] skip the always-on `sh` symlink so a case can
@@ -297,20 +272,7 @@ export function runDispatch(options) {
   const configDir = join(caseDir, "config");
   mkdirSync(configDir, { recursive: true });
 
-  let packageRoot = options.packageRoot ?? PACKAGE_ROOT;
-  if (options.scripts || options.missingScripts) {
-    // Overrides mutate scripts/, so this case gets its own copy of the root
-    // rather than editing the shared base out from under other cases.
-    const copy = join(caseDir, "pkg");
-    cpSync(packageRoot, copy, { recursive: true });
-    for (const [name, body] of Object.entries(options.scripts ?? {})) {
-      writeExecutable(join(copy, "scripts"), name, body);
-    }
-    for (const name of options.missingScripts ?? []) {
-      rmSync(join(copy, "scripts", name), { force: true });
-    }
-    packageRoot = copy;
-  }
+  const packageRoot = options.packageRoot ?? PACKAGE_ROOT;
 
   const entry = join(packageRoot, "bin", "superpowers-manager.js");
   let target = entry;

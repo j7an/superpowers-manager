@@ -9,7 +9,7 @@
 // below to process.exitCode too; see tests/migration-inventory/probe.md.
 //
 // Slice 4a also moved the outer shell — state guard, config load, role
-// dispatch, tripwire, delegation — into runFake. What stays here is exactly
+// dispatch and tripwire — into runFake. What stays here is exactly
 // what must NOT be shared: this fake's own command branches and both of its
 // exhaustiveness traps.
 
@@ -23,7 +23,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import {
-  delegateToRealAdapter,
   injectSpuriousMutation,
   respondToListing,
   runFake,
@@ -185,8 +184,7 @@ function runAdapter(ctx) {
   // seam value makes reaching it legitimate any more. `always: true` refuses
   // unconditionally, matching probe-fakes.js's own adapter role. The return
   // is still load-bearing: process.exitCode does not halt execution, so
-  // falling through here would reach delegateToRealAdapter below and spawn
-  // the very adapter the tripwire exists to forbid.
+  // falling through would continue into obsolete adapter-role fixture logic.
   if (
     tripwireTriggered(ctx, {
       always: true,
@@ -257,8 +255,8 @@ function runAdapter(ctx) {
     // Fail closed, restoring the shell fake's `*) unknown update-control
     // fixture; exit 99` branch (test_install_commands.sh:203-206 at
     // 81c2de1a). Without it an unhandled updateControl value falls through to
-    // the real adapter at the delegation below, so a fixture misconfiguration
-    // reads as a subject result instead of a fixture fault. The schema
+    // obsolete adapter-role logic below, so a fixture misconfiguration reads
+    // as a subject result instead of a fixture fault. The schema
     // enumeration is not a substitute: it is a list, not a structure.
     process.stderr.write(
       `fixture: unknown update-control value: ${updateControl}\n`,
@@ -287,9 +285,6 @@ function runAdapter(ctx) {
       return;
     }
   }
-
-  delegateToRealAdapter(ctx);
-  return;
 }
 
 runFake({ kind: "install", codex: runCodex, adapter: runAdapter });

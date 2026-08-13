@@ -47,9 +47,6 @@ import { writeGitEgressShim } from "../lib/git-egress.js";
  *   gitConfig: string,
  *   work: string,
  *   adapter: string,
- *   runtimeAdapter: string,
- *   adapterState: string,
- *   adapterLog: string,
  *   codexLog: string,
  *   dispatchLog: string,
  * }} Sandbox
@@ -57,7 +54,6 @@ import { writeGitEgressShim } from "../lib/git-egress.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const FIXTURES = join(ROOT, "tests", "fixtures", "baseline");
-const ADAPTER = join(FIXTURES, "bin", "stateful-adapter");
 /** @type {WeakMap<Sandbox, string>} */
 const REGISTERED_SANDBOXES = new WeakMap();
 const SANDBOX_TOOLS = [
@@ -134,7 +130,6 @@ const PATH_ENVIRONMENT_VARIABLES = new Set([
   "SPW_BASELINE_ADAPTER_LOG",
   "SPW_BASELINE_DISPATCH_LOG",
   "SPW_BASELINE_GIT_LOG",
-  "SPW_BASELINE_RUNTIME_ADAPTER",
   "SPW_BASELINE_SANDBOX_ROOT",
   "SPW_BASELINE_VALIDATOR_MARKER",
 ]);
@@ -350,7 +345,6 @@ function copyRuntimePackage(pkg) {
   mkdirSync(pkg, { recursive: true });
   cpSync(join(ROOT, "bin"), join(pkg, "bin"), { recursive: true });
   cpSync(join(ROOT, "dist"), join(pkg, "dist"), { recursive: true });
-  cpSync(join(ROOT, "scripts"), join(pkg, "scripts"), { recursive: true });
   cpSync(join(ROOT, "config"), join(pkg, "config"), { recursive: true });
   copyFileSync(join(ROOT, "package.json"), join(pkg, "package.json"));
 
@@ -371,92 +365,6 @@ function copyRuntimePackage(pkg) {
     ),
     join(manifestDirectory, "plugin.template.json"),
   );
-}
-
-/** @param {string} command */
-function dispatchStub(command) {
-  return `#!/bin/sh
-set -eu
-
-python3 - ${JSON.stringify(command)} "$@" <<'PY'
-import json
-import os
-import sys
-
-command, *arguments = sys.argv[1:]
-log_path = os.environ["SPW_BASELINE_DISPATCH_LOG"]
-passthrough = ${JSON.stringify(PASSTHROUGH_VARIABLES)}
-record = {
-    "command": command,
-    "argv": arguments,
-    "passthrough": {name: os.environ.get(name) for name in passthrough},
-    "superpowers_env": {
-        name: value
-        for name, value in os.environ.items()
-        if name.startswith("SUPERPOWERS_")
-    },
-    "xdg_env": {
-        name: value
-        for name, value in os.environ.items()
-        if name.startswith("XDG_")
-    },
-    "npm_env": {
-        name: value
-        for name, value in os.environ.items()
-        if name.upper().startswith("NPM_CONFIG_")
-    },
-    "codex_env": {
-        name: value
-        for name, value in os.environ.items()
-        if name.startswith("CODEX_")
-    },
-}
-with open(log_path, "a", encoding="utf-8") as handle:
-    json.dump(record, handle, allow_nan=False, separators=(",", ":"))
-    handle.write("\\n")
-raise SystemExit(int(os.environ.get("SPW_BASELINE_DELEGATE_EXIT", "0")))
-PY
-`;
-}
-
-// An in-process command must never reach scripts/<command>. If routing
-// regresses and spawns it anyway, this stub must be caught two ways: it logs
-// the invocation (so the empty-dispatch-log assertion fails) and it exits
-// non-zero unconditionally, ignoring SPW_BASELINE_DELEGATE_EXIT (so
-// assertCleanResult also fails). A correctly routed in-process command never
-// invokes this file, so its presence is inert.
-/** @param {string} command */
-function regressionStub(command) {
-  return `#!/bin/sh
-set -eu
-
-python3 - ${JSON.stringify(command)} "$@" <<'PY'
-import json
-import os
-import sys
-
-command, *arguments = sys.argv[1:]
-log_path = os.environ["SPW_BASELINE_DISPATCH_LOG"]
-record = {"command": command, "argv": arguments}
-with open(log_path, "a", encoding="utf-8") as handle:
-    json.dump(record, handle, allow_nan=False, separators=(",", ":"))
-    handle.write("\\n")
-raise SystemExit(1)
-PY
-`;
-}
-
-/** @param {Sandbox} sandbox */
-function installDispatchStubs(sandbox) {
-  registeredRoot(sandbox);
-  for (const command of COMMANDS) {
-    const script = join(sandbox.pkg, "scripts", command);
-    const stub = IN_PROCESS_COMMANDS.includes(command)
-      ? regressionStub(command)
-      : dispatchStub(command);
-    writeFileSync(script, stub, "utf8");
-    chmodSync(script, 0o755);
-  }
 }
 
 /**
@@ -482,10 +390,9 @@ const CODEX_LOG_MARKER = "spw-baseline-codex-log";
 /**
  * A `codex` that records every invocation instead of swallowing it.
  *
- * POSIX sh rather than python3 on purpose: dispatchStub and regressionStub
- * shell out to python3 for JSON, and PR 11.5 slice 3.4 is the slice that stops
- * requiring Python for `prepare`. Emptiness is the assertion; the recorded
- * argv is for diagnosis when it is not empty.
+ * POSIX sh rather than python3 on purpose: PR 11.5 slice 3.4 is the slice that
+ * stops requiring Python for `prepare`. Emptiness is the assertion; the
+ * recorded argv is for diagnosis when it is not empty.
  *
  * @param {Sandbox} sandbox
  * @returns {string}
@@ -546,10 +453,10 @@ function assertNoCodexContact(sandbox) {
 // for the shim itself and its design rationale, including its known gaps.
 
 /**
- * @param {{ stubScripts?: boolean }} [options]
+ * @param {{ stubScripts?: boolean }} [_options]
  * @returns {Sandbox}
  */
-function createSandbox({ stubScripts = false } = {}) {
+function createSandbox(_options = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "spw-baseline-")));
   /** @type {Sandbox} */
   let sandbox;
@@ -568,16 +475,6 @@ function createSandbox({ stubScripts = false } = {}) {
       gitConfig: join(root, "git", "config"),
       work: join(root, "work"),
       adapter: join(root, "bin", "stateful-adapter"),
-      runtimeAdapter: join(
-        root,
-        "pkg",
-        "scripts",
-        "adapters",
-        "codex",
-        "adapter",
-      ),
-      adapterState: join(root, "adapter-state"),
-      adapterLog: join(root, "adapter.log"),
       codexLog: join(root, "codex.log"),
       dispatchLog: join(root, "dispatch.log"),
     };
@@ -591,13 +488,10 @@ function createSandbox({ stubScripts = false } = {}) {
       sandbox.codex,
       sandbox.git,
       sandbox.work,
-      sandbox.adapterState,
     ]) {
       mkdirSync(directory, { recursive: true });
     }
     copyRuntimePackage(sandbox.pkg);
-    copyFileSync(ADAPTER, sandbox.adapter);
-    chmodSync(sandbox.adapter, 0o755);
     for (const tool of SANDBOX_TOOLS) {
       if (tool === "git") {
         writeGitEgressShim(sandbox.bin, hostExecutable("git"));
@@ -617,7 +511,6 @@ function createSandbox({ stubScripts = false } = {}) {
     throw error;
   }
   REGISTERED_SANDBOXES.set(sandbox, root);
-  if (stubScripts) installDispatchStubs(sandbox);
   return sandbox;
 }
 
@@ -643,7 +536,6 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
       "plugins/superpowers/.codex-plugin/plugin.template.json",
     ),
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: sandbox.codex,
-    SPW_BASELINE_RUNTIME_ADAPTER: sandbox.runtimeAdapter,
     SPW_BASELINE_SANDBOX_ROOT: sandbox.root,
     ...overrides,
   };
@@ -781,20 +673,6 @@ function removeTool(sandbox, name) {
   if (existsSync(tool)) unlinkSync(tool);
 }
 
-/**
- * @param {Sandbox} sandbox
- * @param {unknown} state
- */
-function writeAdapterState(sandbox, state) {
-  registeredRoot(sandbox);
-  const stateFile = join(sandbox.adapterState, "state.json");
-  writeFileSync(stateFile, `${JSON.stringify(state)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  return stateFile;
-}
-
 /** @param {Sandbox} sandbox */
 function destroySandbox(sandbox) {
   const root = registeredRoot(sandbox);
@@ -825,7 +703,6 @@ export {
   removeTool,
   runCli,
   runScenario,
-  writeAdapterState,
   writeCodexLogTool,
   writeNoopTool,
 };

@@ -9,11 +9,10 @@
 // below to process.exitCode too; see tests/migration-inventory/probe.md.
 //
 // Slice 4a also moved the outer shell — state guard, config load, role
-// dispatch, tripwire, delegation — into runFake. What stays here is exactly
+// dispatch and tripwire — into runFake. What stays here is exactly
 // what must NOT be shared: this fake's own command branches.
 
 import {
-  delegateToRealAdapter,
   injectSpuriousMutation,
   respondToListing,
   runFake,
@@ -87,8 +86,7 @@ function runAdapter(ctx) {
   // so no seam value makes reaching it legitimate any more. `always: true`
   // refuses unconditionally, matching probe-fakes.js's own adapter role. The
   // return is still load-bearing: process.exitCode does not halt execution,
-  // so falling through here would reach delegateToRealAdapter below and spawn
-  // the very adapter the tripwire exists to forbid.
+  // so falling through would continue into obsolete adapter-role fixture logic.
   if (
     tripwireTriggered(ctx, {
       always: true,
@@ -117,8 +115,6 @@ function runAdapter(ctx) {
     process.exitCode = 0;
     return;
   }
-  delegateToRealAdapter(ctx);
-  return;
 }
 
 runFake({ kind: "uninstall", codex: runCodex, adapter: runAdapter });

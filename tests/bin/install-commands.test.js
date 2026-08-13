@@ -254,8 +254,7 @@ function copyFallbackManifestIntoCandidate(argv) {
  * mean what they meant in the shell.
  *
  * Converted (Task 6, D4): calls `runPrepare` in-process with its own injected
- * recording adapter, rather than spawning `scripts/prepare` through the
- * SPW_ADAPTER seam. "prepare did not inspect update control" is now a
+ * recording adapter. "prepare did not inspect update control" is now a
  * property of the double's own construction — it answers ONLY a `build` call
  * and fails the case by exhaustion on anything else — rather than a read over
  * a log file that stops existing when the seam does. This double is entirely
@@ -635,18 +634,6 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("packaged root preconditions (:77-82)", () => {
     const c = installCase();
-    // :77-78 — executability, not mere presence.
-    for (const relative of [
-      "scripts/install",
-      "scripts/adapters/codex/adapter",
-    ]) {
-      const path = join(c.pkg, relative);
-      // existsSync first so a missing file reports the contract, not ENOENT.
-      assert.ok(
-        existsSync(path) && (statSync(path).mode & 0o111) !== 0,
-        `${relative} must remain executable in the packaged root`,
-      );
-    }
     // :79-81
     for (const relative of [
       "dist/validate-generated-plugin-cli.js",
@@ -659,13 +646,6 @@ void describe("install commands", { concurrency: true }, () => {
         `${relative} must remain packaged`,
       );
     }
-    // :82
-    assert.ok(
-      !existsSync(
-        join(c.pkg, "scripts/adapters/codex/validate-generated-plugin.py"),
-      ),
-      "the Python generated-plugin validator must not be packaged",
-    );
   });
 
   void test("prepare is capability-independent (:321-336)", async () => {

@@ -99,10 +99,6 @@ void test("each case gets distinct writable paths", () => {
 void test("the package root carries everything a lifecycle script needs", () => {
   const c = createCase({ fakes: "uninstall" });
   for (const rel of [
-    "scripts/install",
-    "scripts/uninstall",
-    "scripts/core/common.sh",
-    "scripts/adapters/codex/adapter",
     "dist/cli.js",
     "package.json",
     "plugins/superpowers/.codex-plugin/plugin.template.json",

@@ -129,14 +129,17 @@ port reads `ROOT`.
 
 ### Packaged root preconditions (`:77-82`)
 
-7. `scripts/install` is executable in the packaged root (`:77`). Port:
-   `:501`.
-8. `scripts/adapters/codex/adapter` is executable (`:78`). Port: `:501`.
+7. `scripts/install` is executable in the packaged root (`:77`). **RETIRED at
+   the gap (Task 3, 4c):** the deleted tree has no packaged-root executability
+   precondition and no port counterpart.
+8. `scripts/adapters/codex/adapter` is executable (`:78`). **RETIRED at the
+   gap (Task 3, 4c):** same deletion boundary as item 7; no port counterpart.
 9. `dist/validate-generated-plugin-cli.js` is packaged (`:79`). Port: `:513`.
 10. `dist/generated-plugin.js` is packaged (`:80`). Port: `:513`.
 11. `dist/python-text.js` is packaged (`:81`). Port: `:513`.
 12. `scripts/adapters/codex/validate-generated-plugin.py` is **not** packaged
-    (`:82`). Port: `:519`.
+    (`:82`). **RETIRED at the gap (Task 3, 4c):** a negative over a path inside
+    the deleted tree is vacuous and has no port counterpart.
 
 ### Prepare is capability-independent (`:321-336`)
 
@@ -1281,9 +1284,10 @@ truncation `reset` performed is load-bearing and not decorative.
   so the 31 static sites produce 31 runtime cases. The `for legacy_state in
   legacy both` loop at `:426` is still expanded into two explicit call sites
   (`:950`, `:959`) sharing one helper.
-- Reconciliation: **116 of 124** shell items retain a port counterpart; the
-  remaining **8** are retired at the gap, each recorded at its own entry
-  above with its reasoning rather than renumbered away — items 22-24
+- Reconciliation: **113 of 124** shell items retain a port counterpart; the
+  remaining **11** are retired at the gap, each recorded at its own entry
+  above with its reasoning rather than renumbered away — packaged-root items
+  7, 8 and 12; items 22-24
   ("Malformed update-control output exits exactly 1") and items 107-111
   ("Scenario 8b — malformed fingerprint inspection output"). Both retired
   cases shared the same root cause: their fixture drove the FAKE ADAPTER
@@ -1294,7 +1298,7 @@ truncation `reset` performed is load-bearing and not decorative.
   item's own entry states plainly that it has no port counterpart, rather
   than being silently dropped from the list.
 
-  Of the 116 that survive, the mapping is **not** 1:1 throughout. **100**
+  Of the 113 that survive, the mapping is **not** 1:1 throughout. **97**
   items map onto a port assertion of their own; the remaining **16 share 7**,
   across seven merges recorded inline. One is a status merge — items 25/26
   collapse onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`.

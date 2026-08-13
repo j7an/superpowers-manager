@@ -45,9 +45,8 @@ function buildSnapshot() {
   const snapshot = mkdtempSync(join(SCRATCH, "snapshot-"));
   // `bin` joined the list at PR 11.5 slice 4b's flip: the subject runScript
   // launches is now the Node entrypoint bin/superpowers-manager.js, not a
-  // scripts/ file. `scripts` stays until 4c deletes it — tests/bin/units.test.js
-  // guards that it is still present here.
-  for (const entry of ["bin", "scripts", "config", "dist"]) {
+  // scripts/ file.
+  for (const entry of ["bin", "config", "dist"]) {
     cpSync(join(ROOT, entry), join(snapshot, entry), { recursive: true });
   }
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
