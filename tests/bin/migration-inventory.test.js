@@ -90,6 +90,11 @@ function frozenRegionLines(source, name) {
     1,
     `${name}: must carry exactly one canonical freeze header`,
   );
+  assert.equal(
+    lines[2],
+    FROZEN_SECOND_LINE,
+    `${name}: missing canonical frozen pointer policy`,
+  );
   const specialResolution = FROZEN_SHELL_RESOLUTION[name];
   if (specialResolution !== undefined) {
     assert.match(
@@ -109,11 +114,6 @@ function frozenRegionLines(source, name) {
     lines[1],
     FROZEN_ORDINARY_FIRST_LINE,
     `${name}: missing canonical frozen historical anchor`,
-  );
-  assert.equal(
-    lines[2],
-    FROZEN_SECOND_LINE,
-    `${name}: missing canonical frozen pointer policy`,
   );
   assert.match(
     lines[3],
