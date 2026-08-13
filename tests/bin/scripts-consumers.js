@@ -51,21 +51,21 @@
 // to the one hit it misdescribes, instead of hiding inside a total that still
 // sums. That is a reviewability property, not a mechanical one.
 //
-// TWO FACTS 4c PLANS AGAINST, recorded here because the withdrawn five-file
-// figure obscured both (spec D2a, amended 2026-08-10 post-merge):
+// TASK 1 RELOCATION RATIONALE, now discharged. Before Task 1, the withdrawn
+// five-file figure obscured two facts that sized the work (spec D2a, amended
+// 2026-08-10 post-merge):
 //
-//   1. There is ONE protocol suite, not two, and it holds 29 literal scripts/
-//      path sites (tests/test_adapter_protocol.sh). Across all four surviving
-//      shell and Python drivers there are 52. Both figures are re-derived from
-//      this map by the test rather than asserted in prose here.
-//   2. THE MOVED ADAPTER RESOLVES ITS OWN LOCATION. The shipped adapter
-//      computes its root from its own directory and then sources
-//      "$root/scripts/core/common.sh" (scripts/adapters/codex/adapter:4-5), so
-//      relocating it breaks BOTH the "../../.." depth and the scripts/core/
-//      path. The fixture layout, the adapter's internal path resolution, and
-//      every suite-side path must be specified together; moving the files
-//      without rewriting the adapter's own resolution produces a fixture that
-//      cannot run.
+//   1. The one protocol suite formerly held 29 literal production-script path
+//      sites, within 52 across the four surviving shell and Python drivers.
+//      Those historical figures sized the relocation; Task 1 removed the 30
+//      protocol declarations and retired their sizing assertion. The current
+//      executable contract is per-hit reconciliation of the remaining observed
+//      and declared sets.
+//   2. Before relocation, the adapter derived the repository root from its own
+//      directory and sourced "$root/scripts/core/common.sh". The relocated
+//      fixture now derives a protocol root for `core/common.sh` and a separate
+//      repository root for `dist/adapter-cli.js`. Keeping those roots distinct
+//      preserves both fixture sourcing and execution of the existing build.
 //
 // THE FILTER (D2a's Step 1a reconciliation). D2a offers two ways to make the
 // audit's exclusion filter agree with the disposition vocabulary and forbids
@@ -275,9 +275,10 @@ export function reconcileAudit(observed, declared) {
 }
 
 /**
- * The declared disposition map: one entry per audit hit. Every count the header
- * above cites is re-derived from this array by
- * tests/bin/scripts-consumers.test.js, never asserted in prose here.
+ * The declared disposition map: one entry per current audit hit. The test
+ * reconciles this array against the observed set and validates each entry's
+ * disposition and target. Historical sizing figures in the header above are
+ * no longer executable assertions after Task 1 discharged the relocation.
  * @type {ScriptsConsumer[]}
  */
 export const SCRIPTS_CONSUMERS = [
