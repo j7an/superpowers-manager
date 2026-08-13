@@ -1,6 +1,7 @@
 # Migration inventory: tests/test_install_commands.sh
 <!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. The pin is not a pointer anchor. -->
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh -->
 
 Source read in full (782 lines). Ported to
 `tests/bin/install-commands.test.js`.
@@ -27,10 +28,9 @@ A mapped-region pointer is therefore usually off by `+1` — a hint for
 re-deriving one, never an offset to apply in bulk, and no claim any pointer is
 right. The port-only region below is worse: only item 42's pointers were added
 at `79851ea`; the rest predate slice 4b, when that file was 1270-1472 lines.
-Shell `:N` references are unresolvable by construction:
-`tests/test_install_commands.sh` is deleted, so they are historical claims
-about a file that no longer exists, which is intended, not a defect. Nothing
-in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
+The shell path is absent from the current tree, but every shell `:N` citation
+resolves through `81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh`.
+Nothing in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
 validates the `json inventory` block's counts, this file's entry numbering and
 its region structure, and never parses one. Some items below mark their own
 pointer stale and deliberately not remapped.

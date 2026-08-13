@@ -1,6 +1,7 @@
 # Migration inventory: tests/test_uninstall_commands.sh
 <!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. The pin is not a pointer anchor. -->
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh -->
 
 Source read in full (457 lines). Ported to
 `tests/bin/uninstall-commands.test.js`.
@@ -27,10 +28,10 @@ reachable from `main`; slice 4b squash-merged as `79851ea`. The port file is
 to old line 33, `+1` through the early file, `+21` from about old line 425,
 irregular between. No single offset applies. The port-only region below is
 worse: only item 21's pointers were added at `79851ea`; the rest predate slice
-4b, when that file was 723-841 lines. Shell `:N` references are unresolvable
-by construction: `tests/test_uninstall_commands.sh` is deleted, so they are
-historical claims about a file that no longer exists, which is intended, not a
-defect. Nothing in CI reads any of these numbers:
+4b, when that file was 723-841 lines. The shell path is absent from the
+current tree, but every shell `:N` citation resolves through
+`81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh`.
+Nothing in CI reads any of these numbers:
 `tests/bin/migration-inventory.test.js` validates the `json inventory` block's
 counts, this file's entry numbering and its region structure, and never parses
 one. Some items below mark their own pointer stale.

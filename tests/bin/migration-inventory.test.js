@@ -67,16 +67,17 @@ const FROZEN_SECOND_LINE =
   "<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->";
 const FROZEN_RESOLUTION_LINE =
   /^<!-- Resolve shell-original citations with: git show [0-9a-f]{40}:.+ -->$/;
-const FROZEN_WITHOUT_SINGLE_RESOLUTION = new Set([
-  "install-commands.md",
-  "uninstall-commands.md",
-]);
+/** @type {Record<string, string>} */
+const FROZEN_SHELL_RESOLUTION = {
+  "install-commands.md":
+    "<!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh -->",
+  "uninstall-commands.md":
+    "<!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh -->",
+};
 
 /**
- * Returns the digest-covered content after exactly one canonical freeze header.
- * The optional third header line is the documented single-resolution anchor;
- * the two provenance-bearing inventories intentionally omit it because their
- * existing notes name multiple historical pointer states instead.
+ * Returns the digest-covered content after exactly one canonical four-line
+ * freeze header.
  * @param {string} source
  * @param {string} name
  * @returns {string[]}
@@ -89,39 +90,37 @@ function frozenRegionLines(source, name) {
     1,
     `${name}: must carry exactly one canonical freeze header`,
   );
+  const specialResolution = FROZEN_SHELL_RESOLUTION[name];
+  if (specialResolution !== undefined) {
+    assert.match(
+      lines[1],
+      FROZEN_PROVENANCE_FIRST_LINE,
+      `${name}: missing canonical multi-state pointer-provenance anchor`,
+    );
+    assert.equal(
+      lines[3],
+      specialResolution,
+      `${name}: frozen shell-original resolution anchor must match its historical driver`,
+    );
+    return lines.slice(4);
+  }
+
   assert.match(
     lines[1],
-    FROZEN_WITHOUT_SINGLE_RESOLUTION.has(name)
-      ? FROZEN_PROVENANCE_FIRST_LINE
-      : FROZEN_ORDINARY_FIRST_LINE,
-    `${name}: missing or malformed frozen-history pin`,
+    FROZEN_ORDINARY_FIRST_LINE,
+    `${name}: missing canonical frozen historical anchor`,
   );
   assert.equal(
     lines[2],
     FROZEN_SECOND_LINE,
     `${name}: missing canonical frozen pointer policy`,
   );
-  const hasSingleResolution = lines[3].startsWith(
-    "<!-- Resolve shell-original citations",
+  assert.match(
+    lines[3],
+    FROZEN_RESOLUTION_LINE,
+    `${name}: malformed frozen resolution anchor`,
   );
-  assert.equal(
-    hasSingleResolution,
-    !FROZEN_WITHOUT_SINGLE_RESOLUTION.has(name),
-    `${name}: freeze header has the wrong resolution-anchor form`,
-  );
-  if (hasSingleResolution) {
-    assert.match(
-      lines[3],
-      FROZEN_RESOLUTION_LINE,
-      `${name}: malformed frozen resolution anchor`,
-    );
-    return lines.slice(4);
-  }
-  assert.ok(
-    lines[1].includes("The pin is not a pointer anchor."),
-    `${name}: multi-state pointer provenance must say the pin is not a pointer anchor`,
-  );
-  return lines.slice(3);
+  return lines.slice(4);
 }
 
 /**
