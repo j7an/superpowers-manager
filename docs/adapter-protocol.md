@@ -2,11 +2,10 @@
 
 ## Scope
 
-This document defines the version-1 JSON response protocol between a
-Superpowers Manager adapter and the shared runtime in `scripts/core/`. The
-adapter writes one response to standard output; the validator checks that
-response against the invoked operation and adapter exit status before any
-adapter message is replayed or any result is accepted.
+This document defines the version-1 response protocol between a Superpowers
+Manager adapter and the in-process TypeScript runtime in `src/`. The runtime
+checks a response against the invoked operation and adapter exit status before
+any adapter message is replayed or any result is accepted.
 
 ## Envelope
 
@@ -96,11 +95,11 @@ coordinated validator/test/doc updates, and a PR.
 This limit is an accident guard, not a security boundary, because adapters
 already execute local code.
 
-## Capture-time disk growth
+## Capture-time buffering
 
-`scripts/core/adapter.sh` redirects adapter stdout to `${result_file}.response`
-before validation. Therefore the limit bounds parser memory and replay volume,
-not disk growth while stdout is captured.
+`src/adapter.ts` captures Codex command output in memory and records it in the
+response envelope. The protocol has no response-file capture step, so it does
+not bound disk growth while output is captured.
 
 ## Governance
 
