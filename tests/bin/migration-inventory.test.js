@@ -121,13 +121,18 @@ const RETIRED_ITEMS_RE = new RegExp(
 // Declared, never derived — same philosophy as DECLARED above, and for the
 // same reason: a predicate ("skip any file with zero markers") would also
 // match a file that *lost* its markers, silently passing exactly the
-// deletion this checker exists to catch. workflows.md is named here, alone,
-// because it records its merges by prose item-range enumeration
-// ("items 1-2", "items 17-24", "items 25-28") and never adopted the
-// `**Merged**` bold-marker convention the other three phrase-bearing files
-// use — its "three recorded merges" is not machine-checkable in this form,
-// not a defect. Remove this entry if workflows.md ever adopts the marker.
-const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
+// deletion this checker exists to catch. Exemptions are per phrase so a file
+// cannot bypass an unrelated count's marker comparison. workflows.md is
+// exempt only for merges because it records them by prose item-range
+// enumeration ("items 1-2", "items 17-24", "items 25-28") and never adopted
+// the `**Merged**` bold-marker convention. Its "three recorded merges" is not
+// machine-checkable in this form, not a defect. Remove this entry if
+// workflows.md ever adopts the marker.
+/** @type {Record<"merges" | "retirements", ReadonlySet<string>>} */
+const STATED_COUNT_MARKER_CHECK_EXEMPT = {
+  merges: new Set(["workflows.md"]),
+  retirements: new Set(),
+};
 
 // Declared, never derived — a predicate such as "check a file that currently
 // states a count" would pass at the moment that count is deleted, which is the
@@ -207,15 +212,16 @@ function parseStatedCount(token) {
  * for the same concept, e.g. `**Merged**`). Both regexes must be global.
  * A file in `required` must state exactly one count; every other non-exempt
  * file must state none. This makes both deleting a declared count and adding
- * a new phrase without declaring it fail closed. Skipped entirely for a name
- * in `exempt` — see STATED_COUNT_MARKER_CHECK_EXEMPT.
+ * a new phrase without declaring it fail closed. Only the marker comparison
+ * is skipped for a name in `markerComparisonExempt`; phrase presence remains
+ * unconditional. See STATED_COUNT_MARKER_CHECK_EXEMPT.
  * @param {string} source
  * @param {RegExp} countRe
  * @param {RegExp} markerRe
  * @param {string} phraseLabel
  * @param {string} name
  * @param {ReadonlySet<string>} required
- * @param {ReadonlySet<string>} exempt
+ * @param {ReadonlySet<string>} markerComparisonExempt
  */
 function assertStatedCountMatchesMarkers(
   source,
@@ -224,9 +230,8 @@ function assertStatedCountMatchesMarkers(
   phraseLabel,
   name,
   required,
-  exempt,
+  markerComparisonExempt,
 ) {
-  if (exempt.has(name)) return;
   const stated = [...source.matchAll(countRe)];
   if (required.has(name)) {
     assert.equal(
@@ -241,6 +246,7 @@ function assertStatedCountMatchesMarkers(
       `${name}: states a ${phraseLabel} count but is absent from STATED_COUNT_REQUIRED`,
     );
   }
+  if (markerComparisonExempt.has(name)) return;
   const actual = [...source.matchAll(markerRe)].length;
   for (const match of stated) {
     const claimed = parseStatedCount(match[1]);
@@ -600,7 +606,7 @@ for (const name of inventories) {
       "recorded merges",
       name,
       STATED_COUNT_REQUIRED.merges,
-      STATED_COUNT_MARKER_CHECK_EXEMPT,
+      STATED_COUNT_MARKER_CHECK_EXEMPT.merges,
     );
     assertStatedCountMatchesMarkers(
       source,
@@ -609,7 +615,7 @@ for (const name of inventories) {
       "retired items",
       name,
       STATED_COUNT_REQUIRED.retirements,
-      STATED_COUNT_MARKER_CHECK_EXEMPT,
+      STATED_COUNT_MARKER_CHECK_EXEMPT.retirements,
     );
 
     assertNetArithmeticSelfConsistent(source, name);
