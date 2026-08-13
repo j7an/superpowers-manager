@@ -15,7 +15,7 @@
 // hand at Task 10 and are recorded in that task's report.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -30,31 +30,28 @@ import {
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-/** @returns {import("./scripts-consumers.js").AuditHit[]} */
-function observe() {
-  const rows = runScriptsAudit(ROOT);
-  // A zero-row audit is 4c's success condition, not 4b's: reaching it here
-  // would mean the command stopped matching rather than that the tree changed,
-  // and every case below would then pass over an empty set.
-  assert.ok(
-    rows.length > 0,
-    "the D2a audit returned no rows at all — the command, not the tree, is the likely cause",
-  );
-  return rows;
+/** A root with one known hit, so a zero real-tree audit cannot be a broken command. */
+function positiveControl() {
+  const root = mkdtempSync(join(tmpdir(), "spw-audit-control-"));
+  try {
+    mkdirSync(join(root, "tests"), { recursive: true });
+    writeFileSync(
+      join(root, "tests", "probe.test.js"),
+      'const p = "scripts/core/common.sh";\n',
+    );
+    return runScriptsAudit(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
-void test("every audit hit is declared, and every declaration is an audit hit", () => {
-  const { undeclared, stale } = reconcileAudit(observe(), SCRIPTS_CONSUMERS);
-  assert.deepEqual(
-    undeclared,
-    [],
-    `these scripts/ consumers have no disposition in tests/bin/scripts-consumers.js:\n${undeclared.join("\n")}`,
-  );
-  assert.deepEqual(
-    stale,
-    [],
-    `these declared dispositions match no audit hit any more:\n${stale.join("\n")}`,
-  );
+void test("the audit still matches, so an empty real-tree result means the tree", () => {
+  assert.equal(positiveControl().length, 1);
+});
+
+void test("scripts/ is gone, so the audit and the declaration map are both empty", () => {
+  assert.deepEqual(runScriptsAudit(ROOT), []);
+  assert.deepEqual(SCRIPTS_CONSUMERS, []);
 });
 
 void test("every declaration names a disposition from the three-value set and a target", () => {
@@ -80,49 +77,37 @@ void test("every declaration names a disposition from the three-value set and a 
 // relocation map in Task 1; the protocol suite now lives under fixtures, and
 // Task 2 removes the remaining shell drivers.
 
+const FIXTURE_HIT = {
+  file: "tests/bin/fixture.test.js",
+  line: 1,
+  normalized: 'const p = join(ROOT, "scripts/core/common.sh");',
+  ordinal: 1,
+};
+const FIXTURE_DECL = {
+  ...FIXTURE_HIT,
+  disposition: /** @type {const} */ ("retire"),
+  target: "fixture entry for this mutation case only",
+};
+
 void test("the reconciliation fails when the audit reports a hit nobody declared", () => {
-  const injected = [
-    ...observe(),
-    {
-      file: "tests/bin/invented.test.js",
-      line: 1,
-      normalized: 'const p = join(ROOT, "scripts/core/common.sh");',
-      ordinal: 1,
-    },
-  ];
+  const injected = [FIXTURE_HIT];
   const { undeclared, stale } = reconcileAudit(injected, SCRIPTS_CONSUMERS);
   assert.deepEqual(stale, []);
   assert.deepEqual(undeclared, [
-    'tests/bin/invented.test.js :: const p = join(ROOT, "scripts/core/common.sh"); :: #1',
+    'tests/bin/fixture.test.js :: const p = join(ROOT, "scripts/core/common.sh"); :: #1',
   ]);
 });
 
 void test("the reconciliation fails when a declared entry is deleted", () => {
-  const rows = observe();
-  const dropped = SCRIPTS_CONSUMERS.slice(1);
-  const { undeclared, stale } = reconcileAudit(rows, dropped);
+  const { undeclared, stale } = reconcileAudit([FIXTURE_HIT], []);
   assert.deepEqual(stale, []);
-  assert.deepEqual(undeclared, [auditKey(SCRIPTS_CONSUMERS[0])]);
+  assert.deepEqual(undeclared, [auditKey(FIXTURE_HIT)]);
 });
 
 void test("the reconciliation fails when a declaration outlives its hit", () => {
-  const rows = observe();
-  const extra = [
-    ...SCRIPTS_CONSUMERS,
-    {
-      file: "tests/bin/retired.test.js",
-      line: 1,
-      normalized: 'cpSync(join(ROOT, "scripts"), dest);',
-      ordinal: 1,
-      disposition: /** @type {const} */ ("retire"),
-      target: "fixture entry for this mutation case only",
-    },
-  ];
-  const { undeclared, stale } = reconcileAudit(rows, extra);
+  const { undeclared, stale } = reconcileAudit([], [FIXTURE_DECL]);
   assert.deepEqual(undeclared, []);
-  assert.deepEqual(stale, [
-    'tests/bin/retired.test.js :: cpSync(join(ROOT, "scripts"), dest); :: #1',
-  ]);
+  assert.deepEqual(stale, [auditKey(FIXTURE_DECL)]);
 });
 
 void test("a D2a audit that cannot run raises instead of reporting zero rows", () => {

@@ -2,6 +2,12 @@
 // D2a's executable audit of the test tree's references into production
 // scripts/, with a disposition per hit.
 //
+// SLICE 4C RECORD. The lifecycle tree is deleted in this slice, so the
+// declaration map below is permanently empty. This module remains the single
+// source for the audit command and its fail-closed parser: the positive control
+// in scripts-consumers.test.js proves a zero-row real-tree audit means no hits,
+// not a command that silently stopped matching.
+//
 // Declared, never globbed. A query over mutable state empties exactly when the
 // deletion it should catch happens — the argument tests/bin/adapter-seam.js and
 // tests/bin/migration-inventory.test.js both make, turned on this list. What is
