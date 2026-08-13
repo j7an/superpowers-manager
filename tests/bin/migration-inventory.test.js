@@ -59,8 +59,10 @@ const DECLARATION = /^```json inventory\n([\s\S]*?)\n```$/gm;
 const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
 const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
 const TEST_IMPORT = /^import test from "node:test";$/m;
-const FROZEN_FIRST_LINE =
-  /^<!-- FROZEN: historical migration record\. Declared historical against ([0-9a-f]{40})\.(?: The pin is not a pointer anchor\.)? -->$/;
+const FROZEN_ORDINARY_FIRST_LINE =
+  /^<!-- FROZEN: historical migration record\. Declared historical against ([0-9a-f]{40})\. -->$/;
+const FROZEN_PROVENANCE_FIRST_LINE =
+  /^<!-- FROZEN: historical migration record\. Declared historical against ([0-9a-f]{40})\. The pin is not a pointer anchor\. -->$/;
 const FROZEN_SECOND_LINE =
   "<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->";
 const FROZEN_RESOLUTION_LINE =
@@ -89,7 +91,9 @@ function frozenRegionLines(source, name) {
   );
   assert.match(
     lines[1],
-    FROZEN_FIRST_LINE,
+    FROZEN_WITHOUT_SINGLE_RESOLUTION.has(name)
+      ? FROZEN_PROVENANCE_FIRST_LINE
+      : FROZEN_ORDINARY_FIRST_LINE,
     `${name}: missing or malformed frozen-history pin`,
   );
   assert.equal(
