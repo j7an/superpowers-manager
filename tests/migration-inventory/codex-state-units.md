@@ -1,11 +1,14 @@
 # Migration inventory: tests/test_codex_state_units.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show cf7163556388fa85192556ba8fd56d789946db56:tests/test_codex_state_units.sh -->
 
 Source read in full (47 lines). Ported to `tests/unit/lifecycle.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_codex_state_units` (confirmed by `grep -c '^| *\`' docs/baseline/traceability.md`
-returning 121 with zero `test_codex_state_units` hits). This inventory, not the
-121-ID count, is the evidence that no assertion was dropped.
+returning 120 with zero `test_codex_state_units` hits). This inventory, not the
+120-ID count, is the evidence that no assertion was dropped.
 
 ## Counting rules applied
 

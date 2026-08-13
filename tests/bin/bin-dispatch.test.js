@@ -64,75 +64,23 @@ void test("a dist/cli.js that throws keeps its real error and is not relabelled"
 // tests/migration-inventory/bin-dispatch.md and the dedicated in-process
 // routing cases below.
 
-void test("`prepare` runs in-process and dispatches nothing", () => {
-  // The fake `git` from `tools` exits 0 and produces nothing, so prepare fails
-  // on the clone — deliberately not asserted. Item 8's contract was routing,
-  // not outcome, and this fixture's package root has no upstream or manifest
-  // template to succeed against.
-  const result = runDispatch({
-    tools: ALL_TOOLS,
-    args: ["prepare", "--ref", "test"],
-  });
-  assert.deepEqual(result.log, []);
-});
-
-void test("routing: `track-latest` succeeds in-process and never reaches its script", () => {
+void test("routing: `track-latest` succeeds in-process", () => {
   const result = runDispatch({ tools: ALL_TOOLS, args: ["track-latest"] });
   assert.equal(result.status, 0);
-  // If routing regressed and dispatched scripts/track-latest anyway, the
-  // shared loggingStub would have appended a line here.
-  assert.deepEqual(result.log, []);
 });
 
-void test("routing: `unpin` succeeds in-process and never reaches its script", () => {
+void test("routing: `unpin` succeeds in-process", () => {
   const result = runDispatch({ tools: ALL_TOOLS, args: ["unpin"] });
   assert.equal(result.status, 0);
-  // If routing regressed and dispatched scripts/unpin anyway, the shared
-  // loggingStub would have appended a line here.
-  assert.deepEqual(result.log, []);
 });
 
-void test("routing: `pin` succeeds in-process and never reaches its script", () => {
+void test("routing: `pin` succeeds in-process", () => {
   const result = runDispatch({
     tools: ["python3", "codex"],
     args: ["pin", "v1.0.0"],
     pinUpstream: true,
   });
   assert.equal(result.status, 0);
-  // If routing regressed and dispatched scripts/pin anyway, the shared
-  // loggingStub would have appended a line here.
-  assert.deepEqual(result.log, []);
-});
-
-// Item 12's successor. `install` cannot succeed through this fixture — the
-// `tools` stubs are `exit 0` one-liners and the package root carries no
-// upstream to clone — so, exactly as for `prepare` above, the routing property
-// is all that survives and no exit status is asserted. The shared
-// `loggingStub` still logs unconditionally on invocation, so an empty log is
-// what discriminates "ran in-process" from "dispatched scripts/install".
-void test("`install` runs in-process and dispatches nothing", () => {
-  const result = runDispatch({
-    tools: ALL_TOOLS,
-    args: ["install", "--dry-run"],
-  });
-  assert.deepEqual(result.log, []);
-});
-
-// Item 13's successor, same shape and same reason.
-void test("`uninstall` runs in-process and dispatches nothing", () => {
-  const result = runDispatch({
-    tools: ALL_TOOLS,
-    args: ["uninstall", "--purge"],
-  });
-  assert.deepEqual(result.log, []);
-});
-
-// Item 14's successor: a bare invocation still routes to `update`, which now
-// runs in-process. The routing half of the shell's claim is what survives —
-// that the default subcommand is `update` and that it reaches no script.
-void test("a bare invocation routes to `update`, in-process, dispatching nothing", () => {
-  const result = runDispatch({ tools: ALL_TOOLS, args: [] });
-  assert.deepEqual(result.log, []);
 });
 
 // The unregistered-handler backstop case stood here until PR 11.5 slice 4b
@@ -165,22 +113,20 @@ void test("a bare invocation routes to `update`, in-process, dispatching nothing
 
 // --- inventory items 15-19: unknown subcommand -----------------------------
 
-void test("an unknown subcommand fails with usage and dispatches nothing", () => {
+void test("an unknown subcommand fails with usage", () => {
   const result = runDispatch({ tools: ALL_TOOLS, args: ["bogus"] });
   assert.equal(result.status, 2);
   assert.ok(result.stderr.includes("unknown subcommand: bogus"));
   assert.ok(result.stderr.includes("usage:"));
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory items 20-23: a stray flag must not fall through to update ---
 
-void test("a stray flag fails with usage and dispatches nothing", () => {
+void test("a stray flag fails with usage", () => {
   const result = runDispatch({ tools: ALL_TOOLS, args: ["--porcelain"] });
   assert.equal(result.status, 2);
   assert.ok(result.stderr.includes("unknown subcommand: --porcelain"));
   assert.ok(result.stderr.includes("usage:"));
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory items 24-28: --help and --version ---------------------------
@@ -224,7 +170,7 @@ void test("--version through a symlink resolves, as npm and npx invoke bins", ()
 //
 // RETIRED at the gap (PR 11.5 slice 4b, Task 8). The case asserted that
 // SUPERPOWERS_REF and SUPERPOWERS_VALIDATOR reach `scripts/update`'s
-// environment, observed through the dispatch log the stub writes. `update` is
+// environment. `update` is
 // in-process, so no environment is handed to a child at all: the command reads
 // `ctx.env`, which is `process.env` itself (src/cli.ts's single CommandContext
 // construction site). There is no "passthrough" left to break. The surviving
@@ -257,7 +203,6 @@ void test("missing git fails before dispatch and names the tool", () => {
     result.stderr,
     "error: required command not found: git — install git and re-run\n",
   );
-  assert.deepEqual(result.log, []);
 });
 
 // New (PR 11.5, Task 7): the generic case above uses `install` — a command
@@ -280,7 +225,6 @@ void test("`pin` fails preflight when git is absent from PATH", () => {
     result.stderr,
     "error: required command not found: git — install git and re-run\n",
   );
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory items 35-37: invalid pin syntax precedes preflight ----------
@@ -298,7 +242,6 @@ void test("an invalid pin ref is a usage error decided before any tool lookup", 
       "pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit",
     ),
   );
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory items 38-40: commands that need no git -----------------------
@@ -326,7 +269,6 @@ void test("`uninstall` runs in-process with git absent from PATH", () => {
     !result.stderr.includes("required command not found: git"),
     `preflight must not require git for uninstall: ${result.stderr}`,
   );
-  assert.deepEqual(result.log, []);
 });
 
 void test("`track-latest` succeeds in-process with git absent from PATH", () => {
@@ -335,7 +277,6 @@ void test("`track-latest` succeeds in-process with git absent from PATH", () => 
     args: ["track-latest"],
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 void test("`unpin` succeeds in-process with git absent from PATH", () => {
@@ -344,7 +285,6 @@ void test("`unpin` succeeds in-process with git absent from PATH", () => {
     args: ["unpin"],
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory item 41: unpin needs no shell, python, codex, or git ---------
@@ -352,7 +292,7 @@ void test("`unpin` succeeds in-process with git absent from PATH", () => {
 // unpin's in-process flip (PR 11.5) made every one of these properties true
 // at once, since DISPATCH-gated preflight (src/cli.ts:240) no longer
 // discovers a shell for it either. The two cases below cover the property
-// item 41 actually protects — success, not a specific dispatch-log line —
+// item 41 actually protects — success —
 // plus a new sibling for `sh` absent, which was previously unwriteable
 // through this fixture (`sh` was unconditionally on PATH).
 
@@ -362,7 +302,6 @@ void test("`unpin` succeeds in-process with python3 absent from PATH", () => {
     args: ["unpin"],
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 void test("`unpin` succeeds in-process with no POSIX shell on PATH", () => {
@@ -372,7 +311,6 @@ void test("`unpin` succeeds in-process with no POSIX shell on PATH", () => {
     omitShell: true,
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 // `track-latest` never required `sh` (spawn dispatch required it for every
@@ -390,7 +328,6 @@ void test("`track-latest` succeeds in-process with python3 and no POSIX shell on
     omitShell: true,
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 // New (PR 11.5, Task 7). `pin`, unlike `track-latest`/`unpin`, still requires
@@ -413,7 +350,6 @@ void test("`pin` succeeds in-process with python3 absent from PATH", () => {
     pinUpstream: true,
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 // New (PR 11.5, Task 7). No POSIX shell counterpart exists in the shell
@@ -428,7 +364,6 @@ void test("`pin` succeeds in-process with no POSIX shell on PATH", () => {
     omitShell: true,
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory items 42-47: codex required for probe and install ------------
@@ -437,10 +372,7 @@ void test("`pin` succeeds in-process with no POSIX shell on PATH", () => {
 // keeps `codex` after slice 2's in-process flip (only `python3` leaves), and
 // this is the end-to-end net for that row. The per-case `scripts` override the
 // shell mirrored here went away with the flip — probe no longer reaches any
-// script, so a stub for one could never log. The shared `PACKAGE_ROOT`'s
-// default `loggingStub` still logs unconditionally on invocation, so the
-// empty-log assertion keeps catching a regression that dispatched anyway,
-// exactly as it does for the `install` sibling below.
+// script, so a stub for one could no longer observe relevant behavior.
 void test("missing codex blocks `probe` before dispatch and names the tool", () => {
   const result = runDispatch({
     tools: ["git", "python3"],
@@ -448,7 +380,6 @@ void test("missing codex blocks `probe` before dispatch and names the tool", () 
   });
   assert.equal(result.status, 1);
   assert.ok(result.stderr.includes("required command not found: codex"));
-  assert.deepEqual(result.log, []);
 });
 
 void test("missing codex blocks `install` before dispatch and names the tool", () => {
@@ -458,7 +389,6 @@ void test("missing codex blocks `install` before dispatch and names the tool", (
   });
   assert.equal(result.status, 1);
   assert.ok(result.stderr.includes("required command not found: codex"));
-  assert.deepEqual(result.log, []);
 });
 
 // --- prepare's conditional python3 requirement -------------------------------
@@ -472,7 +402,6 @@ void test("`prepare` does not require python3 when no validator is configured", 
     !result.stderr.includes("required command not found: python3"),
     `preflight must not require python3 without a validator: ${result.stderr}`,
   );
-  assert.deepEqual(result.log, []);
 });
 
 void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () => {
@@ -486,8 +415,6 @@ void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () 
     result.stderr,
     "error: required command not found: python3 — install python3 and re-run\n",
   );
-  // Preflight completes before dispatch and before any Git or build effect.
-  assert.deepEqual(result.log, []);
 });
 
 // --- inventory items 48-51: commands that need no codex ----------------------
@@ -495,8 +422,7 @@ void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () 
 // A `NO_CODEX_CASES` table and its `for` loop used to stand here. `pin`
 // (formerly item 48), `track-latest` (formerly item 49), and `unpin`
 // (formerly item 50) left it as each went in-process, and `prepare` (formerly
-// item 51) — its last entry — left the same way at slice 3.4: none of the four
-// logs to the dispatch log any more regardless of `codex`'s presence. The
+// item 51) — its last entry — left the same way at slice 3.4. The
 // table and its loop are deleted rather than left with zero entries, because a
 // `for` over `[]` reports success without asserting anything. See the
 // retirement notes for items 48, 49, 50, and 51 in
@@ -512,7 +438,6 @@ void test("`prepare` runs in-process with codex absent from PATH", () => {
     !result.stderr.includes("required command not found: codex"),
     `preflight must not require codex for prepare: ${result.stderr}`,
   );
-  assert.deepEqual(result.log, []);
 });
 
 void test("`track-latest` succeeds in-process with codex absent from PATH", () => {
@@ -521,13 +446,11 @@ void test("`track-latest` succeeds in-process with codex absent from PATH", () =
     args: ["track-latest"],
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 void test("`unpin` succeeds in-process with codex absent from PATH", () => {
   const result = runDispatch({ tools: ["git", "python3"], args: ["unpin"] });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 void test("`pin` succeeds in-process with codex absent from PATH", () => {
@@ -537,7 +460,6 @@ void test("`pin` succeeds in-process with codex absent from PATH", () => {
     pinUpstream: true,
   });
   assert.equal(result.status, 0);
-  assert.deepEqual(result.log, []);
 });
 
 // --- matrix row 13: the pin fixture's git sits behind one egress refusal ---
@@ -602,5 +524,5 @@ void test("the pin dispatch fixture refuses a network git remote before git runs
 // the condition cannot occur in either direction. There is no successor: a
 // missing command module is now an ESM import failure at load, which
 // `bin/superpowers-manager.js` already reports through the two dist-integrity
-// cases at the top of this file. `missingScripts` as a `runDispatch` option
-// survives with no consumer, and is deleted in 4c with `scripts/` itself.
+// cases at the top of this file. The unused `missingScripts` `runDispatch`
+// option was deleted in 4c with the `scripts/` fixture tree itself.

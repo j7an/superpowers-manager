@@ -946,7 +946,7 @@ void test("the STRICT provenance reader, not the lenient one, feeds desiredCommi
   assert.equal(calls.length, 3);
 });
 
-void test('argv is ignored, matching scripts/install never reading "$@"', async () => {
+void test("argv is ignored by src/commands/install.ts", async () => {
   const out = sink();
   const err = sink();
   const { adapter } = scriptedAdapter([

@@ -45,9 +45,8 @@ function buildSnapshot() {
   const snapshot = mkdtempSync(join(SCRATCH, "snapshot-"));
   // `bin` joined the list at PR 11.5 slice 4b's flip: the subject runScript
   // launches is now the Node entrypoint bin/superpowers-manager.js, not a
-  // scripts/ file. `scripts` stays until 4c deletes it — tests/bin/units.test.js
-  // guards that it is still present here.
-  for (const entry of ["bin", "scripts", "config", "dist"]) {
+  // scripts/ file.
+  for (const entry of ["bin", "config", "dist"]) {
     cpSync(join(ROOT, entry), join(snapshot, entry), { recursive: true });
   }
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
@@ -93,7 +92,8 @@ const IDENTITY = [
 
 /**
  * A fake upstream git repo with one stable release tag. Built once and shared
- * across every case: `scripts/prepare` only ever fetches from it, which is
+ * across every case: `src/commands/prepare.ts` only ever fetches from it via
+ * `src/upstream.ts`'s `fetchExactCommit` and `src/git.ts`, which is
  * read-only on the source, so concurrent cases cannot disturb one another
  * through it. Mirrors tests/test_install_commands.sh:51-67.
  * @returns {string}

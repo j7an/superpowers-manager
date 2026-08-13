@@ -1,5 +1,5 @@
 // @ts-check
-// Two gates, plus the four cases that keep them from going vacuous. PRESENT
+// One gate, plus the three cases that keep it from going vacuous. PRESENT
 // STATE, re-derived 2026-08-11 (PR 11.5 slice 4b Task 9): every
 // SEAM_DEPENDENT entry is { intercept: 0, log: 0 }, and no parseable
 // seamDependency DECLARATION is left in the SEAM_SOURCES files — Task 6
@@ -20,34 +20,27 @@
 //
 // Know this before trusting the classification gate below. Its property is
 // `readers === 0 || declared > 0`, so with readers nonzero the second
-// disjunct is the one holding it up — and `declared` counts the bare string
-// `seamDependency:`, which in both files matches only the case builder's
-// passthrough (`seamDependency: options.seamDependency`), never a
-// declaration. That gate therefore cannot fail for these two files at
-// present. Left as is deliberately: the pattern it shares with the count case
-// is what slice 4c reads when it retires the seam, and narrowing it is that
-// task's call, not a fix to smuggle in under a tripwire case.
+// disjunct is the one holding it up. `declared` must therefore count actual
+// declarations, not the case builder's `seamDependency: options.seamDependency`
+// passthrough: only `DECLARATION` can establish the protection this gate asks
+// for.
 //
 // HISTORY, which is why the gates were written: before Task 6 there were 9
 // reader sites and 30 declaring cases, and both would have gone vacuous when
 // slice 4 removed the seam, in exactly the way five cli-parity assertions did
 // in slice 3.4 — silently, with the suite still green.
 //
-// The two gates are "every script with seam-dependent cases still exists" and
-// "no adapter-log reader is left unclassified". The other four cases exist
-// only because each gate has a way to stop asserting: the injection proof
-// shows gate 1 can still fail, the count case ties SEAM_DEPENDENT to the
-// declarations it claims to protect, and the two membership cases keep
-// SEAM_SOURCE_FILES — the scan set both gates now walk — from being emptied
-// ahead of the residue it is supposed to find.
+// The surviving gate is "no adapter-log reader is left unclassified". It
+// derives reader-bearing files from the tree, independently of the mutable
+// seam registries. The other three cases keep the registries reconciled with
+// the declarations and reader files that the tree scan finds.
 
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  assertSeamScriptsPresent,
   SEAM_DEPENDENT,
   SEAM_REASONS,
   SEAM_SOURCE_FILES,
@@ -81,6 +74,20 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const DECLARATION = /seamDependency:\s*\{[^}]*\}/;
 const REASON_FIELD = /reason:\s*"(\w+)"/;
 const SCRIPT_FIELD = /script:\s*"(\w+)"/;
+// A canonical executable reader is a standalone argument followed by a
+// comma. Anchoring the whole line excludes prose and string/regex constants;
+// this file is separately excluded from the tree walk below.
+const ADAPTER_LOG_READER = /^[\t ]*readLog\(c\.adapterLog\),[\t ]*$/gm;
+
+// Declared, never derived. These are the intentional row-18 tripwire
+// readers: with no live seam declarations left, an added reader must not hide
+// among them. A file that regains a real declaration keeps the deliberately
+// weak, per-file classification below — attributing individual readers to
+// cases needs a parser this repository does not have.
+const INTENTIONAL_NON_SEAM_READERS = new Map([
+  ["tests/bin/install-commands.test.js", 2],
+  ["tests/bin/uninstall-commands.test.js", 2],
+]);
 
 /**
  * Type-guards a string against SEAM_REASONS. The cast is only on the
@@ -94,43 +101,6 @@ const SCRIPT_FIELD = /script:\s*"(\w+)"/;
 function isSeamReason(reason) {
   return /** @type {readonly string[]} */ (SEAM_REASONS).includes(reason);
 }
-
-void test("every script with seam-dependent cases still exists", () => {
-  assertSeamScriptsPresent(ROOT, existsSync);
-});
-
-void test("the gate fails when a depended-on script is gone", () => {
-  // Mutation proof by INJECTION, not by editing src/ or scripts/. The gate's
-  // inputs are a root and an existence predicate, so a predicate that denies
-  // one script reproduces slice 4's deletion exactly, with no tracked file
-  // touched and no build step involved.
-  //
-  // `gone` is built with join() deliberately — see the join() comment in
-  // adapter-seam.js's assertSeamScriptsPresent. The predicate can only deny
-  // the path the gate actually probes, so this line also pins path-spelling
-  // agreement between the two. Simplifying it to a template literal
-  // reintroduces the bug commit 0d9a53c fixed: the gate would probe a
-  // double-slash spelling the predicate never matches, and would silently
-  // stop observing its own failure mode.
-  //
-  // A throwaway, nonzero third argument — NOT the real, gated SEAM_DEPENDENT,
-  // which PR 11.5 slice 4b Task 6 discharged to zero everywhere — is required
-  // as of that discharge: `assertSeamScriptsPresent`'s own `total === 0 ->
-  // continue` skip would otherwise pass "install" over before the existence
-  // check below ever runs, since the real map's install entry is now
-  // `{ intercept: 0, log: 0 }`. This proves the same throw path the real gate
-  // uses the moment any script's count is legitimately nonzero again; it
-  // asserts nothing about the real registry's current value, which the count
-  // case above already pins.
-  const gone = join(ROOT, "scripts", "install");
-  assert.throws(
-    () =>
-      assertSeamScriptsPresent(ROOT, (p) => p !== gone && existsSync(p), {
-        install: { intercept: 1, log: 0 },
-      }),
-    /scripts\/install is gone, but \d+ of its cases still depend on the SPW_ADAPTER seam/,
-  );
-});
 
 void test("each declared count matches the declarations in its sources", () => {
   // The count is declared, but checked against the source: a case removed
@@ -179,7 +149,7 @@ void test("each declared count matches the declarations in its sources", () => {
   assert.deepEqual(found, SEAM_DEPENDENT);
 });
 
-void test("no adapter-log reader is left unclassified", () => {
+void test("adapter-log readers have a declaration or their explicit non-seam baseline", () => {
   // A reader in a case with no seamDependency is a reader whose channel dies
   // unannounced. All three modes still write adapter.log, so `delegate` is the
   // mode most likely to look harmless here.
@@ -188,28 +158,44 @@ void test("no adapter-log reader is left unclassified", () => {
   // and a declared case can hold none, so a count comparison would be wrong.
   // Per-case attribution needs a parser this repo has no dependency for, and
   // tests/bin/migration-inventory.test.js's history is a standing argument
-  // against approximating one with a regex. This check's job is only to catch
-  // the whole-file regression — a source that reads the log while declaring
-  // nothing — and it must stay that weak on purpose.
+  // against approximating one with a regex. A file with a real declaration
+  // therefore keeps the old weak classification. A file without one must be
+  // empty unless it has an explicit intentional-reader baseline.
   //
-  // Scans SEAM_SOURCE_FILES for the reason test 3 above does: the derived set
-  // would stop visiting a file exactly when slice 4 empties its SEAM_DEPENDENT
-  // entry, leaving live readers unclassified with this loop body never run.
+  // Reader discovery is deliberately independent of SEAM_SOURCE_FILES and
+  // SEAM_SOURCES. Coordinated removal from those mutable registries must not
+  // hide readers that remain in the tree.
   //
-  // The property is `readers === 0 || declared > 0`, not `declared > 0`: a
-  // file slice 4 has legitimately emptied of both readers and declarations is
-  // not a defect, and asserting on `declared` alone would fail it with a
-  // message describing readers that are not there.
-  for (const relative of SEAM_SOURCE_FILES) {
-    const source = readFileSync(join(ROOT, relative), "utf8");
-    const readers = (source.match(/readLog\(c\.adapterLog\)/g) ?? []).length;
-    const declared = (source.match(/seamDependency:/g) ?? []).length;
+  // A file slice 4 has legitimately emptied of both readers and declarations
+  // is not a defect, so its implicit baseline is zero. The two row-18
+  // tripwire files state their intentional readers above; any other reader in
+  // a declaration-free file fails rather than being covered by a bare
+  // `seamDependency:` mention in the case builder.
+  const readers = readerFiles();
+  const declared = new Set(declaringFiles());
+
+  for (const relative of readers.keys()) {
     assert.ok(
-      readers === 0 || declared > 0,
-      `${relative} has ${readers} adapter-log readers and no seamDependency ` +
-        "declarations at all",
+      SEAM_SOURCE_FILES.includes(relative),
+      `${relative} has adapter-log readers but is absent from ` +
+        "SEAM_SOURCE_FILES, so the seam registry no longer represents it",
     );
   }
+
+  const undeclaredReaders = new Map(
+    [...readers].filter(([relative]) => !declared.has(relative)),
+  );
+  const expected = new Map(
+    [...INTENTIONAL_NON_SEAM_READERS].filter(
+      ([relative]) => !declared.has(relative),
+    ),
+  );
+  assert.deepEqual(
+    undeclaredReaders,
+    expected,
+    "declaration-free adapter-log reader files must exactly match the " +
+      "intentional non-seam baseline",
+  );
 });
 
 void test("every SEAM_SOURCES file is listed in SEAM_SOURCE_FILES", () => {
@@ -282,4 +268,30 @@ function declaringFiles() {
     if (DECLARATION.test(readFileSync(absolute, "utf8"))) found.push(relative);
   }
   return found;
+}
+
+/**
+ * Every test JavaScript file with canonical executable adapter-log readers,
+ * mapped to its exact reader count. The gate file is excluded by absolute
+ * identity so its comments and detector cannot become observations.
+ *
+ * @returns {Map<string, number>}
+ */
+function readerFiles() {
+  const self = fileURLToPath(import.meta.url);
+  /** @type {[string, number][]} */
+  const found = [];
+  for (const entry of readdirSync(join(ROOT, "tests"), { recursive: true })) {
+    const relative = join("tests", String(entry));
+    if (!relative.endsWith(".js")) continue;
+    if (relative.split("/").includes("node_modules")) continue;
+    const absolute = join(ROOT, relative);
+    if (absolute === self || !statSync(absolute).isFile()) continue;
+    const count = (
+      readFileSync(absolute, "utf8").match(ADAPTER_LOG_READER) ?? []
+    ).length;
+    if (count > 0) found.push([relative, count]);
+  }
+  found.sort(([left], [right]) => left.localeCompare(right));
+  return new Map(found);
 }

@@ -1,3 +1,8 @@
+// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
+// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
+// and will not be re-derived. Resolve one with:
+//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh
+
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { runAdapter } from "./adapter.js";
@@ -281,7 +286,7 @@ function usage(): string {
     "  update     probe, then prepare/install only if needed (default when no subcommand)",
     "  uninstall  remove the manager plugin and marketplace from Codex",
     "",
-    "Environment overrides (passed through to the scripts): SUPERPOWERS_REF,",
+    "Environment overrides (used by in-process commands): SUPERPOWERS_REF,",
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",
     "SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,",
     "SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,",

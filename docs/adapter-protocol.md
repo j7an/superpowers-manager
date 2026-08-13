@@ -2,11 +2,16 @@
 
 ## Scope
 
-This document defines the version-1 JSON response protocol between a
-Superpowers Manager adapter and the shared runtime in `scripts/core/`. The
-adapter writes one response to standard output; the validator checks that
-response against the invoked operation and adapter exit status before any
-adapter message is replayed or any result is accepted.
+This document defines the version-1 JSON response protocol used by
+`src/adapter-cli.ts` and the relocated protocol fixtures under
+`tests/fixtures/protocol/`. In that serialized path, the validator checks the
+response against the invoked operation and adapter-process exit status before
+any adapter message is replayed or any result is accepted.
+
+The product CLI does not use that transport: `src/cli.ts` binds `runAdapter`
+directly into the lifecycle context, and handlers consume its `AdapterResult`
+in-process. There is no adapter-process exit or independent
+operation/response validation on that path.
 
 ## Envelope
 
@@ -96,11 +101,14 @@ coordinated validator/test/doc updates, and a PR.
 This limit is an accident guard, not a security boundary, because adapters
 already execute local code.
 
-## Capture-time disk growth
+## Capture-time buffering
 
-`scripts/core/adapter.sh` redirects adapter stdout to `${result_file}.response`
-before validation. Therefore the limit bounds parser memory and replay volume,
-not disk growth while stdout is captured.
+On the product path, `src/adapter.ts` captures Codex child output in memory with
+an unbounded `execFile` `maxBuffer`. Mutation-command output is recorded as
+messages, but listing stdout may instead be parsed directly without being
+recorded in an envelope; listing stderr is recorded. The response-byte limit
+above applies only to the serialized fixture validator, not to this in-process
+capture.
 
 ## Governance
 

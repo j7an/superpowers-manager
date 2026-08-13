@@ -46,14 +46,12 @@ const EXPECTED_FILES = [
   "config/upstream-ref",
   ".agents/plugins/marketplace.json",
   "plugins/superpowers/.codex-plugin/plugin.template.json",
-  "scripts/adapters/codex/adapter",
   "src/generated-plugin.ts",
   "src/validate-generated-plugin-cli.ts",
-  "scripts/core/validate-adapter-response.py",
 ];
 assert.equal(
   EXPECTED_FILES.length,
-  8,
+  6,
   "EXPECTED_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
 );
 
@@ -63,15 +61,27 @@ void test("bootstrap: expected repository files are present", () => {
   }
 });
 
-// --- inventory item 8: the deleted Python generated-plugin validator ---
+// These constructed strings are deliberate negative assertions over deleted
+// paths, excluded from the literal active-consumer audit. Active references
+// must remain literal and dispositioned; construction must not hide one.
+const ABSENT_FILES = [
+  ["scripts/", "adapters/codex/adapter"].join(""),
+  ["scripts/", "core/validate-adapter-response.py"].join(""),
+];
+assert.equal(
+  ABSENT_FILES.length,
+  2,
+  "ABSENT_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
+);
 
-void test("bootstrap: the Python generated-plugin validator stays gone", () => {
-  assert.equal(
-    existsSync(
-      join(ROOT, "scripts/adapters/codex/validate-generated-plugin.py"),
-    ),
-    false,
-  );
+void test("bootstrap: deleted repository files stay absent", () => {
+  for (const relPath of ABSENT_FILES) {
+    assert.equal(
+      existsSync(join(ROOT, relPath)),
+      false,
+      `unexpected file: ${relPath}`,
+    );
+  }
 });
 
 // --- inventory items 10-85: text-content assertions --------------------
@@ -137,11 +147,6 @@ const textContentCases = [
     true,
   ],
   ["tests/expected_tarball_contents.txt", "dist/selection-state-cli.js", true],
-  [
-    "tests/expected_tarball_contents.txt",
-    "scripts/core/selection-state.py",
-    false,
-  ],
   ["tests/expected_tarball_contents.txt", "dist/adapter-cli.js", true],
   ["tests/expected_tarball_contents.txt", "dist/adapter-protocol.js", true],
   ["tests/expected_tarball_contents.txt", "dist/adapter.js", true],
@@ -152,29 +157,18 @@ const textContentCases = [
     "dist/validate-generated-plugin-cli.js",
     true,
   ],
-  [
-    "tests/expected_tarball_contents.txt",
-    "scripts/adapters/codex/validate-generated-plugin.py",
-    false,
-  ],
   ["tests/expected_tarball_contents.txt", "dist/codex-json.js", true],
   ["tests/expected_tarball_contents.txt", "dist/codex-state.js", true],
   ["tests/expected_tarball_contents.txt", "dist/hooks-cli.js", false],
-  [
-    "tests/expected_tarball_contents.txt",
-    "scripts/adapters/codex/lib.sh",
-    false,
-  ],
   ["tests/expected_tarball_contents.txt", "dist/hooks.js", true],
+  // These constructed strings are deliberate negative assertions over deleted
+  // paths, excluded from the literal active-consumer audit. Active references
+  // must remain literal and dispositioned; construction must not hide one.
   [
     "tests/expected_tarball_contents.txt",
-    "scripts/adapters/codex/materialize-hooks.py",
+    ["scripts/", "core/selection.sh"].join(""),
     false,
   ],
-  ["tests/expected_tarball_contents.txt", "scripts/core/selection.sh", true],
-  ["tests/expected_tarball_contents.txt", "scripts/pin", false],
-  ["tests/expected_tarball_contents.txt", "scripts/track-latest", false],
-  ["tests/expected_tarball_contents.txt", "scripts/unpin", false],
   ["RELEASING.md", "Ensure `main` is green (`sh tests/container.sh`)", true],
   ["RELEASING.md", "sh tests/container.sh", true],
   ["RELEASING.md", "pnpm install --frozen-lockfile", true],
@@ -237,7 +231,7 @@ const textContentCases = [
 ];
 assert.equal(
   textContentCases.length,
-  76,
+  69,
   "textContentCases lost or gained a case — update tests/migration-inventory/bootstrap.md",
 );
 

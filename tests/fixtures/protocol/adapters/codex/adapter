@@ -1,0 +1,24 @@
+#!/bin/sh
+# RELOCATED FIXTURE — slice 4c moved this production shell code into tests/fixtures/protocol/
+# keeps a subject after the tree was deleted. This is retired production code, kept alive
+# only to host the protocol suite. SLICE 5 DELETES IT together with that suite. Do not add
+# a new consumer: a second consumer is what turns a scheduled deletion into permanent residue.
+set -eu
+
+protocol_root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+repository_root=$(CDPATH= cd -- "$(dirname "$0")/../../../../.." && pwd)
+. "$protocol_root/core/common.sh"
+
+if [ "$#" -gt 0 ]; then
+  if ! (
+    LC_ALL=C
+    case "$1" in
+      *[!\ -~]*) exit 1 ;;
+    esac
+  ); then
+    echo "protocol strings must not contain terminal control characters" >&2
+    exit 1
+  fi
+fi
+
+spw_node_cli "$repository_root" adapter-cli.js 'codex adapter' "$@"

@@ -9,6 +9,7 @@
 // markdown-parsing harness, and runtime counting would not catch it either.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -16,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const INVENTORY_DIR = join(ROOT, "tests", "migration-inventory");
+const DIGEST_PATH = join(ROOT, "tests", "migration-inventory-digests.json");
 
 // Declared, never derived. A glob is a query over mutable state and it empties
 // exactly when the deletion it should catch happens — the failure instance this
@@ -29,7 +31,9 @@ const DECLARED = {
   "codex-state-units.md": ["tests/unit/lifecycle.test.js"],
   "container-contract.md": ["tests/bin/container-contract.test.js"],
   "install-commands.md": ["tests/bin/install-commands.test.js"],
+  "marketplace-reconcile.md": ["tests/baseline/marketplace-reconcile.test.js"],
   "node-tooling.md": ["tests/bin/node-tooling.test.js"],
+  "node-cli-helper.md": ["tests/unit/adapter.test.js"],
   "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.js"],
   "prepare.md": [
     "tests/baseline/prepare.test.js",
@@ -55,6 +59,110 @@ const DECLARATION = /^```json inventory\n([\s\S]*?)\n```$/gm;
 const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
 const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
 const TEST_IMPORT = /^import test from "node:test";$/m;
+const FROZEN_ORDINARY_FIRST_LINE =
+  /^<!-- FROZEN: historical migration record\. Declared historical against ([0-9a-f]{40})\. -->$/;
+const FROZEN_PROVENANCE_FIRST_LINE =
+  /^<!-- FROZEN: historical migration record\. Declared historical against ([0-9a-f]{40})\. The pin is not a pointer anchor\. -->$/;
+const FROZEN_SECOND_LINE =
+  "<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->";
+const FROZEN_RESOLUTION_LINE =
+  /^<!-- Resolve shell-original citations with: git show [0-9a-f]{40}:.+ -->$/;
+/** @type {Record<string, string>} */
+const FROZEN_SHELL_RESOLUTION = {
+  "install-commands.md":
+    "<!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh -->",
+  "uninstall-commands.md":
+    "<!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh -->",
+};
+
+/**
+ * Returns the digest-covered content after exactly one canonical four-line
+ * freeze header. Together with the checks below, this gate verifies canonical
+ * header syntax, exact declared file membership, digest-covered body content,
+ * and live declared port counts. It does not execute Git or verify H1-to-
+ * filename identity, commit ancestry or object existence, or whether a
+ * resolution path is correct at its stated anchor.
+ * @param {string} source
+ * @param {string} name
+ * @returns {string[]}
+ */
+function frozenRegionLines(source, name) {
+  const lines = source.split("\n");
+  const frozenLines = lines.filter((line) => line.startsWith("<!-- FROZEN:"));
+  assert.equal(
+    frozenLines.length,
+    1,
+    `${name}: must carry exactly one canonical freeze header`,
+  );
+  assert.equal(
+    lines[2],
+    FROZEN_SECOND_LINE,
+    `${name}: missing canonical frozen pointer policy`,
+  );
+  const specialResolution = FROZEN_SHELL_RESOLUTION[name];
+  if (specialResolution !== undefined) {
+    assert.match(
+      lines[1],
+      FROZEN_PROVENANCE_FIRST_LINE,
+      `${name}: missing canonical multi-state pointer-provenance anchor`,
+    );
+    assert.equal(
+      lines[3],
+      specialResolution,
+      `${name}: frozen shell-original resolution anchor must match its historical driver`,
+    );
+    return lines.slice(4);
+  }
+
+  assert.match(
+    lines[1],
+    FROZEN_ORDINARY_FIRST_LINE,
+    `${name}: missing canonical frozen historical anchor`,
+  );
+  assert.match(
+    lines[3],
+    FROZEN_RESOLUTION_LINE,
+    `${name}: malformed frozen resolution anchor`,
+  );
+  return lines.slice(4);
+}
+
+/**
+ * @param {string[]} lines
+ * @returns {string}
+ */
+function frozenDigest(lines) {
+  const canonical = `${lines
+    .map((line) => line.replace(/\s+$/u, ""))
+    .join("\n")
+    .replace(/\n+$/u, "")}\n`;
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
+}
+
+/**
+ * @param {string} name
+ * @returns {Record<string, unknown>}
+ */
+function digestRegistry(name) {
+  let raw;
+  try {
+    raw = readFileSync(DIGEST_PATH, "utf8");
+  } catch {
+    return assert.fail(`${name}: frozen digest registry could not be read`);
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return assert.fail(`${name}: frozen digest registry is not valid JSON`);
+  }
+  assert.ok(
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed),
+    `${name}: frozen digest registry must be an object`,
+  );
+  return /** @type {Record<string, unknown>} */ (parsed);
+}
 
 // Cardinal words this project's inventories have actually used for a stated
 // count (bin-dispatch.md's "two", selection-state.md's "six",
@@ -119,13 +227,37 @@ const RETIRED_ITEMS_RE = new RegExp(
 // Declared, never derived — same philosophy as DECLARED above, and for the
 // same reason: a predicate ("skip any file with zero markers") would also
 // match a file that *lost* its markers, silently passing exactly the
-// deletion this checker exists to catch. workflows.md is named here, alone,
-// because it records its merges by prose item-range enumeration
-// ("items 1-2", "items 17-24", "items 25-28") and never adopted the
-// `**Merged**` bold-marker convention the other three phrase-bearing files
-// use — its "three recorded merges" is not machine-checkable in this form,
-// not a defect. Remove this entry if workflows.md ever adopts the marker.
-const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
+// deletion this checker exists to catch. Exemptions are per phrase so a file
+// cannot bypass an unrelated count's marker comparison. workflows.md is
+// exempt only for merges because it records them by prose item-range
+// enumeration ("items 1-2", "items 17-24", "items 25-28") and never adopted
+// the `**Merged**` bold-marker convention. Its "three recorded merges" is not
+// machine-checkable in this form, not a defect. Remove this entry if
+// workflows.md ever adopts the marker.
+/** @type {Record<"merges" | "retirements", ReadonlySet<string>>} */
+const STATED_COUNT_MARKER_CHECK_EXEMPT = {
+  merges: new Set(["workflows.md"]),
+  retirements: new Set(),
+};
+
+// Declared, never derived — a predicate such as "check a file that currently
+// states a count" would pass at the moment that count is deleted, which is the
+// deletion this gate exists to catch. Membership is per phrase: a file can owe
+// a merge count without owing a retirement count. The lists were derived from
+// the current inventories' two count phrasings, then checked against their
+// **Merged**/**Retired** markers. `workflows.md` remains listed for its merge
+// phrase, but the explicit exemption above skips the marker comparison because
+// its prose item ranges, rather than bold markers, are its ground truth.
+/** @type {Record<"merges" | "retirements", ReadonlySet<string>>} */
+const STATED_COUNT_REQUIRED = {
+  merges: new Set(["bin-dispatch.md", "selection-state.md", "workflows.md"]),
+  retirements: new Set([
+    "bin-dispatch.md",
+    "prepare.md",
+    "probe.md",
+    "selection-commands.md",
+  ]),
+};
 
 // Anchored to the literal shorthand punctuation an inventory uses to restate
 // its own divergence arithmetic in one place (e.g. "+5/-7/net-2") — not to
@@ -180,14 +312,18 @@ function parseStatedCount(token) {
  * Asserts every occurrence of `countRe` in `source` (a stated "N <phrase>")
  * agrees with the file's own count of `markerRe` (its bold per-item marker
  * for the same concept, e.g. `**Merged**`). Both regexes must be global.
- * Skipped entirely for a name in `exempt` — see
- * STATED_COUNT_MARKER_CHECK_EXEMPT.
+ * A file in `required` must state exactly one count; every other non-exempt
+ * file must state none. This makes both deleting a declared count and adding
+ * a new phrase without declaring it fail closed. Only the marker comparison
+ * is skipped for a name in `markerComparisonExempt`; phrase presence remains
+ * unconditional. See STATED_COUNT_MARKER_CHECK_EXEMPT.
  * @param {string} source
  * @param {RegExp} countRe
  * @param {RegExp} markerRe
  * @param {string} phraseLabel
  * @param {string} name
- * @param {ReadonlySet<string>} exempt
+ * @param {ReadonlySet<string>} required
+ * @param {ReadonlySet<string>} markerComparisonExempt
  */
 function assertStatedCountMatchesMarkers(
   source,
@@ -195,11 +331,24 @@ function assertStatedCountMatchesMarkers(
   markerRe,
   phraseLabel,
   name,
-  exempt,
+  required,
+  markerComparisonExempt,
 ) {
-  if (exempt.has(name)) return;
   const stated = [...source.matchAll(countRe)];
-  if (stated.length === 0) return;
+  if (required.has(name)) {
+    assert.equal(
+      stated.length,
+      1,
+      `${name}: must state exactly one ${phraseLabel} count because it is declared in STATED_COUNT_REQUIRED`,
+    );
+  } else {
+    assert.equal(
+      stated.length,
+      0,
+      `${name}: states a ${phraseLabel} count but is absent from STATED_COUNT_REQUIRED`,
+    );
+  }
+  if (markerComparisonExempt.has(name)) return;
   const actual = [...source.matchAll(markerRe)].length;
   for (const match of stated) {
     const claimed = parseStatedCount(match[1]);
@@ -420,10 +569,31 @@ assert.deepEqual(
   "the migration-inventory directory disagrees with the declared inventory list",
 );
 
-for (const name of inventories) {
+for (const name of Object.keys(DECLARED)) {
   void test(`migration inventory reconciles: ${name}`, () => {
     const source = readFileSync(join(INVENTORY_DIR, name), "utf8");
     const lines = source.split("\n");
+    const frozenLines = frozenRegionLines(source, name);
+    const digests = digestRegistry(name);
+    assert.ok(
+      Object.hasOwn(digests, name),
+      `${name}: frozen digest entry is missing`,
+    );
+    assert.equal(
+      typeof digests[name],
+      "string",
+      `${name}: frozen digest must be a string`,
+    );
+    assert.match(
+      /** @type {string} */ (digests[name]),
+      /^[0-9a-f]{64}$/,
+      `${name}: frozen digest must be lowercase 64-hex SHA-256`,
+    );
+    assert.equal(
+      frozenDigest(frozenLines),
+      digests[name],
+      `${name}: frozen content digest disagrees with the registry`,
+    );
 
     const declarationMatches = [...source.matchAll(DECLARATION)];
     assert.equal(
@@ -558,7 +728,8 @@ for (const name of inventories) {
       /\*\*merged\*\*/gi,
       "recorded merges",
       name,
-      STATED_COUNT_MARKER_CHECK_EXEMPT,
+      STATED_COUNT_REQUIRED.merges,
+      STATED_COUNT_MARKER_CHECK_EXEMPT.merges,
     );
     assertStatedCountMatchesMarkers(
       source,
@@ -566,9 +737,19 @@ for (const name of inventories) {
       /\*\*retired\*\*/gi,
       "retired items",
       name,
-      STATED_COUNT_MARKER_CHECK_EXEMPT,
+      STATED_COUNT_REQUIRED.retirements,
+      STATED_COUNT_MARKER_CHECK_EXEMPT.retirements,
     );
 
     assertNetArithmeticSelfConsistent(source, name);
   });
 }
+
+void test("migration inventory digests exactly match the declared inventory list", () => {
+  const digests = digestRegistry("migration-inventory-digests.json");
+  assert.deepEqual(
+    Object.keys(digests).sort(),
+    Object.keys(DECLARED).sort(),
+    "migration-inventory-digests.json: digest keys must exactly match DECLARED",
+  );
+});

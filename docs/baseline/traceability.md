@@ -117,11 +117,11 @@ selectors or intentionally update the inventory, test, and this map together.
 | `PROBE-FAIL-CLOSED-01` | `tests/baseline/probe.test.js::PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail closed` | — |
 | `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.js::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/builders/baseline-scenario.sh` |
 | `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.js::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/builders/baseline-scenario.sh` |
-| `INSTALL-VERIFY-01` | `tests/test_marketplace_reconcile.sh::# BASELINE CASE: INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
+| `INSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.js::INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
 | `UPDATE-CONTROL-01` | `tests/baseline/cli-parity.test.js::UPDATE-CONTROL-01 update requires current managed control evidence` | `tests/fixtures/baseline/bin/stateful-adapter` |
 | `UNINSTALL-OWNERSHIP-01` | `tests/baseline/cli-parity.test.js::UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources` | `tests/fixtures/baseline/bin/stateful-adapter` |
-| `UNINSTALL-TARGETS-01` | `tests/test_marketplace_reconcile.sh::# BASELINE CASE: UNINSTALL-TARGETS-01 adapter removes only manager resources` | — |
-| `UNINSTALL-VERIFY-01` | `tests/test_marketplace_reconcile.sh::# BASELINE CASE: UNINSTALL-VERIFY-01 both manager resources must be absent` | — |
+| `UNINSTALL-TARGETS-01` | `tests/baseline/marketplace-reconcile.test.js::UNINSTALL-TARGETS-01 adapter removes only manager resources` | — |
+| `UNINSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.js::UNINSTALL-VERIFY-01 both manager resources must be absent` | — |
 | `DIAG-INTENTIONAL-01` | `tests/baseline/cli-parity.test.js::CLI-USAGE-01 invalid command and stray flag fail with exit 2` | — |
 | `DIAG-PREFLIGHT-01` | `tests/baseline/cli-parity.test.js::CLI-PREFLIGHT-01 missing tools fail before dispatch` | — |
 | `DIAG-SELECTION-PIN-01` | `tests/baseline/cli-parity.test.js::SEL-BYTES-PINNED-01 pin writes canonical selection bytes` | — |

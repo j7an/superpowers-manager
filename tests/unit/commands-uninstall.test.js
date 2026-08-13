@@ -469,7 +469,7 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
   ]);
 });
 
-void test('argv is ignored, matching scripts/uninstall never reading "$@"', async () => {
+void test("argv is ignored by src/commands/uninstall.ts", async () => {
   const out = sink();
   const err = sink();
   const { adapter } = scriptedAdapter([

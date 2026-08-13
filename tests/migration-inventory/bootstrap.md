@@ -1,6 +1,9 @@
 # Migration inventory: tests/test_bootstrap.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_bootstrap.sh -->
 
-Source read in full (224 lines). Ported to `tests/bin/bootstrap.test.js`.
+Source read in full (226 lines). Ported to `tests/bin/bootstrap.test.js`.
 
 No behavior ID in `docs/baseline/traceability.md` references `test_bootstrap`
 (confirmed by grep on 2026-07-31 — zero matches). This inventory, not the
@@ -19,14 +22,15 @@ the port unless a merge is called out.
 2. `config/upstream-ref` exists
 3. `.agents/plugins/marketplace.json` exists
 4. `plugins/superpowers/.codex-plugin/plugin.template.json` exists
-5. `scripts/adapters/codex/adapter` exists
+5. `scripts/adapters/codex/adapter` does **not** exist. The 4c deletion inverts
+   the port into the shared absence set.
 6. `src/generated-plugin.ts` exists
 7. `src/validate-generated-plugin-cli.ts` exists
-8. `scripts/adapters/codex/validate-generated-plugin.py` does **not** exist
-   (the deleted Python overlay validator; Task 6 removed it — do not
-   reintroduce this assertion pointing at the overlay `.py`, but this
-   assertion is about the *generated-plugin* validator `.py` and is retained)
-9. `scripts/core/validate-adapter-response.py` exists
+8. `scripts/adapters/codex/validate-generated-plugin.py` does **not** exist.
+   **RETIRED at the gap (Task 3, 4c):** an absence assertion inside the
+   deleted tree is vacuous and has no port counterpart.
+9. `scripts/core/validate-adapter-response.py` does **not** exist. The 4c
+   deletion inverts the port into the shared absence set.
 
 ## Text-content assertions (`:47-124`)
 
@@ -61,30 +65,39 @@ the port unless a merge is called out.
 38. `README.md` contains `` `SUPERPOWERS_REF` is an invocation-only override ``
 39. `README.md` contains "SUPERPOWERS_REF=feature/foo npx superpowers-manager probe"
 40. `tests/expected_tarball_contents.txt` contains `dist/selection-state-cli.js`
-41. `tests/expected_tarball_contents.txt` does not contain `scripts/core/selection-state.py`
+41. `tests/expected_tarball_contents.txt` does not contain `scripts/core/selection-state.py`.
+    **RETIRED at the gap (Task 3, 4c):** vacuous once the whole tree leaves the
+    manifest; no port counterpart.
 42. `tests/expected_tarball_contents.txt` contains `dist/adapter-cli.js`
 43. `tests/expected_tarball_contents.txt` contains `dist/adapter-protocol.js`
 44. `tests/expected_tarball_contents.txt` contains `dist/adapter.js`
 45. `tests/expected_tarball_contents.txt` contains `dist/generated-plugin.js`
 46. `tests/expected_tarball_contents.txt` contains `dist/python-text.js`
 47. `tests/expected_tarball_contents.txt` contains `dist/validate-generated-plugin-cli.js`
-48. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/validate-generated-plugin.py`
+48. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/validate-generated-plugin.py`.
+    **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 41; no
+    port counterpart.
 49. `tests/expected_tarball_contents.txt` contains `dist/codex-json.js`
 50. `tests/expected_tarball_contents.txt` contains `dist/codex-state.js`
 51. `tests/expected_tarball_contents.txt` does not contain `dist/hooks-cli.js`
-52. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/lib.sh`
+52. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/lib.sh`.
+    **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 41; no
+    port counterpart.
 53. `tests/expected_tarball_contents.txt` contains `dist/hooks.js`
-54. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/materialize-hooks.py`
-55. `tests/expected_tarball_contents.txt` contains `scripts/core/selection.sh`
-56. `tests/expected_tarball_contents.txt` does not contain `scripts/pin`
-   (the shell original asserted the opposite — that the tarball **contains**
-   `scripts/pin` — because the file still shipped when `test_bootstrap.sh`
-   was written; Task 10b deleted `scripts/pin` and this assertion inverted
-   to match, same precedent as item 8)
-57. `tests/expected_tarball_contents.txt` does not contain `scripts/track-latest`
-   (ditto: inverted by Task 10b's deletion of `scripts/track-latest`)
-58. `tests/expected_tarball_contents.txt` does not contain `scripts/unpin`
-   (ditto: inverted by Task 10b's deletion of `scripts/unpin`)
+54. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/materialize-hooks.py`.
+    **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 41; no
+    port counterpart.
+55. `tests/expected_tarball_contents.txt` does not contain `scripts/core/selection.sh`.
+    The 4c deletion inverts the port.
+56. `tests/expected_tarball_contents.txt` does not contain `scripts/pin`.
+    **RETIRED at the gap (Task 3, 4c):** this already-deleted path becomes a
+    vacuous member of a wholly deleted tree; no port counterpart.
+57. `tests/expected_tarball_contents.txt` does not contain `scripts/track-latest`.
+    **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 56; no
+    port counterpart.
+58. `tests/expected_tarball_contents.txt` does not contain `scripts/unpin`.
+    **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 56; no
+    port counterpart.
 59. `RELEASING.md` contains `` Ensure `main` is green (`sh tests/container.sh`) ``
 60. `RELEASING.md` contains `sh tests/container.sh`
 61. `RELEASING.md` contains `pnpm install --frozen-lockfile`
@@ -174,15 +187,14 @@ same real file and the same two fixture strings.
   exactly-one-section checks, 1 ordering check, 5 pre-publication phrase
   checks, 4 post-publication phrase checks, and 2 negative-fixture rejection
   checks).
-- Port (`tests/bin/bootstrap.test.js`): 99 assertions 1:1-mapped to the shell,
+- Port (`tests/bin/bootstrap.test.js`): 91 assertions retain counterparts,
   one `node:test` case per numbered item above (items 1-85 grouped into
   `node:test` subtests by source file for readability; each retains its own
   `assert.*` call so a single dropped check still fails independently),
   **plus** 1 port-only assertion (the unreadable-path guard added in Task 4)
   that has no shell counterpart and is outside the 1:1 mapping.
-- Reconciliation: 1:1 for all 99 original items, no merges, no drops. Item 8's
-  parenthetical exists only to document that this is *not* the overlay-`.py`
-  assertion the brief says was already removed in Task 6 (that one, at former
-  line ~94 of an earlier revision, referenced a different path and is absent
-  from this file as read). The 1 additional port-only assertion is strictly
-  additive test coverage, not a reconciliation of any shell assertion.
+- Reconciliation: **91 of 99** original items retain a port counterpart. Eight
+  absence assertions retire at their numbered gaps: items 8, 41, 48, 52, 54,
+  and 56-58. Items 5 and 9 invert into the repository absence set; item 55
+  inverts in the tarball manifest. The one additional port-only assertion is
+  strictly additive coverage, not a reconciliation of a shell assertion.

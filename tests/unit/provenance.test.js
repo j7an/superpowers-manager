@@ -207,7 +207,7 @@ void test("generatedCommitOrEmpty reads the generated tree's provenance", async 
   assert.equal(
     generatedMetadataPath(directory),
     metadata,
-    "the metadata path must match scripts/core/lifecycle.sh:28-31",
+    "the metadata path must match src/provenance.ts's generatedMetadataPath",
   );
 
   // Absent tree: empty, not a throw. scripts/core/lifecycle.sh:33-37 relied on

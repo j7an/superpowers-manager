@@ -23,15 +23,10 @@
 //     TypeScript function (readConfigRef) cannot rebind a caller's local
 //     bindings; that hazard class does not exist in the port, so there is no
 //     runtime property left to assert. See inventory items 3-4.
-//   - scripts/core/common.sh's spw_node_cli (unsetting NODE_OPTIONS/NODE_PATH
-//     before exec'ing node) remains live production code for every shell
-//     wrapper in scripts/core/upstream.sh, untouched by this slice, and has
-//     no TypeScript counterpart: resolveRef/fetchExactCommit simply inherit
-//     whatever environment Node was given, and it is spw_node_cli's shell-only
-//     job to scrub that environment before Node ever starts. This is ported
-//     by running a small generated script against the still-live shell
-//     source, the same technique tests/baseline/selection-location.test.js
-//     uses for spw_selection_state. See "the upstream seam scrubs..." below.
+//   - The former shell seam's Node-environment scrub is re-expressed by
+//     tests/unit/adapter.test.js over src/adapter.ts's child process. The git
+//     child diverges: src/git.ts pins LC_ALL and GIT_TERMINAL_PROMPT but does
+//     not scrub NODE_OPTIONS/NODE_PATH. The inventory records that difference.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -50,8 +45,6 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const COMMON_SH = join(ROOT, "scripts/core/common.sh");
-const UPSTREAM_SH = join(ROOT, "scripts/core/upstream.sh");
 const BASELINE_SCENARIO_SH = join(ROOT, "tests/builders/baseline-scenario.sh");
 const SIGNAL_CHILD = fileURLToPath(
   new URL("./ref-resolution-signal-child.js", import.meta.url),
@@ -190,46 +183,6 @@ const UPSTREAM = buildUpstreamRepo();
 function assertOnlySiblingKept(workspace) {
   assert.deepEqual(readdirSync(workspace), ["sibling"]);
   assert.equal(readFileSync(join(workspace, "sibling"), "utf8"), "keep\n");
-}
-
-/**
- * Sources each of `libraries` (asserted to exist first, by name, so a future
- * deletion of one of these still-live shell files fails loudly here instead
- * of surfacing as a confusing downstream diagnostic mismatch), then runs
- * `body` — a POSIX sh script fragment that sees `libraries` as `$1..$N` and
- * `args` as `$(N+1)..$(N+M)`. Everything this script's argv needs travels as a
- * positional parameter into the generated script, rather than through
- * string-interpolated shell source. Ports
- * tests/baseline/selection-location.test.js:154-175's helper of the same
- * name and shape.
- * @param {import("node:test").TestContext} t
- * @param {readonly string[]} libraries shell files to source, in order
- * @param {string} body
- * @param {readonly string[]} args
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {import("node:child_process").SpawnSyncReturns<string>}
- */
-function runShellScript(t, libraries, body, args, env) {
-  for (const library of libraries) {
-    assert.ok(
-      existsSync(library),
-      `expected shell library to exist: ${library}`,
-    );
-  }
-  const dir = mkdtempSync(join(tmpdir(), "spw-ref-script-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const scriptPath = join(dir, "script.sh");
-  const sourceLines = libraries.map((_, index) => `. "$${index + 1}"`);
-  writeFileSync(
-    scriptPath,
-    `#!/bin/sh\nset -eu\n${[...sourceLines, body].join("\n")}\n`,
-    "utf8",
-  );
-  chmodSync(scriptPath, 0o755);
-  return spawnSync("sh", [scriptPath, ...libraries, ...args], {
-    encoding: "utf8",
-    env: env ?? process.env,
-  });
 }
 
 /**
@@ -552,83 +505,4 @@ void test("an upstream with no stable tags still fails latest-release resolution
       error instanceof Error &&
       error.message === "no stable semver tag found for latest-release",
   ); // :195-207
-});
-
-const ENV_LOG_VAR = "SPW_FAKE_GIT_ENV_LOG";
-const ENV_REAL_GIT_VAR = "SPW_FAKE_GIT_ENV_REAL";
-
-// Not a registered behavior ID: scripts/core/common.sh's spw_node_cli
-// (unset NODE_OPTIONS/NODE_PATH, then exec node) has no TypeScript
-// counterpart — see the file header comment. Ported by running a small
-// generated script against the still-live shell source, the same technique
-// tests/baseline/selection-location.test.js:797-809 uses for
-// spw_selection_state.
-void test("the upstream seam scrubs ambient Node preload state, including for the pinned git child", (t) => {
-  const { repo, mainCommit } = UPSTREAM;
-  const preloadBase = mkdtempSync(join(tmpdir(), "spw-ref-preload-"));
-  t.after(() => rmSync(preloadBase, { recursive: true, force: true }));
-  const preloadScript = join(preloadBase, "upstream-preload.cjs");
-  writeFileSync(preloadScript, 'console.error("INJECTED");\n', "utf8");
-
-  // The upstream seam must route through spw_node_cli and scrub
-  // NODE_OPTIONS/NODE_PATH before Node itself ever starts. :209-219
-  const isolated = runShellScript(
-    t,
-    [COMMON_SH, UPSTREAM_SH],
-    'spw_resolve_ref "$3" "$4"',
-    [repo, "main"],
-    {
-      ...process.env,
-      SPW_MANAGER_ROOT: ROOT,
-      NODE_OPTIONS: `--require ${preloadScript}`,
-      NODE_PATH: preloadBase,
-    },
-  );
-  assert.equal(isolated.status, 0, isolated.stdout + isolated.stderr);
-  assert.equal(isolated.stdout, `ref main ${mainCommit}\n`); // :215
-  assert.equal(isolated.stderr.includes("INJECTED"), false); // :216-219, merged: a stronger equality on stdout plus this negative check together subsume the shell's own if-guard.
-
-  // The pinned child environment must reach git, with NODE_* scrubbed and
-  // git's own pins (LC_ALL, GIT_TERMINAL_PROMPT) intact. :221-240
-  const envBinDir = mkdtempSync(join(tmpdir(), "spw-ref-envbin-"));
-  t.after(() => rmSync(envBinDir, { recursive: true, force: true }));
-  const envGitPath = join(envBinDir, "git");
-  writeFileSync(
-    envGitPath,
-    [
-      "#!/bin/sh",
-      "{",
-      "  printf 'LC_ALL=%s\\n' \"${LC_ALL-unset}\"",
-      "  printf 'GIT_TERMINAL_PROMPT=%s\\n' \"${GIT_TERMINAL_PROMPT-unset}\"",
-      "  printf 'NODE_OPTIONS=%s\\n' \"${NODE_OPTIONS-unset}\"",
-      "  printf 'NODE_PATH=%s\\n' \"${NODE_PATH-unset}\"",
-      `} >> "$${ENV_LOG_VAR}"`,
-      `"$${ENV_REAL_GIT_VAR}" "$@"`,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  chmodSync(envGitPath, 0o755);
-  const envLog = join(preloadBase, "git-env.log");
-  const envResult = runShellScript(
-    t,
-    [COMMON_SH, UPSTREAM_SH],
-    'spw_resolve_ref "$3" "$4"',
-    [repo, "main"],
-    {
-      ...process.env,
-      SPW_MANAGER_ROOT: ROOT,
-      NODE_OPTIONS: `--require ${preloadScript}`,
-      NODE_PATH: preloadBase,
-      PATH: `${envBinDir}:${process.env.PATH ?? ""}`,
-      [ENV_LOG_VAR]: envLog,
-      [ENV_REAL_GIT_VAR]: realGitPath(),
-    },
-  );
-  assert.equal(envResult.status, 0, envResult.stdout + envResult.stderr);
-  const envLines = readFileSync(envLog, "utf8").split("\n");
-  assert.ok(envLines.includes("LC_ALL=C")); // :237
-  assert.ok(envLines.includes("GIT_TERMINAL_PROMPT=0")); // :238
-  assert.ok(envLines.includes("NODE_OPTIONS=unset")); // :239
-  assert.ok(envLines.includes("NODE_PATH=unset")); // :240
 });

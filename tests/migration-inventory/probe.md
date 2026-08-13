@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_probe.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show f58289ed00b95635ffc4ea589b845ce83a7404ba:tests/test_probe.sh -->
 
 Source read in full (631 lines). Ported to `tests/baseline/probe.test.js`,
 `tests/unit/commands-probe.test.js`, and `tests/unit/status.test.js`.
@@ -585,10 +588,13 @@ Prose, deliberately not a numbered port-only entry: nothing below is an
 assertion this port added, so counting any of it would overstate `portOnly`.
 
 Task 6 flipped `DISPATCH.probe` to `in-process` and **deleted nothing**.
-`scripts/probe` and `tests/test_probe.sh` both survive this slice, because
+`scripts/probe` survives this slice, because
 `scripts/install:18` and `scripts/update:8` still execute
 `sh "$root/scripts/probe" --porcelain` and read `identity_state`, `status`,
 and `update_control` back out of the porcelain through `spw_probe_field`.
+The shell driver `tests/test_probe.sh` is deleted in Task 2 of slice 4c after
+its replacement `tests/baseline/probe.test.js` was already landed in slice 2;
+the historical source pointers below remain an inventory of what was retired.
 Re-pointing those two callers at the in-process command is also rejected for
 this slice: their lifecycle fakes stub `SPW_ADAPTER`, a seam only
 `scripts/core/adapter.sh` honours and the in-process `runAdapter` does not, so
@@ -605,7 +611,7 @@ string in `tests/**/*.js`, because a spawn assumption expressed as
 |---|---|---|
 | Live shell caller | `scripts/install:18`, `scripts/update:8` | Production; the Task 6 Step 9 guard in `tests/bin/units.test.js` asserts both references, and Step 9a proved it fires |
 | Live shell caller | `tests/expected_tarball_contents.txt:58` | The script still ships, because those two callers execute it at runtime |
-| Live shell caller | `tests/test_probe.sh:346`, `:353` | The shell driver still exists and still runs under `tests/run.sh` |
+| Retired shell driver | `tests/test_probe.sh:346`, `:353` | Historical source pointers; the driver is deleted in slice 4c Task 2 and its replacement is `tests/baseline/probe.test.js` |
 | Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-ENV-CODEX-PREFLIGHT-01` and the four `CLI-CHILD-STATUS-01` blocks | Re-pointed to `install`, vehicle-only comment added |
 | Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-PREFLIGHT-01`'s requirements map | Replaced by a derivation over `commandRequirements()` and `DISPATCH`; the hand-written map encoded dispatch a second time through the presence of `sh` |
 | Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-COMMANDS-01`'s `probe` row | Now takes the in-process branch; given a local upstream, a 40-hex ref, and a listing-answering `codex`, since an `exit 0` stub and the package-default upstream URL are respectively unusable and non-hermetic for a command that actually reads Codex state |
@@ -629,6 +635,18 @@ stays on `probe`: it is the end-to-end net for that same requirement row, not
 a spawn vehicle. See the note on `bin-dispatch.md` items 42-44.
 
 ## Cardinality
+
+**POINTER PROVENANCE — shell-original pointers.** The deleting commit cannot
+name its own SHA: a commit that deletes `tests/test_probe.sh` cannot also be
+the commit in which that path is readable. The anchor for every shell-original
+citation in this inventory is the last commit in which the driver existed:
+`f58289ed00b95635ffc4ea589b845ce83a7404ba`. It was verified before deletion
+with `git show f58289ed00b95635ffc4ea589b845ce83a7404ba:tests/test_probe.sh`
+(resolves) and `git merge-base --is-ancestor
+f58289ed00b95635ffc4ea589b845ce83a7404ba origin/main` (reachable). The
+citations are therefore intentionally no longer resolvable at `HEAD`; use
+`git show f58289ed00b95635ffc4ea589b845ce83a7404ba:tests/test_probe.sh` to
+inspect the shell original.
 
 ```json inventory
 {

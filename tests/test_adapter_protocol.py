@@ -10,7 +10,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VALIDATOR = ROOT / "scripts/core/validate-adapter-response.py"
+VALIDATOR = ROOT / "tests/fixtures/protocol/core/validate-adapter-response.py"
 FIXTURES = ROOT / "tests" / "fixtures" / "baseline" / "adapter-responses"
 EXPECTED_MAX_RESPONSE_BYTES = 1_048_576
 RESPONSE_TOO_LARGE_STDERR = (

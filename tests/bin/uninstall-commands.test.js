@@ -164,8 +164,9 @@ function assertNoRemoves(log) {
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
  * then one `codex plugin marketplace list --json` (src/adapter.ts:871, :883).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
- * --json` does not contain it as a substring, and nothing else scripts/uninstall
- * runs issues either listing.
+ * --json` does not contain it as a substring, and nothing else in
+ * `src/commands/uninstall.ts`'s ownership-inspect / adapter-uninstall /
+ * re-inspect sequence issues either listing.
  * @param {string[]} codex
  * @returns {number}
  */
@@ -177,9 +178,9 @@ function ownershipInspections(codex) {
  * The six identical `if grep -Fq "uninstall --" "$adapter_log"` guards
  * (:321, :333, :345, :360, :372, :387), RE-ANCHORED onto codex.log.
  *
- * scripts/uninstall:23-29 brackets `spw_adapter_uninstall` between two
- * ownership inspections and, under `set -e`, reaches the second one only if the
- * adapter uninstall returned 0. So exactly one ownership inspection at the
+ * `src/commands/uninstall.ts` brackets adapter uninstall between two ownership
+ * inspections and reaches the second one only if the adapter uninstall
+ * returned 0. So exactly one ownership inspection at the
  * Codex level means the flow never got past the first one.
  *
  * WHAT THIS CATCHES, precisely — the re-anchor is not the original assertion,
@@ -197,7 +198,7 @@ function ownershipInspections(codex) {
  * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
  * theoretical, and it is accepted only because in all six call sites the abort
  * provably happens inside the FIRST ownership inspection — upstream of
- * scripts/uninstall:27 entirely — which each case's own subject diagnostic
+ * adapter-uninstall step entirely — which each case's own subject diagnostic
  * pins.
  *
  * The emptiness guard is port-only, for the same reason as `assertNoRemoves`:
@@ -220,10 +221,11 @@ function assertNoAdapterUninstall(codex, message) {
 /**
  * The positive counterpart, and the Codex-level witness that the adapter
  * uninstall operation ran to completion: the verify-after ownership inspection
- * at scripts/uninstall:29 exists only on that path.
+ * in `src/commands/uninstall.ts` exists only on that path.
  *
  * It is an ORDERING witness, not a call witness: two inspections do not by
- * themselves prove scripts/uninstall:27 ran, since :23 and :29 emit one each.
+ * themselves prove the adapter-uninstall step ran, since the before and after
+ * inspections emit one each.
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
@@ -296,16 +298,16 @@ void describe("uninstall commands", { concurrency: true }, () => {
   void test("source guards: no Codex ownership leaks into shared code (:9-16)", () => {
     // :9-12 — reads ROOT, not the copied package root: these are claims about
     // the repository's own source, not about a fixture snapshot.
-    const uninstall = readFileSync(join(ROOT, "scripts", "uninstall"), "utf8");
-    assert.ok(
-      !uninstall.includes("scripts/adapters/codex/lib.sh"),
-      "public uninstall must not source the Codex adapter library",
-    );
-    // :13-16
-    const lifecycle = readFileSync(
-      join(ROOT, "scripts", "core", "lifecycle.sh"),
+    const uninstall = readFileSync(
+      join(ROOT, "src", "commands", "uninstall.ts"),
       "utf8",
     );
+    assert.ok(
+      !/\brunAdapter\b|\bSPW_ADAPTER\b/.test(uninstall),
+      "public uninstall must hold no Codex-adapter implementation or environment seam",
+    );
+    // :13-16
+    const lifecycle = readFileSync(join(ROOT, "src", "lifecycle.ts"), "utf8");
     assert.ok(
       !/SPW_PLUGIN_ID|SPW_MARKETPLACE_NAME/.test(lifecycle),
       "shared lifecycle code must not reference Codex-owned identifiers",

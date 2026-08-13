@@ -5,7 +5,7 @@
 // from the fake `codex` for probe, the "third lifecycle fake" the parent spec
 // named as this extraction's trigger. Slice 4a added the outer shell the two
 // mutating fakes also duplicated: runFake, its FakeContext, the Decision 5
-// injection toggle, the adapter tripwire, and the real-adapter delegation.
+// injection toggle and the adapter tripwire.
 // Slice 4b's Task 9 gives probe-fakes.js the same outer shell (matrix row 20)
 // and widens the adapter tripwire so install and uninstall can trip
 // unconditionally too (row 18), matching the guard probe already carried.
@@ -21,7 +21,6 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { schemaFor, validateConfig } from "./lifecycle-config.js";
 
@@ -297,9 +296,8 @@ export function injectSpuriousMutation(ctx, forbiddenLine) {
  *
  * A caller with anything after this call MUST `return` on true. Setting
  * `process.exitCode` does not halt execution, so a missing return falls
- * through into the delegation the two mutating fakes make below and spawns
- * the real adapter — the exact inverse of a tripwire. probe-fakes.js is the
- * one caller with nothing following, and says so at its own call site.
+ * through into obsolete adapter-role fixture logic. probe-fakes.js is the one
+ * caller with nothing following, and says so at its own call site.
  *
  * @param {FakeContext} ctx
  * @param {{ always?: boolean, message?: string }} [options]
@@ -315,36 +313,4 @@ export function tripwireTriggered(ctx, options = {}) {
   );
   process.exitCode = 94;
   return true;
-}
-
-/**
- * Runs the REAL adapter, exactly as the shell fixtures did
- * (tests/test_install_commands.sh:220, tests/test_uninstall_commands.sh:97).
- * build, install, uninstall and ownership inspection are production code in
- * every case.
- *
- * Slice 4c deletes this function with the seam: once no case spawns the
- * adapter, `scripts/adapters/codex/adapter` has no fixture consumer.
- *
- * @param {FakeContext} ctx
- * @returns {void}
- */
-export function delegateToRealAdapter(ctx) {
-  const pkgRoot = process.env.SPW_TEST_PKG_ROOT;
-  if (!pkgRoot) {
-    process.stderr.write("fixture: SPW_TEST_PKG_ROOT is unset\n");
-    process.exitCode = 95;
-    return;
-  }
-  const real = join(pkgRoot, "scripts", "adapters", "codex", "adapter");
-  if (!existsSync(real)) {
-    process.stderr.write(`fixture: real adapter is missing at ${real}\n`);
-    process.exitCode = 96;
-    return;
-  }
-  const result = spawnSync(real, ctx.args, {
-    stdio: "inherit",
-    env: process.env,
-  });
-  process.exitCode = result.status ?? 97;
 }

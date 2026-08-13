@@ -236,7 +236,7 @@ function copyFallbackManifestIntoCandidate(argv) {
 
 /**
  * Reconstructs the generated-tree precondition the shell driver inherited from
- * the scenario above it. `scripts/core/status.sh:15-16` returns "needs prepare"
+ * the scenario above it. `src/status.ts:21` returns "needs prepare"
  * whenever the package root carries no `.superpowers-upstream.json`, and
  * lifecycle-fixture.js:50-61 copies only `plugin.template.json` into the
  * snapshot — so a fresh `c.pkg` always probes as "needs prepare". In the shell
@@ -254,8 +254,7 @@ function copyFallbackManifestIntoCandidate(argv) {
  * mean what they meant in the shell.
  *
  * Converted (Task 6, D4): calls `runPrepare` in-process with its own injected
- * recording adapter, rather than spawning `scripts/prepare` through the
- * SPW_ADAPTER seam. "prepare did not inspect update control" is now a
+ * recording adapter. "prepare did not inspect update control" is now a
  * property of the double's own construction — it answers ONLY a `build` call
  * and fails the case by exhaustion on anything else — rather than a read over
  * a log file that stops existing when the seam does. This double is entirely
@@ -304,19 +303,20 @@ async function prepareGeneratedTree(c) {
 /**
  * Port-only precondition guard, not a ported assertion.
  *
- * `scripts/prepare` is the only thing that prints "prepared <ref> at <commit>",
- * and `scripts/install:23-25` runs it only on the needs-prepare branch. Its
+ * `src/commands/prepare.ts` is the only thing that prints "prepared <ref> at
+ * <commit>", and `src/commands/install.ts` runs it only on the needs-prepare
+ * branch. Its
  * absence is therefore direct evidence that the subject took the needs-install
  * or current branch — the path the shell driver put it on. Without this guard a
  * lost precondition is invisible: the case still exits non-zero and still
- * carries the gate message, because scripts/install:54 emits the same string
- * from a different branch. That is precisely how the case at :338-347 passed
+ * carries the gate message, because `src/commands/install.ts` emits the same
+ * string from a different branch. That is precisely how the case at :338-347 passed
  * while never entering the update fast path at all.
  *
- * ANCHORED, not a bare substring. `scripts/prepare:117` prints its banner at
- * the start of a line, but `scripts/core/lifecycle.sh:116` also carries the
- * word mid-sentence — "does not match the prepared plugin after install." —
- * on stderr. No current call site can see it: the three that pass combined
+ * ANCHORED, not a bare substring. `src/commands/prepare.ts` prints its banner
+ * at the start of a line, but `src/lifecycle.ts` also carries the word
+ * mid-sentence — "does not match the prepared plugin after install." — on
+ * stderr. No current call site can see it: the three that pass combined
  * output (:519, :546, :658) all stop at the update-control gate, before
  * `spw_verify_installed_fingerprint` runs at all. The anchor is therefore
  * defensive hardening, not a live fix — it keeps this guard meaning "prepare
@@ -593,60 +593,58 @@ async function assertLegacyIdentityStops(c, identityState) {
 // typescript(no-floating-promises) rule treats the runner's returned promise as
 // floating otherwise.
 void describe("install commands", { concurrency: true }, () => {
-  void test("production scripts carry no hook-trust mutation surface (:11-42)", () => {
+  void test("production sources carry no hook-trust mutation surface (:11-42)", () => {
     // Reads ROOT, not a copied package root: this is a claim about the
-    // repository's own production scripts, not about a fixture snapshot.
-    const scriptsRoot = join(ROOT, "scripts");
-    const entries = readdirSync(scriptsRoot, { recursive: true })
-      .map(String)
-      .sort();
+    // repository's own production sources, not about a fixture snapshot.
+    const productionRoots = [join(ROOT, "src"), join(ROOT, "bin")];
     let scanned = 0;
-    for (const entry of entries) {
-      const path = join(scriptsRoot, entry);
-      if (!statSync(path).isFile()) continue;
-      scanned += 1;
-      // :27-29 — an unreadable script is a hard failure, never a skip.
-      let text = "";
-      try {
-        text = readFileSync(path, "utf8");
-      } catch (error) {
-        assert.fail(
-          `production script could not be inspected: ${path}: ${String(error)}`,
-        );
+    for (const productionRoot of productionRoots) {
+      const entries = readdirSync(productionRoot, { recursive: true })
+        .map(String)
+        .sort();
+      for (const entry of entries) {
+        const path = join(productionRoot, entry);
+        if (!statSync(path).isFile()) continue;
+        scanned += 1;
+        // :27-29 — an unreadable source is a hard failure, never a skip.
+        let text = "";
+        try {
+          text = readFileSync(path, "utf8");
+        } catch (error) {
+          assert.fail(
+            `production source could not be inspected: ${path}: ${String(error)}`,
+          );
+        }
+        // :30-35
+        for (const forbidden of FORBIDDEN_LITERALS) {
+          assert.ok(
+            !text.includes(forbidden),
+            `production sources must not contain hook trust mutation surface: ${forbidden} (${path})`,
+          );
+        }
+        // :36-41 — the literal checks deliberately include comments;
+        // app-server is allowed only in comments.
+        text.split("\n").forEach((line, index) => {
+          const trimmed = line.trimStart();
+          assert.ok(
+            !line.includes("app-server") ||
+              trimmed.startsWith("#") ||
+              trimmed.startsWith("//") ||
+              trimmed.startsWith("*") ||
+              trimmed.startsWith("/*"),
+            `production sources must not invoke the Codex app-server: ${path}:${index + 1}`,
+          );
+        });
       }
-      // :30-35
-      for (const forbidden of FORBIDDEN_LITERALS) {
-        assert.ok(
-          !text.includes(forbidden),
-          `production scripts must not contain hook trust mutation surface: ${forbidden} (${path})`,
-        );
-      }
-      // :36-41 — the literal checks deliberately include comments; app-server
-      // is allowed only in comments.
-      text.split("\n").forEach((line, index) => {
-        assert.ok(
-          !line.includes("app-server") || line.trimStart().startsWith("#"),
-          `production scripts must not invoke the Codex app-server: ${path}:${index + 1}`,
-        );
-      });
     }
-    assert.ok(scanned > 0, "scripts/ held no files — the scan proved nothing");
+    assert.ok(
+      scanned > 0,
+      "src/ and bin/ held no files — the scan proved nothing",
+    );
   });
 
   void test("packaged root preconditions (:77-82)", () => {
     const c = installCase();
-    // :77-78 — executability, not mere presence.
-    for (const relative of [
-      "scripts/install",
-      "scripts/adapters/codex/adapter",
-    ]) {
-      const path = join(c.pkg, relative);
-      // existsSync first so a missing file reports the contract, not ENOENT.
-      assert.ok(
-        existsSync(path) && (statSync(path).mode & 0o111) !== 0,
-        `${relative} must remain executable in the packaged root`,
-      );
-    }
     // :79-81
     for (const relative of [
       "dist/validate-generated-plugin-cli.js",
@@ -659,13 +657,6 @@ void describe("install commands", { concurrency: true }, () => {
         `${relative} must remain packaged`,
       );
     }
-    // :82
-    assert.ok(
-      !existsSync(
-        join(c.pkg, "scripts/adapters/codex/validate-generated-plugin.py"),
-      ),
-      "the Python generated-plugin validator must not be packaged",
-    );
   });
 
   void test("prepare is capability-independent (:321-336)", async () => {

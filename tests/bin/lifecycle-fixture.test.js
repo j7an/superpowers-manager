@@ -73,8 +73,9 @@ const MARKETPLACE_PRESENT =
 
 /**
  * A seeded uninstall case, good for a full, successful run of
- * scripts/uninstall — used only where a test needs realistic timing (the
- * concurrency-overlap proof), not just the fixture's own plumbing.
+ * the `uninstall` command launched through `bin/superpowers-manager.js` and
+ * `src/commands/uninstall.ts` — used only where a test needs realistic timing
+ * (the concurrency-overlap proof), not just the fixture's own plumbing.
  * @param {Record<string, unknown>} config
  * @returns {CaseEnv}
  */
@@ -99,10 +100,6 @@ void test("each case gets distinct writable paths", () => {
 void test("the package root carries everything a lifecycle script needs", () => {
   const c = createCase({ fakes: "uninstall" });
   for (const rel of [
-    "scripts/install",
-    "scripts/uninstall",
-    "scripts/core/common.sh",
-    "scripts/adapters/codex/adapter",
     "dist/cli.js",
     "package.json",
     "plugins/superpowers/.codex-plugin/plugin.template.json",
