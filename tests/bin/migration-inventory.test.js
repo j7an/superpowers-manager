@@ -29,7 +29,9 @@ const DECLARED = {
   "codex-state-units.md": ["tests/unit/lifecycle.test.js"],
   "container-contract.md": ["tests/bin/container-contract.test.js"],
   "install-commands.md": ["tests/bin/install-commands.test.js"],
+  "marketplace-reconcile.md": ["tests/baseline/marketplace-reconcile.test.js"],
   "node-tooling.md": ["tests/bin/node-tooling.test.js"],
+  "node-cli-helper.md": ["tests/unit/adapter.test.js"],
   "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.js"],
   "prepare.md": [
     "tests/baseline/prepare.test.js",
