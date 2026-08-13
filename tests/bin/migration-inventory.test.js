@@ -247,11 +247,7 @@ const STATED_COUNT_MARKER_CHECK_EXEMPT = {
 // its prose item ranges, rather than bold markers, are its ground truth.
 /** @type {Record<"merges" | "retirements", ReadonlySet<string>>} */
 const STATED_COUNT_REQUIRED = {
-  merges: new Set([
-    "bin-dispatch.md",
-    "selection-state.md",
-    "workflows.md",
-  ]),
+  merges: new Set(["bin-dispatch.md", "selection-state.md", "workflows.md"]),
   retirements: new Set([
     "bin-dispatch.md",
     "prepare.md",
