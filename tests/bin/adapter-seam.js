@@ -24,8 +24,6 @@
 // rather than deleted, at zero, because an emptied gate — not an absent one —
 // is what proves the seam's removal is safe.
 
-import { join } from "node:path";
-
 /** What the fake does. */
 export const SEAM_MODES = /** @type {const} */ ([
   "delegate",
@@ -192,7 +190,7 @@ export const SEAM_SOURCES = {
  *   2. Only then remove its SEAM_SOURCE_FILES entry.
  *
  * Doing it the other way round — retiring `uninstall` from SEAM_DEPENDENT,
- * SEAM_SOURCES and this list in one step, alongside scripts/uninstall — leaves
+ * SEAM_SOURCES and this list in one step — leaves
  * every gate green over a file that still holds live declarations and live
  * readers. adapter-seam.test.js's "every file declaring a seamDependency is in
  * SEAM_SOURCE_FILES" enforces step 1 before step 2 by scanning the TREE, not
@@ -207,77 +205,3 @@ export const SEAM_SOURCE_FILES = [
   "tests/bin/install-commands.test.js",
   "tests/bin/uninstall-commands.test.js",
 ];
-
-/**
- * A lifecycle case's live condition is the NODE entrypoint, not a script's
- * existence. runScript spawns process.execPath with
- * bin/superpowers-manager.js and the subcommand as its argument
- * (tests/bin/lifecycle-fixture.js:342-345), so every lifecycle case routes
- * through src/cli.ts's DISPATCH, which PR 11.5 slice 4b flipped to
- * "in-process" for all eight subcommands (src/cli.ts:65-74). DISPATCH now
- * governs these cases entirely, and deleting scripts/<script> does not
- * affect them.
- *
- * Before that flip runScript spawned /bin/sh scripts/<script> directly and
- * script existence WAS the condition — that is the history SEAM_DEPENDENT's
- * keying by script name still reflects, and the reason this gate is written
- * over script paths at all. Read together with the paragraph below: with
- * every SEAM_DEPENDENT total at zero, the existence check never runs, so the
- * gate is dormant rather than merely unnecessary. It re-arms if a nonzero
- * count reappears, which is what keeps it worth carrying into slice 4c.
- *
- * `dependent` defaults to the real, gated SEAM_DEPENDENT but is injectable so
- * adapter-seam.test.js's mutation proof ("the gate fails when a depended-on
- * script is gone") can still exercise the throw path below now that every
- * real entry is legitimately zero: with the real map, `total === 0` skips
- * every script before the existence check ever runs, and there is no longer
- * a nonzero entry to inject a missing script against. The parameter is never
- * used to feed a real gate call a non-default map: adapter-seam.test.js holds
- * exactly TWO call sites, and the only non-default one is the injection proof
- * itself, "the gate fails when a depended-on script is gone"
- * (adapter-seam.test.js:102). The other — "every script with seam-dependent
- * cases still exists" (adapter-seam.test.js:98), the real gate — takes the
- * default.
- * @param {string} root repository root
- * @param {(path: string) => boolean} exists
- * @param {Record<string, { intercept: number, log: number }>} [dependent]
- * @returns {void}
- */
-export function assertSeamScriptsPresent(
-  root,
-  exists,
-  dependent = SEAM_DEPENDENT,
-) {
-  for (const [script, counts] of Object.entries(dependent)) {
-    const total = counts.intercept + counts.log;
-    if (total === 0) continue;
-    // Named before it is used: without this, a key added to SEAM_DEPENDENT and
-    // forgotten in SEAM_SOURCES would surface as a TypeError on undefined
-    // instead of the diagnostic below.
-    const sources = SEAM_SOURCES[script];
-    if (!sources) {
-      throw new Error(
-        `adapter-seam: ${script} is in SEAM_DEPENDENT with no SEAM_SOURCES ` +
-          "entry, so the gate cannot name the files that would need re-basing",
-      );
-    }
-    // join(), not string concatenation: root is a fileURLToPath(new URL("../..",
-    // import.meta.url)) result, which always carries a trailing slash, so
-    // `${root}/scripts/${script}` would double the slash. That spelling still
-    // resolves through a real existsSync (the OS collapses it), but it is a
-    // different string than the join()-built path adapter-seam.test.js's
-    // mutation-proof compares against — so an injected "this path doesn't
-    // exist" predicate would never match and the gate would never observe its
-    // own failure mode. Keeping join() here is what lets that test prove
-    // anything at all.
-    if (!exists(join(root, "scripts", script))) {
-      throw new Error(
-        `adapter-seam: scripts/${script} is gone, but ${total} of its cases ` +
-          "still depend on the SPW_ADAPTER seam — a seam the in-process " +
-          "runAdapter ignores. Re-base or retire those cases in " +
-          `${sources.join(", ")} and remove this entry before ` +
-          "deleting the script, or their assertions read a dead channel.",
-      );
-    }
-  }
-}

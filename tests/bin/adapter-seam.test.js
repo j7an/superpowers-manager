@@ -1,5 +1,5 @@
 // @ts-check
-// Two gates, plus the four cases that keep them from going vacuous. PRESENT
+// One gate, plus the three cases that keep it from going vacuous. PRESENT
 // STATE, re-derived 2026-08-11 (PR 11.5 slice 4b Task 9): every
 // SEAM_DEPENDENT entry is { intercept: 0, log: 0 }, and no parseable
 // seamDependency DECLARATION is left in the SEAM_SOURCES files — Task 6
@@ -33,21 +33,18 @@
 // slice 4 removed the seam, in exactly the way five cli-parity assertions did
 // in slice 3.4 — silently, with the suite still green.
 //
-// The two gates are "every script with seam-dependent cases still exists" and
-// "no adapter-log reader is left unclassified". The other four cases exist
-// only because each gate has a way to stop asserting: the injection proof
-// shows gate 1 can still fail, the count case ties SEAM_DEPENDENT to the
-// declarations it claims to protect, and the two membership cases keep
-// SEAM_SOURCE_FILES — the scan set both gates now walk — from being emptied
-// ahead of the residue it is supposed to find.
+// The surviving gate is "no adapter-log reader is left unclassified". The
+// other three cases keep it from going vacuous: the count case ties
+// SEAM_DEPENDENT to the declarations it claims to protect, and the two
+// membership cases keep SEAM_SOURCE_FILES — the scan set the gate walks — from
+// being emptied ahead of the residue it is supposed to find.
 
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  assertSeamScriptsPresent,
   SEAM_DEPENDENT,
   SEAM_REASONS,
   SEAM_SOURCE_FILES,
@@ -94,43 +91,6 @@ const SCRIPT_FIELD = /script:\s*"(\w+)"/;
 function isSeamReason(reason) {
   return /** @type {readonly string[]} */ (SEAM_REASONS).includes(reason);
 }
-
-void test("every script with seam-dependent cases still exists", () => {
-  assertSeamScriptsPresent(ROOT, existsSync);
-});
-
-void test("the gate fails when a depended-on script is gone", () => {
-  // Mutation proof by INJECTION, not by editing src/ or scripts/. The gate's
-  // inputs are a root and an existence predicate, so a predicate that denies
-  // one script reproduces slice 4's deletion exactly, with no tracked file
-  // touched and no build step involved.
-  //
-  // `gone` is built with join() deliberately — see the join() comment in
-  // adapter-seam.js's assertSeamScriptsPresent. The predicate can only deny
-  // the path the gate actually probes, so this line also pins path-spelling
-  // agreement between the two. Simplifying it to a template literal
-  // reintroduces the bug commit 0d9a53c fixed: the gate would probe a
-  // double-slash spelling the predicate never matches, and would silently
-  // stop observing its own failure mode.
-  //
-  // A throwaway, nonzero third argument — NOT the real, gated SEAM_DEPENDENT,
-  // which PR 11.5 slice 4b Task 6 discharged to zero everywhere — is required
-  // as of that discharge: `assertSeamScriptsPresent`'s own `total === 0 ->
-  // continue` skip would otherwise pass "install" over before the existence
-  // check below ever runs, since the real map's install entry is now
-  // `{ intercept: 0, log: 0 }`. This proves the same throw path the real gate
-  // uses the moment any script's count is legitimately nonzero again; it
-  // asserts nothing about the real registry's current value, which the count
-  // case above already pins.
-  const gone = join(ROOT, "scripts", "install");
-  assert.throws(
-    () =>
-      assertSeamScriptsPresent(ROOT, (p) => p !== gone && existsSync(p), {
-        install: { intercept: 1, log: 0 },
-      }),
-    /scripts\/install is gone, but \d+ of its cases still depend on the SPW_ADAPTER seam/,
-  );
-});
 
 void test("each declared count matches the declarations in its sources", () => {
   // The count is declared, but checked against the source: a case removed

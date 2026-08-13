@@ -847,10 +847,9 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
       const result = runCli(sandbox, [command, ...argv], overrides);
       if (IN_PROCESS_COMMANDS.includes(command)) {
         // An in-process command must reach its module and dispatch NOTHING.
-        // Every command's scripts/<command> is stubbed with a regression
-        // detector (support.js's regressionStub): it logs the invocation and
-        // exits non-zero, so a regression that re-spawns the script fails
-        // both assertCleanResult below and this empty-dispatch-log check.
+        // Task 3 removed every scripts/<command> regression stub, so a
+        // regression that re-spawns a script fails with ENOENT before this
+        // weaker empty-dispatch-log check; the log assertion remains real.
         assertCleanResult(result);
         const dispatched = readDispatchLog(sandbox).map((e) => e.command);
         assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
@@ -2132,11 +2131,11 @@ function lifecycleCodexCase(options) {
  * `SPW_ADAPTER` shell override played before PR 11.5 slice 4b's flip.
  *
  * Converted, not retired (Task 8, Step 5b). The lever this replaces was a
- * hand-written `SPW_ADAPTER` script, and `SPW_ADAPTER` is honoured only by
- * `scripts/core/adapter.sh`: the moment `update` dispatches in-process it is
- * inert, and both subcases would silently become the third subcase below with
- * the opposite assertion. Injection is not a `seamDependency`, so no gate
- * widens and this file still must not join `SEAM_SOURCE_FILES`
+ * hand-written `SPW_ADAPTER` script that became inert the moment `update`
+ * began dispatching in-process; both subcases would silently become the third
+ * subcase below with the opposite assertion. Injection is not a
+ * `seamDependency`, so no gate widens and this file still must not join
+ * `SEAM_SOURCE_FILES`
  * (tests/bin/adapter-seam.js).
  *
  * The real adapter's update-control view is hardcoded to "managed"

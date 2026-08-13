@@ -281,42 +281,4 @@ export function reconcileAudit(observed, declared) {
  * no longer executable assertions after Task 1 discharged the relocation.
  * @type {ScriptsConsumer[]}
  */
-export const SCRIPTS_CONSUMERS = [
-  // tests/baseline/cli-parity.test.js (1)
-  {
-    file: "tests/baseline/cli-parity.test.js",
-    normalized:
-      "* `scripts/core/adapter.sh`: the moment `update` dispatches in-process it is",
-    ordinal: 1,
-    disposition: "retire",
-    target:
-      "the `scripts/core/adapter.sh` clause is deleted in 4c with the SPW_ADAPTER seam it names; the surrounding 'Converted, not retired (Task 8, Step 5b)' note survives without it.",
-  },
-  // tests/bin/adapter-seam.js (2)
-  {
-    file: "tests/bin/adapter-seam.js",
-    normalized:
-      "* SEAM_SOURCES and this list in one step, alongside scripts/uninstall — leaves",
-    ordinal: 1,
-    disposition: "retire",
-    target:
-      "the `alongside scripts/uninstall` clause goes when 4c deletes the script; the retirement-order paragraph it sits in survives until slice 6 deletes this module (spec section 5.3).",
-  },
-  {
-    file: "tests/bin/adapter-seam.js",
-    normalized: 'if (!exists(join(root, "scripts", script))) {',
-    ordinal: 1,
-    disposition: "retire",
-    target:
-      "assertSeamScriptsPresent's existence check has no subject once 4c deletes scripts/; retire the function and its two call sites, leaving SEAM_DEPENDENT's four zeroed entries and SEAM_SOURCE_FILES for slice 6 (spec sections 5.3, 6.3).",
-  },
-  // tests/bin/adapter-seam.test.js (1)
-  {
-    file: "tests/bin/adapter-seam.test.js",
-    normalized: 'const gone = join(ROOT, "scripts", "install");',
-    ordinal: 1,
-    disposition: "retire",
-    target:
-      "the injection mutation-proof ('the gate fails when a depended-on script is gone') retires with assertSeamScriptsPresent in 4c; no path under scripts/ survives for it to name.",
-  },
-];
+export const SCRIPTS_CONSUMERS = [];
