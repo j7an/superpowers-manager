@@ -156,6 +156,61 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
   ]);
 });
 
+void test("a marketplace-list command failure fails without mutation", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const packageRoot = join(sandbox.base, "requested");
+  await mkdir(packageRoot);
+
+  const result = await runAdapter(["install", "--package-root", packageRoot], {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: "" }),
+  });
+
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.envelope.error?.code, "install-failed");
+  assert.equal(
+    result.envelope.error?.message,
+    `cannot list Codex marketplaces via '${FAKE_CODEX} plugin marketplace list --json'`,
+  );
+  assert.deepEqual((await readFile(sandbox.log, "utf8")).trim().split("\n"), [
+    "plugin marketplace list --json",
+  ]);
+});
+
+void test("unrelated marketplace roots do not block manager registration", async (t) => {
+  for (const [name, marketplaces] of [
+    ["missing root", '{"marketplaces":[{"name":"openai-curated"}]}'],
+    [
+      "invalid root",
+      '{"marketplaces":[{"name":"openai-curated","root":17}]}',
+    ],
+  ]) {
+    await t.test(name, async (t) => {
+      const sandbox = await codexSandbox(t);
+      const packageRoot = join(sandbox.base, "requested");
+      await mkdir(packageRoot);
+
+      const result = await runAdapter(
+        ["install", "--package-root", packageRoot],
+        {
+          root: PACKAGE_ROOT,
+          env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: marketplaces }),
+        },
+      );
+
+      assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+      assert.deepEqual(
+        (await readFile(sandbox.log, "utf8")).trim().split("\n"),
+        [
+          "plugin marketplace list --json",
+          `plugin marketplace add ${packageRoot}`,
+          "plugin add superpowers@superpowers-manager",
+        ],
+      );
+    });
+  }
+});
+
 void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (t) => {
   const sandbox = await codexSandbox(t);
   const result = await runAdapter(

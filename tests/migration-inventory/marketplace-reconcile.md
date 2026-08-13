@@ -34,9 +34,7 @@ through this anchor, not at `HEAD`.
 2. Reconciliation records the exact marketplace command sequence
    (`:81-88`). **Merged** into item 1's exact command assertion.
 3. A marketplace-list command failure fails without mutation (`:107-120`).
-   Port: `INSTALL-VERIFY-01 installed fingerprint proof and hints`'s real
-   adapter fixture preserves fail-closed listing behavior in the adapter
-   suite; this baseline port retains the manager-resource contract.
+   Port: `a marketplace-list command failure fails without mutation`.
 4. Malformed marketplace JSON fails without mutation (`:123-125`). **Retired
    at the gap**: the strict parser branch is already covered by
    `tests/unit/adapter.test.js`.
@@ -56,10 +54,10 @@ through this anchor, not at `HEAD`.
 10. Each malformed marketplace item fails closed (`:138-149`). **Merged** into
     the adapter parser's invalid-item coverage; no manager mutation is allowed.
 11. An unrelated marketplace with no root does not block manager registration
-    (`:151-160`). **Retired at the gap**: the surviving manager-only mutation
-    contract is covered by item 1 and the adapter unit suite.
+    (`:151-160`). Port: `unrelated marketplace roots do not block manager
+    registration`.
 12. An unrelated marketplace with an invalid root does not block registration
-    (`:151-160`). **Merged** with item 11's table-driven fixture.
+    (`:151-160`). **Merged** with item 11's table-driven baseline case.
 13. An unrelated marketplace is never mutated (`:162-167`). **Retired at the
     gap**: item 1's exact manager-only command list is the surviving contract.
 14. A symlink-equivalent registered manager root is treated as the same path
@@ -109,16 +107,17 @@ through this anchor, not at `HEAD`.
 {
   "shellOriginal": 31,
   "portOnly": 0,
-  "ports": { "tests/baseline/marketplace-reconcile.test.js": 3 }
+  "ports": { "tests/baseline/marketplace-reconcile.test.js": 5 }
 }
 ```
 
 - Shell original: **31** assertions (the mechanical predicate count used by
   the migration inventories; helper call-site and loop conventions are stated
   above). The anchor commit preserves all shell-original citations.
-- Port (`tests/baseline/marketplace-reconcile.test.js`): 3 static `node:test`
-  cases, one for each retained behavior ID. Repeated fixture rows are merged
-  within those cases only where the expected command or diagnostic is the same.
+- Port (`tests/baseline/marketplace-reconcile.test.js`): 5 static `node:test`
+  cases: the three retained behavior IDs plus focused list-failure and
+  unrelated-root reconciliation cases. Repeated fixture rows are merged within
+  those cases only where the expected command or diagnostic is the same.
 - Reconciliation: all 31 shell items are accounted for by a port, an explicit
   merge note, or an explicit retirement note at the numbered gap. No number is
   reused.
