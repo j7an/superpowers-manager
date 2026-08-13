@@ -90,10 +90,15 @@ resolutions were counted. Decision: **excluded**, following the
 These two read the repository's own source, not a fixture snapshot, so the
 port reads `ROOT` rather than the copied package root.
 
-1. `scripts/uninstall` does not source `scripts/adapters/codex/lib.sh`
-   (`:9-12`). Port: `:285`.
-2. `scripts/core/lifecycle.sh` names neither `SPW_PLUGIN_ID` nor
-   `SPW_MARKETPLACE_NAME` (`:13-16`). Port: `:294`.
+1. The public uninstall path contains no Codex-adapter implementation or
+   environment seam (`:9-12`). Slice 4c re-anchors this gate onto the live
+   `src/commands/uninstall.ts` source and checks `runAdapter` / `SPW_ADAPTER`,
+   beside `tests/unit/ctx-adapter-provenance.test.js`'s no-`runAdapter` import
+   gate. The old `scripts/adapters/codex/lib.sh` needle was inert because that
+   path did not exist. Port: `tests/bin/uninstall-commands.test.js`.
+2. Shared lifecycle code names neither `SPW_PLUGIN_ID` nor
+   `SPW_MARKETPLACE_NAME` (`:13-16`). Slice 4c re-anchors the same claim onto
+   live source `src/lifecycle.ts`. Port: `tests/bin/uninstall-commands.test.js`.
 
 ### Selection-independent recovery (`:162-190`)
 

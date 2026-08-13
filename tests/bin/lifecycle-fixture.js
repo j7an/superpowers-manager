@@ -92,7 +92,8 @@ const IDENTITY = [
 
 /**
  * A fake upstream git repo with one stable release tag. Built once and shared
- * across every case: `scripts/prepare` only ever fetches from it, which is
+ * across every case: `src/commands/prepare.ts` only ever fetches from it via
+ * `src/upstream.ts`'s `fetchExactCommit` and `src/git.ts`, which is
  * read-only on the source, so concurrent cases cannot disturb one another
  * through it. Mirrors tests/test_install_commands.sh:51-67.
  * @returns {string}

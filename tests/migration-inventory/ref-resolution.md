@@ -229,30 +229,30 @@ Not a registered behavior ID: no `BASELINE CASE` marker covers this cluster.
 
 ### The upstream seam scrubs ambient Node preload state (`:209-240`)
 
-Not a registered behavior ID either. `scripts/core/common.sh:61-72`'s
-`spw_node_cli` (unset `NODE_OPTIONS`/`NODE_PATH`, then exec `node`) has no
-TypeScript counterpart: `resolveRef`/`fetchExactCommit` simply inherit
-whatever environment Node was already given, and scrubbing that environment
-before Node starts is `spw_node_cli`'s job alone. Ported by running a small
-generated script against the still-live shell source, the same technique
-`selection-state.md` item 48 uses for `spw_selection_state`.
+Not a registered behavior ID either. Slice 4c re-expresses the child-process
+scrub through `tests/unit/adapter.test.js`'s `runCommand strips NODE_OPTIONS
+and NODE_PATH from the child env`, over `src/adapter.ts:116-122`.
+
+**Divergence:** the git-child half has no TypeScript subject with the same
+contract. `src/git.ts:32` pins `LC_ALL` and `GIT_TERMINAL_PROMPT` but does not
+scrub `NODE_OPTIONS` or `NODE_PATH`. The old combined shell case therefore is
+not carried forward as a false equivalence.
 
 34. `spw_resolve_ref`, run through the seam with an ambient `NODE_OPTIONS`
-    preload injected, still resolves correctly (`:215`). Port:
-    `tests/baseline/ref-resolution.test.js:587-588`.
+    preload injected, still resolves correctly (`:215`). Re-expressed by the
+    adapter child-environment case above.
 35. The injected preload's own stderr marker (`INJECTED`) unexpectedly
     surviving into the resolver's stderr is itself the failure (`:216-219`).
     **Merged** into the port's exact-stdout equality plus the negative stderr
-    check at `:587-589`, together strictly stronger than the shell's bare
-    `grep -Fq` guard — same precedent as `bin-dispatch.md` item 15.
-36. The pinned child's git invocation sees `LC_ALL=C` (`:237`). Port:
-    `tests/baseline/ref-resolution.test.js:630`.
+    adapter child-environment case above.
+36. The pinned child's git invocation sees `LC_ALL=C` (`:237`). Divergence
+    recorded above; `src/git.ts:32` preserves this pin.
 37. The pinned child's git invocation sees `GIT_TERMINAL_PROMPT=0` (`:238`).
-    Port: `:631`.
+    Divergence recorded above; `src/git.ts:32` preserves this pin.
 38. The pinned child's git invocation sees `NODE_OPTIONS` scrubbed to unset
-    (`:239`). Port: `:632`.
+    (`:239`). Divergence: `src/git.ts` does not scrub it.
 39. The pinned child's git invocation sees `NODE_PATH` scrubbed to unset
-    (`:240`). Port: `:633`.
+    (`:240`). Divergence: `src/git.ts` does not scrub it.
 
 <!-- inventory:mapped:end -->
 
@@ -262,7 +262,7 @@ generated script against the still-live shell source, the same technique
 {
   "shellOriginal": 39,
   "portOnly": 0,
-  "ports": { "tests/baseline/ref-resolution.test.js": 8 }
+  "ports": { "tests/baseline/ref-resolution.test.js": 7 }
 }
 ```
 
@@ -272,22 +272,22 @@ generated script against the still-live shell source, the same technique
   no-stable-tags, 6 Node-preload-scrub; sum: 2+3+7+2+11+6+2+6 = 39). See
   "Divergences from the derived 31" above for why this is 31 plus eight
   undercounted guards, not the mechanical grep's 31 on its own.
-- Port (`tests/baseline/ref-resolution.test.js`): 8 static `test(` call
+- Port (`tests/baseline/ref-resolution.test.js`): 7 static `test(` call
   sites — one ordinary case each for the `BUILDER-GIT-01` builder and
   `readConfigRef`'s value, the four behavior-ID cases
   (`REF-LATEST-STABLE-01`, `REF-GENERIC-FALLBACK-01`, `REF-SOURCE-PROOF-01`,
-  `REF-CLEANUP-01`), one ordinary case for the no-stable-tags cluster, and one
-  ordinary case for the combined Node-preload-scrub cluster — carrying 35 of
-  the 39 shell items mapped (seven recorded merges, at items 18, 22, 24, 27,
-  28, 32, and 35, each a negative guard or a redundant retry loop subsumed by
-  a stronger check that follows it, same precedent as `bin-dispatch.md` item
-  15) and 4 retired (items 3, 4, 6, and 7). 35 mapped + 4 retired = 39. No
+  `REF-CLEANUP-01`), and one ordinary case for the no-stable-tags cluster.
+  Items 34-35 move to `tests/unit/adapter.test.js`; items 36-39 are recorded as
+  the git-child divergence above. The other 29 mapped items remain here, with
+  4 retired (items 3, 4, 6, and 7). No
   port-only assertions were added: every port assertion restates a shell
   assertion at the same or a strictly stronger granularity.
-- Reconciliation: 35 of 39 shell items are mapped; 4 are retired, each with a
-  citation to the pre-existing coverage that already supersedes it (items 3-4
+- Reconciliation: 31 of 39 shell items are mapped; 4 are retired and 4 record
+  the git-child divergence. Items 34-35 map to the adapter child scrub; each
+  retirement has a citation to the pre-existing coverage that already
+  supersedes it (items 3-4
   to JavaScript's argument-passing semantics, items 6-7 to
   `tests/unit/upstream.test.js`'s existing `manifestVersionForRef` table) —
   unlike `bin-dispatch.md`'s retired items, none of these four lost a live
   shell subject; each simply has nothing left to prove that isn't already
-  proven elsewhere. 35 + 4 = 39.
+  proven elsewhere. 31 mapped + 4 retired + 4 divergence = 39.

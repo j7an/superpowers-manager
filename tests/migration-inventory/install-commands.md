@@ -109,12 +109,14 @@ separately, and a 1:1 mapping is the property this file exists to certify.
 
 <!-- inventory:mapped:start -->
 
-### Source guards: no hook-trust mutation surface in production scripts (`:11-42`)
+### Source guards: no hook-trust mutation surface in production sources (`:11-42`)
 
-These read the repository's own `scripts/`, not a fixture snapshot, so the
-port reads `ROOT`.
+These read the repository's own production sources, not a fixture snapshot.
+Slice 4c re-anchors the scan from the deleted `scripts/` tree onto `src/` and
+`bin/`, the surviving implementation surface. The invariant is unchanged:
+the manager never creates managed hooks or mutates Codex trust state.
 
-1. An unreadable production script is a hard failure, never a skip
+1. An unreadable production source is a hard failure, never a skip
    (`:26-29`). Port: `:469`.
 2. No production script contains `requirements.toml` (`:30-35`, literal 1 of
    4). Port: `:475`.

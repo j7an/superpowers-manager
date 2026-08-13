@@ -122,7 +122,7 @@ referenced again after this block. It exercises
     subshell). **Merged**, same rationale as item 7. Port: `:409-412`.
 12. The all-absent diagnostic is `HOME is required to locate selection state`
     (`:61`). Port: `:409-412`.
-13. `spw_usage_error 'bad arguments'` unexpectedly succeeding is itself the
+13. The CLI usage-error path unexpectedly succeeding is itself the
     failure (`:63-68`). **Merged** into the port's `assert.equal(usage.status,
     2)` at `tests/baseline/selection-location.test.js:427`, which is strictly
     stronger and subsumes this guard, same precedent as `bin-dispatch.md`
@@ -134,19 +134,12 @@ referenced again after this block. It exercises
     (their own usage-error diagnostics now come from `src/cli.ts`'s
     `parseArgs`, already covered by `bin-dispatch.md` items 35-37; Task 10b
     then deleted all three shell files outright — see the note below).
-    `scripts/core/common.sh` itself is unchanged and still live source for
-    other shell tests, so the port runs it directly via a generated script
-    (`tests/baseline/selection-location.test.js`'s `runShellScript`).
-    Note for slice 4 (not this slice's work): Task 10b deleted
-    `scripts/pin`, `scripts/unpin`, and `scripts/track-latest` outright, so
-    `spw_usage_error` (`scripts/core/common.sh:9`) now has zero callers
-    anywhere in `scripts/`. `scripts/core/common.sh` still ships
-    (`tests/expected_tarball_contents.txt:47`), and removing the now-dead
-    helper is slice 4's call, not this task's.
-14. `spw_usage_error` exits `2` (`:69`). Port: `:427`.
-15. `spw_usage_error`'s stderr is exactly `error: bad arguments` (`:70`).
-    Port: `:428-429` (the port asserts the full stdout/stderr shape in one
-    step: empty stdout, one exact stderr line).
+    Slice 4c re-expresses the case through `src/cli.ts:314-316`, the live
+    usage-error implementation, rather than the deleted shell helper.
+14. The CLI usage-error path exits `2` (`:69`). Port:
+    `tests/baseline/selection-location.test.js`.
+15. Its stderr is `error: <msg>` followed by the complete usage block, while
+    stdout is empty (`:70`). Port: `tests/baseline/selection-location.test.js`.
 
 ### Complete ref precedence — absent state (`:134-172`)
 
@@ -231,21 +224,17 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
     Port: `:781`.
 46. Displaying a credential-bearing source redacts it (`:311`). Port: `:782`.
 47. Displaying the official source shows it verbatim (`:312`). Port: `:783`.
-48. `spw_selection_state` ignores ambient `NODE_OPTIONS` (`:314-322`). No
-    TypeScript counterpart: `scripts/core/selection.sh`'s
-    `spw_selection_state` remains live production code for
-    `scripts/prepare` and `scripts/probe`, untouched by this slice. Ported by
-    running a small generated script against the still-live shell source.
-    Port: `tests/baseline/selection-location.test.js:797-809`.
+48. `spw_selection_state` ignores ambient `NODE_OPTIONS` (`:314-322`).
+    **Retired structurally in slice 4c:** selection state is read in-process
+    by `src/selection-store.ts`, so there is no child Node process for
+    `NODE_OPTIONS` to reach and no helper file left to be missing.
 49. A missing `dist/selection-state-cli.js` unexpectedly succeeding is itself
-    the failure (`:325-330`). Unlike items 7/9/11/13/40/43 above, nothing
-    stronger follows this guard in the shell either — the original only ever
-    checks non-zero here, never an exact status code — so this is ported as
-    its own assertion rather than merged. Port: `:817-823` (`:823`
-    specifically).
-50. The missing-helper stderr is exactly one line (`:332`). Port: `:825`.
+    the failure (`:325-330`). **Retired structurally in slice 4c**, for the
+    same in-process/no-helper reason as item 48.
+50. The missing-helper stderr is exactly one line (`:332`). **Retired
+    structurally in slice 4c**, same reason as item 48.
 51. That line is exactly `error: selection state helper missing` (`:333`).
-    Port: `:826`.
+    **Retired structurally in slice 4c**, same reason as item 48.
 
 <!-- inventory:mapped:end -->
 
@@ -271,16 +260,14 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
   behavior-ID cases (`SEL-LOCATION-01`, `SEL-PRECEDENCE-REF-01`,
   `SEL-PRECEDENCE-VALIDATE-01`), and one ordinary case for the
   non-behavior-ID `SEL-REF-GENERIC-01` cluster — carrying all 51 shell items
-  mapped (six recorded merges, at items 7, 9, 11, 13, 40, and 43, each a
+  mapped or structurally retired (six recorded merges, at items 7, 9, 11, 13, 40, and 43, each a
   negative if-guard subsumed by the stronger check that follows it, same
-  precedent as `bin-dispatch.md` item 15). 51 mapped + 0 retired = 51. No
+  precedent as `bin-dispatch.md` item 15). 47 mapped + 4 retired = 51. No
   port-only assertions were added: `computeEffectiveSelection`'s TypeScript
   return type already makes `assert_exported_selection`'s property
   structural (see the divergence note), and this port otherwise stays at the
   shell's own assertion granularity rather than adding new coverage.
-- Reconciliation: all 51 shell items are mapped, none retired — every shell
-  behavior this driver checked still has a live subject (either the
-  TypeScript `computeEffectiveSelection`/`selectionConfigDir`/`validateSource`/
-  `displaySource` path, or the still-live shell library, unlike
-  `bin-dispatch.md`'s `pin`/`unpin`/`track-latest` routing items, whose
-  underlying shell path was physically removed from dispatch). 51 + 0 = 51.
+- Reconciliation: 47 shell items remain mapped and items 48-51 retire
+  structurally because selection state is read in-process by
+  `src/selection-store.ts`; no child Node process or helper path survives.
+  47 + 4 = 51.

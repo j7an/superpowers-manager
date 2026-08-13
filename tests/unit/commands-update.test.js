@@ -820,7 +820,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
 });
 
-void test('argv is ignored, matching scripts/update never reading "$@"', async () => {
+void test("argv is ignored by src/commands/update.ts", async () => {
   const out = sink();
   const err = sink();
   const { adapter } = scriptedAdapter(probeCurrent());

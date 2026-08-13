@@ -1,8 +1,8 @@
 # Deliberate divergence: `int-5000-digits.json`
 
 CPython's `int()` constructor refuses to convert a string of more than 4,300
-digits (`sys.set_int_max_str_digits`, default limit). Loading this fixture
-with `scripts/adapters/codex/apply-manifest-overlay.py` raises
+digits (`sys.set_int_max_str_digits`, default limit). The withdrawn Python
+overlay applier raised
 `ValueError: Exceeds the limit (4300 digits) for integer string conversion`
 during `json.load`, so the Python oracle **rejects** this file.
 

@@ -2,7 +2,7 @@
 // Migrated from tests/test_selection_state.sh (335 lines), a shell driver
 // over scripts/core/selection.sh's spw_selection_config_dir,
 // spw_compute_effective_selection, spw_resolve_ref, spw_selection_state, and
-// spw_display_source, plus scripts/core/common.sh's spw_usage_error.
+// spw_display_source, plus the CLI usage-error contract now owned by src/cli.ts.
 //
 // PR 11.5 already ported the config-dir chain and the env > saved >
 // package-default precedence ladder to TypeScript
@@ -10,21 +10,10 @@
 // and src/selection.ts's validateSource / displaySource), so this port
 // exercises those directly wherever a TypeScript counterpart exists.
 //
-// Two clusters have no TypeScript counterpart at all, because their subject
-// is shell-only infrastructure, and this task changes no production code:
-//   - scripts/core/common.sh's spw_usage_error was reachable only from
-//     scripts/pin, scripts/unpin, and scripts/track-latest, none of which
-//     src/cli.ts's DISPATCH reached any more once all three flipped to
-//     in-process TypeScript by earlier tasks in this slice. Task 10b then
-//     deleted the shell files themselves, but the helper is still live shell
-//     source in scripts/core/common.sh, so it is ported here by running a
-//     small generated script (see runShellScript) against it.
-//   - scripts/core/selection.sh's spw_selection_state (the wrapper that
-//     invokes dist/selection-state-cli.js via spw_node_cli, scrubbing
-//     ambient NODE_OPTIONS/NODE_PATH and reporting a missing helper with one
-//     diagnostic) remains live production code for scripts/prepare and
-//     scripts/probe, which this slice has not touched. It is ported the
-//     same way.
+// The former selection-state wrapper cluster closes structurally in slice 4c:
+// src/selection-store.ts reads selection state in-process, so there is no
+// child Node process for NODE_OPTIONS to reach and no helper file left to be
+// missing. The inventory records the retirement of that shell-only shape.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -44,10 +33,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const COMMON_SH = join(ROOT, "scripts/core/common.sh");
-const PROVENANCE_SH = join(ROOT, "scripts/core/provenance.sh");
-const UPSTREAM_SH = join(ROOT, "scripts/core/upstream.sh");
-const SELECTION_SH = join(ROOT, "scripts/core/selection.sh");
+const BIN = join(ROOT, "bin", "superpowers-manager.js");
 const BASELINE_SCENARIO_SH = join(ROOT, "tests/builders/baseline-scenario.sh");
 
 // A static import from `dist/` fails the `typecheck:js` gate: dist output has
@@ -133,45 +119,6 @@ function makeConfigDir(t, raw) {
     writeFileSync(join(dir, "selection.json"), raw, "utf8");
   }
   return dir;
-}
-
-/**
- * Sources each of `libraries` (asserted to exist first, by name, so a future
- * deletion of one of these still-live shell files fails loudly here instead
- * of surfacing as a confusing downstream diagnostic mismatch), then runs
- * `body` — a POSIX sh script fragment that sees `libraries` as `$1..$N` and
- * `args` as `$(N+1)..$(N+M)`. Everything this script's argv needs travels as
- * a positional parameter into the generated script, rather than through
- * string-interpolated shell source, so nothing here builds a shell command
- * by concatenation.
- * @param {import("node:test").TestContext} t
- * @param {readonly string[]} libraries shell files to source, in order
- * @param {string} body
- * @param {readonly string[]} args
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {import("node:child_process").SpawnSyncReturns<string>}
- */
-function runShellScript(t, libraries, body, args, env) {
-  for (const library of libraries) {
-    assert.ok(
-      existsSync(library),
-      `expected shell library to exist: ${library}`,
-    );
-  }
-  const dir = mkdtempSync(join(tmpdir(), "spw-sel-script-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const scriptPath = join(dir, "script.sh");
-  const sourceLines = libraries.map((_, index) => `. "$${index + 1}"`);
-  writeFileSync(
-    scriptPath,
-    `#!/bin/sh\nset -eu\n${[...sourceLines, body].join("\n")}\n`,
-    "utf8",
-  );
-  chmodSync(scriptPath, 0o755);
-  return spawnSync("sh", [scriptPath, ...libraries, ...args], {
-    encoding: "utf8",
-    env: env ?? process.env,
-  });
 }
 
 // A fixed script body, containing no test-controlled value at all: every
@@ -364,7 +311,7 @@ void test("the permission-denied builder produces a deterministically unreadable
   chmodSync(dirname(permissionTarget), 0o700); // :39, cleanup, not an assertion
 });
 
-void test("SEL-LOCATION-01 selection location chain and fail-closed bases", (t) => {
+void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () => {
   // :42 an explicit SUPERPOWERS_CONFIG_DIR wins over every other base.
   assert.equal(
     selectionConfigDir({
@@ -411,23 +358,23 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", (t) 
     message: "HOME is required to locate selection state",
   });
 
-  // :63-70 scripts/core/common.sh's spw_usage_error, reachable in production
-  // only from scripts/pin|unpin|track-latest before those three were ported
-  // to TypeScript and then deleted by Task 10b (see the file header comment)
-  // — but scripts/core/common.sh itself is unchanged and still ships, so this
-  // runs a small generated script against it. The if-guard at :63
-  // ("unexpectedly succeeded") is subsumed by the exact-status assertion
-  // below, matching the merge precedent at
-  // tests/migration-inventory/bin-dispatch.md item 15.
-  const usage = runShellScript(
-    t,
-    [COMMON_SH],
-    "spw_usage_error 'bad arguments'",
-    [],
-  );
+  // :63-70 re-expressed through src/cli.ts's surviving usage-error contract:
+  // `error: <msg>` on stderr, followed by the same usage block `--help`
+  // prints, with exit 2. The shell guard's "unexpectedly succeeded" half is
+  // subsumed by the exact-status assertion below.
+  const help = spawnSync(process.execPath, [BIN, "--help"], {
+    encoding: "utf8",
+  });
+  assert.equal(help.status, 0, help.stdout + help.stderr);
+  const usage = spawnSync(process.execPath, [BIN, "bogus"], {
+    encoding: "utf8",
+  });
   assert.equal(usage.status, 2); // :63, :69
   assert.equal(usage.stdout, "");
-  assert.equal(usage.stderr, "error: bad arguments\n"); // :70
+  assert.equal(
+    usage.stderr,
+    `error: unknown subcommand: bogus\n${help.stdout}`,
+  ); // :70
 });
 
 void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
@@ -782,47 +729,4 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
   assert.equal(logText(log), ""); // :310
   assert.equal(displaySource(credentialSource), "<redacted-source>"); // :311
   assert.equal(displaySource(UPSTREAM_URL_DEFAULT), UPSTREAM_URL_DEFAULT); // :312
-
-  // Selection-state execution ignores ambient Node preload state. :314-322.
-  // scripts/core/selection.sh's spw_selection_state remains live for
-  // scripts/prepare and scripts/probe; see the file header comment.
-  const preloadBase = mkdtempSync(join(tmpdir(), "spw-sel-preload-"));
-  t.after(() => rmSync(preloadBase, { recursive: true, force: true }));
-  const preloadMarker = join(preloadBase, "preload-marker");
-  const preloadScript = join(preloadBase, "preload.js");
-  writeFileSync(
-    preloadScript,
-    `require('node:fs').writeFileSync(${JSON.stringify(preloadMarker)}, 'injected');\n`,
-    "utf8",
-  );
-  const preloadResult = runShellScript(
-    t,
-    [COMMON_SH, PROVENANCE_SH, UPSTREAM_SH, SELECTION_SH],
-    'spw_selection_state "$5" validate-source --source="$6"',
-    [ROOT, UPSTREAM_URL_DEFAULT],
-    { ...process.env, NODE_OPTIONS: `--require=${preloadScript}` },
-  );
-  assert.equal(
-    preloadResult.status,
-    0,
-    preloadResult.stdout + preloadResult.stderr,
-  );
-  assert.equal(existsSync(preloadMarker), false); // :322
-
-  // Missing selection-state helpers fail with one controlled diagnostic.
-  // :324-333. The if-guard at :327 is ported as its own assertion (unlike
-  // the other clusters above, nothing stronger follows it in the shell
-  // either — the original only ever checks non-zero, never an exact code).
-  const missingHelperRoot = mkdtempSync(join(tmpdir(), "spw-sel-missing-"));
-  t.after(() => rmSync(missingHelperRoot, { recursive: true, force: true }));
-  const missingResult = runShellScript(
-    t,
-    [COMMON_SH, PROVENANCE_SH, UPSTREAM_SH, SELECTION_SH],
-    'spw_selection_state "$5" validate-source --source="$6"',
-    [missingHelperRoot, UPSTREAM_URL_DEFAULT],
-  );
-  assert.notEqual(missingResult.status, 0); // :327
-  const missingLines = missingResult.stderr.replace(/\n$/, "").split("\n");
-  assert.equal(missingLines.length, 1, missingResult.stderr); // :332
-  assert.equal(missingLines[0], "error: selection state helper missing"); // :333
 });
