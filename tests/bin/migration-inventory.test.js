@@ -77,7 +77,11 @@ const FROZEN_SHELL_RESOLUTION = {
 
 /**
  * Returns the digest-covered content after exactly one canonical four-line
- * freeze header.
+ * freeze header. Together with the checks below, this gate verifies canonical
+ * header syntax, exact declared file membership, digest-covered body content,
+ * and live declared port counts. It does not execute Git or verify H1-to-
+ * filename identity, commit ancestry or object existence, or whether a
+ * resolution path is correct at its stated anchor.
  * @param {string} source
  * @param {string} name
  * @returns {string[]}

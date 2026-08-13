@@ -69,8 +69,11 @@ Codex below describe the product integration, not a required agent harness.
   Python-standard-library boundaries.
 - Ask before adding a runtime dependency.
 - Update documentation and contract tests when observable behavior changes.
-  `tests/migration-inventory/` is frozen historical evidence exempt from this
-  instruction; its gate enforces that exemption.
+  Routine behavior changes do not rewrite the frozen migration inventories. A
+  historical correction or mapped-suite topology change updates the affected
+  inventory and digest entry in the same commit; its commit or PR names the
+  affected file, reason, and supporting evidence. Reviewers authorize a
+  re-freeze; a matching digest alone does not.
 
 ## Testing
 
