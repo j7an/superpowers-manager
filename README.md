@@ -318,23 +318,22 @@ and pushes to `main`.
 
 ```
 .agents/plugins/marketplace.json          # local marketplace definition (tracked)
-config/upstream-ref                        # which upstream ref to track (tracked)
+.github/                                  # CI, security, dependency, and release workflows (tracked)
 bin/superpowers-manager.js                # public thin loader for dist/cli.js
+config/upstream-ref                       # packaged upstream fallback policy (tracked)
 docs/                                     # protocol documentation and baseline evidence (tracked)
+package.json pnpm-lock.yaml tsconfig.json # package contract and locked toolchain (tracked)
+plugins/superpowers/
+  .codex-plugin/plugin.template.json      # fallback manifest template (tracked)
+  generated plugin tree                   # prepared from upstream (gitignored)
 src/                                      # in-process TypeScript runtime (tracked)
   cli.ts                                  # CLI parsing, preflight, and command dispatch
   commands/                               # lifecycle and selection command handlers
   adapter.ts                              # Codex integration
-dist/cli.js                               # generated ESM CLI build (gitignored)
-plugins/superpowers/
-  .codex-plugin/plugin.template.json       # fallback manifest template (tracked)
-  .codex-plugin/plugin.json                # generated manifest           (gitignored)
-  skills/ assets/ LICENSE ...              # generated from upstream       (gitignored)
-  .superpowers-upstream.json               # generated provenance          (gitignored)
 tests/                                    # hermetic suite and manual Codex probe (tracked)
   fixtures/protocol/                       # relocated protocol fixtures; removed in slice 5
   migration-inventory/                     # frozen historical evidence
-.cache/upstream/                           # upstream clone cache         (gitignored)
+dist/                                     # generated ESM build tree (gitignored)
 ```
 
 Everything under `plugins/superpowers/` except the fallback manifest template is

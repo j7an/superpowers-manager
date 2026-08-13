@@ -2,10 +2,16 @@
 
 ## Scope
 
-This document defines the version-1 response protocol between a Superpowers
-Manager adapter and the in-process TypeScript runtime in `src/`. The runtime
-checks a response against the invoked operation and adapter exit status before
+This document defines the version-1 JSON response protocol used by
+`src/adapter-cli.ts` and the relocated protocol fixtures under
+`tests/fixtures/protocol/`. In that serialized path, the validator checks the
+response against the invoked operation and adapter-process exit status before
 any adapter message is replayed or any result is accepted.
+
+The product CLI does not use that transport: `src/cli.ts` binds `runAdapter`
+directly into the lifecycle context, and handlers consume its `AdapterResult`
+in-process. There is no adapter-process exit or independent
+operation/response validation on that path.
 
 ## Envelope
 
@@ -97,9 +103,12 @@ already execute local code.
 
 ## Capture-time buffering
 
-`src/adapter.ts` captures Codex command output in memory and records it in the
-response envelope. The protocol has no response-file capture step, so it does
-not bound disk growth while output is captured.
+On the product path, `src/adapter.ts` captures Codex child output in memory with
+an unbounded `execFile` `maxBuffer`. Mutation-command output is recorded as
+messages, but listing stdout may instead be parsed directly without being
+recorded in an envelope; listing stderr is recorded. The response-byte limit
+above applies only to the serialized fixture validator, not to this in-process
+capture.
 
 ## Governance
 
