@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_node_cli_helper.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show b3f926f3a5428d21e1fdfe35f9714a639d8209c5:tests/test_node_cli_helper.sh -->
 
 Source read in full (76 lines). Retired in Task 2 of slice 4c. The surviving
 property is the child-environment scrub and is covered by

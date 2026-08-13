@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_probe.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show f58289ed00b95635ffc4ea589b845ce83a7404ba:tests/test_probe.sh -->
 
 Source read in full (631 lines). Ported to `tests/baseline/probe.test.js`,
 `tests/unit/commands-probe.test.js`, and `tests/unit/status.test.js`.

@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_codex_state_units.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show cf7163556388fa85192556ba8fd56d789946db56:tests/test_codex_state_units.sh -->
 
 Source read in full (47 lines). Ported to `tests/unit/lifecycle.test.js`.
 

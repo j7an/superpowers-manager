@@ -9,6 +9,7 @@
 // markdown-parsing harness, and runtime counting would not catch it either.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -16,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const INVENTORY_DIR = join(ROOT, "tests", "migration-inventory");
+const DIGEST_PATH = join(ROOT, "tests", "migration-inventory-digests.json");
 
 // Declared, never derived. A glob is a query over mutable state and it empties
 // exactly when the deletion it should catch happens — the failure instance this
@@ -57,6 +59,103 @@ const DECLARATION = /^```json inventory\n([\s\S]*?)\n```$/gm;
 const ENTRY = /^(\d+)(?:-(\d+))?\.\s/;
 const PROSE_TOTAL = /^- Shell original: \*\*(\d+)\*\* assertions/m;
 const TEST_IMPORT = /^import test from "node:test";$/m;
+const FROZEN_FIRST_LINE =
+  /^<!-- FROZEN: historical migration record\. Declared historical against ([0-9a-f]{40})\.(?: The pin is not a pointer anchor\.)? -->$/;
+const FROZEN_SECOND_LINE =
+  "<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->";
+const FROZEN_RESOLUTION_LINE =
+  /^<!-- Resolve shell-original citations with: git show [0-9a-f]{40}:.+ -->$/;
+const FROZEN_WITHOUT_SINGLE_RESOLUTION = new Set([
+  "install-commands.md",
+  "uninstall-commands.md",
+]);
+
+/**
+ * Returns the digest-covered content after exactly one canonical freeze header.
+ * The optional third header line is the documented single-resolution anchor;
+ * the two provenance-bearing inventories intentionally omit it because their
+ * existing notes name multiple historical pointer states instead.
+ * @param {string} source
+ * @param {string} name
+ * @returns {string[]}
+ */
+function frozenRegionLines(source, name) {
+  const lines = source.split("\n");
+  const frozenLines = lines.filter((line) => line.startsWith("<!-- FROZEN:"));
+  assert.equal(
+    frozenLines.length,
+    1,
+    `${name}: must carry exactly one canonical freeze header`,
+  );
+  assert.match(
+    lines[1],
+    FROZEN_FIRST_LINE,
+    `${name}: missing or malformed frozen-history pin`,
+  );
+  assert.equal(
+    lines[2],
+    FROZEN_SECOND_LINE,
+    `${name}: missing canonical frozen pointer policy`,
+  );
+  const hasSingleResolution = lines[3].startsWith(
+    "<!-- Resolve shell-original citations",
+  );
+  assert.equal(
+    hasSingleResolution,
+    !FROZEN_WITHOUT_SINGLE_RESOLUTION.has(name),
+    `${name}: freeze header has the wrong resolution-anchor form`,
+  );
+  if (hasSingleResolution) {
+    assert.match(
+      lines[3],
+      FROZEN_RESOLUTION_LINE,
+      `${name}: malformed frozen resolution anchor`,
+    );
+    return lines.slice(4);
+  }
+  assert.ok(
+    lines[1].includes("The pin is not a pointer anchor."),
+    `${name}: multi-state pointer provenance must say the pin is not a pointer anchor`,
+  );
+  return lines.slice(3);
+}
+
+/**
+ * @param {string[]} lines
+ * @returns {string}
+ */
+function frozenDigest(lines) {
+  const canonical = `${lines
+    .map((line) => line.replace(/\s+$/u, ""))
+    .join("\n")
+    .replace(/\n+$/u, "")}\n`;
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
+}
+
+/**
+ * @param {string} name
+ * @returns {Record<string, unknown>}
+ */
+function digestRegistry(name) {
+  let raw;
+  try {
+    raw = readFileSync(DIGEST_PATH, "utf8");
+  } catch {
+    return assert.fail(`${name}: frozen digest registry could not be read`);
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return assert.fail(`${name}: frozen digest registry is not valid JSON`);
+  }
+  assert.ok(
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed),
+    `${name}: frozen digest registry must be an object`,
+  );
+  return /** @type {Record<string, unknown>} */ (parsed);
+}
 
 // Cardinal words this project's inventories have actually used for a stated
 // count (bin-dispatch.md's "two", selection-state.md's "six",
@@ -467,10 +566,31 @@ assert.deepEqual(
   "the migration-inventory directory disagrees with the declared inventory list",
 );
 
-for (const name of inventories) {
+for (const name of Object.keys(DECLARED)) {
   void test(`migration inventory reconciles: ${name}`, () => {
     const source = readFileSync(join(INVENTORY_DIR, name), "utf8");
     const lines = source.split("\n");
+    const frozenLines = frozenRegionLines(source, name);
+    const digests = digestRegistry(name);
+    assert.ok(
+      Object.hasOwn(digests, name),
+      `${name}: frozen digest entry is missing`,
+    );
+    assert.equal(
+      typeof digests[name],
+      "string",
+      `${name}: frozen digest must be a string`,
+    );
+    assert.match(
+      /** @type {string} */ (digests[name]),
+      /^[0-9a-f]{64}$/,
+      `${name}: frozen digest must be lowercase 64-hex SHA-256`,
+    );
+    assert.equal(
+      frozenDigest(frozenLines),
+      digests[name],
+      `${name}: frozen content digest disagrees with the registry`,
+    );
 
     const declarationMatches = [...source.matchAll(DECLARATION)];
     assert.equal(
@@ -621,3 +741,12 @@ for (const name of inventories) {
     assertNetArithmeticSelfConsistent(source, name);
   });
 }
+
+void test("migration inventory digests exactly match the declared inventory list", () => {
+  const digests = digestRegistry("migration-inventory-digests.json");
+  assert.deepEqual(
+    Object.keys(digests).sort(),
+    Object.keys(DECLARED).sort(),
+    "migration-inventory-digests.json: digest keys must exactly match DECLARED",
+  );
+});

@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_ref_resolution.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh -->
 
 Source read in full (242 lines). Ported to
 `tests/baseline/ref-resolution.test.js`.

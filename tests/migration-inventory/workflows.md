@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_workflows.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh -->
 
 Source read in full (739 lines). Ported to `tests/bin/workflows.test.js` and
 `tests/bin/action-pins.test.js`, with shared helpers in

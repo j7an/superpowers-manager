@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_marketplace_reconcile.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show ccd1884007a6e7b77218d7ff41c75e69d84d5a5b:tests/test_marketplace_reconcile.sh -->
 
 Source read in full (319 lines). Migrated to
 `tests/baseline/marketplace-reconcile.test.js`; the three behavior-ID cases

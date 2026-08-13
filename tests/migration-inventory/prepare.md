@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_prepare_with_fake_upstream.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh -->
 
 Source read in full (1278 lines). Ported to `tests/baseline/prepare.test.js`,
 `tests/unit/commands-prepare.test.js`, and `tests/unit/atomic.test.js`.

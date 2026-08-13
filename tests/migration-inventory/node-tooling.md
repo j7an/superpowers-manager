@@ -1,4 +1,7 @@
 # Migration inventory: tests/test_node_tooling.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
+<!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_node_tooling.sh -->
 
 Source read in full (23 lines). Ported to `tests/bin/node-tooling.test.js`.
 

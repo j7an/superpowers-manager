@@ -1,4 +1,6 @@
 # Migration inventory: tests/test_install_commands.sh
+<!-- FROZEN: historical migration record. Declared historical against ad56569a4c161e7b122967442e2b026eeb6395f6. The pin is not a pointer anchor. -->
+<!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 
 Source read in full (782 lines). Ported to
 `tests/bin/install-commands.test.js`.
