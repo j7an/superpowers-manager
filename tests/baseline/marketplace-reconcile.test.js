@@ -131,7 +131,15 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     ok({}),
     ok({ view: "fingerprint", fingerprint: desired.slice(0, 7) }),
   );
-  assert.equal(short.ok, true);
+  assert.deepEqual(short, {
+    ok: true,
+    stdout: [
+      `desired_commit=${desired}`,
+      `installed_commit=${desired.slice(0, 7)}`,
+      "manager updated",
+    ],
+    stderr: [],
+  });
 
   const mismatch = verifyInstalledFingerprint(
     "1111111111111111111111111111111111111111",

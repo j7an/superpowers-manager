@@ -61,6 +61,9 @@ void test("bootstrap: expected repository files are present", () => {
   }
 });
 
+// These constructed strings are deliberate negative assertions over deleted
+// paths, excluded from the literal active-consumer audit. Active references
+// must remain literal and dispositioned; construction must not hide one.
 const ABSENT_FILES = [
   ["scripts/", "adapters/codex/adapter"].join(""),
   ["scripts/", "core/validate-adapter-response.py"].join(""),
@@ -158,6 +161,9 @@ const textContentCases = [
   ["tests/expected_tarball_contents.txt", "dist/codex-state.js", true],
   ["tests/expected_tarball_contents.txt", "dist/hooks-cli.js", false],
   ["tests/expected_tarball_contents.txt", "dist/hooks.js", true],
+  // These constructed strings are deliberate negative assertions over deleted
+  // paths, excluded from the literal active-consumer audit. Active references
+  // must remain literal and dispositioned; construction must not hide one.
   [
     "tests/expected_tarball_contents.txt",
     ["scripts/", "core/selection.sh"].join(""),
