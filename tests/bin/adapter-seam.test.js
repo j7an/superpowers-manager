@@ -20,13 +20,10 @@
 //
 // Know this before trusting the classification gate below. Its property is
 // `readers === 0 || declared > 0`, so with readers nonzero the second
-// disjunct is the one holding it up — and `declared` counts the bare string
-// `seamDependency:`, which in both files matches only the case builder's
-// passthrough (`seamDependency: options.seamDependency`), never a
-// declaration. That gate therefore cannot fail for these two files at
-// present. Left as is deliberately: the pattern it shares with the count case
-// is what slice 4c reads when it retires the seam, and narrowing it is that
-// task's call, not a fix to smuggle in under a tripwire case.
+// disjunct is the one holding it up. `declared` must therefore count actual
+// declarations, not the case builder's `seamDependency: options.seamDependency`
+// passthrough: only `DECLARATION` can establish the protection this gate asks
+// for.
 //
 // HISTORY, which is why the gates were written: before Task 6 there were 9
 // reader sites and 30 declaring cases, and both would have gone vacuous when
@@ -78,6 +75,16 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const DECLARATION = /seamDependency:\s*\{[^}]*\}/;
 const REASON_FIELD = /reason:\s*"(\w+)"/;
 const SCRIPT_FIELD = /script:\s*"(\w+)"/;
+
+// Declared, never derived. These are the intentional row-18 tripwire
+// readers: with no live seam declarations left, an added reader must not hide
+// among them. A file that regains a real declaration keeps the deliberately
+// weak, per-file classification below — attributing individual readers to
+// cases needs a parser this repository does not have.
+const INTENTIONAL_NON_SEAM_READERS = new Map([
+  ["tests/bin/install-commands.test.js", 2],
+  ["tests/bin/uninstall-commands.test.js", 2],
+]);
 
 /**
  * Type-guards a string against SEAM_REASONS. The cast is only on the
@@ -139,7 +146,7 @@ void test("each declared count matches the declarations in its sources", () => {
   assert.deepEqual(found, SEAM_DEPENDENT);
 });
 
-void test("no adapter-log reader is left unclassified", () => {
+void test("adapter-log readers have a declaration or their explicit non-seam baseline", () => {
   // A reader in a case with no seamDependency is a reader whose channel dies
   // unannounced. All three modes still write adapter.log, so `delegate` is the
   // mode most likely to look harmless here.
@@ -148,26 +155,30 @@ void test("no adapter-log reader is left unclassified", () => {
   // and a declared case can hold none, so a count comparison would be wrong.
   // Per-case attribution needs a parser this repo has no dependency for, and
   // tests/bin/migration-inventory.test.js's history is a standing argument
-  // against approximating one with a regex. This check's job is only to catch
-  // the whole-file regression — a source that reads the log while declaring
-  // nothing — and it must stay that weak on purpose.
+  // against approximating one with a regex. A file with a real declaration
+  // therefore keeps the old weak classification. A file without one must be
+  // empty unless it has an explicit intentional-reader baseline.
   //
   // Scans SEAM_SOURCE_FILES for the reason test 3 above does: the derived set
   // would stop visiting a file exactly when slice 4 empties its SEAM_DEPENDENT
   // entry, leaving live readers unclassified with this loop body never run.
   //
-  // The property is `readers === 0 || declared > 0`, not `declared > 0`: a
-  // file slice 4 has legitimately emptied of both readers and declarations is
-  // not a defect, and asserting on `declared` alone would fail it with a
-  // message describing readers that are not there.
+  // A file slice 4 has legitimately emptied of both readers and declarations
+  // is not a defect, so its implicit baseline is zero. The two row-18
+  // tripwire files state their intentional readers above; any other reader in
+  // a declaration-free file fails rather than being covered by a bare
+  // `seamDependency:` mention in the case builder.
   for (const relative of SEAM_SOURCE_FILES) {
     const source = readFileSync(join(ROOT, relative), "utf8");
     const readers = (source.match(/readLog\(c\.adapterLog\)/g) ?? []).length;
-    const declared = (source.match(/seamDependency:/g) ?? []).length;
-    assert.ok(
-      readers === 0 || declared > 0,
+    const declared = (source.match(new RegExp(DECLARATION, "g")) ?? []).length;
+    if (declared > 0) continue;
+    const expected = INTENTIONAL_NON_SEAM_READERS.get(relative) ?? 0;
+    assert.equal(
+      readers,
+      expected,
       `${relative} has ${readers} adapter-log readers and no seamDependency ` +
-        "declarations at all",
+        `declarations; its explicit non-seam baseline is ${expected}`,
     );
   }
 });

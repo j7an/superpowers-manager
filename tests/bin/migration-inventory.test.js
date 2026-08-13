@@ -129,6 +129,29 @@ const RETIRED_ITEMS_RE = new RegExp(
 // not a defect. Remove this entry if workflows.md ever adopts the marker.
 const STATED_COUNT_MARKER_CHECK_EXEMPT = new Set(["workflows.md"]);
 
+// Declared, never derived — a predicate such as "check a file that currently
+// states a count" would pass at the moment that count is deleted, which is the
+// deletion this gate exists to catch. Membership is per phrase: a file can owe
+// a merge count without owing a retirement count. The lists were derived from
+// the current inventories' two count phrasings, then checked against their
+// **Merged**/**Retired** markers. `workflows.md` remains listed for its merge
+// phrase, but the explicit exemption above skips the marker comparison because
+// its prose item ranges, rather than bold markers, are its ground truth.
+/** @type {Record<"merges" | "retirements", ReadonlySet<string>>} */
+const STATED_COUNT_REQUIRED = {
+  merges: new Set([
+    "bin-dispatch.md",
+    "selection-state.md",
+    "workflows.md",
+  ]),
+  retirements: new Set([
+    "bin-dispatch.md",
+    "prepare.md",
+    "probe.md",
+    "selection-commands.md",
+  ]),
+};
+
 // Anchored to the literal shorthand punctuation an inventory uses to restate
 // its own divergence arithmetic in one place (e.g. "+5/-7/net-2") — not to
 // any specific file's wording, so it needs no phrase-specific exemption list
@@ -182,13 +205,16 @@ function parseStatedCount(token) {
  * Asserts every occurrence of `countRe` in `source` (a stated "N <phrase>")
  * agrees with the file's own count of `markerRe` (its bold per-item marker
  * for the same concept, e.g. `**Merged**`). Both regexes must be global.
- * Skipped entirely for a name in `exempt` — see
- * STATED_COUNT_MARKER_CHECK_EXEMPT.
+ * A file in `required` must state exactly one count; every other non-exempt
+ * file must state none. This makes both deleting a declared count and adding
+ * a new phrase without declaring it fail closed. Skipped entirely for a name
+ * in `exempt` — see STATED_COUNT_MARKER_CHECK_EXEMPT.
  * @param {string} source
  * @param {RegExp} countRe
  * @param {RegExp} markerRe
  * @param {string} phraseLabel
  * @param {string} name
+ * @param {ReadonlySet<string>} required
  * @param {ReadonlySet<string>} exempt
  */
 function assertStatedCountMatchesMarkers(
@@ -197,11 +223,24 @@ function assertStatedCountMatchesMarkers(
   markerRe,
   phraseLabel,
   name,
+  required,
   exempt,
 ) {
   if (exempt.has(name)) return;
   const stated = [...source.matchAll(countRe)];
-  if (stated.length === 0) return;
+  if (required.has(name)) {
+    assert.equal(
+      stated.length,
+      1,
+      `${name}: must state exactly one ${phraseLabel} count because it is declared in STATED_COUNT_REQUIRED`,
+    );
+  } else {
+    assert.equal(
+      stated.length,
+      0,
+      `${name}: states a ${phraseLabel} count but is absent from STATED_COUNT_REQUIRED`,
+    );
+  }
   const actual = [...source.matchAll(markerRe)].length;
   for (const match of stated) {
     const claimed = parseStatedCount(match[1]);
@@ -560,6 +599,7 @@ for (const name of inventories) {
       /\*\*merged\*\*/gi,
       "recorded merges",
       name,
+      STATED_COUNT_REQUIRED.merges,
       STATED_COUNT_MARKER_CHECK_EXEMPT,
     );
     assertStatedCountMatchesMarkers(
@@ -568,6 +608,7 @@ for (const name of inventories) {
       /\*\*retired\*\*/gi,
       "retired items",
       name,
+      STATED_COUNT_REQUIRED.retirements,
       STATED_COUNT_MARKER_CHECK_EXEMPT,
     );
 
