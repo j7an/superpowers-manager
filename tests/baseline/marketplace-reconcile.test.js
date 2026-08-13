@@ -180,10 +180,7 @@ void test("a marketplace-list command failure fails without mutation", async (t)
 void test("unrelated marketplace roots do not block manager registration", async (t) => {
   for (const [name, marketplaces] of [
     ["missing root", '{"marketplaces":[{"name":"openai-curated"}]}'],
-    [
-      "invalid root",
-      '{"marketplaces":[{"name":"openai-curated","root":17}]}',
-    ],
+    ["invalid root", '{"marketplaces":[{"name":"openai-curated","root":17}]}'],
   ]) {
     await t.test(name, async (t) => {
       const sandbox = await codexSandbox(t);
