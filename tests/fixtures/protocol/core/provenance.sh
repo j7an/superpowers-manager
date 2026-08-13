@@ -1,4 +1,8 @@
 #!/bin/sh
+# RELOCATED FIXTURE — slice 4c moved this production shell code into tests/fixtures/protocol/
+# keeps a subject after the tree was deleted. This is retired production code, kept alive
+# only to host the protocol suite. SLICE 5 DELETES IT together with that suite. Do not add
+# a new consumer: a second consumer is what turns a scheduled deletion into permanent residue.
 # Sourced module; callers own set -eu.
 
 spw_json_get() {

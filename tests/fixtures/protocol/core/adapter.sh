@@ -1,4 +1,8 @@
 #!/bin/sh
+# RELOCATED FIXTURE — slice 4c moved this production shell code into tests/fixtures/protocol/
+# keeps a subject after the tree was deleted. This is retired production code, kept alive
+# only to host the protocol suite. SLICE 5 DELETES IT together with that suite. Do not add
+# a new consumer: a second consumer is what turns a scheduled deletion into permanent residue.
 # Sourced module; callers own set -eu.
 
 spw_adapter_package_root() {
@@ -12,8 +16,8 @@ spw_adapter_package_root() {
 }
 
 SPW_ADAPTER_ROOT=$(spw_adapter_package_root)
-SPW_ADAPTER="${SPW_ADAPTER:-$SPW_ADAPTER_ROOT/scripts/adapters/codex/adapter}"
-SPW_ADAPTER_RESPONSE_VALIDATOR="${SPW_ADAPTER_RESPONSE_VALIDATOR:-$SPW_ADAPTER_ROOT/scripts/core/validate-adapter-response.py}"
+SPW_ADAPTER="${SPW_ADAPTER:-$SPW_ADAPTER_ROOT/adapters/codex/adapter}"
+SPW_ADAPTER_RESPONSE_VALIDATOR="${SPW_ADAPTER_RESPONSE_VALIDATOR:-$SPW_ADAPTER_ROOT/core/validate-adapter-response.py}"
 
 spw_invoke_adapter() {
   operation="$1"

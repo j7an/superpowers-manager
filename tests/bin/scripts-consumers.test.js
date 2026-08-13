@@ -76,28 +76,9 @@ void test("every declaration names a disposition from the three-value set and a 
   }
 });
 
-void test("the two figures 4c plans against are re-derived from the map, not carried as prose", () => {
-  /** @param {string} file */
-  const hits = (file) =>
-    SCRIPTS_CONSUMERS.filter((entry) => entry.file === file).length;
-  // Exact literals on purpose: these two are spec D2a's own post-merge
-  // amendment, the numbers 4c sizes the relocation against, so the contract IS
-  // the figure. A tree change that moves either one has to be re-adjudicated
-  // against D2a rather than absorbed.
-  assert.equal(
-    hits("tests/test_adapter_protocol.sh"),
-    29,
-    "D2a: one protocol suite holding 29 literal scripts/ path sites",
-  );
-  assert.equal(
-    hits("tests/test_adapter_protocol.sh") +
-      hits("tests/test_probe.sh") +
-      hits("tests/test_marketplace_reconcile.sh") +
-      hits("tests/test_node_cli_helper.sh"),
-    52,
-    "D2a: 52 sites across the four surviving shell drivers",
-  );
-});
+// Retired in Slice 4c: D2a's 29/52 sizing question was discharged by the
+// relocation map in Task 1; the protocol suite now lives under fixtures, and
+// Task 2 removes the remaining shell drivers.
 
 void test("the reconciliation fails when the audit reports a hit nobody declared", () => {
   const injected = [

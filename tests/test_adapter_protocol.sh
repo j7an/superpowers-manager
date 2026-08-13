@@ -6,12 +6,15 @@ test_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 spw_test_root
 spw_test_tmpdir
 
-. "$root/scripts/core/common.sh"
-. "$root/scripts/core/provenance.sh"
-. "$root/scripts/core/adapter.sh"
+protocol="$root/tests/fixtures/protocol"
+SPW_PACKAGE_ROOT="$protocol"
+export SPW_PACKAGE_ROOT
+. "$protocol/core/common.sh"
+. "$protocol/core/provenance.sh"
+. "$protocol/core/adapter.sh"
 
 SPW_ADAPTER="$root/tests/fixtures/fake-adapter"
-[ "$SPW_ADAPTER_RESPONSE_VALIDATOR" = "$root/scripts/core/validate-adapter-response.py" ]
+[ "$SPW_ADAPTER_RESPONSE_VALIDATOR" = "$protocol/core/validate-adapter-response.py" ]
 grep -Fxq 'from __future__ import annotations' "$SPW_ADAPTER_RESPONSE_VALIDATOR"
 python3 -S "$root/tests/test_adapter_protocol.py"
 
@@ -102,7 +105,7 @@ run_adapter update-control-unsupported inspect update-control update-control
 
 real_update_control_result="$tmpdir/real-update-control.result.json"
 missing_update_control_codex="$tmpdir/codex-must-not-run"
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_CODEX="$missing_update_control_codex" \
   spw_inspect_update_control "$real_update_control_result"
 [ "$(spw_adapter_result_get "$real_update_control_result" "view")" = "update-control" ]
@@ -151,7 +154,7 @@ assert_identity_state() {
   expected_legacy_marketplace="$7"
   expected_state="$8"
   result="$tmpdir/identity-$label.result.json"
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
   SUPERPOWERS_CODEX="$identity_codex" \
   SPW_IDENTITY_PLUGIN_JSON="$plugin_json" \
   SPW_IDENTITY_MARKETPLACE_JSON="$marketplace_json" \
@@ -264,7 +267,7 @@ run_real_install() {
   rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR" "$real_state/log"
 
   RUN_RC=0
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
   SUPERPOWERS_CODEX="$real_codex" \
   SPW_REAL_CODEX_STATE="$real_state" \
   SPW_REAL_CODEX_SCENARIO="$scenario" \
@@ -297,7 +300,7 @@ fi
 rm -f "$real_state/log"
 RUN_RESULT="$tmpdir/remove-add-refresh.result.json"
 RUN_RC=0
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_CODEX="$real_codex" \
 SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add \
 SPW_REAL_CODEX_STATE="$real_state" \
@@ -311,7 +314,7 @@ grep -Fq 'plugin add ' "$real_state/log"
 
 RUN_RESULT="$tmpdir/invalid-refresh.result.json"
 RUN_RC=0
-( SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+( SPW_ADAPTER="$protocol/adapters/codex/adapter" \
   SUPERPOWERS_CODEX="$real_codex" \
   SUPERPOWERS_INSTALL_REFRESH_MODE=invalid \
   SPW_REAL_CODEX_STATE="$real_state" \
@@ -340,7 +343,7 @@ fi
 control=$(printf '\033')
 control_out="$tmpdir/control.out"
 control_err="$tmpdir/control.err"
-if "$root/scripts/adapters/codex/adapter" install "--bad-$control" \
+if "$protocol/adapters/codex/adapter" install "--bad-$control" \
   >"$control_out" 2>"$control_err"; then
   echo "terminal control in an adapter error must be rejected" >&2
   exit 1
@@ -352,7 +355,7 @@ grep -Fq 'protocol strings must not contain terminal control characters' "$contr
 # terminal-facing protocol envelope. Raw C1 bytes remain covered below.
 non_ascii_out="$tmpdir/non-ascii-operation.out"
 non_ascii_err="$tmpdir/non-ascii-operation.err"
-if "$root/scripts/adapters/codex/adapter" "buildé" \
+if "$protocol/adapters/codex/adapter" "buildé" \
   >"$non_ascii_out" 2>"$non_ascii_err"; then
   echo "non-ASCII adapter operation must fail" >&2
   exit 1
@@ -367,7 +370,7 @@ grep -Fq \
 surrogate=$(LC_ALL=C printf '\233')
 surrogate_out="$tmpdir/surrogate.out"
 surrogate_err="$tmpdir/surrogate.err"
-if LC_ALL=C "$root/scripts/adapters/codex/adapter" "bad-$surrogate" \
+if LC_ALL=C "$protocol/adapters/codex/adapter" "bad-$surrogate" \
   >"$surrogate_out" 2>"$surrogate_err"; then
   echo "surrogate adapter operation must be rejected" >&2
   exit 1
@@ -381,7 +384,7 @@ grep -Fq 'protocol strings must not contain terminal control characters' "$surro
 # A zero-argument adapter failure must identify the adapter boundary, not
 # falsely claim that the build operation ran.
 zero_out="$tmpdir/zero-argument.out"
-if "$root/scripts/adapters/codex/adapter" >"$zero_out" 2>/dev/null; then
+if "$protocol/adapters/codex/adapter" >"$zero_out" 2>/dev/null; then
   echo "zero-argument adapter invocation must fail" >&2
   exit 1
 fi
@@ -391,7 +394,7 @@ fi
 # An explicit empty operation is equivalent to an omitted operation at the
 # protocol boundary, so its controlled envelope identifies that boundary.
 empty_operation_out="$tmpdir/empty-operation.out"
-if "$root/scripts/adapters/codex/adapter" "" \
+if "$protocol/adapters/codex/adapter" "" \
   >"$empty_operation_out" 2>/dev/null; then
   echo "empty adapter operation invocation must fail" >&2
   exit 1
@@ -400,7 +403,7 @@ fi
 [ "$(spw_json_get "$empty_operation_out" error.code)" = invalid-arguments ]
 
 unknown_operation_out="$tmpdir/unknown-operation.out"
-if "$root/scripts/adapters/codex/adapter" future-operation \
+if "$protocol/adapters/codex/adapter" future-operation \
   >"$unknown_operation_out" 2>/dev/null; then
   echo "unknown adapter operation invocation must fail" >&2
   exit 1
@@ -420,7 +423,7 @@ RUN_STDERR="$tmpdir/real-inspect-invalid.stderr"
 rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
 mkdir -p "$tmpdir/empty-codex"
 RUN_RC=0
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/empty-codex" \
 spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view nope \
   >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
@@ -454,7 +457,7 @@ printf '%s\n' '{"commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}' \
 
 # BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command
 RUN_RESULT="$tmpdir/active-fingerprint.result.json"
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_CODEX="$fingerprint_codex" \
 SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root" \
 SPW_FINGERPRINT_LISTING='{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0+manager.bbbbbbb"}]}' \
@@ -463,7 +466,7 @@ SPW_FINGERPRINT_LISTING='{"installed":[{"pluginId":"superpowers@superpowers-mana
   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" ]
 
 RUN_RESULT="$tmpdir/absent-fingerprint.result.json"
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_CODEX="$fingerprint_codex" \
 SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root" \
 SPW_FINGERPRINT_LISTING='{"installed":[]}' \
@@ -483,7 +486,7 @@ RUN_RESULT="$tmpdir/default-fingerprint.result.json"
   unset SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT
   PATH="$default_bin:$PATH"
   HOME="$default_home"
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+SPW_ADAPTER="$protocol/adapters/codex/adapter"
   SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$default_version\"}]}"
   export PATH HOME SPW_ADAPTER SPW_FINGERPRINT_LISTING
   spw_inspect_fingerprint "$RUN_RESULT"
@@ -498,7 +501,7 @@ RUN_RESULT="$tmpdir/empty-override-fingerprint.result.json"
   SUPERPOWERS_INSTALLED_SEARCH_ROOT=""
   PATH="$default_bin:$PATH"
   HOME="$default_home"
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+SPW_ADAPTER="$protocol/adapters/codex/adapter"
   SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$default_version\"}]}"
   export SUPERPOWERS_INSTALLED_SEARCH_ROOT PATH HOME SPW_ADAPTER \
     SPW_FINGERPRINT_LISTING
@@ -525,7 +528,7 @@ RUN_RC=0
   unset SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT
   HOME=""
   PATH="$default_bin:$PATH"
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+SPW_ADAPTER="$protocol/adapters/codex/adapter"
   SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$empty_home_version\"}]}"
   export HOME PATH SPW_ADAPTER SPW_FINGERPRINT_LISTING
   spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint
@@ -561,7 +564,7 @@ RUN_RC=0
   cd "$unset_home_cwd"
   unset HOME SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT
   PATH="$default_bin:$PATH"
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+SPW_ADAPTER="$protocol/adapters/codex/adapter"
   SPW_FINGERPRINT_LISTING="{\"installed\":[{\"pluginId\":\"superpowers@superpowers-manager\",\"version\":\"$unset_home_version\"}]}"
   export PATH SPW_ADAPTER SPW_FINGERPRINT_LISTING
   spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint
@@ -586,7 +589,7 @@ RUN_RESULT="$tmpdir/empty-path-component-fingerprint.result.json"
   SUPERPOWERS_CODEX=codex-empty-path-component
   SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root"
   PATH=":$PATH"
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter"
+SPW_ADAPTER="$protocol/adapters/codex/adapter"
   SPW_FINGERPRINT_LISTING='{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0+manager.bbbbbbb"}]}'
   export SUPERPOWERS_CODEX SUPERPOWERS_INSTALLED_SEARCH_ROOT PATH SPW_ADAPTER \
     SPW_FINGERPRINT_LISTING
@@ -645,7 +648,7 @@ do
   RUN_RESULT="$tmpdir/failed-fingerprint.result.json"
   rm -f "$RUN_RESULT" "$RUN_RESULT.response"
   RUN_RC=0
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
   SUPERPOWERS_CODEX="$fingerprint_codex" \
   SUPERPOWERS_INSTALLED_SEARCH_ROOT="$fingerprint_root" \
   SPW_FINGERPRINT_LISTING="$invalid_listing" \
@@ -660,7 +663,7 @@ RUN_STDOUT="$tmpdir/missing-codex-install.stdout"
 RUN_STDERR="$tmpdir/missing-codex-install.stderr"
 rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
 RUN_RC=0
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_CODEX="$missing_codex" \
 spw_invoke_adapter install "$RUN_RESULT" "" -- --package-root "$real_pkg" \
   >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
@@ -680,7 +683,7 @@ RUN_STDOUT="$tmpdir/missing-codex-fingerprint.stdout"
 RUN_STDERR="$tmpdir/missing-codex-fingerprint.stderr"
 rm -f "$RUN_RESULT" "$RUN_RESULT.response" "$RUN_STDOUT" "$RUN_STDERR"
 RUN_RC=0
-SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+SPW_ADAPTER="$protocol/adapters/codex/adapter" \
 SUPERPOWERS_CODEX="$missing_codex" \
 SUPERPOWERS_INSTALLED_SEARCH_ROOT="$tmpdir/empty-codex" \
 spw_invoke_adapter inspect "$RUN_RESULT" fingerprint -- --view fingerprint \
@@ -699,14 +702,14 @@ for missing_case in ownership uninstall; do
   RUN_RC=0
   case "$missing_case" in
     ownership)
-      SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+      SPW_ADAPTER="$protocol/adapters/codex/adapter" \
       SUPERPOWERS_CODEX="$missing_codex" \
       spw_invoke_adapter inspect "$RUN_RESULT" ownership -- --view ownership \
         >"$RUN_STDOUT" 2>"$RUN_STDERR" || RUN_RC=$?
       expected_operation=inspect
       ;;
     uninstall)
-      SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+      SPW_ADAPTER="$protocol/adapters/codex/adapter" \
       SUPERPOWERS_CODEX="$missing_codex" \
       spw_invoke_adapter uninstall "$RUN_RESULT" "" -- \
         --plugin-present true --marketplace-present true \
@@ -780,7 +783,7 @@ run_source_build() {
   rm -f "$SOURCE_RESULT" "$SOURCE_RESULT.response" \
     "$SOURCE_STDOUT" "$SOURCE_STDERR"
   SOURCE_RC=0
-  SPW_ADAPTER="$root/scripts/adapters/codex/adapter" \
+  SPW_ADAPTER="$protocol/adapters/codex/adapter" \
     spw_invoke_adapter build "$SOURCE_RESULT" "" -- \
       --upstream-root "$source_upstream" \
       --candidate-root "$source_candidate" \
