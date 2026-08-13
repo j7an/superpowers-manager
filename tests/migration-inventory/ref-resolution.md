@@ -86,9 +86,9 @@ Not a registered behavior ID: `BUILDER-GIT-01` matches no pattern in
 `scripts/core/upstream.sh`.
 
 1. The builder's `REPO=` output names a directory that is a git repository
-   (`:21`). Port: `tests/baseline/ref-resolution.test.js:271`.
+   (`:21`). Port: `tests/baseline/ref-resolution.test.js:224`.
 2. The builder's `STABLE_COMMIT=` output equals the peeled commit of its
-   `refs/tags/v1.1.0` tag (`:22`). Port: `:272-278`.
+   `refs/tags/v1.1.0` tag (`:22`). Port: `:225-231`.
 
 ### `spw_config_ref` variable isolation and value (`:24-32`)
 
@@ -109,7 +109,7 @@ function without that subshell would.
    local (`:31`). **Retired**, same rationale as item 3.
 5. With `SUPERPOWERS_REF` unset, `spw_config_ref` returns the packaged
    `config/upstream-ref` contents, trailing whitespace stripped (`:26,29,32`).
-   Port: `tests/baseline/ref-resolution.test.js:286-291` (`readConfigRef`
+   Port: `tests/baseline/ref-resolution.test.js:239-244` (`readConfigRef`
    direct call).
 
 ### `REF-LATEST-STABLE-01` numeric stable release selection and peeling (`:34-75`)
@@ -130,66 +130,66 @@ function without that subshell would.
    this exact expected string.
 8. `resolveRef` selects the greatest stable tag (`v1.2.3`) for
    `latest-release`, peeled to its commit (`:59-60`). Port:
-   `tests/baseline/ref-resolution.test.js:297-302`.
+   `tests/baseline/ref-resolution.test.js:250-255`.
 9. A malformed leading-zero tag (`v01.9.9`) does not participate in
-   `latest-release` selection (`:62-66`). Port: `:304-312`.
+   `latest-release` selection (`:62-66`). Port: `:257-265`.
 10. `resolveRef` resolves a direct tag hit (`v1.2.3`) to its peeled commit
-    (`:68-69`). Port: `:314-315`.
+    (`:68-69`). Port: `:267-268`.
 11. `resolveRef` resolves a lightweight tag (`v1.2.2`) to the commit it
-    points at directly, with no peeling (`:71-72`). Port: `:317-322`.
+    points at directly, with no peeling (`:71-72`). Port: `:270-275`.
 12. `resolveRef` treats a 40-hex ref as a raw commit without querying
-    (`:74-75`). Port: `:324-329`.
+    (`:74-75`). Port: `:277-282`.
 
 ### `REF-GENERIC-FALLBACK-01` arbitrary refs fall back after tag lookup (`:77-81`)
 
 13. `resolveRef` falls through to the generic ref lookup for a branch name
     (`main`) that is not a tag (`:78-79`). Port:
-    `tests/baseline/ref-resolution.test.js:334-335`.
+    `tests/baseline/ref-resolution.test.js:287-288`.
 14. `resolveRef` falls through to the generic ref lookup for a branch named
     like a tag (`v9.9.9`), rather than matching it as a tag (`:80-81`). Port:
-    `:336-341`.
+    `:289-294`.
 
 ### `REF-SOURCE-PROOF-01` selected source must supply a commit object (`:83-123`)
 
 15. The persistent cache actually holds the requested commit object after a
     successful `fetchExactCommit` (`:91`). Port:
-    `tests/baseline/ref-resolution.test.js:359-364` (see "Counting rules
+    `tests/baseline/ref-resolution.test.js:312-317` (see "Counting rules
     applied" above for why this bare `cat-file -e` line counts).
 16. `fetchExactCommit`'s own inner proof workspace is removed on success,
-    leaving only the caller's sibling (`:92`). Port: `:365`.
+    leaving only the caller's sibling (`:92`). Port: `:318`.
 17. The sibling file is untouched by a successful `fetchExactCommit`
-    (`:93`). Port: `:365` (`assertOnlySiblingKept` checks both in one call).
+    (`:93`). Port: `:318` (`assertOnlySiblingKept` checks both in one call).
 18. An empty (no-commit) source unexpectedly satisfying the request from a
     cached object is itself the failure (`:99-103`). **Merged** into the
-    port's `assert.rejects` at `:369-380`, which is strictly stronger — a
+    port's `assert.rejects` at `:322-333`, which is strictly stronger — a
     thrown error is not a success — same precedent as `bin-dispatch.md` item
     15.
 19. The empty-source failure names the requested commit:
     `source cannot supply requested commit: $release_commit` (`:104-105`).
-    Port: `:369-380`.
+    Port: `:322-333`.
 20. `fetchExactCommit`'s inner proof workspace is removed after the
-    empty-source failure too (`:106`). Port: `:381`.
+    empty-source failure too (`:106`). Port: `:334`.
 21. The sibling file is untouched by the empty-source failure (`:107`). Port:
-    `:381`.
+    `:334`.
 22. A blob object unexpectedly being accepted as the requested commit is
     itself the failure (`:110-114`). **Merged**, same rationale as item 18.
-    Port: `:383-394`.
+    Port: `:336-347`.
 23. The blob-rejection failure names the blob object:
     `requested object is not a commit: $blob_object` (`:115`). Port:
-    `:383-394`.
+    `:336-347`.
 24. An annotated tag object unexpectedly being accepted as the requested
     commit is itself the failure (`:117-121`). **Merged**, same rationale as
-    item 18. Port: `:396-407`.
+    item 18. Port: `:349-360`.
 25. The tag-object-rejection failure names the tag object:
     `requested object is not a commit: $release_tag_object` (`:122-123`).
-    Port: `:396-407`.
+    Port: `:349-360`.
 
 ### `REF-CLEANUP-01` interrupted source proof cleans only its workspace (`:125-193`)
 
 26. The interrupted fetch must actually reach the signal fixture before the
     signal is sent, or the interruption proves nothing (`:176-178`, the
     embedded Python fixture's readiness guard). Port:
-    `tests/baseline/ref-resolution.test.js:483-489` (`waitForMarker` plus the
+    `tests/baseline/ref-resolution.test.js:436-442` (`waitForMarker` plus the
     `assert.fail` on timeout).
 27. The interrupted fetch's own proof workspace (`superpowers-manager.fetch.*`)
     is removed, allowing for asynchronous cleanup within a 5-second retry
@@ -199,21 +199,21 @@ function without that subshell would.
     `child.once("close", ...)` has already fired, cleanup is guaranteed
     complete — the retry loop this item hedges against an asynchrony that no
     longer exists on this path. Port:
-    `tests/baseline/ref-resolution.test.js:525-530`.
+    `tests/baseline/ref-resolution.test.js:478-483`.
 28. The interrupted child's exit status is non-zero (`:189`, bare
     `test "$(cat signal-rc)" -ne 0`). **Merged** into the port's
     `assert.equal(result.signal, "SIGTERM")` / `assert.equal(result.code,
-    null)` at `:505-506`, which is strictly stronger (asserting the exact
+    null)` at `:458-459`, which is strictly stronger (asserting the exact
     cause of death, not merely that it was non-zero) — same precedent as
     `bin-dispatch.md` item 15.
 29. The interrupted invocation is specifically the resolver's own inner
     proof-workspace fetch (`-C $signal_workspace/superpowers-manager.fetch.`),
     not some other call (`:190-191`). Port:
-    `tests/baseline/ref-resolution.test.js:508-523`.
+    `tests/baseline/ref-resolution.test.js:461-476`.
 30. The interrupted fetch's workspace holds only the caller's sibling
-    afterward (`:192`). Port: `:530` (also carries item 27's merge, per the
+    afterward (`:192`). Port: `:483` (also carries item 27's merge, per the
     synchronous-cleanup rationale above).
-31. The sibling file is untouched (`:193`). Port: `:530`
+31. The sibling file is untouched (`:193`). Port: `:483`
     (`assertOnlySiblingKept` checks both in one call).
 
 ### An upstream with no stable tags (`:195-207`)
@@ -222,10 +222,10 @@ Not a registered behavior ID: no `BASELINE CASE` marker covers this cluster.
 
 32. A source with no stable tags unexpectedly succeeding at `latest-release`
     resolution is itself the failure (`:203-206`). **Merged** into the port's
-    `assert.rejects` at `tests/baseline/ref-resolution.test.js:549-554`, same
+    `assert.rejects` at `tests/baseline/ref-resolution.test.js:502-507`, same
     rationale as item 18.
 33. The failure names the reason: `no stable semver tag found for
-    latest-release` (`:207`). Port: `:549-554`.
+    latest-release` (`:207`). Port: `:502-507`.
 
 ### The upstream seam scrubs ambient Node preload state (`:209-240`)
 
@@ -243,8 +243,8 @@ not carried forward as a false equivalence.
     adapter child-environment case above.
 35. The injected preload's own stderr marker (`INJECTED`) unexpectedly
     surviving into the resolver's stderr is itself the failure (`:216-219`).
-    **Merged** into the port's exact-stdout equality plus the negative stderr
-    adapter child-environment case above.
+    Re-expressed by the adapter child-environment case above, whose parsed
+    child environment must contain `NODE_OPTIONS: null` and `NODE_PATH: null`.
 36. The pinned child's git invocation sees `LC_ALL=C` (`:237`). Divergence
     recorded above; `src/git.ts:32` preserves this pin.
 37. The pinned child's git invocation sees `GIT_TERMINAL_PROMPT=0` (`:238`).

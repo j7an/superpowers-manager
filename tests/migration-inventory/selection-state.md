@@ -91,40 +91,40 @@ referenced again after this block. It exercises
 `scripts/core/selection.sh`.
 
 1. The builder's `ROOT=` output names a directory that exists (`:30`). Port:
-   `tests/baseline/selection-location.test.js:351`.
+   `tests/baseline/selection-location.test.js:298`.
 2. Unless running as root, the builder's `TARGET=` output names a file that
    is not readable (`:34-37`, `if [ -r ... ]; then ... exit 1; fi`). Port:
-   `:354-362` (root-skip branch at `:354`, the negative check itself at
-   `:362`).
+   `:301-309` (root-skip branch at `:301`, the negative check itself at
+   `:309`).
 
 ### Selection location chain and fail-closed bases (`:41-70`)
 
 3. `SUPERPOWERS_CONFIG_DIR`, explicit, wins over every other base (`:42`).
-   Port: `tests/baseline/selection-location.test.js:369-376`.
+   Port: `tests/baseline/selection-location.test.js:316-323`.
 4. `XDG_CONFIG_HOME`, with `SUPERPOWERS_CONFIG_DIR` absent, wins over `HOME`
-   (`:43`). Port: `:378-381`.
+   (`:43`). Port: `:325-328`.
 5. An empty `XDG_CONFIG_HOME` is treated as absent, falling through to `HOME`
-   (`:44`). Port: `:383-386`.
-6. `HOME` alone is the last base (`:45`). Port: `:388-391`.
+   (`:44`). Port: `:330-333`.
+6. `HOME` alone is the last base (`:45`). Port: `:335-338`.
 7. A relative `SUPERPOWERS_CONFIG_DIR` unexpectedly succeeding is itself the
    failure (`:47-50`, `if (...) ...; then ... exit 1; fi`). **Merged** into
-   the port's `assert.throws` at `:395-401`, which is strictly stronger (a
+   the port's `assert.throws` at `:342-348`, which is strictly stronger (a
    thrown error is not a success) and therefore subsumes this guard — same
    precedent as `bin-dispatch.md` item 15.
 8. The relative-`SUPERPOWERS_CONFIG_DIR` diagnostic is
-   `SUPERPOWERS_CONFIG_DIR must be absolute` (`:51`). Port: `:395-401`.
+   `SUPERPOWERS_CONFIG_DIR must be absolute` (`:51`). Port: `:342-348`.
 9. A relative `XDG_CONFIG_HOME` unexpectedly succeeding is itself the failure
-   (`:52-55`). **Merged**, same rationale as item 7. Port: `:403-406`.
+   (`:52-55`). **Merged**, same rationale as item 7. Port: `:350-353`.
 10. The relative-`XDG_CONFIG_HOME` diagnostic is `XDG_CONFIG_HOME must be
-    absolute` (`:56`). Port: `:403-406`.
+   absolute` (`:56`). Port: `:350-353`.
 11. Every base absent unexpectedly succeeding is itself the failure
     (`:57-60`, the `env -u HOME -u XDG_CONFIG_HOME -u SUPERPOWERS_CONFIG_DIR`
-    subshell). **Merged**, same rationale as item 7. Port: `:409-412`.
+   subshell). **Merged**, same rationale as item 7. Port: `:356-359`.
 12. The all-absent diagnostic is `HOME is required to locate selection state`
-    (`:61`). Port: `:409-412`.
+   (`:61`). Port: `:356-359`.
 13. The CLI usage-error path unexpectedly succeeding is itself the
     failure (`:63-68`). **Merged** into the port's `assert.equal(usage.status,
-    2)` at `tests/baseline/selection-location.test.js:427`, which is strictly
+    2)` at `tests/baseline/selection-location.test.js:372`, which is strictly
     stronger and subsumes this guard, same precedent as `bin-dispatch.md`
     item 15. No TypeScript counterpart exists for `spw_usage_error` itself:
     it was reachable in production only from `scripts/pin`, `scripts/unpin`,
@@ -145,52 +145,52 @@ referenced again after this block. It exercises
 
 16. Absent state resolves the packaged default ref, tag kind, one resolver
     call (`:137-142`, `assert_effective package-default default
-    package-default ...`). Port: `tests/baseline/selection-location.test.js:440-454`.
-17. `SPW_SAVED_MODE` is `none` for absent state (`:143`). Port: `:455`.
+    package-default ...`). Port: `tests/baseline/selection-location.test.js:387-401`.
+17. `SPW_SAVED_MODE` is `none` for absent state (`:143`). Port: `:402`.
 18. Exactly one resolver call for the packaged-default path (`:144`). Ported
     as "exactly one `--tags` probe logged" — see the file header's note on
-    why a raw git-invocation count would not be equivalent. Port: `:456`.
+    why a raw git-invocation count would not be equivalent. Port: `:403`.
 19. Both `SUPERPOWERS_REF` and `SUPERPOWERS_UPSTREAM_URL` override
-    independently over absent state (`:146-154`). Port: `:460-476`.
+    independently over absent state (`:146-154`). Port: `:407-423`.
 20. `SUPERPOWERS_REF` alone overrides the ref while the source stays
-    package-default (`:156-163`). Port: `:480-495`.
+    package-default (`:156-163`). Port: `:427-442`.
 21. `SUPERPOWERS_UPSTREAM_URL` alone overrides the source while the ref stays
-    package-default (`:165-172`). Port: `:499-514`.
+    package-default (`:165-172`). Port: `:446-461`.
 
 ### Complete ref precedence — track-latest state (`:174-210`)
 
 22. Track-latest state resolves `latest-release` to a distinct tag and commit
     (`:176-181`). This is the non-short-circuit path with distinct
     `resolvedRef`/`desiredCommit` values the file header's swap-detection note
-    describes. Port: `tests/baseline/selection-location.test.js:520-532`.
-23. `SPW_SAVED_MODE` is `track-latest` (`:182`). Port: `:533`.
+    describes. Port: `tests/baseline/selection-location.test.js:467-479`.
+23. `SPW_SAVED_MODE` is `track-latest` (`:182`). Port: `:480`.
 24. `SUPERPOWERS_REF` overrides track-latest's ref while the source stays
-    saved (`:184-191`). Port: `:537-552`.
+    saved (`:184-191`). Port: `:484-499`.
 25. `SUPERPOWERS_UPSTREAM_URL` overrides track-latest's source while the ref
     stays `latest-release` — again with distinct resolved-ref/commit values
-    (`:193-200`). Port: `:556-571`.
-26. Both override together (`:202-210`). Port: `:575-591`.
+    (`:193-200`). Port: `:503-518`.
+26. Both override together (`:202-210`). Port: `:522-538`.
 
 ### Complete ref precedence — pinned state (`:212-254`)
 
 27. Pinned state reuses its verified identity without querying the resolver
-    (`:213-219`). Port: `tests/baseline/selection-location.test.js:597-611`.
+    (`:213-219`). Port: `tests/baseline/selection-location.test.js:544-558`.
 28. The resolver log is empty for the pinned short-circuit (`:220`). Port:
-    `:612`.
+    `:559`.
 29. `SPW_SAVED_REQUESTED_REF` equals the saved pin's requested ref (`:221`).
-    Port: `:613`.
+    Port: `:560`.
 30. `SPW_SAVED_RESOLVED_REF` equals the saved pin's resolved ref (`:222`).
-    Port: `:614`.
-31. `SPW_SAVED_COMMIT` equals the saved pin's commit (`:223`). Port: `:615`.
+    Port: `:561`.
+31. `SPW_SAVED_COMMIT` equals the saved pin's commit (`:223`). Port: `:562`.
 32. `SUPERPOWERS_REF` overrides a pin's ref, falling through to resolution
-    (`:225-232`). Port: `:619-634`.
+    (`:225-232`). Port: `:566-581`.
 33. Exactly one resolver call when overriding a pin's ref (`:233`). Port:
-    `:635`.
+    `:582`.
 34. `SUPERPOWERS_UPSTREAM_URL` overrides a pin's source while its ref/commit
-    stay saved (`:235-242`). Port: `:639-654`.
+    stay saved (`:235-242`). Port: `:586-601`.
 35. The resolver log is empty when only the pin's source is overridden
-    (`:243`). Port: `:655`.
-36. Both override together over a pin (`:245-252`). Port: `:659-675`.
+    (`:243`). Port: `:602`.
+36. Both override together over a pin (`:245-252`). Port: `:606-622`.
 
 ### Arbitrary ref and raw-commit resolution (`:255-280`)
 
@@ -199,31 +199,31 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
 
 37. An environment ref containing a shell glob character resolves as data,
     not as a pattern (`:256-264`). Port:
-    `tests/baseline/selection-location.test.js:689-704`.
+    `tests/baseline/selection-location.test.js:636-651`.
 38. A raw-commit saved pin derives `raw-commit` resolution kind without
-    resolver access (`:266-278`). Port: `:720-732`.
+    resolver access (`:266-278`). Port: `:667-679`.
 39. The resolver log is empty for the raw-commit short-circuit (`:279`).
-    Port: `:733`.
+    Port: `:680`.
 
 ### Invalid saved state and safe display (`:281-333`)
 
 40. Malformed saved state (`schema_version: 2`) unexpectedly succeeding is
     itself the failure (`:283-295`). **Merged** into the port's
-    `assert.rejects` at `tests/baseline/selection-location.test.js:748-759`,
+    `assert.rejects` at `tests/baseline/selection-location.test.js:695-706`,
     same rationale as item 7.
 41. The malformed-state diagnostic includes `schema_version must equal
-    integer 1` (`:296`). Port: `:748-759`.
+    integer 1` (`:296`). Port: `:695-706`.
 42. The resolver log stays empty when saved-state validation fails first
-    (`:297`). Port: `:761`.
+    (`:297`). Port: `:708`.
 43. An effective HTTP(S) source with userinfo unexpectedly succeeding is
     itself the failure (`:300-308`). **Merged**, same rationale as item 7.
-    Port: `:769-779`.
+    Port: `:716-726`.
 44. The userinfo diagnostic is `HTTP(S) source must not include userinfo`
-    (`:309`). Port: `:769-779`.
+    (`:309`). Port: `:716-726`.
 45. The resolver log stays empty when source validation fails first (`:310`).
-    Port: `:781`.
-46. Displaying a credential-bearing source redacts it (`:311`). Port: `:782`.
-47. Displaying the official source shows it verbatim (`:312`). Port: `:783`.
+    Port: `:728`.
+46. Displaying a credential-bearing source redacts it (`:311`). Port: `:729`.
+47. Displaying the official source shows it verbatim (`:312`). Port: `:730`.
 48. `spw_selection_state` ignores ambient `NODE_OPTIONS` (`:314-322`).
     **Retired structurally in slice 4c:** selection state is read in-process
     by `src/selection-store.ts`, so there is no child Node process for
