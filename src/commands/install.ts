@@ -2,6 +2,10 @@
 // status.sh, lifecycle.sh and adapter.sh; the predicates now live in
 // src/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
 // and the adapter arrives through ctx.adapter.
+// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
+// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
+// and will not be re-derived. Resolve one with:
+//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install
 import { tmpdir } from "node:os";
 import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
 import { oneLine } from "../cli-arguments.js";
