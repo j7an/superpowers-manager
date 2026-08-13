@@ -146,10 +146,10 @@ referenced again after this block. It exercises
 16. Absent state resolves the packaged default ref, tag kind, one resolver
     call (`:137-142`, `assert_effective package-default default
     package-default ...`). Port: `tests/baseline/selection-location.test.js:387-401`.
-17. `SPW_SAVED_MODE` is `none` for absent state (`:143`). Port: `:402`.
+17. `SPW_SAVED_MODE` is `none` for absent state (`:143`). Port: `:403`.
 18. Exactly one resolver call for the packaged-default path (`:144`). Ported
     as "exactly one `--tags` probe logged" — see the file header's note on
-    why a raw git-invocation count would not be equivalent. Port: `:403`.
+    why a raw git-invocation count would not be equivalent. Port: `:404`.
 19. Both `SUPERPOWERS_REF` and `SUPERPOWERS_UPSTREAM_URL` override
     independently over absent state (`:146-154`). Port: `:407-423`.
 20. `SUPERPOWERS_REF` alone overrides the ref while the source stays
@@ -163,7 +163,7 @@ referenced again after this block. It exercises
     (`:176-181`). This is the non-short-circuit path with distinct
     `resolvedRef`/`desiredCommit` values the file header's swap-detection note
     describes. Port: `tests/baseline/selection-location.test.js:467-479`.
-23. `SPW_SAVED_MODE` is `track-latest` (`:182`). Port: `:480`.
+23. `SPW_SAVED_MODE` is `track-latest` (`:182`). Port: `:481`.
 24. `SUPERPOWERS_REF` overrides track-latest's ref while the source stays
     saved (`:184-191`). Port: `:484-499`.
 25. `SUPERPOWERS_UPSTREAM_URL` overrides track-latest's source while the ref
@@ -176,20 +176,20 @@ referenced again after this block. It exercises
 27. Pinned state reuses its verified identity without querying the resolver
     (`:213-219`). Port: `tests/baseline/selection-location.test.js:544-558`.
 28. The resolver log is empty for the pinned short-circuit (`:220`). Port:
-    `:559`.
+    `:560`.
 29. `SPW_SAVED_REQUESTED_REF` equals the saved pin's requested ref (`:221`).
-    Port: `:560`.
-30. `SPW_SAVED_RESOLVED_REF` equals the saved pin's resolved ref (`:222`).
     Port: `:561`.
-31. `SPW_SAVED_COMMIT` equals the saved pin's commit (`:223`). Port: `:562`.
+30. `SPW_SAVED_RESOLVED_REF` equals the saved pin's resolved ref (`:222`).
+    Port: `:562`.
+31. `SPW_SAVED_COMMIT` equals the saved pin's commit (`:223`). Port: `:563`.
 32. `SUPERPOWERS_REF` overrides a pin's ref, falling through to resolution
     (`:225-232`). Port: `:566-581`.
 33. Exactly one resolver call when overriding a pin's ref (`:233`). Port:
-    `:582`.
+    `:583`.
 34. `SUPERPOWERS_UPSTREAM_URL` overrides a pin's source while its ref/commit
     stay saved (`:235-242`). Port: `:586-601`.
 35. The resolver log is empty when only the pin's source is overridden
-    (`:243`). Port: `:602`.
+    (`:243`). Port: `:603`.
 36. Both override together over a pin (`:245-252`). Port: `:606-622`.
 
 ### Arbitrary ref and raw-commit resolution (`:255-280`)
@@ -203,27 +203,27 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
 38. A raw-commit saved pin derives `raw-commit` resolution kind without
     resolver access (`:266-278`). Port: `:667-679`.
 39. The resolver log is empty for the raw-commit short-circuit (`:279`).
-    Port: `:680`.
+    Port: `:681`.
 
 ### Invalid saved state and safe display (`:281-333`)
 
 40. Malformed saved state (`schema_version: 2`) unexpectedly succeeding is
     itself the failure (`:283-295`). **Merged** into the port's
-    `assert.rejects` at `tests/baseline/selection-location.test.js:695-706`,
+    `assert.rejects` at `tests/baseline/selection-location.test.js:696-708`,
     same rationale as item 7.
 41. The malformed-state diagnostic includes `schema_version must equal
-    integer 1` (`:296`). Port: `:695-706`.
+    integer 1` (`:296`). Port: `:696-708`.
 42. The resolver log stays empty when saved-state validation fails first
-    (`:297`). Port: `:708`.
+    (`:297`). Port: `:709`.
 43. An effective HTTP(S) source with userinfo unexpectedly succeeding is
     itself the failure (`:300-308`). **Merged**, same rationale as item 7.
-    Port: `:716-726`.
+    Port: `:717-728`.
 44. The userinfo diagnostic is `HTTP(S) source must not include userinfo`
-    (`:309`). Port: `:716-726`.
+    (`:309`). Port: `:717-728`.
 45. The resolver log stays empty when source validation fails first (`:310`).
-    Port: `:728`.
-46. Displaying a credential-bearing source redacts it (`:311`). Port: `:729`.
-47. Displaying the official source shows it verbatim (`:312`). Port: `:730`.
+    Port: `:729`.
+46. Displaying a credential-bearing source redacts it (`:311`). Port: `:730`.
+47. Displaying the official source shows it verbatim (`:312`). Port: `:731`.
 48. `spw_selection_state` ignores ambient `NODE_OPTIONS` (`:314-322`).
     **Retired structurally in slice 4c:** selection state is read in-process
     by `src/selection-store.ts`, so there is no child Node process for
