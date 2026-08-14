@@ -26,14 +26,16 @@ reachable from `main`; slice 4b squash-merged as `79851ea`. The port file is
 1640 lines at HEAD: one line inserted near the top, sixty appended at the end.
 A mapped-region pointer is therefore usually off by `+1` — a hint for
 re-deriving one, never an offset to apply in bulk, and no claim any pointer is
-right. The port-only region below is worse: only item 42's pointers were added
+right. That caveat does not apply to items 65, 68, 80, 120 and 124: three were
+remapped by slice 4c and verified current, and two were derived at HEAD by
+slice 4c.1. The port-only region below is worse: only item 42's pointers were added
 at `79851ea`; the rest predate slice 4b, when that file was 1270-1472 lines.
 The shell path is absent from the current tree, but every shell `:N` citation
 resolves through `81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh`.
 Nothing in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
 validates the `json inventory` block's counts, this file's entry numbering and
-its region structure, and never parses one. Some items below mark their own
-pointer stale and deliberately not remapped.
+its region structure, and never parses one. Slice 4c.1 settled the last five
+stale-pointer dispositions; none remains.
 
 ## Counting rules applied
 
@@ -446,12 +448,14 @@ narrowing recorded at `uninstall-commands.md:316-329`.
 
 ### Scenario 1b — a current manager is reconciled, not skipped (`:514-532`)
 
-65. The adapter log holds `install --package-root <pkg>` (`:523`). Port: none — no live counterpart.
-    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
-    re-anchored this assertion onto `codex.log`, so the adapter-log line
-    this item describes is no longer asserted anywhere and no line number
-    can honestly stand in for it. Re-deriving the claim and its pointer
-    together is a re-disposition, not a pointer fix.
+65. The adapter log holds `install --package-root <pkg>` (`:523`). Port: `:1089-1097`.
+    **Re-anchored, not dropped (slice 3.5; disposition settled slice 4c.1).**
+    The adapter-log line itself is gone. The claim is witnessed by the
+    `assertOrder` items 66 and 67 also cite: its
+    `plugin marketplace add ${c.pkg}` needle carries the same package root
+    the deleted needle pinned, as the port records at
+    `tests/bin/install-commands.test.js:1085-1088`. Counted shared with
+    items 66 and 67.
 66. `plugin marketplace list` precedes `plugin marketplace add <pkg>`
     (`:527`, first `[ ]`). Port: `:1089-1097`.
 67. `plugin marketplace add <pkg>` precedes `plugin add
@@ -459,12 +463,14 @@ narrowing recorded at `uninstall-commands.md:316-329`.
 
 ### Scenario 1c — a matching fingerprint at a different root (`:534-551`)
 
-68. The adapter log holds `install --package-root <pkg>` (`:542`). Port: none — no live counterpart.
-    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
-    re-anchored this assertion onto `codex.log`, so the adapter-log line
-    this item describes is no longer asserted anywhere and no line number
-    can honestly stand in for it. Re-deriving the claim and its pointer
-    together is a re-disposition, not a pointer fix.
+68. The adapter log holds `install --package-root <pkg>` (`:542`). Port: `:1118-1126`.
+    **Re-anchored, not dropped (slice 3.5; disposition settled slice 4c.1).**
+    The adapter-log line itself is gone. The claim is witnessed by the
+    `assertOrder` items 69 and 70 also cite: its
+    `plugin marketplace add ${c.pkg}` needle carries the same package root
+    the deleted needle pinned, as the port records at
+    `tests/bin/install-commands.test.js:1114-1117`. Counted shared with
+    items 69 and 70.
 69. `plugin marketplace remove superpowers-manager` precedes `plugin
     marketplace add <pkg>` (`:546`, first `[ ]`). Port: `:1118-1126`.
 70. `plugin marketplace add <pkg>` precedes `plugin add
@@ -496,16 +502,14 @@ narrowing recorded at `uninstall-commands.md:316-329`.
 ### Scenario 3b — update stays read-only when probe reports current (`:587-602`)
 
 79. Stdout contains `manager is current` (`:594`). Port: `:1213`.
-80. The adapter log holds no `install --package-root` (`:595-599`). Port: none — no live counterpart.
-    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
-    re-anchored scenario 3b onto `codex.log`: the adapter-log negative and
-    its `nonEmpty` guard were both deleted, subsumed into the
-    `assertNoCodexMutation` call item 81 cites. `:947` reads as valid and is
-    not: at the time this note was written it landed on an unrelated
-    `assertOrder`, and at HEAD (after Task 6) it lands on the closing `);` of
-    the "no call named install reached the double" guard in the fresh-gate
-    case — a different unrelated site. Re-deriving the claim is a
-    re-disposition, not a pointer fix.
+80. The adapter log holds no `install --package-root` (`:595-599`). Port: `:1225`.
+    **Re-anchored, not dropped (slice 3.5; disposition settled slice 4c.1).**
+    PR 11.5 slice 3.5 re-anchored scenario 3b onto `codex.log`: the
+    adapter-log negative and its `nonEmpty` guard were both deleted,
+    subsumed into the `assertNoCodexMutation` call item 81 cites. That call
+    is this claim's witness — had the read-only path performed an install,
+    it would have left the Codex mutations this guard rejects. Counted
+    shared with item 81.
 81. No Codex mutation (`:600-602`). Port: `:1225`. **Divergence:** the shell
     wrapped the helper in `[ ! -s "$log" ] ||`, so an empty Codex log
     satisfied the scenario. The port drops that escape hatch —
@@ -665,12 +669,13 @@ combined).
      an input this test owns — not a version whose source of truth lives
      elsewhere.
 119. Stdout contains `manager updated` (`:757`). Port: `:1523`.
-120. The adapter log holds `install --package-root <pkg>` (`:758`). Port: none — no live counterpart.
-    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
-    re-anchored this assertion onto `codex.log`, so the adapter-log line
-    this item describes is no longer asserted anywhere and no line number
-    can honestly stand in for it. Re-deriving the claim and its pointer
-    together is a re-disposition, not a pointer fix.
+120. The adapter log holds `install --package-root <pkg>` (`:758`). Port: `:1529-1536`.
+    **Re-anchored, not dropped (slice 3.5; disposition settled slice 4c.1).**
+    The adapter-log line itself is gone. The claim is witnessed by the
+    `assertOrder` call: its `plugin marketplace add ${c.pkg}` needle carries
+    the same package root the deleted needle pinned, as the port records at
+    `tests/bin/install-commands.test.js:1524-1528`. No other item names this
+    call, so this item is counted as its own.
 121. The regenerated provenance carries a `commit` that is a string of
      exactly 40 hex digits (`:759-768`, rule 10). Port: `:1538`, helper at
      `:415-429`.
@@ -679,12 +684,13 @@ combined).
 
 122. Stdout contains `prepared v1.0.0` (`:778`). Port: `:1554`.
 123. Stdout contains `manager updated` (`:779`). Port: `:1556`.
-124. The adapter log holds `install --package-root <pkg>` (`:780`). Port: none — no live counterpart.
-    **Pointer stale, deliberately not remapped.** PR 11.5 slice 3.5
-    re-anchored this assertion onto `codex.log`, so the adapter-log line
-    this item describes is no longer asserted anywhere and no line number
-    can honestly stand in for it. Re-deriving the claim and its pointer
-    together is a re-disposition, not a pointer fix.
+124. The adapter log holds `install --package-root <pkg>` (`:780`). Port: `:1558-1565`.
+    **Re-anchored, not dropped (slice 3.5; disposition settled slice 4c.1).**
+    The adapter-log line itself is gone. The claim is witnessed by the
+    `assertOrder` call: its `plugin marketplace add ${c.pkg}` needle carries
+    the same package root the deleted needle pinned, as the port records at
+    `tests/bin/install-commands.test.js:1556-1557`. No other item names this
+    call, so this item is counted as its own.
 
 <!-- inventory:mapped:end -->
 
@@ -986,6 +992,15 @@ c24. Its "cases 3, 8, 9, 10" match c3, c8, c9, c10 directly.
 | O3 | third adjacent pair swapped at the four-needle site | item 114 (`:1357`) |
 | P1 | no tracked file touched: a `node` probe applied the source-guard and packaged-root predicates to the real file contents and to in-memory regression copies | predicates `true` on the real inputs, `false` on every regression copy — see adjudication D |
 
+***Cross-references updated 2026-08-13 (slice 4c.1); no row above is
+re-run.*** *Two rows send the reader to item entries that slice 4c.1
+re-dispositioned.* **Row 2** *names item 80 at* `:947` *as "stale — see its
+entry"; that entry now carries* `Port: :1225` *and records the*
+`assertNoCodexMutation` *witness.* **Row 5** *names items 65, 68, 120 and 124
+as "all four stale, see their entries"; all four entries now carry live
+pointers to their witnessing* `assertOrder` *calls. Both rows' observations
+stand as recorded against the tree they describe.*
+
 Row 1's `plugin add superpowers@spurious` payload deliberately names no real
 fixture resource, so it can only be caught by a guard that rejects *any*
 Codex mutation; rows 1b-1e reuse that single injection point with
@@ -1250,6 +1265,34 @@ removing `clearLogs(c)` from the scenario-3c port turns item 84 RED with
 `build --upstream-root …` as the sole offender, confirming that the log
 truncation `reset` performed is load-bearing and not decorative.
 
+### Current mutation evidence — slice 4c.1, observed 2026-08-13
+
+Scope: this section certifies the five witness relationships slice 4c.1
+settled (items 65, 68, 80, 120 and 124). It is **not** a re-run of the
+historical matrix above, and it does not supersede or correct it. Its
+coordinates are against the tree at that date.
+
+| Row | Injection (file, exact edit) | Observed RED — item @ port line |
+|---|---|---|
+| W1 | `install-fakes.js` `runCodex`: the sole Codex-log call was rewritten with `.replace(/(plugin marketplace add) .*/, "$1 /spurious-root")`, so every logged `plugin marketplace add` argument is replaced by fixed `/spurious-root`; command arguments were unchanged. This is a replacement, not an added line. | items 65 (`:1089-1097`), 68 (`:1118-1126`), 120 (`:1529-1536`), 124 (`:1558-1565`), plus group siblings 66, 67, 69 and 70 |
+| W2 | Two edits, both required — the hook is config-gated (`lifecycle-fakes.js:275-277`), so the payload change alone logs nothing. **(A)** `install-fakes.js:38`, `injectSpuriousMutation`'s payload changed from `plugin add superpowers@spurious` to the install's own Codex footprint `plugin add superpowers@superpowers-manager`. **(B)** `install-commands.test.js:1202`, scenario 3b only: `installCase()` changed to `installCase({ config: { spuriousMutation: true } })`. Outcome unchanged; only the log gains a mutation. | item 80 (`:1225`) |
+
+**Current `assertOrder` census.** The current tree has seven `assertOrder`
+sites, all reading the Codex log: `:1089`, `:1118`, `:1529` and `:1558` inline
+via `readLog(c.codexLog)`, and `:1040`, `:1181` and `:1468` through a `const
+codex = readLog(c.codexLog)` local at `:1039`, `:1179` and `:1466`.
+This census supersedes nothing: the historical five-site account in rows 6 and
+O1/O2 is about a different tree and remains unchanged.
+
+**Why W1 replaces rather than adds.** `assertOrder` searches its needles in
+sequence, so adding a spurious marketplace-add line would leave the real
+needle in place and the assertion GREEN. W1 therefore cannot reuse row 1d's
+payload: it replaces the logged package-root argument.
+
+**Expected merged-group REDs.** W1 making group siblings 66, 67, 69 and 70
+RED alongside items 65 and 68 is expected and is evidence of the merge: a
+merge cannot be falsified for one member alone.
+
 ## Cardinality
 
 ```json inventory
@@ -1282,7 +1325,7 @@ truncation `reset` performed is load-bearing and not decorative.
   between them added or removed one. No remaining call site is data-driven,
   so the 31 static sites produce 31 runtime cases. The `for legacy_state in
   legacy both` loop at `:426` is still expanded into two explicit call sites
-  (`:950`, `:959`) sharing one helper.
+  (`:948`, `:953`) sharing one helper.
 - Reconciliation: **113 of 124** shell items retain a port counterpart; the
   remaining **11** are retired at the gap, each recorded at its own entry
   above with its reasoning rather than renumbered away — packaged-root items
@@ -1297,20 +1340,31 @@ truncation `reset` performed is load-bearing and not decorative.
   item's own entry states plainly that it has no port counterpart, rather
   than being silently dropped from the list.
 
-  Of the 113 that survive, the mapping is **not** 1:1 throughout. **97**
-  items map onto a port assertion of their own; the remaining **16 share 7**,
-  across seven merges recorded inline. One is a status merge — items 25/26
+  Of the 113 that survive, the mapping is **not** 1:1 throughout. **93**
+  items map onto a port assertion of their own; the remaining **20 share 8**,
+  across eight merge groups recorded inline. One is a status merge — items 25/26
   collapse onto one `assert.equal(status, 1)`, since `=== 1` implies `!== 0`.
   (Items 22/23 were an eighth merge of exactly that kind before Task 6. Both
   numbers are retired with their case, so that merge leaves the count
   entirely rather than staying in it as a moot entry — the arithmetic here is
-  over surviving items only.) Five are rule-9 ordering guards — items 58-59,
-  66-67, 69-70, 75-76, and 112-114 — each collapsing onto one `assertOrder`
-  call, which asserts every one of those ordering claims plus the presence
-  of each needle. The seventh is the adapter-log collapse: items 13, 14 and
-  15 all name the one
-  `deepEqual(adapter.calls.map((call) => call[0]), ["build"])` in
-  `prepareGeneratedTree`, which witnesses each of the three claims. One
+  over surviving items only.) The eight merge groups are:
+
+  ```text
+  {25, 26}          status merge                      2
+  {58, 59}          assertOrder                       2
+  {65, 66, 67}      assertOrder :1089-1097            3
+  {68, 69, 70}      assertOrder :1118-1126            3
+  {75, 76}          assertOrder                       2
+  {112, 113, 114}   assertOrder                       3
+  {13, 14, 15}      deepEqual :689-694                3
+  {80, 81}          assertNoCodexMutation :1225       2
+                                                   ──
+                                          shared =  20
+  ```
+
+  The two enlarged `assertOrder` groups are not purely rule-9 ordering guards:
+  items 65 and 68 are presence claims witnessed by the same calls, while their
+  sibling claims are ordering guards. One
   ordering differs from the shell: items 71-73, where the port hoists the
   positive claim above the negatives that depend on it, so neither negative can
   pass on an empty log. ***Corrected 2026-08-12:*** *this sentence read
@@ -1323,46 +1377,52 @@ truncation `reset` performed is load-bearing and not decorative.
   reverses them, as item 73's own entry and the port comment both record.*
 
   **How to reproduce these three figures**, since the gate does not read this
-  prose and this accounting has a correction history: it was wrong twice on its
-  figures (an early revision was wrong by three; the revision that replaced it
+  prose and this accounting has a correction history: it was wrong on its
+  figures three times (an early revision was wrong by three; the revision that replaced it
   missed a merge entirely), and once on a matter of fact about the deleted
   shell, where it named items 62-64 as an ordering that differs from the shell
   when the shell already ran positive-first (the Corrected note above).
-  Retired = the items whose entry says "No port counterpart" (22, 23, 24, 107,
-  108, 109, 110, 111 — **8**), so retained = 124 − 8 = **116**; shared = the
-  merges enumerated in the previous paragraph (25/26, the five rule-9 guards,
-  and 13/14/15 = **16** items over **7** merges), so own = 116 − 16 = **100**.
+  Two retirement markers, at two granularities:
+
+  - `rg -c '^### .*— \*\*RETIRED\*\*$'` returns **2** — the two wholly
+    retired scenarios, covering items 22-24 and 107-111, **8** items.
+  - `rg -c '\(Task 3, 4c\):\*\*'` returns **3** — items 7, 8 and 12, retired
+    individually from surviving scenarios.
+
+  Retired = 8 + 3 = **11**. Retained = 124 − 11 = **113**. Shared = the eight
+  groups enumerated above: 2+2+3+3+2+3+3+2 = **20**. Own = 113 − 20 = **93**.
 
   **The counting rule, stated so that a third reading cannot open.** An item
   is **shared** when it carries a live `Port:` pointer and that pointer names
   the same single assertion call as another item's pointer. An item counts as
   its **own** in three cases: it carries a live pointer no other item names;
   or it shares only a static line because the port loops over a literal tuple
-  (2-5 at one `assert.ok`, 7-8, 9-11), where counting rule 4 makes each
+  (2-5 at one `assert.ok`, 9-11), where counting rule 4 makes each
   iteration its own assertion; or it carries **no** `Port:` pointer at all,
   because a sibling's structural assertion subsumes the claim outright — the
   three `**Subsumed…**` items, 44, 50 and 85.
 
-  **How the 7 was actually derived, and what the procedure cannot do.**
-  Grouping the 124 mapped items by their live `Port:` pointer narrows where a
-  merge can hide, but it does not by itself decide one, and it is not a
+  **How the 8 was actually derived, and what the procedure cannot do.**
+  Grouping the live `Port:` pointers among the 113 retained mapped items narrows where
+  a merge can hide, but it does not by itself decide one, and it is not a
   substitute for reading the entries. Three steps, in order. **One:** group by
-  live pointer and keep the groups whose pointer is an exact single-line
-  citation — that yields the three literal-tuple groups and the five rule-9
-  groups, plus 13/14/15: **nine groups covering 24 items**. Summing the item
-  lists quoted above gives 23, not 24 — the twenty-fourth is item 80, which
-  rides in the `:947` group behind
-  a pointer its own entry marks invalid, and is the reason step three exists.
-  This is the step that found the merge earlier counts missed, and note that
-  nine groups is not seven merges — three of the nine are literal-tuple
-  carve-outs, and 25/26 is not among them. **Two:** hand
+  live pointer and retain both exact single-line and exact range citations,
+  then apply the entry semantics — that yields the two literal-tuple groups,
+  the five `assertOrder` groups, 13-15, and 80-81: **nine groups covering 25
+  items**. The two literal-tuple groups, 2-5 and 9-11, cover seven own
+  assertion iterations under rule 4; the seven shared-call groups cover 18
+  shared items. The `:1225` group is items 80 and 81, so item 80 is no longer
+  an unmatched aside. This is the step that found the merge earlier counts
+  missed, and note that nine groups is not eight merges — two of the nine are
+  literal-tuple carve-outs, and 25/26 is not among them. **Two:** hand
   check the range-pointer groups, because a range collects a whole scenario and
   cannot show sharing on its own; this is the only way 25/26 is recoverable, as
   items 25, 26 **and** 27 all carry `within :792-818` and only the first two
-  merge. **Three:** hand check every item whose entry declares its pointer
-  stale, since grouping silently misfiles those — see the deferred-exception
-  note below, which is exactly such a case. A reader who runs step one alone
-  and stops will get a different, wrong answer.
+  merge. **Three:** hand check whether any item declares its pointer stale. As
+  of slice 4c.1, none does, so this check is presently vacuous; it remains part
+  of the procedure because a future slice could reintroduce one and grouping
+  would silently misfile it. A reader who runs step one alone and stops will
+  get a different, wrong answer.
 
   ***DISCREPANCY, found 2026-08-11 at slice 4b's closeout and recorded rather
   than silently re-derived. RESOLVED 2026-08-12 — this reading was
@@ -1381,6 +1441,13 @@ truncation `reset` performed is load-bearing and not decorative.
   three items, the figures would become **16 shared over 7 merges** and
   **116 − 16 = 100 own**.*
 
+  ***Corrected 2026-08-13 (slice 4c.1):*** *this note's closing arithmetic —
+  "116 − 16 = 100 own" — used the defective retired count of 8; see the
+  rebuilt recipe above. Retired is 11 and the merge set is now eight, so the
+  figures this note resolved to are 113 − 20 = 93. The note's finding, that
+  the 13/14/15 collapse was a merge the enumeration omitted, stands unchanged
+  and is why it is kept.*
+
   ***Amended 2026-08-12:*** *the second reading is adopted and the
   figures above moved from 103/13/6 to 100/16/7. The deciding argument is the
   head sentence's own wording — "map onto a port assertion of their own" —
@@ -1396,6 +1463,14 @@ truncation `reset` performed is load-bearing and not decorative.
   three are counted in the merge above, while item 80's names an unrelated
   site, so its disposition is deferred rather than counted. Item 80 is the only
   member of that second, unsettleable kind; see the notes that follow.*
+
+  ***Corrected 2026-08-13 (slice 4c.1):*** *the reasoning above for counting
+  items 13, 14 and 15 as a merge stands. Its closing disposition of item 80
+  does not: "item 80's names an unrelated site, so its disposition is deferred
+  rather than counted. Item 80 is the only member of that second, unsettleable
+  kind" was overtaken twice — slice 4c removed item 80's pointer entirely, and
+  slice 4c.1 settled its disposition as the merge `{80, 81}` on the witness
+  rule stated above.*
 
   ***Membership test for that fourth category, stated 2026-08-12 because
   three different tests were in play and this file named none of
@@ -1428,47 +1503,28 @@ truncation `reset` performed is load-bearing and not decorative.
   than an absorption; and items 44, 50 and 85 carry the marker and no* `Port:`
   *pointer at all, failing both (i) and (ii).*
 
-  ***Deferred exception, recorded 2026-08-12 rather than folded in:
-  item 80.*** *Item 80 carries* `Port: :947`*, which items 69 and 70 also
-  carry, so live-pointer grouping places it in* `{69, 70, 80}`*. It does not
-  belong there: item 80's
-  own entry marks the pointer **stale and deliberately not remapped**, and says
-  the claim was "subsumed into the `assertNoCodexMutation` call item 81 cites."
-  So item 80 is a genuine instance of the category — subsumed, pointer-bearing,
-  carrying no* `**Subsumed…**` *marker — and it is **not** counted as a seventh
-  merge with item 81 here, for a reason and not by oversight: items 80 and 81 do
-  not share a pointer at all (81 cites* `:1066`*), so treating them as a merge
-  means overriding a pointer with prose and then verifying that a Codex-log
-  helper really does witness an adapter-log claim. That is a re-derivation, and
-  item 80's own text already rules on who owns it: "Re-deriving the claim and
-  its pointer together is a re-disposition, not a pointer fix." **Slice 4c owns
-  item 80's disposition.** If 4c rules it a merge, the figures become 98 own and
-  18 shared over 8 merges, and the 22/23 aside above becomes "a ninth merge".*
+  ***Corrected 2026-08-13 (slice 4c.1):*** *conditions (i)-(iii) stand, but
+  the survey result does not: its exclusion of items 65, 68, 120 and 124 rested
+  on their entries saying the claim "is no longer asserted anywhere", which is
+  false. Re-running the stated search only from the mapped-region markers,
+  then reading every pointer-bearing, unmarked hit, returns six items: 13, 14
+  and 15 remain because their one `deepEqual` call is documented as absorbing
+  their claims; 65 and 68 now qualify because their removed adapter-log claims
+  are witnessed by the shared `assertOrder` calls their two siblings also name,
+  rather than by separate assertions; and 80 remains explicitly subsumed into
+  item 81's `assertNoCodexMutation` call. Items 120 and 124 are excluded under
+  (iii): each is separately witnessed by its scenario-local `assertOrder`, has
+  no sibling pointer, and is expressly counted as its own. Item 104 remains a
+  re-basing to its own whole-line assertion, not an absorption; items 44, 50
+  and 85 still lack a `Port:` pointer and carry the bold subsumed-marker.*
 
-  ***Scope of that exception, measured 2026-08-12.*** *Item 80 is the only item
-  in the mapped region that is pointer-bearing, declared subsumed into a named
-  sibling's assertion, **and whose pointer does not name that absorbing
-  assertion**. The final clause is what makes it an exception, and it is
-  load-bearing: items 13, 14 and 15 all meet the first two conditions and, like
-  item 80, carry no marker — each carries* `Port: :697`*, and this file records
-  all three as absorbed into the one* `deepEqual` *check they map onto (item
-  13's entry says so and names the other two; the channel-change note heading
-  their case says so of item 15). But their pointers name that very call, so
-  grouping catches them and all three are counted in the merge above. Item 80's
-  pointer names an unrelated site instead, which is exactly why grouping
-  misfiles it and why it cannot be settled here. It is* **not** *the only item
-  whose pointer the file declares invalid: items 65, 68,
-  80, 120 and 124 all carry a **"Pointer stale, deliberately not remapped"**
-  note, all five from slice 3.5's re-anchoring of these assertions onto*
-  `codex.log`*. The other four differ from 80 in disposition — each says its
-  claim "is no longer asserted anywhere and no line number can honestly stand in
-  for it", rather than naming a sibling that absorbed it — so they are not
-  merge candidates, but their pointers are equally unusable for grouping. For
-  those five items the own/shared partition is provisional in principle, since
-  "own" presupposes a port assertion the pointer no longer locates. Settling
-  them is the same 4c re-disposition, not a counting-rule question. None of*
-  `shellOriginal`*,* `portOnly` *or* `ports` *is affected by any of this: the
-  gate reads those and not this paragraph, and 124 is unchanged.*
+  ***Deferral discharged 2026-08-13 (PR 11.5 slice 4c.1, PR #70).***
+  *Two blocks here — a deferred exception for item 80 and a measurement of its
+  scope — assigned item 80's disposition to slice 4c and recorded the
+  own/shared partition for items 65, 68, 80, 120 and 124 as provisional in
+  principle. Slice 4c.1 settled all five on the witness rule stated above. The
+  superseded text is recoverable with*
+  `git show 9a5e61e1c5e4ba1c858ac5ae6ff7ad451df22afc:tests/migration-inventory/install-commands.md`*.*
 
   **A citation that was wrong when it was written is a separate class from one
   that drifted, and only drift has ever been swept for here.** A pointer that
