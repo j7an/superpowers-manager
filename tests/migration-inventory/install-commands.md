@@ -1518,7 +1518,7 @@ merge cannot be falsified for one member alone.
   re-basing to its own whole-line assertion, not an absorption; items 44, 50
   and 85 still lack a `Port:` pointer and carry the bold subsumed-marker.*
 
-  ***Deferral discharged 2026-08-13 (PR 11.5 slice 4c.1, PR #\<PR-NUMBER\>).***
+  ***Deferral discharged 2026-08-13 (PR 11.5 slice 4c.1, PR #70).***
   *Two blocks here — a deferred exception for item 80 and a measurement of its
   scope — assigned item 80's disposition to slice 4c and recorded the
   own/shared partition for items 65, 68, 80, 120 and 124 as provisional in
