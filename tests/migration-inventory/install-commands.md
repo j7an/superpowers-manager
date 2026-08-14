@@ -35,7 +35,9 @@ resolves through `81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_co
 Nothing in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
 validates the `json inventory` block's counts, this file's entry numbering and
 its region structure, and never parses one. Slice 4c.1 settled the last five
-stale-pointer dispositions; none remains.
+stale-pointer dispositions in the mapped region; none remains there. The
+port-only historical region still contains item 31's `Stale, deliberately not
+remapped.` label.
 
 ## Counting rules applied
 
@@ -1402,27 +1404,22 @@ merge cannot be falsified for one member alone.
   because a sibling's structural assertion subsumes the claim outright — the
   three `**Subsumed…**` items, 44, 50 and 85.
 
-  **How the 8 was actually derived, and what the procedure cannot do.**
-  Grouping the live `Port:` pointers among the 113 retained mapped items narrows where
-  a merge can hide, but it does not by itself decide one, and it is not a
-  substitute for reading the entries. Three steps, in order. **One:** group by
-  live pointer and retain both exact single-line and exact range citations,
-  then apply the entry semantics — that yields the two literal-tuple groups,
-  the five `assertOrder` groups, 13-15, and 80-81: **nine groups covering 25
-  items**. The two literal-tuple groups, 2-5 and 9-11, cover seven own
-  assertion iterations under rule 4; the seven shared-call groups cover 18
-  shared items. The `:1225` group is items 80 and 81, so item 80 is no longer
-  an unmatched aside. This is the step that found the merge earlier counts
-  missed, and note that nine groups is not eight merges — two of the nine are
-  literal-tuple carve-outs, and 25/26 is not among them. **Two:** hand
-  check the range-pointer groups, because a range collects a whole scenario and
-  cannot show sharing on its own; this is the only way 25/26 is recoverable, as
-  items 25, 26 **and** 27 all carry `within :792-818` and only the first two
-  merge. **Three:** hand check whether any item declares its pointer stale. As
-  of slice 4c.1, none does, so this check is presently vacuous; it remains part
-  of the procedure because a future slice could reintroduce one and grouping
-  would silently misfile it. A reader who runs step one alone and stops will
-  get a different, wrong answer.
+  **How the 8 was actually derived, and what the procedure cannot do.** Direct
+  grouping of the live `Port:` pointers among the 113 retained mapped items
+  yields ten duplicate-pointer buckets covering 27 items. Two buckets,
+  `{2, 3, 4, 5}` and `{9, 10, 11}`, are literal-tuple loop carve-outs: although
+  each bucket shares a static pointer, counting rule 4 counts each loop
+  iteration own. The other eight buckets are the shared merge groups already
+  enumerated in the headline above, covering 20 items. In particular, items 25
+  and 26 already form one exact pointer group at `:795-799`; item 27 is separate
+  at `:802-808`. No group is recovered from `within :792-818`.
+
+  After grouping, hand-check the entries for semantics and for stale
+  mapped-region pointer declarations. The stale-declaration check currently
+  returns nothing in the mapped region, but remains necessary for future
+  safety: a later slice could reintroduce one, and grouping would then silently
+  misfile it. Grouping is therefore the mechanical candidate derivation, not a
+  substitute for reading the entries.
 
   ***DISCREPANCY, found 2026-08-11 at slice 4b's closeout and recorded rather
   than silently re-derived. RESOLVED 2026-08-12 — this reading was
