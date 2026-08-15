@@ -18,7 +18,7 @@ import { SafetyError } from "../safety-error.js";
 import type { ResolutionKind } from "../upstream-version.js";
 import { manifestVersionForRef } from "../upstream-version.js";
 import { fetchExactCommit, gitSafeSource } from "../upstream.js";
-import { withWorkspace } from "../workspace.js";
+import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
 
 // scripts/prepare:64-67, via spw_require_upstream_path. Order is the shell's;
@@ -177,6 +177,26 @@ type PrepareOutcome =
       readonly message: string | null;
     };
 
+// Carries a post-success workspace-removal failure WITHOUT discarding the
+// PrepareOutcome the callback already computed. See the header comment on
+// withWorkspace's onCleanupFailure option (src/workspace.ts:99-107).
+//
+// Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
+// StageRun documents a precondition that its callback never throws, so it has
+// no "callback also failed" case to lose the cleanup message to. That
+// precondition does NOT hold here: runValidator rejects with prepareError from
+// its child.on("error") handler on a spawn failure, and withWorkspace returns
+// the callback error on that path (src/workspace.ts:137) without ever
+// consulting the reporter below. The envelopes the callback below collected
+// into its `envelopes` array are lost there. That is a separate, unassigned
+// defect -- the callback-throw path discards them -- and it is out of scope
+// here: this type fixes only the post-success cleanup case, and its existence
+// should not be read as covering the other.
+interface PrepareRun {
+  readonly outcome: PrepareOutcome;
+  readonly cleanupWarning: string | null;
+}
+
 // Identical to src/commands/probe.ts's replayEnvelope, and identical for the
 // same reason: scripts/core/validate-adapter-response.py:235-272 replayed every
 // response's messages whether or not that response failed.
@@ -250,7 +270,7 @@ function runValidator(
   });
 }
 
-async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
+async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
   const env = ctx.env;
   // scripts/prepare:16 — captured before the two case statements below.
   // getcwd(3) returns the physical path, so this matches `pwd -P` without a
@@ -280,7 +300,8 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
     mkdir(tmpParent, { recursive: true }),
   );
 
-  return await withWorkspace(
+  let cleanupWarning: string | null = null;
+  const outcome = await withWorkspace(
     tmpParent,
     ".superpowers.prepare.",
     async (workspace): Promise<PrepareOutcome> => {
@@ -499,7 +520,17 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareOutcome> {
         commit: selection.desiredCommit,
       };
     },
+    {
+      // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure, so
+      // the PrepareOutcome the callback already computed still reaches
+      // runPrepare instead of being discarded. The reporter runs synchronously,
+      // as the option requires (src/workspace.ts:103-106).
+      onCleanupFailure: (path) => {
+        cleanupWarning = workspaceRemovalFailure(path);
+      },
+    },
   );
+  return { outcome, cleanupWarning };
 }
 
 export async function runPrepare(
@@ -510,9 +541,9 @@ export async function runPrepare(
   // deliberate asymmetry with probe, whose shell original rejected unknown
   // arguments and whose arity therefore moved into parseArgs in slice 2.
   void argv;
-  let outcome: PrepareOutcome;
+  let run: PrepareRun;
   try {
-    outcome = await gatherPrepare(ctx);
+    run = await gatherPrepare(ctx);
   } catch (cause) {
     // Every throw reachable here carries a HAND-WRITTEN message:
     //   - prepareError(), from this module's owned() wrappers, its two
@@ -567,6 +598,7 @@ export async function runPrepare(
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
+  const { outcome, cleanupWarning } = run;
   for (const envelope of outcome.envelopes) replayEnvelope(envelope, ctx);
   if (outcome.validator.stdout.length > 0) {
     ctx.stdout.write(outcome.validator.stdout);
@@ -574,12 +606,24 @@ export async function runPrepare(
   if (outcome.validator.stderr.length > 0) {
     ctx.stderr.write(outcome.validator.stderr);
   }
+  let status: number;
   if (outcome.kind === "failed") {
     if (outcome.message !== null) {
       ctx.stderr.write(`error: ${outcome.message}\n`);
     }
+    status = 1;
+  } else {
+    ctx.stdout.write(`prepared ${outcome.resolvedRef} at ${outcome.commit}\n`);
+    status = 0;
+  }
+  if (cleanupWarning !== null) {
+    // A leaked workspace is reported even when the outcome above was itself a
+    // success: the generated-tree replacement that produced it already
+    // completed before cleanup ran, so it is not being reported as unverified
+    // -- but something did still go wrong, and AGENTS.md's fail-closed rule
+    // extends to it. Mirrors src/commands/install.ts:499-506.
+    ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }
-  ctx.stdout.write(`prepared ${outcome.resolvedRef} at ${outcome.commit}\n`);
-  return 0;
+  return status;
 }
