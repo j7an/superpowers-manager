@@ -40,6 +40,11 @@ const { writeSelectionState } = await import(
   new URL("../../dist/selection-store.js", import.meta.url).href
 );
 
+/** @type {typeof import("../../src/workspace.js")} */
+const { workspaceRemovalFailure } = await import(
+  new URL("../../dist/workspace.js", import.meta.url).href
+);
+
 /** @typedef {import("../bin/lifecycle-fixture.js").CaseEnv} CaseEnv */
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -602,6 +607,187 @@ void test("prepare runs the additional plugin validator inside the staging works
     `error: additional plugin validator not found: ${missing}\n`,
   );
   assertNoLeakedInternals(notFound.stderr);
+});
+
+/**
+ * A validator that poisons the staging workspace and writes one sentinel to
+ * each stream. Runs from src/commands/prepare.ts's runValidator call -- AFTER
+ * the build envelope exists (its `envelopes` array is already populated) and
+ * BEFORE the atomicReplaceDir call -- with TMPDIR set to the staging workspace
+ * (runValidator's spawn options set TMPDIR to its `workspace` argument). The
+ * poisoned directory is a SIBLING of the candidate, so the swap still
+ * succeeds; withWorkspace's rm(workspace, { recursive: true, force: true })
+ * then fails EACCES unlinking the file inside it. A real filesystem failure,
+ * not a mock.
+ *
+ * tests/unit/commands-install.test.js:998-1013 induces its cleanup failure by
+ * chmod'ing the workspace's PARENT read-only. That cannot be used here:
+ * prepare's parent is gatherPrepare's `tmpParent`, i.e. dirname(pluginRoot),
+ * and atomicReplaceDir writes into it, so a read-only parent would fail the
+ * swap and never reach the post-replacement case.
+ *
+ * @param {CaseEnv} c
+ * @param {number} exitCode 0 keeps the ok path; 1 takes prepare's
+ *   validation-failed branch -- the `ran.code !== 0` early return, which
+ *   returns BEFORE the swap.
+ * @returns {string}
+ */
+function poisoningValidator(c, exitCode) {
+  const path = join(c.dir, `validator-poison-${exitCode}.py`);
+  writeFileSync(
+    path,
+    [
+      "import os",
+      "import sys",
+      'workspace = os.environ["TMPDIR"]',
+      'poison = os.path.join(workspace, "poison")',
+      "os.mkdir(poison)",
+      'with open(os.path.join(poison, "held"), "w") as handle:',
+      '    handle.write("held\\n")',
+      "os.chmod(poison, 0o500)",
+      'print("validator-stdout TMPDIR=" + workspace)',
+      'sys.stderr.write("validator-stderr sentinel\\n")',
+      "sys.stderr.flush()",
+      `sys.exit(${exitCode})`,
+      "",
+    ].join("\n"),
+  );
+  return path;
+}
+
+/**
+ * Restores every poisoned workspace under `parent`. The case teardown cannot
+ * remove a 0o500 directory either, and on a RED run the assertions throw before
+ * the workspace path is bound, so this scans rather than taking it as an
+ * argument.
+ * @param {string} parent
+ */
+function unpoisonWorkspaces(parent) {
+  for (const entry of readdirSync(parent)) {
+    if (!entry.startsWith(".superpowers.prepare.")) continue;
+    try {
+      chmodSync(join(parent, entry, "poison"), 0o700);
+    } catch {
+      // The run may have failed before the validator created it.
+    }
+  }
+}
+
+/**
+ * Asserts `needles` appear in `haystack` in this order. Ordering is asserted
+ * WITHIN one stream only: stdout and stderr are separate pipes, so no single
+ * total order across both is observable, and asserting one would pin an
+ * artifact of buffering rather than a contract.
+ * @param {string} haystack
+ * @param {string[]} needles
+ */
+function assertOrder(haystack, needles) {
+  let previous = -1;
+  for (const needle of needles) {
+    const at = haystack.indexOf(needle);
+    assert.ok(
+      at > previous,
+      `${needle} is missing or out of order in:\n${haystack}`,
+    );
+    previous = at;
+  }
+}
+
+void test("a post-success workspace cleanup failure keeps the prepared outcome and every line before it", async () => {
+  // chmod does not gate root, so the poisoned directory would be removable and
+  // the cleanup this case exists to fail would succeed. Matches
+  // tests/unit/commands-install.test.js:983.
+  if (process.getuid?.() === 0) return;
+  const c = createCase({ fakes: "probe" });
+  const parent = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
+  const validator = poisoningValidator(c, 0);
+  const before = seedSentinel(c);
+  try {
+    const result = await prepare(c, {
+      SUPERPOWERS_REF: REFS.fallback,
+      SUPERPOWERS_VALIDATOR: validator,
+    });
+
+    const printed = result.stdout.match(/^validator-stdout TMPDIR=(.*)$/m)?.[1];
+    assert.equal(typeof printed, "string", `${result.stdout}${result.stderr}`);
+    const workspace = /** @type {string} */ (printed);
+
+    // 1. The swap happened. Without this the case could pass against a run that
+    //    replaced nothing -- exactly the state this slice exists to surface.
+    assert.notDeepEqual(snapshotTree(generated(c)), before);
+    assert.ok(!existsSync(join(generated(c), "sentinel.txt")));
+    assert.ok(existsSync(join(generated(c), ".superpowers-upstream.json")));
+
+    // 2. stdout, in order: the REPLAYED ADAPTER ENVELOPE (an adapter build
+    //    always emits this on the stdout channel, src/adapter.ts:542-547 --
+    //    envelope loss is the first thing this slice fixes, so it is asserted
+    //    directly), then the validator's stdout, then the domain result.
+    assertOrder(result.stdout, [
+      "generated plugin validation passed: ",
+      "validator-stdout TMPDIR=",
+      "prepared ",
+    ]);
+    assert.match(result.stdout, /^prepared .+ at [0-9a-f]{40}$/m);
+
+    // 3. stderr, exactly: the validator's stderr REQUIRED (not merely
+    //    tolerated), then the leaked-workspace warning.
+    assert.equal(
+      result.stderr,
+      `validator-stderr sentinel\n${`error: ${workspaceRemovalFailure(workspace)}\n`}`,
+    );
+    assertNoLeakedInternals(result.stderr);
+
+    // 4. The run still fails closed.
+    assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
+  } finally {
+    unpoisonWorkspaces(parent);
+  }
+});
+
+void test("a cleanup failure after a FAILED prepare still replays the outcome before the warning", async () => {
+  // Not redundant with the case above. Before this slice, this path also
+  // reported only the cleanup failure; afterwards it must replay the envelope,
+  // the validator output, AND the domain failure diagnostic ahead of the
+  // warning. The ok case cannot pin that ordering, because on that path there
+  // is no domain failure diagnostic at all.
+  if (process.getuid?.() === 0) return;
+  const c = createCase({ fakes: "probe" });
+  const parent = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
+  const validator = poisoningValidator(c, 1);
+  const before = seedSentinel(c);
+  try {
+    const result = await prepare(c, {
+      SUPERPOWERS_REF: REFS.fallback,
+      SUPERPOWERS_VALIDATOR: validator,
+    });
+
+    const printed = result.stdout.match(/^validator-stdout TMPDIR=(.*)$/m)?.[1];
+    assert.equal(typeof printed, "string", `${result.stdout}${result.stderr}`);
+    const workspace = /** @type {string} */ (printed);
+
+    // 1. The swap did NOT happen: the validator failure takes prepare's
+    //    `ran.code !== 0` early return, before its atomicReplaceDir call.
+    assert.deepEqual(snapshotTree(generated(c)), before);
+
+    // 2. stdout: envelope then validator stdout, and NO success line.
+    assertOrder(result.stdout, [
+      "generated plugin validation passed: ",
+      "validator-stdout TMPDIR=",
+    ]);
+    assert.doesNotMatch(result.stdout, /^prepared /m);
+
+    // 3. stderr, exactly: validator stderr, then the DOMAIN failure, then the
+    //    leaked-workspace warning.
+    assert.equal(
+      result.stderr,
+      `validator-stderr sentinel\nerror: additional plugin validation failed\n${`error: ${workspaceRemovalFailure(workspace)}\n`}`,
+    );
+    assertNoLeakedInternals(result.stderr);
+
+    assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
+  } finally {
+    unpoisonWorkspaces(parent);
+  }
 });
 
 void test("prepare writes complete provenance and is idempotent", async () => {

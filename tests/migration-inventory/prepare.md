@@ -1200,7 +1200,7 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   "shellOriginal": 163,
   "portOnly": 6,
   "ports": {
-    "tests/baseline/prepare.test.js": 29,
+    "tests/baseline/prepare.test.js": 31,
     "tests/unit/commands-prepare.test.js": 6,
     "tests/unit/atomic.test.js": 8
   }
@@ -1221,16 +1221,18 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   2+7+5+7+5+3+3+4+10+2+6+7+8+7+5+4+17+10+16+3+10+5+6+5+1+5 = 163). See
   "Divergences from the derived 158" above for the full +15/-10/net5 derivation
   from the mechanical 158.
-- Ports: `tests/baseline/prepare.test.js` has 29 static `test(` call sites (8
-  named for the baseline case IDs they own, and 21 further end-to-end cases —
+- Ports: `tests/baseline/prepare.test.js` has 31 static `test(` call sites (8
+  named for the baseline case IDs they own, and 23 further end-to-end cases —
   the adapter classification wrapper, source-side hooks-root containment,
   candidate-side hooks-root containment, the pinned saved selection,
   clone-then-fetch, the required-path matrix, the additional validator's
   three clauses, provenance completeness and idempotence, seven
   manifest-rejection shapes, two directory-as-path rejections, the failed
   upstream copy, the two hostile-git fetch branches, the unreadable hooks
-  subdirectory inside an already-contained subtree, and the accepted
-  contained hooks-root symlink);
+  subdirectory inside an already-contained subtree, the accepted
+  contained hooks-root symlink, the post-success workspace cleanup failure
+  that keeps the prepared outcome, and the cleanup failure after a failed
+  prepare that still replays the outcome ahead of the warning);
   `tests/unit/commands-prepare.test.js` has 6 (three for
   `readUpstreamManifestVersion` and three for `runPrepare`'s `-f`/`-d`
   predicates); `tests/unit/atomic.test.js` has 8 (five for `atomicWriteFile`
