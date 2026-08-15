@@ -575,3 +575,368 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
     MARKER: "kept",
   });
 });
+
+// ADAPTER-FINGERPRINT-01 / -REJECT-01 / -OWNERSHIP-01 were owned by
+// tests/test_adapter_protocol.py until PR 11.5 slice 5. The protocol carried
+// these results; it never produced them. `runInspect` does, so the contracts
+// are asserted here directly over `runAdapter`.
+//
+// The fingerprint vocabulary itself lives in src/codex-state.ts
+// (`codexMetadataCommit` accepts 40-hex or 7-hex; `manifestShortSha` returns
+// "" for anything else), reached through this view.
+//
+// The contract's "accepts null" clause IS asserted. An earlier draft dropped
+// it, claiming an unresolvable fingerprint is always "" and therefore always
+// inspect-failed. That conflated two distinct states. src/adapter.ts:822-824
+// returns `fingerprint: null` as a SUCCESS result when no superpowers plugin
+// is active at all; only the case where a plugin IS active but its commit
+// cannot be resolved reaches :843-847 and fails closed. Both are live.
+
+/**
+ * Seed the installed-plugin cache the fingerprint view reads.
+ * @param {{base: string}} sandbox
+ * @param {string} version
+ * @param {string} commit
+ */
+async function seedInstalledCommit(sandbox, version, commit) {
+  const root = join(
+    sandbox.base,
+    "codex",
+    "plugins",
+    "cache",
+    "superpowers-manager",
+    "superpowers",
+    version,
+  );
+  await mkdir(root, { recursive: true });
+  await writeFile(
+    join(root, ".superpowers-upstream.json"),
+    `${JSON.stringify({ commit })}\n`,
+  );
+  return root;
+}
+
+/** @param {string} version */
+const pluginListFor = (version) =>
+  JSON.stringify({
+    installed: [{ pluginId: "superpowers@superpowers-manager", version }],
+  });
+
+void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-hex commits in its exact result shape", async (t) => {
+  for (const fingerprint of [COMMIT, "d884ae0"]) {
+    const sandbox = await codexSandbox(t);
+    const version = "6.1.1+manager.d884ae0";
+    await seedInstalledCommit(sandbox, version, fingerprint);
+    const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+      root: PACKAGE_ROOT,
+      env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
+    });
+    assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+    // deepStrictEqual, not a field probe: "exact result shape" is the
+    // contract, so an extra key must fail.
+    assert.deepStrictEqual(result.envelope.result, {
+      view: "fingerprint",
+      fingerprint,
+    });
+  }
+
+  // Third state: the listing parses and reports no superpowers plugin. This
+  // is `ok`, not a failure, and reports null -- see src/adapter.ts:822-824.
+  // Nothing is seeded under the search root, proving the view returns before
+  // it reads one.
+  const empty = await codexSandbox(t);
+  const nullResult = await runAdapter(["inspect", "--view", "fingerprint"], {
+    root: PACKAGE_ROOT,
+    env: empty.env({
+      FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed: [] }),
+    }),
+  });
+  assert.equal(
+    nullResult.envelope.ok,
+    true,
+    JSON.stringify(nullResult.envelope),
+  );
+  assert.deepStrictEqual(nullResult.envelope.result, {
+    view: "fingerprint",
+    fingerprint: null,
+  });
+});
+
+void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint", async (t) => {
+  // 10 hex characters: valid hex, wrong length. codexMetadataCommit rejects
+  // it, manifestShortSha finds no plugin.json, installedCommitFromRoot
+  // returns "", and the view fails closed rather than reporting the value.
+  const sandbox = await codexSandbox(t);
+  const version = "6.1.1+manager.d884ae0";
+  const activeRoot = await seedInstalledCommit(sandbox, version, "d884ae0123");
+  const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
+  });
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.envelope.error?.code, "inspect-failed");
+  assert.equal(
+    result.envelope.error?.message,
+    `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
+  );
+});
+
+// FOUR independent booleans, not two. src/adapter.ts:939-940 computes
+//   managerPresent = managerPlugin || managerMarketplace
+//   legacyPresent  = legacyPlugin  || legacyMarketplace
+// A draft of this test pinned both marketplace booleans to false. With
+// `marketplace === false`, `plugin || false` and `plugin && false` are
+// distinguishable, so an `&&` mutation is caught -- but replacing
+// `managerMarketplace` with a constant is NOT, because the case where it is
+// the only true input never runs. The 16-case cross product closes that.
+void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans", async (t) => {
+  const bits = [false, true];
+  for (const managerPlugin of bits) {
+    for (const managerMarketplace of bits) {
+      for (const legacyPlugin of bits) {
+        for (const legacyMarketplace of bits) {
+          const sandbox = await codexSandbox(t);
+          const installed = [];
+          if (managerPlugin) {
+            installed.push({
+              pluginId: "superpowers@superpowers-manager",
+              version: "6.1.1+manager.d884ae0",
+            });
+          }
+          if (legacyPlugin) {
+            installed.push({
+              pluginId: "superpowers@superpowers-wrapper",
+              version: "0.1.1",
+            });
+          }
+          const marketplaces = [];
+          if (managerMarketplace) {
+            marketplaces.push({ name: "superpowers-manager" });
+          }
+          if (legacyMarketplace) {
+            marketplaces.push({ name: "superpowers-wrapper" });
+          }
+          const managerPresent = managerPlugin || managerMarketplace;
+          const legacyPresent = legacyPlugin || legacyMarketplace;
+          const identity = managerPresent
+            ? legacyPresent
+              ? "both"
+              : "manager"
+            : legacyPresent
+              ? "legacy"
+              : "neither";
+          const label = JSON.stringify({
+            managerPlugin,
+            managerMarketplace,
+            legacyPlugin,
+            legacyMarketplace,
+          });
+          const result = await runAdapter(["inspect", "--view", "ownership"], {
+            root: PACKAGE_ROOT,
+            env: sandbox.env({
+              FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed }),
+              FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({ marketplaces }),
+            }),
+          });
+          assert.equal(result.envelope.ok, true, label);
+          assert.deepStrictEqual(
+            result.envelope.result,
+            {
+              view: "ownership",
+              resources: {
+                plugin: managerPlugin,
+                marketplace: managerMarketplace,
+              },
+              legacy_resources: {
+                plugin: legacyPlugin,
+                marketplace: legacyMarketplace,
+              },
+              identity_state: identity,
+            },
+            label,
+          );
+        }
+      }
+    }
+  }
+});
+
+// ADAPTER-INSTALL-RESULT-01, ADAPTER-CONTROLLED-FAILURE-01 and
+// DIAG-ADAPTER-01 were owned by tests/test_adapter_protocol.py until PR 11.5
+// slice 5.
+//
+// INSTALL-RESULT-01 is NARROWED. Its protocol contract admitted
+// verification_hints with neither, either, or both terms, which was the
+// response schema's tolerance. src/adapter.ts emits `missing` unconditionally
+// and `mismatch` exactly when the refresh mode is add-only, so two of those
+// four shapes are reachable and those two are what this asserts.
+
+void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode", async (t) => {
+  /** @type {[string, Record<string, string>][]} */
+  const cases = [
+    [
+      "add-only",
+      {
+        mismatch: "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add",
+        missing: "verify with 'codex plugin list --json'.",
+      },
+    ],
+    ["remove-add", { missing: "verify with 'codex plugin list --json'." }],
+  ];
+  for (const [refreshMode, hints] of cases) {
+    const sandbox = await codexSandbox(t);
+    const result = await runAdapter(
+      ["install", "--package-root", sandbox.packageRoot],
+      {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({
+          SUPERPOWERS_INSTALL_REFRESH_MODE: refreshMode,
+          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({
+            marketplaces: [
+              { name: "superpowers-manager", root: sandbox.packageRoot },
+            ],
+          }),
+        }),
+      },
+    );
+    assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+    assert.deepStrictEqual(
+      result.envelope.result,
+      { verification_hints: hints },
+      refreshMode,
+    );
+  }
+});
+
+/**
+ * Drive the adapter install operation to `src/adapter.ts:654-662`, the one
+ * in-process failure that carries MORE THAN ONE hint. The marketplace is
+ * reported as registered at a different root, so the adapter removes it and
+ * re-adds it; the stub accepts the remove and refuses the add, which is the
+ * exact "removed but re-adding failed" state.
+ *
+ * A custom stub rather than tests/unit/helpers/fake-codex.sh: that helper has
+ * no failure-injection channel, and adding one would change a shared fixture
+ * from inside a PR that is meant to be additive.
+ * @param {import('node:test').TestContext} t
+ */
+async function reAddFailureRun(t) {
+  const base = await mkdtemp(join(tmpdir(), "spw-adapter-readd-"));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const packageRoot = join(base, "package");
+  const registeredRoot = join(base, "previous");
+  await mkdir(packageRoot);
+  await mkdir(registeredRoot);
+  const stub = join(base, "codex");
+  await writeFile(
+    stub,
+    [
+      "#!/bin/sh",
+      'case "$*" in',
+      "  'plugin marketplace list --json')",
+      `    printf '%s\\n' '{"marketplaces":[{"name":"superpowers-manager","root":"${registeredRoot}"}]}' ;;`,
+      "  'plugin marketplace remove superpowers-manager') exit 0 ;;",
+      "  'plugin marketplace add '*) exit 1 ;;",
+      "  *) exit 0 ;;",
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  const result = await runAdapter(["install", "--package-root", packageRoot], {
+    root: PACKAGE_ROOT,
+    env: { SUPERPOWERS_CODEX: stub },
+  });
+  return { result, stub, packageRoot, registeredRoot };
+}
+
+void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1", async (t) => {
+  const workspace = await buildWorkspace(t);
+  await rm(join(workspace.candidate, "LICENSE"));
+  const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
+  assert.equal(result.status, 1);
+  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  // "yields no result" is the half a field probe would miss.
+  assert.equal(result.envelope.result, null);
+  assert.equal(
+    result.envelope.error?.code,
+    "generated-plugin-validation-failed",
+  );
+  assert.equal(
+    result.envelope.error?.message,
+    "built-in generated plugin validation failed",
+  );
+  // Exact, not `Array.isArray`: a shape probe passes on any value and would
+  // not notice hints disappearing.
+  assert.deepStrictEqual(result.envelope.error?.hints, []);
+
+  // The contract says "carries its hints", and a hints-empty scenario cannot
+  // witness that. src/adapter.ts:654-662 is the one in-process failure with
+  // two of them, and their ORDER is part of what replay preserves.
+  const readd = await reAddFailureRun(t);
+  assert.equal(readd.result.status, 1);
+  assert.equal(readd.result.envelope.ok, false);
+  assert.equal(readd.result.envelope.result, null);
+  assert.equal(readd.result.envelope.error?.code, "install-failed");
+  assert.equal(
+    readd.result.envelope.error?.message,
+    "marketplace superpowers-manager was removed but re-adding failed.",
+  );
+  assert.deepStrictEqual(readd.result.envelope.error?.hints, [
+    `recover with: ${readd.stub} plugin marketplace add ${readd.packageRoot}`,
+    `previous root (last known good): ${readd.registeredRoot}`,
+  ]);
+});
+
+// The contract covers "validated adapter messages, controlled errors, and
+// hints" -- all three, each on its declared stream and in array order. A
+// messages-only assertion would leave the error and hint halves unwitnessed,
+// which is what the retiring protocol suite used to cover.
+void test("DIAG-ADAPTER-01 adapter messages, errors, and hints retain their declared stream and array order", async (t) => {
+  const workspace = await buildWorkspace(t);
+  await rm(join(workspace.candidate, "LICENSE"));
+  await rm(join(workspace.candidate, "README.md"));
+  const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
+  // Order AND stream together, as one deepStrictEqual over the whole array:
+  // asserting membership, or per-record channel, would pass on a reordered
+  // log. The validator emits the header first and then one record per error
+  // in source order, so LICENSE precedes README.md.
+  assert.deepStrictEqual(result.envelope.messages, [
+    { channel: "stderr", text: "Generated plugin validation failed:" },
+    { channel: "stderr", text: "- missing required file `LICENSE`" },
+    { channel: "stderr", text: "- missing required file `README.md`" },
+  ]);
+  // The error and hint halves of the same contract, asserted exactly. Replay
+  // order on the product path is messages, then `error: <message>`, then one
+  // `hint: <text>` per hint -- see replayEnvelope in src/commands/probe.ts.
+  assert.equal(result.envelope.ok, false);
+  assert.equal(
+    result.envelope.error?.message,
+    "built-in generated plugin validation failed",
+  );
+  assert.deepStrictEqual(result.envelope.error?.hints, []);
+  // Every record on THIS path is stderr: a stdout record here would mean a
+  // diagnostic reached the data stream, which is the failure this ID exists to
+  // catch.
+  assert.deepStrictEqual(
+    [...new Set(result.envelope.messages.map((m) => m.channel))],
+    ["stderr"],
+  );
+
+  // A single-stream scenario cannot witness "their DECLARED stream" -- it
+  // passes just as well against an implementation that sends everything to
+  // stderr unconditionally. The re-add failure is the one in-process path
+  // carrying a stdout message and two ordered hints at once, so it closes both
+  // halves the scenario above leaves open.
+  const readd = await reAddFailureRun(t);
+  assert.deepStrictEqual(readd.result.envelope.messages, [
+    {
+      channel: "stdout",
+      text: `marketplace superpowers-manager registered at ${readd.registeredRoot}; re-registering at ${readd.packageRoot}`,
+    },
+  ]);
+  assert.deepStrictEqual(readd.result.envelope.error?.hints, [
+    `recover with: ${readd.stub} plugin marketplace add ${readd.packageRoot}`,
+    `previous root (last known good): ${readd.registeredRoot}`,
+  ]);
+});

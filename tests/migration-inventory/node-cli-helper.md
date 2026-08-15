@@ -59,14 +59,15 @@ b3f926f3a5428d21e1fdfe35f9714a639d8209c5 origin/main` confirmed reachability.
 {
   "shellOriginal": 10,
   "portOnly": 0,
-  "ports": { "tests/unit/adapter.test.js": 13 }
+  "ports": { "tests/unit/adapter.test.js": 19 }
 }
 ```
 
 - Shell original: **10** assertions (four missing-helper branch assertions,
   six scrub/preload assertions across the first and two consecutive calls).
-- Port (`tests/unit/adapter.test.js`): 13 static `node:test` cases are present
-  in the shared adapter unit file; the final case carries the surviving
+- Port (`tests/unit/adapter.test.js`): 19 static `node:test` cases are present
+  in the shared adapter unit file; the case named `runCommand strips
+  NODE_OPTIONS and NODE_PATH from the child env` carries the surviving
   child-environment contract and preservation of an unrelated variable.
 - Reconciliation: the surviving child-environment property is represented by
   the port; all shell-only helper and repeated-call assertions are **retired
