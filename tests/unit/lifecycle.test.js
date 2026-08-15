@@ -336,3 +336,38 @@ void test("a non-object resources falls through to the Boolean message", () => {
     "expected a Boolean adapter result at resources.plugin",
   );
 });
+
+// ADAPTER-UPDATE-CONTROL-01 was owned by tests/test_adapter_protocol.py until
+// PR 11.5 slice 5, and its contract SPLITS.
+//
+// The recognition rule -- only `managed` and `unsupported` are known values,
+// and a third is rejected -- survives in-process here.
+//
+// The reportability half -- that an inspection can emit `unsupported` --
+// retires with the transport. src/adapter.ts's update-control view returns
+// the literal `managed`; the old witness at
+// tests/test_adapter_protocol.sh:102-104 ran a fixture SHELL adapter emitting
+// a canned envelope, and no shell adapters remain. tests/migration-inventory/
+// probe.md item 92 instructs slice 5 to port that witness; it cannot be
+// ported, because there is nothing in-process that produces the value.
+
+void test("ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value", () => {
+  assert.deepEqual(requireManagedUpdateControl("managed"), { ok: true });
+  assert.deepEqual(requireManagedUpdateControl("unsupported"), {
+    ok: false,
+    message: "adapter cannot guarantee manager-controlled updates",
+  });
+  // A third value is rejected with a DIFFERENT message than `unsupported`.
+  // Asserting only `ok: false` would pass if the two collapsed into one
+  // branch, which is exactly the closed-enumeration property at stake.
+  for (const value of ["", "MANAGED", "unknown", "unsupported "]) {
+    assert.deepEqual(
+      requireManagedUpdateControl(value),
+      {
+        ok: false,
+        message: `unknown adapter update-control capability: ${value}`,
+      },
+      value,
+    );
+  }
+});
