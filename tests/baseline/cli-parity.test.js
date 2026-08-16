@@ -2783,11 +2783,17 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
       result.stderr,
       /^error: unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: replace$/m,
     );
-    // The refusal is fail-closed: nothing was mutated. Without this, ANY
-    // early failure would satisfy the assertion above.
+    // The refusal is fail-closed: nothing was mutated. This filters EVERY
+    // mutation verb the install path can reach -- `plugin marketplace add`
+    // (:619), `plugin marketplace remove` (:636), `plugin remove` (:665) and
+    // `plugin add` (:672) -- not just the first one. An earlier draft named
+    // `plugin marketplace add` alone, which is the last of the four an early
+    // mutation would reach: a defect that removed the plugin, or removed the
+    // marketplace, before the enumeration check would have left this
+    // assertion green while the comment above it claimed otherwise.
     assert.deepEqual(
       listingCodexCalls(sandbox).filter((line) =>
-        line.startsWith("plugin marketplace add "),
+        /^plugin (marketplace )?(add|remove) /.test(line),
       ),
       [],
     );
@@ -2815,5 +2821,55 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
       ),
       listingCodexCalls(sandbox).join(" | "),
     );
+  });
+
+  // Half three: the OTHER accepted value. The contract names a closed
+  // enumeration of two, and halves one and two together only establish that
+  // `add-only` is in it and `replace` is not -- an implementation that
+  // rejected `remove-add` would leave both of them green. The retiring
+  // witness (tests/test_adapter_protocol.sh:301-311) drove `remove-add`
+  // explicitly and asserted the removal and the addition both reached Codex;
+  // dropping that half here would have narrowed the contract without saying
+  // so.
+  //
+  // This half needs a fixture the other two do not. writeListingCodex exits
+  // 99 on `plugin marketplace add`, so the run fails closed at
+  // src/adapter.ts:626 and never reaches the refresh-mode branch at :665.
+  // writeVersionCodex accepts the marketplace add, so the run gets as far as
+  // the plugin mutations. `plugin remove` is deliberately NOT accepted by it
+  // and does not need to be: src/adapter.ts:666-671 issues that command
+  // without checking its status, so the run continues to `plugin add`
+  // regardless -- and the stub records every invocation before dispatching on
+  // it, so the attempt is observable either way.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      "",
+      sandbox.codexLog,
+    );
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["install"], {
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+      SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add",
+    });
+    assert.equal(result.error, undefined);
+    assert.doesNotMatch(
+      result.stderr,
+      /unsupported SUPERPOWERS_INSTALL_REFRESH_MODE/,
+    );
+    const calls = listingCodexCalls(sandbox);
+    const removedAt = calls.findIndex((line) =>
+      line.startsWith("plugin remove "),
+    );
+    const addedAt = calls.findIndex((line) => line.startsWith("plugin add "));
+    // Presence AND order. `remove-add` is the mode's whole meaning: asserting
+    // only that both commands appear would pass on an implementation that
+    // added first and removed afterwards, which uninstalls what it just
+    // installed.
+    assert.notEqual(removedAt, -1, calls.join(" | "));
+    assert.notEqual(addedAt, -1, calls.join(" | "));
+    assert.ok(removedAt < addedAt, calls.join(" | "));
   });
 });
