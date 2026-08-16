@@ -208,6 +208,70 @@ function hasTerminalControl(value: string): boolean {
   return false;
 }
 
+// D8b's enforcement point on the LIVE product path. serializeEnvelope below is
+// the only other place that scans a failure's code, message, and hints, and
+// its sole caller is src/adapter-cli.ts, which no product path invokes; PR
+// 11.5 slice 5 removes it. replayEnvelope -- which every command replays
+// through -- wrote these three strings to the terminal unfiltered.
+//
+// NOT requireProtocolString: that one message
+// ("protocol strings must not contain terminal control characters") names no
+// member, and D8b requires the thrown message to name the failing one. So this
+// scans with the predicate underneath it instead.
+//
+// Order is code, then message, then hints by ascending index, so the thrown
+// message is a function of the envelope rather than of iteration order.
+//
+// The offending value is never interpolated, never sanitized, and never
+// truncated into the message: the contract is that an unsafe string does not
+// reach the terminal, not that it arrives altered. The hint INDEX is the one
+// interpolated value, and it is a bounded integer. src/cli.ts's handler catch
+// emits `error: <this module's own hand-written message>` with exit 1, which
+// is the sanctioned interpolation under AGENTS.md.
+//
+// Exported separately from writeAdapterFailure because replayEnvelope writes
+// every message BEFORE the error line: a caller that validated only at the
+// write would already have put the context lines on the stream when the guard
+// fired. Hoisting this above the message loop is what makes a refused failure
+// leave both streams untouched.
+export function assertFailureWritable(envelope: AdapterEnvelope): void {
+  if (envelope.ok) return;
+  if (hasTerminalControl(envelope.error.code)) {
+    throw new Error(
+      "adapter failure code contains a terminal control character",
+    );
+  }
+  if (hasTerminalControl(envelope.error.message)) {
+    throw new Error(
+      "adapter failure message contains a terminal control character",
+    );
+  }
+  for (const [index, hint] of envelope.error.hints.entries()) {
+    if (hasTerminalControl(hint)) {
+      throw new Error(
+        `adapter failure hint[${index}] contains a terminal control character`,
+      );
+    }
+  }
+}
+
+// Validates the WHOLE failure before the first write, so a hint that fails
+// after two safe ones leaves neither of those two on the stream. `ctx` is
+// typed structurally rather than as CommandContext: this reads exactly one of
+// that interface's five members, and naming the wide type would point this
+// module at one that already imports from it.
+export function writeAdapterFailure(
+  ctx: { readonly stderr: NodeJS.WritableStream },
+  envelope: AdapterEnvelope,
+): void {
+  assertFailureWritable(envelope);
+  if (envelope.ok) return;
+  ctx.stderr.write(`error: ${envelope.error.message}\n`);
+  for (const hint of envelope.error.hints) {
+    ctx.stderr.write(`hint: ${hint}\n`);
+  }
+}
+
 function requireProtocolString(value: string): void {
   if (hasTerminalControl(value)) {
     throw new Error(

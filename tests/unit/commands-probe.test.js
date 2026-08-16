@@ -244,6 +244,42 @@ void test("replay emits the error line then one hint line per hint", () => {
   // follow it in array order. Three separate `match` calls would pass on any
   // permutation of the same three lines.
   assert.equal(err.text(), "context\nerror: cannot list\nhint: a\nhint: b\n");
+
+  // The hoist: a failure that will be refused writes NOTHING, not even the
+  // messages that precede the error line. Without assertFailureWritable above
+  // the message loop, `context` would already be on stderr when the guard
+  // fired on the hint.
+  const badOut = capture();
+  const badErr = capture();
+  assert.throws(
+    () =>
+      replayEnvelope(
+        envelopeWith({
+          ok: false,
+          messages: [{ channel: "stderr", text: "context" }],
+          result: null,
+          error: {
+            code: "inspect-failed",
+            message: "cannot list",
+            hints: ["fine", "bad\u001bhint"],
+          },
+        }),
+        {
+          root: "/unused",
+          env: {},
+          stdout: badOut.stream,
+          stderr: badErr.stream,
+          adapter: notCalledAdapter,
+        },
+      ),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /hint/);
+      return true;
+    },
+  );
+  assert.equal(badOut.text(), "");
+  assert.equal(badErr.text(), "");
 });
 
 void test("replay on a clean success envelope writes nothing", () => {

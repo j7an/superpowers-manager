@@ -4,6 +4,10 @@
 //   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe
 
 import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
+import {
+  assertFailureWritable,
+  writeAdapterFailure,
+} from "../adapter-protocol.js";
 import { oneLine } from "../cli-arguments.js";
 import { computeEffectiveSelection } from "../effective-selection.js";
 import { generatedCommitOrEmpty } from "../provenance.js";
@@ -164,7 +168,9 @@ export function formatHuman(f: ProbeFacts): string {
 //
 // Interpolating error.message and each hint is the sanctioned form (AGENTS.md):
 // src/adapter.ts has 52 `fail()` sites and none interpolates a caught error's
-// message, so the callee owns every failure reachable on this path.
+// message, so the callee owns every failure reachable on this path. Those two
+// writes now live in writeAdapterFailure (src/adapter-protocol.ts), which
+// validates all three strings before the first of them reaches the stream.
 //
 // This writes to ctx, so it MUST NOT be called from inside gatherProbe's try
 // -- see the ProbeOutcome note below.
@@ -172,16 +178,19 @@ export function replayEnvelope(
   envelope: AdapterEnvelope,
   ctx: CommandContext,
 ): void {
+  // Hoisted ABOVE the message loop, and that ordering is the point: a failure
+  // whose code, message, or a hint carries a terminal control character must
+  // leave both streams untouched, not the context lines followed by nothing.
+  // Returns immediately on a succeeding envelope.
+  assertFailureWritable(envelope);
   for (const message of envelope.messages) {
     const stream = message.channel === "stdout" ? ctx.stdout : ctx.stderr;
     stream.write(`${message.text}\n`);
   }
-  if (!envelope.ok) {
-    ctx.stderr.write(`error: ${envelope.error.message}\n`);
-    for (const hint of envelope.error.hints) {
-      ctx.stderr.write(`hint: ${hint}\n`);
-    }
-  }
+  // The message loop stays unguarded on purpose: D8b scopes the check to code,
+  // message, and hints, and AdapterMessageLog escapes message text before it is
+  // stored, so scanning it here would re-check a population that cannot fail.
+  writeAdapterFailure(ctx, envelope);
 }
 
 type Inspection =
