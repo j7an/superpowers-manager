@@ -216,6 +216,33 @@ void test("verifyInstalledFingerprint omits the hint line when no hint is presen
   assert.equal(verdict.stderr.length, 1);
 });
 
+void test("ADAPTER-TERMINAL-01 verifyInstalledFingerprint omits a hint carrying a terminal control", () => {
+  const esc = String.fromCharCode(0x1b);
+  const verdict = verifyInstalledFingerprint(
+    "d".repeat(40),
+    ok({ verification_hints: { mismatch: `try ${esc}]0;title` } }),
+    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
+  );
+  assert.equal(verdict.ok, false);
+  // The error line stands; only the hint line is dropped.
+  assert.deepEqual(verdict.stderr, [
+    "error: installed manager fingerprint does not match the prepared plugin after install.",
+  ]);
+});
+
+void test("ADAPTER-SURROGATE-01 verifyInstalledFingerprint omits a hint carrying a lone surrogate", () => {
+  const lone = String.fromCharCode(0xd800);
+  const verdict = verifyInstalledFingerprint(
+    "f".repeat(40),
+    ok({ verification_hints: { missing: `codex said ${lone}` } }),
+    ok({ view: "fingerprint", fingerprint: null }),
+  );
+  assert.equal(verdict.ok, false);
+  assert.deepEqual(verdict.stderr, [
+    "error: installed manager fingerprint is not detectable after install.",
+  ]);
+});
+
 void test("verifyUninstalledResources accepts both resources absent", () => {
   assert.deepEqual(
     verifyUninstalledResources(

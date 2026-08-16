@@ -194,7 +194,7 @@ export function failureResult(
   };
 }
 
-function hasTerminalControl(value: string): boolean {
+export function hasTerminalControl(value: string): boolean {
   for (const character of value) {
     const code = character.codePointAt(0)!;
     if (

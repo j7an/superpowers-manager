@@ -75,6 +75,7 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
 }
 
 import type { AdapterResult } from "./adapter-protocol.js";
+import { hasTerminalControl } from "./adapter-protocol.js";
 import { commitMatches } from "./status.js";
 
 export interface Refusal {
@@ -218,7 +219,7 @@ export function verifyInstalledFingerprint(
   if (typeof hints === "object" && hints !== null && !Array.isArray(hints)) {
     const key = installedCommit.length > 0 ? "mismatch" : "missing";
     const value = (hints as Record<string, unknown>)[key];
-    if (typeof value === "string") hint = value;
+    if (typeof value === "string" && !hasTerminalControl(value)) hint = value;
   }
 
   const stderr = [
