@@ -420,7 +420,7 @@ or "counterpart" claim is quoted inline in that item.
 {
   "shellOriginal": 16,
   "portOnly": 36,
-  "ports": { "tests/unit/lifecycle.test.js": 25 }
+  "ports": { "tests/unit/lifecycle.test.js": 26 }
 }
 ```
 
@@ -428,7 +428,7 @@ or "counterpart" claim is quoted inline in that item.
   `spw_require_no_legacy_state`, 2 rejection checks + 6 `grep -Fxq` checks for
   its `legacy`/`both` arm, 2 clean-state checks for `spw_report_legacy_state`,
   4 `grep -Fxq` checks for its `legacy`/`both` arm; sum: 2+2+6+2+4 = 16).
-- Port (`tests/unit/lifecycle.test.js`): 25 static `test(` call sites,
+- Port (`tests/unit/lifecycle.test.js`): 26 static `test(` call sites,
   carrying all 16 shell assertions (each of the four `void test(...)` cases
   covering `neither`/`manager`/`legacy`/`both` groups multiple shell
   assertions behind one `assert.deepEqual`, since the port returns a verdict

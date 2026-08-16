@@ -33,7 +33,7 @@ async function sandbox(t) {
 /** @param {number} depth */
 const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
-void test("Codex build source reader preserves its accepting profile", async (t) => {
+void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its accepting profile", async (t) => {
   const directory = await sandbox(t);
   const file = join(directory, "provenance.json");
   await writeFile(

@@ -2500,3 +2500,376 @@ void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", 
     "plugin marketplace list --json",
   ]);
 });
+
+/**
+ * A recording `codex` that reports a specific active manager version, written
+ * to an arbitrary path so a case can point SUPERPOWERS_CODEX at it. Close in
+ * shape to writeListingCodex (:202), but NOT a parameterised copy of it: this
+ * one takes a path and a version that helper hardcodes, and it also answers
+ * `plugin marketplace add` / `plugin add` with exit 0, which that helper
+ * rejects with exit 99. The install cases below drive a mutation, so the
+ * mutating commands have to succeed here; the listing-only cases must keep
+ * failing closed on them. Do not consolidate the two on the strength of the
+ * shared listing branches.
+ * @param {Sandbox} sandbox
+ * @param {string} toolPath
+ * @param {string} version empty string reports no active plugin
+ * @param {string} log
+ */
+function writeVersionCodex(sandbox, toolPath, version, log) {
+  const installed = version
+    ? `{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"${version}"}]}`
+    : '{"installed":[]}';
+  writeFileSync(
+    toolPath,
+    [
+      "#!/bin/sh",
+      `printf '%s\\n' "$*" >> ${shQuote(log)}`,
+      'case "$*" in',
+      `  'plugin list --json') printf '%s\\n' '${installed}' ;;`,
+      "  'plugin marketplace list --json')",
+      "    printf '%s\\n' '{\"marketplaces\":[]}' ;;",
+      "  'plugin marketplace add '*|'plugin add '*) exit 0 ;;",
+      "  *)",
+      "    printf 'unexpected codex command: %s\\n' \"$*\" >&2",
+      "    exit 99 ;;",
+      "esac",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  chmodSync(toolPath, 0o755);
+  writeFileSync(log, "", "utf8");
+  return toolPath;
+}
+
+/**
+ * Seed the installed plugin cache the fingerprint view reads.
+ * `installedRootForVersion` (src/codex-state.ts:43-50) builds
+ * `<searchRoot>/plugins/cache/<marketplace>/<plugin>/<version>`.
+ * @param {string} searchRoot
+ * @param {string} version
+ * @param {string} commit
+ */
+function seedInstalledCache(searchRoot, version, commit) {
+  const root = join(
+    searchRoot,
+    "plugins",
+    "cache",
+    "superpowers-manager",
+    "superpowers",
+    version,
+  );
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    join(root, ".superpowers-upstream.json"),
+    `${JSON.stringify({ commit })}\n`,
+    "utf8",
+  );
+  return root;
+}
+
+// The five CLI-ENV-* rows below were owned by tests/test_adapter_protocol.sh
+// until PR 11.5 slice 5. Each is an environment-resolution rule, not a
+// property of the transport, so each is asserted here against the real CLI.
+
+const CACHE_COMMIT = "d884ae0f2f6e5c4b3a29187e6d5c4b3a29187e6d";
+const OTHER_COMMIT = "1111111222222233333334444444555555566666";
+
+/**
+ * The selection half of a probe environment. Without it the run fails in
+ * computeEffectiveSelection, before any Codex call -- see the note above.
+ * @param {ReturnType<typeof createReleaseRepo>} upstream
+ */
+function localSelection(upstream) {
+  return {
+    SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+    SUPERPOWERS_REF: upstream.RAW_COMMIT,
+  };
+}
+
+void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex from PATH when it is unset", () => {
+  // Half one: the override is used. `codex` is removed from PATH entirely, so
+  // a run that reaches a listing at all can only have reached it through the
+  // override -- an assertion on the override's log alone would still pass if
+  // a PATH `codex` had served the call.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const log = join(sandbox.root, "override-codex.log");
+    const override = join(sandbox.bin, "baseline-override-codex");
+    writeVersionCodex(sandbox, override, "", log);
+    removeTool(sandbox, "codex");
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["probe", "--porcelain"], {
+      ...localSelection(upstream),
+      SUPERPOWERS_CODEX: override,
+    });
+    assert.equal(result.error, undefined);
+    assert.deepEqual(
+      readFileSync(log, "utf8").split("\n").filter(Boolean)[0],
+      "plugin list --json",
+    );
+  });
+
+  // Half two: with the override unset, the same run resolves `codex` from
+  // PATH. writeListingCodex installs its recorder AT `sandbox.bin/codex`, so
+  // a recorded call is proof of PATH resolution.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    writeListingCodex(sandbox);
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(
+      sandbox,
+      ["probe", "--porcelain"],
+      localSelection(upstream),
+    );
+    assert.equal(result.error, undefined);
+    assert.equal(listingCodexCalls(sandbox)[0], "plugin list --json");
+  });
+});
+
+void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_CODEX override", () => {
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const log = join(sandbox.root, "override-codex.log");
+    const override = join(sandbox.bin, "baseline-override-codex");
+    writeVersionCodex(sandbox, override, "", log);
+    // Again: no `codex` on PATH, so the mutation below cannot have been served
+    // by anything except the override.
+    removeTool(sandbox, "codex");
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["install"], {
+      SUPERPOWERS_CODEX: override,
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+    });
+    assert.equal(result.error, undefined);
+    const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
+    // The MUTATING call specifically. Listing calls alone would satisfy
+    // CLI-ENV-CODEX-LISTING-01 and say nothing about this row, whose contract
+    // names the mutation path (src/adapter.ts:577).
+    assert.ok(
+      calls.some((line) => line.startsWith("plugin marketplace add ")),
+      calls.join(" | "),
+    );
+  });
+});
+
+// The contract is "without explicit overrides", so the variable must be
+// ABSENT, not empty. `runCli` cannot express that -- tests/baseline/support.js
+// puts SUPERPOWERS_INSTALLED_SEARCH_ROOT into every environment it builds and
+// runCli passes that object to spawnSync as the complete env -- but
+// `runCliWithoutEnvironment` (tests/baseline/cli-parity.test.js:152) exists
+// for exactly this: it takes a list of names and deletes each from the
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`:1408`)
+// and CLI-ENV-PREPARE-01 (`:1454`) already use it for the same reason.
+//
+// An earlier draft of this plan asserted the default through the EMPTY STRING
+// instead, on the false premise that the harness could not unset. Empty is
+// kept below as its own half, because empty-equals-absent is a real property
+// of two lines and worth pinning -- but it is the secondary case, not the
+// contract's subject.
+void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search root the listing resolves codex from PATH and the installed fingerprint is read under $HOME/.codex", () => {
+  // Half one: the override is genuinely ABSENT from the environment.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const version = "6.1.1+manager.d884ae0";
+    // Both defaults in one run: the recorder is at `sandbox.bin/codex` (PATH),
+    // and the cache is seeded ONLY under $HOME/.codex. If either default were
+    // resolved differently the fingerprint below would be absent.
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      version,
+      sandbox.codexLog,
+    );
+    seedInstalledCache(join(sandbox.home, ".codex"), version, CACHE_COMMIT);
+    // Deliberately NOT seeded at sandbox.codex, the harness default: a run
+    // that read the harness value would find no cache and fail closed at
+    // src/adapter.ts:843-847 rather than reporting CACHE_COMMIT.
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCliWithoutEnvironment(
+      sandbox,
+      ["probe", "--porcelain"],
+      ["SUPERPOWERS_INSTALLED_SEARCH_ROOT"],
+      localSelection(upstream),
+    );
+    assert.equal(result.error, undefined);
+    assert.equal(listingCodexCalls(sandbox)[0], "plugin list --json");
+    assert.match(
+      result.stdout,
+      new RegExp(`^installed_commit=${CACHE_COMMIT}$`, "m"),
+    );
+  });
+
+  // Half two: the empty string reaches the same default. This is not a
+  // restatement of half one -- it asserts that two specific lines agree.
+  // validateEnvironment skips path checking when `value === ""`
+  // (tests/baseline/support.js:312), so the empty value survives to the
+  // manager; src/adapter.ts:827 tests `if (!searchRoot)`, which is true for
+  // absent and empty alike. Step 5's second mutation makes that equality an
+  // asserted property rather than a reading of the source.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const version = "6.1.1+manager.d884ae0";
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      version,
+      sandbox.codexLog,
+    );
+    seedInstalledCache(join(sandbox.home, ".codex"), version, CACHE_COMMIT);
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["probe", "--porcelain"], {
+      ...localSelection(upstream),
+      SUPERPOWERS_INSTALLED_SEARCH_ROOT: "",
+    });
+    assert.equal(result.error, undefined);
+    assert.match(
+      result.stdout,
+      new RegExp(`^installed_commit=${CACHE_COMMIT}$`, "m"),
+    );
+  });
+});
+
+void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT", () => {
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const activeVersion = "6.1.1+manager.d884ae0";
+    const staleVersion = "6.0.0+manager.aaaaaaa";
+    const searchRoot = join(sandbox.root, "custom-codex-root");
+    // TWO versions seeded under the same root with different commits, and the
+    // listing reports the active one. Asserting a single seeded version would
+    // pass on any implementation that read the root at all; this fails unless
+    // the exact per-version path is selected.
+    seedInstalledCache(searchRoot, activeVersion, CACHE_COMMIT);
+    seedInstalledCache(searchRoot, staleVersion, OTHER_COMMIT);
+    // $HOME/.codex is seeded with the WRONG commit for the same version, so a
+    // run that ignored the override and fell back to the default would report
+    // OTHER_COMMIT and fail here rather than passing silently.
+    seedInstalledCache(
+      join(sandbox.home, ".codex"),
+      activeVersion,
+      OTHER_COMMIT,
+    );
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      activeVersion,
+      sandbox.codexLog,
+    );
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["probe", "--porcelain"], {
+      ...localSelection(upstream),
+      SUPERPOWERS_INSTALLED_SEARCH_ROOT: searchRoot,
+    });
+    assert.equal(result.error, undefined);
+    assert.match(
+      result.stdout,
+      new RegExp(`^installed_commit=${CACHE_COMMIT}$`, "m"),
+    );
+  });
+});
+
+void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation", () => {
+  // Half one: a third value is refused, and the refusal happens BEFORE the
+  // mutation. src/adapter.ts:580-585 validates the enumeration three
+  // statements after requireCodex and before the marketplace lookup.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    writeListingCodex(sandbox);
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["install"], {
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+      SUPERPOWERS_INSTALL_REFRESH_MODE: "replace",
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /^error: unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: replace$/m,
+    );
+    // The refusal is fail-closed: nothing was mutated. This filters EVERY
+    // mutation verb the install path can reach -- `plugin marketplace add`
+    // (:619), `plugin marketplace remove` (:636), `plugin remove` (:665) and
+    // `plugin add` (:672) -- not just the first one. An earlier draft named
+    // `plugin marketplace add` alone, which is the last of the four an early
+    // mutation would reach: a defect that removed the plugin, or removed the
+    // marketplace, before the enumeration check would have left this
+    // assertion green while the comment above it claimed otherwise.
+    assert.deepEqual(
+      listingCodexCalls(sandbox).filter((line) =>
+        /^plugin (marketplace )?(add|remove) /.test(line),
+      ),
+      [],
+    );
+  });
+
+  // Half two: an accepted value gets PAST that point on an otherwise
+  // identical fixture. This is what makes half one specific to the value
+  // rather than to the fixture.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    writeListingCodex(sandbox);
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["install"], {
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+      SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
+    });
+    assert.equal(result.error, undefined);
+    assert.doesNotMatch(
+      result.stderr,
+      /unsupported SUPERPOWERS_INSTALL_REFRESH_MODE/,
+    );
+    assert.ok(
+      listingCodexCalls(sandbox).some((line) =>
+        line.startsWith("plugin marketplace add "),
+      ),
+      listingCodexCalls(sandbox).join(" | "),
+    );
+  });
+
+  // Half three: the OTHER accepted value. The contract names a closed
+  // enumeration of two, and halves one and two together only establish that
+  // `add-only` is in it and `replace` is not -- an implementation that
+  // rejected `remove-add` would leave both of them green. The retiring
+  // witness (tests/test_adapter_protocol.sh:301-311) drove `remove-add`
+  // explicitly and asserted the removal and the addition both reached Codex;
+  // dropping that half here would have narrowed the contract without saying
+  // so.
+  //
+  // This half needs a fixture the other two do not. writeListingCodex exits
+  // 99 on `plugin marketplace add`, so the run fails closed at
+  // src/adapter.ts:626 and never reaches the refresh-mode branch at :665.
+  // writeVersionCodex accepts the marketplace add, so the run gets as far as
+  // the plugin mutations. `plugin remove` is deliberately NOT accepted by it
+  // and does not need to be: src/adapter.ts:666-671 issues that command
+  // without checking its status, so the run continues to `plugin add`
+  // regardless -- and the stub records every invocation before dispatching on
+  // it, so the attempt is observable either way.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      "",
+      sandbox.codexLog,
+    );
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCli(sandbox, ["install"], {
+      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+      SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add",
+    });
+    assert.equal(result.error, undefined);
+    assert.doesNotMatch(
+      result.stderr,
+      /unsupported SUPERPOWERS_INSTALL_REFRESH_MODE/,
+    );
+    const calls = listingCodexCalls(sandbox);
+    const removedAt = calls.findIndex((line) =>
+      line.startsWith("plugin remove "),
+    );
+    const addedAt = calls.findIndex((line) => line.startsWith("plugin add "));
+    // Presence AND order. `remove-add` is the mode's whole meaning: asserting
+    // only that both commands appear would pass on an implementation that
+    // added first and removed afterwards, which uninstalls what it just
+    // installed.
+    assert.notEqual(removedAt, -1, calls.join(" | "));
+    assert.notEqual(addedAt, -1, calls.join(" | "));
+    assert.ok(removedAt < addedAt, calls.join(" | "));
+  });
+});
