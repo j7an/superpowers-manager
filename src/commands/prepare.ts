@@ -20,6 +20,7 @@ import { manifestVersionForRef } from "../upstream-version.js";
 import { fetchExactCommit, gitSafeSource } from "../upstream.js";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
+import { replayEnvelope } from "./probe.js";
 
 // scripts/prepare:64-67, via spw_require_upstream_path. Order is the shell's;
 // the first miss wins.
@@ -195,28 +196,6 @@ type PrepareOutcome =
 interface PrepareRun {
   readonly outcome: PrepareOutcome;
   readonly cleanupWarning: string | null;
-}
-
-// Identical to src/commands/probe.ts's replayEnvelope, and identical for the
-// same reason: scripts/core/validate-adapter-response.py:235-272 replayed every
-// response's messages whether or not that response failed.
-//
-// Interpolating error.message and each hint is the sanctioned form: none of
-// src/adapter.ts's fail() sites interpolates a caught error's message, so the
-// callee owns every failure reachable on this path.
-//
-// This WRITES, so it must never be called from inside gatherPrepare.
-function replayEnvelope(envelope: AdapterEnvelope, ctx: CommandContext): void {
-  for (const message of envelope.messages) {
-    const stream = message.channel === "stdout" ? ctx.stdout : ctx.stderr;
-    stream.write(`${message.text}\n`);
-  }
-  if (!envelope.ok) {
-    ctx.stderr.write(`error: ${envelope.error.message}\n`);
-    for (const hint of envelope.error.hints) {
-      ctx.stderr.write(`hint: ${hint}\n`);
-    }
-  }
 }
 
 // scripts/prepare:107-113, ported verbatim per the parent spec's D1: no
