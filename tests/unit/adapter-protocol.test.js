@@ -1,7 +1,17 @@
 // @ts-check
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { capture } from "./helpers/command-harness.js";
 
@@ -315,19 +325,33 @@ function assertRefused(run, out, offending, member) {
 //                       -> dropped at the consumer by verifyInstalledFingerprint
 //                          (src/lifecycle.ts), per D0c
 //
-// The subtests below are one per mechanism, and all three are required: a
-// witness naming only writeAdapterFailure would stay green while a future
-// change dropped either of the other two.
+// The first three subtests below are one per mechanism, and all three are
+// required: a witness naming only writeAdapterFailure would stay green while a
+// future change dropped either of the other two. ADAPTER-TERMINAL-01 carries a
+// FOURTH, which is not a mechanism but the operator-visible BOUNDARY -- the
+// real CLI, spawned -- because no in-process witness can see whether a
+// traceback reaches the terminal.
 //
 // Escapes are written as \u sequences so this source carries no invisible
-// bytes: C0 U+0001, DEL U+007F, C1 U+009F.
+// bytes: C0 U+0001 and U+001B, DEL U+007F, C1 U+009B and U+009F.
+//
+// Each range is exercised at a BOUNDARY and in its INTERIOR, because a
+// boundary-only corpus cannot distinguish the range from its endpoints.
+// hasTerminalControl is `code < 0x20 || (code >= 0x7f && code <= 0x9f) || ...`
+// (src/adapter-protocol.ts:200-205): U+0001 is the bottom of C0, so narrowing
+// to `code < 0x02` keeps it green while admitting U+0002-U+001F including ESC;
+// U+007F and U+009F are the two ends of the DEL/C1 clause, so narrowing to
+// `code === 0x7f || code === 0x9f` keeps both green while admitting
+// U+0080-U+009E including CSI. U+001B and U+009B are the interior values that
+// close both holes, and they are the two the retiring Python witness used
+// (tests/test_adapter_protocol.py:473-528 at fd94d7d).
 
 void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused", async (t) => {
-  // One subtest per MECHANISM. Step 1b appends two more to this body, and
-  // Step 6 mutates each mechanism separately; a subtest is what makes those
-  // rounds separately reportable. See the note below this block.
+  // One subtest per MECHANISM, then one for the CLI boundary. Each is mutated
+  // separately during verification; a subtest is what makes those rounds
+  // separately reportable. See the note above this block.
   await t.test("refused at writeAdapterFailure", () => {
-    for (const control of ["\u0001", "\u007f", "\u009f"]) {
+    for (const control of ["\u0001", "\u001b", "\u007f", "\u009b", "\u009f"]) {
       for (const field of ["code", "message", "hint"]) {
         const { out, ctx } = recordingCtx();
         const envelope = failureResult(
@@ -361,13 +385,15 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
     // printable escape, so hasTerminalControl can never see one downstream.
     //
     // The expected text is written EXACTLY, not matched by pattern. Each of
-    // these three code points is <= 0xff, so pythonUnicodeEscape takes the
+    // these five code points is <= 0xff, so pythonUnicodeEscape takes the
     // `\x%02x` branch (src/adapter-protocol.ts:120); a pattern like /\\x/ would
     // also pass on an implementation that escaped only the first character of
     // a longer run.
     for (const [control, escaped] of [
       ["\u0001", "boom\\x01"],
+      ["\u001b", "boom\\x1b"],
       ["\u007f", "boom\\x7f"],
+      ["\u009b", "boom\\x9b"],
       ["\u009f", "boom\\x9f"],
     ]) {
       const log = new AdapterMessageLog();
@@ -383,7 +409,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
   await t.test("byte ingress via appendBytes", () => {
     // The same member through the OTHER ingress -- the one the product uses.
     // appendBytes decodes before it escapes, so it has a second failure mode
-    // appendText does not have, and these four rows separate them.
+    // appendText does not have, and these seven rows separate them.
     //
     // Note the two shapes. A byte that DECODES to a code point reaches
     // pythonUnicodeEscape's `\x%02x` branch (:120) and yields ONE backslash. A
@@ -397,10 +423,29 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
     // Every expected value here was confirmed against the built module rather
     // than derived by hand; re-derive rather than adjust if one disagrees.
     for (const [label, bytes, escaped] of [
-      ["C0", [0x62, 0x6f, 0x6f, 0x6d, 0x01], "boom\\x01"],
+      ["C0 boundary", [0x62, 0x6f, 0x6f, 0x6d, 0x01], "boom\\x01"],
+      ["C0 interior", [0x62, 0x6f, 0x6f, 0x6d, 0x1b], "boom\\x1b"],
       ["DEL", [0x62, 0x6f, 0x6f, 0x6d, 0x7f], "boom\\x7f"],
-      ["C1 as valid UTF-8", [0x62, 0x6f, 0x6f, 0x6d, 0xc2, 0x9f], "boom\\x9f"],
-      ["C1 as a lone byte", [0x62, 0x6f, 0x6f, 0x6d, 0x9f], "boom\\\\x9f"],
+      [
+        "C1 boundary as valid UTF-8",
+        [0x62, 0x6f, 0x6f, 0x6d, 0xc2, 0x9f],
+        "boom\\x9f",
+      ],
+      [
+        "C1 boundary as a lone byte",
+        [0x62, 0x6f, 0x6f, 0x6d, 0x9f],
+        "boom\\\\x9f",
+      ],
+      [
+        "C1 interior as valid UTF-8",
+        [0x62, 0x6f, 0x6f, 0x6d, 0xc2, 0x9b],
+        "boom\\x9b",
+      ],
+      [
+        "C1 interior as a lone byte",
+        [0x62, 0x6f, 0x6f, 0x6d, 0x9b],
+        "boom\\\\x9b",
+      ],
     ]) {
       const log = new AdapterMessageLog();
       log.appendBytes(
@@ -418,28 +463,137 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
       );
     }
   });
+
+  // The operator-visible boundary, driven through the REAL CLI. The three
+  // subtests above all stop at a module edge, and every one of them stays
+  // green if src/cli.ts:353-361 is changed to emit `cause.stack` instead of
+  // `oneLine(cause)` -- so the "without leaking a traceback" clause both
+  // behavior IDs carry needs a subprocess to be non-vacuous at all. The
+  // clause is witnessed HERE for both IDs; the note in ADAPTER-SURROGATE-01
+  // records why a surrogate cannot take this route.
+  //
+  // The route is constructible end to end with no product code bent to reach
+  // it. SUPERPOWERS_CODEX may name any existing executable (src/cli.ts:253-258
+  // accepts a path outright), a POSIX filename may carry any byte but NUL and
+  // slash, and src/adapter.ts:806-809 interpolates that path into an
+  // adapter-authored failure message when `codex plugin list --json` exits
+  // non-zero. probe replays the resulting envelope AFTER its try/catch has
+  // resolved (the loop below runProbe's catch), so the throw from
+  // assertFailureWritable escapes runProbe, escapes the handler, and lands in
+  // src/cli.ts's catch -- the only place an operator ever sees it.
+  await t.test("refused at the CLI without a traceback", () => {
+    const esc = String.fromCharCode(0x1b);
+    const base = mkdtempSync(join(tmpdir(), "spw-adapter-terminal-"));
+    try {
+      const home = join(base, "home");
+      const temp = join(base, "tmp");
+      const codexDir = join(base, `co${esc}dex`);
+      for (const dir of [home, temp, codexDir]) {
+        mkdirSync(dir, { recursive: true });
+      }
+      const codexBin = join(codexDir, "codex");
+      // Writes a context line as well as failing: listingCommand appends the
+      // child's stderr to the envelope's message records
+      // (src/adapter.ts:238-246). That record is what the hoist withholds, so
+      // its absence below is the end-to-end half of the atomicity contract.
+      writeFileSync(
+        codexBin,
+        "#!/bin/sh\necho codex-context-line >&2\nexit 1\n",
+        "utf8",
+      );
+      chmodSync(codexBin, 0o755);
+
+      const run = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(
+            new URL("../../bin/superpowers-manager.js", import.meta.url),
+          ),
+          "probe",
+        ],
+        {
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024,
+          env: {
+            HOME: home,
+            TMPDIR: temp,
+            // git must RESOLVE, because probe's preflight requires it
+            // (src/cli.ts:115). Nothing here reaches a git PROCESS -- a
+            // 40-hex SUPERPOWERS_REF is a raw-commit resolution
+            // (src/upstream.ts:160-162) -- so the case stays hermetic, and
+            // probe is read-only besides.
+            PATH: process.env.PATH ?? "",
+            SUPERPOWERS_CONFIG_DIR: join(
+              home,
+              ".config",
+              "superpowers-manager",
+            ),
+            SUPERPOWERS_CODEX: codexBin,
+            SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(home, ".codex"),
+            SUPERPOWERS_REF: "a".repeat(40),
+            SUPERPOWERS_UPSTREAM_URL: join(base, "upstream"),
+          },
+        },
+      );
+
+      assert.equal(run.status, 1);
+      // EXACTLY empty, not merely free of the offending byte. replayEnvelope
+      // writes stdout message records too, and probe's own report follows the
+      // replay, so a guard that fired late would leave a prefix here.
+      assert.equal(run.stdout, "");
+      // EXACTLY the guard's own hand-written text and nothing else: no
+      // context line, no hint, no second line of any kind.
+      assert.equal(
+        run.stderr,
+        "error: adapter failure message contains a terminal control character\n",
+      );
+      for (const stream of [run.stdout, run.stderr]) {
+        assert.equal(stream.includes(esc), false);
+        assert.equal(stream.includes("codex-context-line"), false);
+        // Node stack frames, and the traceback header the retiring Python
+        // witness forbade (tests/test_adapter_protocol.py at fd94d7d).
+        assert.equal(stream.includes("    at "), false);
+        assert.equal(stream.includes("Traceback"), false);
+      }
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
 });
 
 void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback", async (t) => {
   await t.test("refused at writeAdapterFailure", () => {
-    for (const field of ["code", "message", "hint"]) {
-      const { out, ctx } = recordingCtx();
-      const envelope = failureResult(
-        "install",
-        field === "code" ? "install-failed\ud800" : "install-failed",
-        field === "message" ? "boom\ud800" : "boom",
-        field === "hint" ? ["try again\ud800"] : ["try again"],
-        [],
-      ).envelope;
-      const member = field === "hint" ? "hint[0]" : field;
-      assertRefused(
-        () => writeAdapterFailure(ctx, envelope),
-        out,
-        "\ud800",
-        member,
-      );
-      // "without leaking a traceback": no stack frame text reaches the operator.
-      assert.equal(out.stderr().includes("    at "), false, member);
+    // BOTH halves of the range, not just the high one. hasTerminalControl
+    // covers 0xd800-0xdfff (src/adapter-protocol.ts:203); a corpus of high
+    // surrogates alone stays green under a narrowing to `code <= 0xdbff`,
+    // which admits every low surrogate. U+DC9B is the value the retiring
+    // Python witness drove through code, message, hints, the message log,
+    // and the verification hint alike (tests/test_adapter_protocol.py:544
+    // at fd94d7d).
+    for (const surrogate of ["\ud800", "\udc9b"]) {
+      for (const field of ["code", "message", "hint"]) {
+        const { out, ctx } = recordingCtx();
+        const envelope = failureResult(
+          "install",
+          field === "code" ? `install-failed${surrogate}` : "install-failed",
+          field === "message" ? `boom${surrogate}` : "boom",
+          field === "hint" ? [`try again${surrogate}`] : ["try again"],
+          [],
+        ).envelope;
+        const member = field === "hint" ? "hint[0]" : field;
+        // assertRefused already pins BOTH streams to exactly empty, which
+        // is why no `includes("    at ")` assertion appears here: after an
+        // exact-empty assertion it would be trivially true and would prove
+        // nothing. The "without leaking a traceback" clause is witnessed
+        // by the CLI subtest in ADAPTER-TERMINAL-01, at the only boundary
+        // where a traceback could become visible to an operator.
+        assertRefused(
+          () => writeAdapterFailure(ctx, envelope),
+          out,
+          surrogate,
+          member,
+        );
+      }
     }
   });
 
@@ -448,33 +602,55 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
     // implementation that let one through would fail at the write rather than
     // at the guard -- which is exactly the traceback this contract forbids.
     //
-    // U+D800 is > 0xff and <= 0xffff, so it takes the `\u%04x` branch
-    // (src/adapter-protocol.ts:121-122): the stored text is the six literal
-    // characters backslash-u-d-8-0-0, and carries no surrogate at all.
-    const log = new AdapterMessageLog();
-    log.appendText("stderr", "boom\ud800");
-    assert.deepStrictEqual(log.snapshot(), [
-      { channel: "stderr", text: "boom\\ud800" },
-    ]);
+    // Both surrogates are > 0xff and <= 0xffff, so each takes the
+    // `\u%04x` branch (src/adapter-protocol.ts:121-122): the stored text
+    // is the six literal characters backslash-u-<four hex digits>, and
+    // carries no surrogate at all. Both expected values were confirmed
+    // against the built module rather than derived by hand.
+    for (const [surrogate, escaped] of [
+      ["\ud800", "boom\\ud800"],
+      ["\udc9b", "boom\\udc9b"],
+    ]) {
+      const log = new AdapterMessageLog();
+      log.appendText("stderr", `boom${surrogate}`);
+      assert.deepStrictEqual(
+        log.snapshot(),
+        [{ channel: "stderr", text: escaped }],
+        escaped,
+      );
+    }
   });
 
   await t.test("byte ingress via appendBytes", () => {
     // The byte ingress cannot produce a surrogate AT ALL, and that -- not an
     // escape -- is what this half asserts. decodeBackslashReplace clamps the
-    // second byte after 0xed to 0x9f (src/adapter-protocol.ts:78), so ed a0 80,
-    // the UTF-8 encoding of U+D800, fails validation and each of its three
-    // bytes is byte-escaped on its own. The stored text carries three
-    // double-backslash escapes and no surrogate anywhere, which is why a lone
-    // surrogate can never reach the encoder on the path the product uses.
+    // second byte after 0xed to 0x9f (src/adapter-protocol.ts:78), so the
+    // UTF-8 encoding of ANY surrogate fails validation and each of its three
+    // bytes is byte-escaped on its own -- ed a0 80 for the high half, ed b2 9b
+    // for the low one. Both rows store three double-backslash escapes and no
+    // surrogate anywhere, which is why a lone surrogate can never reach the
+    // encoder on the path the product uses. It is also why no surrogate is
+    // constructible on the end-to-end CLI route: a lone surrogate cannot
+    // survive a POSIX filename (Node decodes an undecodable byte to U+FFFD)
+    // or an environment variable, and this ingress escapes it before it can
+    // reach a failure string. The CLI witness in ADAPTER-TERMINAL-01 uses a
+    // control character for exactly that reason.
     //
     // Confirmed against the built module, not derived by hand.
-    const log = new AdapterMessageLog();
-    log.appendBytes(
-      "stderr",
-      Uint8Array.from([0x62, 0x6f, 0x6f, 0x6d, 0xed, 0xa0, 0x80]),
-    );
-    assert.deepStrictEqual(log.snapshot(), [
-      { channel: "stderr", text: "boom\\\\xed\\\\xa0\\\\x80" },
-    ]);
+    for (const [bytes, escaped] of [
+      [[0x62, 0x6f, 0x6f, 0x6d, 0xed, 0xa0, 0x80], "boom\\\\xed\\\\xa0\\\\x80"],
+      [[0x62, 0x6f, 0x6f, 0x6d, 0xed, 0xb2, 0x9b], "boom\\\\xed\\\\xb2\\\\x9b"],
+    ]) {
+      const log = new AdapterMessageLog();
+      log.appendBytes(
+        "stderr",
+        Uint8Array.from(/** @type {number[]} */ (bytes)),
+      );
+      assert.deepStrictEqual(
+        log.snapshot(),
+        [{ channel: "stderr", text: escaped }],
+        /** @type {string} */ (escaped),
+      );
+    }
   });
 });

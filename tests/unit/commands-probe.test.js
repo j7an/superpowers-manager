@@ -247,8 +247,17 @@ void test("replay emits the error line then one hint line per hint", () => {
 
   // The hoist: a failure that will be refused writes NOTHING, not even the
   // messages that precede the error line. Without assertFailureWritable above
-  // the message loop, `context` would already be on stderr when the guard
-  // fired on the hint.
+  // the message loop, both context lines would already be on their streams
+  // when the guard fired on the hint.
+  //
+  // The poisoned envelope carries a record on EACH channel, and that is the
+  // point. replayEnvelope routes per record (`message.channel === "stdout" ?
+  // ctx.stdout : ctx.stderr`), so a stderr-only envelope makes the
+  // `badOut.text() === ""` assertion true by construction: stdout was never
+  // going to receive anything, and a hoist split so that stdout messages
+  // wrote BEFORE the guard and stderr messages after would stay green. With
+  // both channels populated, each exact-empty assertion below constrains its
+  // own stream.
   const badOut = capture();
   const badErr = capture();
   assert.throws(
@@ -256,7 +265,10 @@ void test("replay emits the error line then one hint line per hint", () => {
       replayEnvelope(
         envelopeWith({
           ok: false,
-          messages: [{ channel: "stderr", text: "context" }],
+          messages: [
+            { channel: "stdout", text: "stdout context" },
+            { channel: "stderr", text: "stderr context" },
+          ],
           result: null,
           error: {
             code: "inspect-failed",

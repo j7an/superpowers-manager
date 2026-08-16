@@ -231,16 +231,35 @@ void test("ADAPTER-TERMINAL-01 verifyInstalledFingerprint omits a hint carrying 
 });
 
 void test("ADAPTER-SURROGATE-01 verifyInstalledFingerprint omits a hint carrying a lone surrogate", () => {
-  const lone = String.fromCharCode(0xd800);
-  const verdict = verifyInstalledFingerprint(
-    "f".repeat(40),
-    ok({ verification_hints: { missing: `codex said ${lone}` } }),
-    ok({ view: "fingerprint", fingerprint: null }),
-  );
-  assert.equal(verdict.ok, false);
-  assert.deepEqual(verdict.stderr, [
-    "error: installed manager fingerprint is not detectable after install.",
-  ]);
+  // BOTH halves of the surrogate range, in one test() rather than two:
+  // tests/migration-inventory/codex-state-units.md pins this file at 28 static
+  // `test(` call sites, so the second value is a row here rather than a case
+  // of its own.
+  //
+  // hasTerminalControl covers 0xd800-0xdfff (src/adapter-protocol.ts:203).
+  // U+D800 alone leaves that clause under-constrained: narrowing it to
+  // `code <= 0xdbff` keeps a high-surrogate row green while admitting every
+  // low surrogate. 0xdc9b is the value the retiring Python witness drove
+  // through verification_hints.missing (tests/test_adapter_protocol.py:544 at
+  // fd94d7d).
+  //
+  // String.fromCharCode, never an inline escape: an escape typed into an
+  // editing tool arrives in the file as the raw byte it denotes, and a lone
+  // surrogate is not representable as a byte at all.
+  for (const code of [0xd800, 0xdc9b]) {
+    const lone = String.fromCharCode(code);
+    const verdict = verifyInstalledFingerprint(
+      "f".repeat(40),
+      ok({ verification_hints: { missing: `codex said ${lone}` } }),
+      ok({ view: "fingerprint", fingerprint: null }),
+    );
+    assert.equal(verdict.ok, false, code.toString(16));
+    assert.deepEqual(
+      verdict.stderr,
+      ["error: installed manager fingerprint is not detectable after install."],
+      code.toString(16),
+    );
+  }
 });
 
 void test("verifyUninstalledResources accepts both resources absent", () => {
