@@ -845,7 +845,19 @@ async function reAddFailureRun(t) {
   );
   const result = await runAdapter(["install", "--package-root", packageRoot], {
     root: PACKAGE_ROOT,
-    env: { SUPERPOWERS_CODEX: stub },
+    env: {
+      SUPERPOWERS_CODEX: stub,
+      // Pinned so the fixture does not inherit this variable from the
+      // executor's shell: src/adapter.ts:578-585 enumerates only "add-only"
+      // and "remove-add", and any other inherited value fails runInstall's
+      // enumeration check before the failure this fixture drives is reached.
+      // The value itself is not load-bearing -- the remove-then-add the stub
+      // exercises is the marketplace branch at src/adapter.ts:631, which is
+      // gated on pathsEqual alone and reads no refresh mode. "add-only" is
+      // the default (src/adapter.ts:578) and so the value these witnesses
+      // were written against.
+      SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
+    },
   });
   return { result, stub, packageRoot, registeredRoot };
 }
