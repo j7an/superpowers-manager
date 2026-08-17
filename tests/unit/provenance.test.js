@@ -50,6 +50,40 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
     await writeFile(file, text);
     await assert.rejects(readCodexBuildSource(file), SafetyError, text);
   }
+  // Bytes: the matrix says NO byte cap, and until PR-3 the only assertion of
+  // that was tests/test_adapter_protocol.sh:853-854 (a 1 MiB + 1 payload). Ported
+  // here so the cell keeps a witness after the driver is deleted. Mirrors
+  // tests/unit/codex-state.test.js:47 for the sibling reader.
+  await writeFile(
+    file,
+    `{"padding":"${"x".repeat(1_048_577)}","source":"https://example.invalid/repo"}`,
+  );
+  assert.equal(
+    await readCodexBuildSource(file),
+    "https://example.invalid/repo",
+  );
+  // Nesting: the cell is "no explicit depth cap; recursion failure rejects".
+  // Only the first clause is pinned here. The second is a property of the V8
+  // stack rather than of this source, so any fixed-depth rejection assertion
+  // would encode the very cap this cell says does not exist: measured, the
+  // same unmodified reader rejects at depth 20000 under --stack-size=984 and
+  // accepts under --stack-size=8192, so such an assertion would report RED on
+  // a correct product under one node invocation and GREEN under another.
+  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (src/provenance.ts:36-39)
+  // sets no maxDepth, and nested(255) reaches container depth 256, which a
+  // `maxDepth: 256` mutant still ACCEPTS -- strict-json.ts:158 rejects only on
+  // `depth > maxDepth`. nested(256) reaches 257 and is the first depth that
+  // mutant crosses. The pair is already pinned against the strict profile,
+  // which does cap at 256, by PROV-READER-STRICT-01's nested(255)/nested(256)
+  // assertions in this file.
+  await writeFile(
+    file,
+    `{"padding":${nested(256)},"source":"https://example.invalid/repo"}`,
+  );
+  assert.equal(
+    await readCodexBuildSource(file),
+    "https://example.invalid/repo",
+  );
 });
 
 void test("PROV-READER-STRICT-01 reads fields under the strict provenance profile", async (t) => {

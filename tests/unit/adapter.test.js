@@ -663,22 +663,30 @@ void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-he
 });
 
 void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint", async (t) => {
-  // 10 hex characters: valid hex, wrong length. codexMetadataCommit rejects
-  // it, manifestShortSha finds no plugin.json, installedCommitFromRoot
-  // returns "", and the view fails closed rather than reporting the value.
-  const sandbox = await codexSandbox(t);
-  const version = "6.1.1+manager.d884ae0";
-  const activeRoot = await seedInstalledCommit(sandbox, version, "d884ae0123");
-  const result = await runAdapter(["inspect", "--view", "fingerprint"], {
-    root: PACKAGE_ROOT,
-    env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
-  });
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  assert.equal(result.envelope.error?.code, "inspect-failed");
-  assert.equal(
-    result.envelope.error?.message,
-    `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
-  );
+  // Two lengths, both valid hex. `d884ae0123` is ten characters; `123456` is
+  // six -- one below the seven-character bound, which is what makes the
+  // rejection specific to the bound rather than to "some wrong length". The
+  // retiring tests/test_adapter_protocol.py:817 drove the six-character case
+  // and this witness did not; dropping it would have retired a strictly
+  // stronger input set. For both: codexMetadataCommit rejects the value,
+  // manifestShortSha finds no plugin.json, installedCommitFromRoot returns "",
+  // and the view fails closed rather than reporting the value.
+  for (const commit of ["d884ae0123", "123456"]) {
+    const sandbox = await codexSandbox(t);
+    const version = "6.1.1+manager.d884ae0";
+    const activeRoot = await seedInstalledCommit(sandbox, version, commit);
+    const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+      root: PACKAGE_ROOT,
+      env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
+    });
+    assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+    assert.equal(result.envelope.error?.code, "inspect-failed");
+    assert.equal(
+      result.envelope.error?.message,
+      `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
+      commit,
+    );
+  }
 });
 
 // FOUR independent booleans, not two. src/adapter.ts:939-940 computes
