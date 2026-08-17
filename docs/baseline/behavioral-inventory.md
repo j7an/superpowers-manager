@@ -162,7 +162,6 @@ promised numeric nesting boundary.
 | Codex installed/listing membership parser | Accept | No explicit depth cap; recursion failure exits 2 | No byte cap | Last key wins | Named top-level array; every item must be an object with a non-empty string target field. Emits only `present`/`absent`; invalid input exits 2 with no result. |
 | Codex marketplace-root parser | Accept | No explicit depth cap; recursion failure exits 2 | No byte cap | Last key wins | Every item needs a non-empty string name; only the matching item needs a non-empty string root. Invalid input exits 2 with no result. |
 | Codex active-version parser | Reject | No explicit depth cap; recursion failure exits 2 | No byte cap | Last key wins | At most one matching plugin; version is a safe non-empty cache-path component without terminal controls. Invalid input exits 2; verified absence is empty exit 0. |
-| Adapter-response reader | Reject | Maximum 64 containers; 65 rejects | 1,048,576 bytes inclusive | Reject recursively | Exact protocol-v1 envelope and per-operation schema. Malformed input exits validator 2, writes no result, and replays nothing; the public adapter boundary normalizes nonzero to operational failure. |
 
 The reader behaviors above are assigned as follows.
 
@@ -189,34 +188,20 @@ The reader behaviors above are assigned as follows.
 
 ## Adapter protocol
 
-[`docs/adapter-protocol.md`](../adapter-protocol.md) is the normative internal
-protocol-v1 envelope and operation-schema definition. This inventory links to
-that contract rather than restating or redefining its six-key envelope.
+[`docs/adapter-protocol.md`](../adapter-protocol.md) is the normative
+in-process adapter result contract. This inventory links to that contract
+rather than restating or redefining it.
 
 | Behavior ID | Contract |
 |---|---|
-| `ADAPTER-PROTOCOL-01` | Successful `build` and `uninstall` protocol-1 responses accept only their exact empty result objects. Inspect and install results have independent contracts below. |
-| `ADAPTER-ENVELOPE-01` | Empty, malformed, non-object, and extra-key response input is rejected before replay. |
-| `ADAPTER-ENVELOPE-KEYS-01` | A response missing a required protocol-v1 envelope key is rejected before result creation or message replay. |
-| `ADAPTER-ENVELOPE-TYPES-01` | Protocol, operation, Boolean, message, result-view, and invocation-view mismatches are rejected before replay. |
 | `ADAPTER-FINGERPRINT-01` | Fingerprint inspection accepts null and exact 7- or 40-hex fingerprints in its exact result shape. |
 | `ADAPTER-FINGERPRINT-REJECT-01` | Fingerprint inspection rejects a non-null fingerprint whose length is neither 7 nor 40 hexadecimal characters. |
 | `ADAPTER-UPDATE-CONTROL-01` | Update-control inspection accepts only `managed` or `unsupported` in its exact result shape. |
 | `ADAPTER-OWNERSHIP-01` | Ownership inspection accepts all internally consistent manager/legacy resource Boolean combinations and derived identity states. |
-| `ADAPTER-OWNERSHIP-REJECT-01` | Ownership inspection rejects old, malformed, wrong-type, and internally inconsistent result shapes. |
 | `ADAPTER-INSTALL-RESULT-01` | Install success accepts exact `verification_hints` carrying `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only` — two of the four combinations the retired response schema admitted. Narrowed 2026-08-15; authorized by the repository owner in the pull request thread as a baseline contract change. |
-| `ADAPTER-INSTALL-REJECT-01` | Install results reject unknown hint keys and empty hint strings. |
-| `ADAPTER-STATUS-01` | `ok`, adapter exit status, `result`, and `error` obey the success/failure cross-rules. |
-| `ADAPTER-REPLAY-01` | Only a completely validated response replays messages, in array order and to each declared stream. |
 | `ADAPTER-CONTROLLED-FAILURE-01` | A valid controlled failure replays validated messages, error, and hints, yields no result, and returns validator status 1. |
 | `ADAPTER-TERMINAL-01` | Terminal-facing protocol strings reject C0, DEL, and C1 controls. |
-| `ADAPTER-TERMINAL-SHAPE-01` | Empty replayed message text is rejected. |
 | `ADAPTER-SURROGATE-01` | Terminal-facing protocol strings reject surrogate code points without leaking a traceback. |
-| `ADAPTER-READER-BYTES-01` | The response file limit is inclusive at exactly 1,048,576 bytes and rejects the next byte before replay. |
-| `ADAPTER-READER-UTF8-01` | Adapter response size is counted in UTF-8 bytes, not Unicode code points. |
-| `ADAPTER-READER-CONSTANTS-01` | Adapter response JSON rejects all non-standard numeric constants before replay. |
-| `ADAPTER-READER-DEPTH-01` | Adapter response JSON accepts exactly 64 nested containers and rejects 65 before replay. |
-| `ADAPTER-READER-DUPLICATES-01` | Adapter response JSON rejects duplicate keys recursively before replay. |
 
 ## Generated tree and hook forms
 

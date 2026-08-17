@@ -331,7 +331,6 @@ src/                                      # in-process TypeScript runtime (track
   commands/                               # lifecycle and selection command handlers
   adapter.ts                              # Codex integration
 tests/                                    # hermetic suite and manual Codex probe (tracked)
-  fixtures/protocol/                       # relocated protocol fixtures; removed in slice 5
   migration-inventory/                     # frozen historical evidence
 dist/                                     # generated ESM build tree (gitignored)
 ```

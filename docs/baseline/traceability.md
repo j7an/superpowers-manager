@@ -18,17 +18,17 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-USAGE-01` | `tests/baseline/cli-parity.test.js::CLI-USAGE-01 invalid command and stray flag fail with exit 2` | — |
 | `CLI-PREFLIGHT-01` | `tests/baseline/cli-parity.test.js::CLI-PREFLIGHT-01 missing tools fail before dispatch` | — |
 | `CLI-ENV-CODEX-PREFLIGHT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight` | — |
-| `CLI-ENV-CODEX-LISTING-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
-| `CLI-ENV-CODEX-MUTATION-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-MUTATION-01 install mutation uses Codex override` | — |
+| `CLI-ENV-CODEX-LISTING-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex from PATH when it is unset` | — |
+| `CLI-ENV-CODEX-MUTATION-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_CODEX override` | — |
 | `CLI-ENV-CACHE-DIR-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
 | `CLI-ENV-PLUGIN-ROOT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
 | `CLI-ENV-MANIFEST-TEMPLATE-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rejection` | — |
 | `CLI-ENV-VALIDATOR-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
-| `CLI-ENV-INSTALLED-ROOT-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
-| `CLI-ENV-REFRESH-MODE-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-REFRESH-MODE-01 install refresh defaults and validation` | — |
+| `CLI-ENV-INSTALLED-ROOT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT` | — |
+| `CLI-ENV-REFRESH-MODE-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation` | — |
 | `CLI-ENV-PASSTHROUGH-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-01 ten SUPERPOWERS variables pass through` | — |
 | `CLI-ENV-PREPARE-PATHS-01` | `tests/baseline/prepare.test.js::CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd` | — |
-| `CLI-ENV-INSTALLED-DEFAULTS-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: CLI-ENV-CODEX-LISTING-01 fingerprint listing uses override and default command` | — |
+| `CLI-ENV-INSTALLED-DEFAULTS-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search root the listing resolves codex from PATH and the installed fingerprint is read under $HOME/.codex` | — |
 | `SEL-LOCATION-01` | `tests/baseline/selection-location.test.js::SEL-LOCATION-01 selection location chain and fail-closed bases` | — |
 | `SEL-PRECEDENCE-REF-01` | `tests/baseline/selection-location.test.js::SEL-PRECEDENCE-REF-01 complete ref precedence` | — |
 | `SEL-PRECEDENCE-SOURCE-01` | `tests/baseline/cli-parity.test.js::SEL-PRECEDENCE-SOURCE-01 source precedence is independent` | `tests/fixtures/baseline/selection/track-latest.json` |
@@ -59,7 +59,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `PROV-READER-STRICT-01` | `tests/unit/provenance.test.js::PROV-READER-STRICT-01 reads fields under the strict provenance profile` | — |
 | `PROV-READER-LENIENT-01` | `tests/unit/provenance.test.js::PROV-READER-LENIENT-01 returns only an acceptable generated commit` | — |
 | `PROV-READER-CANDIDATE-01` | `tests/baseline/generated-plugin-corpus.test.js::PROV-READER-CANDIDATE-01 candidate provenance validator profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
-| `PROV-READER-CODEX-SOURCE-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: PROV-READER-CODEX-SOURCE-01 Codex source reader profile` | `tests/fixtures/baseline/provenance/non-standard-constant.json` |
+| `PROV-READER-CODEX-SOURCE-01` | `tests/unit/provenance.test.js::PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its accepting profile` | `tests/fixtures/baseline/provenance/non-standard-constant.json` |
 | `PROV-READER-CODEX-COMMIT-01` | `tests/unit/codex-state.test.js::PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
 | `MANIFEST-READER-INSTALLED-01` | `tests/unit/codex-state.test.js::MANIFEST-READER-INSTALLED-01 installed manifest complete matrix` | `tests/fixtures/baseline/manifests/installed-manager-version.json` |
 | `MANIFEST-READER-UPSTREAM-01` | `tests/baseline/prepare.test.js::MANIFEST-READER-UPSTREAM-01 upstream manifest version reaches provenance` | `tests/fixtures/baseline/manifests/upstream-no-hooks.json` |
@@ -69,28 +69,14 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CODEX-JSON-ARRAY-01` | `tests/unit/codex-json.test.js::CODEX-JSON-ARRAY-01 installed listing reader complete matrix` | — |
 | `CODEX-JSON-MARKETPLACE-01` | `tests/unit/codex-json.test.js::CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix` | — |
 | `CODEX-JSON-VERSION-01` | `tests/unit/codex-json.test.js::CODEX-JSON-VERSION-01 active version reader complete matrix` | — |
-| `ADAPTER-PROTOCOL-01` | `tests/test_adapter_protocol.py::test_build_and_uninstall_accept_exact_empty_results` | `tests/fixtures/baseline/adapter-responses/valid-build.json` |
-| `ADAPTER-ENVELOPE-01` | `tests/test_adapter_protocol.py::test_rejects_empty_malformed_non_object_and_extra_fields` | — |
-| `ADAPTER-ENVELOPE-KEYS-01` | `tests/test_adapter_protocol.sh::# BASELINE CASE: ADAPTER-ENVELOPE-KEYS-01 missing envelope keys reject before replay` | — |
-| `ADAPTER-ENVELOPE-TYPES-01` | `tests/test_adapter_protocol.py::test_rejects_wrong_protocol_operation_types_and_views` | — |
-| `ADAPTER-FINGERPRINT-01` | `tests/test_adapter_protocol.py::test_inspect_fingerprint_accepts_full_sha_short_sha_and_null` | `tests/fixtures/baseline/adapter-responses/valid-inspect-fingerprint.json` |
-| `ADAPTER-FINGERPRINT-REJECT-01` | `tests/test_adapter_protocol.py::test_rejects_invalid_fingerprint_and_result_schema_keys` | — |
-| `ADAPTER-UPDATE-CONTROL-01` | `tests/test_adapter_protocol.py::test_inspect_update_control_accepts_only_exact_allowed_values` | `tests/fixtures/baseline/adapter-responses/valid-inspect-update-control.json` |
-| `ADAPTER-OWNERSHIP-01` | `tests/test_adapter_protocol.py::test_inspect_ownership_accepts_all_consistent_identity_states` | `tests/fixtures/baseline/adapter-responses/valid-inspect-ownership.json` |
-| `ADAPTER-OWNERSHIP-REJECT-01` | `tests/test_adapter_protocol.py::test_inspect_ownership_rejects_old_malformed_and_inconsistent_results` | — |
-| `ADAPTER-INSTALL-RESULT-01` | `tests/test_adapter_protocol.py::test_install_accepts_empty_one_and_both_verification_hints` | `tests/fixtures/baseline/adapter-responses/valid-install.json` |
-| `ADAPTER-INSTALL-REJECT-01` | `tests/test_adapter_protocol.py::test_rejects_invalid_fingerprint_and_result_schema_keys` | — |
-| `ADAPTER-STATUS-01` | `tests/test_adapter_protocol.py::test_rejects_exit_envelope_mismatches_and_null_cross_rules` | — |
-| `ADAPTER-REPLAY-01` | `tests/test_adapter_protocol.py::test_messages_replay_by_channel_in_order` | — |
-| `ADAPTER-CONTROLLED-FAILURE-01` | `tests/test_adapter_protocol.py::test_controlled_failure_replays_messages_error_and_hints` | `tests/fixtures/baseline/adapter-responses/controlled-failure.json` |
-| `ADAPTER-TERMINAL-01` | `tests/test_adapter_protocol.py::test_rejects_terminal_controls_in_terminal_facing_protocol_strings` | — |
-| `ADAPTER-TERMINAL-SHAPE-01` | `tests/test_adapter_protocol.py::test_rejects_wrong_protocol_operation_types_and_views` | — |
-| `ADAPTER-SURROGATE-01` | `tests/test_adapter_protocol.py::test_rejects_surrogate_escapes_in_terminal_facing_protocol_strings` | — |
-| `ADAPTER-READER-BYTES-01` | `tests/test_adapter_protocol.py::test_enforces_inclusive_response_size_boundary_before_replay` | `tests/fixtures/baseline/adapter-responses/size-1048576.json` |
-| `ADAPTER-READER-UTF8-01` | `tests/test_adapter_protocol.py::test_response_size_limit_counts_utf8_bytes_before_replay` | — |
-| `ADAPTER-READER-CONSTANTS-01` | `tests/test_adapter_protocol.py::test_rejects_non_standard_json_constants_without_replay` | `tests/fixtures/baseline/adapter-responses/non-standard-constant.json` |
-| `ADAPTER-READER-DEPTH-01` | `tests/test_adapter_protocol.py::test_enforces_exact_json_nesting_boundary` | `tests/fixtures/baseline/adapter-responses/depth-64.json` |
-| `ADAPTER-READER-DUPLICATES-01` | `tests/test_adapter_protocol.py::test_rejects_duplicate_object_keys_recursively_without_replay` | `tests/fixtures/baseline/adapter-responses/duplicate-key.json` |
+| `ADAPTER-FINGERPRINT-01` | `tests/unit/adapter.test.js::ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-hex commits in its exact result shape` | — |
+| `ADAPTER-FINGERPRINT-REJECT-01` | `tests/unit/adapter.test.js::ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint` | — |
+| `ADAPTER-UPDATE-CONTROL-01` | `tests/unit/lifecycle.test.js::ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value` | — |
+| `ADAPTER-OWNERSHIP-01` | `tests/unit/adapter.test.js::ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans` | — |
+| `ADAPTER-INSTALL-RESULT-01` | `tests/unit/adapter.test.js::ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode` | — |
+| `ADAPTER-CONTROLLED-FAILURE-01` | `tests/unit/adapter.test.js::ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1` | — |
+| `ADAPTER-TERMINAL-01` | `tests/unit/adapter-protocol.test.js::ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused` | — |
+| `ADAPTER-SURROGATE-01` | `tests/unit/adapter-protocol.test.js::ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback` | — |
 | `GENERATED-LAYOUT-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
 | `GENERATED-UNKNOWN-FIELDS-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-DECLARED-01 GENERATED-UNKNOWN-FIELDS-01 declared hook paths and unknown fields` | `tests/fixtures/baseline/manifests/upstream-active-hooks.json` |
 | `GENERATED-WRONG-NAME-01` | `tests/baseline/prepare.test.js::GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected` | — |
@@ -128,7 +114,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `DIAG-SELECTION-TRACK-01` | `tests/baseline/cli-parity.test.js::SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes` | — |
 | `DIAG-SELECTION-UNPIN-01` | `tests/baseline/cli-parity.test.js::SEL-UNPIN-01 unpin removes saved intent without applying changes` | — |
 | `DIAG-PROBE-01` | `tests/baseline/cli-parity.test.js::PROBE-READONLY-01 probe is read-only` | — |
-| `DIAG-ADAPTER-01` | `tests/test_adapter_protocol.py::test_messages_replay_by_channel_in_order` | — |
+| `DIAG-ADAPTER-01` | `tests/unit/adapter.test.js::DIAG-ADAPTER-01 adapter messages, errors, and hints retain their declared stream and array order` | — |
 | `PACKAGE-REPO-01` | `tests/baseline/cli-parity.test.js::CLI-MODE-VERSION-01 version mode routes through dist` | — |
 | `PACKAGE-TARBALL-01` | `tests/baseline/packaged-cli.test.js::PACKAGE-CLI-01 offline installed tarball routes through dist and exposes help and version` | — |
 
