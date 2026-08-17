@@ -26,6 +26,10 @@ const DIGEST_PATH = join(ROOT, "tests", "migration-inventory-digests.json");
 // commit as the file itself.
 /** @type {Record<string, string[]>} */
 const DECLARED = {
+  "adapter-protocol.md": [
+    "tests/baseline/cli-parity.test.js",
+    "tests/unit/provenance.test.js",
+  ],
   "bin-dispatch.md": ["tests/bin/bin-dispatch.test.js"],
   "bootstrap.md": ["tests/bin/bootstrap.test.js"],
   "codex-state-units.md": ["tests/unit/lifecycle.test.js"],
