@@ -204,7 +204,7 @@ that contract rather than restating or redefining its six-key envelope.
 | `ADAPTER-UPDATE-CONTROL-01` | Update-control inspection accepts only `managed` or `unsupported` in its exact result shape. |
 | `ADAPTER-OWNERSHIP-01` | Ownership inspection accepts all internally consistent manager/legacy resource Boolean combinations and derived identity states. |
 | `ADAPTER-OWNERSHIP-REJECT-01` | Ownership inspection rejects old, malformed, wrong-type, and internally inconsistent result shapes. |
-| `ADAPTER-INSTALL-RESULT-01` | Install success accepts exact `verification_hints` with neither, either, or both optional `mismatch` and `missing` terminal-facing strings. |
+| `ADAPTER-INSTALL-RESULT-01` | Install success accepts exact `verification_hints` carrying `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only` — two of the four combinations the retired response schema admitted. Narrowed 2026-08-15; authorized by the repository owner in the pull request thread as a baseline contract change. |
 | `ADAPTER-INSTALL-REJECT-01` | Install results reject unknown hint keys and empty hint strings. |
 | `ADAPTER-STATUS-01` | `ok`, adapter exit status, `result`, and `error` obey the success/failure cross-rules. |
 | `ADAPTER-REPLAY-01` | Only a completely validated response replays messages, in array order and to each declared stream. |
