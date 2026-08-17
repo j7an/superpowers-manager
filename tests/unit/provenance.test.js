@@ -71,7 +71,7 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   // a correct product under one node invocation and GREEN under another.
   // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (src/provenance.ts:36-39)
   // sets no maxDepth, and nested(255) reaches container depth 256, which a
-  // `maxDepth: 256` mutant still ACCEPTS -- strict-json.ts:158 rejects only on
+  // `maxDepth: 256` mutant still ACCEPTS -- src/strict-json.ts:158 rejects only on
   // `depth > maxDepth`. nested(256) reaches 257 and is the first depth that
   // mutant crosses. The pair is already pinned against the strict profile,
   // which does cap at 256, by PROV-READER-STRICT-01's nested(255)/nested(256)
