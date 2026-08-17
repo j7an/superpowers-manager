@@ -2754,6 +2754,33 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     );
     seedInstalledCache(join(sandbox.work, ".codex"), version, CACHE_COMMIT);
     const upstream = createReleaseRepo(sandbox);
+    // Precondition, asserted rather than assumed. This half is the one place in
+    // the file whose outcome depends on state outside the sandbox: the `|| "/"`
+    // arm composes an absolute root, so the run reads /.codex on the real host.
+    // Nothing is written there. A bare /.codex directory is harmless -- the
+    // composed root still holds no cache, so the same message still arrives --
+    // and the hazard is only a readable commit file at this exact versioned
+    // path, which on a POSIX host needs root to create. Asserting it here makes
+    // host state fail as a named precondition instead of surfacing as an
+    // unexplained `status` mismatch below.
+    //
+    // Checked rather than relocated because `/.codex` is the literal the
+    // `|| "/"` arm produces: substituting a sandbox-relative path would stop
+    // testing that arm at all, and nothing inside Layers 1-3 can move the
+    // filesystem root without a product seam that exists only for the test.
+    const composedRoot = join(
+      "/.codex",
+      "plugins",
+      "cache",
+      "superpowers-manager",
+      "superpowers",
+      version,
+    );
+    assert.equal(
+      existsSync(composedRoot),
+      false,
+      `${composedRoot} exists on this host, so the empty-HOME witness cannot run`,
+    );
     const result = runCliWithoutEnvironment(
       sandbox,
       ["probe", "--porcelain"],
@@ -2770,23 +2797,10 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     // that this is a CONTROLLED failure -- since a protocol violation would
     // have added an `error: invalid adapter response:` line here.
     //
-    // This half is the one place in the file whose outcome depends on state
-    // outside the sandbox: it presumes the host has no readable cache at
-    // /.codex/plugins/cache/superpowers-manager/superpowers/<version>. Nothing
-    // is written there -- the run only reads. A bare /.codex directory is
-    // harmless: the composed root still has no cache, so the same message still
-    // arrives. The hazard is narrower -- a readable commit file at that exact
-    // versioned path -- and on a POSIX host creating /.codex needs root, so the
-    // precondition holds wherever this suite is meant to run.
-    //
-    // It is left as-is rather than parameterised because `/.codex` is the
-    // literal the `|| "/"` arm produces; substituting a sandbox-relative path
-    // would stop testing that arm at all.
-    //
-    // If it ever does happen, the FIRST assertion to fail is
-    // `assert.equal(result.status, 1)` above, not this stderr equality -- probe
-    // would exit 0 and this line would never be reached. So: on an unexplained
-    // `status` failure here, check for /.codex before suspecting the manager.
+    // The host-state dependency this text embeds is asserted above, before the
+    // run, so it can no longer reach this line: a readable cache at the
+    // composed root would make probe exit 0, and the `composedRoot` precondition
+    // fails first with the offending path in its message.
     assert.equal(
       result.stderr,
       "error: cannot inspect active Codex plugin fingerprint under " +
