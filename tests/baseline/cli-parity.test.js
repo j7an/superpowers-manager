@@ -2725,6 +2725,115 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
       new RegExp(`^installed_commit=${CACHE_COMMIT}$`, "m"),
     );
   });
+
+  // Half three: an EMPTY HOME composes the root as `/.codex`, not as a
+  // cwd-relative `.codex`. Replaces tests/test_adapter_protocol.sh:526-548,
+  // which drove the same fixture through `inspect --view fingerprint` and
+  // asserted the resolved root by name.
+  //
+  // Not a restatement of halves one and two: those pin which VARIABLE supplies
+  // the root when both defaults hold. This one pins the `|| "/"` composition in
+  // `join(env.HOME || "/", ".codex")` (src/adapter.ts:834) -- the arm reached
+  // only once HOME is present but empty, where shell expansion of `$HOME/.codex`
+  // yielded `/.codex` and this port must agree.
+  //
+  // The cwd decoy is what makes the assertion specific. sandbox.work is the
+  // working directory runCliWithoutEnvironment spawns in, and it is seeded with
+  // a cache for the SAME active version, so an implementation that resolved the
+  // relative `.codex` against the process cwd would report
+  // `installed_commit=${CACHE_COMMIT}` and exit 0. Asserting only "the run
+  // failed" would pass on that implementation, and also on one that rejected an
+  // empty HOME outright before composing anything.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const version = "6.1.1+manager.d884ae0";
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      version,
+      sandbox.codexLog,
+    );
+    seedInstalledCache(join(sandbox.work, ".codex"), version, CACHE_COMMIT);
+    const upstream = createReleaseRepo(sandbox);
+    const result = runCliWithoutEnvironment(
+      sandbox,
+      ["probe", "--porcelain"],
+      ["SUPERPOWERS_INSTALLED_SEARCH_ROOT"],
+      { ...localSelection(upstream), HOME: "" },
+    );
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    // Exact, because the resolved root inside this text IS the contract: it is
+    // the only observable that separates `/.codex` from the decoy. probe
+    // replays the adapter envelope's own failure (src/commands/probe.ts:459),
+    // so the adapter's fail() text (src/adapter.ts:843-847) arrives verbatim.
+    // Whole-stream equality also carries the retiring case's second guard --
+    // that this is a CONTROLLED failure -- since a protocol violation would
+    // have added an `error: invalid adapter response:` line here.
+    //
+    // This is the one assertion in the file whose outcome depends on state
+    // outside the sandbox: it presumes the host has no readable cache at
+    // /.codex/plugins/cache/superpowers-manager/superpowers/<version>. Nothing
+    // is written there -- the run only reads -- but were such a cache to exist,
+    // the probe would succeed and this equality would fail. The property is
+    // inherited from the retiring shell case, which composed the same absolute
+    // root, and it is left as-is rather than parameterised because `/.codex` is
+    // the literal the `|| "/"` arm produces and substituting a sandbox-relative
+    // path would stop testing that arm. On a POSIX host creating /.codex needs
+    // root, so the precondition holds wherever this suite is meant to run; if
+    // this assertion ever fails with an `installed_commit=` line in stdout,
+    // check for /.codex before suspecting the manager.
+    assert.equal(
+      result.stderr,
+      "error: cannot inspect active Codex plugin fingerprint under " +
+        `/.codex/plugins/cache/superpowers-manager/superpowers/${version}\n`,
+    );
+    // Fail-closed: no porcelain block at all, so the decoy's commit was never
+    // reported. The retiring case asserted the same by requiring no adapter
+    // result file.
+    assert.equal(result.stdout, "");
+  });
+
+  // Half four: an ABSENT HOME fails closed BEFORE any composition, with its own
+  // diagnostic. Replaces tests/test_adapter_protocol.sh:563-579.
+  //
+  // A separate code path from half three, and the two must not be merged into
+  // one "no usable HOME" case: src/adapter.ts:828-832 tests
+  // `env.HOME === undefined` and returns early, so an absent HOME never reaches
+  // the `|| "/"` fallback half three pins. The messages differ, and asserting
+  // each exactly is what keeps either branch from being deleted in favour of
+  // the other.
+  //
+  // Same cwd decoy, for the same reason: absent HOME must not degrade into
+  // reading a cwd-relative `.codex`, which would exit 0 with the decoy's
+  // commit instead of failing.
+  withSandbox({ stubScripts: true }, (sandbox) => {
+    const version = "6.1.1+manager.d884ae0";
+    writeVersionCodex(
+      sandbox,
+      join(sandbox.bin, "codex"),
+      version,
+      sandbox.codexLog,
+    );
+    seedInstalledCache(join(sandbox.work, ".codex"), version, CACHE_COMMIT);
+    const upstream = createReleaseRepo(sandbox);
+    // BOTH names deleted. Unsetting only HOME would leave
+    // SUPERPOWERS_INSTALLED_SEARCH_ROOT -- which baseEnvironment always sets
+    // (tests/baseline/support.js:538) -- winning at src/adapter.ts:826, and the
+    // HOME branch would never be reached at all.
+    const result = runCliWithoutEnvironment(
+      sandbox,
+      ["probe", "--porcelain"],
+      ["SUPERPOWERS_INSTALLED_SEARCH_ROOT", "HOME"],
+      localSelection(upstream),
+    );
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stderr,
+      "error: cannot inspect active Codex plugin fingerprint without HOME\n",
+    );
+    assert.equal(result.stdout, "");
+  });
 });
 
 void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT", () => {
