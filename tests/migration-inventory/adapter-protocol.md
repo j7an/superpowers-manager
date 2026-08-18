@@ -393,16 +393,41 @@ different languages sharing one record.
    `tests/baseline/cli-parity.test.js`'s `CLI-ENV-CODEX-LISTING-01 the
    fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex
    from PATH when it is unset` — Codex executable resolution for the
-   fingerprint listing, the same ID items 109-111 port. The ID-level
-   attribution is exact; the coverage is not equal. That test's two halves are
-   an absolute-path `SUPERPOWERS_CODEX` override
-   (`tests/baseline/cli-parity.test.js:2596-2611`) and `codex` resolving from
-   `PATH` when the override is unset
-   (`tests/baseline/cli-parity.test.js:2616-2626`). **Neither exercises the
-   two `PATH`-component edges these shell lines cover** — an explicitly empty
-   `PATH` component resolving a bare command from the current directory, and
-   an absent `PATH` declining to synthesize one. Those two edges retire with
-   the driver; the port carries the ID, not this record's whole citation set.
+   fingerprint listing, the same ID items 109-111 port. The port test carries
+   four halves, and the two `PATH`-component edges these shell lines cover are
+   the last two of them. Its first two — an absolute-path `SUPERPOWERS_CODEX`
+   override (`tests/baseline/cli-parity.test.js:2624-2639`) and `codex`
+   resolving from `PATH` when the override is unset
+   (`tests/baseline/cli-parity.test.js:2644-2654`) — exercise neither edge.
+   The third asserts that an explicitly empty `PATH` component resolves a bare
+   command planted only in the working directory, through a recording `codex`
+   that exists nowhere on `PATH` whose listing log is the proof of resolution
+   (`tests/baseline/cli-parity.test.js:2681-2714`). The fourth asserts that an
+   absent `PATH` declines to synthesize one, failing `command-not-found` with
+   the working-directory copy never run
+   (`tests/baseline/cli-parity.test.js:2746-2782`); its override names `true`
+   for the reason the driver's did, that a launch `ENOENT` maps to the same
+   `command-not-found` code the precheck raises, so only a name resolvable
+   from execvp's default path separates a precheck that failed closed from one
+   that wrongly passed. Both halves drive `runAdapter` rather than the CLI,
+   and that is forced: `src/cli.ts`'s preflight resolves the same command name
+   with its own `findTool`, which drops empty components (`src/cli.ts:207`)
+   and rejects an absent `PATH`, so a CLI-level run fails at preflight before
+   `src/adapter.ts:263-264` is reached. `runAdapter` is the function the CLI
+   dispatches into (`src/commands/probe.ts:231`), so the two edges are pinned
+   at the layer where the rule lives. What that does **not** establish is that
+   any invoked product path exercises them: on the only invoked path the
+   preflight makes both branch outcomes unobservable, and `dist/adapter-cli.js`
+   — which does call `runAdapter` with a bare `process.env` and no preflight —
+   has, per `src/adapter-protocol.ts:211-215`, a sole caller "no product path
+   invokes". These are **defense-in-depth witnesses** of a fail-closed
+   invariant in production code, and a later reader auditing whether
+   `src/adapter.ts:263-264` is dead code should read them as exactly that.
+   (An earlier revision of this record said
+   these two edges "retire with the driver" and that the port carried the ID
+   without them. That was true of the port test as it stood at
+   `16aad89795876eb94d22e2350ba71cdf86613859`; merge review found the gap, and
+   the two halves cited above close it.)
    **Retire** (the launch-failure case,
    `tests/test_adapter_protocol.sh:636`-`tests/test_adapter_protocol.sh:639`):
    no row of `docs/baseline/protocol-disposition.md` claims adapter-cli's
@@ -818,10 +843,10 @@ intentionally no longer resolvable at `HEAD`; use `git show
   witnessed, so not a first-time port — including the two
   citations (`tests/test_adapter_protocol.sh:853-854`) PR-3.2 ported ahead of
   this deletion specifically to keep the Bytes cell of that matrix row
-  witnessed. Ported coverage is narrower than this record's citation set in
-  one place: items 125-132's two `PATH`-component edges have no in-process
-  witness, and `CLI-ENV-CODEX-LISTING-01`'s port test carries the ID without
-  them. Every other item is `Retire`, `Retired at the gap`, or a `Duplicate
+  witnessed. `CLI-ENV-CODEX-LISTING-01`'s port test also carries items
+  125-132's two `PATH`-component edges, which an earlier revision of this
+  record recorded as retiring with the driver until merge review found the
+  gap. Every other item is `Retire`, `Retired at the gap`, or a `Duplicate
   witness` of a behavior ID `docs/baseline/protocol-disposition.md` already
   disposed of, per this file's own disposition vocabulary (see Counting
   rules). One retired clause leaves an acknowledged gap rather than a

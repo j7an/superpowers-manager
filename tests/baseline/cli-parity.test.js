@@ -107,6 +107,34 @@ function withSandbox(options, callback) {
 }
 
 /**
+ * Runs `fn` with the process's cwd pinned to `dir`, restoring it afterward.
+ * `commandAvailable` (src/adapter.ts:258-270) resolves a RELATIVE candidate
+ * path against `process.cwd()`, which is the seam both PATH-shape halves of
+ * CLI-ENV-CODEX-LISTING-01 turn on; the retired shell driver got the same
+ * effect by `cd`-ing inside a subshell. Same shape as
+ * tests/baseline/selection-commands.test.js:341-350, and safe for the same
+ * reason: node:test runs top-level tests sequentially.
+ *
+ * NOT usable from inside `withSandbox`: that helper destroys the sandbox in a
+ * `finally` around a SYNCHRONOUS call, so an async callback's sandbox would be
+ * deleted while the callback was still running. The two halves that need this
+ * manage createSandbox/destroySandbox themselves.
+ * @template T
+ * @param {string} dir
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withCwd(dir, fn) {
+  const previous = process.cwd();
+  process.chdir(dir);
+  try {
+    return await fn();
+  } finally {
+    process.chdir(previous);
+  }
+}
+
+/**
  * @param {Sandbox} sandbox
  * @param {Record<string, string>} [overrides]
  */
@@ -2588,7 +2616,7 @@ function localSelection(upstream) {
   };
 }
 
-void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex from PATH when it is unset", () => {
+void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex from PATH when it is unset", async () => {
   // Half one: the override is used. `codex` is removed from PATH entirely, so
   // a run that reaches a listing at all can only have reached it through the
   // override -- an assertion on the override's log alone would still pass if
@@ -2624,6 +2652,134 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
     assert.equal(result.error, undefined);
     assert.equal(listingCodexCalls(sandbox)[0], "plugin list --json");
   });
+
+  // Half three pins the loop body of
+  // `for (const directory of env.PATH.split(delimiter))`
+  // (src/adapter.ts:264): an EMPTY component is KEPT, so `join("", command)`
+  // yields a bare relative path and the lookup resolves from the current
+  // directory, the way execvp-style PATH search does. Neither half above can
+  // catch a regression here: both run with PATH === sandbox.bin, a single
+  // NON-empty component, so a filter that dropped empty components would
+  // leave both of them passing.
+  //
+  // Driven through `runAdapter` rather than `runCli`, and that is forced.
+  // src/cli.ts's preflight resolves the same command name with its own
+  // `findTool`, which DROPS empty components (`src/cli.ts:207`), so a CLI run
+  // fails at preflight with "required command not found" before
+  // src/adapter.ts:264 is reached at all. `runAdapter` is the function the CLI
+  // dispatches into (ctx.adapter, src/commands/probe.ts:231).
+  //
+  // Be precise about what that buys, because the next reader auditing whether
+  // src/adapter.ts:263-264 is reachable needs the true answer: on the only
+  // INVOKED product path, the preflight makes both branch outcomes
+  // unobservable. dist/adapter-cli.js does call runAdapter with a bare
+  // process.env and no preflight, but src/adapter-protocol.ts:211-215 records
+  // that its sole caller is one "no product path invokes". So this half and
+  // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
+  // production code, pinned at the layer where the rule actually lives -- not
+  // proof that a user-reachable invocation exercises it.
+  const emptyComponent = createSandbox({ stubScripts: true });
+  try {
+    const log = join(emptyComponent.root, "empty-path-component-codex.log");
+    // Planted in the WORKING DIRECTORY, under a name that exists nowhere on
+    // PATH: a listing recorded in this log can only have been resolved through
+    // the leading empty component.
+    writeVersionCodex(
+      emptyComponent,
+      join(emptyComponent.work, "codex-empty-path-component"),
+      "",
+      log,
+    );
+    const environment = baseEnvironment(emptyComponent, {
+      SUPERPOWERS_CODEX: "codex-empty-path-component",
+    });
+    // After baseEnvironment, never through it: it validates
+    // `PATH === sandbox.bin` (tests/baseline/support.js:305-307), which is the
+    // very invariant this half has to break.
+    environment.PATH = `${delimiter}${emptyComponent.bin}`;
+    const result = await withCwd(emptyComponent.work, () =>
+      runAdapter(["inspect", "--view", "fingerprint"], {
+        root: emptyComponent.pkg,
+        env: environment,
+      }),
+    );
+    assert.equal(result.status, 0, JSON.stringify(result.envelope));
+    assert.equal(result.envelope.ok, true);
+    assert.equal(
+      readFileSync(log, "utf8").split("\n").filter(Boolean)[0],
+      "plugin list --json",
+    );
+  } finally {
+    destroySandbox(emptyComponent);
+  }
+
+  // Half four pins `if (env.PATH === undefined) return false;`
+  // (src/adapter.ts:263): an absent PATH does not synthesize a
+  // current-directory search component. No populated-PATH case can catch
+  // this -- the branch is only reached when PATH is absent, and every other
+  // case in this file defines it.
+  //
+  // The overridden name is `true`, and that choice is what makes the case
+  // discriminating rather than decorative. A launch ENOENT maps to the SAME
+  // `command-not-found` code the precheck raises (src/adapter.ts:184-186), so
+  // a name that resolves nowhere would report `command-not-found` whether the
+  // precheck failed closed or wrongly passed and the spawn then failed. `true`
+  // resolves from execvp's built-in default path even with PATH unset, so a
+  // precheck that synthesized `.` would find the working-directory copy, pass,
+  // and then launch the SYSTEM `true`, whose empty output fails the listing
+  // parse under a different code. The retired driver paired the same two.
+  //
+  // That discrimination is therefore a HOST DEPENDENCY, and a silent one: on a
+  // host whose execvp default path holds no `true`, the mutant's spawn fails
+  // ENOENT, maps back to `command-not-found`, and this half passes while no
+  // longer killing the mutation. It stays green either way, so nothing here
+  // signals the loss -- re-prove it by mutation, not by a green run, if this
+  // case is ever moved to a new platform.
+  //
+  // In-process for the same reason as half three: src/cli.ts's preflight
+  // rejects an absent PATH first, so a CLI run never reaches
+  // src/adapter.ts:263. Deleting PATH from the CONTEXT env is not enough
+  // either -- runAdapter merges `{ ...process.env, ...context.env }`
+  // (src/adapter.ts:982), so the runner's own PATH would survive the merge.
+  // Both have to go, and process.env is restored in the finally below the way
+  // CLI-HOST-TOOLS-01/02 (`:578`, `:622`) restore it.
+  const absentPath = createSandbox({ stubScripts: true });
+  const originalPath = process.env.PATH;
+  try {
+    const log = join(absentPath.root, "absent-path-codex.log");
+    // A RECORDING codex under the overridden name, in the working directory
+    // only: an empty log is proof that nothing resolved it from there.
+    writeVersionCodex(absentPath, join(absentPath.work, "true"), "", log);
+    const environment = baseEnvironment(absentPath, {
+      SUPERPOWERS_CODEX: "true",
+    });
+    delete environment.PATH;
+    // After createSandbox and baseEnvironment, both of which read the host
+    // PATH to build and validate the sandbox.
+    delete process.env.PATH;
+    const result = await withCwd(absentPath.work, () =>
+      runAdapter(["inspect", "--view", "fingerprint"], {
+        root: absentPath.pkg,
+        env: environment,
+      }),
+    );
+    assert.equal(result.status, 1);
+    assert.equal(result.envelope.ok, false);
+    assert.equal(
+      result.envelope.error?.code,
+      "command-not-found",
+      JSON.stringify(result.envelope),
+    );
+    assert.equal(
+      result.envelope.error?.message,
+      "required Codex command not found: true",
+    );
+    assert.equal(readFileSync(log, "utf8"), "");
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    destroySandbox(absentPath);
+  }
 });
 
 void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_CODEX override", () => {
