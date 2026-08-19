@@ -6,8 +6,7 @@ LICENSE
 README.md
 bin/superpowers-manager.js
 config/upstream-ref
-dist/adapter-cli.js
-dist/adapter-protocol.js
+dist/adapter-result.js
 dist/adapter.js
 dist/atomic.js
 dist/cli-arguments.js

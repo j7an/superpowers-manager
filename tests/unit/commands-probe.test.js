@@ -9,7 +9,7 @@ import { capture, notCalledAdapter } from "./helpers/command-harness.js";
 const {
   formatPorcelain,
   formatHuman,
-  replayEnvelope,
+  replayOutcome,
   PROBE_PORCELAIN_KEYS,
   PROBE_USAGE,
   runProbe,
@@ -168,7 +168,7 @@ void test("a thrown selection failure is an operational failure", async () => {
   );
 });
 
-// --- Envelope replay (spec §3.3, added 2026-08-07 after adjudication) ---
+// --- Outcome replay (spec §3.3, added 2026-08-07 after adjudication) ---
 //
 // scripts/core/validate-adapter-response.py ran on every adapter response and
 // did two things the first draft of this port dropped: replay(messages) at
@@ -176,12 +176,11 @@ void test("a thrown selection failure is an operational failure", async () => {
 // :269-272 printed `error: <message>` followed by one `hint: <h>` per hint.
 // DIAG-ADAPTER-01 is a retained contract (docs/baseline/protocol-disposition.md:53).
 // These tests hold it at the command level; tests/unit/adapter.test.js holds
-// it at the envelope level.
+// it at the outcome level.
 
-/** @param {Partial<import("../../src/adapter-protocol.js").AdapterEnvelope>} over */
-function envelopeWith(over) {
+/** @param {Partial<import("../../src/adapter-result.js").AdapterOutcome>} over */
+function outcomeWith(over) {
   return /** @type {any} */ ({
-    protocol: 1,
     operation: "inspect",
     ok: true,
     messages: [],
@@ -194,8 +193,8 @@ function envelopeWith(over) {
 void test("replay writes each message to its declared stream in array order", () => {
   const out = capture();
   const err = capture();
-  replayEnvelope(
-    envelopeWith({
+  replayOutcome(
+    outcomeWith({
       messages: [
         { channel: "stdout", text: "first" },
         { channel: "stderr", text: "second" },
@@ -220,8 +219,8 @@ void test("replay writes each message to its declared stream in array order", ()
 void test("replay emits the error line then one hint line per hint", () => {
   const out = capture();
   const err = capture();
-  replayEnvelope(
-    envelopeWith({
+  replayOutcome(
+    outcomeWith({
       ok: false,
       messages: [{ channel: "stderr", text: "context" }],
       result: null,
@@ -250,9 +249,9 @@ void test("replay emits the error line then one hint line per hint", () => {
   // the message loop, both context lines would already be on their streams
   // when the guard fired on the hint.
   //
-  // The poisoned envelope carries a record on EACH channel, and that is the
-  // point. replayEnvelope routes per record (`message.channel === "stdout" ?
-  // ctx.stdout : ctx.stderr`), so a stderr-only envelope makes the
+  // The poisoned outcome carries a record on EACH channel, and that is the
+  // point. replayOutcome routes per record (`message.channel === "stdout" ?
+  // ctx.stdout : ctx.stderr`), so a stderr-only outcome makes the
   // `badOut.text() === ""` assertion true by construction: stdout was never
   // going to receive anything, and a hoist split so that stdout messages
   // wrote BEFORE the guard and stderr messages after would stay green. With
@@ -262,8 +261,8 @@ void test("replay emits the error line then one hint line per hint", () => {
   const badErr = capture();
   assert.throws(
     () =>
-      replayEnvelope(
-        envelopeWith({
+      replayOutcome(
+        outcomeWith({
           ok: false,
           messages: [
             { channel: "stdout", text: "stdout context" },
@@ -294,10 +293,10 @@ void test("replay emits the error line then one hint line per hint", () => {
   assert.equal(badErr.text(), "");
 });
 
-void test("replay on a clean success envelope writes nothing", () => {
+void test("replay on a clean success outcome writes nothing", () => {
   const out = capture();
   const err = capture();
-  replayEnvelope(envelopeWith({}), {
+  replayOutcome(outcomeWith({}), {
     root: "/unused",
     env: {},
     stdout: out.stream,

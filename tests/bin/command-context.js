@@ -47,8 +47,8 @@ export function recordingAdapter(handler) {
   const calls = [];
   /**
    * @param {readonly string[]} argv
-   * @param {import("../../src/adapter-protocol.js").AdapterContext} _ctx
-   * @returns {Promise<import("../../src/adapter-protocol.js").AdapterResult>}
+   * @param {import("../../src/adapter-result.js").AdapterContext} _ctx
+   * @returns {Promise<import("../../src/adapter-result.js").AdapterResult>}
    */
   const adapter = async (argv, _ctx) => {
     const copy = [...argv];
@@ -69,7 +69,7 @@ export function recordingAdapter(handler) {
       answer !== undefined,
       `recordingAdapter exhausted at call ${calls.length}: ${copy.join(" ")}`,
     );
-    return /** @type {import("../../src/adapter-protocol.js").AdapterResult} */ (
+    return /** @type {import("../../src/adapter-result.js").AdapterResult} */ (
       answer
     );
   };

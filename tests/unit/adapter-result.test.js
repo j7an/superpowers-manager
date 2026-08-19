@@ -15,17 +15,15 @@ import { fileURLToPath } from "node:url";
 
 import { capture } from "./helpers/command-harness.js";
 
-/** @type {typeof import("../../src/adapter-protocol.js")} */
+/** @type {typeof import("../../src/adapter-result.js")} */
 const {
   AdapterMessageLog,
   failureResult,
   pythonUnicodeEscapeBytes,
-  serializeEnvelope,
+  requireProtocolString,
   successResult,
   writeAdapterFailure,
-} = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
-);
+} = await import(new URL("../../dist/adapter-result.js", import.meta.url).href);
 
 /** @param {Uint8Array} bytes */
 function pythonOracle(bytes) {
@@ -86,70 +84,106 @@ void test("message log splits on LF, drops empty chunks, and keeps channels", ()
   ]);
 });
 
-void test("serializer preserves envelope shape and rejects unsafe values", () => {
-  const success = successResult("build", {}, []);
-  assert.equal(
-    serializeEnvelope(success.envelope),
-    '{"protocol":1,"operation":"build","ok":true,"messages":[],"result":{},"error":null}\n',
-  );
-  const failure = failureResult(
-    "install",
-    "install-failed",
-    "failed",
-    ["retry"],
-    [{ channel: "stderr", text: "detail" }],
-  );
-  assert.deepEqual(JSON.parse(serializeEnvelope(failure.envelope)), {
-    protocol: 1,
-    operation: "install",
-    ok: false,
-    messages: [{ channel: "stderr", text: "detail" }],
-    result: null,
-    error: {
-      code: "install-failed",
-      message: "failed",
-      hints: ["retry"],
+void test("adapter result exposes an outcome with no protocol tag", () => {
+  const ok = successResult("build", { built: true }, []);
+  assert.deepEqual(ok, {
+    status: 0,
+    outcome: {
+      operation: "build",
+      ok: true,
+      messages: [],
+      result: { built: true },
+      error: null,
     },
   });
+  const bad = failureResult("build", "E_X", "boom", ["try again"], []);
+  assert.deepEqual(bad, {
+    status: 1,
+    outcome: {
+      operation: "build",
+      ok: false,
+      messages: [],
+      result: null,
+      error: { code: "E_X", message: "boom", hints: ["try again"] },
+    },
+  });
+  // the two properties the union's deletion is supposed to produce, stated so
+  // a reader sees them rather than inferring them from the deepEqual above
+  assert.ok(
+    !("envelope" in ok),
+    "AdapterResult must expose outcome, not envelope",
+  );
+  assert.ok(
+    !("protocol" in ok.outcome),
+    "the transport version tag must be gone",
+  );
+  assert.equal(ok.outcome.operation, "build");
+});
 
-  for (const operation of ["bad\nop", "bad\u0085op", "bad\ud800op"]) {
+void test("requireProtocolString accepts safe text and rejects terminal controls", () => {
+  /** @type {(...codes: number[]) => string} */
+  const cp = (...codes) => String.fromCodePoint(...codes);
+  // accepted: printable ASCII, and non-ASCII that is neither a control nor a
+  // surrogate -- the guard must not become a blanket non-ASCII reject
+  for (const safe of [
+    "",
+    "plain",
+    "hyphen-free",
+    cp(0xe9),
+    cp(0x65e5, 0x672c),
+  ]) {
+    assert.doesNotThrow(
+      () => requireProtocolString(safe),
+      `rejected safe input ${JSON.stringify(safe)}`,
+    );
+  }
+  // rejected: the three ranges hasTerminalControl scans
+  // (src/adapter-result.ts:197-199), each sampled at both ends AND inside.
+  // The interior samples are not decoration -- see the note below the fence:
+  // with only the two surrogate endpoints, a predicate narrowed to
+  // `code === 0xd800 || code === 0xdfff` passes this entire test.
+  // Built with fromCodePoint rather than written as literals: a raw C0 byte in
+  // a source file is invisible to the next reader, and a `\u` escape typed into
+  // a tool that decodes escapes lands as that raw byte anyway.
+  const rejected = [
+    cp(0x00), // C0 bottom
+    "a" + cp(0x1b) + "b", // ESC mid-string -- the case the guard exists for
+    cp(0x1f), // C0 top
+    cp(0x7f), // DEL, bottom of the second range
+    "a" + cp(0x85) + "b", // C1 interior
+    cp(0x9f), // C1 top
+    cp(0xd800), // lone high surrogate, bottom of the third range
+    cp(0xdb7f), // interior high surrogate
+    cp(0xdc00), // interior -- first low surrogate
+    cp(0xdc9b), // interior low surrogate
+    cp(0xdfff), // lone low surrogate, top of the third range
+  ];
+  for (const bad of rejected) {
     assert.throws(
-      () => serializeEnvelope(successResult(operation, {}, []).envelope),
+      () => requireProtocolString(bad),
       {
+        name: "Error",
         message:
           "protocol strings must not contain terminal control characters",
       },
+      `accepted unsafe input ${JSON.stringify(bad)}`,
     );
   }
-  assert.doesNotThrow(() =>
-    serializeEnvelope(successResult("build😀", {}, []).envelope),
-  );
-  assert.throws(
-    () =>
-      serializeEnvelope(
-        successResult("build", { value: Number.NaN }, []).envelope,
-      ),
-    { message: "protocol JSON must not contain non-finite numbers" },
-  );
-  // Note the message: a tab in a message record is rejected as an invalid
-  // record, not as a control character. The bare assert.throws this replaces
-  // could not tell the two apart, so it passed whichever fired.
-  assert.throws(
-    () =>
-      serializeEnvelope(
-        successResult("build", {}, [
-          { channel: "stderr", text: "bad\tmessage" },
-        ]).envelope,
-      ),
-    { message: "invalid message record at line 1" },
-  );
+  // the safe side of each boundary, so a predicate widened by one code point
+  // reddens this test rather than passing quietly
+  for (const edge of [cp(0x20), cp(0x7e), cp(0xa0), cp(0x10000)]) {
+    assert.doesNotThrow(
+      () => requireProtocolString(edge),
+      `rejected boundary ${JSON.stringify(edge)}`,
+    );
+  }
 });
 
 // The enforcement point the parent spec requires to outlive the transport.
-// Today the only validation of error code, message, and hints lives inside
-// serializeEnvelope, whose sole caller is src/adapter-cli.ts -- which no
-// product path invokes. replayEnvelope writes those strings unfiltered.
-// PR 11.5 slice 5 deletes the serializer, so the check moves here first.
+// writeAdapterFailure is the live validator of error code, message, and
+// hints; replayOutcome writes those strings unfiltered otherwise.
+// PR 11.5 slice 5 deleted the serializer that used to also enforce this,
+// leaving writeAdapterFailure the check's sole enforcement point.
 
 // Uses the existing capture() rather than a private recorder.
 // tests/unit/helpers/command-harness.js:47-59 already returns a
@@ -179,7 +213,7 @@ void test("writeAdapterFailure writes the error and every hint to stderr in orde
       "install failed",
       ["first hint", "second hint"],
       [],
-    ).envelope,
+    ).outcome,
   );
   assert.equal(out.stdout(), "");
   assert.equal(
@@ -189,16 +223,16 @@ void test("writeAdapterFailure writes the error and every hint to stderr in orde
 });
 
 // failureResult takes FIVE arguments -- (operation, code, message, hints,
-// messages) -- per src/adapter-protocol.ts:177-183. The fifth is neither
+// messages) -- per src/adapter-result.ts:174-180. The fifth is neither
 // optional nor trailing-defaulted, and this file is typechecked: it carries
 // `// @ts-check` and annotates the destructured dist/ import with
-// `@type {typeof import("../../src/adapter-protocol.js")}`, so a four-argument
+// `@type {typeof import("../../src/adapter-result.js")}`, so a four-argument
 // call is a hard `pnpm run typecheck:js` failure. An earlier draft of this plan
 // omitted it in all four calls below.
 //
-// `.envelope` on every call is the other half of the same typecheck.
-// failureResult returns AdapterResult (`{ status, envelope }`); the helpers
-// take AdapterEnvelope, because that is what replayEnvelope holds at the call
+// `.outcome` on every call is the other half of the same typecheck.
+// failureResult returns AdapterResult (`{ status, outcome }`); the helpers
+// take AdapterOutcome, because that is what replayOutcome holds at the call
 // site Step 5 routes. Passing the result would fail on the same run.
 
 // D8b: the guard THROWS, and the thrown message names the failing member
@@ -216,14 +250,14 @@ void test("writeAdapterFailure writes the error and every hint to stderr in orde
 // index is 1, not 0, because the safe hint precedes the unsafe one.
 void test("writeAdapterFailure throws on an unsafe string and never emits the value", () => {
   // Annotated rather than inferred: a bare array literal of mixed-type tuples
-  // widens each element to `string | AdapterEnvelope`, and `label` is then not
+  // widens each element to `string | AdapterOutcome`, and `label` is then not
   // assignable to assert's `message` parameter -- a hard `typecheck:js` error
   // on all five assertions below.
   /**
    * @type {readonly [
    *   string,
    *   string,
-   *   import("../../src/adapter-protocol.js").AdapterEnvelope,
+   *   import("../../src/adapter-result.js").AdapterOutcome,
    * ][]}
    */
   const cases = [
@@ -231,13 +265,13 @@ void test("writeAdapterFailure throws on an unsafe string and never emits the va
       "message",
       "adapter failure message contains a terminal control character",
       failureResult("install", "install-failed", "bad\u001bmessage", [], [])
-        .envelope,
+        .outcome,
     ],
     [
       "code",
       "adapter failure code contains a terminal control character",
       failureResult("install", "bad\u007fcode", "install failed", [], [])
-        .envelope,
+        .outcome,
     ],
     [
       "hint",
@@ -248,13 +282,13 @@ void test("writeAdapterFailure throws on an unsafe string and never emits the va
         "install failed",
         ["safe hint", "bad\u009fhint"],
         [],
-      ).envelope,
+      ).outcome,
     ],
   ];
-  for (const [label, expected, envelope] of cases) {
+  for (const [label, expected, outcome] of cases) {
     const { out, ctx } = recordingCtx();
     assert.throws(
-      () => writeAdapterFailure(ctx, envelope),
+      () => writeAdapterFailure(ctx, outcome),
       (error) => {
         assert.ok(error instanceof Error, label);
         // Names the failing member, exactly and only...
@@ -338,7 +372,7 @@ function assertRefused(run, out, offending, member) {
 // Each range is exercised at a BOUNDARY and in its INTERIOR, because a
 // boundary-only corpus cannot distinguish the range from its endpoints.
 // hasTerminalControl is `code < 0x20 || (code >= 0x7f && code <= 0x9f) || ...`
-// (src/adapter-protocol.ts:200-205): U+0001 is the bottom of C0, so narrowing
+// (src/adapter-result.ts:196-201): U+0001 is the bottom of C0, so narrowing
 // to `code < 0x02` keeps it green while admitting U+0002-U+001F including ESC;
 // U+007F and U+009F are the two ends of the DEL/C1 clause, so narrowing to
 // `code === 0x7f || code === 0x9f` keeps both green while admitting
@@ -354,15 +388,15 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
     for (const control of ["\u0001", "\u001b", "\u007f", "\u009b", "\u009f"]) {
       for (const field of ["code", "message", "hint"]) {
         const { out, ctx } = recordingCtx();
-        const envelope = failureResult(
+        const outcome = failureResult(
           "install",
           field === "code" ? `install-failed${control}` : "install-failed",
           field === "message" ? `boom${control}` : "boom",
           field === "hint" ? [`try again${control}`] : ["try again"],
           [],
-        ).envelope;
+        ).outcome;
         // The member token, not the field name: the hint case is `hint[0]`
-        // because these envelopes carry exactly one hint. Step 2's helper
+        // because these outcomes carry exactly one hint. Step 2's helper
         // builds the expected message from it.
         const member = field === "hint" ? "hint[0]" : field;
         // The assertion is that the unsafe string never reaches the terminal.
@@ -370,7 +404,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
         // assertRefused pins both halves: the throw happened, and neither
         // stream carries the offending code point.
         assertRefused(
-          () => writeAdapterFailure(ctx, envelope),
+          () => writeAdapterFailure(ctx, outcome),
           out,
           control,
           member,
@@ -386,7 +420,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
     //
     // The expected text is written EXACTLY, not matched by pattern. Each of
     // these five code points is <= 0xff, so pythonUnicodeEscape takes the
-    // `\x%02x` branch (src/adapter-protocol.ts:120); a pattern like /\\x/ would
+    // `\x%02x` branch (src/adapter-result.ts:118); a pattern like /\\x/ would
     // also pass on an implementation that escaped only the first character of
     // a longer run.
     for (const [control, escaped] of [
@@ -412,8 +446,8 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
     // appendText does not have, and these seven rows separate them.
     //
     // Note the two shapes. A byte that DECODES to a code point reaches
-    // pythonUnicodeEscape's `\x%02x` branch (:120) and yields ONE backslash. A
-    // byte that fails validation is handed to byteEscape (:53-55), whose own
+    // pythonUnicodeEscape's `\x%02x` branch (:118) and yields ONE backslash. A
+    // byte that fails validation is handed to byteEscape (:51-53), whose own
     // backslash is then escaped by pythonUnicodeEscape, yielding TWO. The C1
     // rows are the pair that pins this: the same code point arrives as valid
     // UTF-8 in one row and as a lone continuation byte in the other, and the
@@ -477,7 +511,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
   // accepts a path outright), a POSIX filename may carry any byte but NUL and
   // slash, and src/adapter.ts:806-809 interpolates that path into an
   // adapter-authored failure message when `codex plugin list --json` exits
-  // non-zero. probe replays the resulting envelope AFTER its try/catch has
+  // non-zero. probe replays the resulting outcome AFTER its try/catch has
   // resolved (the loop below runProbe's catch), so the throw from
   // assertFailureWritable escapes runProbe, escapes the handler, and lands in
   // src/cli.ts's catch -- the only place an operator ever sees it.
@@ -493,7 +527,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
       }
       const codexBin = join(codexDir, "codex");
       // Writes a context line as well as failing: listingCommand appends the
-      // child's stderr to the envelope's message records
+      // child's stderr to the outcome's message records
       // (src/adapter.ts:238-246). That record is what the hoist withholds, so
       // its absence below is the end-to-end half of the atomicity contract.
       writeFileSync(
@@ -537,7 +571,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
       );
 
       assert.equal(run.status, 1);
-      // EXACTLY empty, not merely free of the offending byte. replayEnvelope
+      // EXACTLY empty, not merely free of the offending byte. replayOutcome
       // writes stdout message records too, and probe's own report follows the
       // replay, so a guard that fired late would leave a prefix here.
       assert.equal(run.stdout, "");
@@ -564,7 +598,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
 void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback", async (t) => {
   await t.test("refused at writeAdapterFailure", () => {
     // BOTH halves of the range, not just the high one. hasTerminalControl
-    // covers 0xd800-0xdfff (src/adapter-protocol.ts:203); a corpus of high
+    // covers 0xd800-0xdfff (src/adapter-result.ts:199); a corpus of high
     // surrogates alone stays green under a narrowing to `code <= 0xdbff`,
     // which admits every low surrogate. U+DC9B is the value the retiring
     // Python witness drove through code, message, hints, the message log,
@@ -573,13 +607,13 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
     for (const surrogate of ["\ud800", "\udc9b"]) {
       for (const field of ["code", "message", "hint"]) {
         const { out, ctx } = recordingCtx();
-        const envelope = failureResult(
+        const outcome = failureResult(
           "install",
           field === "code" ? `install-failed${surrogate}` : "install-failed",
           field === "message" ? `boom${surrogate}` : "boom",
           field === "hint" ? [`try again${surrogate}`] : ["try again"],
           [],
-        ).envelope;
+        ).outcome;
         const member = field === "hint" ? "hint[0]" : field;
         // assertRefused already pins BOTH streams to exactly empty, which
         // is why no `includes("    at ")` assertion appears here: after an
@@ -588,7 +622,7 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
         // by the CLI subtest in ADAPTER-TERMINAL-01, at the only boundary
         // where a traceback could become visible to an operator.
         assertRefused(
-          () => writeAdapterFailure(ctx, envelope),
+          () => writeAdapterFailure(ctx, outcome),
           out,
           surrogate,
           member,
@@ -603,7 +637,7 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
     // at the guard -- which is exactly the traceback this contract forbids.
     //
     // Both surrogates are > 0xff and <= 0xffff, so each takes the
-    // `\u%04x` branch (src/adapter-protocol.ts:121-122): the stored text
+    // `\u%04x` branch (src/adapter-result.ts:119-120): the stored text
     // is the six literal characters backslash-u-<four hex digits>, and
     // carries no surrogate at all. Both expected values were confirmed
     // against the built module rather than derived by hand.
@@ -624,7 +658,7 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
   await t.test("byte ingress via appendBytes", () => {
     // The byte ingress cannot produce a surrogate AT ALL, and that -- not an
     // escape -- is what this half asserts. decodeBackslashReplace clamps the
-    // second byte after 0xed to 0x9f (src/adapter-protocol.ts:78), so the
+    // second byte after 0xed to 0x9f (src/adapter-result.ts:76), so the
     // UTF-8 encoding of ANY surrogate fails validation and each of its three
     // bytes is byte-escaped on its own -- ed a0 80 for the high half, ed b2 9b
     // for the low one. Both rows store three double-backslash escapes and no

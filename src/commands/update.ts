@@ -18,7 +18,7 @@ import type { CommandContext } from "./context.js";
 import {
   formatPorcelain,
   gatherProbe,
-  replayEnvelope,
+  replayOutcome,
   type ProbeFacts,
 } from "./probe.js";
 import { runInstall } from "./install.js";
@@ -81,7 +81,7 @@ export async function runUpdate(
     return 1;
   }
   // Replay first, on both paths, before any decision -- clause 1.
-  for (const envelope of probe.envelopes) replayEnvelope(envelope, ctx);
+  for (const outcome of probe.outcomes) replayOutcome(outcome, ctx);
   if (probe.status === 1) {
     if (probe.message !== null) {
       ctx.stderr.write(`error: ${probe.message}\n`);
@@ -146,7 +146,7 @@ export async function runUpdate(
   }
   if (facts.status === "needs prepare") {
     // Called as a FUNCTION: a failure propagates as a status, never through
-    // `set -eu`. runPrepare has already replayed its own envelopes and
+    // `set -eu`. runPrepare has already replayed its own outcomes and
     // written its own diagnostics by the time it returns, so nothing further
     // is written here on that path.
     const prepareStatus = await runPrepare([], ctx);

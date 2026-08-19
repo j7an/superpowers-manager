@@ -109,8 +109,8 @@ eliminates latent hook-policy drift.
 ## Runtime architecture
 
 - The in-process TypeScript runtime under `src/` owns lifecycle dispatch,
-  status, and adapter-protocol handling;
-  see the [version-1 adapter response protocol](https://github.com/j7an/superpowers-manager/blob/main/docs/adapter-protocol.md).
+  status, and adapter-result handling;
+  see the [in-process adapter result contract](https://github.com/j7an/superpowers-manager/blob/main/docs/adapter-protocol.md).
 - `src/adapter.ts` owns build, inspection, reconciliation, and Codex mutation.
 - Codex is the only supported adapter today; no public harness selector ships
   yet.

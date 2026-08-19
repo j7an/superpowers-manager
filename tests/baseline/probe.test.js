@@ -563,10 +563,10 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 });
 
 // Two things at once, because one fixture proves both. First: runProbe really
-// calls replayEnvelope on a real adapter response, so the adapter's own logged
+// calls replayOutcome on a real adapter response, so the adapter's own logged
 // messages reach stderr BEFORE its error line, exactly as
 // scripts/core/validate-adapter-response.py:268-270 ordered them
-// (tests/unit/commands-probe.test.js proves replayEnvelope only in isolation).
+// (tests/unit/commands-probe.test.js proves replayOutcome only in isolation).
 // Second: nextPluginList (tests/bin/lifecycle-fakes.js:148-170) FAILS CLOSED
 // when the configured sequence runs out instead of repeating its last entry --
 // if it repeated, the ownership inspection would succeed and this run would
@@ -574,7 +574,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
 // child's stderr (src/adapter.ts:233-242), and the fake writes nothing there
-// on that path, so the envelope carries no messages at all and the error line
+// on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr. Recorded in tests/migration-inventory/probe.md.
 void test("adapter messages precede the error line on a controlled failure", async () => {

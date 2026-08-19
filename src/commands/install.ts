@@ -7,7 +7,7 @@
 // and will not be re-derived. Resolve one with:
 //   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install
 import { tmpdir } from "node:os";
-import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import { oneLine } from "../cli-arguments.js";
 import {
   requireManagedUpdateControl,
@@ -23,7 +23,7 @@ import type { CommandContext } from "./context.js";
 import {
   formatPorcelain,
   gatherProbe,
-  replayEnvelope,
+  replayOutcome,
   type ProbeFacts,
 } from "./probe.js";
 import { runPrepare } from "./prepare.js";
@@ -50,11 +50,11 @@ function readStringField(
   label: string,
 ): FieldRead {
   // Callers only reach this after invoke() has already proven
-  // `result.status === 0 && result.envelope.ok`; the guard below is for
-  // TypeScript's narrowing of `envelope.result`, not a live branch.
-  const envelope = result.envelope;
-  const parsed = envelope.ok
-    ? (envelope.result as Record<string, unknown> | null)
+  // `result.status === 0 && result.outcome.ok`; the guard below is for
+  // TypeScript's narrowing of `outcome.result`, not a live branch.
+  const outcome = result.outcome;
+  const parsed = outcome.ok
+    ? (outcome.result as Record<string, unknown> | null)
     : null;
   const raw = parsed?.[key];
   if (raw === null || raw === undefined) return { kind: "ok", value: "" };
@@ -88,7 +88,7 @@ async function invoke(
   ctx: CommandContext,
   env: NodeJS.ProcessEnv,
   argv: readonly string[],
-  envelopes: AdapterEnvelope[],
+  outcomes: AdapterOutcome[],
 ): Promise<StageResult> {
   let result: AdapterResult;
   try {
@@ -100,17 +100,17 @@ async function invoke(
       result: null,
     };
   }
-  // Clause 1: replay every envelope, on both the success and the failure
+  // Clause 1: replay every outcome, on both the success and the failure
   // path, before any decision -- collected here and replayed by runInstall
   // once gatherInstallStages's try/catch has resolved, for the same EPIPE
-  // reason gatherProbe carries its envelopes out rather than writing in place
+  // reason gatherProbe carries its outcomes out rather than writing in place
   // (src/commands/probe.ts).
-  envelopes.push(result.envelope);
-  const envelope = result.envelope;
-  if (result.status !== 0 || !envelope.ok) {
+  outcomes.push(result.outcome);
+  const outcome = result.outcome;
+  if (result.status !== 0 || !outcome.ok) {
     return {
       ok: false,
-      message: envelope.ok
+      message: outcome.ok
         ? `adapter reported a failure status for ${argv.join(" ")}`
         : null,
       result,
@@ -125,14 +125,14 @@ async function invoke(
 // supplied -- which gatherInstallStages below does, precisely so this class
 // stays reserved for mkdtemp failure (nothing collected yet) and the
 // callback's own throw (never reachable here; see gatherInstallStages).
-// Carries the envelopes collected so far so runInstall's catch can still
+// Carries the outcomes collected so far so runInstall's catch can still
 // replay them instead of discarding them with a bare re-throw. Same shape as
 // src/commands/uninstall.ts's GatherFailure, duplicated for the same reason
 // invoke() is: no shared dependency between the two modules.
 class GatherFailure extends Error {
   constructor(
     readonly inner: unknown,
-    readonly envelopes: readonly AdapterEnvelope[],
+    readonly outcomes: readonly AdapterOutcome[],
   ) {
     super("install gather failed");
   }
@@ -141,19 +141,19 @@ class GatherFailure extends Error {
 type StageOutcome =
   | {
       readonly kind: "blocked";
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly lines: readonly string[];
     }
   | {
       readonly kind: "failed";
-      readonly envelopes: readonly AdapterEnvelope[];
-      // null means replayEnvelope already emitted the adapter's own error:
-      // and hint: lines for the failing envelope.
+      readonly outcomes: readonly AdapterOutcome[];
+      // null means replayOutcome already emitted the adapter's own error:
+      // and hint: lines for the failing outcome.
       readonly message: string | null;
     }
   | {
       readonly kind: "verified";
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly status: 0 | 1;
       readonly stdout: readonly string[];
       readonly stderr: readonly string[];
@@ -190,7 +190,7 @@ async function gatherInstallStages(
   // scripts/install:38 -- ${TMPDIR:-/tmp}. Matches
   // src/commands/uninstall.ts's gatherUninstall.
   const parent = ctx.env.TMPDIR ?? tmpdir();
-  const envelopes: AdapterEnvelope[] = [];
+  const outcomes: AdapterOutcome[] = [];
   let cleanupWarning: string | null = null;
   try {
     const outcome = await withWorkspace(
@@ -200,7 +200,7 @@ async function gatherInstallStages(
         const env = { ...ctx.env, TMPDIR: workspace };
         const failed = (message: string | null): StageOutcome => ({
           kind: "failed",
-          envelopes,
+          outcomes,
           message,
         });
 
@@ -211,7 +211,7 @@ async function gatherInstallStages(
           ctx,
           env,
           ["inspect", "--view", "ownership"],
-          envelopes,
+          outcomes,
         );
         if (!ownership.ok) return failed(ownership.message);
         const identity = readStringField(
@@ -222,7 +222,7 @@ async function gatherInstallStages(
         if (identity.kind === "malformed") return failed(identity.message);
         const legacy = requireNoLegacyState(identity.value);
         if (legacy.kind === "blocked") {
-          return { kind: "blocked", envelopes, lines: legacy.lines };
+          return { kind: "blocked", outcomes, lines: legacy.lines };
         }
         if (legacy.kind === "unknown") return failed(legacy.message);
 
@@ -231,7 +231,7 @@ async function gatherInstallStages(
           ctx,
           env,
           ["inspect", "--view", "update-control"],
-          envelopes,
+          outcomes,
         );
         if (!updateControl.ok) return failed(updateControl.message);
         const control = readStringField(
@@ -249,7 +249,7 @@ async function gatherInstallStages(
           ctx,
           env,
           ["install", "--package-root", ctx.root],
-          envelopes,
+          outcomes,
         );
         if (!install.ok) return failed(install.message);
 
@@ -272,7 +272,7 @@ async function gatherInstallStages(
           ctx,
           env,
           ["inspect", "--view", "fingerprint"],
-          envelopes,
+          outcomes,
         );
         let inspectResult: AdapterResult;
         if (inspected.ok) {
@@ -289,7 +289,7 @@ async function gatherInstallStages(
         );
         return {
           kind: "verified",
-          envelopes,
+          outcomes,
           status: verdict.ok ? 0 : 1,
           stdout: verdict.stdout,
           stderr: verdict.stderr,
@@ -310,7 +310,7 @@ async function gatherInstallStages(
     // Reachable only for mkdtemp failure (nothing collected yet) -- the
     // callback above never throws, so a post-success cleanup failure is
     // already handled by onCleanupFailure and cannot reach here.
-    throw new GatherFailure(cause, envelopes);
+    throw new GatherFailure(cause, outcomes);
   }
 }
 
@@ -389,7 +389,7 @@ export async function runInstall(
     return 1;
   }
   // Replay first, on both paths, before any decision -- clause 1.
-  for (const envelope of probe.envelopes) replayEnvelope(envelope, ctx);
+  for (const outcome of probe.outcomes) replayOutcome(outcome, ctx);
   if (probe.status === 1) {
     if (probe.message !== null) {
       ctx.stderr.write(`error: ${probe.message}\n`);
@@ -433,7 +433,7 @@ export async function runInstall(
   // scripts/install:22-33.
   if (facts.status === "needs prepare") {
     // Called as a FUNCTION: a failure propagates as a status, never through
-    // `set -eu`. runPrepare has already replayed its own envelopes and
+    // `set -eu`. runPrepare has already replayed its own outcomes and
     // written its own diagnostics by the time it returns, so nothing further
     // is written here on that path.
     const prepareStatus = await runPrepare([], ctx);
@@ -469,15 +469,15 @@ export async function runInstall(
   try {
     stage = await gatherInstallStages(ctx, desiredCommit);
   } catch (cause) {
-    const envelopes =
-      cause instanceof GatherFailure ? cause.envelopes : ([] as const);
-    for (const envelope of envelopes) replayEnvelope(envelope, ctx);
+    const outcomes =
+      cause instanceof GatherFailure ? cause.outcomes : ([] as const);
+    for (const outcome of outcomes) replayOutcome(outcome, ctx);
     const inner = cause instanceof GatherFailure ? cause.inner : cause;
     ctx.stderr.write(`error: ${oneLine(inner)}\n`);
     return 1;
   }
   const { outcome, cleanupWarning } = stage;
-  for (const envelope of outcome.envelopes) replayEnvelope(envelope, ctx);
+  for (const each of outcome.outcomes) replayOutcome(each, ctx);
 
   let status: number;
   if (outcome.kind === "blocked") {

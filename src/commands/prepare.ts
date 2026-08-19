@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import { atomicReplaceDir } from "../atomic.js";
 import { oneLine } from "../cli-arguments.js";
 import { computeEffectiveSelection } from "../effective-selection.js";
@@ -20,7 +20,7 @@ import { manifestVersionForRef } from "../upstream-version.js";
 import { fetchExactCommit, gitSafeSource } from "../upstream.js";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
-import { replayEnvelope } from "./probe.js";
+import { replayOutcome } from "./probe.js";
 
 // scripts/prepare:64-67, via spw_require_upstream_path. Order is the shell's;
 // the first miss wins.
@@ -165,16 +165,16 @@ const NO_VALIDATOR_OUTPUT: ValidatorOutput = { stdout: "", stderr: "" };
 type PrepareOutcome =
   | {
       readonly kind: "ok";
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly validator: ValidatorOutput;
       readonly resolvedRef: string;
       readonly commit: string;
     }
   | {
       readonly kind: "failed";
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly validator: ValidatorOutput;
-      // null when the replayed envelope already carries the diagnostic.
+      // null when the replayed outcome already carries the diagnostic.
       readonly message: string | null;
     };
 
@@ -188,8 +188,8 @@ type PrepareOutcome =
 // precondition does NOT hold here: runValidator rejects with prepareError from
 // its child.on("error") handler on a spawn failure, and withWorkspace returns
 // the callback error on that path (src/workspace.ts:137) without ever
-// consulting the reporter below. The envelopes the callback below collected
-// into its `envelopes` array are lost there. That is a separate, unassigned
+// consulting the reporter below. The outcomes the callback below collected
+// into its `outcomes` array are lost there. That is a separate, unassigned
 // defect -- the callback-throw path discards them -- and it is out of scope
 // here: this type fixes only the post-success cleanup case, and its existence
 // should not be read as covering the other.
@@ -286,7 +286,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
     async (workspace): Promise<PrepareOutcome> => {
       const failed = (message: string): PrepareOutcome => ({
         kind: "failed",
-        envelopes: [],
+        outcomes: [],
         validator: NO_VALIDATOR_OUTPUT,
         message,
       });
@@ -420,7 +420,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         );
       } catch {
         // ctx.adapter reports CONTROLLED failures by return value
-        // (src/adapter-protocol.ts:34-37) but still THROWS for a
+        // (src/adapter-result.ts:32-35) but still THROWS for a
         // non-AdapterFailure cause (src/adapter.ts:1009). That cause is by
         // construction the one failure src/adapter.ts declined to own, so its
         // text must never reach ctx.stderr. Caught here rather than in
@@ -428,18 +428,18 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         // src/commands/probe.ts:210-232 gives it.
         return failed("cannot build the generated plugin candidate");
       }
-      const envelopes = [built.envelope];
-      if (built.status !== 0 || !built.envelope.ok) {
+      const outcomes = [built.outcome];
+      if (built.status !== 0 || !built.outcome.ok) {
         return {
           kind: "failed",
-          envelopes,
+          outcomes,
           validator: NO_VALIDATOR_OUTPUT,
-          // replayEnvelope emits the adapter's own error and hints; a second
+          // replayOutcome emits the adapter's own error and hints; a second
           // line here would duplicate them. The `ok && status !== 0`
           // combination cannot arise from successResult/failureResult, so it
           // gets its own hand-written message rather than a silent replay.
-          message: built.envelope.ok
-            ? "adapter reported failure without an error envelope"
+          message: built.outcome.ok
+            ? "adapter reported failure without an error outcome"
             : null,
         };
       }
@@ -450,7 +450,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         if (!(await regularFileExists(additionalValidator))) {
           return {
             kind: "failed",
-            envelopes,
+            outcomes,
             validator,
             message: `additional plugin validator not found: ${additionalValidator}`,
           };
@@ -465,7 +465,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         if (ran.code !== 0) {
           return {
             kind: "failed",
-            envelopes,
+            outcomes,
             validator,
             message: "additional plugin validation failed",
           };
@@ -485,7 +485,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       } catch (cause) {
         return {
           kind: "failed",
-          envelopes,
+          outcomes,
           validator,
           message: `cannot install generated tree into ${pluginRoot}: ${oneLine(cause)}`,
         };
@@ -493,7 +493,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
 
       return {
         kind: "ok",
-        envelopes,
+        outcomes,
         validator,
         resolvedRef: selection.resolvedRef,
         commit: selection.desiredCommit,
@@ -578,7 +578,7 @@ export async function runPrepare(
     return 1;
   }
   const { outcome, cleanupWarning } = run;
-  for (const envelope of outcome.envelopes) replayEnvelope(envelope, ctx);
+  for (const each of outcome.outcomes) replayOutcome(each, ctx);
   if (outcome.validator.stdout.length > 0) {
     ctx.stdout.write(outcome.validator.stdout);
   }

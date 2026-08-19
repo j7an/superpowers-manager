@@ -13,9 +13,8 @@ export interface AdapterError {
   readonly hints: readonly string[];
 }
 
-export type AdapterEnvelope =
+export type AdapterOutcome =
   | {
-      readonly protocol: 1;
       readonly operation: string;
       readonly ok: true;
       readonly messages: readonly AdapterMessage[];
@@ -23,7 +22,6 @@ export type AdapterEnvelope =
       readonly error: null;
     }
   | {
-      readonly protocol: 1;
       readonly operation: string;
       readonly ok: false;
       readonly messages: readonly AdapterMessage[];
@@ -33,7 +31,7 @@ export type AdapterEnvelope =
 
 export interface AdapterResult {
   readonly status: 0 | 1;
-  readonly envelope: AdapterEnvelope;
+  readonly outcome: AdapterOutcome;
 }
 
 // Lives here, not in src/adapter.ts, rather than having context.ts import it
@@ -42,7 +40,7 @@ export interface AdapterResult {
 // (`import type { AdapterContext } from "../adapter.js"`) at emit, so it
 // produces no runtime edge either way and a cycle was never possible. The
 // actual reason is grouping: AdapterContext, AdapterResult, and
-// AdapterEnvelope are all protocol types, and this is the module that owns
+// AdapterOutcome are all protocol types, and this is the module that owns
 // the protocol rather than the one that implements it. adapter.ts re-exports
 // this name so its existing importers are unaffected.
 export interface AdapterContext {
@@ -163,8 +161,7 @@ export function successResult(
 ): AdapterResult {
   return {
     status: 0,
-    envelope: {
-      protocol: 1,
+    outcome: {
       operation,
       ok: true,
       messages,
@@ -183,8 +180,7 @@ export function failureResult(
 ): AdapterResult {
   return {
     status: 1,
-    envelope: {
-      protocol: 1,
+    outcome: {
       operation,
       ok: false,
       messages,
@@ -208,11 +204,9 @@ export function hasTerminalControl(value: string): boolean {
   return false;
 }
 
-// D8b's enforcement point on the LIVE product path. serializeEnvelope below is
-// the only other place that scans a failure's code, message, and hints, and
-// its sole caller is src/adapter-cli.ts, which no product path invokes; PR
-// 11.5 slice 5 removes it. replayEnvelope -- which every command replays
-// through -- wrote these three strings to the terminal unfiltered.
+// D8b's enforcement point on the LIVE product path. replayOutcome -- which
+// every command replays through -- wrote these three strings to the terminal
+// unfiltered.
 //
 // NOT requireProtocolString: that one message
 // ("protocol strings must not contain terminal control characters") names no
@@ -220,7 +214,7 @@ export function hasTerminalControl(value: string): boolean {
 // scans with the predicate underneath it instead.
 //
 // Order is code, then message, then hints by ascending index, so the thrown
-// message is a function of the envelope rather than of iteration order.
+// message is a function of the outcome rather than of iteration order.
 //
 // The offending value is never interpolated, never sanitized, and never
 // truncated into the message: the contract is that an unsafe string does not
@@ -229,24 +223,24 @@ export function hasTerminalControl(value: string): boolean {
 // emits `error: <this module's own hand-written message>` with exit 1, which
 // is the sanctioned interpolation under AGENTS.md.
 //
-// Exported separately from writeAdapterFailure because replayEnvelope writes
+// Exported separately from writeAdapterFailure because replayOutcome writes
 // every message BEFORE the error line: a caller that validated only at the
 // write would already have put the context lines on the stream when the guard
 // fired. Hoisting this above the message loop is what makes a refused failure
 // leave both streams untouched.
-export function assertFailureWritable(envelope: AdapterEnvelope): void {
-  if (envelope.ok) return;
-  if (hasTerminalControl(envelope.error.code)) {
+export function assertFailureWritable(outcome: AdapterOutcome): void {
+  if (outcome.ok) return;
+  if (hasTerminalControl(outcome.error.code)) {
     throw new Error(
       "adapter failure code contains a terminal control character",
     );
   }
-  if (hasTerminalControl(envelope.error.message)) {
+  if (hasTerminalControl(outcome.error.message)) {
     throw new Error(
       "adapter failure message contains a terminal control character",
     );
   }
-  for (const [index, hint] of envelope.error.hints.entries()) {
+  for (const [index, hint] of outcome.error.hints.entries()) {
     if (hasTerminalControl(hint)) {
       throw new Error(
         `adapter failure hint[${index}] contains a terminal control character`,
@@ -262,60 +256,20 @@ export function assertFailureWritable(envelope: AdapterEnvelope): void {
 // module at one that already imports from it.
 export function writeAdapterFailure(
   ctx: { readonly stderr: NodeJS.WritableStream },
-  envelope: AdapterEnvelope,
+  outcome: AdapterOutcome,
 ): void {
-  assertFailureWritable(envelope);
-  if (envelope.ok) return;
-  ctx.stderr.write(`error: ${envelope.error.message}\n`);
-  for (const hint of envelope.error.hints) {
+  assertFailureWritable(outcome);
+  if (outcome.ok) return;
+  ctx.stderr.write(`error: ${outcome.error.message}\n`);
+  for (const hint of outcome.error.hints) {
     ctx.stderr.write(`hint: ${hint}\n`);
   }
 }
 
-function requireProtocolString(value: string): void {
+export function requireProtocolString(value: string): void {
   if (hasTerminalControl(value)) {
     throw new Error(
       "protocol strings must not contain terminal control characters",
     );
   }
-}
-
-function requireFinite(value: JsonValue): void {
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    throw new Error("protocol JSON must not contain non-finite numbers");
-  }
-  if (Array.isArray(value)) {
-    for (const child of value) requireFinite(child);
-  } else if (value !== null && typeof value === "object") {
-    for (const child of Object.values(value)) requireFinite(child);
-  }
-}
-
-export function serializeEnvelope(envelope: AdapterEnvelope): string {
-  requireProtocolString(envelope.operation);
-  for (const [index, message] of envelope.messages.entries()) {
-    if (
-      (message.channel !== "stdout" && message.channel !== "stderr") ||
-      message.text.length === 0 ||
-      message.text.includes("\t") ||
-      message.text.includes("\r") ||
-      hasTerminalControl(message.text)
-    ) {
-      throw new Error(`invalid message record at line ${index + 1}`);
-    }
-  }
-  if (envelope.ok) {
-    requireFinite(envelope.result);
-  } else {
-    requireProtocolString(envelope.error.code);
-    requireProtocolString(envelope.error.message);
-    for (const hint of envelope.error.hints) {
-      if (hasTerminalControl(hint)) {
-        throw new Error(
-          "protocol hints must not contain terminal control characters",
-        );
-      }
-    }
-  }
-  return `${JSON.stringify(envelope)}\n`;
 }

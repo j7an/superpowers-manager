@@ -2175,7 +2175,7 @@ function lifecycleCodexCase(options) {
  * rejected with `invalid adapter response` — a diagnostic that exists nowhere
  * under `src/`. An injected double returns a structured `AdapterResult`, so
  * the analogue at the same decision point is evidence the reader cannot
- * interpret: a well-formed envelope whose `update_control` is not a string,
+ * interpret: a well-formed outcome whose `update_control` is not a string,
  * which `src/commands/probe.ts`'s `inspect()` fails closed on. The ID's
  * contract — "Unsupported, unknown, or malformed evidence fails without
  * mutation" — is unchanged; only the wording of the diagnostic is the port's.
@@ -2189,16 +2189,15 @@ function updateControlAdapter(response) {
   const calls = [];
   /**
    * @param {readonly string[]} argv
-   * @param {import("../../src/adapter-protocol.js").AdapterContext} adapterCtx
-   * @returns {Promise<import("../../src/adapter-protocol.js").AdapterResult>}
+   * @param {import("../../src/adapter-result.js").AdapterContext} adapterCtx
+   * @returns {Promise<import("../../src/adapter-result.js").AdapterResult>}
    */
   const adapter = async (argv, adapterCtx) => {
     calls.push([...argv]);
     if (argv.join(" ") === "inspect --view update-control") {
       return {
         status: 0,
-        envelope: {
-          protocol: 1,
+        outcome: {
           operation: "inspect",
           ok: true,
           messages: [],
@@ -2670,11 +2669,13 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // dispatches into (ctx.adapter, src/commands/probe.ts:231).
   //
   // Be precise about what that buys, because the next reader auditing whether
-  // src/adapter.ts:263-264 is reachable needs the true answer: on the only
-  // INVOKED product path, the preflight makes both branch outcomes
-  // unobservable. dist/adapter-cli.js does call runAdapter with a bare
-  // process.env and no preflight, but src/adapter-protocol.ts:211-215 records
-  // that its sole caller is one "no product path invokes". So this half and
+  // src/adapter.ts:263-264 is reachable needs the true answer: the preflight
+  // makes both branch outcomes unobservable on EVERY product path, not merely
+  // the common one. src/cli.ts is the sole site that binds runAdapter to a
+  // context (src/cli.ts:348-351), and it runs the preflight first. The one
+  // entry point that called runAdapter with a bare process.env and no
+  // preflight was src/adapter-cli.ts, and PR 11.5 slice 5 deleted it, so
+  // nothing shipped reaches src/adapter.ts:263-264 unguarded. So this half and
   // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
   // production code, pinned at the layer where the rule actually lives -- not
   // proof that a user-reachable invocation exercises it.
@@ -2703,8 +2704,8 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
         env: environment,
       }),
     );
-    assert.equal(result.status, 0, JSON.stringify(result.envelope));
-    assert.equal(result.envelope.ok, true);
+    assert.equal(result.status, 0, JSON.stringify(result.outcome));
+    assert.equal(result.outcome.ok, true);
     assert.equal(
       readFileSync(log, "utf8").split("\n").filter(Boolean)[0],
       "plugin list --json",
@@ -2764,14 +2765,14 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
       }),
     );
     assert.equal(result.status, 1);
-    assert.equal(result.envelope.ok, false);
+    assert.equal(result.outcome.ok, false);
     assert.equal(
-      result.envelope.error?.code,
+      result.outcome.error?.code,
       "command-not-found",
-      JSON.stringify(result.envelope),
+      JSON.stringify(result.outcome),
     );
     assert.equal(
-      result.envelope.error?.message,
+      result.outcome.error?.message,
       "required Codex command not found: true",
     );
     assert.equal(readFileSync(log, "utf8"), "");
@@ -2947,7 +2948,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     assert.equal(result.status, 1);
     // Exact, because the resolved root inside this text IS the contract: it is
     // the only observable that separates `/.codex` from the decoy. probe
-    // replays the adapter envelope's own failure (src/commands/probe.ts:459),
+    // replays the adapter outcome's own failure (src/commands/probe.ts:459),
     // so the adapter's fail() text (src/adapter.ts:843-847) arrives verbatim.
     // Whole-stream equality also carries the retiring case's second guard --
     // that this is a CONTROLLED failure -- since a protocol violation would

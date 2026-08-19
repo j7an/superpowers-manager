@@ -3,11 +3,11 @@
 // and will not be re-derived. Resolve one with:
 //   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe
 
-import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import {
   assertFailureWritable,
   writeAdapterFailure,
-} from "../adapter-protocol.js";
+} from "../adapter-result.js";
 import { oneLine } from "../cli-arguments.js";
 import { computeEffectiveSelection } from "../effective-selection.js";
 import { generatedCommitOrEmpty } from "../provenance.js";
@@ -169,46 +169,46 @@ export function formatHuman(f: ProbeFacts): string {
 // Interpolating error.message and each hint is the sanctioned form (AGENTS.md):
 // src/adapter.ts has 52 `fail()` sites and none interpolates a caught error's
 // message, so the callee owns every failure reachable on this path. Those two
-// writes now live in writeAdapterFailure (src/adapter-protocol.ts), which
+// writes now live in writeAdapterFailure (src/adapter-result.ts), which
 // validates all three strings before the first of them reaches the stream.
 //
 // This writes to ctx, so it MUST NOT be called from inside gatherProbe's try
 // -- see the ProbeOutcome note below.
-export function replayEnvelope(
-  envelope: AdapterEnvelope,
+export function replayOutcome(
+  outcome: AdapterOutcome,
   ctx: CommandContext,
 ): void {
   // Hoisted ABOVE the message loop, and that ordering is the point: a failure
   // whose code, message, or a hint carries a terminal control character must
   // leave both streams untouched, not the context lines followed by nothing.
-  // Returns immediately on a succeeding envelope.
-  assertFailureWritable(envelope);
-  for (const message of envelope.messages) {
+  // Returns immediately on a succeeding outcome.
+  assertFailureWritable(outcome);
+  for (const message of outcome.messages) {
     const stream = message.channel === "stdout" ? ctx.stdout : ctx.stderr;
     stream.write(`${message.text}\n`);
   }
   // The message loop stays unguarded on purpose: D8b scopes the check to code,
   // message, and hints, and AdapterMessageLog escapes message text before it is
   // stored, so scanning it here would re-check a population that cannot fail.
-  writeAdapterFailure(ctx, envelope);
+  writeAdapterFailure(ctx, outcome);
 }
 
 type Inspection =
   | {
       readonly ok: true;
       readonly value: string;
-      readonly envelope: AdapterEnvelope;
+      readonly outcome: AdapterOutcome;
     }
   | {
       readonly ok: false;
-      // null when the envelope's own error already carries the diagnostic --
-      // replayEnvelope emits it, and adding a second line would duplicate it.
+      // null when the outcome's own error already carries the diagnostic --
+      // replayOutcome emits it, and adding a second line would duplicate it.
       readonly message: string | null;
-      readonly envelope: AdapterEnvelope | null;
+      readonly outcome: AdapterOutcome | null;
     };
 
 // `runAdapter` reports a CONTROLLED failure by RETURN VALUE, not by throwing
-// (src/adapter-protocol.ts:34-37). The shell got fail-closed behaviour for
+// (src/adapter-result.ts:32-35). The shell got fail-closed behaviour for
 // free: spw_invoke_adapter returned 1 and scripts/probe ran under `set -eu`.
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
@@ -240,49 +240,49 @@ async function inspect(
     // this function is ever called with -- so naming the input is safe.
     return {
       ok: false,
-      envelope: null,
+      outcome: null,
       message: `cannot inspect Codex adapter state for view ${view}`,
     };
   }
-  const envelope = result.envelope;
-  if (result.status !== 0 || !envelope.ok) {
-    // The `envelope.ok && status !== 0` combination cannot arise from
+  const outcome = result.outcome;
+  if (result.status !== 0 || !outcome.ok) {
+    // The `outcome.ok && status !== 0` combination cannot arise from
     // successResult/failureResult, so it gets its own hand-written message
     // rather than falling through to a replay that would print nothing.
     return {
       ok: false,
-      envelope,
-      message: envelope.ok
+      outcome,
+      message: outcome.ok
         ? `adapter reported a failure status for inspect --view ${view}`
         : null,
     };
   }
-  const value = (envelope.result as Record<string, unknown> | null)?.[key];
+  const value = (outcome.result as Record<string, unknown> | null)?.[key];
   // The Python reader printed the empty string for a JSON null
   // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
   // whenever no plugin version is active (src/adapter.ts:818).
   if (value === null || value === undefined) {
-    return { ok: true, value: "", envelope };
+    return { ok: true, value: "", outcome };
   }
   if (typeof value !== "string") {
     return {
       ok: false,
-      envelope,
+      outcome,
       message: `adapter returned a non-string ${key} for inspect --view ${view}`,
     };
   }
-  return { ok: true, value, envelope };
+  return { ok: true, value, outcome };
 }
 
 type ProbeOutcome =
   | {
       readonly status: 1;
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly message: string | null;
     }
   | {
       readonly status: 0;
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly facts: ProbeFacts;
     };
 
@@ -290,8 +290,8 @@ type ProbeOutcome =
 // data. It performs no writes of its own, so nothing inside runProbe's try can
 // raise EPIPE — the same shape as src/commands/unpin.ts's attemptUnpin.
 //
-// The envelopes are CARRIED OUT rather than replayed in place, for that same
-// reason: replayEnvelope writes to ctx, and a write inside this try could
+// The outcomes are CARRIED OUT rather than replayed in place, for that same
+// reason: replayOutcome writes to ctx, and a write inside this try could
 // raise EPIPE and be caught and relabelled as a selection failure. runProbe
 // replays them, in collection order, after the try/catch has resolved. The
 // operator-visible result is identical -- probe emits nothing else until the
@@ -304,30 +304,30 @@ export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
   const generatedCommit = await generatedCommitOrEmpty(ctx.root);
 
-  const envelopes: AdapterEnvelope[] = [];
+  const outcomes: AdapterOutcome[] = [];
   const collect = async (view: string, key: string): Promise<Inspection> => {
     const result = await inspect(view, key, ctx);
-    if (result.envelope !== null) envelopes.push(result.envelope);
+    if (result.outcome !== null) outcomes.push(result.outcome);
     return result;
   };
 
   const fingerprint = await collect("fingerprint", "fingerprint");
   if (!fingerprint.ok) {
-    return { status: 1, envelopes, message: fingerprint.message };
+    return { status: 1, outcomes, message: fingerprint.message };
   }
   const ownership = await collect("ownership", "identity_state");
   if (!ownership.ok) {
-    return { status: 1, envelopes, message: ownership.message };
+    return { status: 1, outcomes, message: ownership.message };
   }
   const updateControl = await collect("update-control", "update_control");
   if (!updateControl.ok) {
-    return { status: 1, envelopes, message: updateControl.message };
+    return { status: 1, outcomes, message: updateControl.message };
   }
 
   const saved = selection.saved;
   return {
     status: 0,
-    envelopes,
+    outcomes,
     facts: {
       requestedRef: selection.requestedRef,
       resolvedRef: selection.resolvedRef,
@@ -456,10 +456,10 @@ export async function runProbe(
   // Replay first, on both paths: the shell validator replayed every response's
   // messages whether or not that response was a failure
   // (scripts/core/validate-adapter-response.py:268).
-  for (const envelope of outcome.envelopes) replayEnvelope(envelope, ctx);
+  for (const each of outcome.outcomes) replayOutcome(each, ctx);
   if (outcome.status === 1) {
-    // null means replayEnvelope already emitted the adapter's own `error:`
-    // and `hint:` lines for the failing envelope.
+    // null means replayOutcome already emitted the adapter's own `error:`
+    // and `hint:` lines for the failing outcome.
     if (outcome.message !== null) {
       ctx.stderr.write(`error: ${outcome.message}\n`);
     }

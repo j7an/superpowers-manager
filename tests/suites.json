@@ -34,7 +34,7 @@
     "tests/bin/uninstall-commands.test.js",
     "tests/bin/units.test.js",
     "tests/bin/workflows.test.js",
-    "tests/unit/adapter-protocol.test.js",
+    "tests/unit/adapter-result.test.js",
     "tests/unit/adapter.test.js",
     "tests/unit/atomic.test.js",
     "tests/unit/codex-json.test.js",

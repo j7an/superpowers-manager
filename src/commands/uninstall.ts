@@ -6,13 +6,13 @@
 // and will not be re-derived. Resolve one with:
 //   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall
 import { tmpdir } from "node:os";
-import type { AdapterEnvelope, AdapterResult } from "../adapter-protocol.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import { oneLine } from "../cli-arguments.js";
 import type { Check } from "../lifecycle.js";
 import { reportLegacyState, verifyUninstalledResources } from "../lifecycle.js";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
-import { replayEnvelope } from "./probe.js";
+import { replayOutcome } from "./probe.js";
 
 // scripts/core/adapter.sh:58-73. A non-Boolean is a HARD failure, never a
 // falsy absent -- the shell spw_die'd rather than defaulting.
@@ -24,7 +24,7 @@ import { replayEnvelope } from "./probe.js";
 // collapse Task 2 undoes in src/lifecycle.ts's resultObject. Spec §4.2a
 // clauses 2 and 4.
 type Presence =
-  // Clause 2/3: the call itself did not produce a usable envelope. The
+  // Clause 2/3: the call itself did not produce a usable outcome. The
   // caller already knows -- via the `invoke()` gate below -- which of clause
   // 2 or 3 applies and what (if any) message to write; this arm exists so
   // presenceFlag stays a total function over an arbitrary AdapterResult
@@ -39,11 +39,11 @@ function presenceFlag(
   result: AdapterResult,
   key: "plugin" | "marketplace",
 ): Presence {
-  const envelope = result.envelope;
-  if (result.status !== 0 || !envelope.ok) {
+  const outcome = result.outcome;
+  if (result.status !== 0 || !outcome.ok) {
     return { kind: "call-failed" };
   }
-  const value = envelope.result;
+  const value = outcome.result;
   // Mirrors src/lifecycle.ts's verifyUninstalledResources: a missing or
   // non-object `resources` falls THROUGH to the Boolean check rather than
   // getting its own message, for parity with
@@ -66,10 +66,10 @@ function presenceFlag(
 }
 
 // Every ctx.adapter call site obeys spec §4.2a's five clauses, in order:
-// replay every envelope (the caller pushes it below before deciding
-// anything); !envelope.ok stops with no additional diagnostic (`message:
-// null` -- replayEnvelope already wrote the adapter's own error:/hint:
-// lines); envelope.ok && status !== 0 gets a hand-written message naming the
+// replay every outcome (the caller pushes it below before deciding
+// anything); !outcome.ok stops with no additional diagnostic (`message:
+// null` -- replayOutcome already wrote the adapter's own error:/hint:
+// lines); outcome.ok && status !== 0 gets a hand-written message naming the
 // operation; a stop issues no further calls; and an unrelated throw (a
 // non-AdapterFailure cause -- src/adapter.ts:1009) gets a hand-written
 // message naming the operation too, never the caught error's own text
@@ -83,7 +83,7 @@ async function invoke(
   ctx: CommandContext,
   env: NodeJS.ProcessEnv,
   argv: readonly string[],
-  envelopes: AdapterEnvelope[],
+  outcomes: AdapterOutcome[],
 ): Promise<StageResult> {
   let result: AdapterResult;
   try {
@@ -94,17 +94,17 @@ async function invoke(
       message: `cannot invoke Codex adapter for ${argv.join(" ")}`,
     };
   }
-  // Clause 1: replay every envelope, on both the success and the failure
+  // Clause 1: replay every outcome, on both the success and the failure
   // path, before any decision -- collected here and replayed by the caller
   // once gatherUninstall's try/catch has resolved, for the same EPIPE reason
-  // gatherProbe carries its envelopes out rather than writing in place
+  // gatherProbe carries its outcomes out rather than writing in place
   // (src/commands/probe.ts:279-284).
-  envelopes.push(result.envelope);
-  const envelope = result.envelope;
-  if (result.status !== 0 || !envelope.ok) {
+  outcomes.push(result.outcome);
+  const outcome = result.outcome;
+  if (result.status !== 0 || !outcome.ok) {
     return {
       ok: false,
-      message: envelope.ok
+      message: outcome.ok
         ? `adapter reported a failure status for ${argv.join(" ")}`
         : null,
     };
@@ -115,32 +115,32 @@ async function invoke(
 type UninstallOutcome =
   | {
       readonly status: 1;
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly message: string | null;
     }
   | {
       readonly status: 0;
-      readonly envelopes: readonly AdapterEnvelope[];
+      readonly outcomes: readonly AdapterOutcome[];
       readonly lines: readonly string[];
     };
 
 // withWorkspace throws for mkdtemp failure before the callback ever runs
 // ("cannot create workspace", src/workspace.ts:120). A bare re-throw would
-// silently drop every envelope collected before that point -- a narrow
+// silently drop every outcome collected before that point -- a narrow
 // DIAG-ADAPTER-01 regression the shell never had, since it replayed each
 // adapter response as it went rather than batching replay to the end. This
-// carries the envelopes collected so far alongside the original cause, so
+// carries the outcomes collected so far alongside the original cause, so
 // runUninstall's catch can still replay them before reporting the cause.
 //
 // The post-success cleanup failure no longer reaches here: onCleanupFailure
 // below suppresses withWorkspace's throw for that case and records the
 // warning as data, so the computed UninstallOutcome survives it. The
-// envelope-carrying is still load-bearing for mkdtemp, and the shape stays
+// outcome-carrying is still load-bearing for mkdtemp, and the shape stays
 // identical to src/commands/install.ts's GatherFailure.
 class GatherFailure extends Error {
   constructor(
     readonly inner: unknown,
-    readonly envelopes: readonly AdapterEnvelope[],
+    readonly outcomes: readonly AdapterOutcome[],
   ) {
     super("uninstall gather failed");
   }
@@ -178,7 +178,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
   // collected before a workspace throw. Both `mkdtemp` failure (nothing
   // collected yet) and a post-success cleanup failure (everything the
   // callback collected) reach this same array.
-  const envelopes: AdapterEnvelope[] = [];
+  const outcomes: AdapterOutcome[] = [];
   let cleanupWarning: string | null = null;
   try {
     const outcome = await withWorkspace(
@@ -188,7 +188,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         const env = { ...ctx.env, TMPDIR: workspace };
         const failed = (message: string | null): UninstallOutcome => ({
           status: 1,
-          envelopes,
+          outcomes,
           message,
         });
 
@@ -197,7 +197,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
           ctx,
           env,
           ["inspect", "--view", "ownership"],
-          envelopes,
+          outcomes,
         );
         if (!first.ok) return failed(first.message);
 
@@ -209,7 +209,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         }
         if (pluginFlag.kind === "call-failed") {
           // Unreachable via this call path: `first.ok` above already proved
-          // status === 0 && envelope.ok, the only inputs presenceFlag reads
+          // status === 0 && outcome.ok, the only inputs presenceFlag reads
           // to decide this arm. Handled anyway so presenceFlag stays total
           // and this switch stays exhaustive rather than assuming its caller
           // always gates first.
@@ -236,7 +236,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
             "--marketplace-present",
             String(marketplaceFlag.value),
           ],
-          envelopes,
+          outcomes,
         );
         if (!uninstallStage.ok) return failed(uninstallStage.message);
 
@@ -247,7 +247,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
           ctx,
           env,
           ["inspect", "--view", "ownership"],
-          envelopes,
+          outcomes,
         );
         if (!second.ok) return failed(second.message);
 
@@ -257,11 +257,11 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         // identity_state comes from this SAME second inspection, matching
         // scripts/uninstall:31's spw_adapter_result_get read of the
         // overwritten inspect_result. `second.ok` already proved this call
-        // succeeded, so envelope.ok is true here; the explicit check below is
+        // succeeded, so outcome.ok is true here; the explicit check below is
         // for TypeScript's narrowing (a local variable, not a re-derivation
         // of that fact) rather than a live branch.
-        const secondEnvelope = second.result.envelope;
-        if (!secondEnvelope.ok) return failed(null);
+        const secondOutcome = second.result.outcome;
+        if (!secondOutcome.ok) return failed(null);
         // Mirrors src/commands/probe.ts:250-257's inspect() and
         // src/lifecycle.ts:171-190's fingerprint read: a JSON null or a
         // missing key defaults to "" (the Python reader's own convention for
@@ -274,7 +274,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         // sites as support even though both of them fail closed on a
         // non-string value rather than stringifying it. AGENTS.md's
         // fail-closed rule wins over shell parity here.)
-        const parsed = secondEnvelope.result as Record<string, unknown> | null;
+        const parsed = secondOutcome.result as Record<string, unknown> | null;
         const identityRaw = parsed?.identity_state;
         let identityState: string;
         if (identityRaw === null || identityRaw === undefined) {
@@ -307,7 +307,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
             ".cache/upstream/ were left in place; remove them manually or " +
             "regenerate with npx superpowers-manager prepare.",
         );
-        return { status: 0, envelopes, lines };
+        return { status: 0, outcomes, lines };
       },
       {
         // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure,
@@ -326,10 +326,10 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
     // inside invoke(), and presenceFlag/verifyUninstalledResources/
     // reportLegacyState are pure (src/lifecycle.ts's header comment) -- so a
     // post-success cleanup failure is handled by onCleanupFailure above and
-    // cannot reach here. Wrapping with `envelopes` anyway keeps the class
+    // cannot reach here. Wrapping with `outcomes` anyway keeps the class
     // total over its declared contract rather than assuming the callback's
     // purity at the throw site.
-    throw new GatherFailure(cause, envelopes);
+    throw new GatherFailure(cause, outcomes);
   }
 }
 
@@ -347,9 +347,9 @@ export async function runUninstall(
   } catch (cause) {
     // gatherUninstall throws exactly one shape: GatherFailure, wrapping
     // withWorkspace's "cannot create workspace" SafetyError
-    // (src/workspace.ts:120), alongside whatever envelopes were collected
+    // (src/workspace.ts:120), alongside whatever outcomes were collected
     // before that throw -- none, for that cause. Replaying first, before
-    // reporting the cause, keeps the arm honest for any envelope-bearing
+    // reporting the cause, keeps the arm honest for any outcome-bearing
     // throw the class is declared to carry (DIAG-ADAPTER-01). The
     // post-success cleanup failure no longer arrives here: gatherUninstall's
     // onCleanupFailure records it as `cleanupWarning` and the computed
@@ -367,9 +367,9 @@ export async function runUninstall(
     // gatherUninstall performs no writes of its own, so this catch cannot
     // also be reached by an EPIPE from uninstall's own output -- every write
     // below runs only after this try/catch has resolved.
-    const envelopes =
-      cause instanceof GatherFailure ? cause.envelopes : ([] as const);
-    for (const envelope of envelopes) replayEnvelope(envelope, ctx);
+    const outcomes =
+      cause instanceof GatherFailure ? cause.outcomes : ([] as const);
+    for (const outcome of outcomes) replayOutcome(outcome, ctx);
     const inner = cause instanceof GatherFailure ? cause.inner : cause;
     ctx.stderr.write(`error: ${oneLine(inner)}\n`);
     return 1;
@@ -378,11 +378,11 @@ export async function runUninstall(
   // Replay first, on both paths: the shell validator replayed every
   // response's messages whether or not that response was a failure
   // (scripts/core/validate-adapter-response.py:268).
-  for (const envelope of outcome.envelopes) replayEnvelope(envelope, ctx);
+  for (const each of outcome.outcomes) replayOutcome(each, ctx);
   let status: number;
   if (outcome.status === 1) {
-    // null means replayEnvelope already emitted the adapter's own error:
-    // and hint: lines for the failing envelope.
+    // null means replayOutcome already emitted the adapter's own error:
+    // and hint: lines for the failing outcome.
     if (outcome.message !== null) {
       ctx.stderr.write(`error: ${outcome.message}\n`);
     }

@@ -36,8 +36,7 @@ const FAKE_CODEX = fileURLToPath(
 function ok(result) {
   return {
     status: 0,
-    envelope: {
-      protocol: 1,
+    outcome: {
       operation: "inspect",
       ok: true,
       messages: [],
@@ -100,8 +99,8 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
         '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0"}]}',
     }),
   });
-  assert.equal(inspect.envelope.ok, true, JSON.stringify(inspect.envelope));
-  assert.deepEqual(inspect.envelope.result, {
+  assert.equal(inspect.outcome.ok, true, JSON.stringify(inspect.outcome));
+  assert.deepEqual(inspect.outcome.result, {
     view: "fingerprint",
     fingerprint: desired,
   });
@@ -181,10 +180,10 @@ void test("a marketplace-list command failure fails without mutation", async (t)
     env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: "" }),
   });
 
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  assert.equal(result.envelope.error?.code, "install-failed");
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+  assert.equal(result.outcome.error?.code, "install-failed");
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     `cannot list Codex marketplaces via '${FAKE_CODEX} plugin marketplace list --json'`,
   );
   assert.deepEqual((await readFile(sandbox.log, "utf8")).trim().split("\n"), [
@@ -210,7 +209,7 @@ void test("unrelated marketplace roots do not block manager registration", async
         },
       );
 
-      assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+      assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
       assert.deepEqual(
         (await readFile(sandbox.log, "utf8")).trim().split("\n"),
         [
@@ -265,8 +264,7 @@ esac
   });
 
   assert.equal(result.status, 1);
-  assert.deepEqual(result.envelope, {
-    protocol: 1,
+  assert.deepEqual(result.outcome, {
     operation: "install",
     ok: false,
     messages: [
@@ -295,7 +293,7 @@ void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (
     ["uninstall", "--plugin-present", "true", "--marketplace-present", "true"],
     { root: PACKAGE_ROOT, env: sandbox.env() },
   );
-  assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+  assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
   assert.deepEqual((await readFile(sandbox.log, "utf8")).trim().split("\n"), [
     "plugin remove superpowers@superpowers-manager",
     "plugin marketplace remove superpowers-manager",

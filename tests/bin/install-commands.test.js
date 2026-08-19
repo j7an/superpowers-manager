@@ -60,7 +60,7 @@ const { runPrepare } = await import(
   new URL("../../dist/commands/prepare.js", import.meta.url).href
 );
 const { successResult, failureResult } = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+  new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 
 // Verbatim from tests/test_install_commands.sh:16-21.
@@ -783,8 +783,8 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("failed update-control inspection exits exactly 1 (:366-375)", async () => {
     // Converted (Task 6, D4): calls `runUpdate` in-process. `updateControl:
-    // "failure"` is a well-formed ok:false envelope
-    // (src/adapter-protocol.js's failureResult) -- reachable through a
+    // "failure"` is a well-formed ok:false outcome
+    // (src/adapter-result.js's failureResult) -- reachable through a
     // double exactly as it was through the fixture, unlike the genuinely
     // malformed cases retired below.
     const c = installCase();
@@ -1410,7 +1410,7 @@ void describe("install commands", { concurrency: true }, () => {
     // (src/adapter.ts:806-813), builds the installed root for it (:831-836),
     // and finds nothing readable there — installedCommitFromRoot returns ""
     // (src/codex-state.ts:67-84) — and fails with a controlled inspect-failed
-    // envelope. The case therefore needs no interception and is not
+    // outcome. The case therefore needs no interception and is not
     // seam-dependent.
     const c = installCase({
       config: { pluginAdd: "orphan" },

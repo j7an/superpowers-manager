@@ -74,8 +74,8 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
   return unknownState(identityState);
 }
 
-import type { AdapterResult } from "./adapter-protocol.js";
-import { hasTerminalControl } from "./adapter-protocol.js";
+import type { AdapterResult } from "./adapter-result.js";
+import { hasTerminalControl } from "./adapter-result.js";
 import { commitMatches } from "./status.js";
 
 export interface Refusal {
@@ -107,16 +107,16 @@ export function requireManagedUpdateControl(value: string): Check {
 // Spec §6.2.3 item 3.
 type ResultRead =
   | { readonly kind: "object"; readonly value: Record<string, unknown> }
-  // The call itself failed: non-zero status, or an ok:false envelope.
+  // The call itself failed: non-zero status, or an ok:false outcome.
   | { readonly kind: "call-failed" }
   // The call succeeded and the result is not a usable object.
   | { readonly kind: "unusable" };
 
 function readResult(adapterResult: AdapterResult): ResultRead {
   if (adapterResult.status !== 0) return { kind: "call-failed" };
-  const envelope = adapterResult.envelope;
-  if (!envelope.ok) return { kind: "call-failed" };
-  const value = envelope.result;
+  const outcome = adapterResult.outcome;
+  if (!outcome.ok) return { kind: "call-failed" };
+  const value = outcome.result;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { kind: "unusable" };
   }
@@ -160,7 +160,7 @@ export function verifyInstalledFingerprint(
     };
   }
   if (inspected.kind === "unusable") {
-    // A well-formed envelope whose `result` is not an object is the port's
+    // A well-formed outcome whose `result` is not an object is the port's
     // analogue of the shell's own split: the inspect call SUCCEEDED and only
     // the content is unusable. This is what makes
     // tests/test_marketplace_reconcile.sh:312's live `grep -Fq "parse"`

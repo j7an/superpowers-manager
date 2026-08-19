@@ -47,7 +47,7 @@ const { runUninstall } = await import(
   new URL("../../dist/commands/uninstall.js", import.meta.url).href
 );
 const { successResult, failureResult } = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+  new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 
 // Fixture JSON, verbatim from tests/test_uninstall_commands.sh:101-108.
@@ -451,7 +451,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Converted (Task 6, D4): calls `runUninstall` in-process, with the
     // double answering the ownership inspect exactly as the real adapter's
     // requireCodex check does for a missing binary (src/adapter.ts:267-273,
-    // ":180") -- a well-formed ok:false envelope, not a transport-level
+    // ":180") -- a well-formed ok:false outcome, not a transport-level
     // fault. There is no re-anchor onto codex.log available for this case
     // either way: Codex is never reached by construction, so codex.log would
     // be empty regardless of channel.

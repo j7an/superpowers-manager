@@ -612,7 +612,7 @@ void test("prepare runs the additional plugin validator inside the staging works
 /**
  * A validator that poisons the staging workspace and writes one sentinel to
  * each stream. Runs from src/commands/prepare.ts's runValidator call -- AFTER
- * the build envelope exists (its `envelopes` array is already populated) and
+ * the build outcome exists (its `outcomes` array is already populated) and
  * BEFORE the atomicReplaceDir call -- with TMPDIR set to the staging workspace
  * (runValidator's spawn options set TMPDIR to its `workspace` argument). The
  * poisoned directory is a SIBLING of the candidate, so the swap still
@@ -620,7 +620,7 @@ void test("prepare runs the additional plugin validator inside the staging works
  * then fails EACCES unlinking the file inside it. A real filesystem failure,
  * not a mock.
  *
- * tests/unit/commands-install.test.js:998-1013 induces its cleanup failure by
+ * tests/unit/commands-install.test.js:996-1011 induces its cleanup failure by
  * chmod'ing the workspace's PARENT read-only. That cannot be used here:
  * prepare's parent is gatherPrepare's `tmpParent`, i.e. dirname(pluginRoot),
  * and atomicReplaceDir writes into it, so a read-only parent would fail the
@@ -696,7 +696,7 @@ function assertOrder(haystack, needles) {
 void test("a post-success workspace cleanup failure keeps the prepared outcome and every line before it", async () => {
   // chmod does not gate root, so the poisoned directory would be removable and
   // the cleanup this case exists to fail would succeed. Matches
-  // tests/unit/commands-install.test.js:983.
+  // tests/unit/commands-install.test.js:981.
   if (process.getuid?.() === 0) return;
   const c = createCase({ fakes: "probe" });
   const parent = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
@@ -718,9 +718,9 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
     assert.ok(!existsSync(join(generated(c), "sentinel.txt")));
     assert.ok(existsSync(join(generated(c), ".superpowers-upstream.json")));
 
-    // 2. stdout, in order: the REPLAYED ADAPTER ENVELOPE (an adapter build
+    // 2. stdout, in order: the REPLAYED ADAPTER OUTCOME (an adapter build
     //    always emits this on the stdout channel, src/adapter.ts:542-547 --
-    //    envelope loss is the first thing this slice fixes, so it is asserted
+    //    outcome loss is the first thing this slice fixes, so it is asserted
     //    directly), then the validator's stdout, then the domain result.
     assertOrder(result.stdout, [
       "generated plugin validation passed: ",
@@ -746,7 +746,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
 
 void test("a cleanup failure after a FAILED prepare still replays the outcome before the warning", async () => {
   // Not redundant with the case above. Before this slice, this path also
-  // reported only the cleanup failure; afterwards it must replay the envelope,
+  // reported only the cleanup failure; afterwards it must replay the outcome,
   // the validator output, AND the domain failure diagnostic ahead of the
   // warning. The ok case cannot pin that ordering, because on that path there
   // is no domain failure diagnostic at all.
@@ -769,7 +769,7 @@ void test("a cleanup failure after a FAILED prepare still replays the outcome be
     //    `ran.code !== 0` early return, before its atomicReplaceDir call.
     assert.deepEqual(snapshotTree(generated(c)), before);
 
-    // 2. stdout: envelope then validator stdout, and NO success line.
+    // 2. stdout: outcome then validator stdout, and NO success line.
     assertOrder(result.stdout, [
       "generated plugin validation passed: ",
       "validator-stdout TMPDIR=",
