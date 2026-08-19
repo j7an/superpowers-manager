@@ -95,8 +95,8 @@ function buildArgv(workspace, overrides = {}) {
 void test("the adapter replays the validator success line as one stdout record", async (t) => {
   const workspace = await buildWorkspace(t);
   const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
-  assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
-  assert.deepStrictEqual(result.envelope.messages, [
+  assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+  assert.deepStrictEqual(result.outcome.messages, [
     {
       channel: "stdout",
       text: `generated plugin validation passed: ${workspace.candidate}`,
@@ -109,18 +109,18 @@ void test("the adapter replays a multi-error failure as one record per line", as
   await rm(join(workspace.candidate, "LICENSE"));
   await rm(join(workspace.candidate, "README.md"));
   const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
-  assert.equal(result.envelope.ok, false);
-  assert.deepStrictEqual(result.envelope.messages, [
+  assert.equal(result.outcome.ok, false);
+  assert.deepStrictEqual(result.outcome.messages, [
     { channel: "stderr", text: "Generated plugin validation failed:" },
     { channel: "stderr", text: "- missing required file `LICENSE`" },
     { channel: "stderr", text: "- missing required file `README.md`" },
   ]);
   assert.equal(
-    result.envelope.error?.code,
+    result.outcome.error?.code,
     "generated-plugin-validation-failed",
   );
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     "built-in generated plugin validation failed",
   );
 });
@@ -170,20 +170,20 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
     resultLine,
     `no RESULT_JSON line in child stdout: ${spawned.stdout}`,
   );
-  const envelope = JSON.parse(resultLine.slice("RESULT_JSON:".length));
-  assert.equal(envelope.ok, false);
-  assert.equal(envelope.messages.length, 1, "expected exactly one message");
-  assert.equal(envelope.messages[0].channel, "stderr");
+  const outcome = JSON.parse(resultLine.slice("RESULT_JSON:".length));
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.messages.length, 1, "expected exactly one message");
+  assert.equal(outcome.messages[0].channel, "stderr");
   assert.match(
-    envelope.messages[0].text,
+    outcome.messages[0].text,
     /^cannot read manifest JSON in .+\/\.codex-plugin\/plugin\.json$/,
   );
-  assert.equal(envelope.error?.code, "build-failed");
+  assert.equal(outcome.error?.code, "build-failed");
   assert.equal(
-    envelope.error?.message,
+    outcome.error?.message,
     "failed to apply manager manifest overlay",
   );
-  const serialized = JSON.stringify(envelope);
+  const serialized = JSON.stringify(outcome);
   assert.doesNotMatch(serialized, /errno/i);
   assert.doesNotMatch(serialized, /ENOENT/);
   assert.doesNotMatch(serialized, /Traceback/);
@@ -230,20 +230,20 @@ void test("a manifest overlay read fails closed when the file changes between th
     `no MANIFEST_BYTES_BASE64 line in child stdout: ${spawned.stdout}`,
   );
 
-  const envelope = JSON.parse(resultLine.slice("RESULT_JSON:".length));
-  assert.equal(envelope.ok, false);
-  assert.equal(envelope.messages.length, 1, "expected exactly one message");
-  assert.equal(envelope.messages[0].channel, "stderr");
+  const outcome = JSON.parse(resultLine.slice("RESULT_JSON:".length));
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.messages.length, 1, "expected exactly one message");
+  assert.equal(outcome.messages[0].channel, "stderr");
   assert.match(
-    envelope.messages[0].text,
+    outcome.messages[0].text,
     /^cannot read manifest JSON in .+\/\.codex-plugin\/plugin\.json$/,
   );
-  assert.equal(envelope.error?.code, "build-failed");
+  assert.equal(outcome.error?.code, "build-failed");
   assert.equal(
-    envelope.error?.message,
+    outcome.error?.message,
     "failed to apply manager manifest overlay",
   );
-  const serialized = JSON.stringify(envelope);
+  const serialized = JSON.stringify(outcome);
   assert.doesNotMatch(serialized, /errno/i);
   assert.doesNotMatch(serialized, /ENOENT/);
   assert.doesNotMatch(serialized, /Traceback/);
@@ -287,15 +287,15 @@ void test("a split dash-leading ref fails before the validator with a named-flag
     buildArgv(workspace, { "--requested-ref": "-foo" }),
     { root: PACKAGE_ROOT },
   );
-  assert.equal(result.envelope.ok, false);
+  assert.equal(result.outcome.ok, false);
   assert.equal(
-    result.envelope.error?.code,
+    result.outcome.error?.code,
     "generated-plugin-validation-failed",
   );
   // Declared exception: argparse wrote usage records here; the pre-call guard
   // writes a differently-worded record naming the rejected flag instead. The
   // failure code and message are unchanged.
-  assert.deepStrictEqual(result.envelope.messages, [
+  assert.deepStrictEqual(result.outcome.messages, [
     { channel: "stderr", text: "Generated plugin validation failed:" },
     {
       channel: "stderr",
@@ -310,12 +310,12 @@ void test("a split dash-leading value on a different flag names that flag", asyn
     buildArgv(workspace, { "--commit": "-deadbeef" }),
     { root: PACKAGE_ROOT },
   );
-  assert.equal(result.envelope.ok, false);
+  assert.equal(result.outcome.ok, false);
   assert.equal(
-    result.envelope.error?.code,
+    result.outcome.error?.code,
     "generated-plugin-validation-failed",
   );
-  assert.deepStrictEqual(result.envelope.messages, [
+  assert.deepStrictEqual(result.outcome.messages, [
     { channel: "stderr", text: "Generated plugin validation failed:" },
     {
       channel: "stderr",
@@ -337,8 +337,8 @@ void test("split Unicode-decimal values still reach the validator", async (t) =>
         buildArgv(workspace, { "--requested-ref": value }),
         { root: PACKAGE_ROOT },
       );
-      assert.equal(result.envelope.ok, false);
-      assert.deepStrictEqual(result.envelope.messages, [
+      assert.equal(result.outcome.ok, false);
+      assert.deepStrictEqual(result.outcome.messages, [
         { channel: "stderr", text: "Generated plugin validation failed:" },
         {
           channel: "stderr",
@@ -357,8 +357,8 @@ void test("split dash-leading exceptions still reach the validator", async (t) =
         buildArgv(workspace, { "--requested-ref": value }),
         { root: PACKAGE_ROOT },
       );
-      assert.equal(result.envelope.ok, false);
-      assert.deepStrictEqual(result.envelope.messages, [
+      assert.equal(result.outcome.ok, false);
+      assert.deepStrictEqual(result.outcome.messages, [
         { channel: "stderr", text: "Generated plugin validation failed:" },
         {
           channel: "stderr",
@@ -415,7 +415,7 @@ async function codexSandbox(t) {
 // closed. Asserting the exact parse diagnostic is what distinguishes the two.
 //
 // This case's discriminating power rests on the exact message AND on the
-// sandbox `searchRoot` being empty: under a lossy decode the envelope is still
+// sandbox `searchRoot` being empty: under a lossy decode the outcome is still
 // ok:false / inspect-failed, and differs only because the fabricated version
 // resolves to no directory. Pre-populating `searchRoot` would defeat it.
 void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async (t) => {
@@ -427,10 +427,10 @@ void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async 
         '{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"1.0.0@@BAD@@"}]}',
     }),
   });
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  assert.equal(result.envelope.error?.code, "inspect-failed");
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+  assert.equal(result.outcome.error?.code, "inspect-failed");
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     `cannot parse output of '${FAKE_CODEX} plugin list --json'`,
   );
   assert.deepStrictEqual(await sandbox.commands(), ["plugin list --json"]);
@@ -449,10 +449,10 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
       FAKE_CODEX_MARKETPLACE_LIST: '{"marketplaces":[]}',
     }),
   });
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  assert.equal(result.envelope.error?.code, "inspect-failed");
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+  assert.equal(result.outcome.error?.code, "inspect-failed");
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     `cannot parse output of '${FAKE_CODEX} plugin list --json'`,
   );
 });
@@ -473,10 +473,10 @@ void test("install rejects an invalid-UTF-8 marketplace listing without mutating
       }),
     },
   );
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  assert.equal(result.envelope.error?.code, "install-failed");
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+  assert.equal(result.outcome.error?.code, "install-failed");
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     `cannot parse output of '${FAKE_CODEX} plugin marketplace list --json'`,
   );
   assert.deepStrictEqual(await sandbox.commands(), [
@@ -493,7 +493,7 @@ void test("install rejects an invalid-UTF-8 marketplace listing without mutating
 // mapCodexLaunchFailure is never reached; on both platforms every other
 // candidate errno (ELOOP, ENAMETOOLONG, ...) fails the X_OK availability
 // check first and is peeled into command-not-found before a real spawn ever
-// happens. So the branch-through-the-envelope property — that this text
+// happens. So the branch-through-the-outcome property — that this text
 // actually reaches `messages` via `log.appendBytes` — is exercised by
 // calling the mapping directly and is not covered end-to-end by any test.
 void test("mapCodexLaunchFailure carries a validated errno, guards free-form codes, and still peels off ENOENT/EACCES", () => {
@@ -631,10 +631,10 @@ void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-he
       root: PACKAGE_ROOT,
       env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
     });
-    assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+    assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
     // deepStrictEqual, not a field probe: "exact result shape" is the
     // contract, so an extra key must fail.
-    assert.deepStrictEqual(result.envelope.result, {
+    assert.deepStrictEqual(result.outcome.result, {
       view: "fingerprint",
       fingerprint,
     });
@@ -651,12 +651,8 @@ void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-he
       FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed: [] }),
     }),
   });
-  assert.equal(
-    nullResult.envelope.ok,
-    true,
-    JSON.stringify(nullResult.envelope),
-  );
-  assert.deepStrictEqual(nullResult.envelope.result, {
+  assert.equal(nullResult.outcome.ok, true, JSON.stringify(nullResult.outcome));
+  assert.deepStrictEqual(nullResult.outcome.result, {
     view: "fingerprint",
     fingerprint: null,
   });
@@ -679,10 +675,10 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
       root: PACKAGE_ROOT,
       env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
     });
-    assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-    assert.equal(result.envelope.error?.code, "inspect-failed");
+    assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+    assert.equal(result.outcome.error?.code, "inspect-failed");
     assert.equal(
-      result.envelope.error?.message,
+      result.outcome.error?.message,
       `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
       commit,
     );
@@ -746,9 +742,9 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
               FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({ marketplaces }),
             }),
           });
-          assert.equal(result.envelope.ok, true, label);
+          assert.equal(result.outcome.ok, true, label);
           assert.deepStrictEqual(
-            result.envelope.result,
+            result.outcome.result,
             {
               view: "ownership",
               resources: {
@@ -807,9 +803,9 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
         }),
       },
     );
-    assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
+    assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
     assert.deepStrictEqual(
-      result.envelope.result,
+      result.outcome.result,
       { verification_hints: hints },
       refreshMode,
     );
@@ -875,34 +871,34 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   await rm(join(workspace.candidate, "LICENSE"));
   const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
   assert.equal(result.status, 1);
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
   // "yields no result" is the half a field probe would miss.
-  assert.equal(result.envelope.result, null);
+  assert.equal(result.outcome.result, null);
   assert.equal(
-    result.envelope.error?.code,
+    result.outcome.error?.code,
     "generated-plugin-validation-failed",
   );
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     "built-in generated plugin validation failed",
   );
   // Exact, not `Array.isArray`: a shape probe passes on any value and would
   // not notice hints disappearing.
-  assert.deepStrictEqual(result.envelope.error?.hints, []);
+  assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
   // witness that. src/adapter.ts:654-662 is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);
-  assert.equal(readd.result.envelope.ok, false);
-  assert.equal(readd.result.envelope.result, null);
-  assert.equal(readd.result.envelope.error?.code, "install-failed");
+  assert.equal(readd.result.outcome.ok, false);
+  assert.equal(readd.result.outcome.result, null);
+  assert.equal(readd.result.outcome.error?.code, "install-failed");
   assert.equal(
-    readd.result.envelope.error?.message,
+    readd.result.outcome.error?.message,
     "marketplace superpowers-manager was removed but re-adding failed.",
   );
-  assert.deepStrictEqual(readd.result.envelope.error?.hints, [
+  assert.deepStrictEqual(readd.result.outcome.error?.hints, [
     `recover with: ${readd.stub} plugin marketplace add ${readd.packageRoot}`,
     `previous root (last known good): ${readd.registeredRoot}`,
   ]);
@@ -921,25 +917,25 @@ void test("DIAG-ADAPTER-01 adapter messages, errors, and hints retain their decl
   // asserting membership, or per-record channel, would pass on a reordered
   // log. The validator emits the header first and then one record per error
   // in source order, so LICENSE precedes README.md.
-  assert.deepStrictEqual(result.envelope.messages, [
+  assert.deepStrictEqual(result.outcome.messages, [
     { channel: "stderr", text: "Generated plugin validation failed:" },
     { channel: "stderr", text: "- missing required file `LICENSE`" },
     { channel: "stderr", text: "- missing required file `README.md`" },
   ]);
   // The error and hint halves of the same contract, asserted exactly. Replay
   // order on the product path is messages, then `error: <message>`, then one
-  // `hint: <text>` per hint -- see replayEnvelope in src/commands/probe.ts.
-  assert.equal(result.envelope.ok, false);
+  // `hint: <text>` per hint -- see replayOutcome in src/commands/probe.ts.
+  assert.equal(result.outcome.ok, false);
   assert.equal(
-    result.envelope.error?.message,
+    result.outcome.error?.message,
     "built-in generated plugin validation failed",
   );
-  assert.deepStrictEqual(result.envelope.error?.hints, []);
+  assert.deepStrictEqual(result.outcome.error?.hints, []);
   // Every record on THIS path is stderr: a stdout record here would mean a
   // diagnostic reached the data stream, which is the failure this ID exists to
   // catch.
   assert.deepStrictEqual(
-    [...new Set(result.envelope.messages.map((m) => m.channel))],
+    [...new Set(result.outcome.messages.map((m) => m.channel))],
     ["stderr"],
   );
 
@@ -949,13 +945,13 @@ void test("DIAG-ADAPTER-01 adapter messages, errors, and hints retain their decl
   // carrying a stdout message and two ordered hints at once, so it closes both
   // halves the scenario above leaves open.
   const readd = await reAddFailureRun(t);
-  assert.deepStrictEqual(readd.result.envelope.messages, [
+  assert.deepStrictEqual(readd.result.outcome.messages, [
     {
       channel: "stdout",
       text: `marketplace superpowers-manager registered at ${readd.registeredRoot}; re-registering at ${readd.packageRoot}`,
     },
   ]);
-  assert.deepStrictEqual(readd.result.envelope.error?.hints, [
+  assert.deepStrictEqual(readd.result.outcome.error?.hints, [
     `recover with: ${readd.stub} plugin marketplace add ${readd.packageRoot}`,
     `previous root (last known good): ${readd.registeredRoot}`,
   ]);

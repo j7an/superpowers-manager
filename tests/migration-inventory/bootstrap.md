@@ -68,8 +68,13 @@ the port unless a merge is called out.
 41. `tests/expected_tarball_contents.txt` does not contain `scripts/core/selection-state.py`.
     **RETIRED at the gap (Task 3, 4c):** vacuous once the whole tree leaves the
     manifest; no port counterpart.
-42. `tests/expected_tarball_contents.txt` contains `dist/adapter-cli.js`
-43. `tests/expected_tarball_contents.txt` contains `dist/adapter-protocol.js`
+42. `tests/expected_tarball_contents.txt` does not contain `dist/adapter-cli.js`.
+    Slice 5 unshipped the artifact — `src/adapter-cli.ts` existed solely to
+    serialize envelopes for the retired protocol drivers — which inverts the
+    port.
+43. `tests/expected_tarball_contents.txt` contains `dist/adapter-result.js`.
+    Slice 5 renamed `src/adapter-protocol.ts` to `src/adapter-result.ts`; the
+    artifact changed name, not membership.
 44. `tests/expected_tarball_contents.txt` contains `dist/adapter.js`
 45. `tests/expected_tarball_contents.txt` contains `dist/generated-plugin.js`
 46. `tests/expected_tarball_contents.txt` contains `dist/python-text.js`
@@ -195,6 +200,6 @@ same real file and the same two fixture strings.
   that has no shell counterpart and is outside the 1:1 mapping.
 - Reconciliation: **91 of 99** original items retain a port counterpart. Eight
   absence assertions retire at their numbered gaps: items 8, 41, 48, 52, 54,
-  and 56-58. Items 5 and 9 invert into the repository absence set; item 55
-  inverts in the tarball manifest. The one additional port-only assertion is
+  and 56-58. Items 5 and 9 invert into the repository absence set; items 42 and 55
+  invert in the tarball manifest. The one additional port-only assertion is
   strictly additive coverage, not a reconciliation of a shell assertion.

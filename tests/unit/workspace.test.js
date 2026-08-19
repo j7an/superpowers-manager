@@ -188,7 +188,7 @@ void test("a signal-path cleanup failure reports through onCleanupFailure and st
   // make a pattern built from the path match more than the path.
   assert.ok(stdout.split("\n").includes(`reported:${workspace}`));
   // The caller's reporter (proven above) is not the observable failure path:
-  // no result envelope is ever built before the process dies by the signal,
+  // no result outcome is ever built before the process dies by the signal,
   // so a report that only reached a buffered adapter log would be lost. The
   // signal path also writes the hand-written diagnostic straight to stderr,
   // unconditionally, which is what a real caller can actually see.
@@ -311,8 +311,8 @@ void test("an adapter operation keeps its result when workspace cleanup fails", 
   assert.deepStrictEqual(leftover.length, 1, leftover.join(", "));
   assert.match(leftover[0] ?? "", /^superpowers-manager\.adapter-uninstall\./);
 
-  assert.equal(result.envelope.ok, true, JSON.stringify(result.envelope));
-  assert.deepStrictEqual(result.envelope.messages, [
+  assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+  assert.deepStrictEqual(result.outcome.messages, [
     {
       channel: "stdout",
       text: "removed plugin superpowers@superpowers-manager",

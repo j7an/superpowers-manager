@@ -75,8 +75,8 @@ selectors or intentionally update the inventory, test, and this map together.
 | `ADAPTER-OWNERSHIP-01` | `tests/unit/adapter.test.js::ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans` | — |
 | `ADAPTER-INSTALL-RESULT-01` | `tests/unit/adapter.test.js::ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode` | — |
 | `ADAPTER-CONTROLLED-FAILURE-01` | `tests/unit/adapter.test.js::ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1` | — |
-| `ADAPTER-TERMINAL-01` | `tests/unit/adapter-protocol.test.js::ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused` | — |
-| `ADAPTER-SURROGATE-01` | `tests/unit/adapter-protocol.test.js::ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback` | — |
+| `ADAPTER-TERMINAL-01` | `tests/unit/adapter-result.test.js::ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused` | — |
+| `ADAPTER-SURROGATE-01` | `tests/unit/adapter-result.test.js::ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback` | — |
 | `GENERATED-LAYOUT-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
 | `GENERATED-UNKNOWN-FIELDS-01` | `tests/baseline/prepare.test.js::GENERATED-HOOKS-DECLARED-01 GENERATED-UNKNOWN-FIELDS-01 declared hook paths and unknown fields` | `tests/fixtures/baseline/manifests/upstream-active-hooks.json` |
 | `GENERATED-WRONG-NAME-01` | `tests/baseline/prepare.test.js::GENERATED-WRONG-NAME-01 wrong upstream manifest name is rejected` | — |

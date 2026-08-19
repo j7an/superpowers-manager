@@ -19,7 +19,7 @@ const { formatPorcelain } = await import(
   new URL("../../dist/commands/probe.js", import.meta.url).href
 );
 const { successResult, failureResult } = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+  new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 const { workspaceRemovalFailure } = await import(
   new URL("../../dist/workspace.js", import.meta.url).href
@@ -43,7 +43,7 @@ function sink() {
 }
 
 /**
- * @param {readonly import("../../src/adapter-protocol.js").AdapterResult[]} responses
+ * @param {readonly import("../../src/adapter-result.js").AdapterResult[]} responses
  */
 function scriptedAdapter(responses) {
   /** @type {string[][]} */
@@ -307,9 +307,9 @@ void test("an unparseable generated commit is never treated as success", async (
 // requireNoLegacyState on an undefined `facts`, then (if that somehow
 // survived) into runPrepare and the install mutation itself -- the worst
 // direction for this relay to fail in. Two cases: one where the failing
-// call's envelope is ok (clause 3, so probe.message is a hand-written,
+// call's outcome is ok (clause 3, so probe.message is a hand-written,
 // non-null string) and one where it is not (clause 2, so probe.message is
-// null and replayEnvelope alone carries the diagnostic). Together they pin
+// null and replayOutcome alone carries the diagnostic). Together they pin
 // both "the stop happens" (calls never grows past gatherProbe's own failing
 // call -- no prepare, no workspace, no install mutation) and "the message
 // is not dropped" for the one shape where there is a message to drop.
@@ -317,12 +317,11 @@ void test("an unparseable generated commit is never treated as success", async (
 void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
   const out = sink();
   const err = sink();
-  /** @type {readonly import("../../src/adapter-protocol.js").AdapterResult[]} */
+  /** @type {readonly import("../../src/adapter-result.js").AdapterResult[]} */
   const responses = [
     {
       status: 1,
-      envelope: {
-        protocol: 1,
+      outcome: {
         operation: "inspect",
         ok: true,
         messages: [],
@@ -361,7 +360,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  // No second, command-authored line: replayEnvelope already wrote the
+  // No second, command-authored line: replayOutcome already wrote the
   // adapter's own error:/hint: lines, and probe.message is null here.
   assert.equal(
     err.chunks.join(""),
@@ -596,20 +595,19 @@ void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1'
   assert.equal(calls.length, 4);
 });
 
-void test("stage 1 clause 3: envelope.ok but status !== 0 gets its own hand-written message", async () => {
+void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-written message", async () => {
   // Spec §4.2a clause 3. successResult/failureResult cannot express this
-  // input, so the envelope is hand-built here to reach the one combination
-  // invoke()'s gate must distinguish from both clause 2 (!envelope.ok,
+  // input, so the outcome is hand-built here to reach the one combination
+  // invoke()'s gate must distinguish from both clause 2 (!outcome.ok,
   // replay-only) and clause 4 (a malformed but successful result).
   const out = sink();
   const err = sink();
-  /** @type {readonly import("../../src/adapter-protocol.js").AdapterResult[]} */
+  /** @type {readonly import("../../src/adapter-result.js").AdapterResult[]} */
   const responses = [
     ...PROBE_OK,
     {
       status: 1,
-      envelope: {
-        protocol: 1,
+      outcome: {
         operation: "inspect",
         ok: true,
         messages: [],
@@ -827,7 +825,7 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
 // throwing. Without its own case, a mutant collapsing the two arms — sending
 // the throw path into verifyInstalledFingerprint too, or restoring the blanket
 // short-circuit — would die to only one of them and falsely certify both. The
-// distinguishing observation is the stderr: a throw has no envelope to replay
+// distinguishing observation is the stderr: a throw has no outcome to replay
 // and no result to verify, so it must produce invoke()'s own hand-written
 // diagnostic and NOTHING else.
 void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter throw as an invocation failure, alone", async () => {
@@ -969,7 +967,7 @@ void test("argv is ignored by src/commands/install.ts", async () => {
 // --- Post-success withWorkspace cleanup failure carries the outcome ---
 //
 // Unlike src/commands/uninstall.ts's GatherFailure (which carries only the
-// collected envelopes, not the computed outcome, because withWorkspace
+// collected outcomes, not the computed outcome, because withWorkspace
 // discards the callback's return value on a post-success cleanup failure),
 // install's gatherInstallStages passes withWorkspace an `onCleanupFailure`
 // reporter. That suppresses the discard: the callback's already-computed
@@ -996,7 +994,7 @@ void test("a post-success workspace cleanup failure still reports the domain out
     /** @type {string[][]} */
     const calls = [];
     // The FINAL scripted call chmods the workspace's own PARENT directory
-    // read-only, after every earlier call has already pushed its envelope.
+    // read-only, after every earlier call has already pushed its outcome.
     // By the time withWorkspace's post-callback `rm(workspace, ...)` runs,
     // the parent cannot be written to, so the removal genuinely fails with
     // EACCES/EPERM -- a real filesystem failure, not a mocked one. Matches

@@ -108,7 +108,7 @@ export const SEAM_REASONS = /** @type {const} */ (["intercept", "log"]);
 //                update fast path" and "failed update-control inspection
 //                exits exactly 1" both answer `inspect --view update-control`
 //                directly — the second with a well-formed `ok: false`
-//                envelope (`failureResult`), which is NOT the transport fault
+//                outcome (`failureResult`), which is NOT the transport fault
 //                the two install retirements above were, and is reachable
 //                through a double exactly as it was through the fixture.
 //     log (3):   "update rejects mixed legacy state even when the fingerprint

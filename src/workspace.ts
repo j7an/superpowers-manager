@@ -8,7 +8,7 @@ type ManagedSignal = (typeof MANAGED_SIGNALS)[number];
 
 // Each active workspace carries its caller's failure reporter. The signal
 // path still invokes it, for parity with the normal path, but a signal death
-// never builds a result envelope (see src/adapter-protocol.ts), so a report
+// never builds a result outcome (see src/adapter-result.ts), so a report
 // that only lands in the adapter's buffered log would never become
 // observable — the signal path therefore also writes the hand-written
 // diagnostic straight to process.stderr, unconditionally; that raw write is
@@ -49,7 +49,7 @@ function cleanupForSignal(signal: ManagedSignal): void {
       rmSync(path, { recursive: true, force: true });
     } catch {
       // The reporter is invoked for parity with the normal path, but nothing
-      // ever reads it back here — no envelope is built before the process
+      // ever reads it back here — no outcome is built before the process
       // dies — so the diagnostic is also written straight to stderr,
       // unconditionally; that write is the only thing actually observable.
       // The diagnostic is hand-written and names the workspace; the caught

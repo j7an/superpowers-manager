@@ -9,7 +9,7 @@ const { runUninstall } = await import(
   new URL("../../dist/commands/uninstall.js", import.meta.url).href
 );
 const { successResult, failureResult } = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+  new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 const { workspaceRemovalFailure } = await import(
   new URL("../../dist/workspace.js", import.meta.url).href
@@ -33,7 +33,7 @@ function sink() {
 }
 
 /**
- * @param {readonly import("../../src/adapter-protocol.js").AdapterResult[]} responses
+ * @param {readonly import("../../src/adapter-result.js").AdapterResult[]} responses
  */
 function scriptedAdapter(responses) {
   /** @type {string[][]} */
@@ -273,7 +273,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     adapter,
   });
   assert.equal(status, 1);
-  // Clause 2: replayEnvelope already wrote the adapter's own error:/hint:
+  // Clause 2: replayOutcome already wrote the adapter's own error:/hint:
   // lines. NO second, command-authored line may follow them.
   assert.equal(
     err.chunks.join(""),
@@ -312,21 +312,20 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
   assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
 });
 
-void test("stage 1 clause 3: envelope.ok but status !== 0 gets its own hand-written message", async () => {
+void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-written message", async () => {
   // Spec §4.2a clause 3. successResult/failureResult cannot express this
   // input -- successResult always pairs ok:true with status:0, failureResult
-  // always pairs ok:false with status:1 -- so the envelope is hand-built here
+  // always pairs ok:false with status:1 -- so the outcome is hand-built here
   // to reach the one combination invoke()'s gate must distinguish from both
-  // clause 2 (!envelope.ok, replay-only) and clause 4 (a malformed but
+  // clause 2 (!outcome.ok, replay-only) and clause 4 (a malformed but
   // successful result).
   const out = sink();
   const err = sink();
-  /** @type {readonly import("../../src/adapter-protocol.js").AdapterResult[]} */
+  /** @type {readonly import("../../src/adapter-result.js").AdapterResult[]} */
   const responses = [
     {
       status: 1,
-      envelope: {
-        protocol: 1,
+      outcome: {
         operation: "inspect",
         ok: true,
         messages: [],
@@ -502,10 +501,10 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
 // by this test asserting stdout was the first inspection's note alone; the
 // shell is the authority and that assertion was pinning the defect.
 //
-// Envelopes collected before the cleanup failure still replay, which is the
+// Outcomes collected before the cleanup failure still replay, which is the
 // property this case originally existed to hold (DIAG-ADAPTER-01).
 
-void test("a post-success withWorkspace cleanup failure keeps the computed outcome and every envelope before it", async () => {
+void test("a post-success withWorkspace cleanup failure keeps the computed outcome and every outcome before it", async () => {
   if (process.getuid?.() === 0) return; // chmod does not gate root
   const parent = mkdtempSync(join(tmpdir(), "spw-uninstall-workspace-"));
   try {
@@ -523,7 +522,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
     const calls = [];
     // No test double for the filesystem: the THIRD (and final) call chmods
     // the workspace's own PARENT directory read-only, after the first two
-    // calls have already pushed their envelopes. By the time
+    // calls have already pushed their outcomes. By the time
     // withWorkspace's post-callback `rm(workspace, ...)` runs, the parent
     // cannot be written to, so the removal genuinely fails with EACCES/EPERM
     // -- a real filesystem failure, not a mocked one.
@@ -548,7 +547,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
     });
     assert.equal(status, 1);
     assert.equal(calls.length, 3);
-    // The envelope collected from the FIRST call -- well before the cleanup
+    // The outcome collected from the FIRST call -- well before the cleanup
     // failure -- still reaches stdout, AND the domain outcome survives it,
     // exactly as scripts/uninstall:34-35 behaved. Dropping either half is a
     // divergence from the shell.

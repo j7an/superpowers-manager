@@ -126,6 +126,6 @@ void test("overlay read failure child", async (t) => {
   const result = await runAdapter(argv, { root: PACKAGE_ROOT });
   // Sanity check inside the child too, so a broken mock fails loudly here
   // rather than producing a confusing assertion in the parent.
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
-  process.stdout.write(`RESULT_JSON:${JSON.stringify(result.envelope)}\n`);
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+  process.stdout.write(`RESULT_JSON:${JSON.stringify(result.outcome)}\n`);
 });

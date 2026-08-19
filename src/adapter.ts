@@ -23,7 +23,7 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-protocol.js";
+} from "./adapter-result.js";
 import {
   activePluginVersionFromJson,
   installedListingHas,
@@ -54,10 +54,10 @@ const LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";
 const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 
 // Re-exported so existing importers of AdapterContext from this module are
-// unaffected: the interface itself now lives in adapter-protocol.js, grouped
-// with the other protocol types (AdapterResult, AdapterEnvelope) rather than
+// unaffected: the interface itself now lives in adapter-result.js, grouped
+// with the other protocol types (AdapterResult, AdapterOutcome) rather than
 // with this module's implementation. Not a cycle avoidance — see
-// adapter-protocol.ts's comment on AdapterContext for why a cycle was never
+// adapter-result.ts's comment on AdapterContext for why a cycle was never
 // possible here regardless of import direction.
 export type { AdapterContext };
 
@@ -194,7 +194,7 @@ export function mapCodexLaunchFailure(
     signal: null,
     stdout: Buffer.alloc(0),
     // Trailing newline matches how a real process writes stderr; appendBytes
-    // (src/adapter-protocol.ts:135) splits on newlines and terminates the
+    // (src/adapter-result.ts:133) splits on newlines and terminates the
     // final chunk at end-of-buffer either way.
     stderr: Buffer.from(
       `cannot launch Codex command ${codexBin}${detail}\n`,

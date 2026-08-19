@@ -13,7 +13,7 @@ const { formatPorcelain, gatherProbe } = await import(
   new URL("../../dist/commands/probe.js", import.meta.url).href
 );
 const { successResult, failureResult } = await import(
-  new URL("../../dist/adapter-protocol.js", import.meta.url).href
+  new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 
 /** Collects writes without a real stream, so no EPIPE hazard exists here. */
@@ -34,7 +34,7 @@ function sink() {
 }
 
 /**
- * @param {readonly import("../../src/adapter-protocol.js").AdapterResult[]} responses
+ * @param {readonly import("../../src/adapter-result.js").AdapterResult[]} responses
  */
 function scriptedAdapter(responses) {
   /** @type {string[][]} */
@@ -243,7 +243,7 @@ function makePreparableCtx(out, err, adapter) {
 
 // --- The four-way switch ---
 
-void test('current: replays envelopes, prints the exact porcelain, then "manager is current"', async () => {
+void test('current: replays outcomes, prints the exact porcelain, then "manager is current"', async () => {
   // The porcelain reaches the terminal here -- unlike install, which never
   // lets it through on a successful run (scripts/install:18's
   // probe_output=$(...) capture). Two independent ctx/adapter pairs, built
@@ -769,12 +769,11 @@ void test("needs prepare: an empty update control refuses before prepare, not in
 void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
   const out = sink();
   const err = sink();
-  /** @type {readonly import("../../src/adapter-protocol.js").AdapterResult[]} */
+  /** @type {readonly import("../../src/adapter-result.js").AdapterResult[]} */
   const responses = [
     {
       status: 1,
-      envelope: {
-        protocol: 1,
+      outcome: {
         operation: "inspect",
         ok: true,
         messages: [],
@@ -810,7 +809,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
-  // No second, command-authored line: replayEnvelope already wrote the
+  // No second, command-authored line: replayOutcome already wrote the
   // adapter's own error:/hint: lines, and probe.message is null here.
   assert.equal(
     err.chunks.join(""),

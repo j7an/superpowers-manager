@@ -95,8 +95,7 @@ void test("an empty identity state is unrecognised, not clean", () => {
 function ok(result) {
   return {
     status: 0,
-    envelope: {
-      protocol: 1,
+    outcome: {
       operation: "inspect",
       ok: true,
       messages: [],
@@ -110,8 +109,7 @@ function ok(result) {
 function failed() {
   return {
     status: 1,
-    envelope: {
-      protocol: 1,
+    outcome: {
       operation: "inspect",
       ok: false,
       messages: [],
@@ -236,7 +234,7 @@ void test("ADAPTER-SURROGATE-01 verifyInstalledFingerprint omits a hint carrying
   // `test(` call sites, so the second value is a row here rather than a case
   // of its own.
   //
-  // hasTerminalControl covers 0xd800-0xdfff (src/adapter-protocol.ts:203).
+  // hasTerminalControl covers 0xd800-0xdfff (src/adapter-result.ts:199).
   // U+D800 alone leaves that clause under-constrained: narrowing it to
   // `code <= 0xdbff` keeps a high-surrogate row green while admitting every
   // low surrogate. 0xdc9b is the value the retiring Python witness drove
@@ -317,7 +315,7 @@ void test("verifyUninstalledResources fails closed on a failed inspection", () =
 
 void test("an unparseable fingerprint result names parsing, not inspection", () => {
   // Previously unreached by any test. Reachable since the resultObject split
-  // (spec §6.2.3 item 3b): the envelope is well-formed, the result is not an
+  // (spec §6.2.3 item 3b): the outcome is well-formed, the result is not an
   // object. This is the branch that makes the shell's `grep -Fq "parse"`
   // satisfiable.
   const verdict = verifyInstalledFingerprint(
@@ -393,7 +391,7 @@ void test("a non-object resources falls through to the Boolean message", () => {
 // retires with the transport. src/adapter.ts's update-control view returns
 // the literal `managed`; the old witness at
 // tests/test_adapter_protocol.sh:102-104 ran a fixture SHELL adapter emitting
-// a canned envelope, and no shell adapters remain. tests/migration-inventory/
+// a canned outcome, and no shell adapters remain. tests/migration-inventory/
 // probe.md item 92 instructs slice 5 to port that witness; it cannot be
 // ported, because there is nothing in-process that produces the value.
 

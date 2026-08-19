@@ -147,10 +147,10 @@ void test("manifest TOCTOU child", async (t) => {
   assert.equal(readCount, 1, "expected exactly one intercepted manifest read");
   // Sanity check inside the child too, so a broken fixture fails loudly here
   // rather than producing a confusing assertion in the parent.
-  assert.equal(result.envelope.ok, false, JSON.stringify(result.envelope));
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
 
   const finalBytes = await realReadFile(candidateManifest);
-  process.stdout.write(`RESULT_JSON:${JSON.stringify(result.envelope)}\n`);
+  process.stdout.write(`RESULT_JSON:${JSON.stringify(result.outcome)}\n`);
   process.stdout.write(
     `MANIFEST_BYTES_BASE64:${finalBytes.toString("base64")}\n`,
   );
