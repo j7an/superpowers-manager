@@ -293,6 +293,9 @@ sh tests/container.sh                    # Layers 1-4: blocking Docker acceptanc
 sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
 ```
 
+`pnpm run build` deletes `dist/` before compiling, so every build is a clean
+rebuild and stale artifacts of deleted or renamed modules cannot survive.
+
 Layers 1-3 stay offline and hermetic: they use a fake local upstream repo plus
 host-side fixtures, and they perform no mutation of the developer's or runner's
 real Codex state.
