@@ -104,6 +104,9 @@ node --test tests/bin/npm-pack-contents.test.js
 git diff --check
 ```
 
+`pnpm run build` deletes `dist/` before compiling, so each verification run
+discards the previously generated output and regenerates it from source.
+
 The dependency-free `prepack` guard intentionally rejects packing when `dist/cli.js` is absent; it never builds the package implicitly.
 
 The container suite is authoritative for Node 24 TypeScript checks and the real

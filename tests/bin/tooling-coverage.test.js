@@ -4,11 +4,21 @@
 // array in tests/tsconfig.json. Each leg asks the real tool what it covers
 // rather than restating the enumeration — a canonical list in this file would
 // be a fifth hand-maintained enumeration and would stay green for a directory
-// nobody listed anywhere.
+// nobody listed anywhere. One further leg guards the `prebuild` clean step,
+// which is a build lifecycle behavior rather than a path list but shares
+// this file's read-the-config-not-a-copy discipline.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -209,4 +219,35 @@ void test("lint, format, and format:check operate on the identical path list", (
   const lint = pathListOf("lint");
   assert.deepEqual(pathListOf("format"), lint);
   assert.deepEqual(pathListOf("format:check"), lint);
+});
+
+// The `prebuild` clean step is a behavior of `pnpm run build`, not a path list,
+// and nothing else in the suite observes it: npm-pack-contents can only see a
+// stale artifact if one already exists, which is never true of the clean
+// checkout CI builds. So this leg reads the configured command from
+// package.json — the source of truth, never a copy of it — and runs it against
+// a throwaway tree. It never touches the repository's own dist/.
+void test("the configured prebuild command removes dist/ before the build runs", () => {
+  const prebuild = manifest.scripts.prebuild;
+  assert.ok(
+    typeof prebuild === "string" && prebuild.length > 0,
+    "package.json declares no prebuild script, so `pnpm run build` no longer clears stale artifacts",
+  );
+  const dir = mkdtempSync(join(tmpdir(), "spw-prebuild-"));
+  try {
+    mkdirSync(join(dir, "dist"));
+    writeFileSync(join(dir, "dist", "stale-artifact.js"), "");
+    const run = spawnSync(prebuild, {
+      cwd: dir,
+      shell: true,
+      encoding: "utf8",
+    });
+    assert.equal(run.status, 0, `prebuild exited ${run.status}: ${run.stderr}`);
+    assert.ok(
+      !existsSync(join(dir, "dist")),
+      "the prebuild command left dist/ in place, so a stale artifact would survive the build",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
