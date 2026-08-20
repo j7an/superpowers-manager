@@ -58,7 +58,6 @@
     "bin/",
     "dist/",
     "!dist/.build-id",
-    "scripts/",
     "config/upstream-ref",
     ".agents/plugins/marketplace.json",
     "plugins/superpowers/.codex-plugin/plugin.template.json",
