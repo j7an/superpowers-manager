@@ -4,7 +4,9 @@
 // array in tests/tsconfig.json. Each leg asks the real tool what it covers
 // rather than restating the enumeration — a canonical list in this file would
 // be a fifth hand-maintained enumeration and would stay green for a directory
-// nobody listed anywhere.
+// nobody listed anywhere. One further leg guards the `prebuild` clean step,
+// which is a build lifecycle behavior rather than a path list but shares
+// this file's read-the-config-not-a-copy discipline.
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
