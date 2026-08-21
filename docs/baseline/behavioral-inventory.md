@@ -199,7 +199,7 @@ rather than restating or redefining it.
 | `ADAPTER-UPDATE-CONTROL-01` | Update-control inspection accepts only `managed` or `unsupported` in its exact result shape. |
 | `ADAPTER-OWNERSHIP-01` | Ownership inspection accepts all internally consistent manager/legacy resource Boolean combinations and derived identity states. |
 | `ADAPTER-INSTALL-RESULT-01` | Install success accepts exact `verification_hints` carrying `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only` — two of the four combinations the retired response schema admitted. Narrowed 2026-08-15; authorized by the repository owner in the pull request thread as a baseline contract change. |
-| `ADAPTER-CONTROLLED-FAILURE-01` | A valid controlled failure replays validated messages, error, and hints, yields no result, and returns validator status 1. |
+| `ADAPTER-CONTROLLED-FAILURE-01` | A valid controlled failure carries its error and its hints in order, yields no result, and returns status 1. Narrowed 2026-08-20; authorized by the repository owner as a baseline contract change. |
 | `ADAPTER-TERMINAL-01` | Terminal-facing protocol strings reject C0, DEL, and C1 controls. |
 | `ADAPTER-SURROGATE-01` | Terminal-facing protocol strings reject surrogate code points without leaking a traceback. |
 
