@@ -1000,8 +1000,12 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     // Every case below is decided in `parseArgs`, before any preflight that
     // could need Codex. Asserted, not assumed: this block used to receive a
     // lazily-written noop `codex` as a side effect of carrying `SPW_ADAPTER`,
-    // and that provisioning is gone. If a usage error ever starts reaching
-    // preflight, this line fails first and says so.
+    // and that provisioning is gone. This line is the sentinel for that
+    // provisioning returning -- a `codex` appearing is the only thing that can
+    // fail it. A usage error that started reaching preflight would leave
+    // `codex` absent and pass this line; `assertCleanResult(result, 2)` below
+    // is what would fail, because preflight exits 1 with the missing-codex
+    // diagnostic rather than 2 with the usage block.
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     for (const { args, diagnostic } of cases) {
       clearDispatchLog(sandbox);
@@ -1013,11 +1017,14 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     }
   });
 
-  // A `probe` usage error is decided before preflight, proved on a sandbox that
-  // never went near `dispatchEnvironment`. `COMMAND_REQUIREMENTS.probe` still
-  // requires `codex` and this sandbox has none. If the arity check lived only in
-  // runProbe, preflight would reach it first and this would be exit 1 with the
-  // missing-codex diagnostic.
+  // A `probe` usage error is decided before preflight, stated a second time on
+  // a sandbox built without `dispatchEnvironment`. That is no longer an
+  // independent witness: as of this PR `dispatchEnvironment` returns exactly
+  // the literal this block passes, so both paths build the same environment.
+  // The block is kept because it states the requirement inline --
+  // `COMMAND_REQUIREMENTS.probe` still requires `codex` and this sandbox has
+  // none, so if the arity check lived only in runProbe, preflight would reach
+  // it first and this would be exit 1 with the missing-codex diagnostic.
   withSandbox({ stubScripts: true }, (sandbox) => {
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     const result = runCli(sandbox, ["probe", "--porcelaine"], {
