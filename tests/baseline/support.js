@@ -551,17 +551,26 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
 // records something DISPATCH does not know -- which commands' *test sites* have
 // been migrated off the dead seam -- so there is no source for it to disagree
 // with. Slice 4b's flip added install/update/uninstall (Task 8, Step 5b);
-// slice 6 deletes this with the seam.
+// slice 6's PR 3 added pin/track-latest/unpin/probe, and slice 6 deletes this
+// set with the seam.
 //
-// All eight commands are now in-process, so this set is the whole command list
-// and any SPW_ADAPTER override reaching runCli is inert by construction. It is
-// still NOT collapsed into "always throw": the set records which test sites
-// have been CLEANED, which is a different fact from which commands are
-// in-process, and spelling it out is what keeps the two from being conflated
-// when slice 6 removes the seam.
+// This set is now the whole command list, and as of PR 3 that is a fact about
+// TEST SITES rather than an inference from DISPATCH: `dispatchEnvironment` was
+// the repository's only producer of SPW_ADAPTER on the runCli path, and it no
+// longer carries the key. The claim above this line previously read "All eight
+// commands are now in-process, so this set is the whole command list" while the
+// set held four -- a true premise with a false conclusion. It is still NOT
+// collapsed into "always throw": the set records which test sites have been
+// CLEANED, which is a different fact from which commands are in-process, and
+// spelling it out is what keeps the two from being conflated when slice 6
+// removes the seam.
 /** @type {Set<string>} */
 const ADAPTER_SEAM_RETIRED = new Set([
+  "pin",
+  "track-latest",
+  "unpin",
   "prepare",
+  "probe",
   "install",
   "update",
   "uninstall",
@@ -602,13 +611,6 @@ function runCli(sandbox, args = [], overrides = {}, options = {}) {
   assertSeamRetired(args, overrides);
   const cwd = options.cwd || sandbox.work;
   assertContainedPath(sandbox, cwd, "working directory");
-  if (
-    Object.hasOwn(overrides, "SPW_ADAPTER") &&
-    !Object.hasOwn(overrides, "SUPERPOWERS_CODEX") &&
-    !existsSync(join(sandbox.bin, "codex"))
-  ) {
-    writeNoopTool(sandbox);
-  }
   return spawnSync(
     join(sandbox.bin, "node"),
     [join(sandbox.pkg, "bin", "superpowers-manager.js"), ...args],

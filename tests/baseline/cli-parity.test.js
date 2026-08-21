@@ -140,7 +140,6 @@ async function withCwd(dir, fn) {
  */
 function dispatchEnvironment(sandbox, overrides = {}) {
   return {
-    SPW_ADAPTER: sandbox.adapter,
     SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
     ...overrides,
   };
@@ -850,27 +849,15 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
                 SUPERPOWERS_REF: upstream.RAW_COMMIT,
               }
             : command === "prepare"
-              ? (() => {
+              ? {
                   // `prepare` really runs here now, so this row needs a local
                   // upstream: without one it resolves the packaged default and
                   // the sandbox git shim turns that into `exit 128` rather
                   // than a readable failure.
-                  //
-                  // SPW_ADAPTER is stripped rather than never added, because
-                  // `dispatchEnvironment` carries it for every other row in
-                  // this Map. It is the only one of `assertSeamRetired`'s
-                  // three keys that helper supplies, so stripping the other
-                  // two would not typecheck. `assertSeamRetired` reads the
-                  // command out of `args`, so it catches this site even though
-                  // no grep for "prepare" would attribute the override to it.
-                  const { SPW_ADAPTER: _adapter, ...rest } =
-                    dispatchEnvironment(sandbox);
-                  return {
-                    ...rest,
-                    SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-                    SUPERPOWERS_REF: upstream.RAW_COMMIT,
-                  };
-                })()
+                  ...dispatchEnvironment(sandbox),
+                  SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+                  SUPERPOWERS_REF: upstream.RAW_COMMIT,
+                }
               : dispatchEnvironment(sandbox);
       const result = runCli(sandbox, [command, ...argv], overrides);
       if (IN_PROCESS_COMMANDS.includes(command)) {
@@ -1010,6 +997,12 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
   ];
 
   withSandbox({ stubScripts: true }, (sandbox) => {
+    // Every case below is decided in `parseArgs`, before any preflight that
+    // could need Codex. Asserted, not assumed: this block used to receive a
+    // lazily-written noop `codex` as a side effect of carrying `SPW_ADAPTER`,
+    // and that provisioning is gone. If a usage error ever starts reaching
+    // preflight, this line fails first and says so.
+    assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     for (const { args, diagnostic } of cases) {
       clearDispatchLog(sandbox);
       const result = runCli(sandbox, args, dispatchEnvironment(sandbox));
@@ -1020,11 +1013,11 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     }
   });
 
-  // A `probe` usage error is decided before preflight. No SPW_ADAPTER override
-  // here, so runCli's lazy writeNoopTool never fires and `codex` — which
-  // COMMAND_REQUIREMENTS.probe still requires — is genuinely absent. If the
-  // arity check lived only in runProbe, preflight would reach it first and
-  // this would be exit 1 with the missing-codex diagnostic.
+  // A `probe` usage error is decided before preflight, proved on a sandbox that
+  // never went near `dispatchEnvironment`. `COMMAND_REQUIREMENTS.probe` still
+  // requires `codex` and this sandbox has none. If the arity check lived only in
+  // runProbe, preflight would reach it first and this would be exit 1 with the
+  // missing-codex diagnostic.
   withSandbox({ stubScripts: true }, (sandbox) => {
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     const result = runCli(sandbox, ["probe", "--porcelaine"], {
