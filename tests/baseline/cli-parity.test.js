@@ -993,16 +993,9 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
 
   withSandbox({ stubScripts: true }, (sandbox) => {
     // Every case below is decided in `parseArgs`, before any preflight that
-    // could need Codex. Asserted, not assumed: this block used to receive a
-    // lazily-written noop `codex` as a side effect of carrying `SPW_ADAPTER`,
-    // and that provisioning is gone. This line is the sentinel for that
-    // provisioning returning -- a `codex` appearing is the only thing that can
-    // fail it. A usage error that started reaching preflight would leave
-    // `codex` absent and pass this line; `assertCleanResult(result, 2)` below
-    // is what would fail instead. Only the two `probe` rows would fail with
-    // the missing-codex diagnostic: `pin`, `track-latest` and `unpin` have
-    // requirements this sandbox already satisfies, so those would fail by the
-    // command actually running.
+    // could need Codex. This first check records the starting precondition:
+    // `codex` is not in SANDBOX_TOOLS, so `withSandbox` never provisions one
+    // and the loop begins without it.
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     for (const { args, diagnostic } of cases) {
       clearDispatchLog(sandbox);
@@ -1012,6 +1005,21 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
       assert.equal(result.stderr, `error: ${diagnostic}\n${USAGE}`);
       assert.deepEqual(readDispatchLog(sandbox), []);
     }
+    // The tripwire, and it has to sit here rather than above the loop. This
+    // block used to receive a lazily-written noop `codex` as a side effect of
+    // carrying `SPW_ADAPTER`, and `runCli` wrote it during the call rather
+    // than before it -- so a check that ran only before the loop would pass
+    // and the suite would stay green if that provisioning came back. Nothing
+    // in this block removes `bin/codex`, so absent before and absent after
+    // pins the absence across every iteration above.
+    //
+    // A usage error that started reaching preflight would leave `codex` absent
+    // and pass both checks; `assertCleanResult(result, 2)` inside the loop is
+    // what would fail instead. Only the two `probe` rows would fail with the
+    // missing-codex diagnostic: `pin`, `track-latest` and `unpin` have
+    // requirements this sandbox already satisfies, so those would fail by the
+    // command actually running.
+    assert.equal(existsSync(join(sandbox.bin, "codex")), false);
   });
 
   // A `probe` usage error is decided before preflight, stated a second time on
