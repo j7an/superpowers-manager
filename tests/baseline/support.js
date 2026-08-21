@@ -46,7 +46,6 @@ import { writeGitEgressShim } from "../lib/git-egress.js";
  *   git: string,
  *   gitConfig: string,
  *   work: string,
- *   adapter: string,
  *   codexLog: string,
  *   dispatchLog: string,
  * }} Sandbox
@@ -474,7 +473,6 @@ function createSandbox(_options = {}) {
       git: join(root, "git"),
       gitConfig: join(root, "git", "config"),
       work: join(root, "work"),
-      adapter: join(root, "bin", "stateful-adapter"),
       codexLog: join(root, "codex.log"),
       dispatchLog: join(root, "dispatch.log"),
     };

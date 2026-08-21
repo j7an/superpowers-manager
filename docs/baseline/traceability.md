@@ -104,8 +104,8 @@ selectors or intentionally update the inventory, test, and this map together.
 | `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.js::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/builders/baseline-scenario.sh` |
 | `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.js::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/builders/baseline-scenario.sh` |
 | `INSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.js::INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
-| `UPDATE-CONTROL-01` | `tests/baseline/cli-parity.test.js::UPDATE-CONTROL-01 update requires current managed control evidence` | `tests/fixtures/baseline/bin/stateful-adapter` |
-| `UNINSTALL-OWNERSHIP-01` | `tests/baseline/cli-parity.test.js::UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources` | `tests/fixtures/baseline/bin/stateful-adapter` |
+| `UPDATE-CONTROL-01` | `tests/baseline/cli-parity.test.js::UPDATE-CONTROL-01 update requires current managed control evidence` | — |
+| `UNINSTALL-OWNERSHIP-01` | `tests/baseline/cli-parity.test.js::UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources` | — |
 | `UNINSTALL-TARGETS-01` | `tests/baseline/marketplace-reconcile.test.js::UNINSTALL-TARGETS-01 adapter removes only manager resources` | — |
 | `UNINSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.js::UNINSTALL-VERIFY-01 both manager resources must be absent` | — |
 | `DIAG-INTENTIONAL-01` | `tests/baseline/cli-parity.test.js::CLI-USAGE-01 invalid command and stray flag fail with exit 2` | — |
