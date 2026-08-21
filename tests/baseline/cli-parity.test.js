@@ -140,7 +140,6 @@ async function withCwd(dir, fn) {
  */
 function dispatchEnvironment(sandbox, overrides = {}) {
   return {
-    SPW_ADAPTER: sandbox.adapter,
     SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
     ...overrides,
   };
@@ -500,20 +499,15 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
   assertNoCodexContact(sandbox);
 }
 
-// Rewritten for PR 11.5 slice 4b Task 7 (D5). The five lifecycle behaviour
-// IDs below no longer drive the baseline sandbox's `stateful-adapter` (the
-// `SPW_ADAPTER` seam `scripts/core/adapter.sh` honours) through
-// `withSandbox`/`runCli`: `tests/baseline/support.js`'s own
-// `validateEnvironment` (`:309-346`) refuses a `SUPERPOWERS_CODEX` override
-// that resolves outside the sandbox root, and the lifecycle fixture's fake
-// `codex` lives under its own scratch tree
-// (`tests/bin/lifecycle-fixture.js`'s `SCRATCH`), never under a baseline
-// sandbox. The two fixtures are siloed on purpose, so these five move onto
-// `createCase`/`runScript` instead — the same machinery
-// `tests/bin/install-commands.test.js` and
-// `tests/bin/uninstall-commands.test.js` already drive
-// `scripts/install`/`update`/`uninstall` through, still via `/bin/sh`, still
-// the shell subject Task 8 has not yet flipped.
+// Rewritten for PR 11.5 slice 4b Task 7 (D5), re-anchored by slice 6's PR 3
+// when the fixture and the seam's last baseline producer were deleted. The
+// seam itself survives until PR 4. The five lifecycle behaviour IDs
+// below run on `createCase`/`runScript` from `tests/bin/lifecycle-fixture.js`,
+// not on a baseline sandbox: `tests/baseline/support.js`'s own
+// `validateEnvironment` refuses a `SUPERPOWERS_CODEX` override that resolves
+// outside the sandbox root, and the lifecycle fixture's fake `codex` lives
+// under its own scratch tree (`SCRATCH` in that file), never under a baseline
+// sandbox. The two fixtures are siloed on purpose.
 
 /**
  * The fixture's own `codex` log, in place of `adapterOperations(sandbox)`.
@@ -850,27 +844,15 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
                 SUPERPOWERS_REF: upstream.RAW_COMMIT,
               }
             : command === "prepare"
-              ? (() => {
+              ? {
                   // `prepare` really runs here now, so this row needs a local
                   // upstream: without one it resolves the packaged default and
                   // the sandbox git shim turns that into `exit 128` rather
                   // than a readable failure.
-                  //
-                  // SPW_ADAPTER is stripped rather than never added, because
-                  // `dispatchEnvironment` carries it for every other row in
-                  // this Map. It is the only one of `assertSeamRetired`'s
-                  // three keys that helper supplies, so stripping the other
-                  // two would not typecheck. `assertSeamRetired` reads the
-                  // command out of `args`, so it catches this site even though
-                  // no grep for "prepare" would attribute the override to it.
-                  const { SPW_ADAPTER: _adapter, ...rest } =
-                    dispatchEnvironment(sandbox);
-                  return {
-                    ...rest,
-                    SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-                    SUPERPOWERS_REF: upstream.RAW_COMMIT,
-                  };
-                })()
+                  ...dispatchEnvironment(sandbox),
+                  SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+                  SUPERPOWERS_REF: upstream.RAW_COMMIT,
+                }
               : dispatchEnvironment(sandbox);
       const result = runCli(sandbox, [command, ...argv], overrides);
       if (IN_PROCESS_COMMANDS.includes(command)) {
@@ -1010,6 +992,11 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
   ];
 
   withSandbox({ stubScripts: true }, (sandbox) => {
+    // Every case below is decided in `parseArgs`, before any preflight that
+    // could need Codex. This first check records the starting precondition:
+    // `codex` is not in SANDBOX_TOOLS, so `withSandbox` never provisions one
+    // and the loop begins without it.
+    assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     for (const { args, diagnostic } of cases) {
       clearDispatchLog(sandbox);
       const result = runCli(sandbox, args, dispatchEnvironment(sandbox));
@@ -1018,13 +1005,31 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
       assert.equal(result.stderr, `error: ${diagnostic}\n${USAGE}`);
       assert.deepEqual(readDispatchLog(sandbox), []);
     }
+    // The tripwire, and it has to sit here rather than above the loop. This
+    // block used to receive a lazily-written noop `codex` as a side effect of
+    // carrying `SPW_ADAPTER`, and `runCli` wrote it during the call rather
+    // than before it -- so a check that ran only before the loop would pass
+    // and the suite would stay green if that provisioning came back. Nothing
+    // in this block removes `bin/codex`, so absent before and absent after
+    // pins the absence across every iteration above.
+    //
+    // A usage error that started reaching preflight would leave `codex` absent
+    // and pass both checks; `assertCleanResult(result, 2)` inside the loop is
+    // what would fail instead. Only the two `probe` rows would fail with the
+    // missing-codex diagnostic: `pin`, `track-latest` and `unpin` have
+    // requirements this sandbox already satisfies, so those would fail by the
+    // command actually running.
+    assert.equal(existsSync(join(sandbox.bin, "codex")), false);
   });
 
-  // A `probe` usage error is decided before preflight. No SPW_ADAPTER override
-  // here, so runCli's lazy writeNoopTool never fires and `codex` — which
-  // COMMAND_REQUIREMENTS.probe still requires — is genuinely absent. If the
-  // arity check lived only in runProbe, preflight would reach it first and
-  // this would be exit 1 with the missing-codex diagnostic.
+  // A `probe` usage error is decided before preflight, stated a second time on
+  // a sandbox built without `dispatchEnvironment`. That is no longer an
+  // independent witness: as of this PR `dispatchEnvironment` returns exactly
+  // the literal this block passes, so both paths build the same environment.
+  // The block is kept because it states the requirement inline --
+  // `COMMAND_REQUIREMENTS.probe` still requires `codex` and this sandbox has
+  // none, so if the arity check lived only in runProbe, preflight would reach
+  // it first and this would be exit 1 with the missing-codex diagnostic.
   withSandbox({ stubScripts: true }, (sandbox) => {
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     const result = runCli(sandbox, ["probe", "--porcelaine"], {
@@ -2030,10 +2035,12 @@ void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
 });
 
 // Rewritten, not re-pointed (PR 11.5 slice 2): the previous version ran the
-// real `scripts/probe` with an SPW_ADAPTER stub, a seam only
-// scripts/core/adapter.sh honours. Once probe dispatches in-process the stub
-// stops taking effect, so this drives `runProbe` against the probe fake
-// instead. The ID and the contract — probe mutates nothing — are unchanged.
+// real `scripts/probe` through an `SPW_ADAPTER` stub, and the stub stopped
+// taking effect once probe began dispatching in-process. Both that script and
+// the `scripts/core/adapter.sh` that honoured the seam have since been deleted
+// with the rest of the lifecycle shell runtime, so this drives `runProbe`
+// against the probe fake instead. The ID and the contract — probe mutates
+// nothing — are unchanged.
 void test("PROBE-READONLY-01 probe is read-only", async () => {
   const c = createCase({ fakes: "probe" });
   // Two empty listings: probe issues `plugin list --json` once per inspection
@@ -2155,8 +2162,7 @@ function lifecycleCodexCase(options) {
 /**
  * Answers `inspect --view update-control` with evidence the real adapter
  * cannot produce, and DELEGATES every other operation to the real in-process
- * `runAdapter` — the exact role the `exec "$realAdapter"` tail of the old
- * `SPW_ADAPTER` shell override played before PR 11.5 slice 4b's flip.
+ * `runAdapter`.
  *
  * Converted, not retired (Task 8, Step 5b). The lever this replaces was a
  * hand-written `SPW_ADAPTER` script that became inert the moment `update`
@@ -2167,8 +2173,8 @@ function lifecycleCodexCase(options) {
  * (tests/bin/adapter-seam.js).
  *
  * The real adapter's update-control view is hardcoded to "managed"
- * (src/adapter.ts:782), which is why interception is needed at all and why the
- * third subcase needs none.
+ * (`runInspect` in src/adapter.ts), which is why interception is needed at all
+ * and why the third subcase needs none.
  *
  * `"malformed"` re-anchors onto the port's own reader rather than the shell's.
  * The shell fixture printed a bare `{`, which `validate-adapter-response.py`
