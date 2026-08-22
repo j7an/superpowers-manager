@@ -91,7 +91,7 @@ void test("routing: `pin` succeeds in-process", () => {
 // It reached src/cli.ts's `!handler` guard by patching a case-local copy of the
 // compiled DISPATCH table, flipping a "spawn" entry to "in-process" so the name
 // dispatched was one IN_PROCESS_HANDLERS does not carry. At 8/8 in-process
-// there is no "spawn" entry left to flip, and `patchDispatch` rejected a no-op
+// there was no "spawn" entry left to flip, and `patchDispatch` rejected a no-op
 // override by design, so the fixture could not construct the condition at all.
 // The test's own comment had already scheduled this: "in slice 4 it throws
 // instead, which is when this test should be deleted."

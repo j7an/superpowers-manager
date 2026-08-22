@@ -1110,9 +1110,10 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 });
 
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
-  // Derived, never restated. The hand-written map this replaces encoded
-  // DISPATCH a second time through the presence of "sh", forty lines below
-  // this same file's correct derived usage.
+  // Derived, never restated. The hand-written map this replaces spelled out
+  // each command's tools by hand, so production could change its requirements
+  // while this expectation stayed silently stale; it also encoded the retired
+  // DISPATCH table a second time through the presence of "sh".
   //
   // commandRequirements(env) (src/cli.ts:227) takes the environment — `prepare`
   // requires python3 only when SUPERPOWERS_VALIDATOR names one — and returns
