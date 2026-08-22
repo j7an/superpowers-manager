@@ -89,11 +89,10 @@ async function saveSelection(c, record) {
 }
 
 /**
- * A per-case copy of the shared fixture upstream. `UPSTREAM` is built once and
- * shared across the whole run (tests/bin/lifecycle-fixture.js's `buildUpstream`),
- * so a
- * case that renames its source away must rename a copy — renaming the original
- * would break every concurrently running case.
+ * A per-case copy of the shared fixture upstream. `UPSTREAM` is built once
+ * and shared across the whole run (tests/bin/lifecycle-fixture.js's
+ * `buildUpstream`), so a case that renames its source away must rename a
+ * copy — renaming the original would break every concurrently running case.
  * @param {CaseEnv} c
  * @returns {string}
  */
@@ -301,10 +300,11 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
   assert.match(result.stdout, /^selection_origin=user-config$/m);
   assert.equal(result.stdout.includes(`effective_source=${source}\n`), true);
   assert.equal(result.stdout.includes(`saved_source=${source}\n`), true);
-  // track-latest is the one saved mode that still resolves through Git, and it
-  // resolved: requested_ref, resolved_ref, and desired_commit are three
-  // different values here, which is what makes `gatherProbe`'s `collect`
-  // mapping discriminating.
+  // track-latest is the one saved mode that still resolves through Git, and
+  // it resolved: requested_ref, resolved_ref, and desired_commit are three
+  // different values here, which is what makes the `requestedRef`,
+  // `resolvedRef`, and `desiredCommit` entries of the EffectiveSelection ->
+  // ProbeFacts mapping (`gatherProbe`'s `facts` object) discriminating.
   assert.match(result.stdout, /^requested_ref=latest-release$/m);
   assert.match(result.stdout, /^resolved_ref=v1\.0\.0$/m);
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));

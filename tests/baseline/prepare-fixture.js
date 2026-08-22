@@ -87,11 +87,12 @@ function git(repo, args) {
 
 /**
  * The fixture's own view of a repository, for an assertion message.
- * The `cannot clone upstream repo` diagnostic names only the source when a clone fails and
- * discards git's output by contract, so a case whose clone fails for an
- * unexpected reason cannot say why. This does not change that contract; it adds
- * the fixture's side of the story to the failure message. Deliberately does not
- * go through `git()` above: every command here is expected to be able to fail.
+ * The `cannot clone upstream repo` diagnostic names only the source when a
+ * clone fails and discards git's output by contract, so a case whose clone
+ * fails for an unexpected reason cannot say why. This does not change that
+ * contract; it adds the fixture's side of the story to the failure message.
+ * Deliberately does not go through `git()` above: every command here is
+ * expected to be able to fail.
  * @param {string} repository
  * @returns {string}
  */
@@ -273,10 +274,11 @@ function buildUpstream() {
   //
   // The value is a NUMBER on purpose. classifyHooks accepts
   // `typeof hooks === "string"` as a single declared path
-  // (`classifyHooks`'s `manifest.hooks` extraction), so a plain string reaches validateDeclaredFile and
-  // fails with `declared hook path must start with ./` — a different cause,
-  // already covered in tests/unit/hooks.test.js. 42 falls through every
-  // accepted shape to the unsupported-declaration throw.
+  // (`classifyHooks`'s `manifest.hooks` extraction), so a plain string
+  // reaches validateDeclaredFile and fails with `declared hook path must
+  // start with ./` — a different cause, already covered in
+  // tests/unit/hooks.test.js. 42 falls through every accepted shape to the
+  // unsupported-declaration throw.
   //
   // The eight underlying causes the retired shell driver asserted behind this
   // prefix are all already message-exact in tests/unit/hooks.test.js. This

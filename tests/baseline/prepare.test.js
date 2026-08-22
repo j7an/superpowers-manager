@@ -505,8 +505,8 @@ void test("prepare clones once and then fetches into the same cache", async () =
 
   const second = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
   assert.equal(second.status, 0, second.stderr);
-  // Same inode: the second run took the fetch branch
-  // (`gatherPrepare`'s cached-clone fetch branch) instead of removing and re-cloning.
+  // Same inode: the second run took the fetch branch (`gatherPrepare`'s
+  // cached-clone fetch branch) instead of removing and re-cloning.
   assert.equal(statSync(cacheRepo(c)).ino, inode);
 });
 
@@ -532,11 +532,11 @@ void test("prepare rejects an upstream missing any required path", async () => {
       SUPERPOWERS_UPSTREAM_URL: source,
       SUPERPOWERS_REF: commit,
     });
-    // The `cannot clone upstream repo` diagnostic names only the source when a clone fails
-    // and discards git's output by contract, so an unexpected failure here
-    // cannot say why on its own. Attach the fixture's own view of the source —
-    // computed only once the expectation has already failed, so a passing run
-    // pays for no extra git processes.
+    // The `cannot clone upstream repo` diagnostic names only the source when
+    // a clone fails and discards git's output by contract, so an unexpected
+    // failure here cannot say why on its own. Attach the fixture's own view
+    // of the source — computed only once the expectation has already failed,
+    // so a passing run pays for no extra git processes.
     const expected = `error: required upstream path missing: ${label}\n`;
     const diagnosis =
       result.status === 1 && result.stderr === expected
@@ -1028,8 +1028,9 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   };
 
   // Non-pinned: the cache already exists, so this is the fetch branch
-  // (`gatherPrepare`'s cached-clone fetch branch), whose diagnostic names the source and
-  // nothing else. Exact equality is the assertion — one hand-written line.
+  // (`gatherPrepare`'s cached-clone fetch branch), whose diagnostic names the
+  // source and nothing else. Exact equality is the assertion — one
+  // hand-written line.
   const env = createCase({ fakes: "probe" });
   const commit = commitOf(REFS.fallback);
   const seeded = await prepare(env, { SUPERPOWERS_REF: commit });
@@ -1057,17 +1058,18 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   // bounds this output.
   //
   // fetchExactCommit does hold three splice sites — its `cannot initialize
-  // upstream cache repository` throw and its `cannot transfer requested
-  // commit into upstream cache` throw, and proveCommit's init at :262,
-  // inherited from spw_upstream_cli's
-  // `spw_die "${_upstream_out#error: }"` and not a regression — but no
-  // externally constructible input reaches any of them. Four shapes were tried:
-  // a regular file as the cache repository, `.git` as a regular file, an empty
-  // `.git` directory, and a read-only `.git/objects`. Every one either fails
-  // earlier or makes git emit a single `fatal:` line, so a multi-line splice
-  // cannot be built from outside the process. Pinning the collapse itself needs
-  // an injected git result in a src/upstream.ts unit test, not this driver.
-  // Do not re-derive that list; extend it.
+  // upstream cache repository` throw, its `cannot transfer requested commit
+  // into upstream cache` throw, and proveCommit's init throw, which
+  // fetchExactCommit reaches as `cannot initialize exact-commit fetch
+  // workspace` — all three inherited from spw_upstream_cli's
+  // `spw_die "${_upstream_out#error: }"`, and not a regression — but no
+  // externally constructible input reaches any of them. Four shapes were
+  // tried: a regular file as the cache repository, `.git` as a regular file,
+  // an empty `.git` directory, and a read-only `.git/objects`. Every one
+  // either fails earlier or makes git emit a single `fatal:` line, so a
+  // multi-line splice cannot be built from outside the process. Pinning the
+  // collapse itself needs an injected git result in a src/upstream.ts unit
+  // test, not this driver. Do not re-derive that list; extend it.
   //
   // So this half asserts the exact message, which is strictly stronger than the
   // single-line shape check the task text asked for. The same string is already
