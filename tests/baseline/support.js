@@ -47,7 +47,6 @@ import { writeGitEgressShim } from "../lib/git-egress.js";
  *   gitConfig: string,
  *   work: string,
  *   codexLog: string,
- *   dispatchLog: string,
  * }} Sandbox
  */
 
@@ -119,7 +118,6 @@ const PATH_ENVIRONMENT_VARIABLES = new Set([
   "SUPERPOWERS_VALIDATOR",
   "SUPERPOWERS_INSTALLED_SEARCH_ROOT",
   "SPW_PACKAGE_ROOT",
-  "SPW_BASELINE_DISPATCH_LOG",
   "SPW_BASELINE_GIT_LOG",
   "SPW_BASELINE_SANDBOX_ROOT",
   "SPW_BASELINE_VALIDATOR_MARKER",
@@ -466,7 +464,6 @@ function createSandbox(_options = {}) {
       gitConfig: join(root, "git", "config"),
       work: join(root, "work"),
       codexLog: join(root, "codex.log"),
-      dispatchLog: join(root, "dispatch.log"),
     };
 
     for (const directory of [
@@ -578,23 +575,6 @@ function runScenario(sandbox, command, destination, overrides = {}) {
   );
 }
 
-/** @param {Sandbox} sandbox */
-function readDispatchLog(sandbox) {
-  registeredRoot(sandbox);
-  if (!existsSync(sandbox.dispatchLog)) return [];
-  const text = readFileSync(sandbox.dispatchLog, "utf8");
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-}
-
-/** @param {Sandbox} sandbox */
-function clearDispatchLog(sandbox) {
-  registeredRoot(sandbox);
-  writeFileSync(sandbox.dispatchLog, "", "utf8");
-}
-
 /**
  * @param {Sandbox} sandbox
  * @param {string} name
@@ -624,12 +604,10 @@ export {
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
-  clearDispatchLog,
   commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,
-  readDispatchLog,
   removeTool,
   runCli,
   runScenario,

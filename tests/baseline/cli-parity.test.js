@@ -22,12 +22,10 @@ import {
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
-  clearDispatchLog,
   commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,
-  readDispatchLog,
   removeTool,
   runCli,
   runScenario,
@@ -129,17 +127,6 @@ async function withCwd(dir, fn) {
   } finally {
     process.chdir(previous);
   }
-}
-
-/**
- * @param {Sandbox} sandbox
- * @param {Record<string, string>} [overrides]
- */
-function dispatchEnvironment(sandbox, overrides = {}) {
-  return {
-    SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-    ...overrides,
-  };
 }
 
 /**
@@ -544,7 +531,6 @@ void test("CLI-MODE-HELP-01 help modes", () => {
       assertCleanResult(result);
       assert.equal(result.stdout, USAGE);
       assert.equal(result.stderr, "");
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
   });
 });
@@ -635,12 +621,12 @@ void test("CLI-MODE-VERSION-01 version mode routes through dist", () => {
 });
 
 // Rewritten, not re-pointed (PR 11.5 slice 4b, Task 8): `update` dispatches
-// in-process now, so the dispatch record this used to read
-// (`assertOnlyDispatch(sandbox, "update", [])`) can never be written. The ID,
-// the test name and the traceability row are unchanged, and so is the contract
-// — docs/baseline/behavioral-inventory.md states it as "No arguments is the
-// third distinct mode and is exactly equivalent to dispatching `update` with no
-// arguments", which is what the equivalence below asserts literally.
+// in-process now, so the dispatch record this used to read (an empty-dispatch
+// assertion on `update`) can never be written. The ID, the test name and the
+// traceability row are unchanged, and so is the contract —
+// docs/baseline/behavioral-inventory.md states it as "No arguments is the
+// third distinct mode and is exactly equivalent to dispatching `update` with
+// no arguments", which is what the equivalence below asserts literally.
 //
 // Two halves, because no single observable carries both directions of it.
 //
@@ -676,15 +662,11 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
     writeNoopTool(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const overrides = {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
     };
     const bare = runCli(sandbox, [], overrides);
-    assert.deepEqual(readDispatchLog(sandbox), []);
-    clearDispatchLog(sandbox);
     const explicit = runCli(sandbox, ["update"], overrides);
-    assert.deepEqual(readDispatchLog(sandbox), []);
     assert.equal(bare.error, undefined);
     assert.equal(bare.signal, null);
     assert.deepEqual(
@@ -727,13 +709,11 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
       "plugin marketplace add",
     ];
     const bare = runCli(sandbox, [], {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
     });
     assert.equal(bare.error, undefined);
     assert.equal(bare.signal, null);
-    assert.deepEqual(readDispatchLog(sandbox), []);
     // The marketplace-add argv carries the sandbox package root, so the
     // recorded line is trimmed back to its operation, as CLI-COMMANDS-01 does.
     assert.deepEqual(
@@ -813,16 +793,14 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     for (const [command, argv] of cases) {
       if (OWN_SANDBOX.includes(command)) continue;
       handled.push(command);
-      clearDispatchLog(sandbox);
+      /** @type {Record<string, string> | undefined} */
       const overrides =
         command === "pin"
           ? {
-              ...dispatchEnvironment(sandbox),
               SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
             }
           : command === "probe"
             ? {
-                ...dispatchEnvironment(sandbox),
                 SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
                 SUPERPOWERS_REF: upstream.RAW_COMMIT,
               }
@@ -832,19 +810,15 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
                   // upstream: without one it resolves the packaged default and
                   // the sandbox git shim turns that into `exit 128` rather
                   // than a readable failure.
-                  ...dispatchEnvironment(sandbox),
                   SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
                   SUPERPOWERS_REF: upstream.RAW_COMMIT,
                 }
-              : dispatchEnvironment(sandbox);
+              : undefined;
       const result = runCli(sandbox, [command, ...argv], overrides);
-      // An in-process command must reach its module and dispatch NOTHING.
-      // Task 3 removed every scripts/<command> regression stub, so a
-      // regression that re-spawns a script fails with ENOENT before this
-      // weaker empty-dispatch-log check; the log assertion remains real.
+      // There is no `scripts/<command>` stub anywhere in the tree, so a
+      // regression that re-spawned a script would fail with ENOENT and surface
+      // here as a non-zero exit status -- which is what this check is for.
       assertCleanResult(result);
-      const dispatched = readDispatchLog(sandbox).map((e) => e.command);
-      assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
     }
   });
 
@@ -859,8 +833,8 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   //
   // `install` and `update` stop where the sandbox's `codex` refuses the
   // marketplace mutation; that failure is the fixture's boundary, not a claim
-  // of this ID, so only the sequence and the absence of a dispatch are
-  // asserted. `uninstall` completes, and its exit status IS asserted.
+  // of this ID, so only the sequence is asserted. `uninstall` completes, and
+  // its exit status IS asserted.
   /** @type {Record<string, string[]>} */
   const expectedCodex = {
     install: [
@@ -900,18 +874,12 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
         sandbox,
         [command, .../** @type {string[]} */ (cases.get(command))],
         {
-          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
           SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
           SUPERPOWERS_REF: upstream.RAW_COMMIT,
         },
       );
       assert.equal(result.error, undefined);
       assert.equal(result.signal, null);
-      assert.deepEqual(
-        readDispatchLog(sandbox).map((e) => e.command),
-        [],
-        `${command} must not spawn a script`,
-      );
       // The marketplace-add argv carries the sandbox package root, so the
       // recorded line is trimmed back to its operation before comparison.
       assert.deepEqual(
@@ -974,12 +942,10 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     // and the loop begins without it.
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     for (const { args, diagnostic } of cases) {
-      clearDispatchLog(sandbox);
-      const result = runCli(sandbox, args, dispatchEnvironment(sandbox));
+      const result = runCli(sandbox, args);
       assertCleanResult(result, 2);
       assert.equal(result.stdout, "");
       assert.equal(result.stderr, `error: ${diagnostic}\n${USAGE}`);
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
     // The tripwire, and it has to sit here rather than above the loop. This
     // block used to receive a lazily-written noop `codex` as a side effect of
@@ -998,26 +964,24 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
   });
 
-  // A `probe` usage error is decided before preflight, stated a second time on
-  // a sandbox built without `dispatchEnvironment`. That is no longer an
-  // independent witness: as of this PR `dispatchEnvironment` returns exactly
-  // the literal this block passes, so both paths build the same environment.
-  // The block is kept because it states the requirement inline --
-  // `COMMAND_REQUIREMENTS.probe` still requires `codex` and this sandbox has
-  // none, so if the arity check lived only in runProbe, preflight would reach
-  // it first and this would be exit 1 with the missing-codex diagnostic.
+  // A `probe` usage error is decided before preflight, stated a second time
+  // on a second, independently-built sandbox. That is not an independent
+  // witness of how the environment is built: neither this block nor the loop
+  // above passes any environment override, so both paths build the same
+  // environment. The block is kept because it states the requirement inline
+  // -- `COMMAND_REQUIREMENTS.probe` still requires `codex` and this sandbox
+  // has none, so the arity check is therefore proven to run before preflight:
+  // if it lived only in runProbe, preflight would reach it first and this
+  // would be exit 1 with the missing-codex diagnostic instead.
   withSandbox({ stubScripts: true }, (sandbox) => {
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
-    const result = runCli(sandbox, ["probe", "--porcelaine"], {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-    });
+    const result = runCli(sandbox, ["probe", "--porcelaine"]);
     assertCleanResult(result, 2);
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
       `error: usage: superpowers-manager probe [--porcelain]\n${USAGE}`,
     );
-    assert.deepEqual(readDispatchLog(sandbox), []);
   });
 });
 
@@ -1077,9 +1041,7 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
     // (`notEqual(null, 2)` would have passed that silently).
     const noSuchUpstream = join(sandbox.root, "no-such-upstream");
     for (const ref of accepted) {
-      clearDispatchLog(sandbox);
       const result = runCli(sandbox, ["pin", ref], {
-        ...dispatchEnvironment(sandbox),
         SUPERPOWERS_UPSTREAM_URL: noSuchUpstream,
       });
       assertCleanResult(result, 1);
@@ -1088,15 +1050,9 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
           "pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit",
         ),
       );
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
     for (const ref of refused) {
-      clearDispatchLog(sandbox);
-      const result = runCli(
-        sandbox,
-        ["pin", ref],
-        dispatchEnvironment(sandbox),
-      );
+      const result = runCli(sandbox, ["pin", ref]);
       assertCleanResult(result, 2);
       assert.equal(result.stdout, "");
       assert.equal(
@@ -1104,7 +1060,6 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
         "error: pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit\n" +
           USAGE,
       );
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
   });
 });
@@ -1148,12 +1103,9 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
       // requirement list is genuinely empty rather than merely undeclared.
       withSandbox({ stubScripts: true }, (sandbox) => {
         for (const tool of ALL_REQUIRED_TOOLS) removeTool(sandbox, tool);
-        const result = runCli(sandbox, [command, ...(argsFor[command] || [])], {
-          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-        });
+        const result = runCli(sandbox, [command, ...(argsFor[command] || [])]);
         assertCleanResult(result);
         assert.equal(result.stderr, "");
-        assert.deepEqual(readDispatchLog(sandbox), []);
       });
       continue;
     }
@@ -1161,9 +1113,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
       withSandbox({ stubScripts: true }, (sandbox) => {
         if (tools.includes("codex") && tool !== "codex") writeNoopTool(sandbox);
         removeTool(sandbox, tool);
-        const result = runCli(sandbox, [command, ...(argsFor[command] || [])], {
-          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-        });
+        const result = runCli(sandbox, [command, ...(argsFor[command] || [])]);
         assertCleanResult(result, 1);
         assert.equal(result.stdout, "");
         const diagnostic =
@@ -1171,7 +1121,6 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
             ? "error: required command not found: codex — install the Codex CLI or set SUPERPOWERS_CODEX\n"
             : `error: required command not found: ${tool} — install ${tool} and re-run\n`;
         assert.equal(result.stderr, diagnostic);
-        assert.deepEqual(readDispatchLog(sandbox), []);
       });
     }
   }
@@ -1185,8 +1134,8 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
 // all RETAINED. It is not a child-handling property: a custom
 // `SUPERPOWERS_CODEX` satisfying launcher preflight with `codex` absent from
 // PATH is a requirement-checking contract the flip does not touch. Only the
-// body changed, because it ended in `assertOnlyDispatch(sandbox, "install",
-// [])` and there is no dispatch record to read any more. See the case below.
+// body changed, because it ended in an empty-dispatch assertion on `install`
+// and there is no dispatch record to read any more. See the case below.
 //
 // `CLI-CHILD-STATUS-01` and all FOUR of its scenarios — RETIRED at the gap,
 // with its rows removed from docs/baseline/traceability.md and
@@ -1231,7 +1180,6 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
     // all — which would make the recording below vacuous.
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
       SUPERPOWERS_CODEX: customCodex,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
@@ -1260,7 +1208,6 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
       result.stderr,
       `error: cannot parse output of '${customCodex} plugin list --json'\n`,
     );
-    assert.deepEqual(readDispatchLog(sandbox), []);
   });
 });
 
@@ -1347,7 +1294,6 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     let result;
     try {
       result = runCli(sandbox, ["update"], {
-        SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
         NODE_OPTIONS: `--require ${preload}`,
         NODE_PATH: join(sandbox.root, "custom-node-path"),
         ...values,
@@ -1362,8 +1308,6 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
 
     assert.equal(result.error, undefined);
     assert.equal(result.signal, null);
-    // No script was spawned: the environment reached a child, but not that one.
-    assert.deepEqual(readDispatchLog(sandbox), []);
     // Non-vacuity: the record exists only because the CLI actually spawned the
     // child and handed it an environment.
     assert.equal(existsSync(dumped), true, "the codex child never ran");
