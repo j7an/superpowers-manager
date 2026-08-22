@@ -120,10 +120,11 @@ assert.deepStrictEqual(
 
 // --- vehicleCommand's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ------
 // They asserted that vehicleCommand picks a spawned command and throws when
-// none remains. DISPATCH is now 8/8 in-process, so the second case is the
-// permanent state of the world and the first can only be satisfied by a
-// hand-written table that describes nothing. vehicleCommand itself is deleted
-// with tests/bin/dispatch-mode.js, exactly as its own doc comment instructed:
+// none remains. DISPATCH was 8/8 in-process (and is now deleted, slice 6), so
+// the second case was the permanent state of the world and the first could
+// only be satisfied by a hand-written table that describes nothing.
+// vehicleCommand itself is deleted with tests/bin/dispatch-mode.js, exactly
+// as its own doc comment instructed:
 // "delete it rather than re-point it". No successor.
 
 // --- usage separates saving selection intent from applying it ---

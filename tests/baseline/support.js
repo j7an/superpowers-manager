@@ -91,12 +91,8 @@ const COMMANDS = [
 // Derived, never restated. A second hand-maintained list can agree with itself
 // while disagreeing with the code it describes.
 /** @type {typeof import("../../src/cli.js")} */
-const { DISPATCH, commandRequirements } = await import(
+const { commandRequirements } = await import(
   new URL("../../dist/cli.js", import.meta.url).href
-);
-const IN_PROCESS_COMMANDS = COMMANDS.filter(
-  (command) =>
-    DISPATCH[/** @type {keyof typeof DISPATCH} */ (command)] === "in-process",
 );
 const PASSTHROUGH_VARIABLES = [
   "SUPERPOWERS_REF",
@@ -625,8 +621,6 @@ function fixturePath(...parts) {
 
 export {
   COMMANDS,
-  DISPATCH,
-  IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,

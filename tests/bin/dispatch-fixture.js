@@ -104,20 +104,6 @@ const PIN_UPSTREAM = join(SCRATCH, "pin-upstream");
   }
 }
 
-/** @type {typeof import("../../src/cli.js")} */
-const { DISPATCH } = await import(
-  new URL("../../dist/cli.js", import.meta.url).href
-);
-
-/**
- * The subcommands the real bin dispatches to. Derived, never restated: a
- * third hand-maintained copy of the eight names can agree with itself while
- * disagreeing with the code it describes.
- */
-export const DISPATCH_COMMANDS = /** @type {(keyof typeof DISPATCH)[]} */ (
-  Object.keys(DISPATCH)
-);
-
 /**
  * @param {string} dir
  * @param {string} name
@@ -133,10 +119,10 @@ function writeExecutable(dir, name, body) {
 // slice 4b (Task 8, Step 5a). They existed to put one command into a DISPATCH
 // state src/cli.ts's IN_PROCESS_HANDLERS registry does not carry, by rewriting
 // a "spawn" mode literal to "in-process" in a case-local copy of the compiled
-// table. With DISPATCH at 8/8 in-process there is no "spawn" literal to rewrite
-// and `patchDispatch` rejected a no-op override by design, so the mechanism
-// could not construct that state at all. Its one consumer retired with it; the
-// only other test that used it tested the fixture itself.
+// table. With DISPATCH at 8/8 in-process there was no "spawn" literal to
+// rewrite and `patchDispatch` rejected a no-op override by design, so the
+// mechanism could not construct that state at all. Its one consumer retired
+// with it; the only other test that used it tested the fixture itself.
 
 /**
  * @param {string} kind "real" copies the built dist/, "none" omits it,

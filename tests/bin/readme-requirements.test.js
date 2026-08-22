@@ -4,10 +4,19 @@
 // claiming `probe` needs Python 3 and a POSIX sh, a regression that shipped
 // and survived four slices because nothing checked it (carried row 12).
 //
-// CLI-PREFLIGHT-01 already derives its own map from these same two exports, so
-// this adds no new source of truth -- it stops one document from restating one.
+// CLI-PREFLIGHT-01 already derives its own map from the same single
+// `commandRequirements` export, so this adds no new source of truth -- it
+// stops one document from restating one.
 //
-// This whole file dies in slice 6 with the table it guards.
+// This file is RETAINED (slice 6, D2). Its earlier note said it "dies in slice
+// 6 with the table it guards"; that was wrong on its own terms. Three of its
+// four columns — git, Python 3, Codex CLI — derive from commandRequirements()
+// and never touched DISPATCH. Only the POSIX `sh` column did, and only that
+// column is gone. The regression this file was built for was slice 2 flipping
+// `probe` in-process and leaving README claiming `probe` needs Python 3, which
+// is a commandRequirements fact, not a dispatch fact — and commandRequirements
+// changes without any flip. PR 11.6 retargets SUPERPOWERS_VALIDATOR_EXECUTABLE,
+// which moves the exact `prepare` cell this table carries.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -18,29 +27,15 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 /** @type {typeof import("../../src/cli.js")} */
 const cli = await import(new URL("../../dist/cli.js", import.meta.url).href);
 
-// DISPATCH is declared `as const`, so its value types are literals. With PR
-// 11.5 slice 4b's flip they are all "in-process", and a direct
-// `DISPATCH[key] === "spawn"` becomes TS2367 ("no overlap") under
-// `pnpm run typecheck:js`. The comparison is kept rather than replaced by a
-// constant `"no"`: it is the derivation of record for the POSIX `sh` column, so
-// an entry that ever went back to "spawn" would put `yes` in the README without
-// anyone editing this file. Widening the read to the exported DispatchMode is
-// all that is needed to keep it compiling.
-/** @type {Record<string, import("../../src/cli.js").DispatchMode>} */
-const DISPATCH = cli.DISPATCH;
-
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
-// Column heading -> the COMMAND_REQUIREMENTS token it reports on. The POSIX sh
-// column has no token: `derive()` reads it off the DISPATCH map at `:65` below,
-// where a "spawn" entry means the command still shells out and so needs a
-// POSIX sh. Nothing in src/cli.ts restates the column.
+// Column heading -> the COMMAND_REQUIREMENTS token it reports on.
 const TOOL_COLUMNS = [
   ["git", "git"],
   ["Python 3", "python3"],
   ["Codex CLI", "codex"],
 ];
-const COLUMNS = ["git", "Python 3", "POSIX `sh`", "Codex CLI"];
+const COLUMNS = ["git", "Python 3", "Codex CLI"];
 
 /** @returns {Record<string, string>[]} */
 function derive() {
@@ -62,7 +57,6 @@ function derive() {
           ? "only with SUPERPOWERS_VALIDATOR"
           : "no";
     }
-    row["POSIX `sh`"] = DISPATCH[key] === "spawn" ? "yes" : "no";
     return row;
   });
 }

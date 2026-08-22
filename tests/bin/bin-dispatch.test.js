@@ -97,10 +97,11 @@ void test("routing: `pin` succeeds in-process", () => {
 // instead, which is when this test should be deleted."
 //
 // Decision (Step 5a, option (b)): the compile-time exhaustiveness guard —
-// `IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler>` keyed by
-// exactly the DISPATCH entries reading "in-process" — is accepted as the whole
-// protection. Reaching the runtime guard would now require surgically deleting
-// a key from a compiled registry, which asserts only that a hand-mutilated
+// `IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler>` (slice 6 retyped
+// it from `Record<InProcessCommand, InProcessHandler>`; the guarantee is
+// unchanged, the same decision one indirection shorter) — is accepted as the
+// whole protection. Reaching the runtime guard would now require surgically
+// deleting a key from a compiled registry, which asserts only that a hand-mutilated
 // build reports rather than crashes. `src/cli.ts`'s `!handler` guard STAYS as
 // an unreachable, documented fail-closed backstop; it is three lines and its
 // removal would trade a named diagnostic for a TypeError.
