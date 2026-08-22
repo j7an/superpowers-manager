@@ -19,7 +19,6 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateConfig } from "./lifecycle-config.js";
-import { SEAM_DEPENDENT, SEAM_MODES, SEAM_REASONS } from "./adapter-seam.js";
 import { registerScratch } from "./fixture-scratch.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -147,7 +146,6 @@ export const UPSTREAM = buildUpstream();
  * @property {string} adapterLog
  * @property {string} codexBin
  * @property {string} adapterBin
- * @property {string} adapterSeam what the fake adapter does: delegate, tripwire, or intercept
  */
 
 /**
@@ -177,8 +175,6 @@ function writeFakeBin(dir, name, modulePath, role) {
  * @param {object} options
  * @param {"install" | "uninstall" | "probe"} options.fakes
  * @param {Record<string, unknown>} [options.config]
- * @param {"delegate" | "tripwire" | "intercept"} [options.adapterSeam]
- * @param {{ reason: "intercept" | "log", script: string }} [options.seamDependency]
  * @returns {CaseEnv}
  */
 export function createCase(options) {
@@ -187,46 +183,6 @@ export function createCase(options) {
   // calls — the missing-python3 case asserts an empty Codex log, so a typo'd
   // key there would otherwise still pass, defeating this design's rationale.
   validateConfig(options.fakes, options.config ?? {});
-
-  // Eager, for the same reason validateConfig above is eager: a case that
-  // makes zero adapter calls would otherwise carry a typo'd mode undetected.
-  const adapterSeam = options.adapterSeam ?? "delegate";
-  if (!SEAM_MODES.includes(adapterSeam)) {
-    throw new Error(
-      `createCase: unknown adapterSeam ${JSON.stringify(adapterSeam)} — ` +
-        `expected one of ${SEAM_MODES.join(", ")}`,
-    );
-  }
-  if (adapterSeam === "intercept" && !options.seamDependency) {
-    throw new Error(
-      "createCase: adapterSeam 'intercept' requires seamDependency, so the " +
-        "case is attributable to a script in SEAM_DEPENDENT",
-    );
-  }
-  if (options.seamDependency) {
-    const { reason, script } = options.seamDependency;
-    if (!SEAM_REASONS.includes(reason)) {
-      throw new Error(
-        `createCase: unknown seamDependency reason ${JSON.stringify(reason)}`,
-      );
-    }
-    if (!Object.hasOwn(SEAM_DEPENDENT, script)) {
-      throw new Error(
-        `createCase: ${script} is not in SEAM_DEPENDENT — declare it there ` +
-          "before adding a seam-dependent case, or the gate cannot see it",
-      );
-    }
-    // The converse of the adapterSeam check above, which alone leaves the
-    // implication one-directional: a case declaring reason 'intercept' while
-    // running in delegate or tripwire mode would silently get no interception,
-    // and the registry would over-report its intercept count.
-    if (reason === "intercept" && adapterSeam !== "intercept") {
-      throw new Error(
-        "createCase: seamDependency reason 'intercept' requires adapterSeam " +
-          "'intercept'",
-      );
-    }
-  }
 
   const dir = mkdtempSync(join(SCRATCH, "case-"));
   const pkg = join(dir, "pkg");
@@ -261,7 +217,6 @@ export function createCase(options) {
     adapterLog: join(state, "adapter.log"),
     codexBin,
     adapterBin,
-    adapterSeam,
   };
 }
 
@@ -290,24 +245,6 @@ export async function runScript(caseEnv, script, options = {}) {
       `refusing to run ${script} against a package root outside the fixture scratch tree: ${caseEnv.pkg}`,
     );
   }
-  // The runScript-side counterpart of tests/baseline/support.js's
-  // assertSeamRetired, added at PR 11.5 slice 4b's flip (Task 8, Step 5b).
-  // That guard fires only from runCli / runCliWithoutEnvironment, which is why
-  // it did not catch the two UPDATE-CONTROL-01 subcases that reached the dying
-  // seam through this function instead. It rejects a CALLER-supplied override
-  // only: the fixture's own SPW_ADAPTER below is a surviving default that
-  // nothing in-process reads, kept until slice 6 deletes the seam with the
-  // fake adapter machinery it selects.
-  for (const key of ["SPW_ADAPTER", "SPW_ADAPTER_RESPONSE_VALIDATOR"]) {
-    if (options.env && Object.hasOwn(options.env, key)) {
-      throw new Error(
-        `runScript: ${script}'s adapter seam is retired: remove ${key} from ` +
-          "this call. Every command dispatches in-process, so the in-process " +
-          "runAdapter ignores it and the override is inert — inject a " +
-          "ctx.adapter double instead (tests/bin/command-context.js).",
-      );
-    }
-  }
   // An explicit allowlist, not process.env. The shell drivers used
   // `env VAR=… sh …`, which inherits the developer's whole environment.
   //
@@ -320,11 +257,6 @@ export async function runScript(caseEnv, script, options = {}) {
     HOME: caseEnv.home,
     XDG_CONFIG_HOME: join(caseEnv.home, ".config"),
     TMPDIR: caseEnv.tmp,
-    SPW_ADAPTER: caseEnv.adapterBin,
-    // A FIXTURE variable, read only by tests/bin/*-fakes.js. Nothing under
-    // src/ may read it: it selects what the fake does, never what the subject
-    // does.
-    SPW_FIXTURE_ADAPTER_SEAM: caseEnv.adapterSeam,
     SPW_FIXTURE_STATE: caseEnv.state,
     SPW_TEST_PKG_ROOT: caseEnv.pkg,
     SUPERPOWERS_CODEX: caseEnv.codexBin,
@@ -443,8 +375,8 @@ export function assertOrder(log, needles, message) {
 
 /**
  * Invokes a case's own fake adapter directly — the executable a regressed
- * subject would have spawned, with the state, seam and package root that case
- * runs under.
+ * subject would have spawned, with the state and package root that case runs
+ * under.
  *
  * Why a tripwire case needs it. `readLog` returns `[]` for a missing file, so
  * "the adapter log holds no line" is the same observation whether the subject
@@ -458,17 +390,22 @@ export function assertOrder(log, needles, message) {
  * caseEnv.adapterLog. A caller that asserts both halves fails if the tripwire
  * stops firing, which the emptiness assertion alone cannot do.
  *
- * The fake process reads exactly three variables — SPW_FIXTURE_STATE
- * (lifecycle-fakes.js:235), SPW_FIXTURE_ADAPTER_SEAM (:209) and
- * SPW_TEST_PKG_ROOT (:333, plus install-fakes.js:41 in the codex role). The
- * rest of the allowlist below is inert while the tripwire holds and exists
- * only for the mutation this helper is meant to die under: a disarmed
- * tripwire falls through to delegateToRealAdapter, and these keep that
- * delegation inside the case's own scratch tree instead of the developer's
- * environment. It is spelled out here rather than shared with runScript's
- * literal because extracting a common builder renumbers lines other files
- * cite; divergence fails closed, since the caller asserts an exact status and
- * an exact stderr rather than a substring.
+ * The fake process reads exactly two variables as fixture inputs —
+ * SPW_FIXTURE_STATE (`runFake` in lifecycle-fakes.js) and SPW_TEST_PKG_ROOT
+ * (`runCodex` in install-fakes.js, the codex role only). Five of the six
+ * remaining keys are not fixture inputs at all: HOME, XDG_CONFIG_HOME, TMPDIR,
+ * SUPERPOWERS_CODEX and SUPERPOWERS_INSTALLED_SEARCH_ROOT contain the spawned
+ * PROCESS inside the case's own scratch tree rather than the developer's
+ * environment, which holds whether or not anything reads them. PATH is the
+ * sixth, and the one deliberate ambient pass-through: it copies the
+ * developer's PATH through verbatim and points nowhere in the scratch tree.
+ * Nothing is launched through it either — writeFakeBin writes
+ * `exec "<process.execPath>"`, an absolute node.
+ *
+ * It is spelled out here rather than shared with runScript's literal because
+ * extracting a common builder renumbers lines other files cite; divergence
+ * fails closed, since the caller asserts an exact status and an exact stderr
+ * rather than a substring.
  *
  * @param {CaseEnv} caseEnv
  * @param {string[]} args
@@ -482,7 +419,6 @@ export function spawnFakeAdapter(caseEnv, args) {
       HOME: caseEnv.home,
       XDG_CONFIG_HOME: join(caseEnv.home, ".config"),
       TMPDIR: caseEnv.tmp,
-      SPW_FIXTURE_ADAPTER_SEAM: caseEnv.adapterSeam,
       SPW_FIXTURE_STATE: caseEnv.state,
       SPW_TEST_PKG_ROOT: caseEnv.pkg,
       SUPERPOWERS_CODEX: caseEnv.codexBin,

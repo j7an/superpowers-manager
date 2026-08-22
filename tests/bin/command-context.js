@@ -13,9 +13,11 @@ import { join, resolve, sep } from "node:path";
 import { SCRATCH, UPSTREAM } from "./lifecycle-fixture.js";
 
 /**
- * The env allowlist runScript builds (tests/bin/lifecycle-fixture.js:296-312),
- * minus SPW_ADAPTER: an in-process subject never reads it, and leaving it in
- * would let a case look seam-wired when it is not.
+ * The env allowlist runScript builds in tests/bin/lifecycle-fixture.js. It
+ * used to be that list minus SPW_ADAPTER, because an in-process subject never
+ * read it and leaving it in would have let a case look seam-wired when it was
+ * not. The seam is retired, so no context carries it and there is nothing
+ * left to subtract.
  * @param {import("./lifecycle-fixture.js").CaseEnv} c
  * @param {Record<string, string>} [extra]
  * @returns {NodeJS.ProcessEnv}
@@ -26,7 +28,6 @@ export function caseEnvVars(c, extra = {}) {
     HOME: c.home,
     XDG_CONFIG_HOME: join(c.home, ".config"),
     TMPDIR: c.tmp,
-    SPW_FIXTURE_ADAPTER_SEAM: c.adapterSeam,
     SPW_FIXTURE_STATE: c.state,
     SPW_TEST_PKG_ROOT: c.pkg,
     SUPERPOWERS_CODEX: c.codexBin,

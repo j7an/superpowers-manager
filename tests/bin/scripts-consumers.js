@@ -9,8 +9,8 @@
 // not a command that silently stopped matching.
 //
 // Declared, never globbed. A query over mutable state empties exactly when the
-// deletion it should catch happens — the argument tests/bin/adapter-seam.js and
-// tests/bin/migration-inventory.test.js both make, turned on this list. What is
+// deletion it should catch happens — the argument
+// tests/bin/migration-inventory.test.js makes, turned on this list. What is
 // derived here is the OBSERVED set (runScriptsAudit); the DECLARED set below is
 // hand-written, and the gate is the equality between them.
 //

@@ -23,7 +23,6 @@ import {
   IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
-  assertSeamRetired,
   baseEnvironment,
   clearDispatchLog,
   commandRequirements,
@@ -177,7 +176,6 @@ function assertOnlyDispatch(sandbox, command, argv) {
  * @param {Record<string, string>} [overrides]
  */
 function runCliWithoutEnvironment(sandbox, args, unsetNames, overrides = {}) {
-  assertSeamRetired(args, overrides);
   const environment = baseEnvironment(sandbox, overrides);
   for (const name of unsetNames) delete environment[name];
   return spawnSync(
@@ -2112,15 +2110,12 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * `installCase`/`uninstallCase` in tests/bin/{install,uninstall}-commands.test.js
  * seed them for the same fakes.
  *
- * `adapterSeam`/`seamDependency` are deliberately NOT accepted here.
- * `createCase`'s "intercept" mode requires a `seamDependency` declaration
- * (createCase's own eager validation), and
- * `tests/bin/adapter-seam.test.js`'s "every file declaring a seamDependency
- * is in SEAM_SOURCE_FILES" gate scans the whole `tests/` tree for that exact
- * literal and fails any file outside the declared set — verified: adding one
- * here failed that gate. `writeUpdateControlOverride` below is how
- * UPDATE-CONTROL-01 answers `inspect --view update-control` without going
- * through that machinery at all.
+ * `updateControlAdapter` below is how UPDATE-CONTROL-01 answers
+ * `inspect --view update-control`: the double intercepts that one view at the
+ * `ctx.adapter` call site and uses no adapter-side fixture mode at all. Its
+ * subcases are still built by THIS helper, and every operation other than the
+ * intercepted view goes to the real runAdapter, which execs the fake this
+ * helper wrote.
  *
  * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
  * discipline — `nextPluginList` (tests/bin/lifecycle-fakes.js:148), which
@@ -2167,10 +2162,7 @@ function lifecycleCodexCase(options) {
  * Converted, not retired (Task 8, Step 5b). The lever this replaces was a
  * hand-written `SPW_ADAPTER` script that became inert the moment `update`
  * began dispatching in-process; both subcases would silently become the third
- * subcase below with the opposite assertion. Injection is not a
- * `seamDependency`, so no gate widens and this file still must not join
- * `SEAM_SOURCE_FILES`
- * (tests/bin/adapter-seam.js).
+ * subcase below with the opposite assertion.
  *
  * The real adapter's update-control view is hardcoded to "managed"
  * (`runInspect` in src/adapter.ts), which is why interception is needed at all

@@ -2,18 +2,17 @@
 // The properties of the shared fake shell (tests/bin/lifecycle-fakes.js) that
 // nothing else in the tree asserts.
 //
-// `process.exitCode = 94` does not halt execution. The return after
-// `tripwireTriggered(ctx, …)` remains load-bearing in both mutating fakes:
-// each case below proves the role stops with the tripwire's exact status and
-// diagnostic, including when no seam is armed.
+// `process.exitCode = 94` does not halt execution, so an adapter role has to
+// stop of its own accord. Each adapter-role case below proves it does: the
+// role ends at the tripwire, with the tripwire's exact status and diagnostic
+// and nothing running after it.
 //
 // Nothing here goes through runScript (tests/bin/lifecycle-fixture.js), or
 // through a CaseEnv at all: every case below spawns a fake executable directly
-// with an env it builds itself. Two committed cases DO arm adapterSeam:
-// "tripwire" through
-// runScript — tests/bin/install-commands.test.js:1609 and
-// tests/bin/uninstall-commands.test.js:963, row 18's consumer (Task 9,
-// Step 3). They drive the real subject, prove it never spawns the fake
+// with an env it builds itself. Two committed cases go the other way, driving
+// the real subject through runScript — the row-18 cases in
+// tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js.
+// They prove the subject never spawns the fake
 // adapter, and pair that with an armed-witness spawn of their own case's fake
 // (lifecycle-fixture.js's spawnFakeAdapter) so the emptiness half cannot pass
 // on a disarmed tripwire. This file is the complement, not a duplicate: it
@@ -42,25 +41,22 @@ const SCRATCH = mkdtempSync(join(tmpdir(), "spw-fakes-"));
 registerScratch(SCRATCH);
 
 /**
- * The env builder deletes both fixture variables before conditionally setting
- * the seam. An ambient seam or package root in the developer's shell would
- * otherwise decide what these cases test.
+ * The env builder pins the state directory and clears the package root. An
+ * ambient package root in the developer's shell would otherwise decide what
+ * these cases test.
  *
- * @param {{ state: string, seam?: string }} request
+ * @param {{ state: string }} request
  * @returns {NodeJS.ProcessEnv}
  */
 function fakeEnv(request) {
   /** @type {NodeJS.ProcessEnv} */
   const env = { ...process.env, SPW_FIXTURE_STATE: request.state };
-  delete env.SPW_FIXTURE_ADAPTER_SEAM;
   delete env.SPW_TEST_PKG_ROOT;
-  if (request.seam !== undefined) env.SPW_FIXTURE_ADAPTER_SEAM = request.seam;
   return env;
 }
 
 /**
  * @param {"install" | "uninstall"} kind
- * @param {string | undefined} seam
  * @returns {{
  *   status: number | null,
  *   stderr: string,
@@ -68,10 +64,10 @@ function fakeEnv(request) {
  *   adapterLog: string,
  * }}
  */
-function runAdapterRole(kind, seam) {
+function runAdapterRole(kind) {
   const state = mkdtempSync(join(SCRATCH, `${kind}-`));
   writeFileSync(join(state, "config.json"), "{}");
-  const env = fakeEnv({ state, seam });
+  const env = fakeEnv({ state });
   const result = spawnSync(
     process.execPath,
     [
@@ -92,23 +88,14 @@ function runAdapterRole(kind, seam) {
 }
 
 for (const kind of /** @type {const} */ (["install", "uninstall"])) {
-  void test(`${kind}: the adapter role refuses under the tripwire seam`, () => {
-    const run = runAdapterRole(kind, "tripwire");
+  void test(`${kind}: the adapter role refuses unconditionally`, () => {
+    // This exact call — a bare adapter role, with nothing arming it — used to
+    // delegate to the real adapter. It is the direct evidence that the
+    // tripwire fires on every invocation rather than on a selected one.
+    const run = runAdapterRole(kind);
     assert.equal(run.status, 94);
     assert.equal(run.stderr, `fixture: ${kind} must not spawn the adapter\n`);
     // The role body did run, so the exact tripwire result is not vacuous.
-    assert.equal(run.adapterLog, "inspect --view ownership\n");
-  });
-
-  void test(`${kind}: the adapter role refuses even without the tripwire seam`, () => {
-    // Before Task 9, this exact call (no SPW_FIXTURE_ADAPTER_SEAM at all)
-    // delegated — see the file header. It is the direct evidence that the
-    // tripwire is now unconditional rather than gated on ctx.seam: a case
-    // that used to reach the real adapter now refuses identically to the
-    // tripwire-armed case above.
-    const run = runAdapterRole(kind, undefined);
-    assert.equal(run.status, 94);
-    assert.equal(run.stderr, `fixture: ${kind} must not spawn the adapter\n`);
     assert.equal(run.adapterLog, "inspect --view ownership\n");
   });
 }
@@ -139,7 +126,6 @@ void test("runFake refuses an unknown role (exit 98)", () => {
   writeFileSync(join(state, "config.json"), "{}");
   /** @type {NodeJS.ProcessEnv} */
   const env = { ...process.env, SPW_FIXTURE_STATE: state };
-  delete env.SPW_FIXTURE_ADAPTER_SEAM;
   const result = spawnSync(
     process.execPath,
     [join(BIN, "install-fakes.js"), "banana"],

@@ -178,17 +178,10 @@ export function logLine(state, name, line) {
 }
 
 /**
- * `seam` is read once here rather than at each use: the extraction would
- * otherwise leave three copies of the `?? "delegate"` default — one per fake
- * plus the tripwire — and a default that disagrees across copies is how a
- * tripwire silently becomes a delegation. A fake is a fresh process per
- * invocation, so one read per process is one read per command.
- *
  * @typedef {{
  *   state: string,
  *   config: Record<string, unknown>,
  *   args: string[],
- *   seam: string,
  *   log: (name: string, line: string) => void,
  *   readJson: (file: string) => any,
  *   writeJson: (file: string, value: unknown) => void,
@@ -205,7 +198,6 @@ function makeContext(state, config) {
     state,
     config,
     args: process.argv.slice(3),
-    seam: process.env.SPW_FIXTURE_ADAPTER_SEAM ?? "delegate",
     log: (name, line) => logLine(state, name, line),
     readJson: (file) => JSON.parse(readFileSync(join(state, file), "utf8")),
     writeJson: (file, value) =>
@@ -281,33 +273,24 @@ export function injectSpuriousMutation(ctx, forbiddenLine) {
  * row 18): once install/update/uninstall dispatch in-process, runAdapter is a
  * function call and this executable must never be reached.
  *
- * `options.always` drops the `ctx.seam === "tripwire"` gate entirely. Probe
- * has fired unconditionally since before this task — in-process probe calls
- * `runAdapter` as a plain function, so no seam value makes reaching this
- * executable legitimate. Install and uninstall get the same treatment here:
- * post-flip, `ctx.seam` (`SPW_FIXTURE_ADAPTER_SEAM`) no longer selects
- * anything a real dispatch can reach, so the two mutating fakes' adapter role
- * refuses regardless of what seam a case happens to pass. That leaves the
- * `!always` arm below with no caller at all — all three call sites
- * (install-fakes.js:191, uninstall-fakes.js:93, probe-fakes.js:63) pass
- * `always: true`. It stays only because removing it is part of removing the
- * seam it reads, which slice 4c owns; do not read it as a form some fake
- * still uses.
+ * It fires unconditionally, and there is no mode that switches it off.
+ * Post-flip every command dispatches in-process, so `runAdapter` is a plain
+ * function call and no role — install, uninstall or probe — can legitimately
+ * reach this executable. Nothing is left for a gate to select on, which is why
+ * all three adapter-role fakes call this the same way.
  *
  * A caller with anything after this call MUST `return` on true. Setting
  * `process.exitCode` does not halt execution, so a missing return falls
- * through into obsolete adapter-role fixture logic. probe-fakes.js is the one
- * caller with nothing following, and says so at its own call site.
+ * through into whatever follows. No caller has anything following today — all
+ * three adapter roles end with this call and discard the result — so the rule
+ * binds the next statement anyone adds, not any code that exists.
  *
  * @param {FakeContext} ctx
- * @param {{ always?: boolean, message?: string }} [options]
+ * @param {{ message?: string }} [options]
  * @returns {boolean} true when the caller must stop
  */
 export function tripwireTriggered(ctx, options = {}) {
-  const { always = false, message } = options;
-  if (!always && ctx.seam !== "tripwire") {
-    return false;
-  }
+  const { message } = options;
   process.stderr.write(
     `${message ?? "fixture: this command must not spawn the adapter"}\n`,
   );

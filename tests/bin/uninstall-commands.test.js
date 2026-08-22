@@ -93,20 +93,13 @@ const NO_GIT_TOOLS = [
  * yields a fully independent case.
  * @param {object} [options]
  * @param {Record<string, unknown>} [options.config]
- * @param {"delegate" | "tripwire" | "intercept"} [options.adapterSeam]
- * @param {{ reason: "intercept" | "log", script: string }} [options.seamDependency]
  * @param {string} [options.plugins]
  * @param {string} [options.marketplaces]
  */
 function uninstallCase(options = {}) {
-  // Both seam options are forwarded, never defaulted here: createCase owns the
-  // default mode and the eager validation, so a case that omits them still
-  // gets checked against tests/bin/adapter-seam.js.
   const c = createCase({
     fakes: "uninstall",
     config: options.config ?? {},
-    adapterSeam: options.adapterSeam,
-    seamDependency: options.seamDependency,
   });
   writeFileSync(
     join(c.state, "plugin_list.json"),
@@ -943,14 +936,11 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // stale (see the file's own POINTER PROVENANCE note) and inserting in the
   // middle would silently break the ones that are not.
   //
-  // `adapterSeam: "tripwire"` reaches the FAKE only. runScript exports it as
-  // SPW_FIXTURE_ADAPTER_SEAM (lifecycle-fixture.js:327, whose own comment at
-  // :324-326 states nothing under src/ may read it), and uninstall-fakes.js's
-  // adapter role now refuses whatever its value (tests/bin/lifecycle-fakes.js's
-  // tripwireTriggered with `always: true`). What the SUBJECT does is
-  // unaffected: the SPW_ADAPTER seam runScript still defaults (:323) is
-  // retired, which is why its guard at :301-310 rejects a caller-supplied
-  // override outright.
+  // The subject must not reach the fake adapter at all. uninstall-fakes.js's
+  // adapter role refuses unconditionally (tests/bin/lifecycle-fakes.js's
+  // tripwireTriggered). What the SUBJECT does is unaffected: it dispatches
+  // in-process, and the SPW_ADAPTER seam runScript once defaulted was retired
+  // together with the fixture machinery that selected the fake's behaviour.
   //
   // The case therefore asserts two halves, and the second is what makes the
   // first mean anything. A regression that made the port spawn the adapter
@@ -962,8 +952,8 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // and environment a regressed spawn would have used, and pins the refusal
   // it produces. Disarm the tripwire and the witness dies; that is the
   // property the emptiness check borrows.
-  void test("both-present uninstall never reaches the fake adapter, tripwire armed or not (row 18)", async () => {
-    const c = uninstallCase({ adapterSeam: "tripwire" });
+  void test("both-present uninstall never reaches the fake adapter (row 18)", async () => {
+    const c = uninstallCase();
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(
