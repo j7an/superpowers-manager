@@ -22,12 +22,10 @@ import {
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
-  clearDispatchLog,
   commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,
-  readDispatchLog,
   removeTool,
   runCli,
   runScenario,
@@ -90,12 +88,11 @@ $XDG_CONFIG_HOME/superpowers-manager, then $HOME/.config/superpowers-manager.
 
 /**
  * @template T
- * @param {{ stubScripts?: boolean }} options
  * @param {(sandbox: Sandbox) => T} callback
  * @returns {T}
  */
-function withSandbox(options, callback) {
-  const sandbox = createSandbox(options);
+function withSandbox(callback) {
+  const sandbox = createSandbox();
   try {
     return callback(sandbox);
   } finally {
@@ -129,17 +126,6 @@ async function withCwd(dir, fn) {
   } finally {
     process.chdir(previous);
   }
-}
-
-/**
- * @param {Sandbox} sandbox
- * @param {Record<string, string>} [overrides]
- */
-function dispatchEnvironment(sandbox, overrides = {}) {
-  return {
-    SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-    ...overrides,
-  };
 }
 
 /**
@@ -533,7 +519,7 @@ function assertNoCodexMutation(log) {
 }
 
 void test("CLI-MODE-HELP-01 help modes", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     for (const tool of ["git", "python3", "codex", "sh"]) {
       removeTool(sandbox, tool);
     }
@@ -544,7 +530,6 @@ void test("CLI-MODE-HELP-01 help modes", () => {
       assertCleanResult(result);
       assert.equal(result.stdout, USAGE);
       assert.equal(result.stderr, "");
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
   });
 });
@@ -623,7 +608,7 @@ void test("CLI-HOST-TOOLS-02 removes an unregistered root after a smoke-check fa
 });
 
 void test("CLI-MODE-VERSION-01 version mode routes through dist", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const { version } = JSON.parse(
       readFileSync(join(sandbox.pkg, "package.json"), "utf8"),
     );
@@ -635,12 +620,12 @@ void test("CLI-MODE-VERSION-01 version mode routes through dist", () => {
 });
 
 // Rewritten, not re-pointed (PR 11.5 slice 4b, Task 8): `update` dispatches
-// in-process now, so the dispatch record this used to read
-// (`assertOnlyDispatch(sandbox, "update", [])`) can never be written. The ID,
-// the test name and the traceability row are unchanged, and so is the contract
-// — docs/baseline/behavioral-inventory.md states it as "No arguments is the
-// third distinct mode and is exactly equivalent to dispatching `update` with no
-// arguments", which is what the equivalence below asserts literally.
+// in-process now, so the dispatch record this used to read (an empty-dispatch
+// assertion on `update`) can never be written. The ID, the test name and the
+// traceability row are unchanged, and so is the contract —
+// docs/baseline/behavioral-inventory.md states it as "No arguments is the
+// third distinct mode and is exactly equivalent to dispatching `update` with
+// no arguments", which is what the equivalence below asserts literally.
 //
 // Two halves, because no single observable carries both directions of it.
 //
@@ -672,19 +657,15 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
   // selection before it ever reaches Codex, and without these it stops at the
   // sandbox git shim's egress refusal against the packaged default URL rather
   // than at the adapter.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeNoopTool(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const overrides = {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
     };
     const bare = runCli(sandbox, [], overrides);
-    assert.deepEqual(readDispatchLog(sandbox), []);
-    clearDispatchLog(sandbox);
     const explicit = runCli(sandbox, ["update"], overrides);
-    assert.deepEqual(readDispatchLog(sandbox), []);
     assert.equal(bare.error, undefined);
     assert.equal(bare.signal, null);
     assert.deepEqual(
@@ -707,7 +688,7 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
     );
   });
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeListingCodex(sandbox);
     // Restated here rather than shared with CLI-COMMANDS-01's `expectedCodex`.
@@ -727,13 +708,11 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
       "plugin marketplace add",
     ];
     const bare = runCli(sandbox, [], {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
     });
     assert.equal(bare.error, undefined);
     assert.equal(bare.signal, null);
-    assert.deepEqual(readDispatchLog(sandbox), []);
     // The marketplace-add argv carries the sandbox package root, so the
     // recorded line is trimmed back to its operation, as CLI-COMMANDS-01 does.
     assert.deepEqual(
@@ -792,7 +771,7 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   /** @type {string[]} */
   const handled = [];
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // `pin` is the first in-process command whose success genuinely depends
     // on resolving against its source (track-latest/unpin never touch git):
     // it needs a real, reachable upstream, so this test grows a local one
@@ -813,16 +792,14 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     for (const [command, argv] of cases) {
       if (OWN_SANDBOX.includes(command)) continue;
       handled.push(command);
-      clearDispatchLog(sandbox);
+      /** @type {Record<string, string> | undefined} */
       const overrides =
         command === "pin"
           ? {
-              ...dispatchEnvironment(sandbox),
               SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
             }
           : command === "probe"
             ? {
-                ...dispatchEnvironment(sandbox),
                 SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
                 SUPERPOWERS_REF: upstream.RAW_COMMIT,
               }
@@ -832,19 +809,15 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
                   // upstream: without one it resolves the packaged default and
                   // the sandbox git shim turns that into `exit 128` rather
                   // than a readable failure.
-                  ...dispatchEnvironment(sandbox),
                   SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
                   SUPERPOWERS_REF: upstream.RAW_COMMIT,
                 }
-              : dispatchEnvironment(sandbox);
+              : undefined;
       const result = runCli(sandbox, [command, ...argv], overrides);
-      // An in-process command must reach its module and dispatch NOTHING.
-      // Task 3 removed every scripts/<command> regression stub, so a
-      // regression that re-spawns a script fails with ENOENT before this
-      // weaker empty-dispatch-log check; the log assertion remains real.
+      // There is no `scripts/<command>` stub anywhere in the tree, so a
+      // regression that re-spawned a script would fail with ENOENT and surface
+      // here as a non-zero exit status -- which is what this check is for.
       assertCleanResult(result);
-      const dispatched = readDispatchLog(sandbox).map((e) => e.command);
-      assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
     }
   });
 
@@ -859,8 +832,8 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   //
   // `install` and `update` stop where the sandbox's `codex` refuses the
   // marketplace mutation; that failure is the fixture's boundary, not a claim
-  // of this ID, so only the sequence and the absence of a dispatch are
-  // asserted. `uninstall` completes, and its exit status IS asserted.
+  // of this ID, so only the sequence is asserted. `uninstall` completes, and
+  // its exit status IS asserted.
   /** @type {Record<string, string[]>} */
   const expectedCodex = {
     install: [
@@ -893,25 +866,19 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   };
   for (const command of OWN_SANDBOX) {
     handled.push(command);
-    withSandbox({ stubScripts: true }, (sandbox) => {
+    withSandbox((sandbox) => {
       const upstream = createReleaseRepo(sandbox);
       writeListingCodex(sandbox);
       const result = runCli(
         sandbox,
         [command, .../** @type {string[]} */ (cases.get(command))],
         {
-          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
           SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
           SUPERPOWERS_REF: upstream.RAW_COMMIT,
         },
       );
       assert.equal(result.error, undefined);
       assert.equal(result.signal, null);
-      assert.deepEqual(
-        readDispatchLog(sandbox).map((e) => e.command),
-        [],
-        `${command} must not spawn a script`,
-      );
       // The marketplace-add argv carries the sandbox package root, so the
       // recorded line is trimmed back to its operation before comparison.
       assert.deepEqual(
@@ -967,19 +934,17 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     },
   ];
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // Every case below is decided in `parseArgs`, before any preflight that
     // could need Codex. This first check records the starting precondition:
     // `codex` is not in SANDBOX_TOOLS, so `withSandbox` never provisions one
     // and the loop begins without it.
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     for (const { args, diagnostic } of cases) {
-      clearDispatchLog(sandbox);
-      const result = runCli(sandbox, args, dispatchEnvironment(sandbox));
+      const result = runCli(sandbox, args);
       assertCleanResult(result, 2);
       assert.equal(result.stdout, "");
       assert.equal(result.stderr, `error: ${diagnostic}\n${USAGE}`);
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
     // The tripwire, and it has to sit here rather than above the loop. This
     // block used to receive a lazily-written noop `codex` as a side effect of
@@ -998,26 +963,24 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
   });
 
-  // A `probe` usage error is decided before preflight, stated a second time on
-  // a sandbox built without `dispatchEnvironment`. That is no longer an
-  // independent witness: as of this PR `dispatchEnvironment` returns exactly
-  // the literal this block passes, so both paths build the same environment.
-  // The block is kept because it states the requirement inline --
-  // `COMMAND_REQUIREMENTS.probe` still requires `codex` and this sandbox has
-  // none, so if the arity check lived only in runProbe, preflight would reach
-  // it first and this would be exit 1 with the missing-codex diagnostic.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  // A `probe` usage error is decided before preflight, stated a second time
+  // on a second, independently-built sandbox. That is not an independent
+  // witness of how the environment is built: neither this block nor the loop
+  // above passes any environment override, so both paths build the same
+  // environment. The block is kept because it states the requirement inline
+  // -- `COMMAND_REQUIREMENTS.probe` still requires `codex` and this sandbox
+  // has none, so the arity check is therefore proven to run before preflight:
+  // if it lived only in runProbe, preflight would reach it first and this
+  // would be exit 1 with the missing-codex diagnostic instead.
+  withSandbox((sandbox) => {
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
-    const result = runCli(sandbox, ["probe", "--porcelaine"], {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-    });
+    const result = runCli(sandbox, ["probe", "--porcelaine"]);
     assertCleanResult(result, 2);
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
       `error: usage: superpowers-manager probe [--porcelain]\n${USAGE}`,
     );
-    assert.deepEqual(readDispatchLog(sandbox), []);
   });
 });
 
@@ -1048,22 +1011,20 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
     "g123456789abcdef0123456789abcdef01234567",
   ];
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
-    // `pin` is in-process now (PR 11.5, Task 7): an accepted ref never
-    // reaches scripts/pin, and its resolution genuinely runs rather than
-    // hitting the trivial dispatch stub every other command in this suite
-    // still gets. This loop can therefore no longer assert a clean dispatch
-    // for every accepted value — two of them
-    // (`0123456789abcdef0123456789abcdef01234567` and its uppercase
-    // sibling) are arbitrary 40-hex literals not constructible in any
-    // fixture (no buildable repository can contain a commit with that exact
-    // SHA), so genuine resolution success is not just unbuilt here, it is
-    // impossible to assert honestly. What this loop still proves, and the
-    // only thing it ever proved before the flip (the shell-era dispatch
-    // stub short-circuited real resolution too), is the syntax boundary
-    // itself: `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate lets these argv
-    // shapes reach real work, in contrast to every entry in `refused` below,
-    // which is rejected before any tool lookup or dispatch.
+  withSandbox((sandbox) => {
+    // `pin` is in-process: an accepted ref reaches real resolution directly,
+    // and no dispatch stub survives anywhere in the tree. This loop can
+    // therefore no longer assert a clean dispatch for every accepted value —
+    // two of them (`0123456789abcdef0123456789abcdef01234567` and its
+    // uppercase sibling) are arbitrary 40-hex literals not constructible in
+    // any fixture (no buildable repository can contain a commit with that
+    // exact SHA), so genuine resolution success is not just unbuilt here, it
+    // is impossible to assert honestly. What this loop still proves, and the
+    // only thing it ever proved before the flip (the shell-era dispatch stub
+    // short-circuited real resolution too), is the syntax boundary itself:
+    // `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate lets these argv shapes reach
+    // real work, in contrast to every entry in `refused` below, which is
+    // rejected before any tool lookup or dispatch.
     // `SUPERPOWERS_UPSTREAM_URL` is pinned to a definitely-absent local path
     // so that real work fails fast — never touching the network — no
     // matter which accepted value is tried. With that source, resolution is
@@ -1077,9 +1038,7 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
     // (`notEqual(null, 2)` would have passed that silently).
     const noSuchUpstream = join(sandbox.root, "no-such-upstream");
     for (const ref of accepted) {
-      clearDispatchLog(sandbox);
       const result = runCli(sandbox, ["pin", ref], {
-        ...dispatchEnvironment(sandbox),
         SUPERPOWERS_UPSTREAM_URL: noSuchUpstream,
       });
       assertCleanResult(result, 1);
@@ -1088,15 +1047,9 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
           "pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit",
         ),
       );
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
     for (const ref of refused) {
-      clearDispatchLog(sandbox);
-      const result = runCli(
-        sandbox,
-        ["pin", ref],
-        dispatchEnvironment(sandbox),
-      );
+      const result = runCli(sandbox, ["pin", ref]);
       assertCleanResult(result, 2);
       assert.equal(result.stdout, "");
       assert.equal(
@@ -1104,7 +1057,6 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
         "error: pin REF must be an exact v-prefixed SemVer tag or full 40-hex commit\n" +
           USAGE,
       );
-      assert.deepEqual(readDispatchLog(sandbox), []);
     }
   });
 });
@@ -1146,24 +1098,19 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
       // positive instead — this command still succeeds once every tool any
       // *other* command needs is removed from PATH, proving its own
       // requirement list is genuinely empty rather than merely undeclared.
-      withSandbox({ stubScripts: true }, (sandbox) => {
+      withSandbox((sandbox) => {
         for (const tool of ALL_REQUIRED_TOOLS) removeTool(sandbox, tool);
-        const result = runCli(sandbox, [command, ...(argsFor[command] || [])], {
-          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-        });
+        const result = runCli(sandbox, [command, ...(argsFor[command] || [])]);
         assertCleanResult(result);
         assert.equal(result.stderr, "");
-        assert.deepEqual(readDispatchLog(sandbox), []);
       });
       continue;
     }
     for (const tool of tools) {
-      withSandbox({ stubScripts: true }, (sandbox) => {
+      withSandbox((sandbox) => {
         if (tools.includes("codex") && tool !== "codex") writeNoopTool(sandbox);
         removeTool(sandbox, tool);
-        const result = runCli(sandbox, [command, ...(argsFor[command] || [])], {
-          SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
-        });
+        const result = runCli(sandbox, [command, ...(argsFor[command] || [])]);
         assertCleanResult(result, 1);
         assert.equal(result.stdout, "");
         const diagnostic =
@@ -1171,7 +1118,6 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
             ? "error: required command not found: codex — install the Codex CLI or set SUPERPOWERS_CODEX\n"
             : `error: required command not found: ${tool} — install ${tool} and re-run\n`;
         assert.equal(result.stderr, diagnostic);
-        assert.deepEqual(readDispatchLog(sandbox), []);
       });
     }
   }
@@ -1185,8 +1131,8 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
 // all RETAINED. It is not a child-handling property: a custom
 // `SUPERPOWERS_CODEX` satisfying launcher preflight with `codex` absent from
 // PATH is a requirement-checking contract the flip does not touch. Only the
-// body changed, because it ended in `assertOnlyDispatch(sandbox, "install",
-// [])` and there is no dispatch record to read any more. See the case below.
+// body changed, because it ended in an empty-dispatch assertion on `install`
+// and there is no dispatch record to read any more. See the case below.
 //
 // `CLI-CHILD-STATUS-01` and all FOUR of its scenarios — RETIRED at the gap,
 // with its rows removed from docs/baseline/traceability.md and
@@ -1203,7 +1149,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
 // status each handler returns, and by src/cli.ts's single
 // `process.exit(status)`.
 void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // A RECORDING custom codex, not `writeNoopTool`'s silent `exit 0`. The
     // dispatch record used to be the positive evidence that preflight admitted
     // the command; in-process the equivalent positive evidence is that the
@@ -1231,7 +1177,6 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
     // all — which would make the recording below vacuous.
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
-      SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
       SUPERPOWERS_CODEX: customCodex,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
@@ -1260,12 +1205,11 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
       result.stderr,
       `error: cannot parse output of '${customCodex} plugin list --json'\n`,
     );
-    assert.deepEqual(readDispatchLog(sandbox), []);
   });
 });
 
 void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
     // spawns `scripts/update`, so the dispatch stub that used to record the
     // child's environment is never invoked. The ID, the test name, the
@@ -1286,9 +1230,8 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
     // only place in the tree where that scrub is observable end to end at the
-    // CLI level — tests/unit/adapter.test.js pins it at the unit level, and the
-    // two surviving shell pins (tests/baseline/ref-resolution.test.js and
-    // tests/baseline/selection-location.test.js) drive scripts/ directly.
+    // CLI level — tests/unit/adapter.test.js pins it at the unit level, and
+    // no third pin exists anywhere in the tree.
     const dumped = join(sandbox.root, "codex-env.json");
     const customCodex = join(sandbox.bin, "custom-codex");
     writeFileSync(
@@ -1347,7 +1290,6 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     let result;
     try {
       result = runCli(sandbox, ["update"], {
-        SPW_BASELINE_DISPATCH_LOG: sandbox.dispatchLog,
         NODE_OPTIONS: `--require ${preload}`,
         NODE_PATH: join(sandbox.root, "custom-node-path"),
         ...values,
@@ -1362,8 +1304,6 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
 
     assert.equal(result.error, undefined);
     assert.equal(result.signal, null);
-    // No script was spawned: the environment reached a child, but not that one.
-    assert.deepEqual(readDispatchLog(sandbox), []);
     // Non-vacuity: the record exists only because the CLI actually spawned the
     // child and handed it an environment.
     assert.equal(existsSync(dumped), true, "the codex child never ran");
@@ -1400,7 +1340,7 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
 });
 
 void test("CLI-ENV-LOCATION-01 public selection location chain", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     const xdg = join(sandbox.root, "xdg");
     let result = runCliWithoutEnvironment(
@@ -1446,7 +1386,7 @@ void test("CLI-ENV-LOCATION-01 public selection location chain", () => {
 });
 
 void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const result = runCliWithoutEnvironment(
@@ -1481,7 +1421,7 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const customCache = join(sandbox.root, "custom-cache");
@@ -1514,7 +1454,7 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
 });
 
 void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rejection", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     const defaultTemplate = join(
       sandbox.pkg,
@@ -1544,7 +1484,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const defaultTemplate = join(
@@ -1583,7 +1523,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const nonFileTemplate = join(sandbox.root, "non-file-template");
@@ -1607,7 +1547,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
 });
 
 void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
@@ -1624,7 +1564,7 @@ void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs
 });
 
 void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const pin = runCli(sandbox, ["pin", "v1.0.0"], {
@@ -1648,7 +1588,7 @@ void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", ()
 });
 
 void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const official = runCli(sandbox, ["track-latest"]);
     assertCleanResult(official);
     assert.deepEqual(
@@ -1684,7 +1624,7 @@ void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
 });
 
 void test("SEL-BYTES-PINNED-01 pin writes canonical selection bytes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     let result = runCli(sandbox, ["pin", "v1.1.0"], {
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1721,7 +1661,7 @@ void test("SEL-BYTES-PINNED-01 pin writes canonical selection bytes", () => {
 });
 
 void test("SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     const pin = runCli(sandbox, ["pin", "v1.0.0"], {
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1747,7 +1687,7 @@ void test("SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes", ()
 });
 
 void test("SEL-UNPIN-01 unpin removes saved intent without applying changes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const source = join(sandbox.root, "unused-source");
     const saved = runCli(sandbox, ["track-latest"], {
       SUPERPOWERS_UPSTREAM_URL: source,
@@ -1782,13 +1722,13 @@ void test("SEL-UNPIN-01 unpin removes saved intent without applying changes", ()
 });
 
 void test("SEL-INVALID-01 malformed saved state fails before Git or adapter access", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     assertMalformedSelectionFailsBeforeTools(sandbox);
   });
 });
 
 void test("PREPARE-TREE-01 prepare creates the canonical generated tree", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const commit = commitUnknownManifestField(sandbox, upstream.REPO);
@@ -1828,7 +1768,7 @@ void test("PREPARE-TREE-01 prepare creates the canonical generated tree", () => 
 });
 
 void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox, 'upstream "quoted"');
     writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
@@ -1850,7 +1790,7 @@ void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () =>
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox, 'raw upstream "quoted"');
     writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
@@ -1872,7 +1812,7 @@ void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () =>
 });
 
 void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     let result = runCli(sandbox, ["prepare"], {
@@ -1902,7 +1842,7 @@ void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
 });
 
 void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     writeFileSync(
@@ -1937,7 +1877,7 @@ void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", (
 });
 
 void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const topology = scenarioValues(
       runScenario(
         sandbox,
@@ -1973,7 +1913,7 @@ void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => 
 
 void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
   for (const scenarioName of ["broken-symlink", "escaping-symlink"]) {
-    withSandbox({}, (sandbox) => {
+    withSandbox((sandbox) => {
       const upstream = createReleaseRepo(sandbox);
       writeCodexLogTool(sandbox);
       const commit = commitUnsafeHookScenario(
@@ -2585,7 +2525,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // a run that reaches a listing at all can only have reached it through the
   // override -- an assertion on the override's log alone would still pass if
   // a PATH `codex` had served the call.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const log = join(sandbox.root, "override-codex.log");
     const override = join(sandbox.bin, "baseline-override-codex");
     writeVersionCodex(sandbox, override, "", log);
@@ -2605,7 +2545,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // Half two: with the override unset, the same run resolves `codex` from
   // PATH. writeListingCodex installs its recorder AT `sandbox.bin/codex`, so
   // a recorded call is proof of PATH resolution.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeListingCodex(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(
@@ -2644,7 +2584,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
   // production code, pinned at the layer where the rule actually lives -- not
   // proof that a user-reachable invocation exercises it.
-  const emptyComponent = createSandbox({ stubScripts: true });
+  const emptyComponent = createSandbox();
   try {
     const log = join(emptyComponent.root, "empty-path-component-codex.log");
     // Planted in the WORKING DIRECTORY, under a name that exists nowhere on
@@ -2709,7 +2649,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // (src/adapter.ts:982), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
   // CLI-HOST-TOOLS-01/02 (`:578`, `:622`) restore it.
-  const absentPath = createSandbox({ stubScripts: true });
+  const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
     const log = join(absentPath.root, "absent-path-codex.log");
@@ -2749,7 +2689,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
 });
 
 void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_CODEX override", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const log = join(sandbox.root, "override-codex.log");
     const override = join(sandbox.bin, "baseline-override-codex");
     writeVersionCodex(sandbox, override, "", log);
@@ -2790,7 +2730,7 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // contract's subject.
 void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search root the listing resolves codex from PATH and the installed fingerprint is read under $HOME/.codex", () => {
   // Half one: the override is genuinely ABSENT from the environment.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     // Both defaults in one run: the recorder is at `sandbox.bin/codex` (PATH),
     // and the cache is seeded ONLY under $HOME/.codex. If either default were
@@ -2827,7 +2767,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // manager; src/adapter.ts:827 tests `if (!searchRoot)`, which is true for
   // absent and empty alike. Step 5's second mutation makes that equality an
   // asserted property rather than a reading of the source.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     writeVersionCodex(
       sandbox,
@@ -2866,7 +2806,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // `installed_commit=${CACHE_COMMIT}` and exit 0. Asserting only "the run
   // failed" would pass on that implementation, and also on one that rejected an
   // empty HOME outright before composing anything.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     writeVersionCodex(
       sandbox,
@@ -2947,7 +2887,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // Same cwd decoy, for the same reason: absent HOME must not degrade into
   // reading a cwd-relative `.codex`, which would exit 0 with the decoy's
   // commit instead of failing.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     writeVersionCodex(
       sandbox,
@@ -2978,7 +2918,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
 });
 
 void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const activeVersion = "6.1.1+manager.d884ae0";
     const staleVersion = "6.0.0+manager.aaaaaaa";
     const searchRoot = join(sandbox.root, "custom-codex-root");
@@ -3019,7 +2959,7 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // Half one: a third value is refused, and the refusal happens BEFORE the
   // mutation. src/adapter.ts:580-585 validates the enumeration three
   // statements after requireCodex and before the marketplace lookup.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeListingCodex(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
@@ -3052,7 +2992,7 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // Half two: an accepted value gets PAST that point on an otherwise
   // identical fixture. This is what makes half one specific to the value
   // rather than to the fixture.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeListingCodex(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
@@ -3091,7 +3031,7 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // without checking its status, so the run continues to `plugin add`
   // regardless -- and the stub records every invocation before dispatching on
   // it, so the attempt is observable either way.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeVersionCodex(
       sandbox,
       join(sandbox.bin, "codex"),

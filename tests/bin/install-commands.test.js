@@ -1587,7 +1587,7 @@ void describe("install commands", { concurrency: true }, () => {
   // c.adapterLog a path something writes to, so the emptiness half above is
   // not vacuous — and it is the property the seam-retirement mutation gate
   // measured. Neither half detects a regressed spawn any more.
-  void test("fresh install never reaches the fake adapter (row 18)", async () => {
+  void test("fresh install leaves the fake adapter log empty; the tripwire refuses a direct spawn (row 18)", async () => {
     const c = installCase();
     const result = await runScript(c, "install");
     assert.equal(result.status, 0, result.stdout + result.stderr);
