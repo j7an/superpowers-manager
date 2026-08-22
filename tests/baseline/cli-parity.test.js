@@ -88,12 +88,11 @@ $XDG_CONFIG_HOME/superpowers-manager, then $HOME/.config/superpowers-manager.
 
 /**
  * @template T
- * @param {{ stubScripts?: boolean }} options
  * @param {(sandbox: Sandbox) => T} callback
  * @returns {T}
  */
-function withSandbox(options, callback) {
-  const sandbox = createSandbox(options);
+function withSandbox(callback) {
+  const sandbox = createSandbox();
   try {
     return callback(sandbox);
   } finally {
@@ -520,7 +519,7 @@ function assertNoCodexMutation(log) {
 }
 
 void test("CLI-MODE-HELP-01 help modes", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     for (const tool of ["git", "python3", "codex", "sh"]) {
       removeTool(sandbox, tool);
     }
@@ -609,7 +608,7 @@ void test("CLI-HOST-TOOLS-02 removes an unregistered root after a smoke-check fa
 });
 
 void test("CLI-MODE-VERSION-01 version mode routes through dist", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const { version } = JSON.parse(
       readFileSync(join(sandbox.pkg, "package.json"), "utf8"),
     );
@@ -658,7 +657,7 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
   // selection before it ever reaches Codex, and without these it stops at the
   // sandbox git shim's egress refusal against the packaged default URL rather
   // than at the adapter.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeNoopTool(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const overrides = {
@@ -689,7 +688,7 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
     );
   });
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeListingCodex(sandbox);
     // Restated here rather than shared with CLI-COMMANDS-01's `expectedCodex`.
@@ -772,7 +771,7 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   /** @type {string[]} */
   const handled = [];
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // `pin` is the first in-process command whose success genuinely depends
     // on resolving against its source (track-latest/unpin never touch git):
     // it needs a real, reachable upstream, so this test grows a local one
@@ -867,7 +866,7 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   };
   for (const command of OWN_SANDBOX) {
     handled.push(command);
-    withSandbox({ stubScripts: true }, (sandbox) => {
+    withSandbox((sandbox) => {
       const upstream = createReleaseRepo(sandbox);
       writeListingCodex(sandbox);
       const result = runCli(
@@ -935,7 +934,7 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
     },
   ];
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // Every case below is decided in `parseArgs`, before any preflight that
     // could need Codex. This first check records the starting precondition:
     // `codex` is not in SANDBOX_TOOLS, so `withSandbox` never provisions one
@@ -973,7 +972,7 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
   // has none, so the arity check is therefore proven to run before preflight:
   // if it lived only in runProbe, preflight would reach it first and this
   // would be exit 1 with the missing-codex diagnostic instead.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     assert.equal(existsSync(join(sandbox.bin, "codex")), false);
     const result = runCli(sandbox, ["probe", "--porcelaine"]);
     assertCleanResult(result, 2);
@@ -1012,7 +1011,7 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
     "g123456789abcdef0123456789abcdef01234567",
   ];
 
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // `pin` is in-process now (PR 11.5, Task 7): an accepted ref never
     // reaches scripts/pin, and its resolution genuinely runs rather than
     // hitting the trivial dispatch stub every other command in this suite
@@ -1101,7 +1100,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
       // positive instead — this command still succeeds once every tool any
       // *other* command needs is removed from PATH, proving its own
       // requirement list is genuinely empty rather than merely undeclared.
-      withSandbox({ stubScripts: true }, (sandbox) => {
+      withSandbox((sandbox) => {
         for (const tool of ALL_REQUIRED_TOOLS) removeTool(sandbox, tool);
         const result = runCli(sandbox, [command, ...(argsFor[command] || [])]);
         assertCleanResult(result);
@@ -1110,7 +1109,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
       continue;
     }
     for (const tool of tools) {
-      withSandbox({ stubScripts: true }, (sandbox) => {
+      withSandbox((sandbox) => {
         if (tools.includes("codex") && tool !== "codex") writeNoopTool(sandbox);
         removeTool(sandbox, tool);
         const result = runCli(sandbox, [command, ...(argsFor[command] || [])]);
@@ -1152,7 +1151,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
 // status each handler returns, and by src/cli.ts's single
 // `process.exit(status)`.
 void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // A RECORDING custom codex, not `writeNoopTool`'s silent `exit 0`. The
     // dispatch record used to be the positive evidence that preflight admitted
     // the command; in-process the equivalent positive evidence is that the
@@ -1212,7 +1211,7 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
 });
 
 void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
     // spawns `scripts/update`, so the dispatch stub that used to record the
     // child's environment is never invoked. The ID, the test name, the
@@ -1344,7 +1343,7 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
 });
 
 void test("CLI-ENV-LOCATION-01 public selection location chain", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     const xdg = join(sandbox.root, "xdg");
     let result = runCliWithoutEnvironment(
@@ -1390,7 +1389,7 @@ void test("CLI-ENV-LOCATION-01 public selection location chain", () => {
 });
 
 void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const result = runCliWithoutEnvironment(
@@ -1425,7 +1424,7 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const customCache = join(sandbox.root, "custom-cache");
@@ -1458,7 +1457,7 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
 });
 
 void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rejection", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     const defaultTemplate = join(
       sandbox.pkg,
@@ -1488,7 +1487,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const defaultTemplate = join(
@@ -1527,7 +1526,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const nonFileTemplate = join(sandbox.root, "non-file-template");
@@ -1551,7 +1550,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
 });
 
 void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
@@ -1568,7 +1567,7 @@ void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs
 });
 
 void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const pin = runCli(sandbox, ["pin", "v1.0.0"], {
@@ -1592,7 +1591,7 @@ void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", ()
 });
 
 void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const official = runCli(sandbox, ["track-latest"]);
     assertCleanResult(official);
     assert.deepEqual(
@@ -1628,7 +1627,7 @@ void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
 });
 
 void test("SEL-BYTES-PINNED-01 pin writes canonical selection bytes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     let result = runCli(sandbox, ["pin", "v1.1.0"], {
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1665,7 +1664,7 @@ void test("SEL-BYTES-PINNED-01 pin writes canonical selection bytes", () => {
 });
 
 void test("SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     const pin = runCli(sandbox, ["pin", "v1.0.0"], {
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
@@ -1691,7 +1690,7 @@ void test("SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes", ()
 });
 
 void test("SEL-UNPIN-01 unpin removes saved intent without applying changes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const source = join(sandbox.root, "unused-source");
     const saved = runCli(sandbox, ["track-latest"], {
       SUPERPOWERS_UPSTREAM_URL: source,
@@ -1726,13 +1725,13 @@ void test("SEL-UNPIN-01 unpin removes saved intent without applying changes", ()
 });
 
 void test("SEL-INVALID-01 malformed saved state fails before Git or adapter access", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     assertMalformedSelectionFailsBeforeTools(sandbox);
   });
 });
 
 void test("PREPARE-TREE-01 prepare creates the canonical generated tree", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     const commit = commitUnknownManifestField(sandbox, upstream.REPO);
@@ -1772,7 +1771,7 @@ void test("PREPARE-TREE-01 prepare creates the canonical generated tree", () => 
 });
 
 void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox, 'upstream "quoted"');
     writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
@@ -1794,7 +1793,7 @@ void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () =>
     assertNoCodexContact(sandbox);
   });
 
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox, 'raw upstream "quoted"');
     writeCodexLogTool(sandbox);
     const result = runCli(sandbox, ["prepare"], {
@@ -1816,7 +1815,7 @@ void test("PROVENANCE-BYTES-01 prepare writes canonical provenance bytes", () =>
 });
 
 void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     let result = runCli(sandbox, ["prepare"], {
@@ -1846,7 +1845,7 @@ void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
 });
 
 void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const upstream = createReleaseRepo(sandbox);
     writeCodexLogTool(sandbox);
     writeFileSync(
@@ -1881,7 +1880,7 @@ void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", (
 });
 
 void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => {
-  withSandbox({}, (sandbox) => {
+  withSandbox((sandbox) => {
     const topology = scenarioValues(
       runScenario(
         sandbox,
@@ -1917,7 +1916,7 @@ void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => 
 
 void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
   for (const scenarioName of ["broken-symlink", "escaping-symlink"]) {
-    withSandbox({}, (sandbox) => {
+    withSandbox((sandbox) => {
       const upstream = createReleaseRepo(sandbox);
       writeCodexLogTool(sandbox);
       const commit = commitUnsafeHookScenario(
@@ -2529,7 +2528,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // a run that reaches a listing at all can only have reached it through the
   // override -- an assertion on the override's log alone would still pass if
   // a PATH `codex` had served the call.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const log = join(sandbox.root, "override-codex.log");
     const override = join(sandbox.bin, "baseline-override-codex");
     writeVersionCodex(sandbox, override, "", log);
@@ -2549,7 +2548,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // Half two: with the override unset, the same run resolves `codex` from
   // PATH. writeListingCodex installs its recorder AT `sandbox.bin/codex`, so
   // a recorded call is proof of PATH resolution.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeListingCodex(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(
@@ -2588,7 +2587,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
   // production code, pinned at the layer where the rule actually lives -- not
   // proof that a user-reachable invocation exercises it.
-  const emptyComponent = createSandbox({ stubScripts: true });
+  const emptyComponent = createSandbox();
   try {
     const log = join(emptyComponent.root, "empty-path-component-codex.log");
     // Planted in the WORKING DIRECTORY, under a name that exists nowhere on
@@ -2653,7 +2652,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // (src/adapter.ts:982), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
   // CLI-HOST-TOOLS-01/02 (`:578`, `:622`) restore it.
-  const absentPath = createSandbox({ stubScripts: true });
+  const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
     const log = join(absentPath.root, "absent-path-codex.log");
@@ -2693,7 +2692,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
 });
 
 void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_CODEX override", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const log = join(sandbox.root, "override-codex.log");
     const override = join(sandbox.bin, "baseline-override-codex");
     writeVersionCodex(sandbox, override, "", log);
@@ -2734,7 +2733,7 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // contract's subject.
 void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search root the listing resolves codex from PATH and the installed fingerprint is read under $HOME/.codex", () => {
   // Half one: the override is genuinely ABSENT from the environment.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     // Both defaults in one run: the recorder is at `sandbox.bin/codex` (PATH),
     // and the cache is seeded ONLY under $HOME/.codex. If either default were
@@ -2771,7 +2770,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // manager; src/adapter.ts:827 tests `if (!searchRoot)`, which is true for
   // absent and empty alike. Step 5's second mutation makes that equality an
   // asserted property rather than a reading of the source.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     writeVersionCodex(
       sandbox,
@@ -2810,7 +2809,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // `installed_commit=${CACHE_COMMIT}` and exit 0. Asserting only "the run
   // failed" would pass on that implementation, and also on one that rejected an
   // empty HOME outright before composing anything.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     writeVersionCodex(
       sandbox,
@@ -2891,7 +2890,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // Same cwd decoy, for the same reason: absent HOME must not degrade into
   // reading a cwd-relative `.codex`, which would exit 0 with the decoy's
   // commit instead of failing.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const version = "6.1.1+manager.d884ae0";
     writeVersionCodex(
       sandbox,
@@ -2922,7 +2921,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
 });
 
 void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT", () => {
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     const activeVersion = "6.1.1+manager.d884ae0";
     const staleVersion = "6.0.0+manager.aaaaaaa";
     const searchRoot = join(sandbox.root, "custom-codex-root");
@@ -2963,7 +2962,7 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // Half one: a third value is refused, and the refusal happens BEFORE the
   // mutation. src/adapter.ts:580-585 validates the enumeration three
   // statements after requireCodex and before the marketplace lookup.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeListingCodex(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
@@ -2996,7 +2995,7 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // Half two: an accepted value gets PAST that point on an otherwise
   // identical fixture. This is what makes half one specific to the value
   // rather than to the fixture.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeListingCodex(sandbox);
     const upstream = createReleaseRepo(sandbox);
     const result = runCli(sandbox, ["install"], {
@@ -3035,7 +3034,7 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // without checking its status, so the run continues to `plugin add`
   // regardless -- and the stub records every invocation before dispatching on
   // it, so the attempt is observable either way.
-  withSandbox({ stubScripts: true }, (sandbox) => {
+  withSandbox((sandbox) => {
     writeVersionCodex(
       sandbox,
       join(sandbox.bin, "codex"),

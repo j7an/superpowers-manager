@@ -442,10 +442,9 @@ function assertNoCodexContact(sandbox) {
 // for the shim itself and its design rationale, including its known gaps.
 
 /**
- * @param {{ stubScripts?: boolean }} [_options]
  * @returns {Sandbox}
  */
-function createSandbox(_options = {}) {
+function createSandbox() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "spw-baseline-")));
   /** @type {Sandbox} */
   let sandbox;
