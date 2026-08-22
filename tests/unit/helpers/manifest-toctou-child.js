@@ -61,8 +61,8 @@ void test("manifest TOCTOU child", async (t) => {
   );
 
   // Valid at read-1 time: no `hooks` key (fallback manifests must not
-  // declare one — src/hooks.ts:182-183), and "zz" is a placeholder pair we
-  // corrupt one byte of below.
+  // declare one — classifyHooks enforces this), and "zz" is a placeholder
+  // pair we corrupt one byte of below.
   const validText = `${JSON.stringify({
     name: "superpowers",
     description: "zz",

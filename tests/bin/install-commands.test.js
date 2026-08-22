@@ -231,13 +231,13 @@ function copyFallbackManifestIntoCandidate(argv) {
  * Reconstructs the generated-tree precondition the shell driver inherited from
  * the scenario above it. `src/status.ts:21` returns "needs prepare"
  * whenever the package root carries no `.superpowers-upstream.json`, and
- * lifecycle-fixture.js:50-61 copies only `plugin.template.json` into the
- * snapshot — so a fresh `c.pkg` always probes as "needs prepare". In the shell
- * the prepare at :325 (and again inside the install at :383) left a valid
- * generated tree in the shared `$pkg`, and `reset` cleared Codex state but
- * never the package root. Every scenario from :340 to :416 therefore reached
- * the subject with that tree present, probing as "needs install" — or, once
- * `seed_installed_current` also populates the cache, as "current".
+ * lifecycle-fixture.js's buildSnapshot() copies only `plugin.template.json`
+ * into the snapshot — so a fresh `c.pkg` always probes as "needs prepare". In
+ * the shell the prepare at :325 (and again inside the install at :383) left a
+ * valid generated tree in the shared `$pkg`, and `reset` cleared Codex state
+ * but never the package root. Every scenario from :340 to :416 therefore
+ * reached the subject with that tree present, probing as "needs install" — or,
+ * once `seed_installed_current` also populates the cache, as "current".
  *
  * Under per-case isolation that state has to be built, and running prepare is
  * exactly how the driver built it.
@@ -415,12 +415,11 @@ function assertGeneratedCommitIsSha(c) {
 }
 
 /**
- * The commit prepareGeneratedTree just wrote. Prepare writes
- * provenance.commit = selection.desiredCommit exactly
- * (src/commands/prepare.ts:377-383), so this IS the desired commit for a
- * scenario built right after prepareGeneratedTree(c) -- reading it back is
- * simpler and less error-prone than re-resolving the same ref against
- * UPSTREAM a second time.
+ * The commit prepareGeneratedTree just wrote. writeProvenance's commit
+ * field is set to selection.desiredCommit exactly, so this IS the desired
+ * commit for a scenario built right after prepareGeneratedTree(c) -- reading
+ * it back is simpler and less error-prone than re-resolving the same ref
+ * against UPSTREAM a second time.
  * @param {import("./lifecycle-fixture.js").CaseEnv} c
  * @returns {string}
  */
@@ -561,7 +560,8 @@ async function assertLegacyIdentityStops(c, identityState) {
   // there is no codex.log at all in-process, since nothing here spawns a
   // Codex fake -- but it is subsumed: the double never reaching "install"
   // means the adapter's own unconditional `codex plugin add`
-  // (src/adapter.ts:671) was structurally impossible to reach either.
+  // (runInstall's pluginAdded mutationCommand call) was structurally
+  // impossible to reach either.
   assert.ok(
     adapter.calls.some((call) => call.join(" ") === "inspect --view ownership"),
     "adapter never inspected ownership, so 'no build or install' would pass vacuously",
@@ -1199,9 +1199,10 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("manager is current"), result.stdout);
     // :595-599, re-anchored onto codex.log. `install --package-root` absent
     // from the adapter log and "no Codex mutation" are the same claim here:
-    // the adapter install operation unconditionally reaches
-    // `codex plugin add superpowers@superpowers-manager` (src/adapter.ts:671),
-    // which CODEX_MUTATION matches, so :600-602 below already excludes it —
+    // the adapter install operation unconditionally reaches `codex plugin add
+    // superpowers@superpowers-manager` (runInstall's pluginAdded
+    // mutationCommand call), which CODEX_MUTATION matches, so :600-602 below
+    // already excludes it —
     // and it carries its own emptiness guard, which is what `nonEmpty` gave
     // the adapter-log form.
     // :600-602. The shell guarded this with `[ ! -s "$log" ] ||`, tolerating an
@@ -1350,9 +1351,9 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :670
     assert.ok(out.includes("does not match the prepared plugin"), out);
-    // :671 — the hint text lives in src/adapter.ts:681-683 and is replayed
-    // from the adapter result by scripts/core/lifecycle.sh:109,121; core owns
-    // no copy of it.
+    // :671 — the hint text lives in runInstall's pluginAdded mismatch hint and
+    // is replayed from the adapter result by scripts/core/lifecycle.sh:109,121;
+    // core owns no copy of it.
     assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     // :672-674
     assert.ok(
@@ -1444,7 +1445,8 @@ void describe("install commands", { concurrency: true }, () => {
     const c = installCase();
     await prepareGeneratedTree(c);
     clearLogs(c);
-    // :724 — src/adapter.ts:573 reads this; `add-only` is the default.
+    // :724 — runInstall's refreshMode flag read covers this; `add-only`
+    // is the default.
     const result = await runScript(c, "install", {
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add" },
     });

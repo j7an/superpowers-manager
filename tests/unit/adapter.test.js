@@ -59,8 +59,8 @@ async function buildWorkspace(t) {
   // `description` must be valid here or the "success" case cannot succeed.
   // `hooks` must be ABSENT: its absence is what forbids `hooks/` for a
   // fallback manifest. Declaring it — even as `{}` — is rejected by
-  // `classifyHooks` (`src/hooks.ts:182-183`) before the validator is reached,
-  // and by `validate_hooks` if it were.
+  // `classifyHooks` before the validator is reached, and by `validate_hooks`
+  // if it were.
   const fallback = join(base, "fallback.json");
   await writeFile(
     fallback,
@@ -408,11 +408,12 @@ async function codexSandbox(t) {
   };
 }
 
-// The adapter reads `codex plugin list --json` as raw bytes
-// (`src/adapter.ts:106`, `:809`). `@@BAD@@` is a raw 0xff byte inside an
-// otherwise well-formed JSON string, so a lossy `.toString()` at the call site
-// would parse successfully and yield a fabricated version instead of failing
-// closed. Asserting the exact parse diagnostic is what distinguishes the two.
+// The adapter reads `codex plugin list --json` as raw bytes: `CommandResult`'s
+// `stdout: Buffer` field, read by `activePluginVersionFromJson`. `@@BAD@@` is
+// a raw 0xff byte inside an otherwise well-formed JSON string, so a lossy
+// `.toString()` at the call site would parse successfully and yield a
+// fabricated version instead of failing closed. Asserting the exact parse
+// diagnostic is what distinguishes the two.
 //
 // This case's discriminating power rests on the exact message AND on the
 // sandbox `searchRoot` being empty: under a lossy decode the outcome is still
@@ -587,10 +588,10 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
 //
 // The contract's "accepts null" clause IS asserted. An earlier draft dropped
 // it, claiming an unresolvable fingerprint is always "" and therefore always
-// inspect-failed. That conflated two distinct states. src/adapter.ts:822-824
-// returns `fingerprint: null` as a SUCCESS result when no superpowers plugin
-// is active at all; only the case where a plugin IS active but its commit
-// cannot be resolved reaches :843-847 and fails closed. Both are live.
+// inspect-failed. That conflated two distinct states. runInspect's fingerprint
+// view returns `fingerprint: null` as a SUCCESS result when no superpowers
+// plugin is active at all; only the case where a plugin IS active but its
+// commit cannot be resolved reaches :843-847 and fails closed. Both are live.
 
 /**
  * Seed the installed-plugin cache the fingerprint view reads.
@@ -640,10 +641,10 @@ void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-he
     });
   }
 
-  // Third state: the listing parses and reports no superpowers plugin. This
-  // is `ok`, not a failure, and reports null -- see src/adapter.ts:822-824.
-  // Nothing is seeded under the search root, proving the view returns before
-  // it reads one.
+  // Third state: the listing parses and reports no superpowers plugin. This is
+  // `ok`, not a failure, and reports null -- see runInspect's fingerprint view.
+  // Nothing is seeded under the search root, proving the view returns before it
+  // reads one.
   const empty = await codexSandbox(t);
   const nullResult = await runAdapter(["inspect", "--view", "fingerprint"], {
     root: PACKAGE_ROOT,

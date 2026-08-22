@@ -443,8 +443,8 @@ void describe("uninstall commands", { concurrency: true }, () => {
   void test("missing Codex: controlled ownership-inspect failure (:214-232)", async () => {
     // Converted (Task 6, D4): calls `runUninstall` in-process, with the
     // double answering the ownership inspect exactly as the real adapter's
-    // requireCodex check does for a missing binary (src/adapter.ts:267-273,
-    // ":180") -- a well-formed ok:false outcome, not a transport-level
+    // requireCodex check does for a missing binary (:180) -- a well-formed
+    // ok:false outcome, not a transport-level
     // fault. There is no re-anchor onto codex.log available for this case
     // either way: Codex is never reached by construction, so codex.log would
     // be empty regardless of channel.
