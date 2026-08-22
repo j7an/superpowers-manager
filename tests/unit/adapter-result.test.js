@@ -186,7 +186,7 @@ void test("requireProtocolString accepts safe text and rejects terminal controls
 // leaving writeAdapterFailure the check's sole enforcement point.
 
 // Uses the existing capture() rather than a private recorder.
-// tests/unit/helpers/command-harness.js:47-59 already returns a
+// tests/unit/helpers/command-harness.js's capture() already returns a
 // `{ stream: any, text: () => string }` writable stand-in, and its `stream` is
 // cast to `any` there precisely because a two-member object literal is not
 // assignable to NodeJS.WritableStream under checkJs + strict. A private

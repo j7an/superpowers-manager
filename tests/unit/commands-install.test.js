@@ -782,8 +782,10 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // spw_verify_installed_fingerprint unconditionally (scripts/install:57) and
 // printed BOTH lines — the adapter's own error and
 // scripts/core/lifecycle.sh:92's. The flip surfaced it: the shell-parity case
-// at tests/bin/install-commands.test.js:1407, green against /bin/sh through
-// this same channel before Task 8, went red the moment the subject changed.
+// in tests/bin/install-commands.test.js titled "a failed fingerprint
+// inspection is reported as an inspection failure (:687-700)", green against
+// /bin/sh through this same channel before Task 8, went red the moment the
+// subject changed.
 // Both lines are asserted here, in order, so the divergence cannot come back in
 // either direction.
 void test("stage 4 (post-install inspect fingerprint) failure reports the replayed diagnostic AND the verification failure", async () => {

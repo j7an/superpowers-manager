@@ -620,11 +620,12 @@ void test("prepare runs the additional plugin validator inside the staging works
  * then fails EACCES unlinking the file inside it. A real filesystem failure,
  * not a mock.
  *
- * tests/unit/commands-install.test.js:996-1011 induces its cleanup failure by
- * chmod'ing the workspace's PARENT read-only. That cannot be used here:
- * prepare's parent is gatherPrepare's `tmpParent`, i.e. dirname(pluginRoot),
- * and atomicReplaceDir writes into it, so a read-only parent would fail the
- * swap and never reach the post-replacement case.
+ * tests/unit/commands-install.test.js's "a post-success workspace cleanup
+ * failure still reports the domain outcome, then fails closed" induces its
+ * cleanup failure by chmod'ing the workspace's PARENT read-only. That cannot
+ * be used here: prepare's parent is gatherPrepare's `tmpParent`, i.e.
+ * dirname(pluginRoot), and atomicReplaceDir writes into it, so a read-only
+ * parent would fail the swap and never reach the post-replacement case.
  *
  * @param {CaseEnv} c
  * @param {number} exitCode 0 keeps the ok path; 1 takes prepare's
@@ -695,8 +696,9 @@ function assertOrder(haystack, needles) {
 
 void test("a post-success workspace cleanup failure keeps the prepared outcome and every line before it", async () => {
   // chmod does not gate root, so the poisoned directory would be removable and
-  // the cleanup this case exists to fail would succeed. Matches
-  // tests/unit/commands-install.test.js:981.
+  // the cleanup this case exists to fail would succeed. Matches the root guard
+  // in tests/unit/commands-install.test.js's "a post-success workspace cleanup
+  // failure still reports the domain outcome, then fails closed".
   if (process.getuid?.() === 0) return;
   const c = createCase({ fakes: "probe" });
   const parent = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
