@@ -71,7 +71,8 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 // `[ -f ]` — regular file. scripts/prepare:42, :80, and :108 all use -f, and
-// tests/baseline/cli-parity.test.js:1589 asserts a DIRECTORY passed as
+// tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
+// template bytes and non-file rejection" asserts a DIRECTORY passed as
 // SUPERPOWERS_MANIFEST_TEMPLATE is rejected before any adapter build. A
 // stat-only predicate would accept it.
 async function regularFileExists(path: string): Promise<boolean> {
@@ -208,9 +209,10 @@ interface PrepareRun {
 //
 // scripts/prepare:35-36 exported TMPDIR="$prepare_workspace" so every child
 // confined its temporary files to the tree the workspace trap removed. This
-// child still does. The in-process adapter build does NOT: src/adapter.ts:335
-// calls withWorkspace(tmpdir(), ...) and os.tmpdir() reads process.env, never
-// ctx.env, so its build workspace lands in the ambient temp dir. Setting
+// child still does. The in-process adapter build does NOT: runBuild's
+// withWorkspace(tmpdir(), ...) call (src/adapter.ts) and os.tmpdir() reads
+// process.env, never ctx.env, so its build workspace lands in the ambient
+// temp dir. Setting
 // process.env.TMPDIR around the call would be a process-global mutation inside
 // a library function and is unsafe under the concurrent suite; the adapter
 // removes its own workspace, so the residue is bounded. Spec divergence 9.
@@ -542,9 +544,9 @@ export async function runPrepare(
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by tests/unit/upstream.test.js:460-469, :471-481, and :483-501.
     //   2. fetchExactCommit splices the same combined stdout+stderr into its
-    //      own text on the PINNED path (src/upstream.ts:334, :349, and
-    //      proveCommit via :262). This is the rarer of the two raw-git-output
-    //      paths, not the only one.
+    //      own text on the PINNED path (both of its own throw sites in
+    //      src/upstream.ts, and proveCommit's, which it calls). This is the
+    //      rarer of the two raw-git-output paths, not the only one.
     //   3. src/selection-store.ts:124 (same shape at :49, :86, :98)
     //      interpolates the caught error's own message, so Node errno prose
     //      (e.g. "EACCES: permission denied, open '<path>'") can reach this

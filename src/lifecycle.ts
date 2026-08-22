@@ -162,9 +162,9 @@ export function verifyInstalledFingerprint(
   if (inspected.kind === "unusable") {
     // A well-formed outcome whose `result` is not an object is the port's
     // analogue of the shell's own split: the inspect call SUCCEEDED and only
-    // the content is unusable. This is what makes
-    // tests/test_marketplace_reconcile.sh:312's live `grep -Fq "parse"`
-    // satisfiable at all. Spec §6.2.3 items 3 and 4.
+    // the content is unusable. This is the branch
+    // tests/unit/lifecycle.test.js's "an unparseable fingerprint result
+    // names parsing, not inspection" exercises. Spec §6.2.3 items 3 and 4.
     return {
       ok: false,
       stdout: [],
@@ -247,10 +247,11 @@ export function verifyUninstalledResources(
   const inspected = read.value;
   // A missing or non-object `resources` falls THROUGH to the Boolean check
   // rather than getting its own message. scripts/core/adapter.sh:70 emits
-  // "expected Boolean adapter result at resources.plugin" for input {} —
-  // the input tests/test_marketplace_reconcile.sh:224 actually writes — so a
-  // distinct "not an object" message here would be a port-only divergence on
-  // a live shell-tested case. Parity, not divergence. Spec §6.2.3 item 3.
+  // "expected Boolean adapter result at resources.plugin" for input {} — the
+  // input tests/unit/lifecycle.test.js's "a non-object resources falls
+  // through to the Boolean message" exercises — so a distinct "not an
+  // object" message here would be a port-only divergence on a live
+  // shell-tested case. Parity, not divergence. Spec §6.2.3 item 3.
   const resources = inspected.resources;
   const bag: Record<string, unknown> =
     typeof resources === "object" &&

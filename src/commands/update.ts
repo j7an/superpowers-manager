@@ -26,7 +26,7 @@ import { runPrepare } from "./prepare.js";
 
 // scripts/update:29-32's `case ... *)` wildcard. Same unreachability shape as
 // src/commands/install.ts's renderUnknownProbeStatus: statusForCommits
-// (src/status.ts:15-27) can only ever return "needs prepare", "needs
+// (src/status.ts) can only ever return "needs prepare", "needs
 // install" or "current", so this branch is NOT reachable through runUpdate's
 // own call to gatherProbe today. ProbeFacts.status is typed `string`, not
 // that three-literal union, so a future caller that builds facts by hand (as
