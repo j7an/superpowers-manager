@@ -1012,21 +1012,19 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
   ];
 
   withSandbox((sandbox) => {
-    // `pin` is in-process now (PR 11.5, Task 7): an accepted ref never
-    // reaches scripts/pin, and its resolution genuinely runs rather than
-    // hitting the trivial dispatch stub every other command in this suite
-    // still gets. This loop can therefore no longer assert a clean dispatch
-    // for every accepted value — two of them
-    // (`0123456789abcdef0123456789abcdef01234567` and its uppercase
-    // sibling) are arbitrary 40-hex literals not constructible in any
-    // fixture (no buildable repository can contain a commit with that exact
-    // SHA), so genuine resolution success is not just unbuilt here, it is
-    // impossible to assert honestly. What this loop still proves, and the
-    // only thing it ever proved before the flip (the shell-era dispatch
-    // stub short-circuited real resolution too), is the syntax boundary
-    // itself: `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate lets these argv
-    // shapes reach real work, in contrast to every entry in `refused` below,
-    // which is rejected before any tool lookup or dispatch.
+    // `pin` is in-process: an accepted ref reaches real resolution directly,
+    // and no dispatch stub survives anywhere in the tree. This loop can
+    // therefore no longer assert a clean dispatch for every accepted value —
+    // two of them (`0123456789abcdef0123456789abcdef01234567` and its
+    // uppercase sibling) are arbitrary 40-hex literals not constructible in
+    // any fixture (no buildable repository can contain a commit with that
+    // exact SHA), so genuine resolution success is not just unbuilt here, it
+    // is impossible to assert honestly. What this loop still proves, and the
+    // only thing it ever proved before the flip (the shell-era dispatch stub
+    // short-circuited real resolution too), is the syntax boundary itself:
+    // `src/cli.ts`'s TAG_RE/COMMIT_INPUT_RE gate lets these argv shapes reach
+    // real work, in contrast to every entry in `refused` below, which is
+    // rejected before any tool lookup or dispatch.
     // `SUPERPOWERS_UPSTREAM_URL` is pinned to a definitely-absent local path
     // so that real work fails fast — never touching the network — no
     // matter which accepted value is tried. With that source, resolution is
@@ -1232,9 +1230,8 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
     // only place in the tree where that scrub is observable end to end at the
-    // CLI level — tests/unit/adapter.test.js pins it at the unit level, and the
-    // two surviving shell pins (tests/baseline/ref-resolution.test.js and
-    // tests/baseline/selection-location.test.js) drive scripts/ directly.
+    // CLI level — tests/unit/adapter.test.js pins it at the unit level, and
+    // no third pin exists anywhere in the tree.
     const dumped = join(sandbox.root, "codex-env.json");
     const customCodex = join(sandbox.bin, "custom-codex");
     writeFileSync(

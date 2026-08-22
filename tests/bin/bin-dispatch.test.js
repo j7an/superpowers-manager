@@ -165,7 +165,8 @@ void test("--version through a symlink resolves, as npm and npx invoke bins", ()
 // returns. That successor property is not this one — it is asserted per command
 // by the unit suites (tests/unit/commands-{install,update,uninstall}.test.js)
 // and by the exit statuses every case in this file already checks. `scripts` as
-// a `runDispatch` option survives; nothing in this file uses it any more.
+// a `runDispatch` option did not survive: it was deleted, along with the
+// `scripts/` fixture tree, in slice 4c.
 
 // --- inventory items 30-31: env passthrough ---------------------------------
 //

@@ -959,7 +959,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // c.adapterLog a path something writes to, so the emptiness half above is
   // not vacuous — and it is the property the seam-retirement mutation gate
   // measured. Neither half detects a regressed spawn any more.
-  void test("both-present uninstall never reaches the fake adapter (row 18)", async () => {
+  void test("both-present uninstall leaves the fake adapter log empty; the tripwire refuses a direct spawn (row 18)", async () => {
     const c = uninstallCase();
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
