@@ -250,8 +250,8 @@ export function verifyUninstalledResources(
   // "expected Boolean adapter result at resources.plugin" for input {} — the
   // input tests/unit/lifecycle.test.js's "a non-object resources falls
   // through to the Boolean message" exercises — so a distinct "not an
-  // object" message here would be a port-only divergence on a live
-  // shell-tested case. Parity, not divergence. Spec §6.2.3 item 3.
+  // object" message here would be a port-only divergence. Parity, not
+  // divergence. Spec §6.2.3 item 3.
   const resources = inspected.resources;
   const bag: Record<string, unknown> =
     typeof resources === "object" &&

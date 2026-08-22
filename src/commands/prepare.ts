@@ -212,10 +212,10 @@ interface PrepareRun {
 // child still does. The in-process adapter build does NOT: runBuild's
 // withWorkspace(tmpdir(), ...) call (src/adapter.ts) and os.tmpdir() reads
 // process.env, never ctx.env, so its build workspace lands in the ambient
-// temp dir. Setting
-// process.env.TMPDIR around the call would be a process-global mutation inside
-// a library function and is unsafe under the concurrent suite; the adapter
-// removes its own workspace, so the residue is bounded. Spec divergence 9.
+// temp dir. Setting process.env.TMPDIR around the call would be a
+// process-global mutation inside a library function and is unsafe under the
+// concurrent suite; the adapter removes its own workspace, so the residue
+// is bounded. Spec divergence 9.
 function runValidator(
   validator: string,
   candidate: string,
@@ -544,7 +544,7 @@ export async function runPrepare(
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by tests/unit/upstream.test.js:460-469, :471-481, and :483-501.
     //   2. fetchExactCommit splices the same combined stdout+stderr into its
-    //      own text on the PINNED path (both of its own throw sites in
+    //      own text on the PINNED path (both of its own splice sites in
     //      src/upstream.ts, and proveCommit's, which it calls). This is the
     //      rarer of the two raw-git-output paths, not the only one.
     //   3. src/selection-store.ts:124 (same shape at :49, :86, :98)
