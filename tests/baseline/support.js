@@ -400,8 +400,9 @@ function writeCodexLogTool(sandbox) {
       "exit 0",
       "",
     ].join("\n"),
-    { mode: 0o755 },
+    "utf8",
   );
+  chmodSync(tool, 0o755);
   writeFileSync(sandbox.codexLog, "", "utf8");
   return tool;
 }

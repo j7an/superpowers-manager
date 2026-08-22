@@ -398,10 +398,14 @@ void test("missing codex blocks `install` before dispatch and names the tool", (
 // green everywhere and a configured validator fails late, inside runValidator,
 // after the clone and the build (PR 11.5 slice 3, D5).
 void test("`prepare` does not require python3 when no validator is configured", () => {
+  // The exact status and stderr are asserted, not just the diagnostic's
+  // absence, because an absence alone is satisfied by a preflight rejection
+  // on some other tool, which is the regression this case exists to catch.
   const result = runDispatch({ tools: ["git", "codex"], args: ["prepare"] });
-  assert.ok(
-    !result.stderr.includes("required command not found: python3"),
-    `preflight must not require python3 without a validator: ${result.stderr}`,
+  assert.equal(result.status, 1);
+  assert.equal(
+    result.stderr,
+    "error: no stable semver tag found for latest-release\n",
   );
 });
 
@@ -434,10 +438,14 @@ void test("`prepare` runs in-process with codex absent from PATH", () => {
   // prepare, observed through a dispatch. In-process there is no dispatch, so
   // the surviving contract is: preflight admits the command, and no script is
   // spawned.
+  // The exact status and stderr are asserted, not just the diagnostic's
+  // absence, because an absence alone is satisfied by a preflight rejection
+  // on some other tool, which is the regression this case exists to catch.
   const result = runDispatch({ tools: ["git", "python3"], args: ["prepare"] });
-  assert.ok(
-    !result.stderr.includes("required command not found: codex"),
-    `preflight must not require codex for prepare: ${result.stderr}`,
+  assert.equal(result.status, 1);
+  assert.equal(
+    result.stderr,
+    "error: no stable semver tag found for latest-release\n",
   );
 });
 
