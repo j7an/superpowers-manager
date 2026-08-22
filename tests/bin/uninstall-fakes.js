@@ -83,38 +83,16 @@ function runAdapter(ctx) {
   ctx.log("adapter.log", ctx.args.join(" "));
   // Post-flip, uninstall dispatches in-process: `ctx.adapter` is a direct
   // call into src/adapter.ts's runAdapter, never a spawn of this executable,
-  // so no seam value makes reaching it legitimate any more. `always: true`
-  // refuses unconditionally, matching probe-fakes.js's own adapter role. The
-  // return is still load-bearing: process.exitCode does not halt execution,
-  // so falling through would continue into obsolete adapter-role fixture logic.
-  if (
-    tripwireTriggered(ctx, {
-      always: true,
-      message: "fixture: uninstall must not spawn the adapter",
-    })
-  ) {
-    return;
-  }
-  if (
-    ctx.seam === "intercept" &&
-    ctx.args.join(" ") === "inspect --view update-control"
-  ) {
-    process.stdout.write(
-      `${JSON.stringify({
-        protocol: 1,
-        operation: "inspect",
-        ok: true,
-        messages: [],
-        result: {
-          view: "update-control",
-          update_control: ctx.config.updateControl,
-        },
-        error: null,
-      })}\n`,
-    );
-    process.exitCode = 0;
-    return;
-  }
+  // so reaching it is never legitimate. The tripwire refuses unconditionally,
+  // matching probe-fakes.js's own adapter role.
+  //
+  // The return value is discarded because this call is the last statement in
+  // the function, so there is nothing here to fall through into. Add any
+  // statement below it and the `if (…) return;` guard has to come back before
+  // that statement can be trusted not to run after a trip.
+  tripwireTriggered(ctx, {
+    message: "fixture: uninstall must not spawn the adapter",
+  });
 }
 
 runFake({ kind: "uninstall", codex: runCodex, adapter: runAdapter });

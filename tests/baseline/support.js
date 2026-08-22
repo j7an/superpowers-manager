@@ -122,11 +122,7 @@ const PATH_ENVIRONMENT_VARIABLES = new Set([
   "SUPERPOWERS_MANIFEST_TEMPLATE",
   "SUPERPOWERS_VALIDATOR",
   "SUPERPOWERS_INSTALLED_SEARCH_ROOT",
-  "SPW_ADAPTER",
-  "SPW_ADAPTER_RESPONSE_VALIDATOR",
   "SPW_PACKAGE_ROOT",
-  "SPW_BASELINE_ADAPTER_STATE",
-  "SPW_BASELINE_ADAPTER_LOG",
   "SPW_BASELINE_DISPATCH_LOG",
   "SPW_BASELINE_GIT_LOG",
   "SPW_BASELINE_SANDBOX_ROOT",
@@ -541,64 +537,6 @@ function baseEnvironment(sandbox, overrides = {}, cwd = sandbox.work) {
   return environment;
 }
 
-// Commands whose SPW_ADAPTER seam has been retired: their test sites have been
-// cleaned of it and must not reacquire it.
-//
-// NOT a second copy of DISPATCH. IN_PROCESS_COMMANDS is derived because it
-// restates a fact DISPATCH owns, and a copy can disagree with its source. This
-// records something DISPATCH does not know -- which commands' *test sites* have
-// been migrated off the dead seam -- so there is no source for it to disagree
-// with. Slice 4b's flip added install/update/uninstall (Task 8, Step 5b);
-// slice 6's PR 3 added pin/track-latest/unpin/probe, and slice 6 deletes this
-// set with the seam.
-//
-// This set is now the whole command list, and as of PR 3 that is a fact about
-// TEST SITES rather than an inference from DISPATCH: `dispatchEnvironment` was
-// the repository's only producer of SPW_ADAPTER on the runCli path, and it no
-// longer carries the key. The claim above this line previously read "All eight
-// commands are now in-process, so this set is the whole command list" while the
-// set held four -- a true premise with a false conclusion. It is still NOT
-// collapsed into "always throw": the set records which test sites have been
-// CLEANED, which is a different fact from which commands are in-process, and
-// spelling it out is what keeps the two from being conflated when slice 6
-// removes the seam.
-/** @type {Set<string>} */
-const ADAPTER_SEAM_RETIRED = new Set([
-  "pin",
-  "track-latest",
-  "unpin",
-  "prepare",
-  "probe",
-  "install",
-  "update",
-  "uninstall",
-]);
-const ADAPTER_SEAM_KEYS = [
-  "SPW_ADAPTER",
-  "SPW_BASELINE_ADAPTER_STATE",
-  "SPW_BASELINE_ADAPTER_LOG",
-];
-
-/**
- * @param {string[]} args
- * @param {Record<string, string>} overrides
- */
-function assertSeamRetired(args, overrides) {
-  // `runCli(sandbox, [])` dispatches `update`; parseArgs decides that, and this
-  // has to agree with it or the guard silently skips the default invocation.
-  const command = args[0] || "update";
-  if (!ADAPTER_SEAM_RETIRED.has(command)) return;
-  for (const key of ADAPTER_SEAM_KEYS) {
-    if (Object.hasOwn(overrides, key)) {
-      throw new Error(
-        `${command}'s adapter seam is retired: remove ${key} from this call. ` +
-          "The in-process runAdapter ignores SPW_ADAPTER, so the override is " +
-          "inert and any assertion reading its log asserts nothing.",
-      );
-    }
-  }
-}
-
 /**
  * @param {Sandbox} sandbox
  * @param {string[]} [args]
@@ -606,7 +544,6 @@ function assertSeamRetired(args, overrides) {
  * @param {{ cwd?: string }} [options]
  */
 function runCli(sandbox, args = [], overrides = {}, options = {}) {
-  assertSeamRetired(args, overrides);
   const cwd = options.cwd || sandbox.work;
   assertContainedPath(sandbox, cwd, "working directory");
   return spawnSync(
@@ -692,7 +629,6 @@ export {
   IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
-  assertSeamRetired,
   baseEnvironment,
   clearDispatchLog,
   commandRequirements,
