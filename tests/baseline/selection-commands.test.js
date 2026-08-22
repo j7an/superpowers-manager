@@ -92,7 +92,7 @@ process.on("exit", () => {
 
 // Per-invocation identity flags only. These write no git config at any scope
 // and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
-// convention tests/baseline/ref-resolution.test.js:78-83 documents — a
+// convention `IDENTITY` in tests/baseline/ref-resolution.test.js documents — a
 // deliberate departure from tests/test_selection_commands.sh:20-21's own
 // `git config user.email`/`user.name` (repo-scoped, but still a config
 // write this port avoids on principle).
@@ -366,8 +366,8 @@ function assertWorkspaceParentEmpty(dir) {
  * Asserts a workspace-parent directory holds exactly the one sibling file
  * this suite seeds it with, byte-for-byte — the pairing
  * tests/test_selection_commands.sh:338-339 checks twice (content, then
- * count), and the same helper shape
- * tests/baseline/ref-resolution.test.js:190-193 already uses for
+ * count), and the same shape as `assertOnlySiblingKept` in
+ * tests/baseline/ref-resolution.test.js, which that suite already uses for
  * fetchExactCommit's cleanup proofs.
  * @param {string} workspace
  */

@@ -1072,7 +1072,8 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   // So this half asserts the exact message, which is strictly stronger than the
   // single-line shape check the task text asked for. The same string is already
   // pinned at tests/unit/upstream.test.js:404 and
-  // tests/baseline/selection-commands.test.js:655.
+  // by the `cannot fetch requested commit from ${repo}` assertion in
+  // tests/baseline/selection-commands.test.js.
   const pinned = createCase({ fakes: "probe" });
   const pinnedBefore = seedSentinel(pinned);
   const pinnedHostile = nonRepository(pinned);

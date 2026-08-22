@@ -105,8 +105,8 @@ function withSandbox(callback) {
  * `commandAvailable` (src/adapter.ts:258-270) resolves a RELATIVE candidate
  * path against `process.cwd()`, which is the seam both PATH-shape halves of
  * CLI-ENV-CODEX-LISTING-01 turn on; the retired shell driver got the same
- * effect by `cd`-ing inside a subshell. Same shape as
- * tests/baseline/selection-commands.test.js:341-350, and safe for the same
+ * effect by `cd`-ing inside a subshell. Same shape as `withCwd` in
+ * tests/baseline/selection-commands.test.js, and safe for the same
  * reason: node:test runs top-level tests sequentially.
  *
  * NOT usable from inside `withSandbox`: that helper destroys the sandbox in a
@@ -1959,9 +1959,10 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   // under c.pkg. caseEnv puts SUPERPOWERS_CONFIG_DIR (selection) and
   // SUPERPOWERS_INSTALLED_SEARCH_ROOT (Codex) under c.home, so a probe that
   // wrote selection state or a cache there would have passed a c.pkg-only
-  // snapshot. tests/baseline/probe.test.js:358-359 pairs the same two roots,
-  // narrowed to c.home/.codex; c.home is used whole here so selection and any
-  // stray cache are covered too.
+  // snapshot. tests/baseline/probe.test.js pairs the same two roots in its
+  // `snapshotTree(c.pkg)` / `snapshotTree(join(c.home, ".codex"))` calls,
+  // narrowed there to c.home/.codex; c.home is used whole here so selection
+  // and any stray cache are covered too.
   const pkgBefore = snapshotTree(c.pkg);
   const homeBefore = snapshotTree(c.home);
   const out = capture();

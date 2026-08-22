@@ -25,7 +25,7 @@ const CHILD = fileURLToPath(new URL("./prepare-child.js", import.meta.url));
 
 // Per-invocation identity flags only. These write no git config at any scope,
 // which is why they are passed on every commit and tag rather than set once —
-// the choice tests/baseline/ref-resolution.test.js:75 documents. The Global
+// the choice `IDENTITY` in ref-resolution.test.js documents. The Global
 // Constraints' `git add -A` ban governs the repository under development, not a
 // throwaway fixture repo like this one; the shell original stages the same way
 // at tests/test_prepare_with_fake_upstream.sh:182.
