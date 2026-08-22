@@ -506,7 +506,7 @@ void test("prepare clones once and then fetches into the same cache", async () =
   const second = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
   assert.equal(second.status, 0, second.stderr);
   // Same inode: the second run took the fetch branch
-  // (src/commands/prepare.ts:309) instead of removing and re-cloning.
+  // (`gatherPrepare`'s cached-clone fetch branch) instead of removing and re-cloning.
   assert.equal(statSync(cacheRepo(c)).ino, inode);
 });
 
@@ -532,7 +532,7 @@ void test("prepare rejects an upstream missing any required path", async () => {
       SUPERPOWERS_UPSTREAM_URL: source,
       SUPERPOWERS_REF: commit,
     });
-    // src/commands/prepare.ts:329-334 names only the source when a clone fails
+    // The `cannot clone upstream repo` diagnostic names only the source when a clone fails
     // and discards git's output by contract, so an unexpected failure here
     // cannot say why on its own. Attach the fixture's own view of the source —
     // computed only once the expectation has already failed, so a passing run
@@ -950,10 +950,11 @@ void test("prepare rejects a directory as the fallback manifest template before 
   assertNoLeakedInternals(result.stderr);
 
   // No adapter build ran: the same contract
-  // tests/baseline/cli-parity.test.js:1589-1608 asserts for the spawned path.
+  // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
+  // template bytes and non-file rejection" test asserts for the spawned path.
   // An adapter build always replays `generated plugin validation passed: …`
   // onto stdout, and the template check precedes the cache mkdir
-  // (src/commands/prepare.ts:291-298), so neither is present.
+  // (the `missing fallback manifest template` guard), so neither is present.
   assert.equal(result.stdout, "");
   assert.equal(existsSync(join(c.dir, "cache")), false);
 
@@ -1027,7 +1028,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   };
 
   // Non-pinned: the cache already exists, so this is the fetch branch
-  // (src/commands/prepare.ts:310-327), whose diagnostic names the source and
+  // (`gatherPrepare`'s cached-clone fetch branch), whose diagnostic names the source and
   // nothing else. Exact equality is the assertion — one hand-written line.
   const env = createCase({ fakes: "probe" });
   const commit = commitOf(REFS.fallback);
@@ -1055,8 +1056,10 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   // wins and git's five lines are DISCARDED by the callee. oneLine() is not what
   // bounds this output.
   //
-  // fetchExactCommit does hold three splice sites — src/upstream.ts:334, :349,
-  // and proveCommit's init at :262, inherited from spw_upstream_cli's
+  // fetchExactCommit does hold three splice sites — its `cannot initialize
+  // upstream cache repository` throw and its `cannot transfer requested
+  // commit into upstream cache` throw, and proveCommit's init at :262,
+  // inherited from spw_upstream_cli's
   // `spw_die "${_upstream_out#error: }"` and not a regression — but no
   // externally constructible input reaches any of them. Four shapes were tried:
   // a regular file as the cache repository, `.git` as a regular file, an empty

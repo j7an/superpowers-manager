@@ -479,9 +479,9 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
 /**
  * The fixture's own `codex` log, in place of `adapterOperations(sandbox)`.
  * Every mutation the real adapter performs reaches Codex through `codexBin`
- * (src/adapter.ts:559-700, `runInstall`'s marketplace/plugin `listingCommand`/
+ * (`runInstall`'s marketplace/plugin `listingCommand`/
  * `mutationCommand` calls), so this is the channel that survives Task 8's
- * flip. `readLog` itself (tests/bin/lifecycle-fixture.js:354-360) does NOT
+ * flip. `readLog` itself does NOT
  * fail closed and never throws: it wraps the `readFileSync` in a bare
  * try/catch and returns `[]` for ANY read error, a missing log included. The
  * presence-form assertions below are what turn that `[]` into a loud failure
@@ -1067,7 +1067,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // while this expectation stayed silently stale; it also encoded the retired
   // DISPATCH table a second time through the presence of "sh".
   //
-  // commandRequirements(env) (src/cli.ts:227) takes the environment — `prepare`
+  // commandRequirements(env) takes the environment — `prepare`
   // requires python3 only when SUPERPOWERS_VALIDATOR names one — and returns
   // the whole Record<Subcommand, string[]>; index it per command. These cases
   // configure no validator, so the empty env is the right derivation for them.
@@ -2281,9 +2281,9 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     // carries both: the generated tree is at `c.pkg/plugins/superpowers`, and
     // the manager's upstream cache — its own directory in the baseline, via
     // SUPERPOWERS_CACHE_DIR — defaults to `$root/.cache/upstream`
-    // (scripts/prepare:12, src/commands/prepare.ts:255), which is inside
-    // `c.pkg` here because `runScript` sets no SUPERPOWERS_CACHE_DIR
-    // (tests/bin/lifecycle-fixture.js:296-312). A readdirSync of top-level
+    // (scripts/prepare:12, gatherPrepare's `cacheParent` resolution), which is
+    // inside `c.pkg` here because `runScript` sets no SUPERPOWERS_CACHE_DIR.
+    // A readdirSync of top-level
     // names would see neither a change inside `.codex-plugin/` nor a cache
     // appearing. Same form as PROBE-READONLY-01's own `snapshotTree(c.pkg)`.
     const pkgBefore = snapshotTree(c.pkg);
@@ -2302,8 +2302,8 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     // appear in a log pinned to these exact entries.
     // Exact: ownership inspect (list + marketplace list), then the mutation
     // uninstall issues ONLY for what ownership reported present (both, when
-    // managerPresent; neither, when not — src/adapter.ts:702-772,
-    // `runUninstall`), then the post-removal ownership re-inspect.
+    // managerPresent; neither, when not — `runUninstall`),
+    // then the post-removal ownership re-inspect.
     assert.deepEqual(
       codex,
       managerPresent
@@ -2568,7 +2568,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   //
   // Driven through `runAdapter` rather than `runCli`, and that is forced.
   // src/cli.ts's preflight resolves the same command name with its own
-  // `findTool`, which DROPS empty components (`src/cli.ts:207`), so a CLI run
+  // `findTool`, which DROPS empty components via its `.filter(Boolean)`, so a CLI run
   // fails at preflight with "required command not found" before
   // src/adapter.ts:264 is reached at all. `runAdapter` is the function the CLI
   // dispatches into (ctx.adapter, src/commands/probe.ts:231).
@@ -2577,7 +2577,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // src/adapter.ts:263-264 is reachable needs the true answer: the preflight
   // makes both branch outcomes unobservable on EVERY product path, not merely
   // the common one. src/cli.ts is the sole site that binds runAdapter to a
-  // context (src/cli.ts:348-351), and it runs the preflight first. The one
+  // context (the `adapter: runAdapter` binding), and it runs the preflight first. The one
   // entry point that called runAdapter with a bare process.env and no
   // preflight was src/adapter-cli.ts, and PR 11.5 slice 5 deleted it, so
   // nothing shipped reaches src/adapter.ts:263-264 unguarded. So this half and
@@ -2600,7 +2600,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
       SUPERPOWERS_CODEX: "codex-empty-path-component",
     });
     // After baseEnvironment, never through it: it validates
-    // `PATH === sandbox.bin` (tests/baseline/support.js:305-307), which is the
+    // `PATH === sandbox.bin` (validateEnvironment's `PATH` check), which is the
     // very invariant this half has to break.
     environment.PATH = `${delimiter}${emptyComponent.bin}`;
     const result = await withCwd(emptyComponent.work, () =>
@@ -2718,7 +2718,7 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // ABSENT, not empty. `runCli` cannot express that -- tests/baseline/support.js
 // puts SUPERPOWERS_INSTALLED_SEARCH_ROOT into every environment it builds and
 // runCli passes that object to spawnSync as the complete env -- but
-// `runCliWithoutEnvironment` (tests/baseline/cli-parity.test.js:152) exists
+// `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
 // environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`:1408`)
 // and CLI-ENV-PREPARE-01 (`:1454`) already use it for the same reason.
@@ -2763,7 +2763,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // Half two: the empty string reaches the same default. This is not a
   // restatement of half one -- it asserts that two specific lines agree.
   // validateEnvironment skips path checking when `value === ""`
-  // (tests/baseline/support.js:312), so the empty value survives to the
+  // (validateEnvironment's empty-value skip), so the empty value survives to the
   // manager; src/adapter.ts:827 tests `if (!searchRoot)`, which is true for
   // absent and empty alike. Step 5's second mutation makes that equality an
   // asserted property rather than a reading of the source.
@@ -2853,7 +2853,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     assert.equal(result.status, 1);
     // Exact, because the resolved root inside this text IS the contract: it is
     // the only observable that separates `/.codex` from the decoy. probe
-    // replays the adapter outcome's own failure (src/commands/probe.ts:459),
+    // replays the adapter outcome's own failure (the `replayOutcome` loop),
     // so the adapter's fail() text (src/adapter.ts:843-847) arrives verbatim.
     // Whole-stream equality also carries the retiring case's second guard --
     // that this is a CONTROLLED failure -- since a protocol violation would
@@ -2899,7 +2899,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     const upstream = createReleaseRepo(sandbox);
     // BOTH names deleted. Unsetting only HOME would leave
     // SUPERPOWERS_INSTALLED_SEARCH_ROOT -- which baseEnvironment always sets
-    // (tests/baseline/support.js:538) -- winning at src/adapter.ts:826, and the
+    // (`runCli`'s definition) -- winning at src/adapter.ts:826, and the
     // HOME branch would never be reached at all.
     const result = runCliWithoutEnvironment(
       sandbox,

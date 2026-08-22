@@ -55,7 +55,8 @@ const SIGNAL_CHILD = fileURLToPath(
 );
 
 // A static import from `dist/` fails the `typecheck:js` gate the same way
-// tests/baseline/selection-location.test.js:53-57 documents: dist output has
+// tests/baseline/selection-location.test.js documents beside its own
+// `effective-selection.js`/`selection.js` dynamic imports: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
 // implicit `any`. Load the built modules dynamically while typing them
 // against their `src/` sources instead.
@@ -964,7 +965,7 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // src/commands/track-latest.ts:31 — not the variable left absent, which
   // the shell's own `${VAR:-default}` treats identically but this project
   // otherwise treats presence-vs-emptiness as distinct, e.g.
-  // src/effective-selection.ts:20-28), which this repository's shell driver
+  // `requireAbsolute`), which this repository's shell driver
   // only reached by stripping PATH down to a Git-less stub (:420-428) — moot
   // now that runTrackLatest never spawns a process to begin with (see this
   // file's header comment).

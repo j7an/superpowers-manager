@@ -87,7 +87,7 @@ function git(repo, args) {
 
 /**
  * The fixture's own view of a repository, for an assertion message.
- * src/commands/prepare.ts:329-334 names only the source when a clone fails and
+ * The `cannot clone upstream repo` diagnostic names only the source when a clone fails and
  * discards git's output by contract, so a case whose clone fails for an
  * unexpected reason cannot say why. This does not change that contract; it adds
  * the fixture's side of the story to the failure message. Deliberately does not
@@ -273,7 +273,7 @@ function buildUpstream() {
   //
   // The value is a NUMBER on purpose. classifyHooks accepts
   // `typeof hooks === "string"` as a single declared path
-  // (src/hooks.ts:196-198), so a plain string reaches validateDeclaredFile and
+  // (`classifyHooks`'s `manifest.hooks` extraction), so a plain string reaches validateDeclaredFile and
   // fails with `declared hook path must start with ./` — a different cause,
   // already covered in tests/unit/hooks.test.js. 42 falls through every
   // accepted shape to the unsupported-declaration throw.
@@ -317,11 +317,12 @@ function buildUpstream() {
   // CANDIDATE validation at src/hooks.ts:367 fails.
   //
   // `.git` is the target for the same reason the retired shell fixture used
-  // it: it exists in the upstream checkout, so assertExistingContained accepts
-  // it at :358, and it is absent from src/commands/prepare.ts:28-34's five
-  // copied paths, so the symlink recreated at src/hooks.ts:359-360 dangles in
-  // the candidate. Any target outside those five works; this one keeps the
-  // ported case recognisable against the file it replaces.
+  // it: it exists in the upstream checkout, so validateSubtreeSymlinks's
+  // containment check accepts it on the source side, and it is absent from
+  // COPY_PATHS's five copied paths, so the symlink recreated at
+  // src/hooks.ts:359-360 dangles in the candidate. Any target outside those
+  // five works; this one keeps the ported case recognisable against the file
+  // it replaces.
   branchWith("hooks-root-contained-source-only", () => {
     const declared = JSON.parse(
       readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
@@ -334,7 +335,7 @@ function buildUpstream() {
   // P4 — a CONTAINED relative hooks-root symlink, which src/hooks.ts:359-360
   // recreates in the candidate rather than dereferencing.
   //
-  // The target must live under `assets/`. src/commands/prepare.ts:28-34 copies
+  // The target must live under `assets/`. COPY_PATHS copies
   // exactly five paths into the candidate — skills, assets, LICENSE,
   // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
   // directory would dangle in the candidate and fail the SECOND

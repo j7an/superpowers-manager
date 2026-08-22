@@ -5,7 +5,7 @@
 // runPrepare is called in a child process, not in the test process, because
 // ctx.env does not govern what its dependencies actually run under: runGit
 // (src/git.ts:22) spreads process.env and never sees ctx.env, and runBuild's
-// os.tmpdir() (src/adapter.ts:335) reads process.env too. Spawning with the
+// `withWorkspace(tmpdir(), …)` reads process.env too. Spawning with the
 // case's environment as the child's REAL process.env is what makes PATH,
 // TMPDIR, and git configuration hermetic.
 //

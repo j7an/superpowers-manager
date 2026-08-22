@@ -90,7 +90,8 @@ async function saveSelection(c, record) {
 
 /**
  * A per-case copy of the shared fixture upstream. `UPSTREAM` is built once and
- * shared across the whole run (tests/bin/lifecycle-fixture.js:91-133), so a
+ * shared across the whole run (tests/bin/lifecycle-fixture.js's `buildUpstream`),
+ * so a
  * case that renames its source away must rename a copy — renaming the original
  * would break every concurrently running case.
  * @param {CaseEnv} c
@@ -169,7 +170,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
   // A TAG pin, not the shell's all-three-equal raw-commit pin: it makes
   // requested_ref/resolved_ref ("v1.0.0") textually different from
   // desired_commit and saved_commit (the 40-hex SHA), so a swapped field in
-  // the EffectiveSelection -> ProbeFacts mapping (src/commands/probe.ts:317-342)
+  // the EffectiveSelection -> ProbeFacts mapping (`gatherProbe`)
   // cannot pass. The schema forbids requested_ref and resolved_ref differing
   // for a tag pin (src/selection.ts:173-176), so those two are the one pair no
   // valid fixture can tell apart.
@@ -302,8 +303,8 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
   assert.equal(result.stdout.includes(`saved_source=${source}\n`), true);
   // track-latest is the one saved mode that still resolves through Git, and it
   // resolved: requested_ref, resolved_ref, and desired_commit are three
-  // different values here, which is what makes the mapping at
-  // src/commands/probe.ts:317-323 discriminating.
+  // different values here, which is what makes `gatherProbe`'s `collect`
+  // mapping discriminating.
   assert.match(result.stdout, /^requested_ref=latest-release$/m);
   assert.match(result.stdout, /^resolved_ref=v1\.0\.0$/m);
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
