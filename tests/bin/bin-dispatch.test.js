@@ -91,16 +91,17 @@ void test("routing: `pin` succeeds in-process", () => {
 // It reached src/cli.ts's `!handler` guard by patching a case-local copy of the
 // compiled DISPATCH table, flipping a "spawn" entry to "in-process" so the name
 // dispatched was one IN_PROCESS_HANDLERS does not carry. At 8/8 in-process
-// there is no "spawn" entry left to flip, and `patchDispatch` rejected a no-op
+// there was no "spawn" entry left to flip, and `patchDispatch` rejected a no-op
 // override by design, so the fixture could not construct the condition at all.
 // The test's own comment had already scheduled this: "in slice 4 it throws
 // instead, which is when this test should be deleted."
 //
 // Decision (Step 5a, option (b)): the compile-time exhaustiveness guard —
-// `IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler>` keyed by
-// exactly the DISPATCH entries reading "in-process" — is accepted as the whole
-// protection. Reaching the runtime guard would now require surgically deleting
-// a key from a compiled registry, which asserts only that a hand-mutilated
+// `IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler>` (slice 6 retyped
+// it from `Record<InProcessCommand, InProcessHandler>`; the guarantee is
+// unchanged, the same decision one indirection shorter) — is accepted as the
+// whole protection. Reaching the runtime guard would now require surgically
+// deleting a key from a compiled registry, which asserts only that a hand-mutilated
 // build reports rather than crashes. `src/cli.ts`'s `!handler` guard STAYS as
 // an unreachable, documented fail-closed backstop; it is three lines and its
 // removal would trade a named diagnostic for a TypeError.

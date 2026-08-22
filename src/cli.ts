@@ -55,43 +55,19 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   "uninstall",
 ];
 
-export type DispatchMode = "spawn" | "in-process";
-
-// The PR 11.5 migration is complete: every command dispatches in-process, and
-// `buildSpawn`, `discoverShell` and `GIT_BASH_CANDIDATES` were deleted with the
-// last "spawn" entry (slice 4b). This table SURVIVES that deletion — it is not
-// vestigial. It keys `InProcessCommand`, which is what makes an unregistered
-// handler a compile error; `tests/bin/readme-requirements.test.js:65` derives
-// the README's POSIX `sh` column from it, and `tests/baseline/cli-parity.test.js`'s
-// `CLI-PREFLIGHT-01` derives the same column a second way; and
-// `tests/bin/dispatch-fixture.js:119-121` derives `DISPATCH_COMMANDS`, the
-// subcommand list that fixture stubs, from its keys. Slice 6 deletes it with
-// `DispatchMode` once the README table goes.
-const DISPATCH = {
-  pin: "in-process",
-  "track-latest": "in-process",
-  unpin: "in-process",
-  prepare: "in-process",
-  probe: "in-process",
-  install: "in-process",
-  update: "in-process",
-  uninstall: "in-process",
-} as const satisfies Record<Subcommand, DispatchMode>;
-
-type InProcessCommand = {
-  [K in Subcommand]: (typeof DISPATCH)[K] extends "in-process" ? K : never;
-}[Subcommand];
-
 type InProcessHandler = (
   argv: string[],
   ctx: CommandContext,
 ) => Promise<number>;
 
-// Keyed by exactly the DISPATCH entries that read "in-process". Flipping an
-// entry without registering its handler is now a compile error, not a
-// runtime surprise. Requires DISPATCH to be declared `as const` so its value
-// types are literals rather than widened to DispatchMode.
-const IN_PROCESS_HANDLERS: Record<InProcessCommand, InProcessHandler> = {
+// Keyed by Subcommand itself. Until slice 6 this was keyed by a mapped type
+// that filtered Subcommand through a DISPATCH table of "spawn" | "in-process"
+// literals; with every command in-process that filter was the identity, so the
+// table, its mode union and the mapped type were one indirection with nothing
+// left to discriminate. The guarantee is unchanged and is the whole protection
+// — tests/bin/bin-dispatch.test.js records that decision: a Subcommand added
+// without a handler registered here is a compile error, not a runtime surprise.
+const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
   pin: runPin,
   "track-latest": runTrackLatest,
   unpin: runUnpin,
@@ -327,15 +303,14 @@ async function main(): Promise<never> {
     process.exit(1);
   }
   // Dispatch is no longer a branch: slice 4b flipped the last spawned command,
-  // so every subcommand runs here. `parsed.cmd` is the wider Subcommand and the
-  // registry is keyed by the narrower InProcessCommand, so this cast is
-  // required to index it. The exhaustiveness check on IN_PROCESS_HANDLERS makes
-  // an unregistered handler a compile error through the real DISPATCH table;
-  // the `!handler` guard below is the runtime backstop for that guarantee. It
-  // is unreachable through production code, and no fixture reaches it either
-  // now that DISPATCH is 8/8 in-process (slice 4b, Task 8, Step 5a).
-  const handler: InProcessHandler | undefined =
-    IN_PROCESS_HANDLERS[parsed.cmd as InProcessCommand];
+  // so every subcommand runs here, and slice 6 deleted the DISPATCH table whose
+  // only remaining job was narrowing this registry's key type. `parsed.cmd` is
+  // a Subcommand and the registry is keyed by Subcommand, so no cast is needed.
+  // The exhaustiveness check on IN_PROCESS_HANDLERS makes an unregistered
+  // handler a compile error; the `!handler` guard below is the runtime backstop
+  // for that guarantee. It is unreachable through production code, and no
+  // fixture reaches it either.
+  const handler: InProcessHandler | undefined = IN_PROCESS_HANDLERS[parsed.cmd];
   if (!handler) {
     console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
     process.exit(1);
@@ -372,7 +347,6 @@ export {
   preflight,
   usage,
   main,
-  DISPATCH,
 };
 
 if (isMain(import.meta.filename, process.argv[1])) {

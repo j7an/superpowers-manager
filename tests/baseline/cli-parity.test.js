@@ -19,8 +19,6 @@ import test from "node:test";
 
 import {
   COMMANDS,
-  DISPATCH,
-  IN_PROCESS_COMMANDS,
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
@@ -152,21 +150,6 @@ function assertCleanResult(result, status = 0) {
   assert.equal(result.error, undefined);
   assert.equal(result.signal, null);
   assert.equal(result.status, status);
-}
-
-/**
- * @param {Sandbox} sandbox
- * @param {string} command
- * @param {string[]} argv
- */
-function assertOnlyDispatch(sandbox, command, argv) {
-  assert.deepEqual(
-    readDispatchLog(sandbox).map(({ command: name, argv: args }) => ({
-      command: name,
-      argv: args,
-    })),
-    [{ command, argv }],
-  );
 }
 
 /**
@@ -780,24 +763,26 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     ["uninstall", ["--purge", "arbitrary value"]],
   ]);
   assert.deepEqual([...cases.keys()], COMMANDS);
-  // The production DISPATCH keys and the test-side COMMANDS list must agree
-  // as sets in both directions. COMMANDS is hand-maintained while DISPATCH is
-  // keyed by the production Subcommand union, so either one can gain or lose
-  // an entry the other doesn't have; a one-directional `includes` check
-  // cannot catch that because IN_PROCESS_COMMANDS is filtered from COMMANDS
-  // by construction and is therefore always a subset of it.
-  assert.deepEqual(Object.keys(DISPATCH).sort(), [...COMMANDS].sort());
+  // The production subcommand set and the test-side COMMANDS list must agree as
+  // sets in both directions. COMMANDS is hand-maintained; commandRequirements
+  // returns Record<Subcommand, string[]>, typed by the production Subcommand
+  // union and therefore exhaustively checked, so either list can gain or lose an
+  // entry the other does not have. A one-directional `includes` check cannot
+  // catch that. This replaces an identical assertion over Object.keys(DISPATCH),
+  // retired with the table in slice 6; the anchor moved, the property did not.
+  assert.deepEqual(
+    Object.keys(commandRequirements({})).sort(),
+    [...COMMANDS].sort(),
+  );
 
-  // PR 11.5 slice 4b, Task 8. Every command is in-process now, so
-  // IN_PROCESS_COMMANDS covers all eight and the loop below would take its
-  // in-process branch for these three as well — but they cannot reach
-  // `assertCleanResult` in a shared sandbox: each one runs a real probe, a real
-  // prepare and a real Codex mutation, and the shared sandbox's state carries
-  // between iterations. They are handled after the loop instead, one fresh
-  // sandbox each, and pinned by the exact `codex` invocation sequence they
-  // produce. That sequence is what replaces the dispatch record's `command`
-  // field as the per-command discriminator: it differs for all three, so a
-  // routing regression that ran the wrong module is still caught.
+  // PR 11.5 slice 4b, Task 8. Every command is in-process now, but these three
+  // cannot reach `assertCleanResult` in a shared sandbox: each one runs a real
+  // probe, a real prepare and a real Codex mutation, and the shared sandbox's
+  // state carries between iterations. They are handled after the loop instead,
+  // one fresh sandbox each, and pinned by the exact `codex` invocation sequence
+  // they produce. That sequence is what replaces the dispatch record's
+  // `command` field as the per-command discriminator: it differs for all
+  // three, so a routing regression that ran the wrong module is still caught.
   //
   // Restated here rather than derived, because no production table records
   // "needs its own sandbox". Staleness is loud, not silent: a name that stopped
@@ -853,20 +838,13 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
                 }
               : dispatchEnvironment(sandbox);
       const result = runCli(sandbox, [command, ...argv], overrides);
-      if (IN_PROCESS_COMMANDS.includes(command)) {
-        // An in-process command must reach its module and dispatch NOTHING.
-        // Task 3 removed every scripts/<command> regression stub, so a
-        // regression that re-spawns a script fails with ENOENT before this
-        // weaker empty-dispatch-log check; the log assertion remains real.
-        assertCleanResult(result);
-        const dispatched = readDispatchLog(sandbox).map((e) => e.command);
-        assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
-      } else {
-        assertCleanResult(result);
-        assert.equal(result.stdout, "");
-        assert.equal(result.stderr, "");
-        assertOnlyDispatch(sandbox, command, argv);
-      }
+      // An in-process command must reach its module and dispatch NOTHING.
+      // Task 3 removed every scripts/<command> regression stub, so a
+      // regression that re-spawns a script fails with ENOENT before this
+      // weaker empty-dispatch-log check; the log assertion remains real.
+      assertCleanResult(result);
+      const dispatched = readDispatchLog(sandbox).map((e) => e.command);
+      assert.deepEqual(dispatched, [], `${command} must not spawn a script`);
     }
   });
 
@@ -1132,36 +1110,27 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 });
 
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
-  // Derived, never restated. The hand-written map this replaces encoded
-  // DISPATCH a second time through the presence of "sh", forty lines below
-  // this same file's correct derived usage.
+  // Derived, never restated. The hand-written map this replaces spelled out
+  // each command's tools by hand, so production could change its requirements
+  // while this expectation stayed silently stale; it also encoded the retired
+  // DISPATCH table a second time through the presence of "sh".
   //
   // commandRequirements(env) (src/cli.ts:227) takes the environment — `prepare`
   // requires python3 only when SUPERPOWERS_VALIDATOR names one — and returns
   // the whole Record<Subcommand, string[]>; index it per command. These cases
   // configure no validator, so the empty env is the right derivation for them.
   const declared = commandRequirements({});
-  // DISPATCH is declared `as const` in production, so its value types are
-  // literals; at 8/8 "in-process" (PR 11.5 slice 4b) a direct `=== "spawn"` is
-  // TS2367 under `pnpm run typecheck:js`. The derivation is kept rather than
-  // collapsed to `[...declared[key]]`, for the same reason
-  // tests/bin/readme-requirements.test.js keeps its copy: it is what would put
-  // `sh` back into a command's requirement list if an entry ever went back to
-  // "spawn", with no edit here.
-  /** @type {Record<string, import("../../src/cli.js").DispatchMode>} */
-  const dispatch = DISPATCH;
+  // DISPATCH and its "spawn" | "in-process" split are gone (slice 6): there is
+  // no second mode this map could encode any more, so it is a plain copy of
+  // `declared` keyed the same way. This map has exactly one source now,
+  // commandRequirements(env).
   const requirements = new Map(
     COMMANDS.map((command) => {
       // COMMANDS is a plain string[]; CLI-COMMANDS-01 above asserts it agrees
-      // with Object.keys(DISPATCH) as a set in both directions, which is what
-      // makes this narrowing sound rather than assumed.
-      const key = /** @type {keyof typeof DISPATCH} */ (command);
-      return [
-        command,
-        dispatch[key] === "spawn"
-          ? [...declared[key], "sh"]
-          : [...declared[key]],
-      ];
+      // with Object.keys(commandRequirements({})) as a set in both directions,
+      // which is what makes this narrowing sound rather than assumed.
+      const key = /** @type {keyof typeof declared} */ (command);
+      return [command, [...declared[key]]];
     }),
   );
   // Every tool any command in `requirements` can require. Used below to give
@@ -1200,9 +1169,7 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
         const diagnostic =
           tool === "codex"
             ? "error: required command not found: codex — install the Codex CLI or set SUPERPOWERS_CODEX\n"
-            : tool === "sh"
-              ? "error: required command not found: sh\n"
-              : `error: required command not found: ${tool} — install ${tool} and re-run\n`;
+            : `error: required command not found: ${tool} — install ${tool} and re-run\n`;
         assert.equal(result.stderr, diagnostic);
         assert.deepEqual(readDispatchLog(sandbox), []);
       });

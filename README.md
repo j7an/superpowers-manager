@@ -46,16 +46,16 @@ preflight before any dispatch. This table is checked against production by
 change, in the same pull request.
 
 <!-- requirements:begin -->
-| Command | git | Python 3 | POSIX `sh` | Codex CLI |
-|---|---|---|---|---|
-| `pin` | yes | no | no | no |
-| `track-latest` | no | no | no | no |
-| `unpin` | no | no | no | no |
-| `prepare` | yes | only with SUPERPOWERS_VALIDATOR | no | no |
-| `probe` | yes | no | no | yes |
-| `install` | yes | no | no | yes |
-| `update` | yes | no | no | yes |
-| `uninstall` | no | no | no | yes |
+| Command | git | Python 3 | Codex CLI |
+|---|---|---|---|
+| `pin` | yes | no | no |
+| `track-latest` | no | no | no |
+| `unpin` | no | no | no |
+| `prepare` | yes | only with SUPERPOWERS_VALIDATOR | no |
+| `probe` | yes | no | yes |
+| `install` | yes | no | yes |
+| `update` | yes | no | yes |
+| `uninstall` | no | no | yes |
 <!-- requirements:end -->
 
 See `docs/baseline/behavioral-inventory.md`'s `CLI-PREFLIGHT-01` for the
