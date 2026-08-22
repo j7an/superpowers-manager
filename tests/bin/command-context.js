@@ -4,8 +4,8 @@
 // about which adapter operations were issued -- not a text search over a log
 // file that stops existing when the seam does.
 //
-// Classes 3 and 4 get STRONGER here. Today they assert the string
-// "update-control" is absent from adapter.log; with a double they assert no
+// Classes 3 and 4 got STRONGER here. They used to assert the string
+// "update-control" was absent from adapter.log; with a double they assert no
 // `inspect --view update-control` call was made.
 
 import assert from "node:assert/strict";

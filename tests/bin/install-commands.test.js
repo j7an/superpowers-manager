@@ -242,10 +242,6 @@ function copyFallbackManifestIntoCandidate(argv) {
  * Under per-case isolation that state has to be built, and running prepare is
  * exactly how the driver built it.
  *
- * prepare never inspects update control (proved by the case at :321-336), so
- * this leaves `update-control-count` untouched and the later count assertions
- * mean what they meant in the shell.
- *
  * Converted (Task 6, D4): calls `runPrepare` in-process with its own injected
  * recording adapter. "prepare did not inspect update control" is now a
  * property of the double's own construction — it answers ONLY a `build` call
@@ -335,9 +331,6 @@ function assertNoPrepareRan(out) {
  * That is not hypothetical: the `^build |^install ` negative at :615-619 fails
  * against it, and would have to be weakened to accommodate a line the shell
  * never saw.
- *
- * Only the two logs. `reset` also cleared `update-control-count`, and
- * `prepareGeneratedTree` already asserts prepare left none.
  * @param {import("./lifecycle-fixture.js").CaseEnv} c
  * @returns {void}
  */
@@ -1573,20 +1566,27 @@ void describe("install commands", { concurrency: true }, () => {
   //
   // The subject must not reach the fake adapter at all. install-fakes.js's
   // adapter role refuses unconditionally (tests/bin/lifecycle-fakes.js's
-  // tripwireTriggered). What the SUBJECT does is unaffected: it dispatches
-  // in-process, and the SPW_ADAPTER seam runScript once defaulted was retired
-  // together with the fixture machinery that selected the fake's behaviour.
+  // tripwireTriggered). The subject itself dispatches in-process, and the
+  // SPW_ADAPTER seam runScript once defaulted was retired together with the
+  // fixture machinery that selected the fake's behaviour.
   //
-  // The case therefore asserts two halves, and the second is what makes the
-  // first mean anything. A regression that made the port spawn the adapter
-  // again would leave a line in adapter.log and the tripwire's message on
-  // stderr — but `readLog` returns [] for a missing file, so the emptiness
-  // check alone would also pass if the tripwire had been disarmed, or if
-  // c.adapterLog were simply not the path this case's fake writes to. The
-  // armed-witness half runs that fake for real, through the same executable
-  // and environment a regressed spawn would have used, and pins the refusal
-  // it produces. Disarm the tripwire and the witness dies; that is the
-  // property the emptiness check borrows.
+  // Read the emptiness half for what it now is. With the seam retired, no
+  // channel points the subject at c.adapterBin: runScript's env allowlist no
+  // longer carries SPW_ADAPTER, the case's bin/ directory is never on the
+  // subject's PATH, and nothing under src/ reads an environment variable
+  // naming an adapter executable. A spawn is therefore unreachable, not merely
+  // unobserved, so an empty c.adapterLog is a residual structural check rather
+  // than a spawn detector. The live guarantee that SPW_ADAPTER cannot re-enter
+  // src/ is tests/unit/ctx-adapter-provenance.test.js (registered in
+  // tests/suites.json), not this case.
+  //
+  // The armed-witness half below is what still carries weight, and what it
+  // proves is bounded: run this case's own fake adapter for real and it
+  // refuses with the tripwire's exact status and message, and the refusal
+  // lands in c.adapterLog. That is a claim about the FIXTURE. It is what keeps
+  // c.adapterLog a path something writes to, so the emptiness half above is
+  // not vacuous — and it is the property the seam-retirement mutation gate
+  // measured. Neither half detects a regressed spawn any more.
   void test("fresh install never reaches the fake adapter (row 18)", async () => {
     const c = installCase();
     const result = await runScript(c, "install");

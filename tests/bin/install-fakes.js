@@ -10,8 +10,8 @@
 //
 // Slice 4a also moved the outer shell — state guard, config load, role
 // dispatch and tripwire — into runFake. What stays here is exactly
-// what must NOT be shared: this fake's own command branches and both of its
-// exhaustiveness traps.
+// what must NOT be shared: this fake's own command branches and its
+// exhaustiveness trap.
 
 import {
   cpSync,

@@ -2114,8 +2114,8 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * `inspect --view update-control`: the double intercepts that one view at the
  * `ctx.adapter` call site and uses no adapter-side fixture mode at all. Its
  * subcases are still built by THIS helper, and every operation other than the
- * intercepted view goes to the real runAdapter, which execs the fake this
- * helper wrote.
+ * intercepted view goes to the real runAdapter, which execs the case's fake
+ * `codex` — never a fake adapter. `createCase` is what writes both fakes.
  *
  * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
  * discipline — `nextPluginList` (tests/bin/lifecycle-fakes.js:148), which
@@ -2305,9 +2305,9 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
   }
 
   {
-    // Delegate mode (the default): the real adapter's update-control view
-    // always answers "managed" (src/adapter.ts:782), which is exactly what
-    // this branch needs, so no interception is wired at all.
+    // The real adapter's update-control view always answers "managed"
+    // (`runInspect` in src/adapter.ts), which is exactly what this branch
+    // needs, so no interception is wired at all.
     const c = lifecycleCodexCase({ fakes: "install" });
     const result = await runScript(c, "update");
     const out = result.stdout + result.stderr;
