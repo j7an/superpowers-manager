@@ -87,7 +87,7 @@ divergence exists.
 
 Not a registered behavior ID: `BUILDER-PERMISSION-01` matches no pattern in
 `docs/baseline/traceability.md`'s `ID_PATTERN`
-(`tests/baseline/traceability.test.js:15`), and the shell's own
+(`tests/baseline/traceability.test.js`), and the shell's own
 `permission_root`/`permission_target`/`permission_parent` variables are never
 referenced again after this block. It exercises
 `tests/builders/baseline-scenario.sh`'s `permission-denied` scenario, not
@@ -198,7 +198,7 @@ referenced again after this block. It exercises
 ### Arbitrary ref and raw-commit resolution (`:255-280`)
 
 Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
-`tests/baseline/traceability.test.js:15`'s `ID_PATTERN` either.
+`tests/baseline/traceability.test.js`'s `ID_PATTERN` either.
 
 37. An environment ref containing a shell glob character resolves as data,
     not as a pattern (`:256-264`). Port:
