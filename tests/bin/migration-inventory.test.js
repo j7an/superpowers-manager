@@ -596,7 +596,20 @@ for (const name of Object.keys(DECLARED)) {
     assert.equal(
       frozenDigest(frozenLines),
       digests[name],
-      `${name}: frozen content digest disagrees with the registry`,
+      `${name}: frozen content digest disagrees with the registry. ` +
+        `The computed value is the "actual" side above. Do NOT simply paste it into ` +
+        `tests/migration-inventory-digests.json. The frozen historical record is ` +
+        `tests/migration-inventory/${name}; tests/migration-inventory-digests.json is ` +
+        `only its digest registry, and the two change together in one commit. ` +
+        `Rewriting either is a re-freeze that a ` +
+        `REVIEWER must authorize (AGENTS.md, "Update documentation and contract ` +
+        `tests") -- a matching digest alone does not. The commit OR the pull request ` +
+        `must name the affected file, the reason, and the supporting evidence. ` +
+        `A green gate checks header syntax, ` +
+        `declared membership, canonicalized body content and live port counts, among ` +
+        `other structural checks. It does NOT establish H1 identity, commit ancestry, ` +
+        `object existence, or path correctness — a matching digest is not evidence ` +
+        `that the recorded history is true.`,
     );
 
     const declarationMatches = [...source.matchAll(DECLARATION)];
