@@ -423,8 +423,9 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       } catch {
         // ctx.adapter reports CONTROLLED failures by return value
         // (src/adapter-result.ts:32-35) but still THROWS for a
-        // non-AdapterFailure cause (src/adapter.ts:1009). That cause is by
-        // construction the one failure src/adapter.ts declined to own, so its
+        // non-AdapterFailure cause (runAdapter's closing `throw cause`,
+        // src/adapter.ts). That cause is by construction the one failure
+        // src/adapter.ts declined to own, so its
         // text must never reach ctx.stderr. Caught here rather than in
         // runPrepare's outer catch, the same treatment
         // src/commands/probe.ts:210-232 gives it.
@@ -569,9 +570,9 @@ export async function runPrepare(
     // only, so it bounds how much of that text lands, not what it may
     // contain.
     //
-    // runAdapter's rethrow (src/adapter.ts:1009) does NOT arrive here -- the
-    // call site catches it and converts it to a hand-written message per
-    // AGENTS.md's reader-diagnostics rule.
+    // runAdapter's closing `throw cause` (src/adapter.ts) does NOT arrive
+    // here -- the call site catches it and converts it to a hand-written
+    // message per AGENTS.md's reader-diagnostics rule.
     //
     // gatherPrepare performs no writes of its own, so this catch cannot also be
     // reached by an EPIPE from prepare's own output: every write below runs

@@ -86,9 +86,11 @@ Codex below describe the product integration, not a required agent harness.
   - `src/generated-plugin.ts` — its `ResolutionFailure`/`InspectionFailure`/
     `EnumerationFailure` types are internal control flow, carrying a path and
     no operator-facing prose. The diagnostics it pushes onto its `errors`
-    array are operator-facing, but coverage is partial: 56 push sites against
-    29 assertions, so an editor must check the specific string rather than
-    assume the suite will catch them.
+    array are operator-facing, but coverage is partial and the pinning is
+    split across two suites: `tests/unit/generated-plugin.test.js` and
+    `tests/baseline/generated-plugin-corpus.test.js`, which drives the
+    validator CLI and pins some strings the unit suite does not. Search both
+    for the specific string rather than assuming one suite will catch it.
 
   Re-emitting a subordinate module's own diagnostic onto that stream is the
   sanctioned form of interpolation, but only because it obliges the callee to
