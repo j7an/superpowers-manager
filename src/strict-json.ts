@@ -185,9 +185,9 @@ class Parser<T> {
         // Last value wins AT THE FIRST KEY'S POSITION. Verified against
         // CPython 2026-07-31: json.loads('{"a":1,"b":2,"a":3}') reserializes
         // as {"a": 3, "b": 2} — the dict keeps the original slot. Pushing a
-        // new entry instead would satisfy the "renamed" assertion at
-        // tests/test_prepare_with_fake_upstream.sh:660 while silently
-        // reordering the output.
+        // new entry instead would satisfy tests/unit/strict-json.test.js's
+        // "last-wins replaces in place, keeping the first key's position"
+        // while silently reordering the output.
         entries[previous] = [key, value];
       }
       this.skipWhitespace();

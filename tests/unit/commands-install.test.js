@@ -441,8 +441,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // the two is live -- the same blind spot that let the stage-1 re-inspection's
   // `"unknown"` arm survive as a fail-open. Distinct from the empty-state gate
   // at :371-374, which fires first and has its own text: "chaos" is non-empty,
-  // so it clears that gate and reaches requireNoLegacyState's catch-all
-  // (src/lifecycle.ts:57).
+  // so it clears that gate and reaches requireNoLegacyState's catch-all arm.
   const out = sink();
   const err = sink();
   const { adapter, calls } = scriptedAdapter([
@@ -670,15 +669,15 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
 
 void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested", async () => {
   // The sibling case above drives requireNoLegacyState's `"blocked"` arm; this
-  // one drives its `"unknown"` arm (src/lifecycle.ts:57, reached for any
-  // identity_state outside the four known ones). Both arms need their own
-  // case: a mutant that disables BOTH at once dies to the `"blocked"` case
-  // alone, which proves only that one of the two is live. Disabling just the
-  // `"unknown"` arm previously survived the whole suite, and the survivor was
-  // a live fail-open -- re-inspect, receive an unrecognised answer, then
-  // install anyway and exit 0. gatherProbe's own ownership inspect reports
-  // "manager" here, so the unrecognised value is the RE-inspection's own
-  // evidence, not the outer pre-workspace check's.
+  // one drives its `"unknown"` arm (reached for any identity_state outside the
+  // four known ones). Both arms need their own case: a mutant that disables
+  // BOTH at once dies to the `"blocked"` case alone, which proves only that one
+  // of the two is live. Disabling just the `"unknown"` arm previously survived
+  // the whole suite, and the survivor was a live fail-open -- re-inspect,
+  // receive an unrecognised answer, then install anyway and exit 0.
+  // gatherProbe's own ownership inspect reports "manager" here, so the
+  // unrecognised value is the RE-inspection's own evidence, not the outer
+  // pre-workspace check's.
   const out = sink();
   const err = sink();
   const { adapter, calls } = scriptedAdapter([
@@ -783,8 +782,10 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // spw_verify_installed_fingerprint unconditionally (scripts/install:57) and
 // printed BOTH lines — the adapter's own error and
 // scripts/core/lifecycle.sh:92's. The flip surfaced it: the shell-parity case
-// at tests/bin/install-commands.test.js:1407, green against /bin/sh through
-// this same channel before Task 8, went red the moment the subject changed.
+// in tests/bin/install-commands.test.js titled "a failed fingerprint
+// inspection is reported as an inspection failure (:687-700)", green against
+// /bin/sh through this same channel before Task 8, went red the moment the
+// subject changed.
 // Both lines are asserted here, in order, so the divergence cannot come back in
 // either direction.
 void test("stage 4 (post-install inspect fingerprint) failure reports the replayed diagnostic AND the verification failure", async () => {

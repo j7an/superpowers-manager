@@ -51,7 +51,8 @@ const SIGNAL_CHILD = fileURLToPath(
 );
 
 // A static import from `dist/` fails the `typecheck:js` gate the same way
-// tests/baseline/selection-location.test.js:53-57 documents: dist output has
+// tests/baseline/selection-location.test.js documents beside its own
+// `effective-selection.js`/`selection.js` dynamic imports: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
 // implicit `any`. Load the built module dynamically while typing it against
 // its `src/` source instead.

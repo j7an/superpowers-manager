@@ -163,7 +163,7 @@ export function formatHuman(f: ProbeFacts): string {
 // response, so adapter messages reached the operator on their declared streams
 // in array order, and a controlled failure printed `error:` plus one `hint:`
 // per hint. DIAG-ADAPTER-01 retains that contract
-// (docs/baseline/protocol-disposition.md:53); dropping it here would be a
+// (docs/baseline/protocol-disposition.md); dropping it here would be a
 // silent diagnostics regression, not a simplification.
 //
 // Interpolating error.message and each hint is the sanctioned form (AGENTS.md):
@@ -430,17 +430,19 @@ export async function runProbe(
     // containing the harm to one line of git text rather than the arbitrarily
     // many scripts/probe's `set -eu` plumbing allowed.
     //
-    // fetchExactCommit is deliberately NOT in this list, unlike
-    // src/commands/prepare.ts:529's exception 2. Its only callers are
-    // src/upstream-cli.ts:83 and src/commands/prepare.ts:301, so probe never
-    // reaches it and its splice sites cannot appear on this stream. Do not
-    // add it back by symmetry with prepare.
+    // fetchExactCommit is deliberately NOT in this list, unlike prepare's
+    // fetchExactCommit exception, which runPrepare's catch block documents.
+    // Its only callers are src/upstream-cli.ts:83 and gatherPrepare's own
+    // call in src/commands/prepare.ts (git grep -n fetchExactCommit -- src/
+    // is the check that keeps "only" true), so probe never reaches it and
+    // its splice sites cannot appear on this stream. Do not add it back by
+    // symmetry with prepare.
     //
     // generatedCommitOrEmpty is not in this list either, and -- contrary to
     // what this comment used to claim -- it is not a source of hand-written
-    // SafetyErrors: it cannot throw at all. src/provenance.ts:105 delegates to
-    // readGeneratedCommitLenient (src/provenance.ts:78-94), which catches
-    // every failure and returns "".
+    // SafetyErrors: it cannot throw at all. generatedCommitOrEmpty (in
+    // src/provenance.ts) delegates to readGeneratedCommitLenient, which
+    // catches every failure and returns "".
     //
     // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:1009) does
     // NOT reach here: inspect() catches it and converts it to a hand-written

@@ -338,8 +338,8 @@ export async function runUninstall(
   ctx: CommandContext,
 ): Promise<number> {
   // scripts/uninstall never reads "$@", so extra arguments are silently
-  // ignored -- the same asymmetry runPrepare documents
-  // (src/commands/prepare.ts:507).
+  // ignored -- the same asymmetry runPrepare documents at its own
+  // `void argv;`.
   void argv;
   let run: GatherRun;
   try {

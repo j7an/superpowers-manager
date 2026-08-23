@@ -177,9 +177,9 @@ function git(cwd, args) {
 }
 
 /**
- * A local upstream repository carrying every REQUIRED_UPSTREAM path
- * (src/commands/prepare.ts:21-26), so runPrepare's clone-checkout-copy
- * pipeline can succeed without a network. Hermetic: a local clone, no remote.
+ * A local upstream repository carrying every REQUIRED_UPSTREAM path, so
+ * runPrepare's clone-checkout-copy pipeline can succeed without a network.
+ * Hermetic: a local clone, no remote.
  *
  * @returns {{ path: string, commit: string }}
  */
@@ -200,9 +200,9 @@ function makeUpstreamRepo() {
 }
 
 /**
- * runPrepare's fallback manifest template at its default location
- * (src/commands/prepare.ts:262-269). Read before the adapter build, so the
- * atomic swap that later replaces the plugin root does not race it.
+ * runPrepare's fallback manifest template at its default location, set by
+ * gatherPrepare's manifestTemplate resolution. Read before the adapter build,
+ * so the atomic swap that later replaces the plugin root does not race it.
  *
  * @param {string} root
  */

@@ -55,7 +55,8 @@ const SIGNAL_CHILD = fileURLToPath(
 );
 
 // A static import from `dist/` fails the `typecheck:js` gate the same way
-// tests/baseline/selection-location.test.js:53-57 documents: dist output has
+// tests/baseline/selection-location.test.js documents beside its own
+// `effective-selection.js`/`selection.js` dynamic imports: dist output has
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
 // implicit `any`. Load the built modules dynamically while typing them
 // against their `src/` sources instead.
@@ -91,7 +92,7 @@ process.on("exit", () => {
 
 // Per-invocation identity flags only. These write no git config at any scope
 // and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
-// convention tests/baseline/ref-resolution.test.js:78-83 documents — a
+// convention `IDENTITY` in tests/baseline/ref-resolution.test.js documents — a
 // deliberate departure from tests/test_selection_commands.sh:20-21's own
 // `git config user.email`/`user.name` (repo-scoped, but still a config
 // write this port avoids on principle).
@@ -365,8 +366,8 @@ function assertWorkspaceParentEmpty(dir) {
  * Asserts a workspace-parent directory holds exactly the one sibling file
  * this suite seeds it with, byte-for-byte — the pairing
  * tests/test_selection_commands.sh:338-339 checks twice (content, then
- * count), and the same helper shape
- * tests/baseline/ref-resolution.test.js:190-193 already uses for
+ * count), and the same shape as `assertOnlySiblingKept` in
+ * tests/baseline/ref-resolution.test.js, which that suite already uses for
  * fetchExactCommit's cleanup proofs.
  * @param {string} workspace
  */
@@ -963,11 +964,13 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // set to the empty string, matching runTrackLatest's `||` fallback — see
   // src/commands/track-latest.ts:31 — not the variable left absent, which
   // the shell's own `${VAR:-default}` treats identically but this project
-  // otherwise treats presence-vs-emptiness as distinct, e.g.
-  // src/effective-selection.ts:20-28), which this repository's shell driver
-  // only reached by stripping PATH down to a Git-less stub (:420-428) — moot
-  // now that runTrackLatest never spawns a process to begin with (see this
-  // file's header comment).
+  // otherwise treats presence-vs-emptiness as distinct — e.g. the
+  // presence branch in `selectionConfigDir`, where `requireAbsolute`
+  // then rejects an empty value rather than letting it fall through
+  // to XDG), which this repository's shell driver only reached by
+  // stripping PATH down to a Git-less stub (:420-428) — moot now that
+  // runTrackLatest never spawns a process to begin with (see this file's
+  // header comment).
   {
     const { statePath, ctx } = freshContext("track-official", {
       SUPERPOWERS_UPSTREAM_URL: "",

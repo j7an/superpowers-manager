@@ -174,9 +174,9 @@ void test("a thrown selection failure is an operational failure", async () => {
 // did two things the first draft of this port dropped: replay(messages) at
 // :235-238 wrote each message to its own declared stream in array order, and
 // :269-272 printed `error: <message>` followed by one `hint: <h>` per hint.
-// DIAG-ADAPTER-01 is a retained contract (docs/baseline/protocol-disposition.md:53).
-// These tests hold it at the command level; tests/unit/adapter.test.js holds
-// it at the outcome level.
+// DIAG-ADAPTER-01 is a retained contract, recorded in
+// docs/baseline/protocol-disposition.md. These tests hold it at the command
+// level; tests/unit/adapter.test.js holds it at the outcome level.
 
 /** @param {Partial<import("../../src/adapter-result.js").AdapterOutcome>} over */
 function outcomeWith(over) {

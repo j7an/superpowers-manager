@@ -505,8 +505,8 @@ void test("prepare clones once and then fetches into the same cache", async () =
 
   const second = await prepare(c, { SUPERPOWERS_REF: REFS.fallback });
   assert.equal(second.status, 0, second.stderr);
-  // Same inode: the second run took the fetch branch
-  // (src/commands/prepare.ts:309) instead of removing and re-cloning.
+  // Same inode: the second run took the fetch branch (`gatherPrepare`'s
+  // cached-clone fetch branch) instead of removing and re-cloning.
   assert.equal(statSync(cacheRepo(c)).ino, inode);
 });
 
@@ -532,11 +532,11 @@ void test("prepare rejects an upstream missing any required path", async () => {
       SUPERPOWERS_UPSTREAM_URL: source,
       SUPERPOWERS_REF: commit,
     });
-    // src/commands/prepare.ts:329-334 names only the source when a clone fails
-    // and discards git's output by contract, so an unexpected failure here
-    // cannot say why on its own. Attach the fixture's own view of the source —
-    // computed only once the expectation has already failed, so a passing run
-    // pays for no extra git processes.
+    // The `cannot clone upstream repo` diagnostic names only the source when
+    // a clone fails and discards git's output by contract, so an unexpected
+    // failure here cannot say why on its own. Attach the fixture's own view
+    // of the source — computed only once the expectation has already failed,
+    // so a passing run pays for no extra git processes.
     const expected = `error: required upstream path missing: ${label}\n`;
     const diagnosis =
       result.status === 1 && result.stderr === expected
@@ -620,11 +620,12 @@ void test("prepare runs the additional plugin validator inside the staging works
  * then fails EACCES unlinking the file inside it. A real filesystem failure,
  * not a mock.
  *
- * tests/unit/commands-install.test.js:996-1011 induces its cleanup failure by
- * chmod'ing the workspace's PARENT read-only. That cannot be used here:
- * prepare's parent is gatherPrepare's `tmpParent`, i.e. dirname(pluginRoot),
- * and atomicReplaceDir writes into it, so a read-only parent would fail the
- * swap and never reach the post-replacement case.
+ * tests/unit/commands-install.test.js's "a post-success workspace cleanup
+ * failure still reports the domain outcome, then fails closed" induces its
+ * cleanup failure by chmod'ing the workspace's PARENT read-only. That cannot
+ * be used here: prepare's parent is gatherPrepare's `tmpParent`, i.e.
+ * dirname(pluginRoot), and atomicReplaceDir writes into it, so a read-only
+ * parent would fail the swap and never reach the post-replacement case.
  *
  * @param {CaseEnv} c
  * @param {number} exitCode 0 keeps the ok path; 1 takes prepare's
@@ -695,8 +696,9 @@ function assertOrder(haystack, needles) {
 
 void test("a post-success workspace cleanup failure keeps the prepared outcome and every line before it", async () => {
   // chmod does not gate root, so the poisoned directory would be removable and
-  // the cleanup this case exists to fail would succeed. Matches
-  // tests/unit/commands-install.test.js:981.
+  // the cleanup this case exists to fail would succeed. Matches the root guard
+  // in tests/unit/commands-install.test.js's "a post-success workspace cleanup
+  // failure still reports the domain outcome, then fails closed".
   if (process.getuid?.() === 0) return;
   const c = createCase({ fakes: "probe" });
   const parent = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
@@ -950,10 +952,11 @@ void test("prepare rejects a directory as the fallback manifest template before 
   assertNoLeakedInternals(result.stderr);
 
   // No adapter build ran: the same contract
-  // tests/baseline/cli-parity.test.js:1589-1608 asserts for the spawned path.
+  // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
+  // template bytes and non-file rejection" test asserts for the spawned path.
   // An adapter build always replays `generated plugin validation passed: …`
   // onto stdout, and the template check precedes the cache mkdir
-  // (src/commands/prepare.ts:291-298), so neither is present.
+  // (the `missing fallback manifest template` guard), so neither is present.
   assert.equal(result.stdout, "");
   assert.equal(existsSync(join(c.dir, "cache")), false);
 
@@ -1027,8 +1030,9 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   };
 
   // Non-pinned: the cache already exists, so this is the fetch branch
-  // (src/commands/prepare.ts:310-327), whose diagnostic names the source and
-  // nothing else. Exact equality is the assertion — one hand-written line.
+  // (`gatherPrepare`'s cached-clone fetch branch), whose diagnostic names the
+  // source and nothing else. Exact equality is the assertion — one
+  // hand-written line.
   const env = createCase({ fakes: "probe" });
   const commit = commitOf(REFS.fallback);
   const seeded = await prepare(env, { SUPERPOWERS_REF: commit });
@@ -1055,21 +1059,25 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   // wins and git's five lines are DISCARDED by the callee. oneLine() is not what
   // bounds this output.
   //
-  // fetchExactCommit does hold three splice sites — src/upstream.ts:334, :349,
-  // and proveCommit's init at :262, inherited from spw_upstream_cli's
-  // `spw_die "${_upstream_out#error: }"` and not a regression — but no
-  // externally constructible input reaches any of them. Four shapes were tried:
-  // a regular file as the cache repository, `.git` as a regular file, an empty
-  // `.git` directory, and a read-only `.git/objects`. Every one either fails
-  // earlier or makes git emit a single `fatal:` line, so a multi-line splice
-  // cannot be built from outside the process. Pinning the collapse itself needs
-  // an injected git result in a src/upstream.ts unit test, not this driver.
-  // Do not re-derive that list; extend it.
+  // fetchExactCommit does hold three splice sites — its `cannot initialize
+  // upstream cache repository` throw, its `cannot transfer requested commit
+  // into upstream cache` throw, and proveCommit's init throw, which
+  // fetchExactCommit reaches as `cannot initialize exact-commit fetch
+  // workspace` — all three inherited from spw_upstream_cli's
+  // `spw_die "${_upstream_out#error: }"`, and not a regression — but no
+  // externally constructible input reaches any of them. Four shapes were
+  // tried: a regular file as the cache repository, `.git` as a regular file,
+  // an empty `.git` directory, and a read-only `.git/objects`. Every one
+  // either fails earlier or makes git emit a single `fatal:` line, so a
+  // multi-line splice cannot be built from outside the process. Pinning the
+  // collapse itself needs an injected git result in a src/upstream.ts unit
+  // test, not this driver. Do not re-derive that list; extend it.
   //
   // So this half asserts the exact message, which is strictly stronger than the
   // single-line shape check the task text asked for. The same string is already
   // pinned at tests/unit/upstream.test.js:404 and
-  // tests/baseline/selection-commands.test.js:655.
+  // by the `cannot fetch requested commit from ${repo}` assertion in
+  // tests/baseline/selection-commands.test.js.
   const pinned = createCase({ fakes: "probe" });
   const pinnedBefore = seedSentinel(pinned);
   const pinnedHostile = nonRepository(pinned);

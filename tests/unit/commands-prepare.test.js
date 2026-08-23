@@ -155,7 +155,8 @@ void test("runPrepare rejects a directory as the fallback manifest template", as
   mkdirSync(template, { recursive: true });
   // scripts/prepare:42 is `[ -f ]`, not `[ -e ]`. A stat-only predicate would
   // accept this directory and hand it to the adapter as --fallback-manifest;
-  // tests/baseline/cli-parity.test.js:1589 already forbids that.
+  // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
+  // template bytes and non-file rejection" test already forbids that.
   const { out, err, ctx } = unitContext(dir, {
     SUPERPOWERS_MANIFEST_TEMPLATE: template,
   });
@@ -185,10 +186,10 @@ void test("runPrepare emits no errno or multi-line git text when the clone fails
   // that predicate is exercised end-to-end in tests/baseline/prepare.test.js.
   //
   // Exact equality, not just doesNotMatch(/ENOENT|errno|Error:|\n.*\n.*\n/):
-  // notCalledAdapter's throw is caught by gatherPrepare's own `catch` at
-  // src/commands/prepare.ts:404-414 and turned into a *different*,
-  // still-single-line, still-errno-free diagnostic
-  // ("cannot build the generated plugin candidate"). A loose doesNotMatch
+  // notCalledAdapter's throw is caught by gatherPrepare's own `catch`
+  // following the adapter build argv construction and turned into a
+  // *different*, still-single-line, still-errno-free diagnostic ("cannot
+  // build the generated plugin candidate"). A loose doesNotMatch
   // cannot tell that diagnostic apart from this one, so it would stay green
   // even if a future change made this case wrongly reach the adapter. Pinning
   // the exact clone-failure text is what makes reaching ctx.adapter here

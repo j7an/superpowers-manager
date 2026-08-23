@@ -186,7 +186,7 @@ void test("requireProtocolString accepts safe text and rejects terminal controls
 // leaving writeAdapterFailure the check's sole enforcement point.
 
 // Uses the existing capture() rather than a private recorder.
-// tests/unit/helpers/command-harness.js:47-59 already returns a
+// tests/unit/helpers/command-harness.js's capture() already returns a
 // `{ stream: any, text: () => string }` writable stand-in, and its `stream` is
 // cast to `any` there precisely because a two-member object literal is not
 // assignable to NodeJS.WritableStream under checkJs + strict. A private
@@ -500,19 +500,19 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
 
   // The operator-visible boundary, driven through the REAL CLI. The three
   // subtests above all stop at a module edge, and every one of them stays
-  // green if src/cli.ts:353-361 is changed to emit `cause.stack` instead of
-  // `oneLine(cause)` -- so the "without leaking a traceback" clause both
-  // behavior IDs carry needs a subprocess to be non-vacuous at all. The
-  // clause is witnessed HERE for both IDs; the note in ADAPTER-SURROGATE-01
-  // records why a surrogate cannot take this route.
+  // green if main's status/exit block is changed to emit `cause.stack` instead
+  // of `oneLine(cause)` -- so the "without leaking a traceback" clause both
+  // behavior IDs carry needs a subprocess to be non-vacuous at all. The clause
+  // is witnessed HERE for both IDs; the note in ADAPTER-SURROGATE-01 records
+  // why a surrogate cannot take this route.
   //
   // The route is constructible end to end with no product code bent to reach
-  // it. SUPERPOWERS_CODEX may name any existing executable (src/cli.ts:253-258
-  // accepts a path outright), a POSIX filename may carry any byte but NUL and
-  // slash, and src/adapter.ts:806-809 interpolates that path into an
-  // adapter-authored failure message when `codex plugin list --json` exits
-  // non-zero. probe replays the resulting outcome AFTER its try/catch has
-  // resolved (the loop below runProbe's catch), so the throw from
+  // it. SUPERPOWERS_CODEX may name any existing executable (preflight's
+  // codexBin resolution accepts a path outright), a POSIX filename may carry
+  // any byte but NUL and slash, and src/adapter.ts:806-809 interpolates that
+  // path into an adapter-authored failure message when `codex plugin list
+  // --json` exits non-zero. probe replays the resulting outcome AFTER its
+  // try/catch has resolved (the loop below runProbe's catch), so the throw from
   // assertFailureWritable escapes runProbe, escapes the handler, and lands in
   // src/cli.ts's catch -- the only place an operator ever sees it.
   await t.test("refused at the CLI without a traceback", () => {
@@ -552,8 +552,8 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
             HOME: home,
             TMPDIR: temp,
             // git must RESOLVE, because probe's preflight requires it
-            // (src/cli.ts:115). Nothing here reaches a git PROCESS -- a
-            // 40-hex SUPERPOWERS_REF is a raw-commit resolution
+            // (COMMAND_REQUIREMENTS's probe entry). Nothing here reaches a git
+            // PROCESS -- a 40-hex SUPERPOWERS_REF is a raw-commit resolution
             // (src/upstream.ts:160-162) -- so the case stays hermetic, and
             // probe is read-only besides.
             PATH: process.env.PATH ?? "",

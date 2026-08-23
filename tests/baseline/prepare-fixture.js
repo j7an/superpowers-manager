@@ -25,7 +25,7 @@ const CHILD = fileURLToPath(new URL("./prepare-child.js", import.meta.url));
 
 // Per-invocation identity flags only. These write no git config at any scope,
 // which is why they are passed on every commit and tag rather than set once —
-// the choice tests/baseline/ref-resolution.test.js:75 documents. The Global
+// the choice `IDENTITY` in ref-resolution.test.js documents. The Global
 // Constraints' `git add -A` ban governs the repository under development, not a
 // throwaway fixture repo like this one; the shell original stages the same way
 // at tests/test_prepare_with_fake_upstream.sh:182.
@@ -87,11 +87,12 @@ function git(repo, args) {
 
 /**
  * The fixture's own view of a repository, for an assertion message.
- * src/commands/prepare.ts:329-334 names only the source when a clone fails and
- * discards git's output by contract, so a case whose clone fails for an
- * unexpected reason cannot say why. This does not change that contract; it adds
- * the fixture's side of the story to the failure message. Deliberately does not
- * go through `git()` above: every command here is expected to be able to fail.
+ * The `cannot clone upstream repo` diagnostic names only the source when a
+ * clone fails and discards git's output by contract, so a case whose clone
+ * fails for an unexpected reason cannot say why. This does not change that
+ * contract; it adds the fixture's side of the story to the failure message.
+ * Deliberately does not go through `git()` above: every command here is
+ * expected to be able to fail.
  * @param {string} repository
  * @returns {string}
  */
@@ -273,10 +274,11 @@ function buildUpstream() {
   //
   // The value is a NUMBER on purpose. classifyHooks accepts
   // `typeof hooks === "string"` as a single declared path
-  // (src/hooks.ts:196-198), so a plain string reaches validateDeclaredFile and
-  // fails with `declared hook path must start with ./` — a different cause,
-  // already covered in tests/unit/hooks.test.js. 42 falls through every
-  // accepted shape to the unsupported-declaration throw.
+  // (`classifyHooks`'s `manifest.hooks` extraction), so a plain string
+  // reaches validateDeclaredFile and fails with `declared hook path must
+  // start with ./` — a different cause, already covered in
+  // tests/unit/hooks.test.js. 42 falls through every accepted shape to the
+  // unsupported-declaration throw.
   //
   // The eight underlying causes the retired shell driver asserted behind this
   // prefix are all already message-exact in tests/unit/hooks.test.js. This
@@ -317,11 +319,12 @@ function buildUpstream() {
   // CANDIDATE validation at src/hooks.ts:367 fails.
   //
   // `.git` is the target for the same reason the retired shell fixture used
-  // it: it exists in the upstream checkout, so assertExistingContained accepts
-  // it at :358, and it is absent from src/commands/prepare.ts:28-34's five
-  // copied paths, so the symlink recreated at src/hooks.ts:359-360 dangles in
-  // the candidate. Any target outside those five works; this one keeps the
-  // ported case recognisable against the file it replaces.
+  // it: it exists in the upstream checkout, so validateSubtreeSymlinks's
+  // containment check accepts it on the source side, and it is absent from
+  // COPY_PATHS's five copied paths, so the symlink recreated at
+  // src/hooks.ts:359-360 dangles in the candidate. Any target outside those
+  // five works; this one keeps the ported case recognisable against the file
+  // it replaces.
   branchWith("hooks-root-contained-source-only", () => {
     const declared = JSON.parse(
       readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
@@ -334,7 +337,7 @@ function buildUpstream() {
   // P4 — a CONTAINED relative hooks-root symlink, which src/hooks.ts:359-360
   // recreates in the candidate rather than dereferencing.
   //
-  // The target must live under `assets/`. src/commands/prepare.ts:28-34 copies
+  // The target must live under `assets/`. COPY_PATHS copies
   // exactly five paths into the candidate — skills, assets, LICENSE,
   // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
   // directory would dangle in the candidate and fail the SECOND

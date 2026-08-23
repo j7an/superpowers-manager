@@ -160,9 +160,9 @@ assert.strictEqual(root, REPOSITORY_ROOT);
 const entryPath = fs.realpathSync(process.argv[1]);
 assert.strictEqual(bin.isMain(entryPath, process.argv[1]), true);
 assert.strictEqual(bin.isMain(entryPath, undefined), false);
-// Matched on `code`, not on the message: this throw comes from
-// fs.realpathSync (src/cli.ts:136) and its text is Node's own errno prose,
-// which this repo does not pin. `code` is the stable, semantic surface.
+// Matched on `code`, not on the message: this throw comes from isMain's
+// fs.realpathSync call, and its text is Node's own errno prose, which this
+// repo does not pin. `code` is the stable, semantic surface.
 assert.throws(
   () =>
     bin.isMain(entryPath, path.join(import.meta.dirname, "missing-entry.js")),
