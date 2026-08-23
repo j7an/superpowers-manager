@@ -184,10 +184,10 @@ export function mapCodexLaunchFailure(
   if (code === "ENOENT" || code === "EACCES") {
     fail("command-not-found", `required Codex command not found: ${codexBin}`);
   }
-  // The errno is a bounded, enumerable, path-free token — not the cause's
-  // message — so the no-interpolation rule does not reach it. The shape guard
-  // is what keeps that true: an unvalidated String(cause.code) would be
-  // free-form again on a stream the protocol constrains.
+  // A bounded, enumerable, path-free errno is not the cause's message, so the no-interpolation rule
+  // does not reach it; unvalidated, String(cause.code) would put another module's free-form text
+  // in a sentence this module signs. appendBytes below escapes it, but escaping is not ownership:
+  // the rule governs whose wording the operator reads, not whether it reaches the terminal intact.
   const detail = /^E[A-Z0-9]+$/.test(code) ? `: ${code}` : "";
   return {
     status: 1,

@@ -110,7 +110,7 @@ eliminates latent hook-policy drift.
 
 - The in-process TypeScript runtime under `src/` owns lifecycle dispatch,
   status, and adapter-result handling;
-  see the [in-process adapter result contract](https://github.com/j7an/superpowers-manager/blob/main/docs/adapter-protocol.md).
+  see the [in-process adapter result contract](https://github.com/j7an/superpowers-manager/blob/main/docs/adapter-result-contract.md).
 - `src/adapter.ts` owns build, inspection, reconciliation, and Codex mutation.
 - Codex is the only supported adapter today; no public harness selector ships
   yet.
@@ -324,7 +324,7 @@ and pushes to `main`.
 .github/                                  # CI, security, dependency, and release workflows (tracked)
 bin/superpowers-manager.js                # public thin loader for dist/cli.js
 config/upstream-ref                       # packaged upstream fallback policy (tracked)
-docs/                                     # protocol documentation and baseline evidence (tracked)
+docs/                                     # adapter result contract and baseline evidence (tracked)
 package.json pnpm-lock.yaml tsconfig.json # package contract and locked toolchain (tracked)
 plugins/superpowers/
   .codex-plugin/plugin.template.json      # fallback manifest template (tracked)

@@ -116,10 +116,10 @@ export async function readManifest(
     // Deliberately drops the cause on both branches. `detail(cause)` on the
     // read branch surfaced a raw errno (`ENOENT: … open '<path>'`), which the
     // `hook classification failed:` site in src/adapter.ts re-emits onto the
-    // protocol stream; the parse branch surfaced strict-json's own wording
-    // under a prefix src/manifest-overlay.ts also uses with CPython wording.
-    // Same text as the `cannot read manifest JSON in` site in
-    // src/adapter.ts.
+    // terminal these commands write to; the parse branch surfaced
+    // strict-json's own wording under a prefix src/manifest-overlay.ts also
+    // uses with CPython wording.
+    // Same text as the `cannot read manifest JSON in` site in src/adapter.ts.
     throw hookError(`cannot read manifest JSON in ${path}`);
   }
   let parsed: JsonValue;

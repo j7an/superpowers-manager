@@ -213,9 +213,9 @@ type Inspection =
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
-// It does still THROW for a non-AdapterFailure cause (src/adapter.ts:1009).
-// That is caught here rather than in runProbe's outer catch, because the two
-// need different diagnostics -- see spec §3.3a.
+// It does still THROW for a non-AdapterFailure cause (runAdapter's closing
+// `throw cause`, src/adapter.ts). That is caught here rather than in runProbe's
+// outer catch, because the two need different diagnostics -- see spec §3.3a.
 //
 // Reached through ctx.adapter, not a direct module-level dependency on the
 // adapter module: src/commands/prepare.ts and this module are the two the
@@ -381,43 +381,44 @@ export async function runProbe(
   try {
     outcome = await gatherProbe(ctx);
   } catch (cause) {
-    // Most throws reachable here carry a HAND-WRITTEN message:
-    //   - the selectionErrors validateSource raises (src/selection.ts:137,
-    //     :140, and requireSingleLineString at :77), reached from
-    //     src/effective-selection.ts:92, and the ones validateRecord raises
-    //     (src/selection.ts:198, :219, plus requireObject at :47,
-    //     requireExactKeys at :64, and validatePinnedRecord at :170-183),
-    //     reached from src/selection-store.ts:103 on the read path.
-    //     normalizeSaved (src/selection.ts:222-241) is NOT in this list: it
-    //     contains no throw statement and raises nothing at all.
-    //   - the selectionErrors src/effective-selection.ts:15 and :35 raise for
-    //     a non-absolute or missing config directory.
-    //   - readConfigRef's `cannot read packaged upstream ref <path>`
-    //     (src/upstream.ts:52), which names the path and drops the cause.
-    //   - resolveRef's own no-match diagnostics (src/upstream.ts:155, :199).
+    // Hand-written messages, per AGENTS.md's reader-diagnostics rule. Reachable
+    // here: the selectionErrors validateSource raises (src/selection.ts:137,
+    // :140, requireSingleLineString at :77), reached from
+    // computeEffectiveSelection's validateSource call
+    // (src/effective-selection.ts); the ones validateRecord raises
+    // (src/selection.ts:198, :219, requireObject at :47, requireExactKeys at
+    // :64, validatePinnedRecord at :170-183), reached from
+    // src/selection-store.ts:103 on the read path; the selectionErrors
+    // requireAbsolute and selectionConfigDir (src/effective-selection.ts) raise
+    // for a non-absolute or missing config directory; readConfigRef's `cannot
+    // read packaged upstream ref <path>` (src/upstream.ts); and resolveRef's own
+    // two no-match diagnostics, `no stable semver tag found for latest-release`
+    // and `cannot resolve upstream ref: <ref>` (src/upstream.ts). normalizeSaved
+    // (src/selection.ts:222-241) throws nothing at all.
     //
     // THREE exceptions, all inherited and none a regression:
     //   1. resolveRef splices git's combined stdout+stderr into its own text
-    //      (src/upstream.ts:150, :175, :191), reached via
-    //      computeEffectiveSelection (src/effective-selection.ts:133). This is
-    //      probe's DEFAULT path -- every invocation that is not resolving a
-    //      saved pin -- not an exotic corner. Pinned by
-    //      tests/unit/upstream.test.js:460, :471, and :483.
-    //   2. src/selection-store.ts:124 (same shape at :49, :86, :98)
-    //      interpolates the caught error's own message, so Node errno prose
-    //      (e.g. "EACCES: permission denied, open '<path>'") can reach this
-    //      stream. Reached on the READ path only, via loadSavedSelection
-    //      (src/effective-selection.ts:50) -> readSelectionState
-    //      (src/selection-store.ts:149). This module's four write-only
-    //      interpolating sites are all unreachable from probe, which never
-    //      writes: :172 (ensureStateDirectory, called from :206), :197
-    //      (finalStateDiagnostic, called from :229), and :225 and :231 in
-    //      writeSelectionState's own catch. AGENTS.md explicitly grandfathers
-    //      this module's wording, so the read-path sites are sanctioned
-    //      behaviour -- nothing here needs fixing.
-    //   3. Every runGit call site inside resolveRef (src/upstream.ts:141,
-    //      :165, :188) can reject instead of resolving. On the non-ENOENT arm
-    //      of src/git.ts:47-52, runGit builds the message
+    //      (its three `cannot query upstream ...` throws, src/upstream.ts),
+    //      reached via computeEffectiveSelection's resolveRef call
+    //      (src/effective-selection.ts). The packaged ref is `latest-release`,
+    //      which resolveRef answers with an ls-remote, so an ordinary unpinned
+    //      run reaches this rather than only an exotic corner -- though not
+    //      every unpinned run does: resolveRef's COMMIT_INPUT_RE branch returns
+    //      before any runGit call, so a 40-hex requested ref splices nothing.
+    //      Pinned by tests/unit/upstream.test.js:460, :471, and :483.
+    //   2. src/selection-store.ts:124 (same shape at :49, :86, :98) is the
+    //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
+    //      it interpolates the caught error's own message, so Node errno
+    //      prose can reach this stream. Reached on the READ path only, via
+    //      loadSavedSelection (src/effective-selection.ts) ->
+    //      readSelectionState (src/selection-store.ts:149). This module's
+    //      four write-only interpolating sites -- ensureStateDirectory
+    //      (:172), finalStateDiagnostic (:197), and the two in
+    //      writeSelectionState's own catch (:225, :231) -- are all
+    //      unreachable from probe, which never writes.
+    //   3. Every runGit call site inside resolveRef (src/upstream.ts) can
+    //      reject instead of resolving. On the non-ENOENT arm of
+    //      src/git.ts:47-52, runGit builds the message
     //      "cannot run git: " followed by the Node spawn error's own message
     //      (:51) and rejects with a SafetyError carrying it (:52), so that
     //      Node spawn-level text reaches ctx.stderr through this catch. The
@@ -426,9 +427,9 @@ export async function runProbe(
     //      *spawn-level* case, where runGit throws rather than returning a
     //      status.
     //
-    // oneLine() collapses each of exceptions 1 and 3 to a single line,
-    // containing the harm to one line of git text rather than the arbitrarily
-    // many scripts/probe's `set -eu` plumbing allowed.
+    // oneLine() at this catch collapses each of exceptions 1 and 3 -- the two
+    // carrying git-derived text -- to a single line. It collapses CR/LF only,
+    // so it bounds how much of that text lands, not what it may contain.
     //
     // fetchExactCommit is deliberately NOT in this list, unlike prepare's
     // fetchExactCommit exception, which runPrepare's catch block documents.
@@ -438,16 +439,15 @@ export async function runProbe(
     // its splice sites cannot appear on this stream. Do not add it back by
     // symmetry with prepare.
     //
-    // generatedCommitOrEmpty is not in this list either, and -- contrary to
-    // what this comment used to claim -- it is not a source of hand-written
-    // SafetyErrors: it cannot throw at all. generatedCommitOrEmpty (in
-    // src/provenance.ts) delegates to readGeneratedCommitLenient, which
-    // catches every failure and returns "".
+    // generatedCommitOrEmpty is not in this list either: it cannot throw at
+    // all. It (src/provenance.ts) delegates to readGeneratedCommitLenient,
+    // which catches every failure and returns "".
     //
-    // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:1009) does
-    // NOT reach here: inspect() catches it and converts it to a hand-written
-    // message, because a rethrown cause is exactly the failure src/adapter.ts
-    // declined to own and its text must never reach this stream. See §3.3a.
+    // A non-AdapterFailure re-thrown by runAdapter's closing `throw cause`
+    // (src/adapter.ts) does NOT reach here: inspect() catches it and converts
+    // it to a hand-written message per AGENTS.md's reader-diagnostics rule -- a
+    // rethrown cause is exactly the failure src/adapter.ts declined to own, so
+    // its text must never reach this stream. See §3.3a.
     //
     // gatherProbe performs no writes of its own, so this catch cannot also be
     // reached by an EPIPE from probe's own output — every write below runs

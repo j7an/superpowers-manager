@@ -423,11 +423,11 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       } catch {
         // ctx.adapter reports CONTROLLED failures by return value
         // (src/adapter-result.ts:32-35) but still THROWS for a
-        // non-AdapterFailure cause (src/adapter.ts:1009). That cause is by
-        // construction the one failure src/adapter.ts declined to own, so its
-        // text must never reach ctx.stderr. Caught here rather than in
-        // runPrepare's outer catch, the same treatment
-        // src/commands/probe.ts:210-232 gives it.
+        // non-AdapterFailure cause (runAdapter's closing `throw cause`,
+        // src/adapter.ts). That cause is by construction the one failure
+        // src/adapter.ts declined to own, so its text must never reach
+        // ctx.stderr. Caught here rather than in runPrepare's outer catch,
+        // the same treatment src/commands/probe.ts:210-232 gives it.
         return failed("cannot build the generated plugin candidate");
       }
       const outcomes = [built.outcome];
@@ -526,20 +526,20 @@ export async function runPrepare(
   try {
     run = await gatherPrepare(ctx);
   } catch (cause) {
-    // Every throw reachable here carries a HAND-WRITTEN message:
-    //   - prepareError(), from this module's owned() wrappers, its two
-    //     manifest-version checks, asResolutionKind, and runValidator's spawn
-    //     failure. owned() attaches the raw ErrnoException as `cause`, which
-    //     oneLine never reads -- it takes .message only.
-    //   - readManifest's three hookError messages (src/hooks.ts:109-134),
-    //     pinned by tests/unit/hooks.test.js:95 as carrying no reader
-    //     vocabulary or errno.
-    //   - SafetyErrors from gitSafeSource, writeProvenance, and withWorkspace.
+    // Hand-written messages, per AGENTS.md's reader-diagnostics rule.
+    // Reachable here: prepareError(), from this module's owned() wrappers,
+    // its two manifest-version checks, asResolutionKind, and runValidator's
+    // spawn failure (owned() attaches the raw ErrnoException as `cause`,
+    // which oneLine never reads -- it takes .message only); readManifest's
+    // three hookError messages (src/hooks.ts:109-134), pinned by
+    // tests/unit/hooks.test.js:95 as carrying no reader vocabulary or errno;
+    // and SafetyErrors from gitSafeSource, writeProvenance, and
+    // withWorkspace.
     //
     // FOUR exceptions, all inherited and none a regression:
     //   1. resolveRef splices git's combined stdout+stderr into its own text
-    //      on the NON-PINNED path (src/upstream.ts:150, :175, :191), reached
-    //      via computeEffectiveSelection (src/effective-selection.ts:133).
+    //      on the NON-PINNED path (src/upstream.ts), reached via
+    //      computeEffectiveSelection (src/effective-selection.ts).
     //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by tests/unit/upstream.test.js:460-469, :471-481, and :483-501.
@@ -547,11 +547,11 @@ export async function runPrepare(
     //      own text on the PINNED path (both of its own splice sites in
     //      src/upstream.ts, and proveCommit's, which it calls). This is the
     //      rarer of the two raw-git-output paths, not the only one.
-    //   3. src/selection-store.ts:124 (same shape at :49, :86, :98)
-    //      interpolates the caught error's own message, so Node errno prose
-    //      (e.g. "EACCES: permission denied, open '<path>'") can reach this
-    //      stream. AGENTS.md explicitly grandfathers this module's wording,
-    //      so this is sanctioned behaviour -- nothing here needs fixing.
+    //   3. src/selection-store.ts:124 (same shape at :49, :86, :98) is the
+    //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
+    //      it interpolates the caught error's own message, so Node errno
+    //      prose can reach this stream -- sanctioned, nothing here needs
+    //      fixing.
     //   4. Every runGit call site in this module (fetch, clone, checkout) can
     //      reject instead of resolving: src/git.ts:47-51 wraps every string
     //      errno other than ENOENT in
@@ -564,14 +564,14 @@ export async function runPrepare(
     //      status in that case, and this outer catch is what stands between
     //      it and the stream.
     //
-    // scripts/prepare piped comparable text through spw_upstream_cli's
-    // `spw_die "${_upstream_out#error: }"`, and oneLine() here collapses each
-    // of exceptions 1, 2, and 4 to one line, containing the harm to one line
-    // of git text rather than the arbitrarily many the shell original
-    // allowed.
+    // oneLine() at this catch collapses each of exceptions 1, 2, and 4 -- the
+    // three carrying git-derived text -- to a single line. It collapses CR/LF
+    // only, so it bounds how much of that text lands, not what it may
+    // contain.
     //
-    // runAdapter's rethrow (src/adapter.ts:1009) does NOT arrive here -- the
-    // call site catches it and converts it to a hand-written message.
+    // runAdapter's closing `throw cause` (src/adapter.ts) does NOT arrive
+    // here -- the call site catches it and converts it to a hand-written
+    // message per AGENTS.md's reader-diagnostics rule.
     //
     // gatherPrepare performs no writes of its own, so this catch cannot also be
     // reached by an EPIPE from prepare's own output: every write below runs

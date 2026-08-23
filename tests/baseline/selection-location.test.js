@@ -273,8 +273,8 @@ function assertEffective(selection, expected) {
 }
 
 // Ports tests/test_selection_state.sh:22-40. BUILDER-PERMISSION-01 is not a
-// registered behavior ID (see tests/baseline/traceability.test.js:15's
-// ID_PATTERN) and mints no traceability row; the shell's own setup never
+// registered behavior ID (see `tests/baseline/traceability.test.js`'s
+// `ID_PATTERN`) and mints no traceability row; the shell's own setup never
 // uses permission_target/permission_root/permission_parent again after this
 // block, so this ports the builder's own guarantee (a deterministically
 // unreadable target) rather than any selection.sh behavior.
@@ -624,7 +624,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
 });
 
 // SEL-REF-GENERIC-01 is not a registered behavior ID (see
-// tests/baseline/traceability.test.js:15's ID_PATTERN) and mints no
+// `tests/baseline/traceability.test.js`'s `ID_PATTERN`) and mints no
 // traceability row.
 void test("an arbitrary environment ref and a raw-commit pin resolve without shell-quoting surprises", async (t) => {
   const pkgRoot = makePackageRoot(t);

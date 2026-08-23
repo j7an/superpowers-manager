@@ -540,7 +540,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
 // whatever the launch failure was, no errno text, path prose from the OS, or
-// stack reaches the stream the adapter protocol constrains.
+// stack reaches the terminal these commands write to.
 void test("an unusable Codex command fails closed without leaking errno prose", async () => {
   const c = createCase({ fakes: "probe" });
   seedGenerated(c, `{"commit":"${DESIRED}"}`);
