@@ -49,14 +49,36 @@ Codex below describe the product integration, not a required agent harness.
   message naming the input; it never interpolates the caught error's message.
   A bounded, validated token — an exit status, a symbolic errno — may be
   interpolated; a free-form stream or error message may not. **Why:** an
-  interpolated cause puts raw filesystem text, and sometimes a stack, on a
-  stream the adapter protocol constrains. Reader wrappers already frozen by
-  tests (`src/manifest-overlay.ts`, `src/selection-store.ts`,
-  `src/generated-plugin.ts`) keep their wording; enumerate the frozen strings
-  before changing any of them. Re-emitting a subordinate module's own
-  diagnostic onto that stream is the sanctioned form of interpolation, but
-  only because it obliges the callee to own every failure reachable on that
-  path — never add such a site without confirming the callee still does.
+  interpolated cause puts raw filesystem text, and sometimes a stack, directly
+  on the terminal these commands write to — `ctx.stdout`/`ctx.stderr` are
+  `process.stdout`/`process.stderr` (`src/cli.ts`), with no serialized
+  envelope left to intercept it. `assertFailureWritable`/`hasTerminalControl`
+  (`src/adapter-result.ts`) refuse outright to let an adapter-routed
+  diagnostic reach that stream if it carries a terminal control character;
+  every other catch keeps the same discipline by hand, via `oneLine()` and
+  this rule. Reader wrappers are frozen by tests, but by three different
+  mechanisms — enumerate the pinning tests for the specific string before
+  changing any of them:
+  - `src/manifest-overlay.ts` — most diagnostics are asserted as
+    **complete messages** (`assert.equal(error.message, …)`), so those fail
+    on any rewording; the malformed-JSON case is constrained by a predicate
+    instead, and is **not** pinned that tightly.
+  - `src/selection-store.ts` — the module this bullet's sanctioned-
+    interpolation sentence is about: it interpolates the caught error's text
+    into its own message. Its own suite pins the malformed-JSON message by
+    exact equality and the read-failure message by **prefix only** — the
+    prefix is frozen, the interpolated tail is deliberately free.
+  - `src/generated-plugin.ts` — its `ResolutionFailure`/`InspectionFailure`/
+    `EnumerationFailure` types are internal control flow, carrying a path and
+    no operator-facing prose. The diagnostics it pushes onto its `errors`
+    array are operator-facing, but coverage is partial: 56 push sites against
+    29 assertions, so an editor must check the specific string rather than
+    assume the suite will catch them.
+
+  Re-emitting a subordinate module's own diagnostic onto that stream is the
+  sanctioned form of interpolation, but only because it obliges the callee to
+  own every failure reachable on that path — never add such a site without
+  confirming the callee still does.
 
 ## Development Workflow
 
