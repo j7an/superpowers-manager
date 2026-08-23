@@ -278,9 +278,10 @@ void test("TRACEABILITY-FIXTURES-01 every supporting artifact exists", () => {
     assertSafeRepositoryPath(support, `${id} supporting artifact`);
     assert.equal(
       support === "tests/builders/baseline-scenario.sh" ||
+        support === "tests/bin/lifecycle-fixture.js" ||
         support.startsWith("tests/fixtures/baseline/"),
       true,
-      `${id} supporting artifact is outside the baseline fixture/builder scope: ${support}`,
+      `${id} supporting artifact is not an admitted builder or fixture (the baseline scenario builder, the lifecycle fixture, or tests/fixtures/baseline/): ${support}`,
     );
     const absolute = join(ROOT, support);
     assert.equal(

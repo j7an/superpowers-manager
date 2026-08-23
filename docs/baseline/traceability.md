@@ -99,10 +99,10 @@ selectors or intentionally update the inventory, test, and this map together.
 | `SEL-READER-PARENT-01` | `tests/baseline/selection-state.test.js::SEL-READER-PARENT-01 read rejects absent state below a symlinked config directory` | — |
 | `PREPARE-VALIDATE-01` | `tests/baseline/cli-parity.test.js::PREPARE-VALIDATE-01 validation completes before activation` | `tests/builders/baseline-scenario.sh` |
 | `PREPARE-DETERMINISTIC-01` | `tests/baseline/cli-parity.test.js::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
-| `PROBE-READONLY-01` | `tests/baseline/cli-parity.test.js::PROBE-READONLY-01 probe is read-only` | `tests/builders/baseline-scenario.sh` |
+| `PROBE-READONLY-01` | `tests/baseline/cli-parity.test.js::PROBE-READONLY-01 probe is read-only` | `tests/bin/lifecycle-fixture.js` |
 | `PROBE-FAIL-CLOSED-01` | `tests/baseline/probe.test.js::PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail closed` | — |
-| `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.js::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/builders/baseline-scenario.sh` |
-| `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.js::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/builders/baseline-scenario.sh` |
+| `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.js::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/bin/lifecycle-fixture.js` |
+| `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.js::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/bin/lifecycle-fixture.js` |
 | `INSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.js::INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
 | `UPDATE-CONTROL-01` | `tests/baseline/cli-parity.test.js::UPDATE-CONTROL-01 update requires current managed control evidence` | — |
 | `UNINSTALL-OWNERSHIP-01` | `tests/baseline/cli-parity.test.js::UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources` | — |
