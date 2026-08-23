@@ -964,8 +964,10 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // set to the empty string, matching runTrackLatest's `||` fallback — see
   // src/commands/track-latest.ts:31 — not the variable left absent, which
   // the shell's own `${VAR:-default}` treats identically but this project
-  // otherwise treats presence-vs-emptiness as distinct, e.g.
-  // `requireAbsolute`), which this repository's shell driver only reached by
+  // otherwise treats presence-vs-emptiness as distinct — e.g. the
+  // presence branch in `selectionConfigDir`, where `requireAbsolute`
+  // then rejects an empty value rather than letting it fall through
+  // to XDG), which this repository's shell driver only reached by
   // stripping PATH down to a Git-less stub (:420-428) — moot now that
   // runTrackLatest never spawns a process to begin with (see this file's
   // header comment).
