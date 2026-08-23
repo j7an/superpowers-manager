@@ -407,8 +407,10 @@ export async function runProbe(
     //      prose can reach this stream. Reached on the READ path only, via
     //      loadSavedSelection (src/effective-selection.ts:50) ->
     //      readSelectionState (src/selection-store.ts:149). This module's
-    //      four write-only interpolating sites (:172, :197, :225, :231) are
-    //      all unreachable from probe, which never writes.
+    //      four write-only interpolating sites -- ensureStateDirectory
+    //      (:172), finalStateDiagnostic (:197), and the two in
+    //      writeSelectionState's own catch (:225, :231) -- are all
+    //      unreachable from probe, which never writes.
     //   3. Every runGit call site inside resolveRef (src/upstream.ts:141,
     //      :165, :188) can reject instead of resolving. On the non-ENOENT arm
     //      of src/git.ts:47-52, runGit builds the message
@@ -419,6 +421,10 @@ export async function runProbe(
     //      *exit status* is handled by exception 1 above; this is the
     //      *spawn-level* case, where runGit throws rather than returning a
     //      status.
+    //
+    // oneLine() at this catch collapses each of exceptions 1 and 3 -- the two
+    // carrying git-derived text -- to a single line. It collapses CR/LF only,
+    // so it bounds how much of that text lands, not what it may contain.
     //
     // fetchExactCommit is deliberately NOT in this list, unlike prepare's
     // fetchExactCommit exception, which runPrepare's catch block documents.
@@ -434,7 +440,9 @@ export async function runProbe(
     //
     // A non-AdapterFailure re-thrown by runAdapter (src/adapter.ts:1009) does
     // NOT reach here: inspect() catches it and converts it to a hand-written
-    // message per AGENTS.md's reader-diagnostics rule. See §3.3a.
+    // message per AGENTS.md's reader-diagnostics rule -- a rethrown cause is
+    // exactly the failure src/adapter.ts declined to own, so its text must
+    // never reach this stream. See §3.3a.
     //
     // gatherProbe performs no writes of its own, so this catch cannot also be
     // reached by an EPIPE from probe's own output — every write below runs

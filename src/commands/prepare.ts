@@ -564,6 +564,11 @@ export async function runPrepare(
     //      status in that case, and this outer catch is what stands between
     //      it and the stream.
     //
+    // oneLine() at this catch collapses each of exceptions 1, 2, and 4 -- the
+    // three carrying git-derived text -- to a single line. It collapses CR/LF
+    // only, so it bounds how much of that text lands, not what it may
+    // contain.
+    //
     // runAdapter's rethrow (src/adapter.ts:1009) does NOT arrive here -- the
     // call site catches it and converts it to a hand-written message per
     // AGENTS.md's reader-diagnostics rule.
