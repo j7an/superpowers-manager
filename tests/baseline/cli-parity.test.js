@@ -479,13 +479,13 @@ function assertMalformedSelectionFailsBeforeTools(sandbox) {
 /**
  * The fixture's own `codex` log, in place of `adapterOperations(sandbox)`.
  * Every mutation the real adapter performs reaches Codex through `codexBin`
- * (`runInstall`'s marketplace/plugin `listingCommand`/`mutationCommand`
- * calls), so this is the channel that survives Task 8's flip. `readLog`
- * itself does NOT fail closed and never throws: it wraps the `readFileSync`
- * in a bare try/catch and returns `[]` for ANY read error, a missing log
- * included. The presence-form assertions below are what turn that `[]` into a
- * loud failure rather than a silent pass, because each one requires specific
- * lines to be present, not merely absent.
+ * (the marketplace/plugin `listingCommand`/`mutationCommand` calls in
+ * `runInstall`, `src/adapter.ts`), so this is the channel that survives Task
+ * 8's flip. `readLog` itself does NOT fail closed and never throws: it wraps
+ * the `readFileSync` in a bare try/catch and returns `[]` for ANY read
+ * error, a missing log included. The presence-form assertions below are what
+ * turn that `[]` into a loud failure rather than a silent pass, because each
+ * one requires specific lines to be present, not merely absent.
  * @param {import("../bin/lifecycle-fixture.js").CaseEnv} c
  * @returns {string[]}
  */
@@ -2302,8 +2302,8 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     // appear in a log pinned to these exact entries.
     // Exact: ownership inspect (list + marketplace list), then the mutation
     // uninstall issues ONLY for what ownership reported present (both, when
-    // managerPresent; neither, when not — `runUninstall`),
-    // then the post-removal ownership re-inspect.
+    // managerPresent; neither, when not — `runUninstall`,
+    // `src/adapter.ts`), then the post-removal ownership re-inspect.
     assert.deepEqual(
       codex,
       managerPresent
