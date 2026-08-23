@@ -186,9 +186,9 @@ The reader behaviors above are assigned as follows.
 | `CODEX-JSON-MARKETPLACE-01` | The Codex marketplace-root profile is frozen exactly as the matrix states. |
 | `CODEX-JSON-VERSION-01` | The Codex active-version profile is frozen exactly as the matrix states. |
 
-## Adapter protocol
+## Adapter result contract
 
-[`docs/adapter-protocol.md`](../adapter-protocol.md) is the normative
+[`docs/adapter-result-contract.md`](../adapter-result-contract.md) is the normative
 in-process adapter result contract. This inventory links to that contract
 rather than restating or redefining it.
 
