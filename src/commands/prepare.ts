@@ -425,10 +425,9 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         // (src/adapter-result.ts:32-35) but still THROWS for a
         // non-AdapterFailure cause (runAdapter's closing `throw cause`,
         // src/adapter.ts). That cause is by construction the one failure
-        // src/adapter.ts declined to own, so its
-        // text must never reach ctx.stderr. Caught here rather than in
-        // runPrepare's outer catch, the same treatment
-        // src/commands/probe.ts:210-232 gives it.
+        // src/adapter.ts declined to own, so its text must never reach
+        // ctx.stderr. Caught here rather than in runPrepare's outer catch,
+        // the same treatment src/commands/probe.ts:210-232 gives it.
         return failed("cannot build the generated plugin candidate");
       }
       const outcomes = [built.outcome];
