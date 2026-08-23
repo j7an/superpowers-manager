@@ -58,11 +58,13 @@ Codex below describe the product integration, not a required agent harness.
   escaped by `AdapterMessageLog` at store time (`src/adapter-result.ts`) when
   it travels as an adapter message — `src/manifest-overlay.ts`'s thrown text
   and `src/generated-plugin.ts`'s `errors` entries do on the command path — so
-  a control character arrives rendered as `\xNN` rather than acted on; it is
-  never refused. (2) `assertFailureWritable`/`hasTerminalControl` (same
-  module) do refuse outright, but they inspect only the adapter's own failure
-  triple — code, message, and hints — which is hand-written `fail()` text, not
-  a reader's message. (3) `src/selection-store.ts`'s interpolated cause
+  a control character arrives inert as text (tab, LF, and CR as named
+  escapes, the rest as hex or unicode escapes) rather than acted on, and
+  `appendBytes` splits records on LF before escaping; it is never refused.
+  (2) `assertFailureWritable`/`hasTerminalControl` (same module) do refuse
+  outright, but they inspect only the adapter's own failure triple — code,
+  message, and hints — which is hand-written `fail()` text, not a reader's
+  message. (3) `src/selection-store.ts`'s interpolated cause
   reaches the terminal through the CLI-boundary catches (`src/cli.ts`, each
   command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
   (`src/cli-arguments.ts`) collapses CR/LF runs to spaces. That bounds the

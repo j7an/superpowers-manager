@@ -187,7 +187,8 @@ export function mapCodexLaunchFailure(
   // The errno is a bounded, enumerable, path-free token — not the cause's
   // message — so the no-interpolation rule does not reach it. The shape guard
   // is what keeps that true: an unvalidated String(cause.code) would be
-  // free-form again on a stream the protocol constrains.
+  // free-form again on the terminal these commands write to, where nothing
+  // downstream would escape or refuse it.
   const detail = /^E[A-Z0-9]+$/.test(code) ? `: ${code}` : "";
   return {
     status: 1,
