@@ -324,7 +324,7 @@ and pushes to `main`.
 .github/                                  # CI, security, dependency, and release workflows (tracked)
 bin/superpowers-manager.js                # public thin loader for dist/cli.js
 config/upstream-ref                       # packaged upstream fallback policy (tracked)
-docs/                                     # protocol documentation and baseline evidence (tracked)
+docs/                                     # adapter result contract and baseline evidence (tracked)
 package.json pnpm-lock.yaml tsconfig.json # package contract and locked toolchain (tracked)
 plugins/superpowers/
   .codex-plugin/plugin.template.json      # fallback manifest template (tracked)

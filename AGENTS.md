@@ -62,8 +62,10 @@ Codex below describe the product integration, not a required agent harness.
   `assertFailureWritable`/`hasTerminalControl` (same module) do refuse
   outright, but they inspect only the adapter's own failure triple — code,
   message, and hints — which is hand-written `fail()` text, not a reader's
-  message. (3) Everything else, `src/selection-store.ts`'s interpolated cause
-  included, reaches the terminal through the CLI-boundary catches (`src/cli.ts`,
+  message. (3) Everything else that carries an interpolated cause —
+  `src/selection-store.ts` does; `src/workspace.ts`'s signal-path
+  `process.stderr.write`, the lone direct write outside these catches, does
+  not — reaches the terminal through the CLI-boundary catches (`src/cli.ts`,
   each command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
   (`src/cli-arguments.ts`) collapses CR/LF runs to spaces. That bounds the
   blast radius to one line; it is not a control-character defense, and on that
