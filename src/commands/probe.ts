@@ -402,9 +402,12 @@ export async function runProbe(
     //   1. resolveRef splices git's combined stdout+stderr into its own text
     //      (its three `cannot query upstream ...` throws, src/upstream.ts),
     //      reached via computeEffectiveSelection's resolveRef call
-    //      (src/effective-selection.ts). This is probe's DEFAULT path --
-    //      every invocation that is not resolving a saved pin -- not an
-    //      exotic corner. Pinned by
+    //      (src/effective-selection.ts). The packaged ref is
+    //      `latest-release`, which resolveRef answers with an ls-remote, so
+    //      an ordinary unpinned run reaches this rather than only an exotic
+    //      corner -- though not every unpinned run does: resolveRef's
+    //      COMMIT_INPUT_RE branch returns before any runGit call, so a 40-hex
+    //      requested ref splices nothing. Pinned by
     //      tests/unit/upstream.test.js:460, :471, and :483.
     //   2. src/selection-store.ts:124 (same shape at :49, :86, :98) is the
     //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
