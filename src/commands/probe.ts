@@ -213,10 +213,9 @@ type Inspection =
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
-// It does still THROW for a non-AdapterFailure cause (the `throw cause`
-// closing runAdapter's own catch, src/adapter.ts). That is caught here
-// rather than in runProbe's outer catch, because the two need different
-// diagnostics -- see spec §3.3a.
+// It does still THROW for a non-AdapterFailure cause (runAdapter's closing
+// `throw cause`, src/adapter.ts). That is caught here rather than in runProbe's
+// outer catch, because the two need different diagnostics -- see spec §3.3a.
 //
 // Reached through ctx.adapter, not a direct module-level dependency on the
 // adapter module: src/commands/prepare.ts and this module are the two the
@@ -382,33 +381,31 @@ export async function runProbe(
   try {
     outcome = await gatherProbe(ctx);
   } catch (cause) {
-    // Hand-written messages, per AGENTS.md's reader-diagnostics rule.
-    // Reachable here: the selectionErrors validateSource raises
-    // (src/selection.ts:137, :140, requireSingleLineString at :77), reached
-    // from computeEffectiveSelection's validateSource call
+    // Hand-written messages, per AGENTS.md's reader-diagnostics rule. Reachable
+    // here: the selectionErrors validateSource raises (src/selection.ts:137,
+    // :140, requireSingleLineString at :77), reached from
+    // computeEffectiveSelection's validateSource call
     // (src/effective-selection.ts); the ones validateRecord raises
     // (src/selection.ts:198, :219, requireObject at :47, requireExactKeys at
     // :64, validatePinnedRecord at :170-183), reached from
     // src/selection-store.ts:103 on the read path; the selectionErrors
-    // requireAbsolute and selectionConfigDir (src/effective-selection.ts)
-    // raise for a non-absolute or missing config directory; readConfigRef's
-    // `cannot read packaged upstream ref <path>` (src/upstream.ts); and
-    // resolveRef's own two no-match diagnostics, `no stable semver tag found
-    // for latest-release` and `cannot resolve upstream ref: <ref>`
-    // (src/upstream.ts). normalizeSaved (src/selection.ts:222-241) throws
-    // nothing at all.
+    // requireAbsolute and selectionConfigDir (src/effective-selection.ts) raise
+    // for a non-absolute or missing config directory; readConfigRef's `cannot
+    // read packaged upstream ref <path>` (src/upstream.ts); and resolveRef's own
+    // two no-match diagnostics, `no stable semver tag found for latest-release`
+    // and `cannot resolve upstream ref: <ref>` (src/upstream.ts). normalizeSaved
+    // (src/selection.ts:222-241) throws nothing at all.
     //
     // THREE exceptions, all inherited and none a regression:
     //   1. resolveRef splices git's combined stdout+stderr into its own text
     //      (its three `cannot query upstream ...` throws, src/upstream.ts),
     //      reached via computeEffectiveSelection's resolveRef call
-    //      (src/effective-selection.ts). The packaged ref is
-    //      `latest-release`, which resolveRef answers with an ls-remote, so
-    //      an ordinary unpinned run reaches this rather than only an exotic
-    //      corner -- though not every unpinned run does: resolveRef's
-    //      COMMIT_INPUT_RE branch returns before any runGit call, so a 40-hex
-    //      requested ref splices nothing. Pinned by
-    //      tests/unit/upstream.test.js:460, :471, and :483.
+    //      (src/effective-selection.ts). The packaged ref is `latest-release`,
+    //      which resolveRef answers with an ls-remote, so an ordinary unpinned
+    //      run reaches this rather than only an exotic corner -- though not
+    //      every unpinned run does: resolveRef's COMMIT_INPUT_RE branch returns
+    //      before any runGit call, so a 40-hex requested ref splices nothing.
+    //      Pinned by tests/unit/upstream.test.js:460, :471, and :483.
     //   2. src/selection-store.ts:124 (same shape at :49, :86, :98) is the
     //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
     //      it interpolates the caught error's own message, so Node errno
@@ -447,11 +444,10 @@ export async function runProbe(
     // which catches every failure and returns "".
     //
     // A non-AdapterFailure re-thrown by runAdapter's closing `throw cause`
-    // (src/adapter.ts) does NOT reach here: inspect() catches it and
-    // converts it to a hand-written message per AGENTS.md's
-    // reader-diagnostics rule -- a rethrown cause is
-    // exactly the failure src/adapter.ts declined to own, so its text must
-    // never reach this stream. See §3.3a.
+    // (src/adapter.ts) does NOT reach here: inspect() catches it and converts
+    // it to a hand-written message per AGENTS.md's reader-diagnostics rule -- a
+    // rethrown cause is exactly the failure src/adapter.ts declined to own, so
+    // its text must never reach this stream. See §3.3a.
     //
     // gatherProbe performs no writes of its own, so this catch cannot also be
     // reached by an EPIPE from probe's own output — every write below runs
