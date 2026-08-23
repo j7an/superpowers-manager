@@ -52,26 +52,28 @@ Codex below describe the product integration, not a required agent harness.
   interpolated cause puts raw filesystem text, and sometimes a stack, directly
   on the terminal these commands write to — `ctx.stdout`/`ctx.stderr` are
   `process.stdout`/`process.stderr` (`src/cli.ts`), with no serialized
-  envelope left to intercept it. Three separate layers stand between a
-  diagnostic and that terminal, each covering a different channel; none is a
-  blanket guard. (1) A reader's own text that travels as an adapter message —
-  `src/manifest-overlay.ts`'s thrown text and `src/generated-plugin.ts`'s
-  `errors` entries both do — is escaped by `AdapterMessageLog` at store time
-  (`src/adapter-result.ts`), so a control character arrives rendered as
-  `\xNN` rather than acted on; it is never refused. (2)
-  `assertFailureWritable`/`hasTerminalControl` (same module) do refuse
-  outright, but they inspect only the adapter's own failure triple — code,
-  message, and hints — which is hand-written `fail()` text, not a reader's
-  message. (3) Everything else that carries an interpolated cause —
-  `src/selection-store.ts` does; `src/workspace.ts`'s signal-path
-  `process.stderr.write`, the lone direct write outside these catches, does
-  not — reaches the terminal through the CLI-boundary catches (`src/cli.ts`,
-  each command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
+  envelope left to intercept it. Three mechanisms stand between a diagnostic
+  and that terminal, each covering one route; none is a blanket guard, and a
+  diagnostic can reach the terminal past all three. (1) A reader's own text is
+  escaped by `AdapterMessageLog` at store time (`src/adapter-result.ts`) when
+  it travels as an adapter message — `src/manifest-overlay.ts`'s thrown text
+  and `src/generated-plugin.ts`'s `errors` entries do on the command path — so
+  a control character arrives rendered as `\xNN` rather than acted on; it is
+  never refused. (2) `assertFailureWritable`/`hasTerminalControl` (same
+  module) do refuse outright, but they inspect only the adapter's own failure
+  triple — code, message, and hints — which is hand-written `fail()` text, not
+  a reader's message. (3) `src/selection-store.ts`'s interpolated cause
+  reaches the terminal through the CLI-boundary catches (`src/cli.ts`, each
+  command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
   (`src/cli-arguments.ts`) collapses CR/LF runs to spaces. That bounds the
   blast radius to one line; it is not a control-character defense, and on that
-  path this rule is the whole defense. Reader wrappers are frozen by tests,
-  but by three different kinds of assertion — enumerate the pinning tests for
-  the specific string before changing any of them:
+  path this rule is the whole defense. It is the whole defense again wherever
+  a reader's diagnostics are written directly, reaching no escaper and no
+  catch: `src/validate-generated-plugin-cli.ts` writes the same
+  `src/generated-plugin.ts` `errors` entries straight to stderr. Reader
+  wrappers are frozen by tests, but by three different kinds of assertion —
+  enumerate the pinning tests for the specific string before changing any of
+  them:
   - `src/manifest-overlay.ts` — most diagnostics are asserted as
     **complete messages** (`assert.equal(error.message, …)`), so those fail
     on any rewording; the malformed-JSON case is constrained by a predicate
