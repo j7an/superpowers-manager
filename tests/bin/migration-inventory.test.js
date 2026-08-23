@@ -597,7 +597,7 @@ for (const name of Object.keys(DECLARED)) {
       frozenDigest(frozenLines),
       digests[name],
       `${name}: frozen content digest disagrees with the registry. ` +
-        `The computed value is the "actual" side above. Do NOT simply paste it into ` +
+        `The computed value is the "actual" side below. Do NOT simply paste it into ` +
         `tests/migration-inventory-digests.json. The frozen historical record is ` +
         `tests/migration-inventory/${name}; tests/migration-inventory-digests.json is ` +
         `only its digest registry, and the two change together in one commit. ` +
