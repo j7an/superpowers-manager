@@ -24,7 +24,7 @@ const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 // byte-for-byte, so no mutation of that decode says anything about the port.
 // The behavioural half of that adoption is the adapter passing raw `Buffer`
 // stdout from `listingCommand` -- runInstall's `marketplaceList`, and
-// runInspect's fingerprint-view `listing` and update-control-view
+// runInspect's fingerprint-view `listing` and ownership-view
 // `plugins`/`marketplaces` -- instead of a lossily decoded string; a
 // regression there stays green here and needs an adapter-boundary test, not
 // another case in this file.

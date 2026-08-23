@@ -444,10 +444,10 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Converted (Task 6, D4): calls `runUninstall` in-process, with the
     // double answering the ownership inspect exactly as the real adapter's
     // requireCodex check does for a missing binary (:180) -- a well-formed
-    // ok:false outcome, not a transport-level
-    // fault. There is no re-anchor onto codex.log available for this case
-    // either way: Codex is never reached by construction, so codex.log would
-    // be empty regardless of channel.
+    // ok:false outcome, not a transport-level fault. There is no re-anchor
+    // onto codex.log available for this case either way: Codex is never
+    // reached by construction, so codex.log would be empty regardless of
+    // channel.
     const c = uninstallCase({});
     const missingCodex = join(c.dir, "missing-codex");
     const adapter = recordingAdapter((argv) => {

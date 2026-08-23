@@ -669,15 +669,15 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
 
 void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested", async () => {
   // The sibling case above drives requireNoLegacyState's `"blocked"` arm; this
-  // one drives its `"unknown"` arm (reached for any identity_state outside
-  // the four known ones). Both arms need their own
-  // case: a mutant that disables BOTH at once dies to the `"blocked"` case
-  // alone, which proves only that one of the two is live. Disabling just the
-  // `"unknown"` arm previously survived the whole suite, and the survivor was
-  // a live fail-open -- re-inspect, receive an unrecognised answer, then
-  // install anyway and exit 0. gatherProbe's own ownership inspect reports
-  // "manager" here, so the unrecognised value is the RE-inspection's own
-  // evidence, not the outer pre-workspace check's.
+  // one drives its `"unknown"` arm (reached for any identity_state outside the
+  // four known ones). Both arms need their own case: a mutant that disables
+  // BOTH at once dies to the `"blocked"` case alone, which proves only that one
+  // of the two is live. Disabling just the `"unknown"` arm previously survived
+  // the whole suite, and the survivor was a live fail-open -- re-inspect,
+  // receive an unrecognised answer, then install anyway and exit 0.
+  // gatherProbe's own ownership inspect reports "manager" here, so the
+  // unrecognised value is the RE-inspection's own evidence, not the outer
+  // pre-workspace check's.
   const out = sink();
   const err = sink();
   const { adapter, calls } = scriptedAdapter([

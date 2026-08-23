@@ -591,7 +591,8 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
 // inspect-failed. That conflated two distinct states. runInspect's fingerprint
 // view returns `fingerprint: null` as a SUCCESS result when no superpowers
 // plugin is active at all; only the case where a plugin IS active but its
-// commit cannot be resolved reaches :843-847 and fails closed. Both are live.
+// commit cannot be resolved reaches the empty-fingerprint `fail` in
+// `runInspect` and fails closed. Both are live.
 
 /**
  * Seed the installed-plugin cache the fingerprint view reads.

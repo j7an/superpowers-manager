@@ -21,9 +21,9 @@ import {
  * inspecting or building).
  *
  * The throw is loud only for a caller that does not catch it. Neither prepare
- * nor probe is such a caller: gatherPrepare (after building the validator
- * argv) and src/commands/probe.ts:216-227 both wrap the adapter call in a
- * `catch` that turns any thrown error — this one included — into a
+ * nor probe is such a caller: gatherPrepare (after building the adapter
+ * build argv) and src/commands/probe.ts:216-227 both wrap the adapter call
+ * in a `catch` that turns any thrown error — this one included — into a
  * hand-written, status-1 diagnostic. So on those two paths, reaching this
  * double by mistake does NOT surface as an uncaught throw; it surfaces only if
  * the test's own assertions are tight enough to notice the resulting

@@ -6,11 +6,11 @@
 //
 // The base is shared but NOT literally immutable, and has not been since PR
 // 11.5 slice 3.4 flipped `prepare` in-process. The `scripts` and
-// `missingScripts` per-case copy options went away with the
-// scripts tree in slice 4c. The subject under test still writes into the
-// base: runPrepare's gatherPrepare resolves `<root>/plugins/superpowers`,
-// mkdirs its parent, and opens a `.superpowers.prepare.*` workspace there,
-// all inside gatherPrepare and before computeEffectiveSelection runs.
+// `missingScripts` per-case copy options went away with the scripts tree in
+// slice 4c. The subject under test still writes into the base: runPrepare's
+// gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
+// opens a `.superpowers.prepare.*` workspace there, all before
+// computeEffectiveSelection runs.
 // Every `prepare` case that clears preflight therefore leaves an empty
 // `<PACKAGE_ROOT>/plugins/` behind -- three of the four. The exception is the
 // `SUPERPOWERS_VALIDATOR` case, which withholds `python3` so that preflight

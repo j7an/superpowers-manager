@@ -187,9 +187,9 @@ void test("runPrepare emits no errno or multi-line git text when the clone fails
   //
   // Exact equality, not just doesNotMatch(/ENOENT|errno|Error:|\n.*\n.*\n/):
   // notCalledAdapter's throw is caught by gatherPrepare's own `catch`
-  // following the validator argv construction and turned into a *different*,
-  // still-single-line, still-errno-free diagnostic
-  // ("cannot build the generated plugin candidate"). A loose doesNotMatch
+  // following the adapter build argv construction and turned into a
+  // *different*, still-single-line, still-errno-free diagnostic ("cannot
+  // build the generated plugin candidate"). A loose doesNotMatch
   // cannot tell that diagnostic apart from this one, so it would stay green
   // even if a future change made this case wrongly reach the adapter. Pinning
   // the exact clone-failure text is what makes reaching ctx.adapter here

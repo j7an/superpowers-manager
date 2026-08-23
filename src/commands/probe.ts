@@ -163,7 +163,7 @@ export function formatHuman(f: ProbeFacts): string {
 // response, so adapter messages reached the operator on their declared streams
 // in array order, and a controlled failure printed `error:` plus one `hint:`
 // per hint. DIAG-ADAPTER-01 retains that contract
-// (docs/baseline/protocol-disposition.md:53); dropping it here would be a
+// (docs/baseline/protocol-disposition.md); dropping it here would be a
 // silent diagnostics regression, not a simplification.
 //
 // Interpolating error.message and each hint is the sanctioned form (AGENTS.md):

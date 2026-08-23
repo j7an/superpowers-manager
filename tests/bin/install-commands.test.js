@@ -1202,9 +1202,8 @@ void describe("install commands", { concurrency: true }, () => {
     // the adapter install operation unconditionally reaches `codex plugin add
     // superpowers@superpowers-manager` (runInstall's pluginAdded
     // mutationCommand call), which CODEX_MUTATION matches, so :600-602 below
-    // already excludes it —
-    // and it carries its own emptiness guard, which is what `nonEmpty` gave
-    // the adapter-log form.
+    // already excludes it — and it carries its own emptiness guard, which is
+    // what `nonEmpty` gave the adapter-log form.
     // :600-602. The shell guarded this with `[ ! -s "$log" ] ||`, tolerating an
     // empty Codex log. That escape hatch is deliberately not ported: probe
     // always reaches `codex plugin list`, so an empty log is a fixture fault,
@@ -1351,9 +1350,10 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :670
     assert.ok(out.includes("does not match the prepared plugin"), out);
-    // :671 — the hint text lives in runInstall's pluginAdded mismatch hint and
-    // is replayed from the adapter result by scripts/core/lifecycle.sh:109,121;
-    // core owns no copy of it.
+    // :671 — the hint text lives in runInstall's
+    // `verification_hints.mismatch`, returned after the `pluginAdded`
+    // mutation, and is replayed from the adapter result by
+    // scripts/core/lifecycle.sh:109,121; core owns no copy of it.
     assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     // :672-674
     assert.ok(
