@@ -1,7 +1,8 @@
 // @ts-check
-// Unit coverage for src/validator.ts. Every limit is exercised through a small
-// bounded policy, so no test waits on the production 30s timeout. The policy is a
-// real production argument, not a test seam.
+// Unit coverage for src/validator.ts. At this commit only the per-stream byte
+// cap (maxBytesPerStream) is exercised; FAST's timeoutMs, graceMs and drainMs
+// are inert until Task 2 wires the timeout. The policy is a real production
+// argument, not a test seam.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -91,8 +92,9 @@ void test("a file with the exec bit but no interpreter throws synchronously and 
     // Not a script and not a binary: spawn raises ENOEXEC, and on this platform it
     // raises it SYNCHRONOUSLY rather than on the error event.
     const bad = join(dir, "binary");
-    // Bytes, not a string literal: writing raw control characters into this plan
-    // would make the file BINARY to grep, and Task 9's banner gate greps it.
+    // Bytes, constructed programmatically rather than as a string literal, so
+    // this file stays text: embedding raw control characters as a literal would
+    // make the file BINARY to grep.
     writeFileSync(bad, Buffer.from([0x00, 0x01, 0x6e, 0x6f]), { mode: 0o755 });
     const run = await runValidator([bad, "/candidate"], FAST, {}, dir);
     assert.equal(run.kind, "launchFailed");
@@ -102,23 +104,19 @@ void test("a file with the exec bit but no interpreter throws synchronously and 
   }
 });
 
-void test("the promise settles exactly once", async () => {
+void test("a launch failure resolves as launchFailed, not as the close that follows it", async () => {
   const dir = sandbox();
   try {
-    // Both `error` and `close` fire on a launch failure, and `exit` and `close`
-    // both fire on a normal run. A second settle would be silently swallowed by
-    // the Promise, so count the settlements rather than trusting the shape.
-    const exe = writeScript(dir, "quick.sh", "exit 0");
-    let settlements = 0;
-    const run = await runValidator([exe, "/candidate"], FAST, {}, dir).then(
-      (r) => {
-        settlements += 1;
-        return r;
-      },
+    // A nonexistent path fires `error` (launchFailed) and then `close` (which
+    // would resolve as exited with a null code). The first settlement must win.
+    const run = await runValidator(
+      [join(dir, "nope"), "/candidate"],
+      FAST,
+      {},
+      dir,
     );
-    await new Promise((r) => setTimeout(r, FAST.graceMs + FAST.drainMs + 100));
-    assert.equal(settlements, 1);
-    assert.equal(run.kind, "exited");
+    assert.equal(run.kind, "launchFailed");
+    assert.notEqual(run.kind, "exited");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

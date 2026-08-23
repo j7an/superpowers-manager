@@ -92,9 +92,12 @@ class Sink {
   }
 }
 
-// Signal the child's whole process group. The child is spawned detached, so it
-// leads a group of its own and -pid reaches its descendants. Wrapped because the
-// group is already gone in the ordinary race between SIGTERM and SIGKILL.
+// Signal the child's whole process group. Only meaningful for a child spawned
+// under the BOUNDED policy: that spawn passes `detached: true`, so the child
+// leads a group of its own and -pid reaches its descendants. The LEGACY path
+// spawns without `detached`, so its child does not lead a group and this
+// function is not for it. Wrapped because the group is already gone in the
+// ordinary race between SIGTERM and SIGKILL.
 function signalGroup(child: { pid?: number }, signal: NodeJS.Signals): void {
   if (child.pid === undefined) return;
   try {
