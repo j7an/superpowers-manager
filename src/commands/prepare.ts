@@ -539,8 +539,8 @@ export async function runPrepare(
     //
     // FOUR exceptions, all inherited and none a regression:
     //   1. resolveRef splices git's combined stdout+stderr into its own text
-    //      on the NON-PINNED path (src/upstream.ts:150, :175, :191), reached
-    //      via computeEffectiveSelection (src/effective-selection.ts:133).
+    //      on the NON-PINNED path (src/upstream.ts), reached via
+    //      computeEffectiveSelection (src/effective-selection.ts).
     //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by tests/unit/upstream.test.js:460-469, :471-481, and :483-501.

@@ -392,7 +392,7 @@ export async function runProbe(
     // src/selection-store.ts:103 on the read path; the selectionErrors
     // requireAbsolute and selectionConfigDir (src/effective-selection.ts)
     // raise for a non-absolute or missing config directory; readConfigRef's
-    // `cannot read packaged upstream ref <path>` (src/upstream.ts:52); and
+    // `cannot read packaged upstream ref <path>` (src/upstream.ts); and
     // resolveRef's own two no-match diagnostics, `no stable semver tag found
     // for latest-release` and `cannot resolve upstream ref: <ref>`
     // (src/upstream.ts). normalizeSaved (src/selection.ts:222-241) throws
