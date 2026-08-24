@@ -45,7 +45,7 @@ to separate launcher preflight, listing, and mutation use.
 
 | Behavior ID | Contract |
 |---|---|
-| `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the ten public `SUPERPOWERS_*` overrides; it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
+| `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the public `SUPERPOWERS_*` overrides verified by `PASSTHROUGH_VARIABLES` (`tests/baseline/support.js`); it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
 | `CLI-ENV-PREPARE-PATHS-01` | Relative `SUPERPOWERS_CACHE_DIR` and `SUPERPOWERS_PLUGIN_ROOT` values are resolved from the invocation directory. |
 | `CLI-ENV-INSTALLED-DEFAULTS-01` | Without explicit overrides, Codex adapter fingerprint listing uses `codex` from `PATH` and installed fingerprint lookup uses `$HOME/.codex`. |
 | `SEL-PRECEDENCE-VALIDATE-01` | Saved selection and the resulting source are validated before ref resolution. Invalid saved state cannot be bypassed by environment ref/source overrides. |
