@@ -119,11 +119,23 @@ export function runValidator(
     const out = new Sink(limit);
     const err = new Sink(limit);
     let settled = false;
+    // Resolving the promise does NOT stop the kill escalation. Clearing the grace
+    // timer here would cancel a pending SIGKILL roughly 1.8s early whenever the
+    // drain settles first, so a descendant that ignores SIGTERM would never be
+    // killed at all. Settlement and termination are independent; only the timeout
+    // timer is cancelled, because it has already done its job.
     const settle = (run: ValidatorRun): void => {
       if (settled) return;
       settled = true;
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
       resolveRun(run);
     };
+
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let timedOut = false;
+    let lastCode: number | null = null;
+    // No timer is unref'ed. The escalation must actually run, and an unref'ed timer
+    // does not keep the event loop alive.
 
     // ENOEXEC is delivered as a SYNCHRONOUS throw, not on the error event, so a
     // handler-only implementation leaks it as an unhandled rejection.
@@ -158,7 +170,63 @@ export function runValidator(
       settle({ kind: "launchFailed", errno: cause.code ?? "UNKNOWN", cause });
     });
     child.on("close", (code) => {
+      lastCode ??= code;
+      // On the timeout path, settling here would resolve BEFORE SIGKILL and the
+      // escalation would never complete. That path settles itself, after the kill.
+      if (timedOut) return;
       settle({ kind: "exited", code, stdout: out.done(), stderr: err.done() });
     });
+
+    // Settling on `close` alone is not a wall-clock bound: `close` fires only when
+    // every writer has released the pipes, and a descendant that outlives the child
+    // holds them. Settle on whichever comes first -- `close`, or the child's `exit`
+    // plus a bounded drain for trailing output.
+    child.on("exit", (code) => {
+      // `exit` carries the status and fires as soon as the CHILD is gone; `close`
+      // may lag it indefinitely. Capture the code here or a successful validator
+      // whose descendant lingers would settle with a null code and be rejected.
+      lastCode = code;
+      // BOUNDED ONLY. The legacy path settles on `close`, exactly as it does today:
+      // a validator that backgrounds `(sleep 0.6; echo late) &` has "late" captured
+      // under `close` and lost under a 200 ms drain, and that output is captured
+      // today.
+      if (policy.kind !== "bounded") return;
+      // The TIMEOUT path owns its own settlement, after the escalation has run.
+      if (timedOut) return;
+      setTimeout(() => {
+        settle({
+          kind: "exited",
+          code: lastCode,
+          stdout: out.done(),
+          stderr: err.done(),
+        });
+      }, policy.drainMs);
+    });
+
+    if (policy.kind === "bounded") {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        // Signal the GROUP, not the process: descendants hold the pipes. SIGTERM
+        // first, because the contract promises stderr carries the reason, and
+        // reading continues through the grace window so the child can print it.
+        signalGroup(child, "SIGTERM");
+        setTimeout(() => {
+          signalGroup(child, "SIGKILL");
+          // Settle ONLY after SIGKILL has been sent. An earlier revision settled
+          // first and left the escalation on an unref'ed timer, which never fires
+          // because the CLI exits as soon as its handler returns -- measured, the
+          // manager exited at 146 ms and the descendant survived. The wall-clock
+          // bound is therefore timeout + grace + drain, which is still a bound.
+          setTimeout(() => {
+            settle({
+              kind: "timedOut",
+              afterMs: policy.timeoutMs,
+              stdout: out.done(),
+              stderr: err.done(),
+            });
+          }, policy.drainMs);
+        }, policy.graceMs);
+      }, policy.timeoutMs);
+    }
   });
 }
