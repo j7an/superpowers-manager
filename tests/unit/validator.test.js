@@ -41,9 +41,14 @@ const TIMES_OUT = {
 };
 
 // For every other bounded case: the validator is expected to EXIT, so the timeout
-// must never be the thing it races. Production's 30 s against a measured worst
-// spawn-to-settle of 1656 ms is ~18x. It carries the small byte cap too, so a case
-// needing the cap does not have to fall back to a short timeout to get it.
+// must never be the thing it races. Production's 30 s leaves about 29.4 s of
+// headroom over the worst spawn-to-exit measured under full-suite load (see the
+// exec samples on DRAIN_RACE below). Stated in absolute terms deliberately: the
+// 1656 ms figure that motivated this split is a timeout-path settle DURATION
+// (1200 + 400 + 40), not an exec measurement, so quoting a multiple against it
+// would repeat the category slip that produced the short timeout in the first
+// place. It carries the small byte cap too, so a case needing the cap does not
+// have to fall back to a short timeout to get it.
 const SUCCEEDS = {
   kind: /** @type {const} */ ("bounded"),
   timeoutMs: 30_000,
@@ -53,23 +58,30 @@ const SUCCEEDS = {
 };
 
 // For the exit-inside-the-drain-window race ONLY. The window is
-// [timeoutMs - drainMs, timeoutMs) = [5000, 9000).
+// [timeoutMs - drainMs, timeoutMs) = [800, 4000).
 //
 // Two properties, both structural rather than tuned:
-//   * FLOOR -- the validator's own `sleep 6` guarantees it cannot exit before
-//     6000 ms, which is above the window floor of 5000 ms at ANY host speed. That
-//     is what keeps the vacuous mode (exiting before the window, where nothing is
-//     queued and the test passes proving nothing) unreachable.
-//   * CEILING -- it must still exit before timeoutMs, i.e. exec + 6000 < 9000, so
-//     exec has 3000 ms of room. Measured exec under full-suite load: 248-620 ms
-//     (spawn-to-exit of a `sleep 0.5` script, 8 samples, minus the sleep).
-// The two together require drainMs > worst-case exec; 4000 ms is ~6x the measured
-// worst and ~2x the worst inferred from the reviewer's 1656 ms observation.
+//   * FLOOR -- the validator's own `sleep 1` guarantees it cannot exit before
+//     1000 ms, which is above the window floor of 800 ms at ANY host speed. POSIX
+//     `sleep` sleeps AT LEAST its argument and exec latency only pushes the exit
+//     later, so this is an inequality between two constants, not a race. It is what
+//     keeps the vacuous mode -- exiting BELOW the window, where no drain settle is
+//     queued when the timeout comes due and the case passes proving nothing --
+//     unreachable on any host.
+//   * CEILING -- it must still exit before timeoutMs, i.e. exec + 1000 < 4000, so
+//     exec has 3000 ms of room. THIS IS THE BINDING CONSTRAINT: the floor is exact
+//     arithmetic, so the ceiling is the only relation a slow host can break, and it
+//     breaks it visibly (`kind` becomes "timedOut") rather than vacuously.
+// Measured exec under full-suite load: see the samples recorded beside the case
+// itself. 3000 ms of ceiling room is ~5x the measured worst. A worst-case exec of
+// 2000 ms is ASSUMED, not measured -- no sample here approaches it; it is a
+// deliberate safety factor over the measured range, and the ~1.5x it leaves is the
+// margin this construction actually depends on.
 const DRAIN_RACE = {
   kind: /** @type {const} */ ("bounded"),
-  timeoutMs: 9_000,
-  graceMs: 5_000,
-  drainMs: 4_000,
+  timeoutMs: 4_000,
+  graceMs: 3_300,
+  drainMs: 3_200,
   maxBytesPerStream: 256,
 };
 
@@ -424,24 +436,26 @@ void test("a validator exiting inside the drain window is never signalled", asyn
     // oracle is whether SIGTERM was DELIVERED, so the descendant CATCHES it and
     // records the fact. Marker present means the bug is back.
     //
-    // The `sleep 6` is the protection, not a timing guess: it is a hard FLOOR that
-    // puts the exit above the window floor (timeoutMs - drainMs = 5000 ms) on any
-    // host, however fast. Exec latency only pushes the exit later, and the ceiling
-    // (timeoutMs = 9000 ms) leaves 3000 ms for it against a measured 248-620 ms.
-    // The descendant sleeps 12 s so it is certainly still alive at 9000 ms to catch
+    // The `sleep 1` is the protection, not a timing guess: a hard FLOOR putting the
+    // exit above the window floor (timeoutMs - drainMs = 800 ms) on any host,
+    // however fast. Exec latency only pushes the exit later, and the ceiling
+    // (timeoutMs = 4000 ms) leaves 3000 ms for it. Measured spawn-to-exit for this
+    // exact script under full-suite load: 1260-1345 ms across 8
+    // samples, i.e. an exec of 260-345 ms against that 3000 ms of room -- ~8.7x.
+    // The descendant sleeps 8 s so it is certainly still alive at 4000 ms to catch
     // the SIGTERM the buggy path would send.
     const marker = join(dir, "was-signalled");
     const exe = writeScript(
       dir,
       "quick.sh",
-      `sh -c 'trap ": > ${marker}" TERM; sleep 12' &\nsleep 6\nexit 0`,
+      `sh -c 'trap ": > ${marker}" TERM; sleep 8' &\nsleep 1\nexit 0`,
     );
     const run = await runValidator([exe, "/candidate"], DRAIN_RACE, {}, dir);
     assert.equal(run.kind, "exited");
     assert.equal(run.code, 0);
-    // Settlement is exit+drain, about 10.3-10.7 s, already past the 9000 ms at
-    // which the buggy path would have signalled; this only adds margin.
-    await new Promise((r) => setTimeout(r, 3000));
+    // Settlement is exit+drain, already past the 4000 ms at which the buggy path
+    // would have signalled; this only adds margin.
+    await new Promise((r) => setTimeout(r, 500));
     assert.equal(
       existsSync(marker),
       false,
