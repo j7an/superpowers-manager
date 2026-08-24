@@ -24,6 +24,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-ENV-PLUGIN-ROOT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
 | `CLI-ENV-MANIFEST-TEMPLATE-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rejection` | — |
 | `CLI-ENV-VALIDATOR-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
+| `CLI-ENV-VALIDATOR-EXECUTABLE-01` | `tests/baseline/validator-executable.test.js::prepare accepts a tree when the executable validator exits 0` | `tests/bin/lifecycle-fixture.js` |
 | `CLI-ENV-INSTALLED-ROOT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT` | — |
 | `CLI-ENV-REFRESH-MODE-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation` | — |
 | `CLI-ENV-PASSTHROUGH-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-01 ten SUPERPOWERS variables pass through` | — |
