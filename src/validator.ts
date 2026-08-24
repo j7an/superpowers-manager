@@ -1,4 +1,10 @@
 import { spawn } from "node:child_process";
+import { lstat, realpath, stat } from "node:fs/promises";
+import { sep } from "node:path";
+import {
+  hasTerminalControl,
+  pythonUnicodeEscapeBytes,
+} from "./adapter-result.js";
 
 export type ValidatorPolicy =
   | { readonly kind: "unbounded" }
@@ -251,4 +257,101 @@ export function runValidator(
       }, policy.timeoutMs);
     }
   });
+}
+
+export interface ValidatorResolution {
+  readonly configured: string;
+  // NULL when resolution failed. A PATH-relative name such as "sh" cannot be
+  // resolved by realpath (measured: it throws ENOENT) while spawn resolves it
+  // through PATH and succeeds. Falling back to the configured string and calling
+  // it "resolved" would name a bare word while the OS ran some other file.
+  readonly resolved: string | null;
+  readonly isSymlink: boolean;
+  readonly isDirectory: boolean;
+  // Whether the CONFIGURED path itself exists. Distinguishes "the validator is
+  // missing" from "the validator is present but its interpreter is not" -- both
+  // arrive as ENOENT.
+  readonly exists: boolean;
+}
+
+// Every probe below is best-effort BY DESIGN: spawn is the authority on whether the
+// path is runnable, and this result exists only for disclosure and for
+// disambiguating EACCES between "a directory" and "not executable". A failed probe
+// therefore degrades the MESSAGE, never the verdict — no probe result can admit a
+// validator that spawn would have rejected.
+export async function resolveValidator(
+  configured: string,
+): Promise<ValidatorResolution> {
+  // Every probe is skipped for a bare name. lstat and stat are CWD-relative, so on
+  // a bare name they would describe a file in the current directory while spawn
+  // runs whatever PATH selects -- the same divergence that makes realpath unsafe
+  // here.
+  const pathLike = configured.includes(sep);
+  let isSymlink = false;
+  if (pathLike) {
+    try {
+      isSymlink = (await lstat(configured)).isSymbolicLink();
+    } catch {
+      /* spawn reports the real reason */
+    }
+  }
+  // Resolve ONLY when the configured value contains a path separator -- which is
+  // exactly when spawn bypasses PATH and the two agree about the target. For a
+  // bare name, realpath resolves relative to the CWD while spawn searches PATH:
+  // measured from a directory containing `node`, realpath("node") gave one
+  // interpreter and spawn("node") ran another. Resolving a bare name would let the
+  // manager confidently disclose a file it is not about to run.
+  let resolved: string | null = null;
+  if (configured.includes(sep)) {
+    try {
+      resolved = await realpath(configured);
+    } catch {
+      /* unresolvable; stays null and is never claimed */
+    }
+  }
+  let isDirectory = false;
+  let exists = false;
+  if (pathLike) {
+    try {
+      const s = await stat(configured);
+      isDirectory = s.isDirectory();
+      exists = true;
+    } catch {
+      /* spawn reports the real reason */
+    }
+  }
+  return { configured, resolved, isSymlink, isDirectory, exists };
+}
+
+// Escape only when there is something to escape. pythonUnicodeEscape retains only
+// printable ASCII, so escaping unconditionally would render a legitimate non-ASCII
+// path unrecognisable to the operator who configured it. This is a legibility
+// measure, not a security control.
+export function displayPath(value: string): string {
+  return hasTerminalControl(value)
+    ? pythonUnicodeEscapeBytes(Buffer.from(value, "utf8"))
+    : value;
+}
+
+export function launchFailureMessage(
+  errno: string,
+  resolution: ValidatorResolution,
+): string {
+  const shown = displayPath(resolution.configured);
+  if (errno === "ENOENT" && resolution.exists) {
+    // The validator IS there; spawn's ENOENT came from its interpreter line.
+    // Measured: an executable with `#!/definitely/missing` raises ENOENT, and
+    // reporting "validator not found" would send the operator looking for a file
+    // that is present.
+    return `external plugin validator is present but its interpreter is missing: ${shown}`;
+  }
+  if (errno === "ENOENT")
+    return `external plugin validator not found: ${shown}`;
+  if (errno === "EACCES" && resolution.isDirectory)
+    return `external plugin validator is a directory: ${shown}`;
+  if (errno === "EACCES")
+    return `external plugin validator is not executable: ${shown}`;
+  if (errno === "ENOEXEC")
+    return `external plugin validator is not a runnable program: ${shown}`;
+  return `cannot execute external plugin validator: ${shown} (${errno})`;
 }

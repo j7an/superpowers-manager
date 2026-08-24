@@ -7,15 +7,27 @@
 // argument, not a test seam.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 /** @type {typeof import("../../src/validator.js")} */
-const { runValidator, UNBOUNDED_LEGACY, BOUNDED_EXECUTABLE } = await import(
-  new URL("../../dist/validator.js", import.meta.url).href
-);
+const {
+  runValidator,
+  UNBOUNDED_LEGACY,
+  BOUNDED_EXECUTABLE,
+  resolveValidator,
+  displayPath,
+  launchFailureMessage,
+} = await import(new URL("../../dist/validator.js", import.meta.url).href);
 
 // Three bounded policies, named for the PATH each one selects rather than for how
 // fast it is. Production ordering is grace (2000) > drain (200); every policy here
@@ -641,4 +653,74 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
       `${name}: graceMs (${policy.graceMs}) must exceed drainMs (${policy.drainMs})`,
     );
   }
+});
+
+void test("a symlink is resolved and disclosed as one", async () => {
+  const dir = sandbox();
+  try {
+    const real = writeScript(dir, "real.sh", "exit 0");
+    const link = join(dir, "link");
+    symlinkSync(real, link);
+    const r = await resolveValidator(link);
+    assert.equal(r.isSymlink, true);
+    assert.equal(r.resolved, realpathSync(real));
+    assert.equal(r.isDirectory, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("a directory is disclosed as one so EACCES can be disambiguated", async () => {
+  const dir = sandbox();
+  try {
+    const r = await resolveValidator(dir);
+    assert.equal(r.isDirectory, true);
+    assert.equal(r.isSymlink, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("a printable non-ASCII path is displayed verbatim", () => {
+  assert.equal(displayPath("/Users/josé/validator"), "/Users/josé/validator");
+  assert.equal(displayPath("/検証/validator"), "/検証/validator");
+});
+
+void test("a path carrying control characters is escaped", () => {
+  const shown = displayPath("/tmp/bad\nname");
+  assert.ok(
+    !shown.includes("\n"),
+    "the newline must not reach the terminal raw",
+  );
+  assert.match(shown, /\\n/);
+});
+
+void test("each launch failure gets its own message", () => {
+  const base = {
+    configured: "/v",
+    resolved: "/v",
+    isSymlink: false,
+    isDirectory: false,
+    exists: false,
+  };
+  assert.equal(
+    launchFailureMessage("ENOENT", base),
+    "external plugin validator not found: /v",
+  );
+  assert.equal(
+    launchFailureMessage("EACCES", { ...base, isDirectory: true }),
+    "external plugin validator is a directory: /v",
+  );
+  assert.equal(
+    launchFailureMessage("EACCES", base),
+    "external plugin validator is not executable: /v",
+  );
+  assert.equal(
+    launchFailureMessage("ENOEXEC", base),
+    "external plugin validator is not a runnable program: /v",
+  );
+  assert.equal(
+    launchFailureMessage("EPERM", base),
+    "cannot execute external plugin validator: /v (EPERM)",
+  );
 });
