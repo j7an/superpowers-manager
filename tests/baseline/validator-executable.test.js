@@ -3,7 +3,7 @@
 // and update. A NEW suite, deliberately: tests/baseline/prepare.test.js is frozen at
 // 31 call sites by tests/migration-inventory/prepare.md.
 import assert from "node:assert/strict";
-import { existsSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { createCase, runScript } from "../bin/lifecycle-fixture.js";
@@ -52,22 +52,39 @@ function writeValidator(c, name, body) {
 
 void test("prepare accepts a tree when the executable validator exits 0", async () => {
   const c = createCase({ fakes: "probe" });
-  const validator = writeValidator(c, "accept.sh", "exit 0");
+  // R1: the configured value must be a SYMLINK to the real script, not the
+  // script itself. Both createCase's scratch tree and its containing tmpdir
+  // are realpath'd (tests/bin/lifecycle-fixture.js:32-34), so a
+  // non-symlinked path already equals its own realpath -- an assertion of
+  // "configured -> realpath(configured)" would then read as "X -> X" and
+  // could not tell a manager that discloses a genuine resolved target apart
+  // from one that just echoes what was configured. A real, distinct
+  // symlink target also exercises disclosureLine's otherwise-uncovered
+  // "via symlink" branch.
+  const real = writeValidator(c, "accept-real.sh", "exit 0");
+  const validator = join(c.dir, "accept.sh");
+  symlinkSync(real, validator);
   const result = await prepare(c, {
     SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
   });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /running external validator/);
-  // D8: the disclosure must name what was CONFIGURED and what it actually
-  // RESOLVED to, not just announce that something ran. A mutation that
-  // replaces disclosureLine's body with a constant would still satisfy the
-  // loose regex above but fail this.
+  // D8: the disclosure must name what was CONFIGURED (the symlink) and what
+  // it actually RESOLVED to (the real script) -- two DISTINCT paths, joined
+  // by " via symlink ->". A mutation that replaces disclosureLine's body
+  // with a constant, or that echoes the configured path on both sides of
+  // the arrow, fails this.
   const resolved = realpathSync(validator);
+  assert.notEqual(
+    resolved,
+    validator,
+    "fixture bug: the symlink did not add a path distinct from its target",
+  );
   assert.ok(
     result.stdout.includes(
-      `running external validator ${validator} -> ${resolved}`,
+      `running external validator ${validator} via symlink -> ${resolved}`,
     ),
-    `disclosure did not name the resolved target:\n${result.stdout}`,
+    `disclosure did not name the resolved symlink target:\n${result.stdout}`,
   );
 });
 
@@ -203,6 +220,22 @@ void test("update runs the executable validator and rejects on its nonzero exit"
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /external plugin validation failed/);
   assert.match(result.stdout, /running external validator/);
+});
+
+void test("install runs the executable validator and reaches Codex on a passing exit", async () => {
+  // R2: a positive control for the "existsSync(c.codexLog) === false"
+  // assertions elsewhere in this suite. Those are falsifiable on their own,
+  // but nothing else in this file shows a reader that c.codexLog is ever
+  // actually created -- this case lets the executable validator PASS, so
+  // install proceeds past prepare+validate into Codex contact, and the log
+  // must exist by the time it returns.
+  const c = lifecycleCase();
+  const validator = writeValidator(c, "install-accept.sh", "exit 0");
+  const result = await runScript(c, "install", {
+    env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
+  });
+  assert.equal(result.status, 0);
+  assert.ok(existsSync(c.codexLog), "Codex was never contacted");
 });
 
 void test("a both-set rejection touches no integration state", async () => {

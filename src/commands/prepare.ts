@@ -227,12 +227,13 @@ type PrepareOutcome =
 // precondition does NOT hold here: the additional-validator branch below
 // itself throws prepareError when the shared runner (src/validator.ts)
 // settles a launchFailed result from a legacy-validator spawn failure, and
-// withWorkspace THROWS the callback error on that path (src/workspace.ts:137,
-// :141) without ever consulting the reporter below. The outcomes the callback below collected
-// into its `outcomes` array are lost there. That is a separate, unassigned
-// defect -- the callback-throw path discards them -- and it is out of scope
-// here: this type fixes only the post-success cleanup case, and its existence
-// should not be read as covering the other.
+// withWorkspace THROWS the callback error on that path
+// (src/workspace.ts:137, :141) without ever consulting the reporter below.
+// The outcomes the callback below collected into its `outcomes` array are
+// lost there. That is a separate, unassigned defect -- the callback-throw
+// path discards them -- and it is out of scope here: this type fixes only
+// the post-success cleanup case, and its existence should not be read as
+// covering the other.
 interface PrepareRun {
   readonly outcome: PrepareOutcome;
   readonly cleanupWarning: string | null;
