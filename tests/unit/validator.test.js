@@ -239,6 +239,33 @@ void test("a file with the exec bit but no interpreter is rejected, and on darwi
   }
 });
 
+void test("a file with the exec bit, no shebang, and a passing shell body is pinned per platform", async () => {
+  const dir = sandbox();
+  try {
+    // Unlike the previous case, this file's contents ARE valid shell source
+    // (`exit 0`) -- it just lacks the `#!` line that would tell execve which
+    // interpreter to use. POSIX execvp falls back to re-running a file with
+    // /bin/sh when execve returns ENOEXEC, so on Linux this file is executed
+    // as shell source and its `exit 0` is a genuine, accepted success. On
+    // darwin execve raises ENOEXEC synchronously and the file is rejected
+    // outright, the same as the no-interpreter case above. This divergence is
+    // a pinned contract, not an accident: if a future change makes the two
+    // platforms agree, this assertion should go red and be revisited, not
+    // silently pass either branch.
+    const bad = join(dir, "no-shebang");
+    writeFileSync(bad, "exit 0\n", { mode: 0o755 });
+    const run = await runValidator([bad, "/candidate"], SUCCEEDS, {}, dir);
+    if (process.platform === "linux") {
+      assert.equal(run.kind, "exited");
+      assert.equal(run.code, 0);
+    } else if (process.platform === "darwin") {
+      assert.equal(run.kind, "launchFailed");
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 void test("a launch failure resolves as launchFailed, not as the close that follows it", async () => {
   const dir = sandbox();
   try {
