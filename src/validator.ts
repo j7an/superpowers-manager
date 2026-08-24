@@ -355,3 +355,35 @@ export function launchFailureMessage(
     return `external plugin validator is not a runnable program: ${shown}`;
   return `cannot execute external plugin validator: ${shown} (${errno})`;
 }
+
+// Only the commands that would actually run a validator. probe stays read-only, and
+// a validator misconfiguration is none of its business.
+const VALIDATOR_COMMANDS: ReadonlySet<string> = new Set([
+  "prepare",
+  "install",
+  "update",
+]);
+
+// Legacy emptiness semantics exactly: empty string means unset, whitespace-only
+// counts as set. No trimming — a trim would silently change legacy behaviour.
+export function bothConfigured(env: NodeJS.ProcessEnv): boolean {
+  return (
+    (env.SUPERPOWERS_VALIDATOR || "").length > 0 &&
+    (env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "").length > 0
+  );
+}
+
+// The second exported accessor preflight derives its enforcement from. It is an
+// accessor rather than an inline check because an accessor that under-reports what
+// preflight enforces is the blind spot slice 2 closed.
+export function configurationErrors(
+  cmd: string,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  if (!VALIDATOR_COMMANDS.has(cmd)) return [];
+  if (!bothConfigured(env)) return [];
+  return [
+    "SUPERPOWERS_VALIDATOR and SUPERPOWERS_VALIDATOR_EXECUTABLE are both set — " +
+      "unset one; the manager never chooses between them silently",
+  ];
+}

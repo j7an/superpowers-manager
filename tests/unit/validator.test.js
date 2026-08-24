@@ -27,6 +27,8 @@ const {
   resolveValidator,
   displayPath,
   launchFailureMessage,
+  bothConfigured,
+  configurationErrors,
 } = await import(new URL("../../dist/validator.js", import.meta.url).href);
 
 // Three bounded policies, named for the PATH each one selects rather than for how
@@ -723,4 +725,48 @@ void test("each launch failure gets its own message", () => {
     launchFailureMessage("EPERM", base),
     "cannot execute external plugin validator: /v (EPERM)",
   );
+});
+
+void test("both-set is detected with legacy emptiness semantics", () => {
+  assert.equal(
+    bothConfigured({
+      SUPERPOWERS_VALIDATOR: "/a",
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
+    }),
+    true,
+  );
+  assert.equal(bothConfigured({ SUPERPOWERS_VALIDATOR: "/a" }), false);
+  assert.equal(
+    bothConfigured({
+      SUPERPOWERS_VALIDATOR: "",
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
+    }),
+    false,
+  );
+  // Whitespace-only counts as set, exactly as the legacy path treats it. No trim.
+  assert.equal(
+    bothConfigured({
+      SUPERPOWERS_VALIDATOR: " ",
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
+    }),
+    true,
+  );
+});
+
+void test("the both-set error is scoped to the commands that run a validator", () => {
+  const env = {
+    SUPERPOWERS_VALIDATOR: "/a",
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
+  };
+  for (const cmd of ["prepare", "install", "update"]) {
+    assert.equal(configurationErrors(cmd, env).length, 1, `${cmd} must reject`);
+    assert.match(configurationErrors(cmd, env)[0], /both set/);
+  }
+  for (const cmd of ["probe", "pin", "unpin", "track-latest", "uninstall"]) {
+    assert.deepEqual(
+      configurationErrors(cmd, env),
+      [],
+      `${cmd} must be unaffected`,
+    );
+  }
 });

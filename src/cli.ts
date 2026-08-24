@@ -17,6 +17,7 @@ import { runUninstall } from "./commands/uninstall.js";
 import { runUnpin } from "./commands/unpin.js";
 import { runUpdate } from "./commands/update.js";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
+import { configurationErrors } from "./validator.js";
 
 type Subcommand =
   | "pin"
@@ -216,15 +217,17 @@ function commandRequirements(
   };
 }
 
-// Tool preflight; never touches Codex state. Requirements are specific to the
-// selected command. No command requires a POSIX shell: slice 4b flipped the
-// last spawned command in-process, so there is no shell to discover.
+// Preflight; never touches Codex state. It is the union of two exported
+// accessors: configurationErrors (validator configuration) and
+// commandRequirements (tool availability), both specific to the selected
+// command. No command requires a POSIX shell: slice 4b flipped the last
+// spawned command in-process, so there is no shell to discover.
 function preflight(
   cmd: Subcommand,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ): PreflightResult {
-  const errors: string[] = [];
+  const errors: string[] = [...configurationErrors(cmd, env)];
   for (const tool of commandRequirements(env)[cmd]) {
     if (tool === "codex") {
       const codexBin = env.SUPERPOWERS_CODEX || "codex";
@@ -267,7 +270,7 @@ function usage(): string {
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",
     "SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,",
     "SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,",
-    "SUPERPOWERS_VALIDATOR,",
+    "SUPERPOWERS_VALIDATOR, SUPERPOWERS_VALIDATOR_EXECUTABLE,",
     "SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE",
     "",
     "Selection state uses SUPERPOWERS_CONFIG_DIR when set; otherwise it uses",

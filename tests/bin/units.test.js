@@ -117,6 +117,14 @@ assert.deepStrictEqual(
   bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
   ["git"],
 );
+// SUPERPOWERS_VALIDATOR_EXECUTABLE names a program invoked directly, not a
+// Python script, so it must never add python3 to prepare's requirements.
+assert.ok(
+  !bin
+    .commandRequirements({ SUPERPOWERS_VALIDATOR_EXECUTABLE: "/validator" })
+    .prepare.includes("python3"),
+  "python3 must stay keyed to the legacy variable alone",
+);
 
 // --- vehicleCommand's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ------
 // They asserted that vehicleCommand picks a spawned command and throws when
