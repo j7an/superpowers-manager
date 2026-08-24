@@ -266,14 +266,19 @@ void test("output past the cap is truncated and the drop is counted", async () =
 void test("a validator far past the cap still exits cleanly, never blocking into a timeout", async () => {
   const dir = sandbox();
   try {
-    // ~2 MB against a 256-byte cap and SUCCEEDS's 30s timeout. If the reader
-    // stopped consuming past the cap, the OS pipe buffer would fill, the
-    // child would block on its next write, and the run would sit until the
-    // 30s deadline and settle as timedOut instead of exited.
+    // ~2 MB on EACH of stdout and stderr against a 256-byte cap and
+    // SUCCEEDS's 30s timeout. If either reader stopped consuming past the
+    // cap, that stream's OS pipe buffer would fill, the child would block
+    // on its next write to it, and the run would sit until the 30s
+    // deadline and settle as timedOut instead of exited. The two stream
+    // handlers are separate, structurally identical lines
+    // (src/validator.ts), so stdout draining is not evidence that stderr
+    // does too -- both streams are flooded here so a regression on either
+    // one is caught.
     const exe = writeScript(
       dir,
       "flood.sh",
-      "i=0; while [ $i -lt 2000 ]; do printf '%01000d' 0; i=$((i+1)); done; exit 0",
+      "i=0; while [ $i -lt 2000 ]; do printf '%01000d' 0; printf '%01000d' 0 >&2; i=$((i+1)); done; exit 0",
     );
     const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
     assert.equal(
@@ -284,6 +289,8 @@ void test("a validator far past the cap still exits cleanly, never blocking into
     assert.equal(run.code, 0);
     assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
     assert.ok(run.stdout.droppedBytes > 1_000_000);
+    assert.equal(run.stderr.text.length, SUCCEEDS.maxBytesPerStream);
+    assert.ok(run.stderr.droppedBytes > 1_000_000);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
