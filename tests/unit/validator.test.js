@@ -751,6 +751,15 @@ void test("both-set is detected with legacy emptiness semantics", () => {
     }),
     true,
   );
+  // The feature's own happy path: configuring ONLY the new variable must
+  // never be mistaken for a contradiction, or the feature is DOA.
+  assert.equal(
+    bothConfigured({ SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b" }),
+    false,
+  );
+  // The null-configuration case. A default that silently means "skip" is a
+  // fail-open gate.
+  assert.equal(bothConfigured({}), false);
 });
 
 void test("the both-set error is scoped to the commands that run a validator", () => {
@@ -767,6 +776,21 @@ void test("the both-set error is scoped to the commands that run a validator", (
       configurationErrors(cmd, env),
       [],
       `${cmd} must be unaffected`,
+    );
+  }
+  // Neither the null-configuration case nor the executable-only happy path
+  // may be reported as a contradiction, for any command that runs a
+  // validator.
+  for (const cmd of ["prepare", "install", "update"]) {
+    assert.deepEqual(
+      configurationErrors(cmd, {}),
+      [],
+      `${cmd} must accept no validator configured at all`,
+    );
+    assert.deepEqual(
+      configurationErrors(cmd, { SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b" }),
+      [],
+      `${cmd} must accept the executable configured alone`,
     );
   }
 });
