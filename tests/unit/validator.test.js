@@ -40,6 +40,27 @@ const TIMES_OUT = {
   maxBytesPerStream: 256,
 };
 
+// For the one timeout case whose assertion depends on the child having RUN rather
+// than on the settle: it asserts stderr CONTENT, so the child must reach its `echo`
+// before the deadline or the assertion sees ''. TIMES_OUT's 1200 ms is chosen for
+// promptness, which is the wrong property here -- and it is not a margin that can be
+// tuned, because the case failed at 300 ms and again at 1200 ms in the same way.
+//
+// The value is free, because the validator prints and THEN sleeps 30 s: any timeout
+// well below 30 s still takes the timeout path, so this one can be chosen purely for
+// reliability. Measured time from spawn to first stderr byte for this exact script,
+// 12 samples under full-suite load: 166-330 ms. One excursion past 1200 ms was
+// observed in an acceptance run, so the tail is known to exceed the samples; 10 s is
+// ~30x the measured worst and >8x that observed excursion, while settling at
+// timeout+grace+drain = 10.44 s leaves 19.5 s of headroom below the 30 s sleep.
+const RUNS_THEN_TIMES_OUT = {
+  kind: /** @type {const} */ ("bounded"),
+  timeoutMs: 10_000,
+  graceMs: 400,
+  drainMs: 40,
+  maxBytesPerStream: 256,
+};
+
 // For every other bounded case: the validator is expected to EXIT, so the timeout
 // must never be the thing it races. Production's 30 s leaves about 29.4 s of
 // headroom over the worst spawn-to-exit measured under full-suite load (see the
@@ -257,7 +278,12 @@ void test("output written before the timeout is retained in the timedOut result"
     // first is a race. Measured over six identical runs, one lost the output. A
     // flaky test is worse than an absent one.
     const exe = writeScript(dir, "speaks.sh", "echo explaining >&2\nsleep 30");
-    const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
+    const run = await runValidator(
+      [exe, "/candidate"],
+      RUNS_THEN_TIMES_OUT,
+      {},
+      dir,
+    );
     assert.equal(run.kind, "timedOut");
     assert.match(run.stderr.text, /explaining/);
   } finally {
@@ -473,6 +499,7 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
   // mechanically because prose does not go red.
   for (const [name, policy] of Object.entries({
     TIMES_OUT,
+    RUNS_THEN_TIMES_OUT,
     SUCCEEDS,
     DRAIN_RACE,
     BOUNDED_EXECUTABLE,
