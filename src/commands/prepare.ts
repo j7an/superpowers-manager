@@ -3,9 +3,8 @@
 // and will not be re-derived. Resolve one with:
 //   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare
 
-import { spawn } from "node:child_process";
 import { cp, mkdir, rm, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import { atomicReplaceDir } from "../atomic.js";
@@ -18,6 +17,16 @@ import { SafetyError } from "../safety-error.js";
 import type { ResolutionKind } from "../upstream-version.js";
 import { manifestVersionForRef } from "../upstream-version.js";
 import { fetchExactCommit, gitSafeSource } from "../upstream.js";
+import {
+  BOUNDED_EXECUTABLE,
+  UNBOUNDED_LEGACY,
+  launchFailureMessage,
+  resolveValidator,
+  runValidator,
+  displayPath,
+  type Captured,
+  type ValidatorResolution,
+} from "../validator.js";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
 import { replayOutcome } from "./probe.js";
@@ -156,6 +165,35 @@ function asResolutionKind(value: string): ResolutionKind {
   throw prepareError(`unknown upstream resolution kind: ${value}`);
 }
 
+// Each stream's marker goes to that stream's own destination, so a reader of either
+// sees its own truncation and neither is silently short.
+function withTruncationMarker(captured: Captured, stream: string): string {
+  if (captured.droppedBytes === 0) return captured.text;
+  return `${captured.text}\n[superpowers-manager: validator ${stream} truncated, ${captured.droppedBytes} bytes dropped]\n`;
+}
+
+// D8's disclosure. The variable is ambient process env and nothing filters it, so a
+// consumer's CI can set it; naming what actually ran is what makes a supply-chain
+// surprise visible. Paths go through displayPath, so a control character in either
+// one cannot reach the terminal raw.
+function disclosureLine(resolution: ValidatorResolution): string {
+  const configured = displayPath(resolution.configured);
+  if (resolution.resolved === null) {
+    // The manager does not know the final target and does not pretend to. But a
+    // dangling symlink is a KNOWN fact even when resolution fails, and saying "the
+    // OS selects it" about a path-like value would be wrong.
+    if (resolution.isSymlink) {
+      return `[superpowers-manager: running external validator ${configured} (a symlink whose target could not be resolved)]\n`;
+    }
+    if (configured.includes(sep)) {
+      return `[superpowers-manager: running external validator ${configured} (unresolved)]\n`;
+    }
+    return `[superpowers-manager: running external validator ${configured} (a bare name; PATH selects the file, and the manager does not guess which)]\n`;
+  }
+  const via = resolution.isSymlink ? " via symlink" : "";
+  return `[superpowers-manager: running external validator ${configured}${via} -> ${displayPath(resolution.resolved)}]\n`;
+}
+
 interface ValidatorOutput {
   readonly stdout: string;
   readonly stderr: string;
@@ -199,58 +237,6 @@ interface PrepareRun {
   readonly cleanupWarning: string | null;
 }
 
-// scripts/prepare:107-113, ported verbatim per the parent spec's D1: no
-// timeout, no output cap, no executable policy. Those ten sub-decisions belong
-// to SUPERPOWERS_VALIDATOR_EXECUTABLE in PR 11.6.
-//
-// Output is captured rather than inherited so it reaches ctx.stdout/stderr
-// instead of the real process streams. That buffers it until the command ends;
-// the shell streamed it live. Spec divergence 8.
-//
-// scripts/prepare:35-36 exported TMPDIR="$prepare_workspace" so every child
-// confined its temporary files to the tree the workspace trap removed. This
-// child still does. The in-process adapter build does NOT: runBuild's
-// withWorkspace(tmpdir(), ...) call (src/adapter.ts) and os.tmpdir() reads
-// process.env, never ctx.env, so its build workspace lands in the ambient
-// temp dir. Setting process.env.TMPDIR around the call would be a
-// process-global mutation inside a library function and is unsafe under the
-// concurrent suite; the adapter removes its own workspace, so the residue
-// is bounded. Spec divergence 9.
-function runValidator(
-  validator: string,
-  candidate: string,
-  env: NodeJS.ProcessEnv,
-  workspace: string,
-): Promise<{ readonly code: number | null } & ValidatorOutput> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn("python3", [validator, candidate], {
-      env: { ...process.env, ...env, TMPDIR: workspace },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.on("error", (cause) => {
-      rejectPromise(
-        prepareError(
-          `cannot execute additional plugin validator: ${validator}`,
-          cause,
-        ),
-      );
-    });
-    child.on("close", (code) => {
-      resolvePromise({ code, stdout, stderr });
-    });
-  });
-}
-
 async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
   const env = ctx.env;
   // scripts/prepare:16 — captured before the two case statements below.
@@ -275,6 +261,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       "plugin.template.json",
     );
   const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
+  const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const cache = join(cacheParent, "superpowers");
   const tmpParent = dirname(pluginRoot);
   await owned(`cannot create directory: ${tmpParent}`, () =>
@@ -458,18 +445,74 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
           };
         }
         const ran = await runValidator(
-          additionalValidator,
-          candidate,
+          ["python3", additionalValidator, candidate],
+          UNBOUNDED_LEGACY,
           env,
           workspace,
         );
-        validator = { stdout: ran.stdout, stderr: ran.stderr };
-        if (ran.code !== 0) {
+        if (ran.kind === "launchFailed") {
+          // PARITY, and it must stay a THROW. The legacy path rejects the workspace
+          // callback on a spawn failure; withWorkspace returns the callback error
+          // and the `outcomes` collected above are LOST. That loss is a recorded,
+          // deliberately unassigned defect. Returning a failed outcome here would
+          // replay those outcomes instead -- observably different control flow for
+          // CLI-ENV-VALIDATOR-01, which this PR is not authorized to change.
+          throw prepareError(
+            `cannot execute additional plugin validator: ${additionalValidator}`,
+            ran.cause,
+          );
+        }
+        validator = { stdout: ran.stdout.text, stderr: ran.stderr.text };
+        if (ran.kind !== "exited" || ran.code !== 0) {
           return {
             kind: "failed",
             outcomes,
             validator,
             message: "additional plugin validation failed",
+          };
+        }
+      } else if (executableValidator.length > 0) {
+        const resolution = await resolveValidator(executableValidator);
+        const ran = await runValidator(
+          [executableValidator, candidate],
+          BOUNDED_EXECUTABLE,
+          env,
+          workspace,
+        );
+        // The disclosure lands BEFORE any early return, so a launch failure still
+        // reports what the manager tried to run and what it resolved to — exactly
+        // the path where an operator most needs it. It is assigned twice rather
+        // than once because `launchFailed` carries no captured streams: there was
+        // no process to capture from.
+        validator = { stdout: disclosureLine(resolution), stderr: "" };
+        if (ran.kind === "launchFailed") {
+          return {
+            kind: "failed",
+            outcomes,
+            validator,
+            message: launchFailureMessage(ran.errno, resolution),
+          };
+        }
+        validator = {
+          stdout:
+            disclosureLine(resolution) +
+            withTruncationMarker(ran.stdout, "stdout"),
+          stderr: withTruncationMarker(ran.stderr, "stderr"),
+        };
+        if (ran.kind === "timedOut") {
+          return {
+            kind: "failed",
+            outcomes,
+            validator,
+            message: `external plugin validation timed out after ${Math.round(ran.afterMs / 1000)}s`,
+          };
+        }
+        if (ran.code !== 0) {
+          return {
+            kind: "failed",
+            outcomes,
+            validator,
+            message: "external plugin validation failed",
           };
         }
       }

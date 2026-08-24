@@ -15,6 +15,7 @@
     "tests/baseline/selection-state.test.js",
     "tests/baseline/suite-runner.test.js",
     "tests/baseline/traceability.test.js",
+    "tests/baseline/validator-executable.test.js",
     "tests/bin/action-pins.test.js",
     "tests/bin/assert-matcher-gate.test.js",
     "tests/bin/bin-dispatch.test.js",
