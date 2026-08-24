@@ -201,19 +201,39 @@ void test("a nonexistent path is a launch failure, not an exit", async () => {
   }
 });
 
-void test("a file with the exec bit but no interpreter throws synchronously and is caught", async () => {
+void test("a file with the exec bit but no interpreter is rejected, and on darwin throws synchronously", async () => {
   const dir = sandbox();
   try {
-    // Not a script and not a binary: spawn raises ENOEXEC, and on this platform it
-    // raises it SYNCHRONOUSLY rather than on the error event.
+    // Not a script and not a binary: spawn raises ENOEXEC. POSIX execvp falls
+    // back to re-running the file with /bin/sh when execve returns ENOEXEC, so
+    // the SAME file surfaces differently by platform: launchFailed/ENOEXEC on
+    // darwin -- raised SYNCHRONOUSLY, not on the error event -- and a nonzero
+    // `exited` on Linux, where /bin/sh interprets the bytes as a failing
+    // script. Measured divergence: this test reds under Layer 4's Linux
+    // container while Layers 1-3 on darwin cannot see it.
     const bad = join(dir, "binary");
     // Bytes, constructed programmatically rather than as a string literal, so
     // this file stays text: embedding raw control characters as a literal would
     // make the file BINARY to grep.
     writeFileSync(bad, Buffer.from([0x00, 0x01, 0x6e, 0x6f]), { mode: 0o755 });
     const run = await runValidator([bad, "/candidate"], SUCCEEDS, {}, dir);
-    assert.equal(run.kind, "launchFailed");
-    assert.equal(run.errno, "ENOEXEC");
+    // Portable assertion, true on every platform: the file must be REJECTED,
+    // whichever mechanism reports it -- never timedOut, and never a
+    // zero-code exit.
+    assert.notEqual(run.kind, "timedOut");
+    if (run.kind === "exited") {
+      assert.notEqual(run.code, 0);
+    } else {
+      assert.equal(run.kind, "launchFailed");
+    }
+    if (process.platform === "darwin") {
+      // The synchronous ENOEXEC throw is load-bearing here: removing the
+      // runner's synchronous try/catch reds exactly this assertion (confirmed
+      // by mutation in Task 2 review). Only darwin's execvp raises ENOEXEC
+      // synchronously for this file; Linux never reaches this branch.
+      assert.equal(run.kind, "launchFailed");
+      assert.equal(run.errno, "ENOEXEC");
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

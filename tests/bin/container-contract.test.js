@@ -991,7 +991,7 @@ void test("container-contract", async (t) => {
         .sort();
       assert.deepEqual(
         packages,
-        ["ca-certificates", "git", "python3"],
+        ["ca-certificates", "git", "procps", "python3"],
         "the container's system package set changed — every entry is a supply-chain and toolchain commitment",
       );
     },
