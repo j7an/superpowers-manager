@@ -245,6 +245,72 @@ void test("the two stream caps are independent", async () => {
   }
 });
 
+void test("output past the cap is truncated and the drop is counted", async () => {
+  const dir = sandbox();
+  try {
+    // 1000 bytes of stdout against a 256-byte cap.
+    const exe = writeScript(
+      dir,
+      "chatty.sh",
+      "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
+    );
+    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+    assert.equal(run.kind, "exited");
+    assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
+    assert.equal(run.stdout.droppedBytes, 1000 - SUCCEEDS.maxBytesPerStream);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("a validator far past the cap still exits cleanly, never blocking into a timeout", async () => {
+  const dir = sandbox();
+  try {
+    // ~2 MB against a 256-byte cap and SUCCEEDS's 30s timeout. If the reader
+    // stopped consuming past the cap, the OS pipe buffer would fill, the
+    // child would block on its next write, and the run would sit until the
+    // 30s deadline and settle as timedOut instead of exited.
+    const exe = writeScript(
+      dir,
+      "flood.sh",
+      "i=0; while [ $i -lt 2000 ]; do printf '%01000d' 0; i=$((i+1)); done; exit 0",
+    );
+    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+    assert.equal(
+      run.kind,
+      "exited",
+      "a drained flood must not become a timeout",
+    );
+    assert.equal(run.code, 0);
+    assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
+    assert.ok(run.stdout.droppedBytes > 1_000_000);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("the unbounded policy retains everything", async () => {
+  const dir = sandbox();
+  try {
+    const exe = writeScript(
+      dir,
+      "some.sh",
+      "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
+    );
+    const run = await runValidator(
+      [exe, "/candidate"],
+      UNBOUNDED_LEGACY,
+      {},
+      dir,
+    );
+    assert.equal(run.kind, "exited");
+    assert.equal(run.stdout.text.length, 1000);
+    assert.equal(run.stdout.droppedBytes, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 void test("the validator receives the candidate root as its SOLE argument, with no shell", async () => {
   const dir = sandbox();
   try {
