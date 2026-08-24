@@ -61,10 +61,31 @@ const RUNS_THEN_TIMES_OUT = {
   maxBytesPerStream: 256,
 };
 
+// For the two cases that carry a TERMINATION oracle. Their assertion is negative --
+// a survival marker must be ABSENT -- so a child killed before it installed its trap
+// satisfies them while proving nothing, and `kind`, `afterMs`, duration, output and
+// message are all identical between a genuine run and a vacuous one. Measured at the
+// old 1200 ms deadline, protection-installed time reached 1150.5 ms for the survivor
+// shape: 49.5 ms of margin, 4.1% of the budget, and 6/10 vacuous on a cold tree.
+//
+// Sized against the EXCURSION, not the clean samples -- the lesson of the stderr
+// case, whose identical quantity hit 2619 ms on a cold run. In-suite samples of
+// protection-installed time on this host: survivor 172-331 ms, stubborn 167-360 ms
+// (14 each). 15 s is ~45x that measured worst and ~5.7x the 2619 ms cold excursion.
+// The value is free in the same way F1's was: the validator sleeps 30 s, so any
+// timeout well below that still takes the timeout path.
+const TRAPS_THEN_TIMES_OUT = {
+  kind: /** @type {const} */ ("bounded"),
+  timeoutMs: 15_000,
+  graceMs: 400,
+  drainMs: 40,
+  maxBytesPerStream: 256,
+};
+
 // For every other bounded case: the validator is expected to EXIT, so the timeout
-// must never be the thing it races. Production's 30 s leaves about 29.4 s of
-// headroom over the worst spawn-to-exit measured under full-suite load (see the
-// exec samples on DRAIN_RACE below). Stated in absolute terms deliberately: the
+// must never be the thing it races. Production's 30 s leaves 28.7 s of headroom
+// over the worst spawn-to-exit measured under full-suite load (1345 ms; the samples
+// are recorded beside the DRAIN_RACE case). Stated in absolute terms deliberately: the
 // 1656 ms figure that motivated this split is a timeout-path settle DURATION
 // (1200 + 400 + 40), not an exec measurement, so quoting a multiple against it
 // would repeat the category slip that produced the short timeout in the first
@@ -94,7 +115,8 @@ const SUCCEEDS = {
 //     arithmetic, so the ceiling is the only relation a slow host can break, and it
 //     breaks it visibly (`kind` becomes "timedOut") rather than vacuously.
 // Measured exec under full-suite load: see the samples recorded beside the case
-// itself. 3000 ms of ceiling room is ~5x the measured worst. A worst-case exec of
+// itself. 3000 ms of ceiling room is ~8.7x the measured worst (345 ms), the same
+// ratio that case states from the same samples. A worst-case exec of
 // 2000 ms is ASSUMED, not measured -- no sample here approaches it; it is a
 // deliberate safety factor over the measured range, and the ~1.5x it leaves is the
 // margin this construction actually depends on.
@@ -303,18 +325,36 @@ void test("a descendant ignoring SIGTERM is SIGKILLed even AFTER the run settles
     // The HISTORICAL DEFECT SHAPE this case guards against is the opposite
     // ordering: a revision that settled first and let settlement cancel a pending
     // SIGKILL. Under that shape SIGKILL never fires and the marker appears.
+    // `installed` is a POSITIVE CONTROL. The hazard this case had is on the SIGTERM
+    // side, not the marker side: if the descendant has not installed its trap by the
+    // time SIGTERM arrives at timeoutMs, it simply dies, the survival marker is never
+    // written, and the negative assertion below passes having tested nothing. Nothing
+    // about a vacuous run looks different from a genuine one. Asserting that the trap
+    // WAS installed is what makes that failure loud. Descendant sleeps 20 s so it is
+    // still alive at SIGKILL (timeout+grace = 15400 ms) with ~4.8 s of margin at the
+    // fastest observed install.
+    const installed = join(dir, "trap-installed");
     const exe = writeScript(
       dir,
       "survivor.sh",
-      `sh -c 'trap "" TERM; sleep 4; : > ${marker}' &\nsleep 30`,
+      `sh -c 'trap "" TERM; : > ${installed}; sleep 20; : > ${marker}' &\nsleep 30`,
     );
-    const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
+    const run = await runValidator(
+      [exe, "/candidate"],
+      TRAPS_THEN_TIMES_OUT,
+      {},
+      dir,
+    );
     assert.equal(run.kind, "timedOut");
-    // Settlement is 1640 ms, so this checks at ~9.6 s. The marker would be written
-    // at exec+4000 ms; exec measured 248-620 ms under full-suite load, leaving
-    // ~5 s of margin before the check, so an unusually slow exec cannot make the
-    // check fire too early and pass vacuously.
-    await new Promise((r) => setTimeout(r, 8000));
+    // Settlement is timeout+grace+drain = 15440 ms, so this checks at ~25.4 s. The
+    // survival marker would be written at install+20000 ms, i.e. by ~22.6 s even at
+    // the 2619 ms cold excursion, leaving ~2.8 s before the check.
+    await new Promise((r) => setTimeout(r, 10000));
+    assert.equal(
+      existsSync(installed),
+      true,
+      "the descendant never installed its TERM trap: this case proved nothing",
+    );
     assert.equal(
       existsSync(marker),
       false,
@@ -428,18 +468,32 @@ void test("a validator that ignores SIGTERM is still killed", async () => {
     // SIGKILL (at timeout+grace = 1600ms) as the only thing that can end it
     // before the marker is written at ~4s.
     const marker = join(dir, "outlived");
+    // Positive control, same reasoning as the survivor case: a child SIGTERMed before
+    // it reached its own `trap` line dies quietly, never writes the survival marker,
+    // and passes the negative assertion having tested nothing.
+    const installed = join(dir, "trap-installed");
     const exe = writeScript(
       dir,
       "stubborn.sh",
-      `trap '' TERM\nsleep 4\n: > ${marker}`,
+      `trap '' TERM\n: > ${installed}\nsleep 20\n: > ${marker}`,
     );
     const started = Date.now();
-    const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
+    const run = await runValidator(
+      [exe, "/candidate"],
+      TRAPS_THEN_TIMES_OUT,
+      {},
+      dir,
+    );
     assert.equal(run.kind, "timedOut");
-    assert.ok(Date.now() - started < 5000, "SIGKILL should have ended it");
-    // Same margin reasoning as the survivor case: checks at ~9.6 s against a marker
-    // that would be written at exec+4000 ms.
-    await new Promise((r) => setTimeout(r, 8000));
+    assert.ok(Date.now() - started < 20_000, "SIGKILL should have ended it");
+    // Settlement is 15440 ms; this checks at ~25.4 s against a survival marker that
+    // would be written at install+20000 ms.
+    await new Promise((r) => setTimeout(r, 10000));
+    assert.equal(
+      existsSync(installed),
+      true,
+      "the validator never installed its TERM trap: this case proved nothing",
+    );
     assert.equal(
       existsSync(marker),
       false,
@@ -500,6 +554,7 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
   for (const [name, policy] of Object.entries({
     TIMES_OUT,
     RUNS_THEN_TIMES_OUT,
+    TRAPS_THEN_TIMES_OUT,
     SUCCEEDS,
     DRAIN_RACE,
     BOUNDED_EXECUTABLE,
