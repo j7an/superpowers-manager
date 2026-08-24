@@ -3,7 +3,7 @@
 // and update. A NEW suite, deliberately: tests/baseline/prepare.test.js is frozen at
 // 31 call sites by tests/migration-inventory/prepare.md.
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { createCase, runScript } from "../bin/lifecycle-fixture.js";
@@ -58,6 +58,59 @@ void test("prepare accepts a tree when the executable validator exits 0", async 
   });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /running external validator/);
+  // D8: the disclosure must name what was CONFIGURED and what it actually
+  // RESOLVED to, not just announce that something ran. A mutation that
+  // replaces disclosureLine's body with a constant would still satisfy the
+  // loose regex above but fail this.
+  const resolved = realpathSync(validator);
+  assert.ok(
+    result.stdout.includes(
+      `running external validator ${validator} -> ${resolved}`,
+    ),
+    `disclosure did not name the resolved target:\n${result.stdout}`,
+  );
+});
+
+void test("prepare discloses a bare-name executable validator without claiming a resolved path", async () => {
+  // D8a: a PATH-relative name cannot be resolved the way an absolute path
+  // can (resolveValidator skips lstat/realpath entirely for a bare name), so
+  // the disclosure must say PATH selects it rather than presenting the bare
+  // word as though it were a checked, resolved path.
+  const c = createCase({ fakes: "probe" });
+  const name = "bare-accept.sh";
+  writeValidator(c, name, "exit 0");
+  const result = await prepare(c, {
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: name,
+    PATH: `${c.dir}:${process.env.PATH ?? ""}`,
+  });
+  assert.equal(result.status, 0);
+  assert.ok(
+    result.stdout.includes(
+      `running external validator ${name} (a bare name; PATH selects the file, and the manager does not guess which)`,
+    ),
+    `disclosure did not report the bare-name case:\n${result.stdout}`,
+  );
+});
+
+void test("prepare reports a truncated validator stream in its disclosure", async () => {
+  // D7: BOUNDED_EXECUTABLE caps each stream at 64 KiB. A validator emitting
+  // more than that must be reported as truncated -- silently dropping the
+  // remainder with no marker would hide a validator report that ran past
+  // the cap.
+  const c = createCase({ fakes: "probe" });
+  const validator = writeValidator(c, "chatty.sh", "yes | head -c 70000");
+  const result = await prepare(c, {
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
+  });
+  assert.equal(result.status, 0);
+  const marker = result.stdout.match(
+    /validator stdout truncated, (\d+) bytes dropped/,
+  );
+  assert.ok(marker, `no truncation marker in stdout:\n${result.stdout}`);
+  assert.ok(
+    Number(marker[1]) > 0,
+    `truncation marker reported an implausible byte count: ${marker[1]}`,
+  );
 });
 
 void test("prepare rejects a tree when the executable validator exits nonzero", async () => {
@@ -72,13 +125,22 @@ void test("prepare rejects a tree when the executable validator exits nonzero", 
 
 void test("a missing executable validator names itself, and still discloses", async () => {
   const c = createCase({ fakes: "probe" });
+  const missing = join(c.dir, "absent");
   const result = await prepare(c, {
-    SUPERPOWERS_VALIDATOR_EXECUTABLE: join(c.dir, "absent"),
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: missing,
   });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /external plugin validator not found/);
-  // The disclosure must survive the launch-failure path.
+  // The disclosure must survive the launch-failure path, and must say the
+  // path-like value could not be resolved rather than silently omitting
+  // resolution or claiming a target it never checked.
   assert.match(result.stdout, /running external validator/);
+  assert.ok(
+    result.stdout.includes(
+      `running external validator ${missing} (unresolved)`,
+    ),
+    `disclosure did not report the unresolved path:\n${result.stdout}`,
+  );
 });
 
 void test("install rejects a contradictory validator configuration before any network access", async () => {
@@ -103,6 +165,14 @@ void test("update rejects a contradictory validator configuration before any net
   });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /both set/);
+  // Mirrors "a both-set rejection touches no integration state" below, for
+  // `update`: asserting only the exit status would pass even if the
+  // rejection happened after `update`'s own probe.
+  assert.equal(
+    existsSync(c.codexLog),
+    false,
+    "Codex was contacted before the rejection",
+  );
 });
 
 void test("install runs the executable validator and rejects on its nonzero exit", async () => {

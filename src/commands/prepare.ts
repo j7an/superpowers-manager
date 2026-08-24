@@ -224,10 +224,11 @@ type PrepareOutcome =
 // Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
 // StageRun documents a precondition that its callback never throws, so it has
 // no "callback also failed" case to lose the cleanup message to. That
-// precondition does NOT hold here: runValidator rejects with prepareError from
-// its child.on("error") handler on a spawn failure, and withWorkspace returns
-// the callback error on that path (src/workspace.ts:137) without ever
-// consulting the reporter below. The outcomes the callback below collected
+// precondition does NOT hold here: the additional-validator branch below
+// itself throws prepareError when the shared runner (src/validator.ts)
+// settles a launchFailed result from a legacy-validator spawn failure, and
+// withWorkspace THROWS the callback error on that path (src/workspace.ts:137,
+// :141) without ever consulting the reporter below. The outcomes the callback below collected
 // into its `outcomes` array are lost there. That is a separate, unassigned
 // defect -- the callback-throw path discards them -- and it is out of scope
 // here: this type fixes only the post-success cleanup case, and its existence
@@ -571,12 +572,13 @@ export async function runPrepare(
   } catch (cause) {
     // Hand-written messages, per AGENTS.md's reader-diagnostics rule.
     // Reachable here: prepareError(), from this module's owned() wrappers,
-    // its two manifest-version checks, asResolutionKind, and runValidator's
-    // spawn failure (owned() attaches the raw ErrnoException as `cause`,
-    // which oneLine never reads -- it takes .message only); readManifest's
-    // three hookError messages (src/hooks.ts:109-134), pinned by
-    // tests/unit/hooks.test.js:95 as carrying no reader vocabulary or errno;
-    // and SafetyErrors from gitSafeSource, writeProvenance, and
+    // its two manifest-version checks, asResolutionKind, and the
+    // additional-validator branch's own throw on a legacy-validator launch
+    // failure (its cause is the shared runner's (src/validator.ts) captured
+    // spawn error, which oneLine never reads -- it takes .message only);
+    // readManifest's three hookError messages (src/hooks.ts:109-134), pinned
+    // by tests/unit/hooks.test.js:95 as carrying no reader vocabulary or
+    // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //
     // FOUR exceptions, all inherited and none a regression:
