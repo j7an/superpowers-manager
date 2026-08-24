@@ -21,7 +21,7 @@ const { runValidator, UNBOUNDED_LEGACY, BOUNDED_EXECUTABLE } = await import(
 // revision of this plan passed its own tests while shipping that bug.
 const FAST = {
   kind: /** @type {const} */ ("bounded"),
-  timeoutMs: 300,
+  timeoutMs: 1200,
   graceMs: 400,
   drainMs: 40,
   maxBytesPerStream: 256,
@@ -209,18 +209,19 @@ void test("a descendant ignoring SIGTERM is SIGKILLed even AFTER the run settles
   const dir = sandbox();
   try {
     const marker = join(dir, "survived");
-    // The backgrounded shell ignores TERM and would create the marker at +1.5s.
-    // Settlement is ~timeout+drain (340ms); SIGKILL lands at timeout+grace (700ms).
+    // The backgrounded shell ignores TERM and would create the marker at +4s.
+    // Settlement is ~timeout+drain (1240ms); SIGKILL lands at timeout+grace
+    // (1600ms).
     // If settling cancels the grace timer, SIGKILL never fires and the marker
     // appears -- which is the defect this test exists to catch.
     const exe = writeScript(
       dir,
       "survivor.sh",
-      `sh -c 'trap "" TERM; sleep 1.5; : > ${marker}' &\nsleep 30`,
+      `sh -c 'trap "" TERM; sleep 4; : > ${marker}' &\nsleep 30`,
     );
     const run = await runValidator([exe, "/candidate"], FAST, {}, dir);
     assert.equal(run.kind, "timedOut");
-    await new Promise((r) => setTimeout(r, 2500));
+    await new Promise((r) => setTimeout(r, 6000));
     assert.equal(
       existsSync(marker),
       false,
