@@ -119,11 +119,14 @@ export function runValidator(
     const out = new Sink(limit);
     const err = new Sink(limit);
     let settled = false;
-    // Resolving the promise does NOT stop the kill escalation. Clearing the grace
-    // timer here would cancel a pending SIGKILL roughly 1.8s early whenever the
-    // drain settles first, so a descendant that ignores SIGTERM would never be
-    // killed at all. Settlement and termination are independent; only the timeout
-    // timer is cancelled, because it has already done its job.
+    // Settlement and termination are independent BY CONSTRUCTION, which is why
+    // there is no grace-timer handle to clear here: the timedOut settle is nested
+    // inside the SIGKILL callback, so on the timeout path the promise cannot
+    // resolve before the escalation has run. That nesting is the fix for an
+    // earlier revision which settled first and left the SIGKILL on a cancellable
+    // timer -- the historical shape the `survivor.sh` case in the unit suite
+    // exists to catch. Only the timeout timer is cleared, and by the time settle
+    // runs it has either already fired or is being cancelled by a clean exit.
     const settle = (run: ValidatorRun): void => {
       if (settled) return;
       settled = true;
@@ -193,6 +196,20 @@ export function runValidator(
       if (policy.kind !== "bounded") return;
       // The TIMEOUT path owns its own settlement, after the escalation has run.
       if (timedOut) return;
+      // The drain settle below is now the one that will resolve this run, so the
+      // timeout must not fire behind it. A child exiting inside
+      // [timeoutMs - drainMs, timeoutMs) already has its drain settle queued when
+      // the timeout comes due; without this the timeout would SIGTERM the group of
+      // a validator that had ALREADY exited cleanly, then leave the SIGKILL
+      // escalation pending behind a settle that reports `exited`. Race-free rather
+      // than merely unlikely: either the timeout has fired, in which case
+      // `timedOut` is true and we returned above, or it has not, and now it never
+      // will. The bound is unchanged -- settlement is exitTime + drainMs and
+      // exitTime < timeoutMs. Deliberately NOT paired with a `timedOut` re-check
+      // inside the drain callback: with the timer cleared that check is
+      // unreachable, and unfalsifiable defensive code is what this module keeps
+      // being bitten by.
+      clearTimeout(timeoutTimer);
       setTimeout(() => {
         settle({
           kind: "exited",

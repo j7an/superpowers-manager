@@ -1,8 +1,10 @@
 // @ts-check
 // Unit coverage for src/validator.ts: the per-stream byte cap
-// (maxBytesPerStream), the timeout, the grace window and the drain, plus the
-// legacy path's parity contracts. The policy is a real production argument, not
-// a test seam.
+// (maxBytesPerStream), the timeout and the SIGTERM/SIGKILL escalation it drives,
+// the exit-inside-the-drain-window race, and the legacy path's parity contracts.
+// `drainMs` itself is exercised only through settlement timing -- no case here
+// would go red if drain handling alone changed. The policy is a real production
+// argument, not a test seam.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -24,6 +26,18 @@ const FAST = {
   timeoutMs: 1200,
   graceMs: 400,
   drainMs: 40,
+  maxBytesPerStream: 256,
+};
+
+// A deliberately wide window for the exit-inside-the-drain race. The validator
+// exits at ~750ms, inside [timeoutMs - drainMs, timeoutMs) = [400, 1200) -- the
+// window where the drain settle is already queued when the timeout comes due.
+// grace (900) > drain (800) is preserved here too; see the policy invariant case.
+const WIDE_WINDOW = {
+  kind: /** @type {const} */ ("bounded"),
+  timeoutMs: 1200,
+  graceMs: 900,
+  drainMs: 800,
   maxBytesPerStream: 256,
 };
 
@@ -170,7 +184,7 @@ void test("UNBOUNDED_LEGACY declares itself unbounded", () => {
   assert.equal(BOUNDED_EXECUTABLE.kind, "bounded");
 });
 
-void test("a hanging validator is terminated and reported as timedOut", async () => {
+void test("a hanging validator is reported as timedOut inside the bound", async () => {
   const dir = sandbox();
   try {
     const exe = writeScript(dir, "hang.sh", "sleep 30");
@@ -210,10 +224,13 @@ void test("a descendant ignoring SIGTERM is SIGKILLed even AFTER the run settles
   try {
     const marker = join(dir, "survived");
     // The backgrounded shell ignores TERM and would create the marker at +4s.
-    // Settlement is ~timeout+drain (1240ms); SIGKILL lands at timeout+grace
-    // (1600ms).
-    // If settling cancels the grace timer, SIGKILL never fires and the marker
-    // appears -- which is the defect this test exists to catch.
+    // SIGKILL lands at timeout+grace (1600ms) and settlement follows it at
+    // timeout+grace+drain (1640ms) -- measured 1648-1657ms, because the timedOut
+    // settle is nested inside the SIGKILL callback. Settlement is therefore AFTER
+    // the kill, not before it.
+    // The HISTORICAL DEFECT SHAPE this case guards against is the opposite
+    // ordering: a revision that settled first and let settlement cancel a pending
+    // SIGKILL. Under that shape SIGKILL never fires and the marker appears.
     const exe = writeScript(
       dir,
       "survivor.sh",
@@ -302,13 +319,16 @@ void test("PARITY: a leading BOM survives decoding", async () => {
   }
 });
 
-void test("a validator whose DESCENDANT holds the pipes is still bounded", async () => {
+void test("a validator whose DESCENDANT holds the pipes still settles inside the bound", async () => {
   const dir = sandbox();
   try {
     // The shell exits promptly; the backgrounded sleep inherits stdout and stderr
     // and outlives it. A runner that settles on `close` waits for the sleep --
-    // measured at 5279 ms against a 300 ms timeout. Group signalling plus an
-    // exit-based settle is what bounds this.
+    // measured at 5279 ms against a 300 ms timeout. What bounds it HERE is the
+    // timeout timer's own settlement, which fires whether or not any signal is
+    // delivered; the exit-based settle is not on this path at all. This case
+    // measures the bound and NOT termination -- `survivor.sh` and `stubborn.sh`
+    // are the cases that carry a termination oracle.
     const exe = writeScript(dir, "descendant.sh", "sleep 30 &\nsleep 30");
     const started = Date.now();
     const run = await runValidator([exe, "/candidate"], FAST, {}, dir);
@@ -325,12 +345,81 @@ void test("a validator whose DESCENDANT holds the pipes is still bounded", async
 void test("a validator that ignores SIGTERM is still killed", async () => {
   const dir = sandbox();
   try {
-    const exe = writeScript(dir, "stubborn.sh", "trap '' TERM\nsleep 30");
+    // A real termination oracle. `kind === "timedOut"` and the elapsed bound are
+    // both produced by the settle alone and stay green with every signal
+    // suppressed, so neither measures a kill. The child ignores TERM -- and so
+    // does its `sleep`, because an ignored disposition survives exec -- leaving
+    // SIGKILL (at timeout+grace = 1600ms) as the only thing that can end it
+    // before the marker is written at ~4s.
+    const marker = join(dir, "outlived");
+    const exe = writeScript(
+      dir,
+      "stubborn.sh",
+      `trap '' TERM\nsleep 4\n: > ${marker}`,
+    );
     const started = Date.now();
     const run = await runValidator([exe, "/candidate"], FAST, {}, dir);
     assert.equal(run.kind, "timedOut");
     assert.ok(Date.now() - started < 5000, "SIGKILL should have ended it");
+    await new Promise((r) => setTimeout(r, 6000));
+    assert.equal(
+      existsSync(marker),
+      false,
+      "the validator outlived the run: SIGKILL never ended it",
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("a validator exiting inside the drain window is never signalled", async () => {
+  const dir = sandbox();
+  try {
+    // The race: a child exiting inside [timeoutMs - drainMs, timeoutMs) already
+    // has its drain settle QUEUED when the timeout comes due. If the exit handler
+    // does not clear the timeout timer, the timeout still fires, SIGTERMs the
+    // group of a validator that had already exited cleanly, and leaves the SIGKILL
+    // escalation pending behind a settle that reports "exited".
+    // `run.kind` cannot see this -- the buggy path reports "exited" too. The
+    // oracle is whether SIGTERM was DELIVERED, so the descendant CATCHES it and
+    // records the fact. Marker present means the bug is back.
+    const marker = join(dir, "was-signalled");
+    const exe = writeScript(
+      dir,
+      "quick.sh",
+      `sh -c 'trap ": > ${marker}" TERM; sleep 5' &\nsleep 0.5\nexit 0`,
+    );
+    const run = await runValidator([exe, "/candidate"], WIDE_WINDOW, {}, dir);
+    assert.equal(run.kind, "exited");
+    assert.equal(run.code, 0);
+    await new Promise((r) => setTimeout(r, 6000));
+    assert.equal(
+      existsSync(marker),
+      false,
+      "SIGTERM reached a validator that had already exited cleanly",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
+  // Load-bearing, not cosmetic. A grace shorter than the drain lets settlement
+  // precede the SIGKILL, which is precisely the historical defect `survivor.sh`
+  // exists to catch -- and `survivor.sh` would then catch nothing. Asserted
+  // mechanically because prose does not go red.
+  for (const [name, policy] of Object.entries({
+    FAST,
+    WIDE_WINDOW,
+    BOUNDED_EXECUTABLE,
+  })) {
+    // Live, not a type-narrowing formality: BOUNDED_EXECUTABLE is declared as the
+    // ValidatorPolicy union, so this fails if a policy here ever stops being
+    // bounded -- and only then does the comparison below become unreachable.
+    assert.ok(policy.kind === "bounded", `${name} must be a bounded policy`);
+    assert.ok(
+      policy.graceMs > policy.drainMs,
+      `${name}: graceMs (${policy.graceMs}) must exceed drainMs (${policy.drainMs})`,
+    );
   }
 });
