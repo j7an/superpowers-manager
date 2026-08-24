@@ -126,11 +126,15 @@ argument. It cannot replace or bypass built-in validation, and either check
 failing prevents the tree swap and all Codex mutation.
 
 `SUPERPOWERS_VALIDATOR_EXECUTABLE=/path/to/validator` adds an optional external
-validator after the built-in check. It names an executable invoked directly,
-with no arguments passed through a shell, and receives the candidate plugin
-root as its only argument. A file with the exec bit set but no valid
-executable format is handled by the platform's own `execvp` fallback, not by
-the manager: on Linux, `/bin/sh` runs it as shell source; on darwin, it is
+validator after the built-in check. It names an executable, receiving the
+candidate plugin root as its only argument. The manager constructs no shell
+command string and supplies argv directly. On Linux, `execvp` may hand that
+same argv to `/bin/sh` after `ENOEXEC`, and the values are preserved rather
+than re-parsed, so a candidate path containing spaces or shell metacharacters
+is passed through intact and cannot inject a command — on either platform. A
+file with the exec bit set but no valid executable format is handled by the
+platform's own `execvp` fallback, not by the manager: on Linux, `/bin/sh` runs
+it as shell source; on darwin, it is
 rejected outright as not runnable. Give the validator a shebang line or make
 it a real binary, or its behavior will differ by platform. Exit 0 accepts;
 any nonzero exit rejects and prevents the tree swap. The manager stops
