@@ -125,8 +125,13 @@ export function runValidator(
     // resolve before the escalation has run. That nesting is the fix for an
     // earlier revision which settled first and left the SIGKILL on a cancellable
     // timer -- the historical shape the `survivor.sh` case in the unit suite
-    // exists to catch. Only the timeout timer is cleared, and by the time settle
-    // runs it has either already fired or is being cancelled by a clean exit.
+    // exists to catch. Only the timeout timer is cleared here, and that clear is
+    // load-bearing rather than belt-and-braces: on a clean exit the `exit` handler
+    // has already disarmed it, and on the timeout path it has already fired -- but
+    // on the BOUNDED LAUNCH-FAILURE path neither happens. Node emits no `exit`
+    // event for an asynchronously failing spawn (an ENOENT spawn yields `error`
+    // then `close` with -2 and nothing else), so this is the only thing that
+    // disarms the timer for it.
     const settle = (run: ValidatorRun): void => {
       if (settled) return;
       settled = true;
