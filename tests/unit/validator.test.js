@@ -424,11 +424,11 @@ void test("a descendant ignoring SIGTERM is SIGKILLed even AFTER the run settles
   const dir = sandbox();
   try {
     const marker = join(dir, "survived");
-    // The backgrounded shell ignores TERM and would create the marker at +4s.
-    // SIGKILL lands at timeout+grace (1600ms) and settlement follows it at
-    // timeout+grace+drain (1640ms) -- measured 1648-1657ms, because the timedOut
-    // settle is nested inside the SIGKILL callback. Settlement is therefore AFTER
-    // the kill, not before it.
+    // The backgrounded shell ignores TERM and would create the marker at
+    // install+20000ms. SIGKILL lands at timeout+grace (15400ms) and settlement
+    // follows it at timeout+grace+drain (15440ms), because the timedOut settle is
+    // nested inside the SIGKILL callback. Settlement is therefore AFTER the kill,
+    // not before it.
     // The HISTORICAL DEFECT SHAPE this case guards against is the opposite
     // ordering: a revision that settled first and let settlement cancel a pending
     // SIGKILL. Under that shape SIGKILL never fires and the marker appears.
@@ -572,8 +572,8 @@ void test("a validator that ignores SIGTERM is still killed", async () => {
     // both produced by the settle alone and stay green with every signal
     // suppressed, so neither measures a kill. The child ignores TERM -- and so
     // does its `sleep`, because an ignored disposition survives exec -- leaving
-    // SIGKILL (at timeout+grace = 1600ms) as the only thing that can end it
-    // before the marker is written at ~4s.
+    // SIGKILL (at timeout+grace = 15400ms) as the only thing that can end it
+    // before the marker is written at ~20s.
     const marker = join(dir, "outlived");
     // Positive control, same reasoning as the survivor case: a child SIGTERMed before
     // it reached its own `trap` line dies quietly, never writes the survival marker,
@@ -728,6 +728,10 @@ void test("each launch failure gets its own message", () => {
   assert.equal(
     launchFailureMessage("ENOENT", base),
     "external plugin validator not found: /v",
+  );
+  assert.equal(
+    launchFailureMessage("ENOENT", { ...base, exists: true }),
+    "external plugin validator is present but its interpreter is missing: /v",
   );
   assert.equal(
     launchFailureMessage("EACCES", { ...base, isDirectory: true }),

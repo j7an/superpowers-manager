@@ -151,8 +151,12 @@ export function runValidator(
     // No timer is unref'ed. The escalation must actually run, and an unref'ed timer
     // does not keep the event loop alive.
 
-    // ENOEXEC is delivered as a SYNCHRONOUS throw, not on the error event, so a
-    // handler-only implementation leaks it as an unhandled rejection.
+    // On darwin, ENOEXEC is delivered as a SYNCHRONOUS throw here rather than on
+    // the `error` event, so a handler-only implementation would miss it. On Linux
+    // this branch is not reached for ENOEXEC at all: POSIX execvp falls back to
+    // /bin/sh on ENOEXEC, so the spawn itself succeeds. Because the throw happens
+    // inside this Promise executor, it rejects runValidator's returned promise --
+    // not an unhandled rejection -- which is what this try/catch prevents.
     let child;
     try {
       child = spawn(command, args, {
@@ -184,7 +188,6 @@ export function runValidator(
       settle({ kind: "launchFailed", errno: cause.code ?? "UNKNOWN", cause });
     });
     child.on("close", (code) => {
-      lastCode ??= code;
       // On the timeout path, settling here would resolve BEFORE SIGKILL and the
       // escalation would never complete. That path settles itself, after the kill.
       if (timedOut) return;

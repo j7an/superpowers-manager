@@ -201,9 +201,9 @@ function findTool(
 }
 
 // python3 is required by `prepare` only when SUPERPOWERS_VALIDATOR names one:
-// after the port, that optional spawn (runValidator, in
-// src/commands/prepare.ts) is Python's only remaining consumer on the
-// prepare path. The conditional lives here, in the accessor preflight reads,
+// after the port, that optional spawn (runValidator, in src/validator.ts,
+// called from src/commands/prepare.ts) is Python's only remaining consumer
+// on the prepare path. The conditional lives here, in the accessor preflight reads,
 // rather than inside preflight — an accessor that under-reports what
 // preflight enforces is the blind spot slice 2 closed when it made
 // CLI-PREFLIGHT-01 derive its map from production.
