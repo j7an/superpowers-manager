@@ -45,6 +45,7 @@ dist/upstream-cli.js
 dist/upstream-version.js
 dist/upstream.js
 dist/validate-generated-plugin-cli.js
+dist/validator.js
 dist/workspace.js
 package.json
 plugins/superpowers/.codex-plugin/plugin.template.json

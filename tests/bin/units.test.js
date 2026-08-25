@@ -117,6 +117,14 @@ assert.deepStrictEqual(
   bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
   ["git"],
 );
+// SUPERPOWERS_VALIDATOR_EXECUTABLE names a program invoked directly, not a
+// Python script, so it must never add python3 to prepare's requirements.
+assert.ok(
+  !bin
+    .commandRequirements({ SUPERPOWERS_VALIDATOR_EXECUTABLE: "/validator" })
+    .prepare.includes("python3"),
+  "python3 must stay keyed to the legacy variable alone",
+);
 
 // --- vehicleCommand's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ------
 // They asserted that vehicleCommand picks a spawned command and throws when
@@ -184,6 +192,40 @@ assert.ok(
   "install must require codex",
 );
 assert.ok(installPf.errors.join("\n").includes("git"));
+
+// --- preflight wires configurationErrors's verdict into its own result ---
+// Exercises preflight() itself, not configurationErrors() directly: the
+// wiring line in src/cli.ts (const errors: string[] = [...configurationErrors(cmd, env)])
+// has no other test that would go red if that call were deleted and preflight
+// seeded an empty array instead -- deleting the whole feature silently.
+// "prepare" is VALIDATOR_COMMANDS-gated and needs only "git" (not "codex"),
+// which keeps the clean-environment case from failing for an unrelated
+// tooling reason on a host without codex installed.
+const realPathEnv = { PATH: process.env.PATH || "" };
+const bothSetPreflightEnv = {
+  ...realPathEnv,
+  SUPERPOWERS_VALIDATOR: "/a",
+  SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
+};
+const bothSetPreflight = bin.preflight("prepare", bothSetPreflightEnv, "linux");
+assert.strictEqual(
+  bothSetPreflight.ok,
+  false,
+  "preflight must reject a both-set validator configuration",
+);
+assert.ok(
+  bothSetPreflight.errors.join("\n").includes("both set"),
+  "preflight's errors must surface configurationErrors's conflict message",
+);
+// Positive control: the same command, real PATH, no validator variables set
+// at all -- must stay ok. Without this, a preflight that rejected EVERY
+// command would also satisfy the assertion above for the wrong reason.
+const cleanPreflight = bin.preflight("prepare", realPathEnv, "linux");
+assert.strictEqual(
+  cleanPreflight.ok,
+  true,
+  "preflight must stay ok when the validator configuration is clean",
+);
 
 // --- the baseline sandbox refuses network egress through git ---
 // PR 11.5 slice 3. The in-process prepare CLONES, so any sandbox case that

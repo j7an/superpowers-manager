@@ -15,6 +15,7 @@
     "tests/baseline/selection-state.test.js",
     "tests/baseline/suite-runner.test.js",
     "tests/baseline/traceability.test.js",
+    "tests/baseline/validator-executable.test.js",
     "tests/bin/action-pins.test.js",
     "tests/bin/assert-matcher-gate.test.js",
     "tests/bin/bin-dispatch.test.js",
@@ -60,6 +61,7 @@
     "tests/unit/status.test.js",
     "tests/unit/strict-json.test.js",
     "tests/unit/upstream.test.js",
+    "tests/unit/validator.test.js",
     "tests/unit/workspace.test.js"
   ]
 }

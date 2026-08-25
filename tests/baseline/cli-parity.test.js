@@ -79,7 +79,7 @@ Environment overrides (used by in-process commands): SUPERPOWERS_REF,
 SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,
 SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,
 SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,
-SUPERPOWERS_VALIDATOR,
+SUPERPOWERS_VALIDATOR, SUPERPOWERS_VALIDATOR_EXECUTABLE,
 SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE
 
 Selection state uses SUPERPOWERS_CONFIG_DIR when set; otherwise it uses
@@ -1211,12 +1211,12 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
   withSandbox((sandbox) => {
     // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
     // spawns `scripts/update`, so the dispatch stub that used to record the
-    // child's environment is never invoked. The ID, the test name, the
-    // traceability row and the contract are unchanged —
-    // docs/baseline/behavioral-inventory.md states it as "The CLI inherits its
-    // controlled invocation environment wholesale, including the ten public
-    // SUPERPOWERS_* overrides; it does not synthesize unrelated XDG_*, npm, or
-    // Codex variables" — and there is still exactly one child to observe it on:
+    // child's environment is never invoked. The ID, the test name, and the
+    // traceability row are unchanged. CLI-ENV-PASSTHROUGH-01
+    // (docs/baseline/behavioral-inventory.md) still asserts the same
+    // contract: the CLI inherits its controlled invocation environment
+    // wholesale, and it does not synthesize unrelated XDG_*, npm, or Codex
+    // variables — and there is still exactly one child to observe it on:
     // the `codex` process runAdapter spawns (src/adapter.ts's runCommand). The
     // recording shim below is that child, so the claim is asserted against a
     // real child environment the CLI actually constructs, not against the

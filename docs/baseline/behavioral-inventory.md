@@ -22,7 +22,7 @@ compatibility facts, not a recommendation to make every parser identical.
 
 ## Environment and location
 
-The ten `SUPERPOWERS_*` variables below are the complete public override set.
+The eleven `SUPERPOWERS_*` variables below are the complete public override set.
 The CLI inherits the environment wholesale. “Unset” means the consumer uses
 the source-derived default shown here. `SUPERPOWERS_CODEX` appears three times
 to separate launcher preflight, listing, and mutation use.
@@ -39,12 +39,13 @@ to separate launcher preflight, listing, and mutation use.
 | `CLI-ENV-PLUGIN-ROOT-01` | `SUPERPOWERS_PLUGIN_ROOT` | Package-root `plugins/superpowers` | `prepare`; the selected path becomes the generated live tree. |
 | `CLI-ENV-MANIFEST-TEMPLATE-01` | `SUPERPOWERS_MANIFEST_TEMPLATE` | Package-root `plugins/superpowers/.codex-plugin/plugin.template.json` | `prepare` passes the selected fallback bytes through adapter build into generated `.codex-plugin/plugin.template.json`. A non-file path fails before adapter build or mutation. |
 | `CLI-ENV-VALIDATOR-01` | `SUPERPOWERS_VALIDATOR` | Empty, meaning no additional validator | `prepare`; a non-empty path runs after built-in validation and before activation. |
+| `CLI-ENV-VALIDATOR-EXECUTABLE-01` | `SUPERPOWERS_VALIDATOR_EXECUTABLE` | Empty, meaning no external validator | `prepare`; a non-empty path names an executable invoked directly with the candidate root as its sole argument, after built-in validation and before activation, bounded by a 30s timeout and a 64 KiB per-stream output cap. Setting both this and `SUPERPOWERS_VALIDATOR` is rejected at preflight. |
 | `CLI-ENV-INSTALLED-ROOT-01` | `SUPERPOWERS_INSTALLED_SEARCH_ROOT` | `$HOME/.codex` | Codex fingerprint inspection; the active version selects the exact plugin cache path below this root. |
 | `CLI-ENV-REFRESH-MODE-01` | `SUPERPOWERS_INSTALL_REFRESH_MODE` | `add-only` | Codex adapter install; allowed values are `add-only` and `remove-add`. |
 
 | Behavior ID | Contract |
 |---|---|
-| `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the ten public `SUPERPOWERS_*` overrides; it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
+| `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the public `SUPERPOWERS_*` overrides verified by `PASSTHROUGH_VARIABLES` (`tests/baseline/support.js`); it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
 | `CLI-ENV-PREPARE-PATHS-01` | Relative `SUPERPOWERS_CACHE_DIR` and `SUPERPOWERS_PLUGIN_ROOT` values are resolved from the invocation directory. |
 | `CLI-ENV-INSTALLED-DEFAULTS-01` | Without explicit overrides, Codex adapter fingerprint listing uses `codex` from `PATH` and installed fingerprint lookup uses `$HOME/.codex`. |
 | `SEL-PRECEDENCE-VALIDATE-01` | Saved selection and the resulting source are validated before ref resolution. Invalid saved state cannot be bypassed by environment ref/source overrides. |
