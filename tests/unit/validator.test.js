@@ -447,7 +447,7 @@ void test("output written before the timeout is retained in the timedOut result"
   }
 });
 
-void test("a descendant ignoring SIGTERM is SIGKILLed even AFTER the run settles", async () => {
+void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", async () => {
   const dir = sandbox();
   try {
     const marker = join(dir, "survived");
