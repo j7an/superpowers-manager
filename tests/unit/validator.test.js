@@ -379,7 +379,7 @@ void test("the unbounded policy retains everything", async () => {
   }
 });
 
-void test("the validator receives the candidate root as its SOLE argument, with no shell", async () => {
+void test("the validator receives the candidate root as its SOLE argument, with no shell interpretation", async () => {
   const dir = sandbox();
   try {
     // Guards two contract points at once: exactly one argument, and no shell
