@@ -36,11 +36,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -228,29 +230,100 @@ void test("the fake re-validates its config as defence in depth", async () => {
   assert.match(result.stderr, /unknown fixture config key: pluginRemoveTypo/);
 });
 
-// The concurrency proof. Asserting that `{ concurrency: true }` is set proves
-// nothing — the option reads as set whether or not bodies actually overlap.
-// This measures overlap instead. Measured on Node v24.18.0 (Task 2, 76131cf):
-// four spawnSync subtests took 1.31s while four awaited async spawns took
-// 0.36s, so a regression to spawnSync — or a dropped `await` at any call
-// site — fails here rather than silently serialising.
-void test("runScript bodies actually overlap under concurrency", async () => {
-  const started = Date.now();
-  const single = await (async () => {
-    const t0 = Date.now();
-    await runScript(seededUninstallCase({}), "uninstall");
-    return Date.now() - t0;
-  })();
+void test("runScript bodies actually overlap under concurrency", async (t) => {
+  // Overlap is a property, not a duration. The previous oracle compared wall
+  // clocks -- `together < single * 3` -- and failed at 3894ms against a 3795ms
+  // budget during PR 11.6, i.e. it was sampling machine load at 3.08x, not
+  // detecting serialisation. The regression it must catch is named in its own
+  // history: a return to spawnSync, or a dropped `await`. Both make the four
+  // runs DISJOINT, so measure disjointness.
+  const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-"));
+  t.after(() => rmSync(rv, { recursive: true, force: true }));
+  const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "4" };
   const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
-  const t1 = Date.now();
-  await Promise.all(cases.map((c) => runScript(c, "uninstall")));
-  const together = Date.now() - t1;
-  assert.ok(
-    together < single * 3,
-    `four concurrent runs took ${together}ms against a ${single}ms single run — ` +
-      `they are not overlapping (total elapsed ${Date.now() - started}ms)`,
+  const expectedTags = cases
+    .map((c) => createHash("sha256").update(c.state).digest("hex").slice(0, 16))
+    .sort();
+  await Promise.all(cases.map((c) => runScript(c, "uninstall", { env })));
+  const tags = readdirSync(rv)
+    .filter((f) => f.endsWith(".peak"))
+    .map((f) => f.slice(0, -".peak".length))
+    .sort();
+  assert.deepEqual(
+    tags,
+    expectedTags,
+    "exactly the four participants must record evidence",
   );
+  const peaks = tags.map((tag) =>
+    Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
+  );
+  const reasons = tags.map((tag) =>
+    readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
+  );
+  assert.deepEqual(
+    peaks,
+    [4, 4, 4, 4],
+    `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks}`,
+  );
+  const readyTags = readdirSync(rv)
+    .filter((f) => f.endsWith(".ready"))
+    .map((f) => f.slice(0, -".ready".length))
+    .sort();
+  assert.deepEqual(
+    readyTags,
+    expectedTags,
+    "every participant must acknowledge arrival quorum",
+  );
+  assert.deepEqual(reasons, ["quorum", "quorum", "quorum", "quorum"]);
 });
+
+// Four participants, quorum of five: unreachable by construction. Each fake
+// records its own wait-call count and exit reason, so the oracle reads the
+// mechanism rather than inferring it from whole-run wall time.
+void test(
+  "an unmet quorum expires at the bound and reports what it saw",
+  { timeout: 20000 },
+  async (t) => {
+    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-bound-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "5" };
+    const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
+    await Promise.all(cases.map((c) => runScript(c, "uninstall", { env })));
+    const tags = readdirSync(rv)
+      .filter((f) => f.endsWith(".peak"))
+      .map((f) => f.slice(0, -".peak".length));
+    assert.equal(
+      tags.length,
+      4,
+      "every participant must record rendezvous evidence",
+    );
+    const peaks = tags.map((tag) =>
+      Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
+    );
+    const waitCalls = tags.map((tag) =>
+      Number(readFileSync(join(rv, `${tag}.waits`), "utf8").trim()),
+    );
+    const reasons = tags.map((tag) =>
+      readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
+    );
+    // First on purpose: deadline `+ 0` deterministically records zero waits, so
+    // M2 fails on this exact diagnostic before any scheduling-sensitive count.
+    assert.ok(
+      waitCalls.every((count) => count > 0),
+      "wait did not wait",
+    );
+    assert.deepEqual(
+      [...new Set(reasons)],
+      ["expired"],
+      `exit reasons were ${reasons}`,
+    );
+    assert.deepEqual(
+      [...new Set(peaks)],
+      [4],
+      `saw ${peaks} instead of four everywhere`,
+    );
+  },
+);
 
 void test("the process.exitCode idiom is what delivers a large pipe payload", async () => {
   // Carried row :2041's mutation proof. The `exit` arm is the OLD idiom and
