@@ -13,12 +13,7 @@
 // what must NOT be shared: this fake's own command branches.
 
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   injectSpuriousMutation,
@@ -52,6 +47,9 @@ function rendezvous() {
   const claimed = join(dir, `${tag}.claimed`);
   if (existsSync(claimed)) return;
   writeFileSync(claimed, "");
+  // Durable descendant identity for the watchdog acceptance case. The file is
+  // evidence only; it is removed with the rendezvous scratch directory.
+  writeFileSync(join(dir, `${tag}.pid`), `${process.pid}\n`);
   const me = join(dir, `${tag}.here`);
   writeFileSync(me, "");
   const deadline = Date.now() + 10000;
@@ -69,7 +67,9 @@ function rendezvous() {
       // above and must not also collapse this release barrier.
       const releaseDeadline = Date.now() + 10000;
       for (;;) {
-        const ready = readdirSync(dir).filter((f) => f.endsWith(".ready")).length;
+        const ready = readdirSync(dir).filter((f) =>
+          f.endsWith(".ready"),
+        ).length;
         if (ready >= expect) {
           reason = "quorum";
           break;

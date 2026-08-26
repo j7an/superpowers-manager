@@ -221,6 +221,140 @@ export function createCase(options) {
 }
 
 /**
+ * @param {string} executable
+ * @param {string[]} args
+ * @param {Record<string, string>} env
+ * @param {"install" | "update" | "prepare" | "uninstall"} script
+ * @param {number | undefined} timeoutMs
+ * @returns {Promise<{status: number, stdout: string, stderr: string}>}
+ */
+function spawnManager(executable, args, env, script, timeoutMs) {
+  const timed = timeoutMs !== undefined;
+  const spawnOptions = timed ? { env, detached: true } : { env };
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(executable, args, spawnOptions);
+    const groupPid = timed ? child.pid : undefined;
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    let groupTerminationFailed = false;
+    /** @type {NodeJS.Timeout | undefined} */
+    let watchdog;
+
+    const clearWatchdog = () => {
+      if (watchdog !== undefined) {
+        clearTimeout(watchdog);
+        watchdog = undefined;
+      }
+    };
+    /** @param {unknown} error */
+    const errorCode = (error) =>
+      typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "";
+    const killLeaderFallback = () => {
+      groupTerminationFailed = true;
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The close-path diagnostic below remains hand-written. Never emit a
+        // platform error containing raw process details.
+      }
+      // A descendant can inherit these pipes. If group kill itself failed,
+      // close the parent ends so `close` can still reap the leader and report
+      // the controlled termination failure.
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
+    const processGroupGone = async () => {
+      if (groupPid === undefined) return false;
+      const deadline = Date.now() + 1000;
+      for (;;) {
+        try {
+          process.kill(-groupPid, 0);
+        } catch (error) {
+          return errorCode(error) === "ESRCH";
+        }
+        if (Date.now() >= deadline) return false;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      }
+    };
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    // Spawn error preserves the existing distinction: the subject never ran.
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearWatchdog();
+      rejectPromise(
+        new Error(
+          `failed to launch the manager bin for ${script}: ${error.message}`,
+        ),
+      );
+    });
+    child.on("close", (code, signal) => {
+      clearWatchdog();
+      if (settled) return;
+      if (timedOut) {
+        // Reject only after Node has reaped the manager and closed its pipes,
+        // then confirm the detached process group (including the fake) is gone.
+        void (async () => {
+          const groupGone = await processGroupGone();
+          if (settled) return;
+          settled = true;
+          if (groupTerminationFailed || !groupGone) {
+            rejectPromise(
+              new Error(
+                `${script} fixture watchdog could not confirm process-group termination`,
+              ),
+            );
+            return;
+          }
+          rejectPromise(
+            new Error(
+              `${script} exceeded fixture watchdog after ${timeoutMs}ms`,
+            ),
+          );
+        })();
+        return;
+      }
+      settled = true;
+      if (signal !== null) {
+        rejectPromise(new Error(`${script} was killed by signal ${signal}`));
+        return;
+      }
+      resolvePromise({ status: code ?? -1, stdout, stderr });
+    });
+
+    if (timeoutMs !== undefined) {
+      watchdog = setTimeout(() => {
+        if (settled) return;
+        timedOut = true;
+        if (groupPid === undefined) {
+          killLeaderFallback();
+          return;
+        }
+        try {
+          process.kill(-groupPid, "SIGKILL");
+        } catch (error) {
+          // ESRCH means the group is already gone and `close` is imminent. Any
+          // other result takes the bounded, controlled leader/pipes fallback.
+          if (errorCode(error) !== "ESRCH") killLeaderFallback();
+        }
+      }, timeoutMs);
+    }
+  });
+}
+
+/**
  * MUST be awaited. `{ concurrency: true }` parallelises subtests only when
  * their bodies yield to the event loop; a synchronous body runs to completion
  * before the next one starts. Measured: four spawnSync subtests take 1.31s,
@@ -228,10 +362,20 @@ export function createCase(options) {
  * serialise the whole suite while every concurrency option still read as set.
  * @param {CaseEnv} caseEnv
  * @param {"install" | "update" | "prepare" | "uninstall"} script
- * @param {{ env?: Record<string, string>, path?: string }} [options]
+ * @param {{ env?: Record<string, string>, path?: string, timeoutMs?: number }} [options]
  * @returns {Promise<{ status: number, stdout: string, stderr: string }>}
  */
 export async function runScript(caseEnv, script, options = {}) {
+  const timeoutMs = options.timeoutMs;
+  if (
+    timeoutMs !== undefined &&
+    (!Number.isInteger(timeoutMs) || timeoutMs <= 0)
+  ) {
+    throw new Error("runScript timeoutMs must be a positive integer");
+  }
+  if (timeoutMs !== undefined && process.platform === "win32") {
+    throw new Error("runScript timeoutMs requires POSIX process groups");
+  }
   // Resolved, segment-aware containment. A lexical startsWith() also accepts
   // a sibling whose name merely extends the scratch path, so it would not
   // actually prevent running a lifecycle script against the real checkout.
@@ -270,40 +414,13 @@ export async function runScript(caseEnv, script, options = {}) {
   // assertion it exists to make. process.execPath is absolute, so the argument
   // that made /bin/sh-by-absolute-path correct before slice 4b's flip carries
   // over unchanged to the Node entrypoint.
-  return await new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(
-      process.execPath,
-      [join(caseEnv.pkg, "bin", "superpowers-manager.js"), script],
-      { env },
-    );
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    // A spawn error is a fixture failure, not a subject exit status. Reporting
-    // it as a non-zero status would let a case that never launched masquerade
-    // as a case that ran and failed.
-    child.on("error", (error) => {
-      rejectPromise(
-        new Error(
-          `failed to launch the manager bin for ${script}: ${error.message}`,
-        ),
-      );
-    });
-    child.on("close", (code, signal) => {
-      if (signal !== null) {
-        rejectPromise(new Error(`${script} was killed by signal ${signal}`));
-        return;
-      }
-      resolvePromise({ status: code ?? -1, stdout, stderr });
-    });
-  });
+  return await spawnManager(
+    process.execPath,
+    [join(caseEnv.pkg, "bin", "superpowers-manager.js"), script],
+    env,
+    script,
+    timeoutMs,
+  );
 }
 
 /**

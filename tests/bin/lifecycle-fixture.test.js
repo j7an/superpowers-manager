@@ -230,65 +230,114 @@ void test("the fake re-validates its config as defence in depth", async () => {
   assert.match(result.stderr, /unknown fixture config key: pluginRemoveTypo/);
 });
 
-void test("runScript bodies actually overlap under concurrency", async (t) => {
-  // Overlap is a property, not a duration. The previous oracle compared wall
-  // clocks -- `together < single * 3` -- and failed at 3894ms against a 3795ms
-  // budget during PR 11.6, i.e. it was sampling machine load at 3.08x, not
-  // detecting serialisation. The regression it must catch is named in its own
-  // history: a return to spawnSync, or a dropped `await`. Both make the four
-  // runs DISJOINT, so measure disjointness.
-  const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-"));
-  t.after(() => rmSync(rv, { recursive: true, force: true }));
-  const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "4" };
-  const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
-  const expectedTags = cases
-    .map((c) => createHash("sha256").update(c.state).digest("hex").slice(0, 16))
-    .sort();
-  await Promise.all(cases.map((c) => runScript(c, "uninstall", { env })));
-  const tags = readdirSync(rv)
-    .filter((f) => f.endsWith(".peak"))
-    .map((f) => f.slice(0, -".peak".length))
-    .sort();
-  assert.deepEqual(
-    tags,
-    expectedTags,
-    "exactly the four participants must record evidence",
-  );
-  const peaks = tags.map((tag) =>
-    Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
-  );
-  const reasons = tags.map((tag) =>
-    readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
-  );
-  assert.deepEqual(
-    peaks,
-    [4, 4, 4, 4],
-    `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks}`,
-  );
-  const readyTags = readdirSync(rv)
-    .filter((f) => f.endsWith(".ready"))
-    .map((f) => f.slice(0, -".ready".length))
-    .sort();
-  assert.deepEqual(
-    readyTags,
-    expectedTags,
-    "every participant must acknowledge arrival quorum",
-  );
-  assert.deepEqual(reasons, ["quorum", "quorum", "quorum", "quorum"]);
-});
+void test(
+  "runScript watchdog kills and reaps an unreachable rendezvous process group",
+  { timeout: 5000 },
+  async (t) => {
+    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-watchdog-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const timeoutMs = 1500;
+    const c = seededUninstallCase({});
+    const started = Date.now();
+    await assert.rejects(
+      runScript(c, "uninstall", {
+        env: { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "2" },
+        timeoutMs,
+      }),
+      {
+        name: "Error",
+        message: "uninstall exceeded fixture watchdog after 1500ms",
+      },
+    );
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 4000, `watchdog settlement took ${elapsed}ms`);
+    const pidFiles = readdirSync(rv).filter((f) => f.endsWith(".pid"));
+    assert.equal(
+      pidFiles.length,
+      1,
+      "the waiting fake must publish exactly one descendant PID",
+    );
+    const fakePid = Number(readFileSync(join(rv, pidFiles[0]), "utf8").trim());
+    assert.throws(
+      () => process.kill(fakePid, 0),
+      (error) =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "ESRCH",
+    );
+  },
+);
+
+void test(
+  "runScript bodies actually overlap under concurrency",
+  { timeout: 30000 },
+  async (t) => {
+    // Overlap is a property, not a duration. The previous oracle compared wall
+    // clocks -- `together < single * 3` -- and failed at 3894ms against a 3795ms
+    // budget during PR 11.6, i.e. it was sampling machine load at 3.08x, not
+    // detecting serialisation. The regression it must catch is named in its own
+    // history: a return to spawnSync, or a dropped `await`. Both make the four
+    // runs DISJOINT, so measure disjointness.
+    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "4" };
+    const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
+    const expectedTags = cases
+      .map((c) =>
+        createHash("sha256").update(c.state).digest("hex").slice(0, 16),
+      )
+      .sort();
+    await Promise.all(
+      cases.map((c) => runScript(c, "uninstall", { env, timeoutMs: 20000 })),
+    );
+    const tags = readdirSync(rv)
+      .filter((f) => f.endsWith(".peak"))
+      .map((f) => f.slice(0, -".peak".length))
+      .sort();
+    assert.deepEqual(
+      tags,
+      expectedTags,
+      "exactly the four participants must record evidence",
+    );
+    const peaks = tags.map((tag) =>
+      Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
+    );
+    const reasons = tags.map((tag) =>
+      readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
+    );
+    assert.deepEqual(
+      peaks,
+      [4, 4, 4, 4],
+      `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks}`,
+    );
+    const readyTags = readdirSync(rv)
+      .filter((f) => f.endsWith(".ready"))
+      .map((f) => f.slice(0, -".ready".length))
+      .sort();
+    assert.deepEqual(
+      readyTags,
+      expectedTags,
+      "every participant must acknowledge arrival quorum",
+    );
+    assert.deepEqual(reasons, ["quorum", "quorum", "quorum", "quorum"]);
+  },
+);
 
 // Four participants, quorum of five: unreachable by construction. Each fake
 // records its own wait-call count and exit reason, so the oracle reads the
 // mechanism rather than inferring it from whole-run wall time.
 void test(
   "an unmet quorum expires at the bound and reports what it saw",
-  { timeout: 20000 },
+  { timeout: 30000 },
   async (t) => {
     const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-bound-"));
     t.after(() => rmSync(rv, { recursive: true, force: true }));
     const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "5" };
     const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
-    await Promise.all(cases.map((c) => runScript(c, "uninstall", { env })));
+    await Promise.all(
+      cases.map((c) => runScript(c, "uninstall", { env, timeoutMs: 20000 })),
+    );
     const tags = readdirSync(rv)
       .filter((f) => f.endsWith(".peak"))
       .map((f) => f.slice(0, -".peak".length));
