@@ -1287,7 +1287,10 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       // a dropped variable is an ABSENT key in superpowers_env and `null` in
       // passthrough, and neither equals "" under deepEqual.
       SUPERPOWERS_VALIDATOR: "",
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: join(sandbox.root, "custom validator.sh"),
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: join(
+        sandbox.root,
+        "custom validator.sh",
+      ),
       SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(sandbox.root, "custom codex"),
       SUPERPOWERS_INSTALL_REFRESH_MODE: "force-refresh",
     };
