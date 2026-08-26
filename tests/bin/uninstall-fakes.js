@@ -75,6 +75,9 @@ function rendezvous() {
   writeFileSync(join(dir, `${tag}.group-pid`), `${process.ppid}\n`);
   const me = join(dir, `${tag}.here`);
   writeFileSync(me, "");
+  // Final pre-HOLD publication barrier. This is NOT rendezvous `.ready`.
+  // PID, manager/group IDs and `.here` are all durable before it appears.
+  writeFileSync(join(dir, `${tag}.watchdog-ready`), "");
   // Opt-in watchdog fixture only. Default overlap/bound behavior never enters
   // this branch. PID and live-marker readiness are durable before the hold.
   if (process.env.SPW_RENDEZVOUS_HOLD_AFTER_PID === "1") {

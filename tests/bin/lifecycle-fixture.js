@@ -316,6 +316,9 @@ function spawnManager(
       clearControls();
       if (spawned) killProcessGroup();
     };
+    // The arm path is caller-owned. A strict caller can wait for separate fake
+    // readiness, validate live identity, and only then publish this path;
+    // callers without that extra proof may pass final readiness itself.
     const armWatchdogIfReady = () => {
       if (
         settled ||

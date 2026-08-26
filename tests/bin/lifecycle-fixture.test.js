@@ -377,6 +377,9 @@ void test(
     const pidPath = join(rv, `${tag}.pid`);
     const managerPidPath = join(rv, `${tag}.manager-pid`);
     const groupPidPath = join(rv, `${tag}.group-pid`);
+    const herePath = join(rv, `${tag}.here`);
+    const finalReadyPath = join(rv, `${tag}.watchdog-ready`);
+    const armPath = join(rv, `${tag}.watchdog-arm`);
     const timeoutMs = 2000;
     const safety = new AbortController();
     const forwardTestAbort = () => safety.abort();
@@ -389,30 +392,33 @@ void test(
     /** @type {NodeJS.Timeout | undefined} */
     let postReadinessSafetyTimer;
 
-    // Attach the exact expected rejection immediately, before any readiness
-    // wait, so no child rejection can become unhandled.
-    const watchdogRejection = assert.rejects(
-      runScript(c, "uninstall", {
-        env: {
-          SPW_RENDEZVOUS_DIR: rv,
-          SPW_RENDEZVOUS_EXPECT: "2",
-          SPW_RENDEZVOUS_PID_DELAY_MS: "3000",
-          SPW_RENDEZVOUS_HOLD_AFTER_PID: "1",
-        },
-        timeoutMs,
-        watchdogArmPath: pidPath,
-        signal: safety.signal,
-      }),
-      {
-        name: "Error",
-        message: "uninstall exceeded fixture watchdog after 2000ms",
+    // Attach a NON-THROWING settlement observer immediately. This prevents an
+    // unhandled rejection without confusing abort-vs-watchdog mismatch with
+    // raw run settlement during the readiness race.
+    const rawRun = runScript(c, "uninstall", {
+      env: {
+        SPW_RENDEZVOUS_DIR: rv,
+        SPW_RENDEZVOUS_EXPECT: "2",
+        SPW_RENDEZVOUS_PID_DELAY_MS: "3000",
+        SPW_RENDEZVOUS_HOLD_AFTER_PID: "1",
       },
+      timeoutMs,
+      watchdogArmPath: armPath,
+      signal: safety.signal,
+    });
+    const RUN_RESOLVED = Symbol("run-resolved");
+    const RUN_REJECTED = Symbol("run-rejected");
+    /** @type {Promise<typeof RUN_RESOLVED | typeof RUN_REJECTED>} */
+    const runSettled = rawRun.then(
+      () => /** @type {typeof RUN_RESOLVED} */ (RUN_RESOLVED),
+      () => /** @type {typeof RUN_REJECTED} */ (RUN_REJECTED),
     );
 
     // A condition promise races the already-attached rejection assertion.
     // Readiness MUST win for a conditioned helper.
+    /** @type {Promise<"ready" | "aborted">} */
     const readiness = (async () => {
-      while (!existsSync(pidPath)) {
+      while (!existsSync(finalReadyPath)) {
         if (safety.signal.aborted) return "aborted";
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
       }
@@ -424,68 +430,118 @@ void test(
     let groupPid;
     let cleanupFailure;
     try {
-      const winner = await Promise.race([
-        readiness.then((state) => ({ source: "readiness", state })),
-        watchdogRejection.then(() => ({ source: "watchdog", state: "done" })),
-      ]);
-      if (winner.source === "watchdog") {
-        // Cleanup is already complete through assert.rejects. Abort only stops
-        // the still-polling condition promise before the fixed RED is thrown.
+      /** @type {Promise<{source: "readiness", state: "ready" | "aborted"}>} */
+      const readinessOutcome = readiness.then((state) => ({
+        source: "readiness",
+        state,
+      }));
+      /** @type {Promise<{
+       *   source: "run",
+       *   outcome: typeof RUN_RESOLVED | typeof RUN_REJECTED
+       * }>} */
+      const runOutcome = runSettled.then((outcome) => ({
+        source: "run",
+        outcome,
+      }));
+      const winner = await Promise.race([readinessOutcome, runOutcome]);
+      if (winner.source === "run") {
+        // The non-throwing observer proves runScript settled and cleanup is
+        // complete. Abort only stops the losing readiness poll.
         safety.abort();
         await readiness;
-        throw new Error("watchdog rejected before descendant readiness");
+        if (winner.outcome === RUN_REJECTED) {
+          throw new Error(
+            "watchdog readiness wait aborted after process-group cleanup",
+          );
+        }
+        throw new Error("runScript settled before descendant readiness");
       }
       if (winner.state === "aborted") {
-        // Startup/t.signal safety must await runScript cleanup. An abort does
-        // not match the expected watchdog diagnostic, so consume that mismatch
-        // and replace it with the fixed readiness-aborted test diagnostic.
-        try {
-          await watchdogRejection;
-        } catch {}
+        // Startup/t.signal safety must await non-throwing run settlement and
+        // process cleanup before the fixed readiness diagnostic.
+        await runSettled;
         throw new Error(
           "watchdog readiness wait aborted after process-group cleanup",
         );
       }
+      try {
+        if (
+          !existsSync(pidPath) ||
+          !existsSync(managerPidPath) ||
+          !existsSync(groupPidPath) ||
+          !existsSync(herePath)
+        ) {
+          throw new Error(
+            "watchdog readiness published before durable identity",
+          );
+        }
+        const fakePid = Number(readFileSync(pidPath, "utf8").trim());
+        const managerPid = Number(readFileSync(managerPidPath, "utf8").trim());
+        groupPid = Number(readFileSync(groupPidPath, "utf8").trim());
+        if (
+          !Number.isSafeInteger(fakePid) ||
+          !Number.isSafeInteger(managerPid) ||
+          !Number.isSafeInteger(groupPid) ||
+          fakePid < 1 ||
+          managerPid < 1 ||
+          groupPid < 1 ||
+          managerPid !== groupPid
+        ) {
+          throw new Error("watchdog readiness identity is invalid");
+        }
+        const initialSnapshot = await inspectProcess(fakePid);
+        const initialRow =
+          initialSnapshot.kind === "row"
+            ? parseProcessRow(initialSnapshot.text)
+            : undefined;
+        if (
+          !initialRow ||
+          initialRow.pid !== fakePid ||
+          initialRow.pgid !== groupPid ||
+          initialRow.state.startsWith("Z")
+        ) {
+          throw new Error(
+            "watchdog readiness process is not matching live identity",
+          );
+        }
+        fakeIdentity = {
+          pid: initialRow.pid,
+          pgid: initialRow.pgid,
+          command: initialRow.command,
+          started: initialRow.started,
+        };
+      } catch (error) {
+        // Pre-arm failures terminate, await non-throwing run settlement, and
+        // preserve this fixed validation error as the primary failure.
+        safety.abort();
+        await runSettled;
+        throw error;
+      }
+      if (fakeIdentity === undefined) {
+        safety.abort();
+        await runSettled;
+        throw new Error(
+          "watchdog readiness process is not matching live identity",
+        );
+      }
+      // Parent publishes arm only after every durable file and live ps identity
+      // validates. The helper cannot start its primary timer before this write.
+      writeFileSync(armPath, "armed");
       clearTimeout(startupSafetyTimer);
       startupSafetyTimer = undefined;
-      const fakePid = Number(readFileSync(pidPath, "utf8").trim());
-      const managerPid = Number(readFileSync(managerPidPath, "utf8").trim());
-      groupPid = Number(readFileSync(groupPidPath, "utf8").trim());
-      assert.equal(
-        managerPid,
-        groupPid,
-        "detached manager must be the recorded group leader",
-      );
-      const initialSnapshot = await inspectProcess(fakePid);
-      assert.equal(
-        initialSnapshot.kind,
-        "row",
-        "ready fake must have a readable ps identity",
-      );
-      const initialRow =
-        initialSnapshot.kind === "row"
-          ? parseProcessRow(initialSnapshot.text)
-          : undefined;
-      assert.ok(initialRow, "ready fake ps snapshot must parse exactly once");
-      assert.equal(initialRow.pid, fakePid);
-      assert.equal(initialRow.pgid, groupPid);
-      assert.ok(
-        !initialRow.state.startsWith("Z"),
-        "ready fake must be live, not zombie",
-      );
-      fakeIdentity = {
-        pid: initialRow.pid,
-        pgid: initialRow.pgid,
-        command: initialRow.command,
-        started: initialRow.started,
-      };
       // A later abort is the mutation safety net. In the normal case the
       // conditioned 2000ms watchdog wins and cleanup removes this listener.
       postReadinessSafetyTimer = setTimeout(() => safety.abort(), 5000);
+      // Only AFTER durable validation and parent arm does the exact watchdog
+      // assertion become the primary contract. runSettled remains attached.
+      const watchdogRejection = assert.rejects(rawRun, {
+        name: "Error",
+        message: "uninstall exceeded fixture watchdog after 2000ms",
+      });
       await watchdogRejection;
       const finalClass = classifyProcessSnapshot(
         fakeIdentity,
-        await inspectProcess(fakePid),
+        await inspectProcess(fakeIdentity.pid),
       );
       if (finalClass === "live") {
         throw new Error("watchdog left matching live fake process");
@@ -567,7 +623,7 @@ void test(
         runScript(c, "uninstall", {
           env,
           timeoutMs: 20000,
-          watchdogArmPath: join(rv, `${tag}.pid`),
+          watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
           signal: t.signal,
         }),
       ),
@@ -625,7 +681,7 @@ void test(
         runScript(c, "uninstall", {
           env,
           timeoutMs: 20000,
-          watchdogArmPath: join(rv, `${tag}.pid`),
+          watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
           signal: t.signal,
         }),
       ),
