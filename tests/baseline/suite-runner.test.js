@@ -137,6 +137,17 @@ void test("the runner announces completion on a FAILING run", (t) => {
   );
 });
 
+void test("both sentinels reach a piped capture", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/fail.test.js"],
+    files: { "tests/unit/fail.test.js": FAILING_SUITE },
+  });
+  const r = runIn(root);
+  // FALSIFIER: delete the announce() call and this goes red. It does NOT
+  // discriminate process.exit from process.exitCode; see the Task 2 brief.
+  assert.match(r.stdout, /^run-node-suites: complete status=\d+$/m);
+});
+
 // This fails if early fail() paths omit the completion signal; no child summary
 // exists when the runner fails before it can spawn node --test.
 void test("the runner announces completion when it fails before spawning", (t) => {
