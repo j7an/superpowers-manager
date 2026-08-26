@@ -16,6 +16,7 @@ const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"];
 
 // Emitted on EVERY exit path, including failure. Absence of this line means the
 // process was killed, which is the one thing a non-zero status cannot tell you.
+/** @param {number} status */
 function announce(status) {
   process.stdout.write(`run-node-suites: complete status=${status}\n`);
 }
