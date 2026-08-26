@@ -1207,7 +1207,7 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
   });
 });
 
-void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
+void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
   withSandbox((sandbox) => {
     // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
     // spawns `scripts/update`, so the dispatch stub that used to record the
@@ -1249,7 +1249,7 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
     // with asserting an absence: "absent from the child" says nothing unless
     // the manager itself had them. NODE_OPTIONS is witnessed by node honouring
     // it — the preload runs in the manager process and leaves a marker — and
-    // NODE_PATH arrives through the same `overrides` channel as the ten values
+    // NODE_PATH arrives through the same `overrides` channel as the eleven values
     // whose arrival at the child is asserted below, so the channel is proven to
     // deliver and the deletion is attributable to runCommand.
     const preload = join(sandbox.root, "node-preload.cjs");
@@ -1278,11 +1278,24 @@ void test("CLI-ENV-01 ten SUPERPOWERS variables pass through", () => {
       SUPERPOWERS_CONFIG_DIR: join(sandbox.root, "custom config"),
       SUPERPOWERS_PLUGIN_ROOT: join(sandbox.root, "custom plugin"),
       SUPERPOWERS_MANIFEST_TEMPLATE: join(sandbox.root, "custom template.json"),
-      SUPERPOWERS_VALIDATOR: join(sandbox.root, "custom validator.py"),
+      // Empty, and deliberately so. `update` is a VALIDATOR_COMMAND, and
+      // src/validator.ts:382's configurationErrors rejects the run before any
+      // adapter call when both validator names are non-empty -- so a distinctive
+      // path here would abort preflight and the codex child would never run.
+      // src/validator.ts:370-377 reads "" as unset without trimming, which is
+      // what clears the conflict. The key is still forwarded and still asserted:
+      // a dropped variable is an ABSENT key in superpowers_env and `null` in
+      // passthrough, and neither equals "" under deepEqual.
+      SUPERPOWERS_VALIDATOR: "",
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: join(sandbox.root, "custom validator.sh"),
       SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(sandbox.root, "custom codex"),
       SUPERPOWERS_INSTALL_REFRESH_MODE: "force-refresh",
     };
-    assert.deepEqual(Object.keys(values), PASSTHROUGH_VARIABLES);
+    assert.deepEqual(
+      Object.keys(values),
+      PASSTHROUGH_VARIABLES,
+      "passthrough list and fixture must stay in lockstep, same names in the same order",
+    );
 
     const previousLeak = process.env.SUPERPOWERS_BASELINE_LEAK;
     process.env.SUPERPOWERS_BASELINE_LEAK = "must-not-pass";
