@@ -8,6 +8,7 @@
 
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -226,9 +227,19 @@ export function createCase(options) {
  * @param {Record<string, string>} env
  * @param {"install" | "update" | "prepare" | "uninstall"} script
  * @param {number | undefined} timeoutMs
+ * @param {string | undefined} watchdogArmPath
+ * @param {AbortSignal | undefined} signal
  * @returns {Promise<{status: number, stdout: string, stderr: string}>}
  */
-function spawnManager(executable, args, env, script, timeoutMs) {
+function spawnManager(
+  executable,
+  args,
+  env,
+  script,
+  timeoutMs,
+  watchdogArmPath,
+  signal,
+) {
   const timed = timeoutMs !== undefined;
   const spawnOptions = timed ? { env, detached: true } : { env };
   return new Promise((resolvePromise, rejectPromise) => {
@@ -236,16 +247,31 @@ function spawnManager(executable, args, env, script, timeoutMs) {
     const groupPid = timed ? child.pid : undefined;
     let stdout = "";
     let stderr = "";
+    let spawned = false;
     let settled = false;
-    let timedOut = false;
+    let killStarted = false;
+    /** @type {"watchdog" | "abort" | undefined} */
+    let terminationReason;
     let groupTerminationFailed = false;
     /** @type {NodeJS.Timeout | undefined} */
     let watchdog;
+    /** @type {NodeJS.Timeout | undefined} */
+    let armPoll;
+    /** @type {(() => void) | undefined} */
+    let abortListener;
 
-    const clearWatchdog = () => {
+    const clearControls = () => {
       if (watchdog !== undefined) {
         clearTimeout(watchdog);
         watchdog = undefined;
+      }
+      if (armPoll !== undefined) {
+        clearInterval(armPoll);
+        armPoll = undefined;
+      }
+      if (signal !== undefined && abortListener !== undefined) {
+        signal.removeEventListener("abort", abortListener);
+        abortListener = undefined;
       }
     };
     /** @param {unknown} error */
@@ -267,6 +293,21 @@ function spawnManager(executable, args, env, script, timeoutMs) {
       child.stdout.destroy();
       child.stderr.destroy();
     };
+    const killProcessGroup = () => {
+      if (killStarted) return;
+      killStarted = true;
+      if (groupPid === undefined) {
+        killLeaderFallback();
+        return;
+      }
+      try {
+        process.kill(-groupPid, "SIGKILL");
+      } catch (error) {
+        // ESRCH means the group is already gone and `close` is imminent. Any
+        // other result takes the bounded, controlled leader/pipes fallback.
+        if (errorCode(error) !== "ESRCH") killLeaderFallback();
+      }
+    };
     const processGroupGone = async () => {
       if (groupPid === undefined) return false;
       const deadline = Date.now() + 1000;
@@ -280,6 +321,39 @@ function spawnManager(executable, args, env, script, timeoutMs) {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
       }
     };
+    /** @param {"watchdog" | "abort"} reason */
+    const requestTermination = (reason) => {
+      if (settled || terminationReason !== undefined) return;
+      // First reason wins. Never read AbortSignal.reason into a diagnostic.
+      terminationReason = reason;
+      clearControls();
+      if (spawned) killProcessGroup();
+    };
+    const armWatchdogIfReady = () => {
+      if (
+        settled ||
+        terminationReason !== undefined ||
+        watchdog !== undefined ||
+        watchdogArmPath === undefined ||
+        timeoutMs === undefined ||
+        !existsSync(watchdogArmPath)
+      ) {
+        return;
+      }
+      if (armPoll !== undefined) {
+        clearInterval(armPoll);
+        armPoll = undefined;
+      }
+      watchdog = setTimeout(() => {
+        requestTermination("watchdog");
+      }, timeoutMs);
+    };
+    const startArmPolling = () => {
+      armWatchdogIfReady();
+      if (watchdog === undefined && terminationReason === undefined) {
+        armPoll = setInterval(armWatchdogIfReady, 25);
+      }
+    };
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -289,21 +363,32 @@ function spawnManager(executable, args, env, script, timeoutMs) {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
-    // Spawn error preserves the existing distinction: the subject never ran.
-    child.on("error", (error) => {
+    child.once("spawn", () => {
+      spawned = true;
+      if (terminationReason !== undefined) killProcessGroup();
+      else if (timed) startArmPolling();
+    });
+    // Spawn error preserves the existing distinction when no child launched.
+    child.once("error", (error) => {
       if (settled) return;
+      clearControls();
+      if (spawned && terminationReason !== undefined) {
+        // A kill-race error stays on the termination close path and never
+        // overwrites the already-selected fixed reason.
+        groupTerminationFailed = true;
+        return;
+      }
       settled = true;
-      clearWatchdog();
       rejectPromise(
         new Error(
           `failed to launch the manager bin for ${script}: ${error.message}`,
         ),
       );
     });
-    child.on("close", (code, signal) => {
-      clearWatchdog();
+    child.once("close", (code, closeSignal) => {
+      clearControls();
       if (settled) return;
-      if (timedOut) {
+      if (terminationReason !== undefined) {
         // Reject only after Node has reaped the manager and closed its pipes,
         // then confirm the detached process group (including the fake) is gone.
         void (async () => {
@@ -318,38 +403,28 @@ function spawnManager(executable, args, env, script, timeoutMs) {
             );
             return;
           }
-          rejectPromise(
-            new Error(
-              `${script} exceeded fixture watchdog after ${timeoutMs}ms`,
-            ),
-          );
+          const message =
+            terminationReason === "watchdog"
+              ? `${script} exceeded fixture watchdog after ${timeoutMs}ms`
+              : `${script} fixture aborted`;
+          rejectPromise(new Error(message));
         })();
         return;
       }
       settled = true;
-      if (signal !== null) {
-        rejectPromise(new Error(`${script} was killed by signal ${signal}`));
+      if (closeSignal !== null) {
+        rejectPromise(
+          new Error(`${script} was killed by signal ${closeSignal}`),
+        );
         return;
       }
       resolvePromise({ status: code ?? -1, stdout, stderr });
     });
 
-    if (timeoutMs !== undefined) {
-      watchdog = setTimeout(() => {
-        if (settled) return;
-        timedOut = true;
-        if (groupPid === undefined) {
-          killLeaderFallback();
-          return;
-        }
-        try {
-          process.kill(-groupPid, "SIGKILL");
-        } catch (error) {
-          // ESRCH means the group is already gone and `close` is imminent. Any
-          // other result takes the bounded, controlled leader/pipes fallback.
-          if (errorCode(error) !== "ESRCH") killLeaderFallback();
-        }
-      }, timeoutMs);
+    if (signal !== undefined) {
+      abortListener = () => requestTermination("abort");
+      signal.addEventListener("abort", abortListener, { once: true });
+      if (signal.aborted) requestTermination("abort");
     }
   });
 }
@@ -362,16 +437,47 @@ function spawnManager(executable, args, env, script, timeoutMs) {
  * serialise the whole suite while every concurrency option still read as set.
  * @param {CaseEnv} caseEnv
  * @param {"install" | "update" | "prepare" | "uninstall"} script
- * @param {{ env?: Record<string, string>, path?: string, timeoutMs?: number }} [options]
+ * @param {{
+ *   env?: Record<string, string>,
+ *   path?: string,
+ *   timeoutMs?: number,
+ *   watchdogArmPath?: string,
+ *   signal?: AbortSignal,
+ * }} [options]
  * @returns {Promise<{ status: number, stdout: string, stderr: string }>}
  */
 export async function runScript(caseEnv, script, options = {}) {
   const timeoutMs = options.timeoutMs;
+  const watchdogArmPath = options.watchdogArmPath;
+  const signal = options.signal;
+  const watchdogFields = [
+    timeoutMs !== undefined,
+    watchdogArmPath !== undefined,
+    signal !== undefined,
+  ];
+  if (watchdogFields.some(Boolean) && !watchdogFields.every(Boolean)) {
+    throw new Error(
+      "runScript timeoutMs, watchdogArmPath, and signal must be provided together",
+    );
+  }
   if (
     timeoutMs !== undefined &&
     (!Number.isInteger(timeoutMs) || timeoutMs <= 0)
   ) {
     throw new Error("runScript timeoutMs must be a positive integer");
+  }
+  if (
+    watchdogArmPath !== undefined &&
+    (typeof watchdogArmPath !== "string" ||
+      watchdogArmPath.length === 0 ||
+      resolve(watchdogArmPath) !== watchdogArmPath)
+  ) {
+    throw new Error(
+      "runScript watchdogArmPath must be a nonempty absolute path",
+    );
+  }
+  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+    throw new Error("runScript signal must be an AbortSignal");
   }
   if (timeoutMs !== undefined && process.platform === "win32") {
     throw new Error("runScript timeoutMs requires POSIX process groups");
@@ -420,6 +526,8 @@ export async function runScript(caseEnv, script, options = {}) {
     env,
     script,
     timeoutMs,
+    watchdogArmPath,
+    signal,
   );
 }
 

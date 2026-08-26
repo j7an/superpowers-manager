@@ -232,40 +232,101 @@ void test("the fake re-validates its config as defence in depth", async () => {
 
 void test(
   "runScript watchdog kills and reaps an unreachable rendezvous process group",
-  { timeout: 5000 },
+  { timeout: 30000 },
   async (t) => {
     const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-watchdog-"));
     t.after(() => rmSync(rv, { recursive: true, force: true }));
-    const timeoutMs = 1500;
     const c = seededUninstallCase({});
-    const started = Date.now();
-    await assert.rejects(
+    const tag = createHash("sha256").update(c.state).digest("hex").slice(0, 16);
+    const pidPath = join(rv, `${tag}.pid`);
+    const timeoutMs = 500;
+    const safety = new AbortController();
+    const forwardTestAbort = () => safety.abort();
+    if (t.signal.aborted) forwardTestAbort();
+    else t.signal.addEventListener("abort", forwardTestAbort, { once: true });
+    // Full-suite startup evidence is ~1-4.4s. Fifteen seconds is deliberately
+    // generous and still precedes node:test's catastrophic 30s cancellation.
+    /** @type {NodeJS.Timeout | undefined} */
+    let startupSafetyTimer = setTimeout(() => safety.abort(), 15000);
+    /** @type {NodeJS.Timeout | undefined} */
+    let postReadinessSafetyTimer;
+
+    // Attach the exact expected rejection immediately, before any readiness
+    // wait, so no child rejection can become unhandled.
+    const watchdogRejection = assert.rejects(
       runScript(c, "uninstall", {
-        env: { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "2" },
+        env: {
+          SPW_RENDEZVOUS_DIR: rv,
+          SPW_RENDEZVOUS_EXPECT: "2",
+          SPW_RENDEZVOUS_PID_DELAY_MS: "1000",
+          SPW_RENDEZVOUS_HOLD_AFTER_PID: "1",
+        },
         timeoutMs,
+        watchdogArmPath: pidPath,
+        signal: safety.signal,
       }),
       {
         name: "Error",
-        message: "uninstall exceeded fixture watchdog after 1500ms",
+        message: "uninstall exceeded fixture watchdog after 500ms",
       },
     );
-    const elapsed = Date.now() - started;
-    assert.ok(elapsed < 4000, `watchdog settlement took ${elapsed}ms`);
-    const pidFiles = readdirSync(rv).filter((f) => f.endsWith(".pid"));
-    assert.equal(
-      pidFiles.length,
-      1,
-      "the waiting fake must publish exactly one descendant PID",
-    );
-    const fakePid = Number(readFileSync(join(rv, pidFiles[0]), "utf8").trim());
-    assert.throws(
-      () => process.kill(fakePid, 0),
-      (error) =>
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "ESRCH",
-    );
+
+    // A condition promise races the already-attached rejection assertion.
+    // Readiness MUST win for a conditioned helper.
+    const readiness = (async () => {
+      while (!existsSync(pidPath)) {
+        if (safety.signal.aborted) return "aborted";
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      }
+      return "ready";
+    })();
+
+    try {
+      const winner = await Promise.race([
+        readiness.then((state) => ({ source: "readiness", state })),
+        watchdogRejection.then(() => ({ source: "watchdog", state: "done" })),
+      ]);
+      if (winner.source === "watchdog") {
+        // Cleanup is already complete through assert.rejects. Abort only stops
+        // the still-polling condition promise before the fixed RED is thrown.
+        safety.abort();
+        await readiness;
+        throw new Error("watchdog rejected before descendant readiness");
+      }
+      if (winner.state === "aborted") {
+        // Startup/t.signal safety must await runScript cleanup. An abort does
+        // not match the expected watchdog diagnostic, so consume that mismatch
+        // and replace it with the fixed readiness-aborted test diagnostic.
+        try {
+          await watchdogRejection;
+        } catch {}
+        throw new Error(
+          "watchdog readiness wait aborted after process-group cleanup",
+        );
+      }
+      clearTimeout(startupSafetyTimer);
+      startupSafetyTimer = undefined;
+      const fakePid = Number(readFileSync(pidPath, "utf8").trim());
+      // A later abort is the mutation safety net. In the normal case the
+      // conditioned 500ms watchdog wins and cleanup removes this listener.
+      postReadinessSafetyTimer = setTimeout(() => safety.abort(), 3000);
+      await watchdogRejection;
+      assert.throws(
+        () => process.kill(fakePid, 0),
+        (error) =>
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ESRCH",
+      );
+    } finally {
+      if (startupSafetyTimer !== undefined) clearTimeout(startupSafetyTimer);
+      if (postReadinessSafetyTimer !== undefined) {
+        clearTimeout(postReadinessSafetyTimer);
+      }
+      t.signal.removeEventListener("abort", forwardTestAbort);
+      safety.abort();
+    }
   },
 );
 
@@ -283,13 +344,20 @@ void test(
     t.after(() => rmSync(rv, { recursive: true, force: true }));
     const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "4" };
     const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
-    const expectedTags = cases
-      .map((c) =>
-        createHash("sha256").update(c.state).digest("hex").slice(0, 16),
-      )
-      .sort();
+    const participants = cases.map((c) => ({
+      c,
+      tag: createHash("sha256").update(c.state).digest("hex").slice(0, 16),
+    }));
+    const expectedTags = participants.map(({ tag }) => tag).sort();
     await Promise.all(
-      cases.map((c) => runScript(c, "uninstall", { env, timeoutMs: 20000 })),
+      participants.map(({ c, tag }) =>
+        runScript(c, "uninstall", {
+          env,
+          timeoutMs: 20000,
+          watchdogArmPath: join(rv, `${tag}.pid`),
+          signal: t.signal,
+        }),
+      ),
     );
     const tags = readdirSync(rv)
       .filter((f) => f.endsWith(".peak"))
@@ -335,8 +403,19 @@ void test(
     t.after(() => rmSync(rv, { recursive: true, force: true }));
     const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "5" };
     const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
+    const participants = cases.map((c) => ({
+      c,
+      tag: createHash("sha256").update(c.state).digest("hex").slice(0, 16),
+    }));
     await Promise.all(
-      cases.map((c) => runScript(c, "uninstall", { env, timeoutMs: 20000 })),
+      participants.map(({ c, tag }) =>
+        runScript(c, "uninstall", {
+          env,
+          timeoutMs: 20000,
+          watchdogArmPath: join(rv, `${tag}.pid`),
+          signal: t.signal,
+        }),
+      ),
     );
     const tags = readdirSync(rv)
       .filter((f) => f.endsWith(".peak"))

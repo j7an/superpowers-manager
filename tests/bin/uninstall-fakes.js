@@ -32,7 +32,7 @@ import {
 function rendezvous() {
   const dir = process.env.SPW_RENDEZVOUS_DIR;
   const expect = Number(process.env.SPW_RENDEZVOUS_EXPECT);
-  if (!dir || !Number.isInteger(expect) || expect < 1) return;
+  if (!dir || !Number.isInteger(expect) || expect < 1) return true;
   // ONCE PER PARTICIPANT, not once per codex call. A successful `uninstall`
   // invokes the fake SIX times (tests/bin/uninstall-commands.test.js:434-439:
   // plugin list, marketplace list, plugin remove, marketplace remove, then both
@@ -42,16 +42,41 @@ function rendezvous() {
   // files, and with an unreachable quorum each of the twenty-four waits out the
   // full bound.
   const caseId = process.env.SPW_FIXTURE_STATE;
-  if (!caseId) return;
+  if (!caseId) return true;
   const tag = createHash("sha256").update(caseId).digest("hex").slice(0, 16);
   const claimed = join(dir, `${tag}.claimed`);
-  if (existsSync(claimed)) return;
+  if (existsSync(claimed)) return true;
   writeFileSync(claimed, "");
+  const pidDelayRaw = process.env.SPW_RENDEZVOUS_PID_DELAY_MS;
+  if (pidDelayRaw !== undefined) {
+    if (!/^[1-9][0-9]*$/.test(pidDelayRaw)) {
+      process.stderr.write(
+        "fixture: SPW_RENDEZVOUS_PID_DELAY_MS must be an integer from 1 to 5000\n",
+      );
+      process.exitCode = 90;
+      return false;
+    }
+    const pidDelayMs = Number(pidDelayRaw);
+    if (!Number.isSafeInteger(pidDelayMs) || pidDelayMs > 5000) {
+      process.stderr.write(
+        "fixture: SPW_RENDEZVOUS_PID_DELAY_MS must be an integer from 1 to 5000\n",
+      );
+      process.exitCode = 90;
+      return false;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pidDelayMs);
+  }
   // Durable descendant identity for the watchdog acceptance case. The file is
   // evidence only; it is removed with the rendezvous scratch directory.
   writeFileSync(join(dir, `${tag}.pid`), `${process.pid}\n`);
   const me = join(dir, `${tag}.here`);
   writeFileSync(me, "");
+  // Opt-in watchdog fixture only. Default overlap/bound behavior never enters
+  // this branch. PID and live-marker readiness are durable before the hold.
+  if (process.env.SPW_RENDEZVOUS_HOLD_AFTER_PID === "1") {
+    const hold = new Int32Array(new SharedArrayBuffer(4));
+    for (;;) Atomics.wait(hold, 0, 0);
+  }
   const deadline = Date.now() + 10000;
   let peak = 0;
   let waitCalls = 0;
@@ -94,6 +119,7 @@ function rendezvous() {
   writeFileSync(join(dir, `${tag}.waits`), `${waitCalls}\n`);
   writeFileSync(join(dir, `${tag}.reason`), `${reason}\n`);
   rmSync(me, { force: true });
+  return true;
 }
 
 /**
@@ -101,7 +127,7 @@ function rendezvous() {
  * @returns {void}
  */
 function runCodex(ctx) {
-  rendezvous();
+  if (!rendezvous()) return;
   ctx.log("codex.log", ctx.args.join(" "));
   injectSpuriousMutation(ctx, "plugin remove superpowers@spurious");
 
