@@ -308,19 +308,6 @@ function spawnManager(
         if (errorCode(error) !== "ESRCH") killLeaderFallback();
       }
     };
-    const processGroupGone = async () => {
-      if (groupPid === undefined) return false;
-      const deadline = Date.now() + 1000;
-      for (;;) {
-        try {
-          process.kill(-groupPid, 0);
-        } catch (error) {
-          return errorCode(error) === "ESRCH";
-        }
-        if (Date.now() >= deadline) return false;
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
-      }
-    };
     /** @param {"watchdog" | "abort"} reason */
     const requestTermination = (reason) => {
       if (settled || terminationReason !== undefined) return;
@@ -389,26 +376,23 @@ function spawnManager(
       clearControls();
       if (settled) return;
       if (terminationReason !== undefined) {
-        // Reject only after Node has reaped the manager and closed its pipes,
-        // then confirm the detached process group (including the fake) is gone.
-        void (async () => {
-          const groupGone = await processGroupGone();
-          if (settled) return;
-          settled = true;
-          if (groupTerminationFailed || !groupGone) {
-            rejectPromise(
-              new Error(
-                `${script} fixture watchdog could not confirm process-group termination`,
-              ),
-            );
-            return;
-          }
-          const message =
-            terminationReason === "watchdog"
-              ? `${script} exceeded fixture watchdog after ${timeoutMs}ms`
-              : `${script} fixture aborted`;
-          rejectPromise(new Error(message));
-        })();
+        // `close` reaps the direct manager and closes its pipes. A successful
+        // negative-PID SIGKILL is authoritative for group termination; whether
+        // dead grandchildren remain Z until launchd/init reaps them is external.
+        settled = true;
+        if (groupTerminationFailed) {
+          rejectPromise(
+            new Error(
+              `${script} fixture watchdog could not terminate its process group`,
+            ),
+          );
+          return;
+        }
+        const message =
+          terminationReason === "watchdog"
+            ? `${script} exceeded fixture watchdog after ${timeoutMs}ms`
+            : `${script} fixture aborted`;
+        rejectPromise(new Error(message));
         return;
       }
       settled = true;

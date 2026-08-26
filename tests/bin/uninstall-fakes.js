@@ -69,6 +69,10 @@ function rendezvous() {
   // Durable descendant identity for the watchdog acceptance case. The file is
   // evidence only; it is removed with the rendezvous scratch directory.
   writeFileSync(join(dir, `${tag}.pid`), `${process.pid}\n`);
+  // The detached manager is this fake's parent and expected process-group
+  // leader. Persist both meanings so the test never guesses a kill target.
+  writeFileSync(join(dir, `${tag}.manager-pid`), `${process.ppid}\n`);
+  writeFileSync(join(dir, `${tag}.group-pid`), `${process.ppid}\n`);
   const me = join(dir, `${tag}.here`);
   writeFileSync(me, "");
   // Opt-in watchdog fixture only. Default overlap/bound behavior never enters

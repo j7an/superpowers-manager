@@ -230,6 +230,142 @@ void test("the fake re-validates its config as defence in depth", async () => {
   assert.match(result.stderr, /unknown fixture config key: pluginRemoveTypo/);
 });
 
+/** @param {string} text */
+function parseProcessRow(text) {
+  const lines = text.trim().split("\n").filter(Boolean);
+  if (lines.length !== 1) return undefined;
+  const match = lines[0].match(/^(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.+)$/);
+  if (!match) return undefined;
+  return {
+    pid: Number(match[1]),
+    pgid: Number(match[2]),
+    state: match[3],
+    command: match[4],
+    started: match[5].trim(),
+  };
+}
+
+/**
+ * @param {{pid: number, pgid: number, command: string, started: string}} expected
+ * @param {{kind: "absent"} | {kind: "error"} | {kind: "row", text: string}} snapshot
+ */
+function classifyProcessSnapshot(expected, snapshot) {
+  if (snapshot.kind === "absent") return "terminal";
+  if (snapshot.kind === "error") return "error";
+  const row = parseProcessRow(snapshot.text);
+  if (!row) return "error";
+  if (
+    row.pid !== expected.pid ||
+    row.pgid !== expected.pgid ||
+    row.command !== expected.command ||
+    row.started !== expected.started
+  ) {
+    return "reused";
+  }
+  return row.state.startsWith("Z") ? "terminal" : "live";
+}
+
+/** @param {unknown} error */
+function classifyPsError(error) {
+  if (typeof error !== "object" || error === null) return "error";
+  const record = /** @type {Record<string, unknown>} */ (error);
+  return record.code === 1 &&
+    typeof record.stdout === "string" &&
+    record.stdout === "" &&
+    typeof record.stderr === "string" &&
+    record.stderr === ""
+    ? "absent"
+    : "error";
+}
+
+/**
+ * @param {number} pid
+ * @returns {Promise<
+ *   {kind: "absent"} |
+ *   {kind: "error"} |
+ *   {kind: "row", text: string}
+ * >}
+ */
+async function inspectProcess(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ESRCH"
+    ) {
+      return { kind: "absent" };
+    }
+    return { kind: "error" };
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      "ps",
+      ["-o", "pid=,pgid=,state=,comm=,lstart=", "-p", String(pid)],
+      { encoding: "utf8" },
+    );
+    return stdout.trim() === ""
+      ? { kind: "absent" }
+      : { kind: "row", text: stdout };
+  } catch (error) {
+    return classifyPsError(error) === "absent"
+      ? { kind: "absent" }
+      : { kind: "error" };
+  }
+}
+
+void test("process snapshot classifier is identity- and zombie-aware", () => {
+  const expected = {
+    pid: 123,
+    pgid: 99,
+    command: "node",
+    started: "Wed Aug 26 07:28:00 2026",
+  };
+  assert.equal(
+    classifyProcessSnapshot(expected, { kind: "absent" }),
+    "terminal",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, {
+      kind: "row",
+      text: "123 99 Z+ node Wed Aug 26 07:28:00 2026\n",
+    }),
+    "terminal",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, {
+      kind: "row",
+      text: "123 99 S node Wed Aug 26 07:28:00 2026\n",
+    }),
+    "live",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, {
+      kind: "row",
+      text: "123 99 S other Wed Aug 26 07:28:00 2026\n",
+    }),
+    "reused",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, { kind: "row", text: "malformed" }),
+    "error",
+  );
+  assert.equal(classifyProcessSnapshot(expected, { kind: "error" }), "error");
+  assert.equal(classifyPsError({ code: 1, stdout: "", stderr: "" }), "absent");
+  assert.equal(
+    classifyPsError({ code: 1, stdout: Buffer.alloc(0), stderr: "" }),
+    "error",
+  );
+  assert.equal(
+    classifyPsError({ code: 1, stdout: "", stderr: Buffer.alloc(0) }),
+    "error",
+  );
+  assert.equal(classifyPsError({ code: 1, stdout: " ", stderr: "" }), "error");
+  assert.equal(classifyPsError({ code: 2, stdout: "", stderr: "" }), "error");
+});
+
 void test(
   "runScript watchdog kills and reaps an unreachable rendezvous process group",
   { timeout: 30000 },
@@ -239,7 +375,9 @@ void test(
     const c = seededUninstallCase({});
     const tag = createHash("sha256").update(c.state).digest("hex").slice(0, 16);
     const pidPath = join(rv, `${tag}.pid`);
-    const timeoutMs = 500;
+    const managerPidPath = join(rv, `${tag}.manager-pid`);
+    const groupPidPath = join(rv, `${tag}.group-pid`);
+    const timeoutMs = 2000;
     const safety = new AbortController();
     const forwardTestAbort = () => safety.abort();
     if (t.signal.aborted) forwardTestAbort();
@@ -258,7 +396,7 @@ void test(
         env: {
           SPW_RENDEZVOUS_DIR: rv,
           SPW_RENDEZVOUS_EXPECT: "2",
-          SPW_RENDEZVOUS_PID_DELAY_MS: "1000",
+          SPW_RENDEZVOUS_PID_DELAY_MS: "3000",
           SPW_RENDEZVOUS_HOLD_AFTER_PID: "1",
         },
         timeoutMs,
@@ -267,7 +405,7 @@ void test(
       }),
       {
         name: "Error",
-        message: "uninstall exceeded fixture watchdog after 500ms",
+        message: "uninstall exceeded fixture watchdog after 2000ms",
       },
     );
 
@@ -281,6 +419,10 @@ void test(
       return "ready";
     })();
 
+    /** @type {{pid: number, pgid: number, command: string, started: string} | undefined} */
+    let fakeIdentity;
+    let groupPid;
+    let cleanupFailure;
     try {
       const winner = await Promise.race([
         readiness.then((state) => ({ source: "readiness", state })),
@@ -307,18 +449,50 @@ void test(
       clearTimeout(startupSafetyTimer);
       startupSafetyTimer = undefined;
       const fakePid = Number(readFileSync(pidPath, "utf8").trim());
-      // A later abort is the mutation safety net. In the normal case the
-      // conditioned 500ms watchdog wins and cleanup removes this listener.
-      postReadinessSafetyTimer = setTimeout(() => safety.abort(), 3000);
-      await watchdogRejection;
-      assert.throws(
-        () => process.kill(fakePid, 0),
-        (error) =>
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          error.code === "ESRCH",
+      const managerPid = Number(readFileSync(managerPidPath, "utf8").trim());
+      groupPid = Number(readFileSync(groupPidPath, "utf8").trim());
+      assert.equal(
+        managerPid,
+        groupPid,
+        "detached manager must be the recorded group leader",
       );
+      const initialSnapshot = await inspectProcess(fakePid);
+      assert.equal(
+        initialSnapshot.kind,
+        "row",
+        "ready fake must have a readable ps identity",
+      );
+      const initialRow =
+        initialSnapshot.kind === "row"
+          ? parseProcessRow(initialSnapshot.text)
+          : undefined;
+      assert.ok(initialRow, "ready fake ps snapshot must parse exactly once");
+      assert.equal(initialRow.pid, fakePid);
+      assert.equal(initialRow.pgid, groupPid);
+      assert.ok(
+        !initialRow.state.startsWith("Z"),
+        "ready fake must be live, not zombie",
+      );
+      fakeIdentity = {
+        pid: initialRow.pid,
+        pgid: initialRow.pgid,
+        command: initialRow.command,
+        started: initialRow.started,
+      };
+      // A later abort is the mutation safety net. In the normal case the
+      // conditioned 2000ms watchdog wins and cleanup removes this listener.
+      postReadinessSafetyTimer = setTimeout(() => safety.abort(), 5000);
+      await watchdogRejection;
+      const finalClass = classifyProcessSnapshot(
+        fakeIdentity,
+        await inspectProcess(fakePid),
+      );
+      if (finalClass === "live") {
+        throw new Error("watchdog left matching live fake process");
+      }
+      if (finalClass === "error") {
+        throw new Error("watchdog fake process state could not be classified");
+      }
     } finally {
       if (startupSafetyTimer !== undefined) clearTimeout(startupSafetyTimer);
       if (postReadinessSafetyTimer !== undefined) {
@@ -326,7 +500,46 @@ void test(
       }
       t.signal.removeEventListener("abort", forwardTestAbort);
       safety.abort();
+      if (fakeIdentity !== undefined && groupPid !== undefined) {
+        let classification = classifyProcessSnapshot(
+          fakeIdentity,
+          await inspectProcess(fakeIdentity.pid),
+        );
+        if (classification === "live") {
+          try {
+            process.kill(-groupPid, "SIGKILL");
+          } catch (error) {
+            if (!(
+              typeof error === "object" &&
+              error !== null &&
+              "code" in error &&
+              error.code === "ESRCH"
+            )) {
+              try {
+                process.kill(fakeIdentity.pid, "SIGKILL");
+              } catch {}
+            }
+          }
+          for (let attempt = 0; attempt < 80; attempt += 1) {
+            classification = classifyProcessSnapshot(
+              fakeIdentity,
+              await inspectProcess(fakeIdentity.pid),
+            );
+            if (classification === "terminal" || classification === "reused") {
+              break;
+            }
+            if (classification === "error") break;
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+          }
+        }
+        if (classification === "live" || classification === "error") {
+          cleanupFailure =
+            "watchdog cleanup could not reach absent, reused, or zombie fake state";
+          t.diagnostic(cleanupFailure);
+        }
+      }
     }
+    if (cleanupFailure !== undefined) assert.fail(cleanupFailure);
   },
 );
 
