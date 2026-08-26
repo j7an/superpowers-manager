@@ -309,7 +309,7 @@ void test(
     assert.deepEqual(
       peaks,
       [4, 4, 4, 4],
-      `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks}`,
+      `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks.join(",")}`,
     );
     const readyTags = readdirSync(rv)
       .filter((f) => f.endsWith(".ready"))
@@ -364,12 +364,12 @@ void test(
     assert.deepEqual(
       [...new Set(reasons)],
       ["expired"],
-      `exit reasons were ${reasons}`,
+      `exit reasons were ${reasons.join(",")}`,
     );
     assert.deepEqual(
       [...new Set(peaks)],
       [4],
-      `saw ${peaks} instead of four everywhere`,
+      `saw ${peaks.join(",")} instead of four everywhere`,
     );
   },
 );
