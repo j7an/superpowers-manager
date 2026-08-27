@@ -36,11 +36,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -228,29 +230,497 @@ void test("the fake re-validates its config as defence in depth", async () => {
   assert.match(result.stderr, /unknown fixture config key: pluginRemoveTypo/);
 });
 
-// The concurrency proof. Asserting that `{ concurrency: true }` is set proves
-// nothing — the option reads as set whether or not bodies actually overlap.
-// This measures overlap instead. Measured on Node v24.18.0 (Task 2, 76131cf):
-// four spawnSync subtests took 1.31s while four awaited async spawns took
-// 0.36s, so a regression to spawnSync — or a dropped `await` at any call
-// site — fails here rather than silently serialising.
-void test("runScript bodies actually overlap under concurrency", async () => {
-  const started = Date.now();
-  const single = await (async () => {
-    const t0 = Date.now();
-    await runScript(seededUninstallCase({}), "uninstall");
-    return Date.now() - t0;
-  })();
-  const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
-  const t1 = Date.now();
-  await Promise.all(cases.map((c) => runScript(c, "uninstall")));
-  const together = Date.now() - t1;
-  assert.ok(
-    together < single * 3,
-    `four concurrent runs took ${together}ms against a ${single}ms single run — ` +
-      `they are not overlapping (total elapsed ${Date.now() - started}ms)`,
+/** @param {string} text */
+function parseProcessRow(text) {
+  const lines = text.trim().split("\n").filter(Boolean);
+  if (lines.length !== 1) return undefined;
+  const match = lines[0].match(/^(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.+)$/);
+  if (!match) return undefined;
+  return {
+    pid: Number(match[1]),
+    pgid: Number(match[2]),
+    state: match[3],
+    command: match[4],
+    started: match[5].trim(),
+  };
+}
+
+/**
+ * @param {{pid: number, pgid: number, command: string, started: string}} expected
+ * @param {{kind: "absent"} | {kind: "error"} | {kind: "row", text: string}} snapshot
+ */
+function classifyProcessSnapshot(expected, snapshot) {
+  if (snapshot.kind === "absent") return "terminal";
+  if (snapshot.kind === "error") return "error";
+  const row = parseProcessRow(snapshot.text);
+  if (!row) return "error";
+  if (
+    row.pid !== expected.pid ||
+    row.pgid !== expected.pgid ||
+    row.command !== expected.command ||
+    row.started !== expected.started
+  ) {
+    return "reused";
+  }
+  return row.state.startsWith("Z") ? "terminal" : "live";
+}
+
+/** @param {unknown} error */
+function classifyPsError(error) {
+  if (typeof error !== "object" || error === null) return "error";
+  const record = /** @type {Record<string, unknown>} */ (error);
+  return record.code === 1 &&
+    typeof record.stdout === "string" &&
+    record.stdout === "" &&
+    typeof record.stderr === "string" &&
+    record.stderr === ""
+    ? "absent"
+    : "error";
+}
+
+/**
+ * @param {number} pid
+ * @returns {Promise<
+ *   {kind: "absent"} |
+ *   {kind: "error"} |
+ *   {kind: "row", text: string}
+ * >}
+ */
+async function inspectProcess(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ESRCH"
+    ) {
+      return { kind: "absent" };
+    }
+    return { kind: "error" };
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      "ps",
+      ["-o", "pid=,pgid=,state=,comm=,lstart=", "-p", String(pid)],
+      { encoding: "utf8" },
+    );
+    return stdout.trim() === ""
+      ? { kind: "absent" }
+      : { kind: "row", text: stdout };
+  } catch (error) {
+    return classifyPsError(error) === "absent"
+      ? { kind: "absent" }
+      : { kind: "error" };
+  }
+}
+
+void test("process snapshot classifier is identity- and zombie-aware", () => {
+  const expected = {
+    pid: 123,
+    pgid: 99,
+    command: "node",
+    started: "Wed Aug 26 07:28:00 2026",
+  };
+  assert.equal(
+    classifyProcessSnapshot(expected, { kind: "absent" }),
+    "terminal",
   );
+  assert.equal(
+    classifyProcessSnapshot(expected, {
+      kind: "row",
+      text: "123 99 Z+ node Wed Aug 26 07:28:00 2026\n",
+    }),
+    "terminal",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, {
+      kind: "row",
+      text: "123 99 S node Wed Aug 26 07:28:00 2026\n",
+    }),
+    "live",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, {
+      kind: "row",
+      text: "123 99 S other Wed Aug 26 07:28:00 2026\n",
+    }),
+    "reused",
+  );
+  assert.equal(
+    classifyProcessSnapshot(expected, { kind: "row", text: "malformed" }),
+    "error",
+  );
+  assert.equal(classifyProcessSnapshot(expected, { kind: "error" }), "error");
+  assert.equal(classifyPsError({ code: 1, stdout: "", stderr: "" }), "absent");
+  assert.equal(
+    classifyPsError({ code: 1, stdout: Buffer.alloc(0), stderr: "" }),
+    "error",
+  );
+  assert.equal(
+    classifyPsError({ code: 1, stdout: "", stderr: Buffer.alloc(0) }),
+    "error",
+  );
+  assert.equal(classifyPsError({ code: 1, stdout: " ", stderr: "" }), "error");
+  assert.equal(classifyPsError({ code: 2, stdout: "", stderr: "" }), "error");
 });
+
+void test(
+  "runScript watchdog kills and reaps an unreachable rendezvous process group",
+  { timeout: 30000 },
+  async (t) => {
+    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-watchdog-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const c = seededUninstallCase({});
+    const tag = createHash("sha256").update(c.state).digest("hex").slice(0, 16);
+    const pidPath = join(rv, `${tag}.pid`);
+    const managerPidPath = join(rv, `${tag}.manager-pid`);
+    const groupPidPath = join(rv, `${tag}.group-pid`);
+    const herePath = join(rv, `${tag}.here`);
+    const finalReadyPath = join(rv, `${tag}.watchdog-ready`);
+    const armPath = join(rv, `${tag}.watchdog-arm`);
+    const timeoutMs = 2000;
+    const safety = new AbortController();
+    const forwardTestAbort = () => safety.abort();
+    if (t.signal.aborted) forwardTestAbort();
+    else t.signal.addEventListener("abort", forwardTestAbort, { once: true });
+    // Full-suite startup evidence is ~1-4.4s. Fifteen seconds is deliberately
+    // generous and still precedes node:test's catastrophic 30s cancellation.
+    /** @type {NodeJS.Timeout | undefined} */
+    let startupSafetyTimer = setTimeout(() => safety.abort(), 15000);
+    /** @type {NodeJS.Timeout | undefined} */
+    let postReadinessSafetyTimer;
+
+    // Attach a NON-THROWING settlement observer immediately. This prevents an
+    // unhandled rejection without confusing abort-vs-watchdog mismatch with
+    // raw run settlement during the readiness race.
+    const rawRun = runScript(c, "uninstall", {
+      env: {
+        SPW_RENDEZVOUS_DIR: rv,
+        SPW_RENDEZVOUS_EXPECT: "2",
+        SPW_RENDEZVOUS_PID_DELAY_MS: "3000",
+        SPW_RENDEZVOUS_HOLD_AFTER_PID: "1",
+      },
+      timeoutMs,
+      watchdogArmPath: armPath,
+      signal: safety.signal,
+    });
+    const RUN_RESOLVED = Symbol("run-resolved");
+    const RUN_REJECTED = Symbol("run-rejected");
+    /** @type {Promise<typeof RUN_RESOLVED | typeof RUN_REJECTED>} */
+    const runSettled = rawRun.then(
+      () => /** @type {typeof RUN_RESOLVED} */ (RUN_RESOLVED),
+      () => /** @type {typeof RUN_REJECTED} */ (RUN_REJECTED),
+    );
+
+    // A condition promise races the already-attached rejection assertion.
+    // Readiness MUST win for a conditioned helper.
+    /** @type {Promise<"ready" | "aborted">} */
+    const readiness = (async () => {
+      while (!existsSync(finalReadyPath)) {
+        if (safety.signal.aborted) return "aborted";
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      }
+      return "ready";
+    })();
+
+    /** @type {{pid: number, pgid: number, command: string, started: string} | undefined} */
+    let fakeIdentity;
+    let groupPid;
+    let cleanupFailure;
+    try {
+      /** @type {Promise<{source: "readiness", state: "ready" | "aborted"}>} */
+      const readinessOutcome = readiness.then((state) => ({
+        source: "readiness",
+        state,
+      }));
+      /** @type {Promise<{
+       *   source: "run",
+       *   outcome: typeof RUN_RESOLVED | typeof RUN_REJECTED
+       * }>} */
+      const runOutcome = runSettled.then((outcome) => ({
+        source: "run",
+        outcome,
+      }));
+      const winner = await Promise.race([readinessOutcome, runOutcome]);
+      if (winner.source === "run") {
+        // The non-throwing observer proves runScript settled and cleanup is
+        // complete. Abort only stops the losing readiness poll.
+        safety.abort();
+        await readiness;
+        if (winner.outcome === RUN_REJECTED) {
+          throw new Error(
+            "watchdog readiness wait aborted after process-group cleanup",
+          );
+        }
+        throw new Error("runScript settled before descendant readiness");
+      }
+      if (winner.state === "aborted") {
+        // Startup/t.signal safety must await non-throwing run settlement and
+        // process cleanup before the fixed readiness diagnostic.
+        await runSettled;
+        throw new Error(
+          "watchdog readiness wait aborted after process-group cleanup",
+        );
+      }
+      try {
+        if (
+          !existsSync(pidPath) ||
+          !existsSync(managerPidPath) ||
+          !existsSync(groupPidPath) ||
+          !existsSync(herePath)
+        ) {
+          throw new Error(
+            "watchdog readiness published before durable identity",
+          );
+        }
+        const fakePid = Number(readFileSync(pidPath, "utf8").trim());
+        const managerPid = Number(readFileSync(managerPidPath, "utf8").trim());
+        groupPid = Number(readFileSync(groupPidPath, "utf8").trim());
+        if (
+          !Number.isSafeInteger(fakePid) ||
+          !Number.isSafeInteger(managerPid) ||
+          !Number.isSafeInteger(groupPid) ||
+          fakePid < 1 ||
+          managerPid < 1 ||
+          groupPid < 1 ||
+          managerPid !== groupPid
+        ) {
+          throw new Error("watchdog readiness identity is invalid");
+        }
+        const initialSnapshot = await inspectProcess(fakePid);
+        const initialRow =
+          initialSnapshot.kind === "row"
+            ? parseProcessRow(initialSnapshot.text)
+            : undefined;
+        if (
+          !initialRow ||
+          initialRow.pid !== fakePid ||
+          initialRow.pgid !== groupPid ||
+          initialRow.state.startsWith("Z")
+        ) {
+          throw new Error(
+            "watchdog readiness process is not matching live identity",
+          );
+        }
+        fakeIdentity = {
+          pid: initialRow.pid,
+          pgid: initialRow.pgid,
+          command: initialRow.command,
+          started: initialRow.started,
+        };
+      } catch (error) {
+        // Pre-arm failures terminate, await non-throwing run settlement, and
+        // preserve this fixed validation error as the primary failure.
+        safety.abort();
+        await runSettled;
+        throw error;
+      }
+      if (fakeIdentity === undefined) {
+        safety.abort();
+        await runSettled;
+        throw new Error(
+          "watchdog readiness process is not matching live identity",
+        );
+      }
+      // Parent publishes arm only after every durable file and live ps identity
+      // validates. The helper cannot start its primary timer before this write.
+      writeFileSync(armPath, "armed");
+      clearTimeout(startupSafetyTimer);
+      startupSafetyTimer = undefined;
+      // A later abort is the mutation safety net. In the normal case the
+      // conditioned 2000ms watchdog wins and cleanup removes this listener.
+      postReadinessSafetyTimer = setTimeout(() => safety.abort(), 5000);
+      // Only AFTER durable validation and parent arm does the exact watchdog
+      // assertion become the primary contract. runSettled remains attached.
+      const watchdogRejection = assert.rejects(rawRun, {
+        name: "Error",
+        message: "uninstall exceeded fixture watchdog after 2000ms",
+      });
+      await watchdogRejection;
+      const finalClass = classifyProcessSnapshot(
+        fakeIdentity,
+        await inspectProcess(fakeIdentity.pid),
+      );
+      if (finalClass === "live") {
+        throw new Error("watchdog left matching live fake process");
+      }
+      if (finalClass === "error") {
+        throw new Error("watchdog fake process state could not be classified");
+      }
+    } finally {
+      if (startupSafetyTimer !== undefined) clearTimeout(startupSafetyTimer);
+      if (postReadinessSafetyTimer !== undefined) {
+        clearTimeout(postReadinessSafetyTimer);
+      }
+      t.signal.removeEventListener("abort", forwardTestAbort);
+      safety.abort();
+      if (fakeIdentity !== undefined && groupPid !== undefined) {
+        let classification = classifyProcessSnapshot(
+          fakeIdentity,
+          await inspectProcess(fakeIdentity.pid),
+        );
+        if (classification === "live") {
+          try {
+            process.kill(-groupPid, "SIGKILL");
+          } catch (error) {
+            if (!(
+              typeof error === "object" &&
+              error !== null &&
+              "code" in error &&
+              error.code === "ESRCH"
+            )) {
+              try {
+                process.kill(fakeIdentity.pid, "SIGKILL");
+              } catch {}
+            }
+          }
+          for (let attempt = 0; attempt < 80; attempt += 1) {
+            classification = classifyProcessSnapshot(
+              fakeIdentity,
+              await inspectProcess(fakeIdentity.pid),
+            );
+            if (classification === "terminal" || classification === "reused") {
+              break;
+            }
+            if (classification === "error") break;
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+          }
+        }
+        if (classification === "live" || classification === "error") {
+          cleanupFailure =
+            "watchdog cleanup could not reach absent, reused, or zombie fake state";
+          t.diagnostic(cleanupFailure);
+        }
+      }
+    }
+    if (cleanupFailure !== undefined) assert.fail(cleanupFailure);
+  },
+);
+
+void test(
+  "runScript bodies actually overlap under concurrency",
+  { timeout: 30000 },
+  async (t) => {
+    // Overlap is a property, not a duration. The previous oracle compared wall
+    // clocks -- `together < single * 3` -- and failed at 3894ms against a 3795ms
+    // budget during PR 11.6, i.e. it was sampling machine load at 3.08x, not
+    // detecting serialisation. The regression it must catch is named in its own
+    // history: a return to spawnSync, or a dropped `await`. Both make the four
+    // runs DISJOINT, so measure disjointness.
+    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "4" };
+    const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
+    const participants = cases.map((c) => ({
+      c,
+      tag: createHash("sha256").update(c.state).digest("hex").slice(0, 16),
+    }));
+    const expectedTags = participants.map(({ tag }) => tag).sort();
+    await Promise.all(
+      participants.map(({ c, tag }) =>
+        runScript(c, "uninstall", {
+          env,
+          timeoutMs: 20000,
+          watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
+          signal: t.signal,
+        }),
+      ),
+    );
+    const tags = readdirSync(rv)
+      .filter((f) => f.endsWith(".peak"))
+      .map((f) => f.slice(0, -".peak".length))
+      .sort();
+    assert.deepEqual(
+      tags,
+      expectedTags,
+      "exactly the four participants must record evidence",
+    );
+    const peaks = tags.map((tag) =>
+      Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
+    );
+    const reasons = tags.map((tag) =>
+      readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
+    );
+    assert.deepEqual(
+      peaks,
+      [4, 4, 4, 4],
+      `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks.join(",")}`,
+    );
+    const readyTags = readdirSync(rv)
+      .filter((f) => f.endsWith(".ready"))
+      .map((f) => f.slice(0, -".ready".length))
+      .sort();
+    assert.deepEqual(
+      readyTags,
+      expectedTags,
+      "every participant must acknowledge arrival quorum",
+    );
+    assert.deepEqual(reasons, ["quorum", "quorum", "quorum", "quorum"]);
+  },
+);
+
+// Four participants, quorum of five: unreachable by construction. Each fake
+// records its own wait-call count and exit reason, so the oracle reads the
+// mechanism rather than inferring it from whole-run wall time.
+void test(
+  "an unmet quorum expires at the bound and reports what it saw",
+  { timeout: 30000 },
+  async (t) => {
+    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-bound-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "5" };
+    const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
+    const participants = cases.map((c) => ({
+      c,
+      tag: createHash("sha256").update(c.state).digest("hex").slice(0, 16),
+    }));
+    await Promise.all(
+      participants.map(({ c, tag }) =>
+        runScript(c, "uninstall", {
+          env,
+          timeoutMs: 20000,
+          watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
+          signal: t.signal,
+        }),
+      ),
+    );
+    const tags = readdirSync(rv)
+      .filter((f) => f.endsWith(".peak"))
+      .map((f) => f.slice(0, -".peak".length));
+    assert.equal(
+      tags.length,
+      4,
+      "every participant must record rendezvous evidence",
+    );
+    const peaks = tags.map((tag) =>
+      Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
+    );
+    const waitCalls = tags.map((tag) =>
+      Number(readFileSync(join(rv, `${tag}.waits`), "utf8").trim()),
+    );
+    const reasons = tags.map((tag) =>
+      readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
+    );
+    // First on purpose: deadline `+ 0` deterministically records zero waits, so
+    // M2 fails on this exact diagnostic before any scheduling-sensitive count.
+    assert.ok(
+      waitCalls.every((count) => count > 0),
+      "wait did not wait",
+    );
+    assert.deepEqual(
+      [...new Set(reasons)],
+      ["expired"],
+      `exit reasons were ${reasons.join(",")}`,
+    );
+    assert.deepEqual(
+      [...new Set(peaks)],
+      [4],
+      `saw ${peaks.join(",")} instead of four everywhere`,
+    );
+  },
+);
 
 void test("the process.exitCode idiom is what delivers a large pipe payload", async () => {
   // Carried row :2041's mutation proof. The `exit` arm is the OLD idiom and

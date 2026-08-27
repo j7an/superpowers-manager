@@ -27,7 +27,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-ENV-VALIDATOR-EXECUTABLE-01` | `tests/baseline/validator-executable.test.js::prepare accepts a tree when the executable validator exits 0` | `tests/bin/lifecycle-fixture.js` |
 | `CLI-ENV-INSTALLED-ROOT-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT` | — |
 | `CLI-ENV-REFRESH-MODE-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation` | — |
-| `CLI-ENV-PASSTHROUGH-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-01 ten SUPERPOWERS variables pass through` | — |
+| `CLI-ENV-PASSTHROUGH-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-01 eleven SUPERPOWERS variables pass through` | — |
 | `CLI-ENV-PREPARE-PATHS-01` | `tests/baseline/prepare.test.js::CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd` | — |
 | `CLI-ENV-INSTALLED-DEFAULTS-01` | `tests/baseline/cli-parity.test.js::CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search root the listing resolves codex from PATH and the installed fingerprint is read under $HOME/.codex` | — |
 | `SEL-LOCATION-01` | `tests/baseline/selection-location.test.js::SEL-LOCATION-01 selection location chain and fail-closed bases` | — |

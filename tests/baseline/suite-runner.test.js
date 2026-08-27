@@ -17,6 +17,7 @@ import test from "node:test";
 import { computeBuildId } from "../build-id.js";
 
 const RUNNER = fileURLToPath(new URL("../run-node-suites.js", import.meta.url));
+const RUN_SH = fileURLToPath(new URL("../run.sh", import.meta.url));
 
 const PASSING_SUITE = 'import test from "node:test";\ntest("ok", () => {});\n';
 const FAILING_SUITE =
@@ -79,9 +80,13 @@ function runIn(root, extraEnv) {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, SPW_RUNNER_ROOT: root, ...extraEnv },
+    // A harness with no bound cannot assert prompt termination, and every case
+    // in this file that asserts a status would read a kill as that status.
+    timeout: 30000,
   });
   return {
     status: result.status ?? 1,
+    signal: result.signal,
     stdout: result.stdout,
     stderr: result.stderr,
   };
@@ -104,6 +109,103 @@ void test("clean tree passes", (t) => {
   const r = runIn(root);
   assert.equal(r.status, 0);
   assertNoRawFailure(r);
+});
+
+void test("the runner announces completion on a passing run", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/pass.test.js"],
+    files: { "tests/unit/pass.test.js": PASSING_SUITE },
+  });
+  const r = runIn(root);
+  assert.equal(r.status, 0);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.equal(lines[lines.length - 1], "run-node-suites: complete status=0");
+});
+
+// This fails if the runner only announces successful completion: a failed run
+// would then remain indistinguishable from one killed before it could finish.
+void test("the runner announces completion on a FAILING run", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/fail.test.js"],
+    files: { "tests/unit/fail.test.js": FAILING_SUITE },
+  });
+  const r = runIn(root);
+  assert.notEqual(r.status, 0);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.equal(
+    lines[lines.length - 1],
+    `run-node-suites: complete status=${r.status}`,
+  );
+});
+
+void test("both sentinels reach a piped capture", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/fail.test.js"],
+    files: { "tests/unit/fail.test.js": FAILING_SUITE },
+  });
+  const r = spawnSync("sh", [RUN_SH], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_RUNNER_ROOT: root },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 30000,
+  });
+  assert.equal(
+    r.signal,
+    null,
+    "tests/run.sh was killed at the harness bound before both sentinels arrived",
+  );
+  assert.equal(r.status, 1);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.deepEqual(lines.slice(-2), [
+    "run-node-suites: complete status=1",
+    "tests/run.sh: complete failed=1",
+  ]);
+});
+
+// This fails if early fail() paths omit the completion signal; no child summary
+// exists when the runner fails before it can spawn node --test.
+void test("the runner announces completion when it fails before spawning", (t) => {
+  const root = fakeRoot(t, { suites: [], files: {}, withDist: false });
+  const r = runIn(root);
+  assert.equal(r.status, 1);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.equal(lines[lines.length - 1], "run-node-suites: complete status=1");
+});
+
+// This fails if an ordinary non-zero child result does not reach the runner's
+// completion signal.
+void test("a suite that throws on import still ends with the sentinel", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/throws-on-import.test.js"],
+    files: {
+      "tests/unit/throws-on-import.test.js": 'throw new Error("boom");\n',
+    },
+  });
+  const r = runIn(root);
+  assert.notEqual(r.status, 0);
+  assert.equal(r.signal, null);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.equal(
+    lines[lines.length - 1],
+    `run-node-suites: complete status=${r.status}`,
+  );
+});
+
+// This fails if the runner is changed to leave a handle alive after setting its
+// completion status: runIn's timeout kills that regression and exposes a signal.
+void test("the runner exits promptly rather than lingering on a live handle", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/pass.test.js"],
+    files: { "tests/unit/pass.test.js": PASSING_SUITE },
+  });
+  const r = runIn(root);
+  assert.equal(
+    r.signal,
+    null,
+    "the runner was killed at the harness bound; a pending handle is keeping it alive",
+  );
+  assert.equal(r.status, 0);
 });
 
 void test("declared but absent", (t) => {
