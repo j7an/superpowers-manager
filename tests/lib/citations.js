@@ -365,3 +365,121 @@ export function targetExists(path, root) {
 export function displayPath(file, root) {
   return relative(root, file);
 }
+
+/**
+ * Every line of `path` containing `anchor`, one-based.
+ * @param {string} path
+ * @param {string} anchor
+ * @returns {number[]}
+ */
+export function anchorLines(path, anchor) {
+  /** @type {number[]} */
+  const hits = [];
+  readLines(path).forEach((line, index) => {
+    if (line.includes(anchor)) hits.push(index + 1);
+  });
+  return hits;
+}
+
+/**
+ * Anchored and resolution citations are always checked -- an anchored citation
+ * must validate and can never be ledgered, or the ledger becomes the escape
+ * hatch for the check this gate exists to add.
+ * A malformed citation is "checked" for the same reason an anchored one is:
+ * it must be fixed, never ledgered. Ledgering it would let a near-miss anchored
+ * citation buy permanent silence.
+ * @param {Citation} citation
+ * @param {string} root
+ * @returns {"checked" | "unanchored" | "dead"}
+ */
+export function classify(citation, root) {
+  if (citation.kind !== "legacy") return "checked";
+  return targetExists(citation.path, root) ? "unanchored" : "dead";
+}
+
+/**
+ * @param {Citation} citation
+ * @param {string} root
+ * @returns {{ ok: true, line?: number } | { ok: false, code: string, line?: number, message: string }}
+ */
+export function validate(citation, root) {
+  // Shape was already proven by the resolution pattern; Git is never executed.
+  if (citation.kind === "resolution") {
+    return hasDotSegment(citation.path)
+      ? {
+          ok: false,
+          code: "MALFORMED_RESOLUTION",
+          message: `${citation.raw} is not repo-root-relative: a path segment escapes the root`,
+        }
+      : { ok: true };
+  }
+  if (citation.kind === "legacy") return { ok: true };
+  if (citation.kind === "malformed") {
+    return citation.shape === "resolution"
+      ? {
+          ok: false,
+          code: "MALFORMED_RESOLUTION",
+          message:
+            `${citation.raw} is not a valid resolution reference: expected ` +
+            "a 40-hex object name followed by a path",
+        }
+      : {
+          ok: false,
+          code: "ANCHOR_MISSING",
+          message: `${citation.raw} does not parse as \`path::anchor\` or \`path:N::anchor\``,
+        };
+  }
+  const anchor = /** @type {string} */ (citation.anchor);
+  if (anchor.length < MIN_ANCHOR) {
+    return {
+      ok: false,
+      code: "ANCHOR_TOO_SHORT",
+      message: `anchor "${anchor}" is shorter than ${MIN_ANCHOR} characters`,
+    };
+  }
+  if (!targetExists(citation.path, root)) {
+    return {
+      ok: false,
+      code: "MISSING_TARGET",
+      message: `${citation.path} does not exist`,
+    };
+  }
+  const hits = anchorLines(join(root, citation.path), anchor);
+  if (hits.length === 0) {
+    return {
+      ok: false,
+      code: "ANCHOR_NOT_FOUND",
+      message: `anchor "${anchor}" does not occur in ${citation.path}`,
+    };
+  }
+  if (hits.length > 1) {
+    return {
+      ok: false,
+      code: "ANCHOR_MULTIPLE",
+      message:
+        `anchor "${anchor}" occurs on ${hits.length} lines of ${citation.path} ` +
+        `(${hits.join(", ")}); lengthen it`,
+    };
+  }
+  const at = hits[0];
+  if (citation.line === undefined) return { ok: true, line: at };
+  if (citation.endLine !== undefined) {
+    if (at < citation.line || at > citation.endLine) {
+      return {
+        ok: false,
+        code: "RANGE_MISS",
+        message: `cited ${citation.path}:${citation.line}-${citation.endLine}, anchor is at :${at}`,
+      };
+    }
+    return { ok: true, line: at };
+  }
+  if (at !== citation.line) {
+    return {
+      ok: false,
+      code: "LINE_MISMATCH",
+      line: at,
+      message: `cited ${citation.path}:${citation.line}, anchor is at :${at}`,
+    };
+  }
+  return { ok: true, line: at };
+}

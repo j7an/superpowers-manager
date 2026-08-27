@@ -9,7 +9,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { registerScratch } from "./fixture-scratch.js";
-import { commentText, scan, targetExists } from "../lib/citations.js";
+import {
+  classify,
+  commentText,
+  scan,
+  targetExists,
+  validate,
+} from "../lib/citations.js";
 
 /**
  * A scratch tree with the given files, cleaned up with the suite.
@@ -192,4 +198,132 @@ void test("targetExists rejects a target reached through an escaping symlink", (
   writeFileSync(join(outside, "target.ts"), "outside\n");
   symlinkSync(outside, join(root, "escape"));
   assert.equal(targetExists("escape/target.ts", root), false);
+});
+
+/**
+ * One citing file plus one target, scanned and validated in a scratch root.
+ * @param {string} comment
+ * @param {string} target
+ * @returns {{ ok: boolean, code?: string, line?: number, message?: string }}
+ */
+function check(comment, target) {
+  const root = fixture({ "a.js": comment + "\n", "src/x.ts": target });
+  const [found] = scan([join(root, "a.js")]);
+  return validate(found, root);
+}
+
+const TARGET = [
+  "const a = 1;",
+  "export function go() {",
+  "  return a;",
+  "}",
+].join("\n");
+
+void test("an anchor-only citation resolves to its unique line", () => {
+  const r = check("// `src/x.ts::export function go`", TARGET);
+  assert.equal(r.ok, true);
+  assert.equal(r.line, 2);
+});
+
+void test("a line citation agreeing with its anchor passes", () => {
+  const r = check("// `src/x.ts:2::export function go`", TARGET);
+  assert.equal(r.ok, true);
+});
+
+void test("a line citation disagreeing with its anchor reports where the anchor is", () => {
+  const r = check("// `src/x.ts:9::export function go`", TARGET);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "LINE_MISMATCH");
+  assert.equal(r.line, 2);
+  assert.match(r.message ?? "", /anchor is at :2/);
+});
+
+void test("a range citation passes when the anchor falls inside it", () => {
+  assert.equal(check("// `src/x.ts:1-3::export function go`", TARGET).ok, true);
+});
+
+void test("a range citation fails when the anchor falls outside it", () => {
+  const r = check("// `src/x.ts:3-4::export function go`", TARGET);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "RANGE_MISS");
+});
+
+void test("an anchor occurring on more than one line is refused", () => {
+  const r = check("// `src/x.ts::return`", "return\nreturn\n");
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "ANCHOR_MULTIPLE");
+  assert.match(r.message ?? "", /lengthen it/);
+});
+
+void test("an anchor occurring nowhere is refused", () => {
+  const r = check("// `src/x.ts::no such text`", TARGET);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "ANCHOR_NOT_FOUND");
+});
+
+void test("a citation with no anchor text after the separator is refused", () => {
+  const r = check("// `src/x.ts:2::`", TARGET);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "ANCHOR_MISSING");
+});
+
+void test("a resolution reference with a short object name is refused", () => {
+  const r = check("// `git show 0123:scripts/gone.sh`", TARGET);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "MALFORMED_RESOLUTION");
+});
+
+void test("a path escaping the root is refused without touching the filesystem", () => {
+  const root = fixture({ "a.js": "// `../outside.ts::export function go`\n" });
+  const [found] = scan([join(root, "a.js")]);
+  assert.equal(validate(found, root).code, "MISSING_TARGET");
+  assert.equal(targetExists("../outside.ts", root), false);
+});
+
+void test("a resolution reference escaping the root is refused", () => {
+  const root = fixture({
+    "a.js": "// `git show " + "a".repeat(40) + ":../outside.ts`\n",
+  });
+  const [found] = scan([join(root, "a.js")]);
+  assert.equal(validate(found, root).code, "MALFORMED_RESOLUTION");
+});
+
+void test("a legacy citation escaping the root classifies as dead, never live", () => {
+  const root = fixture({ "a.js": "// ../outside.ts:5\n" });
+  const [found] = scan([join(root, "a.js")]);
+  assert.equal(classify(found, root), "dead");
+});
+
+void test("an anchor shorter than the minimum is refused", () => {
+  const r = check("// `src/x.ts::a`", TARGET);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "ANCHOR_TOO_SHORT");
+});
+
+void test("an anchored citation whose target is gone is a failure, never debt", () => {
+  const root = fixture({ "a.js": "// `src/gone.ts::export function go`\n" });
+  const [found] = scan([join(root, "a.js")]);
+  assert.equal(validate(found, root).code, "MISSING_TARGET");
+  assert.equal(classify(found, root), "checked");
+});
+
+void test("a legacy citation classifies by whether its target survives", () => {
+  const root = fixture({
+    "a.js": "// live src/x.ts:2 and dead scripts/gone.sh:5\n",
+    "src/x.ts": TARGET,
+  });
+  const found = scan([join(root, "a.js")]);
+  assert.deepEqual(
+    found.map((c) => classify(c, root)),
+    ["unanchored", "dead"],
+  );
+});
+
+void test("a resolution citation is checked by shape and never opens Git", () => {
+  const root = fixture({
+    "a.js": "// `git show " + "a".repeat(40) + ":scripts/gone.sh`\n",
+  });
+  const [found] = scan([join(root, "a.js")]);
+  assert.equal(classify(found, root), "checked");
+  assert.equal(validate(found, root).ok, true);
 });
