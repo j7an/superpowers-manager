@@ -84,13 +84,16 @@
 // exclusion instead would have left prose citing a deleted tree behind a green
 // gate.
 //
-// ONE exclusion IS added, and it is not the comment question: this module and
-// its test live under tests/, and this map quotes every matched line verbatim.
-// Without `grep -v '^tests/bin/scripts-consumers\.'` the map cannot be closed
-// under its own audit at all — each entry added would add a row demanding
-// another entry, without limit. It is the same kind of exclusion the command
-// already carries for tests/migration-inventory/: a file that DESCRIBES the
-// migration is not a file that EXECUTES against scripts/.
+// THE DESCRIPTIVE-ARTIFACT EXCLUSIONS are not the comment question. This module
+// and its test live under tests/, and this map quotes every matched line
+// verbatim. Without `grep -v '^tests/bin/scripts-consumers\.'` the map cannot be
+// closed under its own audit at all — each entry added would add a row demanding
+// another entry, without limit. The command likewise excludes migration
+// inventories, plus exactly tests/citation-ledger.json and
+// tests/bin/citations.test.js: those two new artifacts describe deleted script
+// referents and citation fixture strings; neither executes against scripts/.
+// The two exact-file filters include grep's trailing output delimiter so a
+// similarly named executable consumer remains audited.
 //
 // AUDIT_COMMAND is exported so 4c's zero-rows exit check imports it rather than
 // retyping it. Two invocations differing by a `grep -v` turn "every hit is
@@ -109,7 +112,7 @@ import { spawnSync } from "node:child_process";
  * one to a bare `|`, silently changing the pattern to one that matches nothing.
  */
 export const AUDIT_COMMAND = String.raw`grep -rn 'scripts/core/\|scripts/adapters/\|"scripts"\|scripts/probe\|scripts/prepare\|scripts/install\|scripts/update\|scripts/uninstall' tests/ \
-  | grep -v '^tests/migration-inventory/' | grep -v '^tests/bin/scripts-consumers\.' | grep -v ':[0-9]*: *//'`;
+  | grep -v '^tests/migration-inventory/' | grep -v '^tests/bin/scripts-consumers\.' | grep -v '^tests/citation-ledger\.json:' | grep -v '^tests/bin/citations\.test\.js:' | grep -v ':[0-9]*: *//'`;
 
 /** The disposition vocabulary. Three values; `comment-only` is withdrawn. */
 export const DISPOSITIONS = /** @type {const} */ ([

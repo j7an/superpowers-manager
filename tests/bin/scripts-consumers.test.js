@@ -71,6 +71,36 @@ void test("every audit alternative matches, so an empty real-tree result means t
   );
 });
 
+void test("descriptive citation artifacts are ignored without hiding a real consumer", () => {
+  const root = mkdtempSync(join(tmpdir(), "spw-audit-descriptive-"));
+  try {
+    mkdirSync(join(root, "tests", "bin"), { recursive: true });
+    writeFileSync(
+      join(root, "tests", "citation-ledger.json"),
+      '{"scripts/core/common.sh:71": 1}\n',
+    );
+    writeFileSync(
+      join(root, "tests", "bin", "citations.test.js"),
+      'const fixture = "scripts/prepare";\n',
+    );
+    writeFileSync(
+      join(root, "tests", "bin", "real-consumer.test.js"),
+      'const consumer = "scripts/install";\n',
+    );
+
+    assert.deepEqual(runScriptsAudit(root), [
+      {
+        file: "tests/bin/real-consumer.test.js",
+        line: 1,
+        normalized: 'const consumer = "scripts/install";',
+        ordinal: 1,
+      },
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 void test("scripts/ is gone, so the audit and the declaration map are both empty", () => {
   assert.deepEqual(runScriptsAudit(ROOT), []);
   assert.deepEqual(SCRIPTS_CONSUMERS, []);
