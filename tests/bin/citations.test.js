@@ -582,6 +582,28 @@ void test("applyFixEdits is idempotent: a second run rewrites nothing", () => {
   );
 });
 
+void test("applyFixEdits canonicalizes an accepted leading-zero citation in one pass", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:0001::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  const a = join(root, "a.js");
+  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 1);
+  const once = readFileSync(a, "utf8");
+  const secondEdits = fixEdits(scan([a]), root);
+  const secondWrites = applyFixEdits(secondEdits);
+  const corrected = "// `src/x.ts:2::export function go`\n";
+  assert.deepEqual(
+    {
+      once,
+      secondEditCount: secondEdits.length,
+      secondWrites,
+      twice: readFileSync(a, "utf8"),
+    },
+    { once: corrected, secondEditCount: 0, secondWrites: 0, twice: corrected },
+  );
+});
+
 const TOOL = fileURLToPath(new URL("../tools/citations.mjs", import.meta.url));
 
 void test("the --fix CLI dispatch rewrites a scratch root, never the repository", () => {

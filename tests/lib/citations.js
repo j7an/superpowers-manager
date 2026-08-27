@@ -676,15 +676,15 @@ export function fixEdits(citations, root) {
     const verdict = validate(citation, root);
     if (verdict.ok || verdict.code !== "LINE_MISMATCH") continue;
     const at = /** @type {number} */ (verdict.line);
+    const numberStart = citation.path.length + 2;
+    const numberEnd = citation.raw.indexOf("::", numberStart);
     edits.push({
       file: citation.file,
       lineNumber: citation.lineNumber,
       column: citation.column,
       from: citation.raw,
-      to: citation.raw.replace(
-        `${citation.path}:${citation.line}::`,
-        `${citation.path}:${at}::`,
-      ),
+      to:
+        citation.raw.slice(0, numberStart) + at + citation.raw.slice(numberEnd),
     });
   }
   return edits;
