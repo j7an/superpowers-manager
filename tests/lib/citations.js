@@ -43,9 +43,11 @@ const BACKTICKED = /`([^`\n]+)`/g;
 // which is a bypass, not a gap. Plain `path:N` is deliberately excluded --
 // that is a legitimate legacy citation and the legacy pass owns it.
 // The file-like fallback is intentionally broader than PATH only for candidate
-// retention; ANCHORED remains the sole valid-path parser.
+// retention: a plausible extension before the `::` separator is enough,
+// independently of valid PATH characters. ANCHORED remains the sole valid-path
+// parser.
 const CANDIDATE = new RegExp(
-  String.raw`^(?:git show\s+\S+:\S|(?:${PATH}(?::.*)?|[^\s:]+\.[^\s:]+(?::.*)?)::)`,
+  String.raw`^(?:git show\s+\S+:\S|.+\.[A-Za-z0-9]+(?::[^:]*)?::)`,
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
 const CONTROL_CONDITION = new Set(["for", "if", "while", "with"]);

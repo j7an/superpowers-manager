@@ -217,6 +217,36 @@ void test("scan retains an invalid-character anchored path as malformed", () => 
   });
 });
 
+void test("scan retains a whitespace-bearing file-like anchored path as malformed", () => {
+  const root = fixture({
+    "a.js": "// `src/my file.ts::export function go`\n",
+  });
+  const found = scan([join(root, "a.js")]);
+  assert.equal(found.length, 1);
+  const [citation] = found;
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  assert.equal(validate(citation, root).ok, false);
+  assert.deepEqual(buildLedger(found, root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
+void test("scan retains a colon-bearing absolute anchored path as malformed", () => {
+  const root = fixture({
+    "a.js": "// `C:/src/x.ts::export function go`\n",
+  });
+  const found = scan([join(root, "a.js")]);
+  assert.equal(found.length, 1);
+  const [citation] = found;
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  assert.equal(validate(citation, root).ok, false);
+  assert.deepEqual(buildLedger(found, root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
 void test("scan ignores a backticked git show that names only a commit", () => {
   // Prose, not a citation: no OBJECT:PATH, so nothing is being pointed at.
   // The corpus contains one of these and it must not turn the gate red.
