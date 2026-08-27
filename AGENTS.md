@@ -45,6 +45,15 @@ Codex below describe the product integration, not a required agent harness.
 - Mutate only `superpowers@superpowers-manager` and the `superpowers-manager`
   marketplace. Never remove another provider automatically.
 - Keep the in-process `probe` command read-only.
+- A `file:line` citation in a comment carries the text it names:
+  `` `path::anchor` `` where a declaration is what is meant, or
+  `` `path:N::anchor` `` where a specific line is, or
+  `` `path:N-M::anchor` `` where a specific range is meant and its unique
+  anchor must fall within N-M. The anchor must occur on exactly one line of the target, and `N` must be that line; a citation into a deleted file becomes
+  `` `git show <sha>:path` ``. **Why:** a bare line number is invalidated
+  silently by any edit above it and nothing reads it — the anchor is what makes
+  the citation checkable, and what lets the gate report where the target moved
+  to rather than only that it moved.
 - On the product path, a reader that catches a failure emits a hand-written
   message naming the input; it never interpolates the caught error's message.
   A bounded, validated token — an exit status, a symbolic errno — may be
@@ -152,6 +161,13 @@ Codex below describe the product integration, not a required agent harness.
   by `tests/bin/migration-inventory.test.js`. **Why:** prose reconciliation let
   a duplicate-looking item number and an undocumented numbering gap survive two
   reviews.
+- `tests/bin/citations.test.js` validates every anchored citation in `src/` and
+  `tests/{bin,baseline,unit,lib}` against its target's text, and holds the
+  not-yet-anchored population in `tests/citation-ledger.json`. The ledger only
+  shrinks: a citation absent from it must validate. Run
+  `node tests/tools/citations.mjs --report` for the buckets without the suite.
+  **Why:** a stale citation is invisible to every other check here, and one
+  reference moved three times inside a single fix wave before anything noticed.
 - Run `git diff --check` before completion.
 
 ## Workflows and Dependencies
