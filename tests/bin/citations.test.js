@@ -4,7 +4,14 @@
 // the real corpus.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +23,8 @@ import {
   commentText,
   CORPUS_DIRS,
   displayPath,
+  fixEdits,
+  applyFixEdits,
   ledgerDrift,
   listSources,
   readLedger,
@@ -488,6 +497,130 @@ void test("readLedger preserves a __proto__ token key as own debt", () => {
   ]);
   assert.equal(Object.getPrototypeOf(counts), Object.prototype);
   assert.equal(Object.hasOwn(counts, "__proto__"), true);
+});
+
+void test("fixEdits rewrites a single-line citation to its anchor's line", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:9::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  const edits = fixEdits(scan([join(root, "a.js")]), root);
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].from, "`src/x.ts:9::export function go`");
+  assert.equal(edits[0].to, "`src/x.ts:2::export function go`");
+  assert.equal(edits[0].column, 3);
+});
+
+void test("fixEdits refuses a range, because shifting one is applying an offset", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:8-9::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
+});
+
+void test("fixEdits never adds an anchor to a legacy citation", () => {
+  const root = fixture({ "a.js": "// src/x.ts:9\n", "src/x.ts": TARGET });
+  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
+});
+
+void test("fixEdits never touches a dead referent", () => {
+  const root = fixture({ "a.js": "// `scripts/gone.sh:9::anything`\n" });
+  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
+});
+
+void test("fixEdits leaves an ambiguous anchor alone rather than guessing", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:9::return`\n",
+    "src/x.ts": "return\nreturn\n",
+  });
+  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
+});
+
+void test("applyFixEdits rewrites the file's bytes", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:9::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  const a = join(root, "a.js");
+  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 1);
+  assert.equal(
+    readFileSync(a, "utf8"),
+    "// `src/x.ts:2::export function go`\n",
+  );
+});
+
+void test("applyFixEdits rewrites two citations on one line correctly", () => {
+  // The left rewrite shrinks by one character, so a left-to-right writer using
+  // original columns would corrupt the right-hand one.
+  const root = fixture({
+    "a.js": "// `src/x.ts:11::const a` and `src/y.ts:12::const b`\n",
+    "src/x.ts": "const a = 1;\n",
+    "src/y.ts": "\nconst b = 2;\n",
+  });
+  const a = join(root, "a.js");
+  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 1);
+  assert.equal(
+    readFileSync(a, "utf8"),
+    "// `src/x.ts:1::const a` and `src/y.ts:2::const b`\n",
+  );
+});
+
+void test("applyFixEdits is idempotent: a second run rewrites nothing", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:9::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  const a = join(root, "a.js");
+  applyFixEdits(fixEdits(scan([a]), root));
+  const once = readFileSync(a, "utf8");
+  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 0);
+  assert.equal(
+    readFileSync(a, "utf8"),
+    once,
+    "a second run must not change a byte",
+  );
+});
+
+const TOOL = fileURLToPath(new URL("../tools/citations.mjs", import.meta.url));
+
+void test("the --fix CLI dispatch rewrites a scratch root, never the repository", () => {
+  const root = fixture({
+    "src/x.ts": TARGET,
+    "tests/bin/a.js": "// `src/x.ts:9::export function go`\n",
+    "tests/baseline/.keep": "",
+    "tests/unit/.keep": "",
+    "tests/lib/.keep": "",
+  });
+  const result = spawnSync(process.execPath, [TOOL, "--fix"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_CITATIONS_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null, "the tool was killed at the harness bound");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /rewrote 1 citations in 1 files/);
+  assert.equal(
+    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
+    "// `src/x.ts:2::export function go`\n",
+  );
+});
+
+void test("CITATION-03 --fix proposes nothing against this repository", () => {
+  assert.deepEqual(
+    fixEdits(scan(listSources(CORPUS_DIRS, ROOT)), ROOT),
+    [],
+    "PR 12.2 sweeps nothing: there must be no citation here for --fix to rewrite",
+  );
+});
+
+void test("fixEdits is empty on a correct citation, so a second run is a no-op", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:2::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
 });
 
 // ---- the two live gates -------------------------------------------------

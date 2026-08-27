@@ -9,7 +9,13 @@
 // citation-shaped token inside a multi-line template literal can be read as a
 // comment citation. That yields a false positive, which the ledger absorbs.
 
-import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import {
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 export const MIN_ANCHOR = 3;
@@ -650,4 +656,65 @@ export function ledgerDrift(observed, declared) {
     }
   }
   return drift.sort();
+}
+
+/**
+ * The only transformation the fixer permits: a single-line anchored citation
+ * may take the line of its unique anchor. Ranges, missing targets, and
+ * ambiguous anchors are left for human review.
+ * @param {Citation[]} citations
+ * @param {string} root
+ * @returns {Array<{ file: string, lineNumber: number, column: number, from: string, to: string }>}
+ */
+export function fixEdits(citations, root) {
+  /** @type {Array<{ file: string, lineNumber: number, column: number, from: string, to: string }>} */
+  const edits = [];
+  for (const citation of citations) {
+    if (citation.kind !== "anchored") continue;
+    if (citation.line === undefined) continue;
+    if (citation.endLine !== undefined) continue;
+    const verdict = validate(citation, root);
+    if (verdict.ok || verdict.code !== "LINE_MISMATCH") continue;
+    const at = /** @type {number} */ (verdict.line);
+    edits.push({
+      file: citation.file,
+      lineNumber: citation.lineNumber,
+      column: citation.column,
+      from: citation.raw,
+      to: citation.raw.replace(
+        `${citation.path}:${citation.line}::`,
+        `${citation.path}:${at}::`,
+      ),
+    });
+  }
+  return edits;
+}
+
+/**
+ * Applies edit spans against their original source lines. Same-line edits run
+ * from right to left so replacing one span cannot shift the next span's
+ * recorded column.
+ * @param {ReturnType<typeof fixEdits>} edits
+ * @returns {number}
+ */
+export function applyFixEdits(edits) {
+  /** @type {Map<string, ReturnType<typeof fixEdits>>} */
+  const byFile = new Map();
+  for (const edit of edits) {
+    const list = byFile.get(edit.file) ?? [];
+    list.push(edit);
+    byFile.set(edit.file, list);
+  }
+  for (const [file, list] of byFile) {
+    const lines = readLines(file);
+    for (const edit of [...list].sort((a, b) => b.column - a.column)) {
+      const line = lines[edit.lineNumber - 1];
+      lines[edit.lineNumber - 1] =
+        line.slice(0, edit.column) +
+        edit.to +
+        line.slice(edit.column + edit.from.length);
+    }
+    writeFileSync(file, lines.join("\n"));
+  }
+  return byFile.size;
 }
