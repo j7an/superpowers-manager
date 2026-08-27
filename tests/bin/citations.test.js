@@ -62,6 +62,18 @@ void test("commentText finds a trailing comment after postfix increment division
   assert.equal(found?.offset, 19);
 });
 
+void test("commentText treats ordinary identifier of before slash as division", () => {
+  const found = commentText("of / divisor; // see src/x.ts:44");
+  assert.equal(found?.text, "// see src/x.ts:44");
+  assert.equal(found?.offset, 14);
+});
+
+void test("commentText allows a regex expression after for-of", () => {
+  const found = commentText("for (x of /'/) run(); // see src/x.ts:44");
+  assert.equal(found?.text, "// see src/x.ts:44");
+  assert.equal(found?.offset, 22);
+});
+
 void test("scan parses all four citation forms", () => {
   const root = fixture({
     "a.js": [

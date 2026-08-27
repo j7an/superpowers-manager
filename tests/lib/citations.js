@@ -49,7 +49,6 @@ const EXPRESSION_PREFIX = new Set([
   "in",
   "instanceof",
   "new",
-  "of",
   "return",
   "throw",
   "typeof",
@@ -73,8 +72,9 @@ export function commentText(line) {
   let regex = false;
   let regexClass = false;
   let expressionCanStart = true;
-  let pendingControl = false;
-  /** @type {boolean[]} */
+  /** @type {"control" | "for" | undefined} */
+  let pendingControl;
+  /** @type {Array<"control" | "for" | "for-of" | undefined>} */
   const controlParens = [];
   let propertyAccess = false;
   for (let i = 0; i < line.length - 1; i += 1) {
@@ -106,7 +106,7 @@ export function commentText(line) {
     if (/\s/.test(c)) continue;
     if (c === "'" || c === '"' || c === "`") {
       quote = c;
-      pendingControl = false;
+      pendingControl = undefined;
       propertyAccess = false;
       continue;
     }
@@ -114,8 +114,21 @@ export function commentText(line) {
       let end = i + 1;
       while (end < line.length && /[\w$]/.test(line[end])) end += 1;
       const word = line.slice(i, end);
-      pendingControl = !propertyAccess && CONTROL_CONDITION.has(word);
-      expressionCanStart = !propertyAccess && EXPRESSION_PREFIX.has(word);
+      /** @type {boolean} */
+      const forOfSeparator =
+        !propertyAccess &&
+        word === "of" &&
+        controlParens.at(-1) === "for" &&
+        !expressionCanStart;
+      if (forOfSeparator) controlParens[controlParens.length - 1] = "for-of";
+      pendingControl =
+        !propertyAccess && CONTROL_CONDITION.has(word)
+          ? word === "for"
+            ? "for"
+            : "control"
+          : undefined;
+      expressionCanStart =
+        !propertyAccess && (EXPRESSION_PREFIX.has(word) || forOfSeparator);
       propertyAccess = false;
       i = end - 1;
       continue;
@@ -124,7 +137,7 @@ export function commentText(line) {
       let end = i + 1;
       while (end < line.length && /[\w.]/.test(line[end])) end += 1;
       expressionCanStart = false;
-      pendingControl = false;
+      pendingControl = undefined;
       propertyAccess = false;
       i = end - 1;
       continue;
@@ -133,7 +146,7 @@ export function commentText(line) {
       return { text: line.slice(i), offset: i };
     }
     if (c === "/") {
-      pendingControl = false;
+      pendingControl = undefined;
       propertyAccess = false;
       if (expressionCanStart) {
         regex = true;
@@ -147,14 +160,14 @@ export function commentText(line) {
     if (c === "(") {
       controlParens.push(pendingControl);
       expressionCanStart = true;
-      pendingControl = false;
+      pendingControl = undefined;
       propertyAccess = false;
       continue;
     }
     if (c === ")") {
-      const closesControl = controlParens.pop() === true;
+      const closesControl = controlParens.pop() !== undefined;
       expressionCanStart = closesControl;
-      pendingControl = false;
+      pendingControl = undefined;
       propertyAccess = false;
       continue;
     }
@@ -162,12 +175,12 @@ export function commentText(line) {
       /** @type {boolean} */
       const postfix = !expressionCanStart;
       expressionCanStart = !postfix;
-      pendingControl = false;
+      pendingControl = undefined;
       propertyAccess = false;
       i += 1;
       continue;
     }
-    pendingControl = false;
+    pendingControl = undefined;
     if (c === "]" || c === "}") {
       expressionCanStart = false;
     } else if (c === ".") {
