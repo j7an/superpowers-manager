@@ -464,6 +464,32 @@ void test("readLedger refuses a count that is not a positive integer", () => {
   );
 });
 
+void test("readLedger preserves a __proto__ citing-file key as own debt", () => {
+  const root = fixture({
+    "ledger.json":
+      '{"unanchored":{"__proto__":{"src/x.ts:2":1}},"deadReferent":{}}',
+  });
+  const ledger = readLedger(join(root, "ledger.json"));
+  assert.deepEqual(ledgerDrift({ unanchored: {}, deadReferent: {} }, ledger), [
+    "unanchored __proto__ `src/x.ts:2`: ledger declares 1, tree has 0",
+  ]);
+  assert.equal(Object.getPrototypeOf(ledger.unanchored), Object.prototype);
+  assert.equal(Object.hasOwn(ledger.unanchored, "__proto__"), true);
+});
+
+void test("readLedger preserves a __proto__ token key as own debt", () => {
+  const root = fixture({
+    "ledger.json": '{"unanchored":{"a.js":{"__proto__":1}},"deadReferent":{}}',
+  });
+  const ledger = readLedger(join(root, "ledger.json"));
+  const counts = ledger.unanchored["a.js"];
+  assert.deepEqual(ledgerDrift({ unanchored: {}, deadReferent: {} }, ledger), [
+    "unanchored a.js `__proto__`: ledger declares 1, tree has 0",
+  ]);
+  assert.equal(Object.getPrototypeOf(counts), Object.prototype);
+  assert.equal(Object.hasOwn(counts, "__proto__"), true);
+});
+
 // ---- the two live gates -------------------------------------------------
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const LEDGER_PATH = join(ROOT, "tests", "citation-ledger.json");

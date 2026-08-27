@@ -490,6 +490,34 @@ export function validate(citation, root) {
  */
 
 /**
+ * Preserve arbitrary string keys on an ordinary object, including keys handled
+ * specially by legacy object accessors.
+ * @template T
+ * @param {Record<string, T>} record
+ * @param {string} key
+ * @param {T} value
+ * @returns {void}
+ */
+function setOwn(record, key, value) {
+  Object.defineProperty(record, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+/**
+ * @template T
+ * @param {Record<string, T>} record
+ * @param {string} key
+ * @returns {T | undefined}
+ */
+function ownValue(record, key) {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
+/**
  * @param {Citation[]} citations
  * @param {string} root
  * @returns {Ledger}
@@ -502,8 +530,12 @@ export function buildLedger(citations, root) {
     if (bucket === "checked") continue;
     const key = bucket === "unanchored" ? "unanchored" : "deadReferent";
     const from = displayPath(citation.file, root);
-    const byFile = (ledger[key][from] ??= {});
-    byFile[citation.raw] = (byFile[citation.raw] ?? 0) + 1;
+    let byFile = ownValue(ledger[key], from);
+    if (byFile === undefined) {
+      byFile = {};
+      setOwn(ledger[key], from, byFile);
+    }
+    setOwn(byFile, citation.raw, (ownValue(byFile, citation.raw) ?? 0) + 1);
   }
   return ledger;
 }
@@ -576,9 +608,9 @@ export function readLedger(path) {
             `${path}: ${bucket} ${file} ${token} must be a positive integer`,
           );
         }
-        counts[token] = count;
+        setOwn(counts, token, count);
       }
-      ledger[bucket][file] = counts;
+      setOwn(ledger[bucket], file, counts);
     }
   }
   return ledger;
@@ -600,15 +632,15 @@ export function ledgerDrift(observed, declared) {
     const said = declared[bucket] ?? {};
     const files = new Set([...Object.keys(seen), ...Object.keys(said)]);
     for (const file of files) {
-      const seenFile = seen[file] ?? {};
-      const saidFile = said[file] ?? {};
+      const seenFile = ownValue(seen, file) ?? {};
+      const saidFile = ownValue(said, file) ?? {};
       const tokens = new Set([
         ...Object.keys(seenFile),
         ...Object.keys(saidFile),
       ]);
       for (const token of tokens) {
-        const seenCount = seenFile[token] ?? 0;
-        const saidCount = saidFile[token] ?? 0;
+        const seenCount = ownValue(seenFile, token) ?? 0;
+        const saidCount = ownValue(saidFile, token) ?? 0;
         if (seenCount !== saidCount) {
           drift.push(
             `${bucket} ${file} \`${token}\`: ledger declares ${saidCount}, tree has ${seenCount}`,
