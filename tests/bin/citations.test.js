@@ -4,12 +4,12 @@
 // the real corpus.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { registerScratch } from "./fixture-scratch.js";
-import { commentText, scan } from "../lib/citations.js";
+import { commentText, scan, targetExists } from "../lib/citations.js";
 
 /**
  * A scratch tree with the given files, cleaned up with the suite.
@@ -42,6 +42,12 @@ void test("commentText finds a trailing comment outside string delimiters", () =
 void test("commentText ignores a slash pair inside a string literal", () => {
   assert.equal(commentText('const u = "http://example.test";'), undefined);
   assert.equal(commentText("const u = 'a//b';"), undefined);
+});
+
+void test("commentText finds a trailing comment after a quote-bearing regex literal", () => {
+  const found = commentText("const re = /'/; // see src/x.ts:44");
+  assert.equal(found?.text, "// see src/x.ts:44");
+  assert.equal(found?.offset, 16);
 });
 
 void test("scan parses all four citation forms", () => {
@@ -150,4 +156,16 @@ void test("scan records the column of the raw token", () => {
   const [found] = scan([join(root, "a.js")]);
   assert.equal(found.column, 5);
   assert.equal(found.raw, "`src/x.ts:12::const seen`");
+});
+
+void test("targetExists rejects a target reached through an escaping symlink", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "spw-citations-"));
+  registerScratch(scratch);
+  const root = join(scratch, "root");
+  const outside = join(scratch, "outside");
+  mkdirSync(root);
+  mkdirSync(outside);
+  writeFileSync(join(outside, "target.ts"), "outside\n");
+  symlinkSync(outside, join(root, "escape"));
+  assert.equal(targetExists("escape/target.ts", root), false);
 });

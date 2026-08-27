@@ -9,8 +9,8 @@
 // citation-shaped token inside a multi-line template literal can be read as a
 // comment citation. That yields a false positive, which the ledger absorbs.
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 export const MIN_ANCHOR = 3;
 
@@ -40,6 +40,18 @@ const CANDIDATE = new RegExp(
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
 
+/** @param {string} line @param {number} at */
+function canStartRegex(line, at) {
+  const before = line.slice(0, at).trimEnd();
+  if (before === "") return true;
+  const previous = before.at(-1);
+  if (previous !== undefined && "([{:;,=!?&|+-*%^~<>".includes(previous))
+    return true;
+  return /(?:^|[^\w$])(?:await|case|delete|in|instanceof|new|return|throw|typeof|void|yield)$/.test(
+    before,
+  );
+}
+
 /**
  * The comment portion of a line, with its offset, or undefined when the line
  * carries none.
@@ -53,6 +65,8 @@ export function commentText(line) {
   }
   /** @type {string | undefined} */
   let quote;
+  let regex = false;
+  let regexClass = false;
   for (let i = 0; i < line.length - 1; i += 1) {
     const c = line[i];
     if (quote !== undefined) {
@@ -63,6 +77,16 @@ export function commentText(line) {
       if (c === quote) quote = undefined;
       continue;
     }
+    if (regex) {
+      if (c === "\\") {
+        i += 1;
+        continue;
+      }
+      if (c === "[") regexClass = true;
+      else if (c === "]") regexClass = false;
+      else if (c === "/" && !regexClass) regex = false;
+      continue;
+    }
     if (c === "'" || c === '"' || c === "`") {
       quote = c;
       continue;
@@ -70,6 +94,7 @@ export function commentText(line) {
     if (c === "/" && line[i + 1] === "/") {
       return { text: line.slice(i), offset: i };
     }
+    if (c === "/" && canStartRegex(line, i)) regex = true;
   }
   return undefined;
 }
@@ -226,8 +251,20 @@ export function hasDotSegment(path) {
 /** @param {string} path @param {string} root @returns {boolean} */
 export function targetExists(path, root) {
   if (hasDotSegment(path)) return false;
-  const target = join(root, path);
-  return existsSync(target) && statSync(target).isFile();
+  try {
+    const physicalRoot = realpathSync(root);
+    const physicalTarget = realpathSync(join(root, path));
+    const fromRoot = relative(physicalRoot, physicalTarget);
+    if (
+      fromRoot === ".." ||
+      fromRoot.startsWith(`..${sep}`) ||
+      isAbsolute(fromRoot)
+    )
+      return false;
+    return statSync(physicalTarget).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** @param {string} file @param {string} root @returns {string} */
