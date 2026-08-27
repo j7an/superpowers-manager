@@ -48,9 +48,11 @@ Codex below describe the product integration, not a required agent harness.
 - A `file:line` citation in a comment carries the text it names:
   `` `path::anchor` `` where a declaration is what is meant, or
   `` `path:N::anchor` `` where a specific line is, or
-  `` `path:N-M::anchor` `` where a specific range is meant and its unique
-  anchor must fall within N-M. The anchor must occur on exactly one line of the target, and `N` must be that line; a citation into a deleted file becomes
-  `` `git show <sha>:path` ``. **Why:** a bare line number is invalidated
+  `` `path:N-M::anchor` `` where a specific range is meant. The anchor must
+  occur on exactly one line of the target; for `` `path:N::anchor` ``, `N`
+  equals that line, and for `` `path:N-M::anchor` ``, that line falls within
+  the inclusive `N-M` range. A citation into a deleted file becomes
+  `` `git show <40-hex>:path` ``. **Why:** a bare line number is invalidated
   silently by any edit above it and nothing reads it — the anchor is what makes
   the citation checkable, and what lets the gate report where the target moved
   to rather than only that it moved.
