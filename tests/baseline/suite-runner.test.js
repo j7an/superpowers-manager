@@ -17,6 +17,7 @@ import test from "node:test";
 import { computeBuildId } from "../build-id.js";
 
 const RUNNER = fileURLToPath(new URL("../run-node-suites.js", import.meta.url));
+const RUN_SH = fileURLToPath(new URL("../run.sh", import.meta.url));
 
 const PASSING_SUITE = 'import test from "node:test";\ntest("ok", () => {});\n';
 const FAILING_SUITE =
@@ -142,10 +143,24 @@ void test("both sentinels reach a piped capture", (t) => {
     suites: ["tests/unit/fail.test.js"],
     files: { "tests/unit/fail.test.js": FAILING_SUITE },
   });
-  const r = runIn(root);
-  // FALSIFIER: delete the announce() call and this goes red. It does NOT
-  // discriminate process.exit from process.exitCode; see the Task 2 brief.
-  assert.match(r.stdout, /^run-node-suites: complete status=\d+$/m);
+  const r = spawnSync("sh", [RUN_SH], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_RUNNER_ROOT: root },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 30000,
+  });
+  assert.equal(
+    r.signal,
+    null,
+    "tests/run.sh was killed at the harness bound before both sentinels arrived",
+  );
+  assert.equal(r.status, 1);
+  const lines = r.stdout.trimEnd().split("\n");
+  assert.deepEqual(lines.slice(-2), [
+    "run-node-suites: complete status=1",
+    "tests/run.sh: complete failed=1",
+  ]);
 });
 
 // This fails if early fail() paths omit the completion signal; no child summary
