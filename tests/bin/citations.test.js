@@ -50,6 +50,18 @@ void test("commentText finds a trailing comment after a quote-bearing regex lite
   assert.equal(found?.offset, 16);
 });
 
+void test("commentText finds a trailing comment after a control-condition regex", () => {
+  const found = commentText("if (ok) /'/.test(value); // see src/x.ts:44");
+  assert.equal(found?.text, "// see src/x.ts:44");
+  assert.equal(found?.offset, 25);
+});
+
+void test("commentText finds a trailing comment after postfix increment division", () => {
+  const found = commentText("count++ / divisor; // see src/x.ts:44");
+  assert.equal(found?.text, "// see src/x.ts:44");
+  assert.equal(found?.offset, 19);
+});
+
 void test("scan parses all four citation forms", () => {
   const root = fixture({
     "a.js": [

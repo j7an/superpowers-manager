@@ -39,18 +39,23 @@ const CANDIDATE = new RegExp(
   String.raw`^(?:git show\s+\S+:\S|${PATH}(?::.*)?::)`,
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
-
-/** @param {string} line @param {number} at */
-function canStartRegex(line, at) {
-  const before = line.slice(0, at).trimEnd();
-  if (before === "") return true;
-  const previous = before.at(-1);
-  if (previous !== undefined && "([{:;,=!?&|+-*%^~<>".includes(previous))
-    return true;
-  return /(?:^|[^\w$])(?:await|case|delete|in|instanceof|new|return|throw|typeof|void|yield)$/.test(
-    before,
-  );
-}
+const CONTROL_CONDITION = new Set(["for", "if", "while", "with"]);
+const EXPRESSION_PREFIX = new Set([
+  "await",
+  "case",
+  "delete",
+  "do",
+  "else",
+  "in",
+  "instanceof",
+  "new",
+  "of",
+  "return",
+  "throw",
+  "typeof",
+  "void",
+  "yield",
+]);
 
 /**
  * The comment portion of a line, with its offset, or undefined when the line
@@ -67,6 +72,11 @@ export function commentText(line) {
   let quote;
   let regex = false;
   let regexClass = false;
+  let expressionCanStart = true;
+  let pendingControl = false;
+  /** @type {boolean[]} */
+  const controlParens = [];
+  let propertyAccess = false;
   for (let i = 0; i < line.length - 1; i += 1) {
     const c = line[i];
     if (quote !== undefined) {
@@ -74,7 +84,10 @@ export function commentText(line) {
         i += 1;
         continue;
       }
-      if (c === quote) quote = undefined;
+      if (c === quote) {
+        quote = undefined;
+        expressionCanStart = false;
+      }
       continue;
     }
     if (regex) {
@@ -84,17 +97,85 @@ export function commentText(line) {
       }
       if (c === "[") regexClass = true;
       else if (c === "]") regexClass = false;
-      else if (c === "/" && !regexClass) regex = false;
+      else if (c === "/" && !regexClass) {
+        regex = false;
+        expressionCanStart = false;
+      }
       continue;
     }
+    if (/\s/.test(c)) continue;
     if (c === "'" || c === '"' || c === "`") {
       quote = c;
+      pendingControl = false;
+      propertyAccess = false;
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(c)) {
+      let end = i + 1;
+      while (end < line.length && /[\w$]/.test(line[end])) end += 1;
+      const word = line.slice(i, end);
+      pendingControl = !propertyAccess && CONTROL_CONDITION.has(word);
+      expressionCanStart = !propertyAccess && EXPRESSION_PREFIX.has(word);
+      propertyAccess = false;
+      i = end - 1;
+      continue;
+    }
+    if (/\d/.test(c)) {
+      let end = i + 1;
+      while (end < line.length && /[\w.]/.test(line[end])) end += 1;
+      expressionCanStart = false;
+      pendingControl = false;
+      propertyAccess = false;
+      i = end - 1;
       continue;
     }
     if (c === "/" && line[i + 1] === "/") {
       return { text: line.slice(i), offset: i };
     }
-    if (c === "/" && canStartRegex(line, i)) regex = true;
+    if (c === "/") {
+      pendingControl = false;
+      propertyAccess = false;
+      if (expressionCanStart) {
+        regex = true;
+        regexClass = false;
+      } else {
+        expressionCanStart = true;
+        if (line[i + 1] === "=") i += 1;
+      }
+      continue;
+    }
+    if (c === "(") {
+      controlParens.push(pendingControl);
+      expressionCanStart = true;
+      pendingControl = false;
+      propertyAccess = false;
+      continue;
+    }
+    if (c === ")") {
+      const closesControl = controlParens.pop() === true;
+      expressionCanStart = closesControl;
+      pendingControl = false;
+      propertyAccess = false;
+      continue;
+    }
+    if ((c === "+" || c === "-") && line[i + 1] === c) {
+      /** @type {boolean} */
+      const postfix = !expressionCanStart;
+      expressionCanStart = !postfix;
+      pendingControl = false;
+      propertyAccess = false;
+      i += 1;
+      continue;
+    }
+    pendingControl = false;
+    if (c === "]" || c === "}") {
+      expressionCanStart = false;
+    } else if (c === ".") {
+      expressionCanStart = false;
+    } else {
+      expressionCanStart = true;
+    }
+    propertyAccess = c === ".";
   }
   return undefined;
 }
