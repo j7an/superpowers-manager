@@ -7,11 +7,18 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { registerScratch } from "./fixture-scratch.js";
 import {
+  buildLedger,
   classify,
   commentText,
+  CORPUS_DIRS,
+  displayPath,
+  ledgerDrift,
+  listSources,
+  readLedger,
   scan,
   targetExists,
   validate,
@@ -276,7 +283,9 @@ void test("a resolution reference with a short object name is refused", () => {
 void test("a path escaping the root is refused without touching the filesystem", () => {
   const root = fixture({ "a.js": "// `../outside.ts::export function go`\n" });
   const [found] = scan([join(root, "a.js")]);
-  assert.equal(validate(found, root).code, "MISSING_TARGET");
+  const verdict = validate(found, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "MISSING_TARGET");
   assert.equal(targetExists("../outside.ts", root), false);
 });
 
@@ -285,7 +294,9 @@ void test("a resolution reference escaping the root is refused", () => {
     "a.js": "// `git show " + "a".repeat(40) + ":../outside.ts`\n",
   });
   const [found] = scan([join(root, "a.js")]);
-  assert.equal(validate(found, root).code, "MALFORMED_RESOLUTION");
+  const verdict = validate(found, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "MALFORMED_RESOLUTION");
 });
 
 void test("a legacy citation escaping the root classifies as dead, never live", () => {
@@ -303,7 +314,9 @@ void test("an anchor shorter than the minimum is refused", () => {
 void test("an anchored citation whose target is gone is a failure, never debt", () => {
   const root = fixture({ "a.js": "// `src/gone.ts::export function go`\n" });
   const [found] = scan([join(root, "a.js")]);
-  assert.equal(validate(found, root).code, "MISSING_TARGET");
+  const verdict = validate(found, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "MISSING_TARGET");
   assert.equal(classify(found, root), "checked");
 });
 
@@ -326,4 +339,157 @@ void test("a resolution citation is checked by shape and never opens Git", () =>
   const [found] = scan([join(root, "a.js")]);
   assert.equal(classify(found, root), "checked");
   assert.equal(validate(found, root).ok, true);
+});
+
+void test("a malformed citation is never ledgered", () => {
+  const root = fixture({ "a.js": "// `src/x.ts:abc::const seen`\n" });
+  const ledger = buildLedger(scan([join(root, "a.js")]), root);
+  assert.deepEqual(ledger, { unanchored: {}, deadReferent: {} });
+});
+
+void test("buildLedger keys by citing file and token, counting duplicates", () => {
+  const root = fixture({
+    "a.js": [
+      "// src/x.ts:2 twice",
+      "// again src/x.ts:2 and scripts/gone.sh:5",
+    ].join("\n"),
+    "src/x.ts": TARGET,
+  });
+  const ledger = buildLedger(scan([join(root, "a.js")]), root);
+  assert.deepEqual(ledger.unanchored, { "a.js": { "src/x.ts:2": 2 } });
+  assert.deepEqual(ledger.deadReferent, { "a.js": { "scripts/gone.sh:5": 1 } });
+});
+
+void test("buildLedger never records an anchored citation", () => {
+  const root = fixture({
+    "a.js": "// `src/x.ts:2::export function go`\n",
+    "src/x.ts": TARGET,
+  });
+  const ledger = buildLedger(scan([join(root, "a.js")]), root);
+  assert.deepEqual(ledger, { unanchored: {}, deadReferent: {} });
+});
+
+void test("ledgerDrift reports an unledgered citation", () => {
+  const observed = {
+    unanchored: { "a.js": { "src/x.ts:2": 1 } },
+    deadReferent: {},
+  };
+  const drift = ledgerDrift(observed, { unanchored: {}, deadReferent: {} });
+  assert.deepEqual(drift, [
+    "unanchored a.js `src/x.ts:2`: ledger declares 0, tree has 1",
+  ]);
+});
+
+void test("ledgerDrift reports an orphan ledger entry", () => {
+  const declared = {
+    unanchored: { "gone.js": { "src/x.ts:2": 1 } },
+    deadReferent: {},
+  };
+  const drift = ledgerDrift({ unanchored: {}, deadReferent: {} }, declared);
+  assert.deepEqual(drift, [
+    "unanchored gone.js `src/x.ts:2`: ledger declares 1, tree has 0",
+  ]);
+});
+
+void test("ledgerDrift reports a count mismatch in either direction", () => {
+  const one = { unanchored: { "a.js": { "src/x.ts:2": 1 } }, deadReferent: {} };
+  const two = { unanchored: { "a.js": { "src/x.ts:2": 2 } }, deadReferent: {} };
+  assert.equal(ledgerDrift(one, two).length, 1);
+  assert.equal(ledgerDrift(two, one).length, 1);
+});
+
+void test("ledgerDrift reports a bucket mismatch", () => {
+  const observed = {
+    unanchored: {},
+    deadReferent: { "a.js": { "src/x.ts:2": 1 } },
+  };
+  const declared = {
+    unanchored: { "a.js": { "src/x.ts:2": 1 } },
+    deadReferent: {},
+  };
+  assert.deepEqual(ledgerDrift(observed, declared), [
+    "deadReferent a.js `src/x.ts:2`: ledger declares 0, tree has 1",
+    "unanchored a.js `src/x.ts:2`: ledger declares 1, tree has 0",
+  ]);
+});
+
+void test("readLedger fails closed on malformed JSON", () => {
+  const root = fixture({ "ledger.json": "{ not json" });
+  assert.throws(
+    () => readLedger(join(root, "ledger.json")),
+    /is not valid JSON$/,
+    "a malformed ledger must fail, never read as empty",
+  );
+});
+
+void test("readLedger refuses a missing bucket", () => {
+  const root = fixture({ "ledger.json": '{"unanchored":{}}' });
+  assert.throws(
+    () => readLedger(join(root, "ledger.json")),
+    /exactly the buckets deadReferent and unanchored/,
+    "a truncated ledger must fail, never default the missing bucket to empty",
+  );
+});
+
+void test("readLedger refuses an extra bucket", () => {
+  const root = fixture({
+    "ledger.json": '{"unanchored":{},"deadReferent":{},"waived":{}}',
+  });
+  assert.throws(
+    () => readLedger(join(root, "ledger.json")),
+    /exactly the buckets deadReferent and unanchored/,
+    "debt must not be parkable in a bucket the drift comparison never reads",
+  );
+});
+
+void test("readLedger refuses a non-object bucket", () => {
+  const root = fixture({
+    "ledger.json": '{"unanchored":[],"deadReferent":{}}',
+  });
+  assert.throws(
+    () => readLedger(join(root, "ledger.json")),
+    /bucket unanchored must be an object/,
+    "an array bucket must fail rather than iterate as empty",
+  );
+});
+
+void test("readLedger refuses a count that is not a positive integer", () => {
+  const root = fixture({
+    "ledger.json": '{"unanchored":{"a.js":{"src/x.ts:2":0}},"deadReferent":{}}',
+  });
+  assert.throws(
+    () => readLedger(join(root, "ledger.json")),
+    /must be a positive integer/,
+    "a zero count would silently cancel a real citation in the drift comparison",
+  );
+});
+
+// ---- the two live gates -------------------------------------------------
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const LEDGER_PATH = join(ROOT, "tests", "citation-ledger.json");
+
+void test("CITATION-01 every anchored citation in the corpus validates", () => {
+  /** @type {string[]} */
+  const failures = [];
+  for (const c of scan(listSources(CORPUS_DIRS, ROOT))) {
+    if (c.kind === "legacy") continue;
+    const verdict = validate(c, ROOT);
+    if (!verdict.ok) {
+      failures.push(
+        `${displayPath(c.file, ROOT)}:${c.lineNumber}: ${verdict.message}`,
+      );
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `anchored citations must validate:\n${failures.join("\n")}`,
+  );
+});
+
+void test("CITATION-02 the ledger matches the tree exactly", () => {
+  const declared = readLedger(LEDGER_PATH);
+  const observed = buildLedger(scan(listSources(CORPUS_DIRS, ROOT)), ROOT);
+  const drift = ledgerDrift(observed, declared);
+  assert.deepEqual(drift, [], `citation ledger drift:\n${drift.join("\n")}`);
 });

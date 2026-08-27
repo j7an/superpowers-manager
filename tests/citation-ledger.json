@@ -1,0 +1,526 @@
+{
+  "unanchored": {
+    "src/adapter.ts": {
+      "src/adapter-result.ts:133": 1
+    },
+    "src/commands/install.ts": {
+      "src/lifecycle.ts:148-156": 1,
+      "src/commands/probe.ts:355-360": 1,
+      "src/commands/probe.ts:369-439": 1,
+      "src/upstream.ts:160-162": 1,
+      "src/git.ts:47-52": 1
+    },
+    "src/commands/pin.ts": {
+      "src/selection-store.ts:103": 1
+    },
+    "src/commands/prepare.ts": {
+      "src/hooks.ts:40": 1,
+      "src/upstream.ts:330": 1,
+      "src/hooks.ts:109": 1,
+      "tests/unit/hooks.test.js:95": 2,
+      "src/workspace.ts:99-107": 1,
+      "src/workspace.ts:137": 1,
+      "src/adapter-result.ts:32-35": 1,
+      "src/commands/probe.ts:210-232": 1,
+      "src/atomic.ts:208-215": 1,
+      "src/workspace.ts:103-106": 1,
+      "src/hooks.ts:109-134": 1,
+      "tests/unit/upstream.test.js:460-469": 1,
+      "src/selection-store.ts:124": 1,
+      "src/git.ts:47-51": 1,
+      "src/commands/install.ts:499-506": 1
+    },
+    "src/commands/probe.ts": {
+      "src/adapter-result.ts:32-35": 1,
+      "src/adapter.ts:818": 1,
+      "src/selection.ts:137": 1,
+      "src/selection.ts:198": 1,
+      "src/selection-store.ts:103": 1,
+      "src/selection.ts:222-241": 1,
+      "tests/unit/upstream.test.js:460": 1,
+      "src/selection-store.ts:124": 1,
+      "src/selection-store.ts:149": 1,
+      "src/git.ts:47-52": 1,
+      "src/upstream-cli.ts:83": 1
+    },
+    "src/commands/track-latest.ts": {
+      "src/selection-store.ts:103": 1
+    },
+    "src/commands/uninstall.ts": {
+      "src/adapter.ts:1009": 2,
+      "src/commands/probe.ts:279-284": 1,
+      "src/workspace.ts:120": 2,
+      "src/commands/probe.ts:285": 1,
+      "src/commands/probe.ts:250-257": 1,
+      "src/lifecycle.ts:171-190": 1
+    },
+    "src/commands/update.ts": {
+      "src/commands/probe.ts:369-439": 1
+    },
+    "src/effective-selection.ts": {
+      "src/selection.ts:41": 1
+    },
+    "src/hooks.ts": {
+      "src/provenance.ts:19": 1,
+      "src/selection-store.ts:19": 1,
+      "src/selection.ts:42": 1,
+      "src/upstream.ts:35": 1
+    },
+    "src/lifecycle.ts": {
+      "src/adapter.ts:818": 1
+    },
+    "src/manifest-overlay.ts": {
+      "src/strict-json.ts:227-232": 1
+    },
+    "tests/baseline/cli-parity.test.js": {
+      "tests/run-node-suites.js:15": 1,
+      "src/adapter.ts:258-270": 1,
+      "src/adapter.ts:797": 1,
+      "src/upstream.ts:160-162": 1,
+      "src/adapter.ts:120-122": 1,
+      "src/validator.ts:382": 1,
+      "src/validator.ts:370-377": 1,
+      "src/codex-json.ts:103": 1,
+      "tests/bin/lifecycle-fakes.js:148": 1,
+      "tests/bin/lifecycle-fakes.js:89-91": 1,
+      "tests/bin/probe-fakes.js:33": 1,
+      "src/adapter.ts:303-557": 1,
+      "tests/bin/lifecycle-config.js:17-24": 1,
+      "src/adapter.ts:784-855": 1,
+      "src/codex-state.ts:43-50": 1,
+      "src/adapter.ts:264": 2,
+      "src/commands/probe.ts:231": 1,
+      "src/adapter.ts:263-264": 2,
+      "src/adapter.ts:263": 2,
+      "src/adapter.ts:184-186": 1,
+      "src/adapter.ts:982": 1,
+      "src/adapter.ts:577": 1,
+      "src/adapter.ts:843-847": 2,
+      "src/adapter.ts:827": 1,
+      "src/adapter.ts:834": 1,
+      "src/adapter.ts:828-832": 1,
+      "src/adapter.ts:826": 1,
+      "src/adapter.ts:580-585": 1,
+      "src/adapter.ts:626": 1,
+      "src/adapter.ts:666-671": 1
+    },
+    "tests/baseline/prepare-child.js": {
+      "tests/run-node-suites.js:15": 1,
+      "src/git.ts:22": 1
+    },
+    "tests/baseline/prepare-fixture.js": {
+      "src/adapter.ts:380": 1,
+      "src/hooks.ts:358": 1,
+      "src/hooks.ts:230": 1,
+      "src/hooks.ts:296-298": 1,
+      "src/hooks.ts:367": 2,
+      "src/hooks.ts:359-360": 2,
+      "src/upstream.ts:160-162": 1
+    },
+    "tests/baseline/prepare.test.js": {
+      "tests/baseline/probe.test.js:65": 1,
+      "src/adapter.ts:380": 1,
+      "src/adapter.ts:389": 1,
+      "src/hooks.ts:303": 2,
+      "src/adapter.ts:542-547": 1,
+      "src/hooks.ts:35": 1,
+      "src/upstream.ts:277": 1,
+      "tests/unit/upstream.test.js:404": 1,
+      "src/hooks.ts:279": 1,
+      "tests/container.sh:8-12": 1,
+      "src/hooks.ts:359-360": 1,
+      "tests/baseline/generated-plugin-corpus.test.js:812-880": 1,
+      "src/hooks.ts:367": 1
+    },
+    "tests/baseline/probe-fixture.js": {
+      "tests/run-node-suites.js:15": 1,
+      "src/adapter.ts:977": 2,
+      "src/git.ts:31": 1,
+      "tests/bin/lifecycle-fakes.js:235-241": 1,
+      "tests/bin/lifecycle-fixture.js:328": 1,
+      "src/adapter.ts:797": 1,
+      "src/upstream.ts:160-162": 1
+    },
+    "tests/baseline/probe.test.js": {
+      "src/commands/probe.ts:336-337": 1,
+      "src/selection.ts:69-79": 1,
+      "src/selection.ts:173-176": 1,
+      "src/effective-selection.ts:117-131": 1,
+      "src/upstream.ts:160-162": 1,
+      "tests/unit/effective-selection.test.js:145-167": 1,
+      "src/adapter.ts:812-816": 1,
+      "src/adapter.ts:1009": 1,
+      "src/adapter.ts:244-251": 1,
+      "tests/bin/lifecycle-fakes.js:148-170": 1,
+      "src/adapter.ts:233-242": 1
+    },
+    "tests/baseline/ref-resolution.test.js": {
+      "tests/bin/lifecycle-fixture.js:84-86": 1
+    },
+    "tests/baseline/selection-commands.test.js": {
+      "src/commands/track-latest.ts:31": 1,
+      "src/selection.ts:198": 1
+    },
+    "tests/baseline/selection-location.test.js": {
+      "tests/unit/manifest-overlay.test.js:5-7": 1
+    },
+    "tests/baseline/validator-executable.test.js": {
+      "tests/bin/lifecycle-fixture.js:32-34": 1
+    },
+    "tests/bin/assert-matcher-gate.test.js": {
+      "tests/baseline/suite-runner.test.js:479": 1
+    },
+    "tests/bin/command-context.js": {
+      "tests/bin/lifecycle-fixture.js:279-288": 1
+    },
+    "tests/bin/install-commands.test.js": {
+      "tests/bin/migration-inventory.test.js:57": 1,
+      "src/adapter.ts:433-452": 1,
+      "src/status.ts:21": 1,
+      "src/adapter.ts:591-672": 2,
+      "src/adapter.ts:626": 1,
+      "src/adapter.ts:650-657": 1,
+      "src/adapter.ts:685": 1,
+      "tests/migration-inventory/install-commands.md:588": 1,
+      "src/adapter.ts:806-813": 1,
+      "src/codex-state.ts:67-84": 1
+    },
+    "tests/bin/install-fakes.js": {
+      "src/adapter.ts:831-844": 1
+    },
+    "tests/bin/lifecycle-config.js": {
+      "src/adapter.ts:831-844": 1
+    },
+    "tests/bin/lifecycle-fakes.js": {
+      "src/adapter.ts:797": 1,
+      "src/adapter.ts:871": 1
+    },
+    "tests/bin/lifecycle-fixture.test.js": {
+      "tests/bin/lifecycle-fakes.js:29-31": 1
+    },
+    "tests/bin/uninstall-commands.test.js": {
+      "tests/bin/migration-inventory.test.js:57": 1,
+      "src/adapter.ts:871": 2,
+      "src/adapter.ts:713-719": 1,
+      "src/adapter.ts:740": 2,
+      "src/adapter.ts:729-761": 1
+    },
+    "tests/bin/uninstall-fakes.js": {
+      "tests/bin/uninstall-commands.test.js:434-439": 1
+    },
+    "tests/bin/units.test.js": {
+      "src/effective-selection.ts:66": 1
+    },
+    "tests/unit/adapter-result.test.js": {
+      "src/adapter-result.ts:197-199": 1,
+      "src/adapter-result.ts:174-180": 1,
+      "src/adapter-result.ts:196-201": 1,
+      "src/adapter-result.ts:118": 1,
+      "src/adapter.ts:806-809": 1,
+      "src/adapter.ts:238-246": 1,
+      "src/upstream.ts:160-162": 1,
+      "src/adapter-result.ts:199": 1,
+      "src/adapter-result.ts:119-120": 1,
+      "src/adapter-result.ts:76": 1
+    },
+    "tests/unit/adapter.test.js": {
+      "src/adapter.ts:362": 1,
+      "src/manifest-overlay.ts:49-50": 1,
+      "src/adapter.ts:396": 1,
+      "src/hooks.ts:113": 1,
+      "src/adapter.ts:603": 1,
+      "src/adapter.ts:939-940": 1,
+      "src/adapter.ts:654-662": 2,
+      "src/adapter.ts:578-585": 1,
+      "src/adapter.ts:631": 1,
+      "src/adapter.ts:578": 1
+    },
+    "tests/unit/commands-install.test.js": {
+      "src/upstream.ts:160-162": 1,
+      "src/commands/install.ts:380-385": 1,
+      "src/lifecycle.ts:147-156": 1
+    },
+    "tests/unit/commands-pin.test.js": {
+      "tests/unit/manifest-overlay.test.js:5-7": 1
+    },
+    "tests/unit/commands-prepare.test.js": {
+      "src/upstream.ts:160-162": 1
+    },
+    "tests/unit/commands-probe.test.js": {
+      "tests/run-node-suites.js:15": 1
+    },
+    "tests/unit/commands-track-latest.test.js": {
+      "tests/unit/manifest-overlay.test.js:5-7": 1
+    },
+    "tests/unit/commands-uninstall.test.js": {
+      "src/workspace.ts:134-141": 1
+    },
+    "tests/unit/commands-unpin.test.js": {
+      "tests/unit/manifest-overlay.test.js:5-7": 1
+    },
+    "tests/unit/commands-update.test.js": {
+      "src/upstream.ts:160-162": 1,
+      "tests/baseline/prepare-fixture.js:32-67": 1
+    },
+    "tests/unit/helpers/manifest-toctou-child.js": {
+      "src/hooks.ts:113": 2
+    },
+    "tests/unit/helpers/pipe-flush-child.js": {
+      "src/adapter.ts:124-133": 1
+    },
+    "tests/unit/lifecycle.test.js": {
+      "src/commands/probe.ts:247-252": 1,
+      "src/adapter-result.ts:199": 1
+    },
+    "tests/unit/provenance.test.js": {
+      "tests/unit/codex-state.test.js:47": 1,
+      "src/provenance.ts:36-39": 1,
+      "src/strict-json.ts:158": 1
+    }
+  },
+  "deadReferent": {
+    "src/adapter.ts": {
+      "scripts/core/common.sh:71": 1,
+      "apply-manifest-overlay.py:42": 1
+    },
+    "src/cli.ts": {
+      "scripts/core/adapter.sh:37-44": 1
+    },
+    "src/commands/install.ts": {
+      "scripts/core/adapter.sh:58-73": 1,
+      "scripts/core/lifecycle.sh:91-94": 1,
+      "scripts/core/lifecycle.sh:50-53": 1
+    },
+    "src/commands/prepare.ts": {
+      "common.sh:53-59": 1,
+      "common.sh:44-51": 1,
+      "scripts/core/common.sh:44-51": 1,
+      "scripts/core/provenance.sh:56-62": 1,
+      "provenance.sh:62": 1
+    },
+    "src/commands/probe.ts": {
+      "scripts/core/lifecycle.sh:39-41": 1,
+      "scripts/core/validate-adapter-response.py:268": 1
+    },
+    "src/commands/uninstall.ts": {
+      "scripts/core/adapter.sh:58-73": 1,
+      "scripts/core/adapter.sh:70": 2,
+      "scripts/core/common.sh:25-30": 1,
+      "scripts/core/provenance.sh:62": 1,
+      "scripts/core/validate-adapter-response.py:268": 1
+    },
+    "src/commands/update.ts": {
+      "scripts/core/lifecycle.sh:50-53": 1
+    },
+    "src/effective-selection.ts": {
+      "scripts/core/selection.sh:4-29": 1,
+      "selection-state-cli.ts:39": 1,
+      "scripts/core/selection.sh:88-162": 1
+    },
+    "src/lifecycle.ts": {
+      "scripts/core/lifecycle.sh:50-53": 2,
+      "scripts/core/lifecycle.sh:75-77": 1,
+      "scripts/core/lifecycle.sh:43-60": 1,
+      "scripts/core/lifecycle.sh:72-85": 1,
+      "scripts/core/lifecycle.sh:62-70": 1,
+      "scripts/core/lifecycle.sh:87-124": 1,
+      "scripts/core/provenance.sh:62": 1,
+      "scripts/core/lifecycle.sh:126-141": 1,
+      "scripts/core/adapter.sh:58-73": 1,
+      "scripts/core/adapter.sh:70": 1
+    },
+    "src/provenance.ts": {
+      "scripts/core/lifecycle.sh:28-31": 1,
+      "scripts/core/lifecycle.sh:33-37": 1
+    },
+    "src/status.ts": {
+      "scripts/core/status.sh:4-9": 1,
+      "scripts/core/status.sh:11-27": 1
+    },
+    "src/upstream.ts": {
+      "scripts/core/upstream.sh:6-13": 1
+    },
+    "tests/baseline/cli-parity.test.js": {
+      "lifecycle-fixture.js:120-129": 1,
+      "install-fakes.js:145-150": 1,
+      "tests/test_adapter_protocol.sh:526-548": 1,
+      "tests/test_adapter_protocol.sh:563-579": 1,
+      "tests/test_adapter_protocol.sh:301-311": 1
+    },
+    "tests/baseline/prepare-fixture.js": {
+      "tests/test_prepare_with_fake_upstream.sh:182": 1,
+      "tests/test_prepare_with_fake_upstream.sh:131-133": 1,
+      "tests/test_prepare_with_fake_upstream.sh:212-217": 1
+    },
+    "tests/baseline/prepare.test.js": {
+      "tests/test_prepare_with_fake_upstream.sh:459-479": 1,
+      "tests/test_prepare_with_fake_upstream.sh:864-876": 1,
+      "tests/test_prepare_with_fake_upstream.sh:1001-1022": 1
+    },
+    "tests/baseline/probe.test.js": {
+      "cli-parity.test.js:267": 1,
+      "tests/test_probe.sh:411-413": 1,
+      "tests/test_probe.sh:434-477": 1,
+      "tests/test_probe.sh:588": 1,
+      "scripts/core/validate-adapter-response.py:268-270": 1
+    },
+    "tests/baseline/protocol-disposition.test.js": {
+      "traceability.test.js:58-62": 1
+    },
+    "tests/baseline/ref-resolution-signal-child.js": {
+      "tests/test_ref_resolution.sh:144-188": 1
+    },
+    "tests/baseline/ref-resolution.test.js": {
+      "scripts/core/upstream.sh:6": 1,
+      "tests/test_ref_resolution.sh:12": 1,
+      "tests/test_ref_resolution.sh:41-57": 1,
+      "tests/test_ref_resolution.sh:92-93": 1,
+      "tests/test_ref_resolution.sh:173-178": 1,
+      "scripts/core/upstream.sh:6-13": 1,
+      "bin-dispatch.md:19-21": 1,
+      "tests/test_ref_resolution.sh:132-142": 1,
+      "tests/test_ref_resolution.sh:144-188": 1,
+      "tests/test_ref_resolution.sh:189": 1,
+      "tests/test_ref_resolution.sh:182-186": 1,
+      "tests/test_ref_resolution.sh:195-207": 1
+    },
+    "tests/baseline/selection-commands-signal-child.js": {
+      "tests/test_selection_commands.sh:301-330": 1
+    },
+    "tests/baseline/selection-commands.test.js": {
+      "tests/test_selection_commands.sh:20-21": 1,
+      "tests/test_selection_commands.sh:19-34": 1,
+      "tests/test_selection_commands.sh:132": 1,
+      "tests/test_selection_commands.sh:141-145": 1,
+      "tests/test_selection_commands.sh:58-65": 1,
+      "tests/test_selection_commands.sh:338-339": 1,
+      "tests/test_selection_commands.sh:151": 1,
+      "tests/test_selection_commands.sh:287-296": 1,
+      "tests/test_selection_commands.sh:322-324": 1,
+      "tests/test_selection_commands.sh:301-330": 1,
+      "tests/test_selection_commands.sh:332-337": 1,
+      "tests/test_selection_commands.sh:437-441": 1,
+      "tests/test_selection_commands.sh:483": 1
+    },
+    "tests/baseline/selection-location.test.js": {
+      "tests/test_selection_state.sh:22-40": 1
+    },
+    "tests/baseline/suite-runner.test.js": {
+      "run-node-suites.js:67-69": 1
+    },
+    "tests/bin/container-contract.test.js": {
+      "codex-offline-probe.sh:588": 1
+    },
+    "tests/bin/dispatch-fixture.js": {
+      "tests/test_bin_dispatch.sh:69": 1
+    },
+    "tests/bin/install-commands.test.js": {
+      "tests/test_install_commands.sh:16-21": 1,
+      "scripts/core/lifecycle.sh:52": 1,
+      "scripts/core/status.sh:11-23": 1,
+      "scripts/core/lifecycle.sh:109": 1,
+      "scripts/core/lifecycle.sh:92": 1,
+      "scripts/core/lifecycle.sh:7-26": 1,
+      "lifecycle-fixture.js:120-129": 1
+    },
+    "tests/bin/install-fakes.js": {
+      "tests/test_install_commands.sh:101-169": 1
+    },
+    "tests/bin/lifecycle-config.js": {
+      "tests/test_uninstall_commands.sh:71": 1
+    },
+    "tests/bin/lifecycle-fakes.test.js": {
+      "lifecycle-fixture.js:28-36": 1
+    },
+    "tests/bin/lifecycle-fixture.js": {
+      "tests/test_install_commands.sh:418-423": 1,
+      "tests/test_install_commands.sh:51-67": 1,
+      "tests/test_uninstall_commands.sh:172-182": 1,
+      "scripts/core/selection.sh:22-28": 1,
+      "tests/test_install_commands.sh:306": 1,
+      "tests/test_install_commands.sh:390": 1
+    },
+    "tests/bin/lifecycle-fixture.test.js": {
+      "lifecycle-config.js:107-110": 1
+    },
+    "tests/bin/npm-pack-contents.test.js": {
+      "tests/test_npm_pack_contents.sh:15-34": 1,
+      "tests/test_npm_pack_contents.sh:9": 1,
+      "tests/test_npm_pack_contents.sh:97-126": 1,
+      "tests/test_npm_pack_contents.sh:78-94": 1
+    },
+    "tests/bin/probe-fakes.js": {
+      "tests/test_probe.sh:234-247": 1
+    },
+    "tests/bin/uninstall-commands.test.js": {
+      "tests/test_uninstall_commands.sh:101-108": 1,
+      "tests/test_uninstall_commands.sh:176": 1,
+      "scripts/core/adapter.sh:37-44": 1,
+      "scripts/core/lifecycle.sh:52": 1
+    },
+    "tests/bin/uninstall-fakes.js": {
+      "tests/test_uninstall_commands.sh:28-84": 1
+    },
+    "tests/bin/workflow-support.js": {
+      "tests/test_workflows.sh:212-230": 1,
+      "tests/test_workflows.sh:32-43": 1,
+      "tests/test_workflows.sh:45-54": 1,
+      "tests/test_workflows.sh:197-210": 1
+    },
+    "tests/bin/workflows.test.js": {
+      "tests/test_workflows.sh:665-692": 1,
+      "tests/test_workflows.sh:646": 1,
+      "tests/test_workflows.sh:650-657": 1,
+      "tests/test_workflows.sh:632": 1
+    },
+    "tests/unit/adapter-result.test.js": {
+      "tests/test_adapter_protocol.py:473-528": 1,
+      "tests/test_adapter_protocol.py:544": 1
+    },
+    "tests/unit/adapter.test.js": {
+      "scripts/core/common.sh:71": 1,
+      "tests/test_adapter_protocol.py:817": 1
+    },
+    "tests/unit/atomic.test.js": {
+      "tests/test_prepare_with_fake_upstream.sh:1199": 1
+    },
+    "tests/unit/commands-install.test.js": {
+      "scripts/core/lifecycle.sh:50-53": 1,
+      "scripts/core/lifecycle.sh:57": 2,
+      "scripts/core/lifecycle.sh:92": 1
+    },
+    "tests/unit/commands-prepare.test.js": {
+      "scripts/core/provenance.sh:59": 1,
+      "scripts/core/provenance.sh:62": 1
+    },
+    "tests/unit/commands-probe.test.js": {
+      "tests/test_probe.sh:413": 1
+    },
+    "tests/unit/commands-uninstall.test.js": {
+      "scripts/core/lifecycle.sh:75-77": 1,
+      "scripts/core/common.sh:25-30": 1
+    },
+    "tests/unit/commands-update.test.js": {
+      "scripts/core/lifecycle.sh:50-53": 1
+    },
+    "tests/unit/lifecycle.test.js": {
+      "scripts/core/lifecycle.sh:50-53": 1,
+      "scripts/core/lifecycle.sh:56-58": 1,
+      "scripts/core/status.sh:7": 1,
+      "scripts/core/lifecycle.sh:108-112": 1,
+      "tests/test_adapter_protocol.py:544": 1,
+      "scripts/core/adapter.sh:58-73": 1,
+      "provenance.sh:62": 1,
+      "scripts/core/adapter.sh:70": 1,
+      "tests/test_marketplace_reconcile.sh:224": 1,
+      "tests/test_adapter_protocol.sh:102-104": 1
+    },
+    "tests/unit/provenance.test.js": {
+      "tests/test_adapter_protocol.sh:853-854": 1,
+      "scripts/core/lifecycle.sh:33-37": 1
+    },
+    "tests/unit/status.test.js": {
+      "scripts/core/status.sh:7": 1
+    }
+  }
+}

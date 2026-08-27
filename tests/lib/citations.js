@@ -483,3 +483,139 @@ export function validate(citation, root) {
   }
   return { ok: true, line: at };
 }
+
+/**
+ * @typedef {{ unanchored: Record<string, Record<string, number>>,
+ *             deadReferent: Record<string, Record<string, number>> }} Ledger
+ */
+
+/**
+ * @param {Citation[]} citations
+ * @param {string} root
+ * @returns {Ledger}
+ */
+export function buildLedger(citations, root) {
+  /** @type {Ledger} */
+  const ledger = { unanchored: {}, deadReferent: {} };
+  for (const citation of citations) {
+    const bucket = classify(citation, root);
+    if (bucket === "checked") continue;
+    const key = bucket === "unanchored" ? "unanchored" : "deadReferent";
+    const from = displayPath(citation.file, root);
+    const byFile = (ledger[key][from] ??= {});
+    byFile[citation.raw] = (byFile[citation.raw] ?? 0) + 1;
+  }
+  return ledger;
+}
+
+/**
+ * Fail closed: an absent or malformed ledger is a failure, never an empty one.
+ * @param {string} path
+ * @returns {Ledger}
+ */
+export function readLedger(path) {
+  let raw;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    throw new Error(`cannot read ${path}`);
+  }
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`${path} is not valid JSON`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${path} must be an object`);
+  }
+  // Exact schema, not a tolerant read. Defaulting a missing bucket to {} makes
+  // a truncated ledger look like a clean one, and ignoring an extra bucket lets
+  // debt be parked somewhere the drift comparison never looks. Both are the
+  // fail-open shape the design forbids.
+  const shaped = /** @type {Record<string, unknown>} */ (parsed);
+  const keys = Object.keys(shaped).sort();
+  if (
+    keys.length !== 2 ||
+    keys[0] !== "deadReferent" ||
+    keys[1] !== "unanchored"
+  ) {
+    throw new Error(
+      `${path} must declare exactly the buckets deadReferent and unanchored, found: ${keys.join(", ")}`,
+    );
+  }
+  /** @type {Ledger} */
+  const ledger = { unanchored: {}, deadReferent: {} };
+  for (const bucket of /** @type {const} */ (["deadReferent", "unanchored"])) {
+    const byFile = shaped[bucket];
+    if (
+      typeof byFile !== "object" ||
+      byFile === null ||
+      Array.isArray(byFile)
+    ) {
+      throw new Error(`${path}: bucket ${bucket} must be an object`);
+    }
+    for (const [file, tokens] of Object.entries(byFile)) {
+      if (
+        typeof tokens !== "object" ||
+        tokens === null ||
+        Array.isArray(tokens)
+      ) {
+        throw new Error(`${path}: ${bucket} entry ${file} must be an object`);
+      }
+      /** @type {Record<string, number>} */
+      const counts = {};
+      for (const [token, count] of Object.entries(tokens)) {
+        if (
+          typeof count !== "number" ||
+          !Number.isInteger(count) ||
+          count < 1
+        ) {
+          throw new Error(
+            `${path}: ${bucket} ${file} ${token} must be a positive integer`,
+          );
+        }
+        counts[token] = count;
+      }
+      ledger[bucket][file] = counts;
+    }
+  }
+  return ledger;
+}
+
+/**
+ * One line per disagreement, in either direction, in either bucket. A single
+ * empty-array assertion over this covers all four symmetry rules at once, with
+ * a message that names each disagreement rather than diffing two large objects.
+ * @param {Ledger} observed
+ * @param {Ledger} declared
+ * @returns {string[]}
+ */
+export function ledgerDrift(observed, declared) {
+  /** @type {string[]} */
+  const drift = [];
+  for (const bucket of /** @type {const} */ (["deadReferent", "unanchored"])) {
+    const seen = observed[bucket] ?? {};
+    const said = declared[bucket] ?? {};
+    const files = new Set([...Object.keys(seen), ...Object.keys(said)]);
+    for (const file of files) {
+      const seenFile = seen[file] ?? {};
+      const saidFile = said[file] ?? {};
+      const tokens = new Set([
+        ...Object.keys(seenFile),
+        ...Object.keys(saidFile),
+      ]);
+      for (const token of tokens) {
+        const seenCount = seenFile[token] ?? 0;
+        const saidCount = saidFile[token] ?? 0;
+        if (seenCount !== saidCount) {
+          drift.push(
+            `${bucket} ${file} \`${token}\`: ledger declares ${saidCount}, tree has ${seenCount}`,
+          );
+        }
+      }
+    }
+  }
+  return drift.sort();
+}
