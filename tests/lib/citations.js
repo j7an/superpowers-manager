@@ -1,7 +1,8 @@
 // @ts-check
-// Citation scanner, resolver and ledger builder. Pure: no assertions, no
-// writes, no process exit. The suite asserts over it and the tool drives it,
-// so both compute line numbers through exactly one implementation.
+// Citation scanner, resolver, ledger builder and bounded fixer. No assertions
+// or process exit; applyFixEdits is the only writer. The suite asserts over it
+// and the tool drives it, so both compute line numbers through exactly one
+// implementation.
 //
 // A citation is recognized ONLY inside a comment. Every citation in the
 // enforced corpus was measured comment-leading at the plan's base, with none
@@ -41,8 +42,10 @@ const BACKTICKED = /`([^`\n]+)`/g;
 // anchored citation would be invisible to the gate AND absent from the ledger,
 // which is a bypass, not a gap. Plain `path:N` is deliberately excluded --
 // that is a legitimate legacy citation and the legacy pass owns it.
+// The file-like fallback is intentionally broader than PATH only for candidate
+// retention; ANCHORED remains the sole valid-path parser.
 const CANDIDATE = new RegExp(
-  String.raw`^(?:git show\s+\S+:\S|${PATH}(?::.*)?::)`,
+  String.raw`^(?:git show\s+\S+:\S|(?:${PATH}(?::.*)?|[^\s:]+\.[^\s:]+(?::.*)?)::)`,
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
 const CONTROL_CONDITION = new Set(["for", "if", "while", "with"]);
@@ -75,6 +78,7 @@ export function commentText(line) {
   }
   /** @type {string | undefined} */
   let quote;
+  let blockComment = false;
   let regex = false;
   let regexClass = false;
   let expressionCanStart = true;
@@ -85,6 +89,13 @@ export function commentText(line) {
   let propertyAccess = false;
   for (let i = 0; i < line.length - 1; i += 1) {
     const c = line[i];
+    if (blockComment) {
+      if (c === "*" && line[i + 1] === "/") {
+        blockComment = false;
+        i += 1;
+      }
+      continue;
+    }
     if (quote !== undefined) {
       if (c === "\\") {
         i += 1;
@@ -150,6 +161,11 @@ export function commentText(line) {
     }
     if (c === "/" && line[i + 1] === "/") {
       return { text: line.slice(i), offset: i };
+    }
+    if (c === "/" && line[i + 1] === "*") {
+      blockComment = true;
+      i += 1;
+      continue;
     }
     if (c === "/") {
       pendingControl = undefined;

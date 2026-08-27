@@ -66,6 +66,12 @@ void test("commentText ignores a slash pair inside a string literal", () => {
   assert.equal(commentText("const u = 'a//b';"), undefined);
 });
 
+void test("commentText finds a trailing comment after a quote-bearing block comment", () => {
+  const found = commentText("x /* ' */ // see src/x.ts:44");
+  assert.equal(found?.text, "// see src/x.ts:44");
+  assert.equal(found?.offset, 10);
+});
+
 void test("commentText finds a trailing comment after a quote-bearing regex literal", () => {
   const found = commentText("const re = /'/; // see src/x.ts:44");
   assert.equal(found?.text, "// see src/x.ts:44");
@@ -179,6 +185,36 @@ void test("scan retains a citation whose range part is truncated", () => {
     ["malformed"],
     "a truncated range must not decay into legacy debt",
   );
+});
+
+void test("scan retains an absolute anchored path as malformed", () => {
+  const root = fixture({
+    "a.js": "// `/src/x.ts::export function go`\n",
+  });
+  const found = scan([join(root, "a.js")]);
+  assert.equal(found.length, 1);
+  const [citation] = found;
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  assert.equal(validate(citation, root).ok, false);
+  assert.deepEqual(buildLedger(found, root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
+void test("scan retains an invalid-character anchored path as malformed", () => {
+  const root = fixture({
+    "a.js": "// `src/x@.ts::export function go`\n",
+  });
+  const found = scan([join(root, "a.js")]);
+  assert.equal(found.length, 1);
+  const [citation] = found;
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  assert.equal(validate(citation, root).ok, false);
+  assert.deepEqual(buildLedger(found, root), {
+    unanchored: {},
+    deadReferent: {},
+  });
 });
 
 void test("scan ignores a backticked git show that names only a commit", () => {
