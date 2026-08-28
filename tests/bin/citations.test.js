@@ -563,6 +563,76 @@ void test("the historical leg is verified where a repository exists", () => {
   assert.deepEqual(validate(citation, root), { ok: true });
 });
 
+void test("a resolution citation carries a line and an anchor", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + sha + ":gone.sh:2::beta gamma`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "resolution");
+  assert.equal(citation.anchor, "beta gamma");
+  assert.deepEqual(validate(citation, root), { ok: true, line: 2 });
+});
+
+void test("a resolution anchor that is not in the historical blob fails", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + sha + ":gone.sh::no such text`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_NOT_FOUND");
+});
+
+void test("a resolution anchor on the wrong line fails", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + sha + ":gone.sh:3::beta gamma`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "LINE_MISMATCH");
+});
+
+void test("a resolution range that does not contain the anchor fails", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + sha + ":gone.sh:3-4::beta gamma`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "RANGE_MISS");
+});
+
+void test("a resolution citation with a line but no anchor is malformed", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
+  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh:2`\n");
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(
+    [citation.kind, citation.shape],
+    ["malformed", "resolution"],
+  );
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "MALFORMED_RESOLUTION");
+});
+
+void test("the bare resolution form still parses and still has no anchor", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
+  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh`\n");
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "resolution");
+  assert.equal(citation.anchor, undefined);
+  assert.equal(citation.line, undefined);
+});
+
 void test("a malformed citation is never ledgered", () => {
   const root = fixture({ "a.js": "// `src/x.ts:abc::const seen`\n" });
   const ledger = buildLedger(scan([join(root, "a.js")]), root);

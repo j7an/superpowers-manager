@@ -36,7 +36,12 @@ const PATH = String.raw`(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+`;
 const ANCHORED = new RegExp(
   String.raw`^(${PATH})(?::(\d+)(?:-(\d+))?)?::(.+)$`,
 );
-const RESOLUTION = new RegExp(String.raw`^git show ([0-9a-f]{40}):(${PATH})$`);
+// The line or range is admissible ONLY with an anchor after it. A trailing
+// `:N` alone would be a line claim nothing can check, which is the fail-open
+// shape this grammar exists to refuse; it stays malformed.
+const RESOLUTION = new RegExp(
+  String.raw`^git show ([0-9a-f]{40}):(${PATH})(?:(?::(\d+)(?:-(\d+))?)?::(.+))?$`,
+);
 const LEGACY = new RegExp(String.raw`(${PATH}):(\d+)(?:-(\d+))?`, "g");
 const BACKTICKED = /`([^`\n]+)`/g;
 // A backticked token that LOOKS like a citation but does not parse is retained
@@ -295,6 +300,9 @@ function parseComment(text, offset, file, lineNumber) {
         raw: m[0],
         path: res[2],
         sha: res[1],
+        line: res[3] === undefined ? undefined : Number(res[3]),
+        endLine: res[4] === undefined ? undefined : Number(res[4]),
+        anchor: res[5],
       });
       spans.push([at, at + m[0].length]);
       continue;
@@ -424,18 +432,46 @@ export function displayPath(file, root) {
 }
 
 /**
+ * @param {readonly string[]} lines
+ * @param {string} anchor
+ * @returns {number[]}
+ */
+function anchorLinesIn(lines, anchor) {
+  /** @type {number[]} */
+  const hits = [];
+  lines.forEach((line, index) => {
+    if (line.includes(anchor)) hits.push(index + 1);
+  });
+  return hits;
+}
+
+/**
  * Every line of `path` containing `anchor`, one-based.
  * @param {string} path
  * @param {string} anchor
  * @returns {number[]}
  */
 export function anchorLines(path, anchor) {
-  /** @type {number[]} */
-  const hits = [];
-  readLines(path).forEach((line, index) => {
-    if (line.includes(anchor)) hits.push(index + 1);
+  return anchorLinesIn(readLines(path), anchor);
+}
+
+/**
+ * The content of path as it stood in object sha, or null when it cannot be
+ * read. Callers have already established existence with historicalTargetExists,
+ * so null here means the object could not be streamed, not that it is absent.
+ * @param {string} sha
+ * @param {string} path
+ * @param {string} root
+ * @returns {string[] | null}
+ */
+export function historicalLines(sha, path, root) {
+  const result = spawnSync("git", ["show", `${sha}:${path}`], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
   });
-  return hits;
+  if (result.error !== undefined || result.status !== 0) return null;
+  return result.stdout.split("\n");
 }
 
 const WORD = /[A-Za-z0-9_$]/;
@@ -467,6 +503,65 @@ export function anchorRespectsBoundaries(line, anchor) {
     if (!startsInside && !endsInside) return true;
   }
   return false;
+}
+
+/**
+ * The single anchor rule, applied to live file content or to a historical
+ * blob. One implementation so the two paths cannot drift apart.
+ * @param {readonly string[]} lines
+ * @param {Citation} citation
+ * @param {string} label how the target is named in diagnostics
+ * @returns {{ ok: true, line: number } | { ok: false, code: string, message: string, line?: number }}
+ */
+function checkAnchor(lines, citation, label) {
+  const anchor = /** @type {string} */ (citation.anchor);
+  const hits = anchorLinesIn(lines, anchor);
+  if (hits.length === 0) {
+    return {
+      ok: false,
+      code: "ANCHOR_NOT_FOUND",
+      message: `anchor "${anchor}" does not occur in ${label}`,
+    };
+  }
+  if (hits.length > 1) {
+    return {
+      ok: false,
+      code: "ANCHOR_MULTIPLE",
+      message:
+        `anchor "${anchor}" occurs on ${hits.length} lines of ${label} ` +
+        `(${hits.join(", ")}); lengthen it`,
+    };
+  }
+  const at = hits[0];
+  if (!anchorRespectsBoundaries(lines[at - 1] ?? "", anchor)) {
+    return {
+      ok: false,
+      code: "ANCHOR_UNBOUNDED",
+      message:
+        `anchor "${anchor}" begins or ends inside an identifier in ` +
+        `${label}:${at}; extend it to a whole token`,
+    };
+  }
+  if (citation.line === undefined) return { ok: true, line: at };
+  if (citation.endLine !== undefined) {
+    if (at < citation.line || at > citation.endLine) {
+      return {
+        ok: false,
+        code: "RANGE_MISS",
+        message: `cited ${label}:${citation.line}-${citation.endLine}, anchor is at :${at}`,
+      };
+    }
+    return { ok: true, line: at };
+  }
+  if (at !== citation.line) {
+    return {
+      ok: false,
+      code: "LINE_MISMATCH",
+      line: at,
+      message: `cited ${label}:${citation.line}, anchor is at :${at}`,
+    };
+  }
+  return { ok: true, line: at };
 }
 
 /**
@@ -510,7 +605,23 @@ export function validate(citation, root) {
         message: `${citation.path} does not exist at ${sha}`,
       };
     }
-    return { ok: true };
+    if (citation.anchor === undefined) return { ok: true };
+    if (citation.anchor.length < MIN_ANCHOR) {
+      return {
+        ok: false,
+        code: "ANCHOR_TOO_SHORT",
+        message: `anchor "${citation.anchor}" is shorter than ${MIN_ANCHOR} characters`,
+      };
+    }
+    const lines = historicalLines(sha, citation.path, root);
+    if (lines === null) {
+      return {
+        ok: false,
+        code: "MISSING_HISTORICAL_TARGET",
+        message: `${citation.path} at ${sha} could not be read`,
+      };
+    }
+    return checkAnchor(lines, citation, `${citation.path} at ${sha}`);
   }
   if (citation.kind === "legacy") return { ok: true };
   if (citation.kind === "malformed") {
@@ -543,58 +654,11 @@ export function validate(citation, root) {
       message: `${citation.path} does not exist`,
     };
   }
-  const hits = anchorLines(join(root, citation.path), anchor);
-  if (hits.length === 0) {
-    return {
-      ok: false,
-      code: "ANCHOR_NOT_FOUND",
-      message: `anchor "${anchor}" does not occur in ${citation.path}`,
-    };
-  }
-  if (hits.length > 1) {
-    return {
-      ok: false,
-      code: "ANCHOR_MULTIPLE",
-      message:
-        `anchor "${anchor}" occurs on ${hits.length} lines of ${citation.path} ` +
-        `(${hits.join(", ")}); lengthen it`,
-    };
-  }
-  const at = hits[0];
-  if (
-    !anchorRespectsBoundaries(
-      readLines(join(root, citation.path))[at - 1] ?? "",
-      anchor,
-    )
-  ) {
-    return {
-      ok: false,
-      code: "ANCHOR_UNBOUNDED",
-      message:
-        `anchor "${anchor}" begins or ends inside an identifier in ` +
-        `${citation.path}:${at}; extend it to a whole token`,
-    };
-  }
-  if (citation.line === undefined) return { ok: true, line: at };
-  if (citation.endLine !== undefined) {
-    if (at < citation.line || at > citation.endLine) {
-      return {
-        ok: false,
-        code: "RANGE_MISS",
-        message: `cited ${citation.path}:${citation.line}-${citation.endLine}, anchor is at :${at}`,
-      };
-    }
-    return { ok: true, line: at };
-  }
-  if (at !== citation.line) {
-    return {
-      ok: false,
-      code: "LINE_MISMATCH",
-      line: at,
-      message: `cited ${citation.path}:${citation.line}, anchor is at :${at}`,
-    };
-  }
-  return { ok: true, line: at };
+  return checkAnchor(
+    readLines(join(root, citation.path)),
+    citation,
+    citation.path,
+  );
 }
 
 /**
