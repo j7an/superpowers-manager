@@ -187,6 +187,19 @@ void test("scan retains a citation whose range part is truncated", () => {
   );
 });
 
+void test("scan retains a colon-separated line part as malformed", () => {
+  const root = fixture({ "a.js": "// `src/x.ts:12:18::const seen`\n" });
+  const found = scan([join(root, "a.js")]);
+  assert.equal(found.length, 1);
+  const [citation] = found;
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  assert.equal(validate(citation, root).ok, false);
+  assert.deepEqual(buildLedger(found, root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
 void test("scan retains an absolute anchored path as malformed", () => {
   const root = fixture({
     "a.js": "// `/src/x.ts::export function go`\n",

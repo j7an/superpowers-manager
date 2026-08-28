@@ -47,7 +47,7 @@ const BACKTICKED = /`([^`\n]+)`/g;
 // independently of valid PATH characters. ANCHORED remains the sole valid-path
 // parser.
 const CANDIDATE = new RegExp(
-  String.raw`^(?:git show\s+\S+:\S|.+\.[A-Za-z0-9]+(?::[^:]*)?::)`,
+  String.raw`^(?:git show\s+\S+:\S|.+\.[^\s:]+(?::.*)?::)`,
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
 const CONTROL_CONDITION = new Set(["for", "if", "while", "with"]);
