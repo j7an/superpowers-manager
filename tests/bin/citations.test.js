@@ -49,6 +49,43 @@ function fixture(files) {
   return root;
 }
 
+/**
+ * A scratch Git object database holding one file, with no commits. Returns the
+ * repository root and a 40-hex tree object name that resolves as <sha>:<name>.
+ * No commit is created, so no git identity is consulted.
+ * @param {string} name
+ * @param {string} body
+ * @returns {{ root: string, sha: string }}
+ */
+function gitFixture(name, body) {
+  const root = mkdtempSync(join(tmpdir(), "spw-citations-git-"));
+  registerScratch(root);
+  /**
+   * @param {string[]} args
+   * @param {string} [input]
+   * @returns {string}
+   */
+  const git = (args, input) => {
+    const result = spawnSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      input,
+    });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(" ")} failed: ${result.stderr}`,
+    );
+    return result.stdout.trim();
+  };
+  git(["init", "--quiet", "."]);
+  writeFileSync(join(root, name), body);
+  const blob = git(["hash-object", "-w", name]);
+  const sha = git(["mktree"], "100644 blob " + blob + "\t" + name + "\n");
+  assert.match(sha, /^[0-9a-f]{40}$/);
+  return { root, sha };
+}
+
 void test("commentText accepts the three comment-leading forms", () => {
   assert.equal(commentText("  // a")?.text, "  // a");
   assert.equal(commentText("   * a")?.text, "   * a");
@@ -372,7 +409,7 @@ for (const [anchor, targetLine, accepted] of BOUNDARY_CASES) {
   void test(`anchor ${JSON.stringify(anchor)} is ${accepted ? "accepted" : "rejected"}`, () => {
     const root = fixture({
       "t.ts": targetLine + "\n",
-      "a.js": "// \`t.ts:1::" + anchor + "\`\n",
+      "a.js": "// `t.ts:1::" + anchor + "`\n",
     });
     const [citation] = scan([join(root, "a.js")]);
     const verdict = validate(citation, root);
@@ -390,7 +427,7 @@ void test("boundaries are checked per occurrence, not per line", () => {
   // standalone occurrence is what makes the anchor legible.
   const root = fixture({
     "t.ts": "  // because the cause matters\n",
-    "a.js": "// \`t.ts:1::cause\`\n",
+    "a.js": "// `t.ts:1::cause`\n",
   });
   const [citation] = scan([join(root, "a.js")]);
   assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
@@ -466,13 +503,64 @@ void test("a legacy citation classifies by whether its target survives", () => {
   );
 });
 
-void test("a resolution citation is checked by shape and never opens Git", () => {
+void test("a resolution citation is checked, never ledgered", () => {
   const root = fixture({
     "a.js": "// `git show " + "a".repeat(40) + ":scripts/gone.sh`\n",
   });
   const [found] = scan([join(root, "a.js")]);
+  assert.equal(found.kind, "resolution");
   assert.equal(classify(found, root), "checked");
-  assert.equal(validate(found, root).ok, true);
+  assert.deepEqual(buildLedger([found], root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
+void test("a resolution citation whose path exists at that object validates", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta\n");
+  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh`\n");
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "resolution");
+  assert.deepEqual(validate(citation, root), { ok: true });
+});
+
+void test("a resolution citation whose path is absent at that object fails", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta\n");
+  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":other.sh`\n");
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "MISSING_HISTORICAL_TARGET");
+});
+
+void test("a resolution citation naming an object not in the repository fails", () => {
+  const { root } = gitFixture("gone.sh", "alpha\nbeta\n");
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + "0".repeat(40) + ":gone.sh`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "MISSING_HISTORICAL_TARGET");
+});
+
+void test("the historical leg is unverified where there is no repository", () => {
+  const root = fixture({
+    "a.js": "// `git show " + "a".repeat(40) + ":scripts/gone.sh`\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(validate(citation, root), {
+    ok: true,
+    unverified: "historical",
+  });
+});
+
+void test("the historical leg is verified where a repository exists", () => {
+  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta\n");
+  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh`\n");
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(validate(citation, root), { ok: true });
 });
 
 void test("a malformed citation is never ledgered", () => {
@@ -774,10 +862,20 @@ void test("fixEdits is empty on a correct citation, so a second run is a no-op",
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const LEDGER_PATH = join(ROOT, "tests", "citation-ledger.json");
 
+// The container is a copy of a checkout, not a checkout, so the historical leg
+// cannot run there. That scope is DECLARED, not silent: the count below must be
+// zero wherever a repository exists, and exactly the resolution population
+// where none does. The declaration itself is asserted by
+// `tests/bin/tooling-coverage.test.js:52::the container declaration matches the actual environment`,
+// so deleting or renaming that test fails this gate.
+const DECLARED_CONTAINER = process.env.SPW_CONTAINER === "1";
+
 void test("CITATION-01 every anchored citation in the corpus validates", () => {
+  const citations = scan(listSources(CORPUS_DIRS, ROOT));
   /** @type {string[]} */
   const failures = [];
-  for (const c of scan(listSources(CORPUS_DIRS, ROOT))) {
+  let unverified = 0;
+  for (const c of citations) {
     if (c.kind === "legacy") continue;
     const verdict = validate(c, ROOT);
     if (!verdict.ok) {
@@ -785,11 +883,20 @@ void test("CITATION-01 every anchored citation in the corpus validates", () => {
         `${displayPath(c.file, ROOT)}:${c.lineNumber}: ${verdict.message}`,
       );
     }
+    if (verdict.ok && verdict.unverified !== undefined) unverified += 1;
   }
   assert.deepEqual(
     failures,
     [],
     `anchored citations must validate:\n${failures.join("\n")}`,
+  );
+  const resolutions = citations.filter((c) => c.kind === "resolution").length;
+  assert.equal(
+    unverified,
+    DECLARED_CONTAINER ? resolutions : 0,
+    DECLARED_CONTAINER
+      ? `declared scope covers resolution citations only; ${unverified} of ${citations.length} went unverified`
+      : "a repository exists here, so every resolution citation must be verified against the object database",
   );
 });
 

@@ -11,12 +11,14 @@
 // comment citation. That yields a false positive, which the ledger absorbs.
 
 import {
+  existsSync,
   readFileSync,
   readdirSync,
   realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 export const MIN_ANCHOR = 3;
@@ -385,6 +387,37 @@ export function targetExists(path, root) {
   }
 }
 
+/**
+ * Whether path exists in the tree of object sha. This is what makes a
+ * resolution citation a claim rather than a shape: without it a stamped
+ * object name that names nothing passes.
+ * @param {string} sha
+ * @param {string} path
+ * @param {string} root
+ * @returns {boolean}
+ */
+export function historicalTargetExists(sha, path, root) {
+  const result = spawnSync("git", ["cat-file", "-e", `${sha}:${path}`], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  return result.error === undefined && result.status === 0;
+}
+
+/**
+ * Whether the historical leg can run at all: a repository must exist at root.
+ * The container image is a copy of a checkout, not a checkout -- .dockerignore
+ * excludes .git -- so this is false there. The discriminator is the fact, never
+ * an environment variable, and the caller counts and asserts what it covers.
+ * A shallow checkout has a repository and lacks the objects, so it fails the
+ * existence check rather than degrading here.
+ * @param {string} root
+ * @returns {boolean}
+ */
+export function historicalChecksAvailable(root) {
+  return existsSync(join(root, ".git"));
+}
+
 /** @param {string} file @param {string} root @returns {string} */
 export function displayPath(file, root) {
   return relative(root, file);
@@ -455,18 +488,29 @@ export function classify(citation, root) {
 /**
  * @param {Citation} citation
  * @param {string} root
- * @returns {{ ok: true, line?: number } | { ok: false, code: string, line?: number, message: string }}
+ * @returns {{ ok: true, line?: number, unverified?: "historical" } | { ok: false, code: string, line?: number, message: string }}
  */
 export function validate(citation, root) {
-  // Shape was already proven by the resolution pattern; Git is never executed.
   if (citation.kind === "resolution") {
-    return hasDotSegment(citation.path)
-      ? {
-          ok: false,
-          code: "MALFORMED_RESOLUTION",
-          message: `${citation.raw} is not repo-root-relative: a path segment escapes the root`,
-        }
-      : { ok: true };
+    if (hasDotSegment(citation.path)) {
+      return {
+        ok: false,
+        code: "MALFORMED_RESOLUTION",
+        message: `${citation.raw} is not repo-root-relative: a path segment escapes the root`,
+      };
+    }
+    if (!historicalChecksAvailable(root)) {
+      return { ok: true, unverified: "historical" };
+    }
+    const sha = /** @type {string} */ (citation.sha);
+    if (!historicalTargetExists(sha, citation.path, root)) {
+      return {
+        ok: false,
+        code: "MISSING_HISTORICAL_TARGET",
+        message: `${citation.path} does not exist at ${sha}`,
+      };
+    }
+    return { ok: true };
   }
   if (citation.kind === "legacy") return { ok: true };
   if (citation.kind === "malformed") {
