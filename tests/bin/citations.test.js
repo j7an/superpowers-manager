@@ -940,6 +940,22 @@ const LEDGER_PATH = join(ROOT, "tests", "citation-ledger.json");
 // so deleting or renaming that test fails this gate.
 const DECLARED_CONTAINER = process.env.SPW_CONTAINER === "1";
 
+void test("the corpus reaches every committed JavaScript file under tests/", () => {
+  const covered = new Set(
+    listSources(CORPUS_DIRS, ROOT).map((f) => displayPath(f, ROOT)),
+  );
+  for (const f of [
+    "tests/assert-matcher-gate.js",
+    "tests/build-id.js",
+    "tests/run-node-suites.js",
+    "tests/write-build-id.js",
+    "tests/tools/citations.mjs",
+    "tests/tools/float-differential.mjs",
+  ]) {
+    assert.ok(covered.has(f), `${f} must be in the enforced corpus`);
+  }
+});
+
 void test("CITATION-01 every anchored citation in the corpus validates", () => {
   const citations = scan(listSources(CORPUS_DIRS, ROOT));
   /** @type {string[]} */

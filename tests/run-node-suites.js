@@ -68,10 +68,17 @@ async function main() {
     try {
       expected = computeBuildId(ROOT);
     } catch {
-      // NOT staleness, and `pnpm run build` cannot fix it. Six causes reach
-      // here (tests/build-id.js:70, :76, :78, :38, :47, :55) — an unreadable
-      // src/, an unreadable source file, a missing tsconfig.json, and an
-      // unresolvable TypeScript install — and only the last is fixed by
+      // NOT staleness, and `pnpm run build` cannot fix it. Six sites in four
+      // kinds reach here: an unreadable src/
+      // (`tests/build-id.js:70::const sources = readdirSync`), an unreadable
+      // source file (`tests/build-id.js:76::root, "src", name`), a missing
+      // tsconfig.json
+      // (`tests/build-id.js:78::readFileSync(join(root, "tsconfig.json"))`),
+      // and an unresolvable TypeScript install, which is three of the six
+      // (`tests/build-id.js:39::cannot resolve the installed`,
+      // `tests/build-id.js:47::is not valid JSON`,
+      // `tests/build-id.js:55::has no usable`) — and only the last kind is
+      // fixed by
       // `pnpm install --frozen-lockfile`. Naming any single remedy would
       // reintroduce the wrong-cause defect this split exists to fix, so name
       // the candidate inputs and prescribe nothing. Do not merge this back

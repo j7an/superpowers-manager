@@ -24,13 +24,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 export const MIN_ANCHOR = 3;
 
 /** The enforced corpus, declared and never globbed. */
-export const CORPUS_DIRS = /** @type {const} */ ([
-  "src",
-  "tests/bin",
-  "tests/baseline",
-  "tests/unit",
-  "tests/lib",
-]);
+export const CORPUS_DIRS = /** @type {const} */ (["src", "tests"]);
 
 const PATH = String.raw`(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+`;
 const ANCHORED = new RegExp(

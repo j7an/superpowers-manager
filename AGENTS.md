@@ -164,7 +164,7 @@ Codex below describe the product integration, not a required agent harness.
   a duplicate-looking item number and an undocumented numbering gap survive two
   reviews.
 - `tests/bin/citations.test.js` validates every anchored citation in `src/` and
-  `tests/{bin,baseline,unit,lib}` against its target's text, and holds the
+  `tests/` against its target's text, and holds the
   not-yet-anchored population in `tests/citation-ledger.json`. The ledger only
   shrinks: a citation absent from it must validate. Run
   `node tests/tools/citations.mjs --report` for the buckets without the suite.
