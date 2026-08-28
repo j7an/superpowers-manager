@@ -70,8 +70,9 @@ for (const target of [strict, loose]) {
 }
 
 // Patching the default exports does not reach a namespace binding:
-// tests/bin/units.test.js:4 uses `import * as assert from "node:assert"` and
-// calls assert.throws at :133. Verified by execution on Node v24.18.0 — that
+// `tests/bin/units.test.js:4::import * as assert from "node:assert"` is the
+// namespace import, and `tests/bin/units.test.js:174::assert.throws(` is the
+// call it reaches. Verified by execution on Node v24.18.0 — that
 // binding still resolves to the ORIGINAL function after the patch above, and
 // this call is what updates it. Without this line the gate is absent from the
 // one file that would have exposed its absence.
