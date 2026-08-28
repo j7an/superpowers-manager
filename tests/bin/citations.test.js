@@ -350,6 +350,52 @@ void test("an anchor occurring on more than one line is refused", () => {
   assert.match(r.message ?? "", /lengthen it/);
 });
 
+// Spec §4.2's literal table: seven rejects, three accepts. Each fragment is
+// unique in its one-line target, so uniqueness alone would admit it; only the
+// boundary rule tells them apart. Fixture bodies are double-quoted, never
+// template literals -- a citation-shaped token inside a template literal is
+// this scanner's declared blind spot.
+const BOUNDARY_CASES = [
+  ["tion h", "function hookError(x) {", false],
+  ["if (ty", 'if (typeof value === "string") {', false],
+  ["ommit:", "  commit: true,", false],
+  ["turn v", "  return value;", false],
+  ["if (ca", "  if (cause) {", false],
+  ["rol: u", "  control: unset,", false],
+  ["e AdapterR", "type AdapterResult = {", false],
+  ["appendBytes", "  appendBytes(buf);", true],
+  ["readManifest", "function readManifest(root) {", true],
+  ["if (failed) throw", "    if (failed) throw callbackError;", true],
+];
+
+for (const [anchor, targetLine, accepted] of BOUNDARY_CASES) {
+  void test(`anchor ${JSON.stringify(anchor)} is ${accepted ? "accepted" : "rejected"}`, () => {
+    const root = fixture({
+      "t.ts": targetLine + "\n",
+      "a.js": "// \`t.ts:1::" + anchor + "\`\n",
+    });
+    const [citation] = scan([join(root, "a.js")]);
+    const verdict = validate(citation, root);
+    if (accepted) {
+      assert.deepEqual(verdict, { ok: true, line: 1 });
+      return;
+    }
+    assert.equal(verdict.ok, false);
+    assert.equal(verdict.code, "ANCHOR_UNBOUNDED");
+  });
+}
+
+void test("boundaries are checked per occurrence, not per line", () => {
+  // "cause" appears inside "because" and standalone on the same line; the
+  // standalone occurrence is what makes the anchor legible.
+  const root = fixture({
+    "t.ts": "  // because the cause matters\n",
+    "a.js": "// \`t.ts:1::cause\`\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
+});
+
 void test("an anchor occurring nowhere is refused", () => {
   const r = check("// `src/x.ts::no such text`", TARGET);
   assert.equal(r.ok, false);

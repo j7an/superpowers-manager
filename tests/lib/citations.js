@@ -405,6 +405,37 @@ export function anchorLines(path, anchor) {
   return hits;
 }
 
+const WORD = /[A-Za-z0-9_$]/;
+
+/**
+ * True when `anchor` occurs in `line` at least once without beginning or
+ * ending inside an identifier. Uniqueness alone admits fragments like
+ * "tion h" (the middle of "function hookError"), which satisfy the gate and
+ * tell a reader nothing.
+ * @param {string} line
+ * @param {string} anchor
+ * @returns {boolean}
+ */
+export function anchorRespectsBoundaries(line, anchor) {
+  if (anchor.length === 0) return false;
+  const first = anchor[0];
+  const last = anchor[anchor.length - 1];
+  for (
+    let i = line.indexOf(anchor);
+    i !== -1;
+    i = line.indexOf(anchor, i + 1)
+  ) {
+    const before = line[i - 1];
+    const after = line[i + anchor.length];
+    const startsInside =
+      WORD.test(first) && before !== undefined && WORD.test(before);
+    const endsInside =
+      WORD.test(last) && after !== undefined && WORD.test(after);
+    if (!startsInside && !endsInside) return true;
+  }
+  return false;
+}
+
 /**
  * Anchored and resolution citations are always checked -- an anchored citation
  * must validate and can never be ledgered, or the ledger becomes the escape
@@ -486,6 +517,20 @@ export function validate(citation, root) {
     };
   }
   const at = hits[0];
+  if (
+    !anchorRespectsBoundaries(
+      readLines(join(root, citation.path))[at - 1] ?? "",
+      anchor,
+    )
+  ) {
+    return {
+      ok: false,
+      code: "ANCHOR_UNBOUNDED",
+      message:
+        `anchor "${anchor}" begins or ends inside an identifier in ` +
+        `${citation.path}:${at}; extend it to a whole token`,
+    };
+  }
   if (citation.line === undefined) return { ok: true, line: at };
   if (citation.endLine !== undefined) {
     if (at < citation.line || at > citation.endLine) {
