@@ -27,7 +27,11 @@ const WIDEN_LIMIT = 5;
 /** The enforced corpus, declared and never globbed. */
 export const CORPUS_DIRS = /** @type {const} */ (["src", "tests"]);
 
-const PATH = String.raw`(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+`;
+const PATH_PART = String.raw`[A-Za-z0-9_.-]+`;
+const DOTTED_PATH = String.raw`(?:${PATH_PART}\/)*${PATH_PART}\.[A-Za-z0-9]+`;
+const EXTENSIONLESS_PATH = String.raw`(?:${PATH_PART}\/)+${PATH_PART}`;
+const RESOLUTION_PATH = String.raw`(?:${DOTTED_PATH}|${EXTENSIONLESS_PATH})`;
+const PATH = DOTTED_PATH;
 const ANCHORED = new RegExp(
   String.raw`^(${PATH})(?::(\d+)(?:-(\d+))?)?::(.+)$`,
 );
@@ -35,7 +39,7 @@ const ANCHORED = new RegExp(
 // `:N` alone would be a line claim nothing can check, which is the fail-open
 // shape this grammar exists to refuse; it stays malformed.
 const RESOLUTION = new RegExp(
-  String.raw`^git show ([0-9a-f]{40}):(${PATH})(?:(?::(\d+)(?:-(\d+))?)?::(.+))?$`,
+  String.raw`^git show ([0-9a-f]{40}):(${RESOLUTION_PATH})(?:(?::(\d+)(?:-(\d+))?)?::(.+))?$`,
 );
 const LEGACY = new RegExp(String.raw`(${PATH}):(\d+)(?:-(\d+))?`, "g");
 const BACKTICKED = /`([^`\n]+)`/g;

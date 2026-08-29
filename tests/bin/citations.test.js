@@ -83,9 +83,12 @@ function gitFixture(name, body) {
     return result.stdout.trim();
   };
   git(["init", "--quiet", "."]);
-  writeFileSync(join(root, name), body);
-  const blob = git(["hash-object", "-w", name]);
-  const sha = git(["mktree"], "100644 blob " + blob + "\t" + name + "\n");
+  const target = join(root, name);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, body);
+  git(["add", "--", name]);
+  const sha = git(["write-tree"]);
+  assert.equal(git(["rev-list", "--count", "--all"]), "0");
   assert.match(sha, /^[0-9a-f]{40}$/);
   return { root, sha };
 }
@@ -526,6 +529,21 @@ void test("a resolution citation whose path exists at that object validates", ()
   const [citation] = scan([join(root, "a.js")]);
   assert.equal(citation.kind, "resolution");
   assert.deepEqual(validate(citation, root), { ok: true });
+});
+
+void test("resolution citations accept a slash-bearing extensionless path", () => {
+  const { root, sha } = gitFixture(
+    "scripts/install",
+    "spw_main() {\n  return 0\n}\n",
+  );
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + sha + ":scripts/install:1::spw_main`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "resolution");
+  assert.equal(citation.path, "scripts/install");
+  assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
 });
 
 void test("a resolution citation whose path is absent at that object fails", () => {
