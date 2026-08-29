@@ -6,10 +6,6 @@
 // it because a write inside a try can raise EPIPE, be caught by that try, and
 // be relabelled as a domain failure. Keeping the predicates write-free means
 // the hazard cannot exist here at all.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh
 
 // A three-way verdict rather than a boolean, because the shell has two
 // distinct failure paths and collapsing them changes operator-visible text:

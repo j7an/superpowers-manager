@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh
-
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { COMMIT_INPUT_RE } from "./domain/refs.js";
