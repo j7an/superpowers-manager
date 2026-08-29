@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh
-
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
@@ -117,8 +112,9 @@ function runCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
 ): Promise<CommandResult> {
-  // scripts/core/common.sh:71 is the system's only scrubbing site and it dies
-  // with scripts/ in 4c. Without this, NODE_OPTIONS would NEWLY reach codex.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:71::NODE_OPTIONS`
+  // is the system's only scrubbing site and it dies with scripts/ in 4c.
+  // Without this, NODE_OPTIONS would NEWLY reach codex.
   // Preserves the property that was load-bearing — the child is clean — and
   // drops the part that was never true, that the dispatcher scrubbed itself.
   // Carried matrix row 11.
@@ -193,8 +189,8 @@ export function mapCodexLaunchFailure(
     status: 1,
     signal: null,
     stdout: Buffer.alloc(0),
-    // Trailing newline matches how a real process writes stderr; appendBytes
-    // (src/adapter-result.ts:133) splits on newlines and terminates the
+    // Trailing newline matches how a real process writes stderr;
+    // `src/adapter-result.ts:133::appendBytes` splits on newlines and terminates the
     // final chunk at end-of-buffer either way.
     stderr: Buffer.from(
       `cannot launch Codex command ${codexBin}${detail}\n`,
@@ -405,9 +401,9 @@ async function runBuild(
             ignoreBOM: true,
           }).decode(rawManifestBytes);
         } catch {
-          // Deliberately drops the cause. The Python interpolated the raw
-          // OSError here (apply-manifest-overlay.py:42), putting
-          // "[Errno 2] No such file or directory" on the operator's stream.
+          // Deliberately drops the cause. The Python interpolated the raw OSError here:
+          // `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:scripts/adapters/codex/apply-manifest-overlay.py:42::read`,
+          // putting "[Errno 2] No such file or directory" on the operator's stream.
           // The prefix is preserved; the errno leak is not.
           log.appendText(
             "stderr",

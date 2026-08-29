@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh
-
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { runAdapter } from "./adapter.js";
@@ -80,10 +75,11 @@ const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
 };
 // `python3` left install, update and uninstall at slice 4b's flip. It was
 // required because `spw_invoke_adapter` ran validate-adapter-response.py once
-// per adapter call (scripts/core/adapter.sh:37-44); the in-process path has no
-// validator process. It remains CONDITIONAL for `prepare` through
-// commandRequirements(env) below, unchanged from slice 3.4. No command requires
-// a POSIX shell any more.
+// per adapter call
+// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:37-44::--response "$response_file" --result "$result_file" \`);
+// the in-process path has no validator process. It remains CONDITIONAL for
+// `prepare` through commandRequirements(env) below, unchanged from slice 3.4.
+// No command requires a POSIX shell any more.
 const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
   "track-latest": [],

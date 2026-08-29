@@ -58,16 +58,18 @@ const RESOLUTION_KINDS: readonly ResolutionKind[] = [
 
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
-// reads .message only. Same arrangement as hookError (src/hooks.ts:40).
+// reads .message only. Same arrangement as hookError
+// (`src/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
 }
 
 // `[ -e ]` — follows symlinks, so a dangling link is absent to the shell too.
 // Two call sites, each mirroring a distinct `-e` in the shell: the
-// REQUIRED_UPSTREAM loop (spw_require_upstream_path, common.sh:53-59 — e.g.
-// skills/ is a directory, not a regular file) and copyPathIfPresent's guard
-// (spw_copy_path_if_present's `[ -e "$src" ]`, common.sh:44-51). The `.git`
+// REQUIRED_UPSTREAM loop
+// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:53-59::spw_require_upstream_path`
+// — e.g. skills/ is a directory, not a regular file) and copyPathIfPresent's
+// guard (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:44-51::spw_copy_path_if_present`). The `.git`
 // check below is NOT a third site: it needs `-d` (F1), not `-e`, and uses
 // directoryExists instead.
 async function pathExists(path: string): Promise<boolean> {
@@ -95,7 +97,8 @@ async function regularFileExists(path: string): Promise<boolean> {
 // `[ -d ]` — scripts/prepare:50. A regular file named `.git` is what a git
 // worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
 // fetch branch and let git follow its `gitdir:` pointer, where the shell took
-// the clone branch. src/upstream.ts:330 makes the same distinction.
+// the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
+// same distinction.
 async function directoryExists(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isDirectory();
@@ -114,7 +117,8 @@ async function owned<T>(message: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-// scripts/core/common.sh:44-51. `cp -R` copies symlinks AS symlinks;
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:44-51::spw_copy_path_if_present`.
+// `cp -R` copies symlinks AS symlinks;
 // fs.cp's default rewrites relative link targets against the destination,
 // which would change what the adapter's containment checks see.
 async function copyPathIfPresent(
@@ -136,21 +140,23 @@ function resolveFromCwd(value: string, cwd: string): string {
   return isAbsolute(value) ? value : resolve(cwd, value);
 }
 
-// readManifest (src/hooks.ts:109) owns the read and the parse completely: byte
+// readManifest (`src/hooks.ts:113::readManifest`) owns the read and the parse completely: byte
 // read so invalid UTF-8 is rejected rather than replaced, cause dropped, three
 // hand-written messages naming the path, object check included. Its
-// diagnostics are pinned by tests/unit/hooks.test.js:95. This wrapper adds only
+// diagnostics are pinned by
+// `tests/unit/hooks.test.js:95::void test("readManifest diagnostics`. This wrapper adds only
 // the `version` type check.
 export async function readUpstreamManifestVersion(
   path: string,
 ): Promise<string> {
   const manifest = await readManifest(path);
   const value = manifest.version;
-  // scripts/core/provenance.sh:56-62 — absent key and JSON null both yield "".
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:56-62::for part in dotted_key.split`
+  // — absent key and JSON null both yield "".
   if (value === undefined || value === null) return "";
   if (typeof value !== "string") {
     // The shell stringified any other type through Python's print()
-    // (provenance.sh:62), so `"version": 6` became "6" and flowed into both the
+    // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value`), so `"version": 6` became "6" and flowed into both the
     // provenance record and --upstream-manifest-version. Fail closed instead.
     // Spec divergence 7.
     throw prepareError(`upstream manifest version is not a string: ${path}`);
@@ -219,7 +225,8 @@ type PrepareOutcome =
 
 // Carries a post-success workspace-removal failure WITHOUT discarding the
 // PrepareOutcome the callback already computed. See the header comment on
-// withWorkspace's onCleanupFailure option (src/workspace.ts:99-107).
+// withWorkspace's onCleanupFailure option
+// (`src/workspace.ts:99-107::interface`).
 //
 // Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
 // StageRun documents a precondition that its callback never throws, so it has
@@ -228,7 +235,8 @@ type PrepareOutcome =
 // itself throws prepareError when the shared runner (src/validator.ts)
 // settles a launchFailed result from a legacy-validator spawn failure, and
 // withWorkspace THROWS the callback error on that path
-// (src/workspace.ts:137, :141) without ever consulting the reporter below.
+// (`src/workspace.ts:136-137::} catch (cleanupError`, :141) without ever
+// consulting the reporter below.
 // The outcomes the callback below collected into its `outcomes` array are
 // lost there. That is a separate, unassigned defect -- the callback-throw
 // path discards them -- and it is out of scope here: this type fixes only
@@ -411,12 +419,14 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         );
       } catch {
         // ctx.adapter reports CONTROLLED failures by return value
-        // (src/adapter-result.ts:32-35) but still THROWS for a
+        // (`src/adapter-result.ts:32-35::export interface AdapterResult`) but still THROWS for a
         // non-AdapterFailure cause (runAdapter's closing `throw cause`,
         // src/adapter.ts). That cause is by construction the one failure
         // src/adapter.ts declined to own, so its text must never reach
         // ctx.stderr. Caught here rather than in runPrepare's outer catch,
-        // the same treatment src/commands/probe.ts:210-232 gives it.
+        // the same treatment
+        // `src/commands/probe.ts:210-233::It does still THROW for a non-AdapterFailure cause`
+        // gives it.
         return failed("cannot build the generated plugin candidate");
       }
       const outcomes = [built.outcome];
@@ -522,7 +532,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       // The swap must run inside the workspace callback: withWorkspace removes
       // the workspace on return, and the candidate lives in it.
       //
-      // atomicReplaceDir's outer catch (src/atomic.ts:208-215) wraps every
+      // atomicReplaceDir's outer catch (`src/atomic.ts:208-215::if (cause`) wraps every
       // non-SafetyError into a SafetyError, so the callee owns every failure on
       // this path and re-emitting its own diagnostic is the sanctioned form of
       // interpolation. The hand-written prefix carries the live root, which the
@@ -550,7 +560,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure, so
       // the PrepareOutcome the callback already computed still reaches
       // runPrepare instead of being discarded. The reporter runs synchronously,
-      // as the option requires (src/workspace.ts:103-106).
+      // as the option requires (`src/workspace.ts:103-106::Must`).
       onCleanupFailure: (path) => {
         cleanupWarning = workspaceRemovalFailure(path);
       },
@@ -577,8 +587,9 @@ export async function runPrepare(
     // additional-validator branch's own throw on a legacy-validator launch
     // failure (its cause is the shared runner's (src/validator.ts) captured
     // spawn error, which oneLine never reads -- it takes .message only);
-    // readManifest's three hookError messages (src/hooks.ts:109-134), pinned
-    // by tests/unit/hooks.test.js:95 as carrying no reader vocabulary or
+    // readManifest's three hookError messages
+    // (`src/hooks.ts:113-138::readManifest`), pinned by
+    // `tests/unit/hooks.test.js:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //
@@ -588,18 +599,21 @@ export async function runPrepare(
     //      computeEffectiveSelection (src/effective-selection.ts).
     //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
-    //      by tests/unit/upstream.test.js:460-469, :471-481, and :483-501.
+    //      by
+    //      `tests/unit/upstream.test.js:460-469::void test("resolveRef reports a query failure for latest`,
+    //      :471-481, and :483-501.
     //   2. fetchExactCommit splices the same combined stdout+stderr into its
     //      own text on the PINNED path (both of its own splice sites in
     //      src/upstream.ts, and proveCommit's, which it calls). This is the
     //      rarer of the two raw-git-output paths, not the only one.
-    //   3. src/selection-store.ts:124 (same shape at :49, :86, :98) is the
+    //   3. `src/selection-store.ts:120-124::cause.module === "selection") {`
+    //      (same shape at :49, :86, :98) is the
     //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
     //      it interpolates the caught error's own message, so Node errno
     //      prose can reach this stream -- sanctioned, nothing here needs
     //      fixing.
     //   4. Every runGit call site in this module (fetch, clone, checkout) can
-    //      reject instead of resolving: src/git.ts:47-51 wraps every string
+    //      reject instead of resolving: `src/git.ts:47-52::reject(new SafetyError` wraps every string
     //      errno other than ENOENT in
     //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
     //      and that Node spawn-level message reaches ctx.stderr through this
@@ -648,7 +662,8 @@ export async function runPrepare(
     // success: the generated-tree replacement that produced it already
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
-    // extends to it. Mirrors src/commands/install.ts:499-506.
+    // extends to it. Mirrors
+    // `src/commands/install.ts:507-514::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

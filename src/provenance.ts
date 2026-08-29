@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh
-
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { COMMIT_INPUT_RE } from "./domain/refs.js";
@@ -98,15 +93,19 @@ export async function readGeneratedCommitLenient(
   }
 }
 
-// scripts/core/lifecycle.sh:28-31. The path the generated tree's provenance
-// lives at, relative to a package root.
+// Ported from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:28-31::spw_generated_metadata_path(`.
+// The path the generated tree's provenance lives at, relative to a package
+// root.
 export function generatedMetadataPath(root: string): string {
   return join(root, "plugins", "superpowers", ".superpowers-upstream.json");
 }
 
-// scripts/core/lifecycle.sh:33-37. Lenient by design: a missing or malformed
-// generated provenance file yields "", which `statusForCommits` reads as
-// "needs prepare". Aborting here would deny the operator the remediation path.
+// Ported from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:33-37::spw_generated_commit_or_empty`.
+// Lenient by design: a missing or malformed generated provenance file yields
+// "", which `statusForCommits` reads as "needs prepare". Aborting here would
+// deny the operator the remediation path.
 export async function generatedCommitOrEmpty(root: string): Promise<string> {
   return readGeneratedCommitLenient(generatedMetadataPath(root));
 }

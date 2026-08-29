@@ -9,6 +9,7 @@ import {
   mkdirSync,
   readFileSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -25,10 +26,13 @@ import {
   displayPath,
   fixEdits,
   applyFixEdits,
+  anchorRespectsBoundaries,
   ledgerDrift,
   listSources,
   readLedger,
   scan,
+  suggest,
+  suggestAnchor,
   targetExists,
   validate,
 } from "../lib/citations.js";
@@ -926,6 +930,245 @@ void test("fixEdits is empty on a correct citation, so a second run is a no-op",
     "src/x.ts": TARGET,
   });
   assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
+});
+
+const SUGGEST_TARGET = [
+  "export function begin() {",
+  "  const value = compute();",
+  "  return value;",
+  "}",
+  "",
+  "export function finish() {",
+  "  const value = compute();",
+  "  return value;",
+  "}",
+  "",
+].join("\n");
+
+// `begin` and `finish` are five and six characters. A two-character declared
+// name would be filtered by MIN_ANCHOR before it could be proposed, which is
+// correct behavior and a confusing fixture.
+
+void test("suggestAnchor prefers the declared name", () => {
+  const lines = SUGGEST_TARGET.split("\n");
+  assert.deepEqual(suggestAnchor(lines, 1, 1), {
+    anchor: "begin",
+    line: 1,
+    endLine: 1,
+  });
+});
+
+void test("suggestAnchor prefers a unique identifier over a line prefix", () => {
+  const lines = ["const value = 1;", "compute(distinctIdentifier);", ""];
+  assert.deepEqual(suggestAnchor(lines, 2, 2), {
+    anchor: "distinctIdentifier",
+    line: 2,
+    endLine: 2,
+  });
+});
+
+void test("suggestAnchor never proposes an inner fragment", () => {
+  const lines = ["const hookError = 1;", "call(hookError);", ""];
+  const picked = suggestAnchor(lines, 2, 2);
+  assert.notEqual(picked, null);
+  const anchor = /** @type {{ anchor: string }} */ (picked).anchor;
+  assert.ok(
+    anchorRespectsBoundaries(lines[1], anchor),
+    `suggested ${JSON.stringify(anchor)} begins or ends inside an identifier`,
+  );
+});
+
+void test("suggestAnchor widens outward when the span is not unique", () => {
+  const lines = SUGGEST_TARGET.split("\n");
+  const picked = suggestAnchor(lines, 3, 3);
+  assert.notEqual(picked, null);
+  const span = /** @type {{ line: number, endLine: number }} */ (picked);
+  assert.ok(
+    span.line < 3 || span.endLine > 3,
+    "line 3 is duplicated at line 8, so the span must widen",
+  );
+  assert.equal(/** @type {{ anchor: string }} */ (picked).anchor, "begin");
+});
+
+void test("suggestAnchor returns null rather than proposing a duplicate", () => {
+  const lines = ["dup", "dup", "dup", "dup", "dup", "dup", "dup", "dup", ""];
+  assert.equal(suggestAnchor(lines, 4, 4), null);
+});
+
+void test("suggest proposes an anchored form for a live target", () => {
+  const root = fixture({
+    "src/x.ts": SUGGEST_TARGET,
+    "tests/bin/a.js": "// see src/x.ts:1 for the entry point\n",
+    "tests/baseline/.keep": "",
+    "tests/unit/.keep": "",
+    "tests/lib/.keep": "",
+  });
+  const lines = suggest(scan(listSources(CORPUS_DIRS, root)), root);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /\tsrc\/x\.ts:1\tsrc\/x\.ts:1::begin$/);
+});
+
+void test("suggest reports a dead referent as dead when no object is given", () => {
+  const root = fixture({
+    "src/.keep": "",
+    "tests/bin/a.js": "// ported from scripts/core/gone.sh:4\n",
+    "tests/baseline/.keep": "",
+    "tests/unit/.keep": "",
+    "tests/lib/.keep": "",
+  });
+  const lines = suggest(scan(listSources(CORPUS_DIRS, root)), root);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /\tDEAD\b/);
+});
+
+void test("suggest proposes a resolution form against a historical object", () => {
+  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
+  unlinkSync(join(root, "old.sh"));
+  mkdirSync(join(root, "tests", "bin"), { recursive: true });
+  writeFileSync(
+    join(root, "tests", "bin", "a.js"),
+    "// ported from old.sh:1\n",
+  );
+  const lines = suggest(scan([join(root, "tests", "bin", "a.js")]), root, {
+    sha,
+    path: "old.sh",
+  });
+  assert.equal(lines.length, 1);
+  assert.equal(
+    lines[0].endsWith(`git show ${sha}:old.sh:1::begin`),
+    true,
+    lines[0],
+  );
+});
+
+void test("an --at object applies only to citations naming that path", () => {
+  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
+  mkdirSync(join(root, "tests", "bin"), { recursive: true });
+  writeFileSync(
+    join(root, "tests", "bin", "a.js"),
+    "// ported from other.sh:1\n",
+  );
+  const lines = suggest(scan([join(root, "tests", "bin", "a.js")]), root, {
+    sha,
+    path: "old.sh",
+  });
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /\tDEAD\b/);
+});
+
+void test("the --report CLI dispatch prints the unverified count", () => {
+  const root = fixture({
+    "src/x.ts": TARGET,
+    "tests/bin/a.js": "// `src/x.ts:2::export function go`\n",
+    "tests/baseline/.keep": "",
+    "tests/unit/.keep": "",
+    "tests/lib/.keep": "",
+  });
+  const result = spawnSync(process.execPath, [TOOL, "--report"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_CITATIONS_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null, "the tool was killed at the harness bound");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /^citations=1 unanchored=0 deadReferent=0 unverified=0 failing=0\n/,
+  );
+});
+
+void test("the --report CLI dispatch counts an unverified historical citation", () => {
+  // No `.git` under a scratch root, so the historical leg cannot run and the
+  // object name is never resolved -- the all-zero name is a fixture literal,
+  // not a claim that such an object exists.
+  const root = fixture({
+    "src/.keep": "",
+    "tests/bin/a.js":
+      "// `git show 0000000000000000000000000000000000000000:old.sh::begin`\n",
+    "tests/baseline/.keep": "",
+    "tests/unit/.keep": "",
+    "tests/lib/.keep": "",
+  });
+  const result = spawnSync(process.execPath, [TOOL, "--report"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_CITATIONS_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null, "the tool was killed at the harness bound");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /^citations=1 unanchored=0 deadReferent=0 unverified=1 failing=0\n/,
+  );
+});
+
+void test("the --suggest CLI dispatch proposes without writing", () => {
+  const root = fixture({
+    "src/x.ts": TARGET,
+    "tests/bin/a.js": "// see src/x.ts:2 for the entry point\n",
+    "tests/baseline/.keep": "",
+    "tests/unit/.keep": "",
+    "tests/lib/.keep": "",
+  });
+  const before = readFileSync(join(root, "tests", "bin", "a.js"), "utf8");
+  const result = spawnSync(process.execPath, [TOOL, "--suggest"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_CITATIONS_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null, "the tool was killed at the harness bound");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /src\/x\.ts:2::/);
+  assert.equal(
+    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
+    before,
+    "--suggest proposes; it never writes",
+  );
+});
+
+void test("the --suggest CLI dispatch keeps --at separate from the optional prefix", () => {
+  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
+  unlinkSync(join(root, "old.sh"));
+  mkdirSync(join(root, "tests", "bin"), { recursive: true });
+  writeFileSync(
+    join(root, "tests", "bin", "a.js"),
+    "// ported from old.sh:1\n",
+  );
+  mkdirSync(join(root, "src"), { recursive: true });
+  for (const directory of ["baseline", "unit", "lib"])
+    mkdirSync(join(root, "tests", directory), { recursive: true });
+  const before = readFileSync(join(root, "tests", "bin", "a.js"), "utf8");
+  const at = `${sha}:old.sh`;
+  for (const args of [
+    ["--at", at],
+    ["tests/bin", "--at", at],
+    ["--at", at, "tests/bin"],
+  ]) {
+    const result = spawnSync(process.execPath, [TOOL, "--suggest", ...args], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, SPW_CITATIONS_ROOT: root },
+      timeout: 30000,
+    });
+    assert.equal(
+      result.signal,
+      null,
+      "the tool was killed at the harness bound",
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      new RegExp(`git show ${sha}:old\\.sh:1::begin`),
+    );
+  }
+  assert.equal(
+    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
+    before,
+    "historical --suggest proposals never write",
+  );
 });
 
 // ---- the two live gates -------------------------------------------------

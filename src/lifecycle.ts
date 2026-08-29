@@ -6,16 +6,13 @@
 // it because a write inside a try can raise EPIPE, be caught by that try, and
 // be relabelled as a domain failure. Keeping the predicates write-free means
 // the hazard cannot exist here at all.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh
 
 // A three-way verdict rather than a boolean, because the shell has two
 // distinct failure paths and collapsing them changes operator-visible text:
 //
-//   legacy | both  -> scripts/core/lifecycle.sh:50-53 prints three bare lines
-//                     to stderr and returns 1. No `error: ` prefix.
+//   legacy | both  ->
+//     `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`
+//     prints three bare lines to stderr and returns 1. No `error: ` prefix.
 //   anything else  -> :57 calls spw_die, which DOES add `error: ` and exits 1.
 //
 // `LegacyVerdict` needs a fourth arm for `reportLegacyState`'s non-fatal
@@ -27,17 +24,20 @@ export type LegacyVerdict =
   | { readonly kind: "report"; readonly lines: readonly string[] }
   | { readonly kind: "unknown"; readonly message: string };
 
-// Frozen text. scripts/core/lifecycle.sh:50-53. The version in the second line
-// is a historical package coordinate an operator must type verbatim, not a
-// reference to this package's current version — do not derive it.
+// Frozen text, from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`.
+// The version in the second line is a historical package coordinate an operator
+// must type verbatim, not a reference to this package's current version — do not
+// derive it.
 const BLOCKED_LINES: readonly string[] = [
   "Legacy superpowers-wrapper Codex state is installed.",
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
   "Then run: npx superpowers-manager install",
 ];
 
-// Frozen text. scripts/core/lifecycle.sh:75-77. Two lines, not three: the
-// report path does not tell the operator to re-install.
+// Frozen text, from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:75-77::remains`.
+// Two lines, not three: the report path does not tell the operator to re-install.
 const REPORT_LINES: readonly string[] = [
   "Legacy superpowers-wrapper Codex state remains installed.",
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
@@ -50,7 +50,7 @@ function unknownState(identityState: string): LegacyVerdict {
   };
 }
 
-// scripts/core/lifecycle.sh:43-60.
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:43-60::spw_require_no_legacy_state`
 export function requireNoLegacyState(identityState: string): LegacyVerdict {
   if (identityState === "neither" || identityState === "manager") {
     return { kind: "ok" };
@@ -61,9 +61,10 @@ export function requireNoLegacyState(identityState: string): LegacyVerdict {
   return unknownState(identityState);
 }
 
-// scripts/core/lifecycle.sh:72-85. Same enumeration, different disposition:
-// this one reports and continues rather than blocking, so its clean arm and
-// its legacy arm are both non-fatal.
+// Ported from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:72-85::spw_report_legacy_state`.
+// Same enumeration, different disposition: this one reports and continues
+// rather than blocking, so its clean arm and its legacy arm are both non-fatal.
 export function reportLegacyState(identityState: string): LegacyVerdict {
   if (identityState === "neither" || identityState === "manager") {
     return { kind: "ok" };
@@ -84,8 +85,10 @@ export interface Refusal {
 }
 export type Check = { readonly ok: true } | Refusal;
 
-// scripts/core/lifecycle.sh:62-70. Both refusals reached spw_die in the shell,
-// so both carry the `error: ` prefix at the call site and neither is special.
+// Ported from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:62-70::spw_require_managed_update_control`.
+// Both refusals reached spw_die in the shell, so both carry the `error: ` prefix
+// at the call site and neither is special.
 export function requireManagedUpdateControl(value: string): Check {
   if (value === "managed") return { ok: true };
   if (value === "unsupported") {
@@ -141,9 +144,11 @@ export type FingerprintVerdict =
       readonly stderr: readonly string[];
     };
 
-// scripts/core/lifecycle.sh:87-124. The shell performed the inspection itself
-// at :91; a pure function cannot, so the caller performs it and a failure
-// arrives here as an AdapterResult with a non-zero status.
+// Ported from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:87-124::spw_verify_installed_fingerprint`.
+// The shell performed the inspection itself at :91; a pure function cannot, so
+// the caller performs it and a failure arrives here as an AdapterResult with a
+// non-zero status.
 export function verifyInstalledFingerprint(
   desiredCommit: string,
   installResult: AdapterResult,
@@ -176,11 +181,13 @@ export function verifyInstalledFingerprint(
   const raw = inspected.value.fingerprint;
   // The Python reader printed the empty string for a JSON null, and
   // `fingerprint` is null whenever no plugin version is active
-  // (src/adapter.ts:818). Anything non-string and non-null is unparseable.
+  // (`src/adapter.ts:820::fingerprint: null`). Anything non-string and non-null
+  // is unparseable.
   //
   // PORT-ONLY, and intentional. The shell cannot construct this trigger:
-  // scripts/core/provenance.sh:62 stringifies any non-null scalar, so a
-  // non-string fingerprint never reaches spw_verify_installed_fingerprint.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value`
+  // stringifies any non-null scalar, so a non-string fingerprint never reaches
+  // spw_verify_installed_fingerprint.
   // The port CAN encounter the shape and must fail closed rather than
   // coerce. Pinned by a test below and recorded in
   // tests/migration-inventory/codex-state-units.md. Spec §6.2.3 item 3.
@@ -231,9 +238,11 @@ export function verifyInstalledFingerprint(
   return { ok: false, stdout, stderr };
 }
 
-// scripts/core/lifecycle.sh:126-141, with the Boolean coercion of
-// scripts/core/adapter.sh:58-73 folded in: a non-Boolean is a hard failure,
-// never a falsy "absent".
+// Ported from
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:126-141::spw_verify_uninstalled_resources`,
+// with the Boolean coercion of
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`
+// folded in: a non-Boolean is a hard failure, never a falsy "absent".
 export function verifyUninstalledResources(
   inspectResult: AdapterResult,
 ): Check {
@@ -246,12 +255,13 @@ export function verifyUninstalledResources(
   }
   const inspected = read.value;
   // A missing or non-object `resources` falls THROUGH to the Boolean check
-  // rather than getting its own message. scripts/core/adapter.sh:70 emits
-  // "expected Boolean adapter result at resources.plugin" for input {} — the
-  // input tests/unit/lifecycle.test.js's "a non-object resources falls
-  // through to the Boolean message" exercises — so a distinct "not an
-  // object" message here would be a port-only divergence. Parity, not
-  // divergence. Spec §6.2.3 item 3.
+  // rather than getting its own message.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`
+  // emits "expected Boolean adapter result at resources.plugin" for input {} —
+  // the input tests/unit/lifecycle.test.js's "a non-object resources falls
+  // through to the Boolean message" exercises — so a distinct "not an object"
+  // message here would be a port-only divergence. Parity, not divergence. Spec
+  // §6.2.3 item 3.
   const resources = inspected.resources;
   const bag: Record<string, unknown> =
     typeof resources === "object" &&

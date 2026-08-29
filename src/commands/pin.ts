@@ -40,7 +40,7 @@ async function attemptPin(
   // writing, under "Invalid existing state must block overwrite" —
   // readSelectionState's own readOpenedRecord/parseRecordBytes is what
   // validates an existing record, via validateRecord at
-  // src/selection-store.ts:103). Calling loadSavedSelection here preserves
+  // `src/selection-store.ts:103::return validateRecord`). Calling loadSavedSelection here preserves
   // scripts/pin:26-27's read-then-resolve-then-write shape, so this command
   // stays fail-closed on its own terms rather than solely by depending on the
   // store's internals.

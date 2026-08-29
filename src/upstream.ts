@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/upstream.sh
-
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -41,8 +36,10 @@ function upstreamError(message: string): SafetyError {
   return new SafetyError("upstream", message);
 }
 
-// Mirrors scripts/core/upstream.sh:6-13: SUPERPOWERS_REF wins; otherwise the
-// first line of config/upstream-ref with trailing whitespace stripped.
+// Mirrors
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/upstream.sh:6-13::spw_config_ref`:
+// SUPERPOWERS_REF wins; otherwise the first line of config/upstream-ref with
+// trailing whitespace stripped.
 // The diagnostic names the path and does not interpolate the caught cause.
 export async function readConfigRef(
   root: string,

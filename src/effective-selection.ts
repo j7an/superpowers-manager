@@ -1,9 +1,6 @@
-// `selectionError` already exists at src/selection.ts:41 and tags errors with
+// `selectionError` already exists at
+// `src/selection.ts:41::export function selectionError` and tags errors with
 // module "selection". Import it rather than defining a second one.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/selection.sh
 import {
   normalizeSaved,
   selectionError,
@@ -21,10 +18,11 @@ function requireAbsolute(value: string, variable: string): string {
   return value;
 }
 
-// Precedence mirrors scripts/core/selection.sh:4-29. SUPERPOWERS_CONFIG_DIR is
-// selected on *presence*, matching the shell's ${SUPERPOWERS_CONFIG_DIR+x}: an
-// empty value takes this branch and then fails the absolute check, rather than
-// falling through to XDG.
+// Precedence mirrors
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/selection.sh:4-29::spw_selection_config_dir(`.
+// SUPERPOWERS_CONFIG_DIR is selected on *presence*, matching the shell's
+// ${SUPERPOWERS_CONFIG_DIR+x}: an empty value takes this branch and then fails
+// the absolute check, rather than falling through to XDG.
 export function selectionConfigDir(env: NodeJS.ProcessEnv): string {
   const explicit = env.SUPERPOWERS_CONFIG_DIR;
   if (explicit !== undefined) {
@@ -45,9 +43,9 @@ export function selectionStatePath(env: NodeJS.ProcessEnv): string {
   return `${selectionConfigDir(env)}/selection.json`;
 }
 
-// Composes exactly what selection-state-cli.ts:39 composes. The shell wrote a
-// normalized document to a mktemp file and read five fields back with five
-// python3 invocations; in-process this is one call.
+// Composes exactly what `src/selection-state-cli.ts:39::const normalized`
+// composes. The shell wrote a normalized document to a mktemp file and read
+// five fields back with five python3 invocations; in-process this is one call.
 export async function loadSavedSelection(
   env: NodeJS.ProcessEnv,
 ): Promise<NormalizedSavedSelection> {
@@ -70,10 +68,11 @@ export interface EffectiveSelection {
 export const UPSTREAM_URL_DEFAULT = "https://github.com/obra/superpowers";
 
 // Ports the env > saved > package-default precedence ladder from
-// scripts/core/selection.sh:88-162. validateSource runs before any ref
-// resolution -- pinned by tests/unit/effective-selection.test.js's "source
-// validation precedes ref resolution": a credential-bearing source must
-// fail before Git is ever invoked.
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/selection.sh:88-162::spw_compute_effective_selection`.
+// validateSource runs before any ref resolution -- pinned by
+// tests/unit/effective-selection.test.js's "source validation precedes ref
+// resolution": a credential-bearing source must fail before Git is ever
+// invoked.
 export async function computeEffectiveSelection(
   root: string,
   env: NodeJS.ProcessEnv,
