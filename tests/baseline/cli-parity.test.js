@@ -2297,7 +2297,7 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     // carries both: the generated tree is at `c.pkg/plugins/superpowers`, and
     // the manager's upstream cache — its own directory in the baseline, via
     // SUPERPOWERS_CACHE_DIR — defaults to `$root/.cache/upstream`
-    // (scripts/prepare:12, gatherPrepare's `cacheParent` resolution), which is
+    // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:12::SUPERPOWERS_CACHE_DIR`, gatherPrepare's `cacheParent` resolution), which is
     // inside `c.pkg` here because `runScript` sets no SUPERPOWERS_CACHE_DIR.
     // A readdirSync of top-level names would see neither a change inside
     // `.codex-plugin/` nor a cache appearing. Same form as

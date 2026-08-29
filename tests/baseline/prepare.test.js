@@ -440,7 +440,7 @@ void test("CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cw
   const c = createCase({ fakes: "probe" });
   // The package root's own generated tree must be untouched: a relative
   // SUPERPOWERS_PLUGIN_ROOT resolves against the invocation cwd
-  // (scripts/prepare:17-24), never against ctx.root.
+  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:17-24::case "$cache_parent`), never against ctx.root.
   const untouched = snapshotTree(generated(c));
   const result = await prepare(
     c,
@@ -511,7 +511,7 @@ void test("prepare clones once and then fetches into the same cache", async () =
 });
 
 void test("prepare rejects an upstream missing any required path", async () => {
-  // scripts/prepare:64-67's labels, in the shell's order. The label, not the
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:64-67::spw_require_upstream_path "$cache/skills`'s labels, in the shell's order. The label, not the
   // path, is what the diagnostic carries.
   for (const [path, label] of [
     ["skills", "skills/"],
@@ -565,7 +565,7 @@ void test("prepare runs the additional plugin validator inside the staging works
   assert.equal(passed.status, 0, passed.stderr);
   assert.match(passed.stdout, /^validator saw .*\/superpowers$/m);
 
-  // scripts/prepare:35-36 exported TMPDIR="$prepare_workspace"; runValidator
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:35-36::TMPDIR=` exported TMPDIR="$prepare_workspace"; runValidator
   // restores that. Without the override the child would inherit the case's own
   // TMPDIR, so this is the assertion that keeps the ported half of spec
   // divergence 9 load-bearing rather than comment-only.

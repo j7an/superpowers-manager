@@ -245,7 +245,7 @@ function makePreparableCtx(out, err, adapter) {
 
 void test('current: replays outcomes, prints the exact porcelain, then "manager is current"', async () => {
   // The porcelain reaches the terminal here -- unlike install, which never
-  // lets it through on a successful run (scripts/install:18's
+  // lets it through on a successful run (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:18::porcelain`'s
   // probe_output=$(...) capture). Two independent ctx/adapter pairs, built
   // from the same fixture: one drives gatherProbe directly to obtain the
   // real `facts` object, the other drives runUpdate. Comparing runUpdate's
@@ -290,7 +290,7 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
 });
 
 void test("current: refuses an unsupported update control BEFORE printing anything", async () => {
-  // §4.4's second correction: scripts/update:18 gates before scripts/update:19
+  // §4.4's second correction: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:18::spw_require_managed_update_control` gates before `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:19::printf`
   // prints anything. An update reporting "manager is current" under an
   // unsupported adapter would be asserting managed control it had not
   // verified.
@@ -374,7 +374,7 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
 });
 
 void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall, not by a bare success", async () => {
-  // scripts/update:23-24 -- prepare THEN install. The sibling case above only
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:23-24::sh "$root/scripts/prepare` -- prepare THEN install. The sibling case above only
   // reaches the first of the two, because its prepare fails; this one is the
   // only proof that the second statement of the arm exists at all. Replacing
   // `return await runInstall([], ctx)` with `return 0` leaves update
@@ -439,9 +439,9 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
 });
 
 void test("needs install: delegates to runInstall alone, and a success propagates as status 0", async () => {
-  // Ten calls, not seven: scripts/update:27 spawned `sh scripts/install` as a
+  // Ten calls, not seven: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:26-27::needs\ install` spawned `sh scripts/install` as a
   // SEPARATE process, which re-ran `sh scripts/probe --porcelain` from
-  // scratch (scripts/install:18) before its own re-inspection. runInstall
+  // scratch (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:18::porcelain`) before its own re-inspection. runInstall
   // preserves that double-probe as a second, independent gatherProbe call --
   // update's own probe (3 calls) is not the same call as install's own probe
   // (3 more calls) -- so the fixture scripts both, then install's four
@@ -508,7 +508,7 @@ void test("needs install: a non-zero runInstall return propagates as update's st
 });
 
 void test("an unrecognised probe status writes the porcelain then reports the error without swallowing it", () => {
-  // scripts/update:29-32's `case ... *)` wildcard. statusForCommits
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:29-32::echo "$probe_output`'s `case ... *)` wildcard. statusForCommits
   // (src/status.ts) can only ever return one of three literals, so this
   // branch is unreachable through runUpdate's own call to gatherProbe --
   // ProbeFacts.status is typed `string`, though, and a hand-built facts
@@ -544,7 +544,7 @@ void test("an unrecognised probe status writes the porcelain then reports the er
       throw new Error("must not be called");
     },
   });
-  // scripts/update:30-31 -- `echo "$probe_output"` on stdout, the error on
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:30-31::echo "$probe_output` -- `echo "$probe_output"` on stdout, the error on
   // stderr via an explicit `>&2`. Each stream is asserted on its own channel,
   // not just as a joined substring, so a mutant that swapped the two streams
   // cannot pass by accident.
@@ -553,8 +553,8 @@ void test("an unrecognised probe status writes the porcelain then reports the er
 });
 
 // --- The two emptiness checks that run BEFORE the switch (§4.4's first
-// correction). scripts/update:10 guards identity_state (matching install's
-// equivalent guard); scripts/update:14 guards update_control, which install
+// correction). `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:10::[ -n "$identity_state` guards identity_state (matching install's
+// equivalent guard); `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:14::capability` guards update_control, which install
 // never checks at all. ---
 
 void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
@@ -641,8 +641,8 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
 });
 
 void test("an empty probe-reported update-control capability fails closed, and runInstall never runs", async () => {
-  // scripts/update:14. install checks only identity_state
-  // (scripts/install:20); update checks this too -- §4.4's first correction.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:14::capability`. install checks only identity_state
+  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:20::report`); update checks this too -- §4.4's first correction.
   // Proven with a call recorder, not just the absence of "manager is
   // current" output: the assertion is that NO call past gatherProbe's own
   // three ever happens, not merely that this particular arm's text is
@@ -683,7 +683,7 @@ void test("an empty probe-reported update-control capability fails closed, and r
 // "needs prepare" fixture whose prepare would succeed, so a guard relocated
 // into the `current` arm lets update reach runPrepare: the adapter build call
 // appears in `calls` and scripting only gatherProbe's three responses makes
-// that arrival loud. What must not happen is exactly what scripts/update:10-14
+// that arrival loud. What must not happen is exactly what `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:10-14::[ -n "$identity_state`
 // refuses -- a real generated-tree write under an identity or an update-control
 // capability the command has not accepted.
 

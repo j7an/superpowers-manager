@@ -706,7 +706,7 @@ void describe("install commands", { concurrency: true }, () => {
     // :344
     assert.notEqual(status, 0, `expected update to fail:\n${out}`);
     // Precondition: probe reported "current", so the gate below is the update
-    // fast path's gate and not scripts/install:54 reached via needs-prepare.
+    // fast path's gate and not `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:53-54::update_control=` reached via needs-prepare.
     assertNoPrepareRan(out);
     // :345
     assert.ok(
@@ -1193,7 +1193,7 @@ void describe("install commands", { concurrency: true }, () => {
     // :593
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // :594. Also the precondition pin: `manager is current` is printed only by
-    // scripts/update:20, inside the `current)` branch, so a lost generated
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:20::manager`, inside the `current)` branch, so a lost generated
     // tree or cache seed turns this RED rather than silently rerouting the
     // case through needs-prepare.
     assert.ok(result.stdout.includes("manager is current"), result.stdout);
@@ -1553,7 +1553,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // Port-only: the shell ran its provenance check only for the install path
     // (:759-768). Update reaches the same remediation through
-    // scripts/update:22-25, so the same claim is asserted here.
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:22-25::needs\ prepare`, so the same claim is asserted here.
     assertGeneratedCommitIsSha(c);
   });
 
