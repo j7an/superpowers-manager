@@ -1,8 +1,5 @@
 {
   "unanchored": {
-    "tests/baseline/validator-executable.test.js": {
-      "tests/bin/lifecycle-fixture.js:32-34": 1
-    },
     "tests/bin/assert-matcher-gate.test.js": {
       "tests/baseline/suite-runner.test.js:479": 1
     },
@@ -115,12 +112,6 @@
     }
   },
   "deadReferent": {
-    "tests/baseline/protocol-disposition.test.js": {
-      "traceability.test.js:58-62": 1
-    },
-    "tests/baseline/suite-runner.test.js": {
-      "run-node-suites.js:67-69": 1
-    },
     "tests/bin/container-contract.test.js": {
       "codex-offline-probe.sh:588": 1
     },

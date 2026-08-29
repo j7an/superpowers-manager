@@ -54,7 +54,7 @@ void test("prepare accepts a tree when the executable validator exits 0", async 
   const c = createCase({ fakes: "probe" });
   // R1: the configured value must be a SYMLINK to the real script, not the
   // script itself. Both createCase's scratch tree and its containing tmpdir
-  // are realpath'd (tests/bin/lifecycle-fixture.js:32-34), so a
+  // are realpath'd (`tests/bin/lifecycle-fixture.js:33-35::export const SCRATCH = realpathSync`), so a
   // non-symlinked path already equals its own realpath -- an assertion of
   // "configured -> realpath(configured)" would then read as "X -> X" and
   // could not tell a manager that discloses a genuine resolved target apart
