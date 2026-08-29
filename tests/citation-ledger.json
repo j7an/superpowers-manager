@@ -28,28 +28,6 @@
       "tests/baseline/generated-plugin-corpus.test.js:812-880": 1,
       "src/hooks.ts:367": 1
     },
-    "tests/baseline/probe-fixture.js": {
-      "tests/run-node-suites.js:15": 1,
-      "src/adapter.ts:977": 2,
-      "src/git.ts:31": 1,
-      "tests/bin/lifecycle-fakes.js:235-241": 1,
-      "tests/bin/lifecycle-fixture.js:328": 1,
-      "src/adapter.ts:797": 1,
-      "src/upstream.ts:160-162": 1
-    },
-    "tests/baseline/probe.test.js": {
-      "src/commands/probe.ts:336-337": 1,
-      "src/selection.ts:69-79": 1,
-      "src/selection.ts:173-176": 1,
-      "src/effective-selection.ts:117-131": 1,
-      "src/upstream.ts:160-162": 1,
-      "tests/unit/effective-selection.test.js:145-167": 1,
-      "src/adapter.ts:812-816": 1,
-      "src/adapter.ts:1009": 1,
-      "src/adapter.ts:244-251": 1,
-      "tests/bin/lifecycle-fakes.js:148-170": 1,
-      "src/adapter.ts:233-242": 1
-    },
     "tests/baseline/ref-resolution.test.js": {
       "tests/bin/lifecycle-fixture.js:84-86": 1
     },
@@ -184,13 +162,6 @@
       "tests/test_prepare_with_fake_upstream.sh:459-479": 1,
       "tests/test_prepare_with_fake_upstream.sh:864-876": 1,
       "tests/test_prepare_with_fake_upstream.sh:1001-1022": 1
-    },
-    "tests/baseline/probe.test.js": {
-      "cli-parity.test.js:267": 1,
-      "tests/test_probe.sh:411-413": 1,
-      "tests/test_probe.sh:434-477": 1,
-      "tests/test_probe.sh:588": 1,
-      "scripts/core/validate-adapter-response.py:268-270": 1
     },
     "tests/baseline/protocol-disposition.test.js": {
       "traceability.test.js:58-62": 1

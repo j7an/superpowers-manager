@@ -56,7 +56,7 @@ const EMPTY_PLUGINS = '{"installed":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than cli-parity.test.js:267's mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.js:261::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  * @param {string} root
@@ -146,14 +146,14 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // src/commands/probe.ts:336-337: an absent saved source stays empty rather
+  // `src/commands/probe.ts:354::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
-  // (src/selection.ts:69-79 rejects the empty string).
+  // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
   assert.match(result.stdout, /^saved_requested_ref=$/m);
   assert.match(result.stdout, /^saved_resolved_ref=$/m);
   assert.match(result.stdout, /^saved_commit=$/m);
-  // Ported from tests/test_probe.sh:411-413: the whole key list, in order.
+  // Ported from `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:411-413::actual_keys=`: the whole key list, in order.
   assert.deepEqual(
     result.stdout
       .split("\n")
@@ -171,7 +171,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
   // desired_commit and saved_commit (the 40-hex SHA), so a swapped field in
   // the EffectiveSelection -> ProbeFacts mapping (`gatherProbe`)
   // cannot pass. The schema forbids requested_ref and resolved_ref differing
-  // for a tag pin (src/selection.ts:173-176), so those two are the one pair no
+  // for a tag pin (`src/selection.ts:173-174::tag resolved_ref must equal requested_ref`), so those two are the one pair no
   // valid fixture can tell apart.
   await saveSelection(c, {
     schema_version: 1,
@@ -186,7 +186,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
   });
-  // A saved pin short-circuits resolveRef (src/effective-selection.ts:117-131),
+  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:122-134::if (usesSavedPin)`),
   // so an unreachable source is the proof that Git was never consulted: any
   // ls-remote against this path would fail once it is renamed away.
   renameSync(source, `${source}-offline`);
@@ -232,9 +232,9 @@ void test("an environment ref overrides only the ref side and the saved fields s
     pluginListings: [ACTIVE, EMPTY_PLUGINS, ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
   });
-  // Renamed away for both runs, exactly as tests/test_probe.sh:434-477 leaves
+  // Renamed away for both runs, exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:434-477::mv "$upstream" "$offline_source"` leaves
   // it: a 40-hex SUPERPOWERS_REF resolves as `raw-commit` without Git
-  // (src/upstream.ts:160-162), so an unreachable source is what proves the
+  // (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so an unreachable source is what proves the
   // shell's `test ! -s "$git_log"` (:460) still holds here.
   renameSync(source, `${source}-offline`);
   try {
@@ -398,7 +398,7 @@ void test("no active plugin yields a null fingerprint and needs install", async 
     manifestVersion: ACTIVE_VERSION,
     installedProvenance: '{"commit":"not-a-fingerprint"}',
   });
-  // The manifest is malformed as well, matching tests/test_probe.sh:588. With
+  // The manifest is malformed as well, matching `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:588::printf '%s\n' '{' > "$installed_root/.codex-plugin/plugin.json"`. With
   // no active plugin the adapter never reaches it, so this only pins that a
   // second unusable input does not change the outcome.
   writeFileSync(
@@ -475,7 +475,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
   // fail loudly if resolveRef were reached -- `v1.0.0` is not a commit, so
   // reaching resolveRef means an ls-remote against an unreachable host and a
   // different diagnostic. This is the same technique
-  // tests/unit/effective-selection.test.js:145-167 uses.
+  // `tests/unit/effective-selection.test.js:145-167::source validation precedes ref resolution` uses.
   for (const { name, seed, env, expected } of [
     {
       name: "malformed selection.json",
@@ -520,7 +520,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // runInspect's real inspect-failed path (src/adapter.ts:812-816).
+  // runInspect's real inspect-failed path (`src/adapter.ts:809::activeVersion = activePluginVersionFromJson`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the fingerprint inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -533,9 +533,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
-// (src/adapter.ts:1009) is NOT reachable through `inspect`: `requireCodex`
+// (`src/adapter.ts:1001::if (cause instanceof AdapterFailure)`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (src/adapter.ts:244-251, :267-274), and
+// `command-not-found` AdapterFailure (`src/adapter.ts:268-274::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -566,15 +566,15 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // Two things at once, because one fixture proves both. First: runProbe really
 // calls replayOutcome on a real adapter response, so the adapter's own logged
 // messages reach stderr BEFORE its error line, exactly as
-// scripts/core/validate-adapter-response.py:268-270 ordered them
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/validate-adapter-response.py:268-270::replay(messages)` ordered them
 // (tests/unit/commands-probe.test.js proves replayOutcome only in isolation).
-// Second: nextPluginList (tests/bin/lifecycle-fakes.js:148-170) FAILS CLOSED
+// Second: nextPluginList (`tests/bin/lifecycle-fakes.js:147-170::function nextPluginList`) FAILS CLOSED
 // when the configured sequence runs out instead of repeating its last entry --
 // if it repeated, the ownership inspection would succeed and this run would
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (src/adapter.ts:233-242), and the fake writes nothing there
+// child's stderr (`src/adapter.ts:234-242::async function listingCommand`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr. Recorded in tests/migration-inventory/probe.md.
