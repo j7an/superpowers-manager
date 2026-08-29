@@ -27,7 +27,7 @@ void test("commitMatches rejects a different commit", () => {
 });
 
 void test("an empty observed commit never matches", () => {
-  // Load-bearing: scripts/core/status.sh:7 guards with [ -n "$observed" ]
+  // Load-bearing: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` guards with [ -n "$observed" ]
   // before either comparison. Without it, `statusForCommits` would read an
   // absent generated tree as current and report success for state it never
   // verified.

@@ -1,34 +1,4 @@
 {
-  "unanchored": {
-    "tests/unit/lifecycle.test.js": {
-      "src/commands/probe.ts:247-252": 1,
-      "src/adapter-result.ts:199": 1
-    },
-    "tests/unit/provenance.test.js": {
-      "tests/unit/codex-state.test.js:47": 1,
-      "src/provenance.ts:36-39": 1,
-      "src/strict-json.ts:158": 1
-    }
-  },
-  "deadReferent": {
-    "tests/unit/lifecycle.test.js": {
-      "scripts/core/lifecycle.sh:50-53": 1,
-      "scripts/core/lifecycle.sh:56-58": 1,
-      "scripts/core/status.sh:7": 1,
-      "scripts/core/lifecycle.sh:108-112": 1,
-      "tests/test_adapter_protocol.py:544": 1,
-      "scripts/core/adapter.sh:58-73": 1,
-      "provenance.sh:62": 1,
-      "scripts/core/adapter.sh:70": 1,
-      "tests/test_marketplace_reconcile.sh:224": 1,
-      "tests/test_adapter_protocol.sh:102-104": 1
-    },
-    "tests/unit/provenance.test.js": {
-      "tests/test_adapter_protocol.sh:853-854": 1,
-      "scripts/core/lifecycle.sh:33-37": 1
-    },
-    "tests/unit/status.test.js": {
-      "scripts/core/status.sh:7": 1
-    }
-  }
+  "unanchored": {},
+  "deadReferent": {}
 }
