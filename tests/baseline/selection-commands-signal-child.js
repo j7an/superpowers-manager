@@ -7,7 +7,7 @@
 // FAKE_GIT_PIN_SIGNAL_BODY in the test file), so the parent can interrupt
 // this process — and, via its own process group, the hung fetch descendant
 // too — with a real POSIX signal. Ports the child half of
-// tests/test_selection_commands.sh:301-330's Python fixture, the same shape
+// `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:301-330::start_new_session=True`, the same shape
 // tests/baseline/ref-resolution-signal-child.js already uses for
 // fetchExactCommit.
 

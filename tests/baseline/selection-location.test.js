@@ -40,7 +40,7 @@ const BASELINE_SCENARIO_SH = join(ROOT, "tests/builders/baseline-scenario.sh");
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
 // implicit `any`. Load the built module dynamically while typing it against
 // its `src/` source instead. Convention documented at
-// tests/unit/manifest-overlay.test.js:5-7.
+// `tests/unit/manifest-overlay.test.js:5-7::typecheck`.
 /** @type {typeof import("../../src/effective-selection.js")} */
 const { selectionConfigDir, computeEffectiveSelection, UPSTREAM_URL_DEFAULT } =
   await import(
@@ -272,7 +272,7 @@ function assertEffective(selection, expected) {
   assert.equal(selection.resolutionKind, expected.resolutionKind);
 }
 
-// Ports tests/test_selection_state.sh:22-40. BUILDER-PERMISSION-01 is not a
+// Ports `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_state.sh:22-40::BUILDER-PERMISSION-01`. BUILDER-PERMISSION-01 is not a
 // registered behavior ID (see `tests/baseline/traceability.test.js`'s
 // `ID_PATTERN`) and mints no traceability row; the shell's own setup never
 // uses permission_target/permission_root/permission_parent again after this

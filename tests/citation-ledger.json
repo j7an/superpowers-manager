@@ -1,12 +1,5 @@
 {
   "unanchored": {
-    "tests/baseline/selection-commands.test.js": {
-      "src/commands/track-latest.ts:31": 1,
-      "src/selection.ts:198": 1
-    },
-    "tests/baseline/selection-location.test.js": {
-      "tests/unit/manifest-overlay.test.js:5-7": 1
-    },
     "tests/baseline/validator-executable.test.js": {
       "tests/bin/lifecycle-fixture.js:32-34": 1
     },
@@ -124,27 +117,6 @@
   "deadReferent": {
     "tests/baseline/protocol-disposition.test.js": {
       "traceability.test.js:58-62": 1
-    },
-    "tests/baseline/selection-commands-signal-child.js": {
-      "tests/test_selection_commands.sh:301-330": 1
-    },
-    "tests/baseline/selection-commands.test.js": {
-      "tests/test_selection_commands.sh:20-21": 1,
-      "tests/test_selection_commands.sh:19-34": 1,
-      "tests/test_selection_commands.sh:132": 1,
-      "tests/test_selection_commands.sh:141-145": 1,
-      "tests/test_selection_commands.sh:58-65": 1,
-      "tests/test_selection_commands.sh:338-339": 1,
-      "tests/test_selection_commands.sh:151": 1,
-      "tests/test_selection_commands.sh:287-296": 1,
-      "tests/test_selection_commands.sh:322-324": 1,
-      "tests/test_selection_commands.sh:301-330": 1,
-      "tests/test_selection_commands.sh:332-337": 1,
-      "tests/test_selection_commands.sh:437-441": 1,
-      "tests/test_selection_commands.sh:483": 1
-    },
-    "tests/baseline/selection-location.test.js": {
-      "tests/test_selection_state.sh:22-40": 1
     },
     "tests/baseline/suite-runner.test.js": {
       "run-node-suites.js:67-69": 1
