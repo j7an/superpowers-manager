@@ -38,7 +38,7 @@ async function buildWorkspace(t) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:362`,
+  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:357-360::manifestSource === "upstream" ?`,
   // `:449`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
@@ -55,7 +55,7 @@ async function buildWorkspace(t) {
     })}\n`,
   );
   // The fallback IS the manifest under validation. The overlay adds only
-  // `version` and `skills` (`src/manifest-overlay.ts:49-50`), so `name` and
+  // `version` and `skills` (`src/manifest-overlay.ts:50-54::setMember(entries, "version", version)`), so `name` and
   // `description` must be valid here or the "success" case cannot succeed.
   // `hooks` must be ABSENT: its absence is what forbids `hooks/` for a
   // fallback manifest. Declaring it — even as `{}` — is rejected by
@@ -126,7 +126,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (src/adapter.ts:396) must surface exactly `cannot read manifest JSON
+// call (`src/adapter.ts:395-398::const rawManifestBytes`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/hooks.ts) must keep succeeding, so this exercises the read at
@@ -189,7 +189,7 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
   assert.doesNotMatch(serialized, /Traceback/);
 });
 
-// The real TOCTOU: `readManifest` (src/hooks.ts:113) validates the candidate
+// The real TOCTOU: `readManifest` (`src/hooks.ts:113::readManifest`) validates the candidate
 // manifest fatally for hook classification; the overlay's own read
 // (src/adapter.ts, ~:360) reads the same path again afterward. Between those
 // two reads, `tests/unit/helpers/manifest-toctou-child.js` replaces the file
@@ -458,7 +458,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/adapter.ts:603`) is the destructive
+// The install reconciliation read (`src/adapter.ts:602-607::registeredRoot = marketplaceRootFromJson`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -548,7 +548,7 @@ void test("mapCodexLaunchFailure carries a validated errno, guards free-form cod
 });
 
 void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", async (t) => {
-  // scripts/core/common.sh:71 was the only scrubbing site in the system and
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:71::NODE_OPTIONS` was the only scrubbing site in the system and
   // dies with scripts/ in 4c. The property that was load-bearing is that the
   // CHILD is clean; the part that was never true is that the dispatcher
   // scrubbed itself. Carried matrix row 11.
@@ -664,7 +664,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
   // Two lengths, both valid hex. `d884ae0123` is ten characters; `123456` is
   // six -- one below the seven-character bound, which is what makes the
   // rejection specific to the bound rather than to "some wrong length". The
-  // retiring tests/test_adapter_protocol.py:817 drove the six-character case
+  // retiring `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.py:817::{"view": "fingerprint", "fingerprint": "` drove the six-character case
   // and this witness did not; dropping it would have retired a strictly
   // stronger input set. For both: codexMetadataCommit rejects the value,
   // manifestShortSha finds no plugin.json, installedCommitFromRoot returns "",
@@ -687,7 +687,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
   }
 });
 
-// FOUR independent booleans, not two. src/adapter.ts:939-940 computes
+// FOUR independent booleans, not two. `src/adapter.ts:935-936::const managerPresent` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -815,7 +815,7 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
 });
 
 /**
- * Drive the adapter install operation to `src/adapter.ts:654-662`, the one
+ * Drive the adapter install operation to `src/adapter.ts:654-662::recover`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -854,13 +854,13 @@ async function reAddFailureRun(t) {
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: src/adapter.ts:578-585 enumerates only "add-only"
+      // executor's shell: `src/adapter.ts:576-585::refreshMode !== "add-only"` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at src/adapter.ts:631, which is
+      // exercises is the marketplace branch at `src/adapter.ts:627-631::pathsEqual(packageRoot, registeredRoot)`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (src/adapter.ts:578) and so the value these witnesses
+      // the default (`src/adapter.ts:574::const refreshMode`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -889,7 +889,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. src/adapter.ts:654-662 is the one in-process failure with
+  // witness that. `src/adapter.ts:654-662::recover` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);

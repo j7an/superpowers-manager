@@ -1,29 +1,5 @@
 {
   "unanchored": {
-    "tests/unit/adapter-result.test.js": {
-      "src/adapter-result.ts:197-199": 1,
-      "src/adapter-result.ts:174-180": 1,
-      "src/adapter-result.ts:196-201": 1,
-      "src/adapter-result.ts:118": 1,
-      "src/adapter.ts:806-809": 1,
-      "src/adapter.ts:238-246": 1,
-      "src/upstream.ts:160-162": 1,
-      "src/adapter-result.ts:199": 1,
-      "src/adapter-result.ts:119-120": 1,
-      "src/adapter-result.ts:76": 1
-    },
-    "tests/unit/adapter.test.js": {
-      "src/adapter.ts:362": 1,
-      "src/manifest-overlay.ts:49-50": 1,
-      "src/adapter.ts:396": 1,
-      "src/hooks.ts:113": 1,
-      "src/adapter.ts:603": 1,
-      "src/adapter.ts:939-940": 1,
-      "src/adapter.ts:654-662": 2,
-      "src/adapter.ts:578-585": 1,
-      "src/adapter.ts:631": 1,
-      "src/adapter.ts:578": 1
-    },
     "tests/unit/commands-install.test.js": {
       "src/upstream.ts:160-162": 1,
       "src/commands/install.ts:380-385": 1,
@@ -51,12 +27,6 @@
       "src/upstream.ts:160-162": 1,
       "tests/baseline/prepare-fixture.js:32-67": 1
     },
-    "tests/unit/helpers/manifest-toctou-child.js": {
-      "src/hooks.ts:113": 2
-    },
-    "tests/unit/helpers/pipe-flush-child.js": {
-      "src/adapter.ts:124-133": 1
-    },
     "tests/unit/lifecycle.test.js": {
       "src/commands/probe.ts:247-252": 1,
       "src/adapter-result.ts:199": 1
@@ -68,17 +38,6 @@
     }
   },
   "deadReferent": {
-    "tests/unit/adapter-result.test.js": {
-      "tests/test_adapter_protocol.py:473-528": 1,
-      "tests/test_adapter_protocol.py:544": 1
-    },
-    "tests/unit/adapter.test.js": {
-      "scripts/core/common.sh:71": 1,
-      "tests/test_adapter_protocol.py:817": 1
-    },
-    "tests/unit/atomic.test.js": {
-      "tests/test_prepare_with_fake_upstream.sh:1199": 1
-    },
     "tests/unit/commands-install.test.js": {
       "scripts/core/lifecycle.sh:50-53": 1,
       "scripts/core/lifecycle.sh:57": 2,

@@ -178,7 +178,7 @@ void test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t
   let calls = 0;
   const realRename = rename;
   // The message text is part of the contract, not incidental: it is the one
-  // assertion tests/test_prepare_with_fake_upstream.sh:1199 made that this test
+  // assertion `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:1199::restored` made that this test
   // did not, and this test is FS-ATOMIC-SWAP-01's anchor from PR 11.5 slice 3
   // onward.
   await assert.rejects(
