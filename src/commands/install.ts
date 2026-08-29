@@ -373,17 +373,17 @@ export async function runInstall(
     // `src/commands/probe.ts:399-433::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
-    // stream too, including the three foreign-text exceptions at :404-438:
-    //   1. :404-415 -- resolveRef splices git's own combined stdout+stderr
+    // stream too, including the three foreign-text exceptions at :399-433:
+    //   1. :399-410 -- resolveRef splices git's own combined stdout+stderr
     //      into its text. Reached on probe's DEFAULT path, which that comment
     //      defines as every invocation NOT resolving a saved pin: a 40-hex
     //      ref returns a "raw-commit" resolution at
     //      `src/upstream.ts:162-164::return { kind: "raw-commit"`
     //      before any git call, so it reaches no splice at all.
-    //   2. :416-428 -- src/selection-store.ts's read path interpolates the
+    //   2. :411-423 -- src/selection-store.ts's read path interpolates the
     //      caught error's own message, so Node errno prose can appear.
     //      AGENTS.md grandfathers that module's wording.
-    //   3. :429-438 -- a SPAWN-level git failure, a different channel from
+    //   3. :424-433 -- a SPAWN-level git failure, a different channel from
     //      exception 1's exit-status one: on the non-ENOENT arm of
     //      `src/git.ts:47-52::if (typeof failure.code === "string") {`, runGit
     //      rejects with "cannot run git: " followed by the Node spawn error's
