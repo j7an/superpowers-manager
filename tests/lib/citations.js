@@ -19,9 +19,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { basename, isAbsolute, join, relative, sep } from "node:path";
 
 export const MIN_ANCHOR = 3;
+const WIDEN_LIMIT = 5;
 
 /** The enforced corpus, declared and never globbed. */
 export const CORPUS_DIRS = /** @type {const} */ (["src", "tests"]);
@@ -497,6 +498,173 @@ export function anchorRespectsBoundaries(line, anchor) {
     if (!startsInside && !endsInside) return true;
   }
   return false;
+}
+
+const DECLARATION =
+  /^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z_$][\w$]*)|^\s*([A-Za-z_$][\w$]*)\s*\(\)\s*\{|^\s*def\s+([A-Za-z_$]\w*)/;
+const IDENTIFIER = /[A-Za-z_$][A-Za-z0-9_$]*/g;
+
+/**
+ * Anchor candidates for one line in the order spec §5.1 requires: the declared
+ * name, then full identifiers longest-first, then the shortest prefix of the
+ * trimmed line that ends on a token boundary. The prefix tier is the "shortest
+ * boundary-respecting clause" of that sentence and stays last.
+ * @param {string} line
+ * @returns {string[]}
+ */
+function anchorCandidates(line) {
+  /** @type {string[]} */
+  const out = [];
+  const declared = DECLARATION.exec(line);
+  if (declared !== null) out.push(declared[1] ?? declared[2] ?? declared[3]);
+  const identifiers = [...line.matchAll(IDENTIFIER)]
+    .map((m) => m[0])
+    .filter((s) => s.length >= MIN_ANCHOR)
+    .sort((a, b) => b.length - a.length);
+  out.push(...identifiers);
+  const trimmed = line.trim();
+  for (let length = MIN_ANCHOR; length <= trimmed.length; length += 1) {
+    if (
+      length < trimmed.length &&
+      WORD.test(trimmed[length - 1]) &&
+      WORD.test(trimmed[length])
+    )
+      continue;
+    out.push(trimmed.slice(0, length));
+  }
+  return out.filter(
+    (c) => c !== undefined && c.length >= MIN_ANCHOR && c === c.trim(),
+  );
+}
+
+/**
+ * @param {string[]} lines
+ * @param {string} candidate
+ * @returns {boolean}
+ */
+function occursOnce(lines, candidate) {
+  let seen = 0;
+  for (const line of lines) {
+    if (!line.includes(candidate)) continue;
+    seen += 1;
+    if (seen > 1) return false;
+  }
+  return seen === 1;
+}
+
+/**
+ * @param {string[]} lines
+ * @param {number} index 0-based
+ * @returns {string | null}
+ */
+function anchorForLine(lines, index) {
+  const line = lines[index];
+  if (line === undefined) return null;
+  for (const candidate of anchorCandidates(line))
+    if (
+      occursOnce(lines, candidate) &&
+      anchorRespectsBoundaries(line, candidate)
+    )
+      return candidate;
+  return null;
+}
+
+/**
+ * The first legible unique anchor for the inclusive 1-based span, widening
+ * outward by up to WIDEN_LIMIT lines when the span itself yields none. Widening
+ * changes what is cited, so the caller is told the span it must write.
+ * @param {string[]} lines
+ * @param {number} start
+ * @param {number} end
+ * @returns {{ anchor: string, line: number, endLine: number } | null}
+ */
+export function suggestAnchor(lines, start, end) {
+  for (let n = start; n <= end; n += 1) {
+    const anchor = anchorForLine(lines, n - 1);
+    if (anchor !== null) return { anchor, line: start, endLine: end };
+  }
+  for (let distance = 1; distance <= WIDEN_LIMIT; distance += 1) {
+    const above = anchorForLine(lines, start - distance - 1);
+    if (above !== null)
+      return {
+        anchor: above,
+        line: Math.max(1, start - distance),
+        endLine: end,
+      };
+    const below = anchorForLine(lines, end + distance - 1);
+    if (below !== null)
+      return { anchor: below, line: start, endLine: end + distance };
+  }
+  return null;
+}
+
+/**
+ * One proposal line per legacy citation. A proposal is a citation body ready to
+ * paste between backticks; it is never applied. `at` resolves dead referents
+ * against one historical object, and applies ONLY to citations whose token path
+ * is that path or its basename -- an object override that matched every dead
+ * path would silently resolve one file's line numbers against another's text.
+ * @param {Citation[]} citations
+ * @param {string} root
+ * @param {{ sha: string, path: string }} [at]
+ * @returns {string[]}
+ */
+export function suggest(citations, root, at) {
+  /** @type {string[]} */
+  const out = [];
+  /** @type {Map<string, string[] | null>} */
+  const cache = new Map();
+  for (const citation of citations) {
+    if (citation.kind !== "legacy") continue;
+    const line = /** @type {number} */ (citation.line);
+    const where = `${displayPath(citation.file, root)}:${citation.lineNumber}`;
+    const token = `${citation.path}:${line}${
+      citation.endLine === undefined ? "" : `-${citation.endLine}`
+    }`;
+    const live = classify(citation, root) === "unanchored";
+    const named =
+      at !== undefined &&
+      (citation.path === at.path || citation.path === basename(at.path));
+    if (!live && !named) {
+      out.push(`${where}\t${token}\tDEAD (rerun with --at <sha>:<path>)`);
+      continue;
+    }
+    const key = live ? `live:${citation.path}` : `hist:${at?.sha}:${at?.path}`;
+    if (!cache.has(key))
+      cache.set(
+        key,
+        live
+          ? readLines(join(root, citation.path))
+          : historicalLines(
+              /** @type {{ sha: string }} */ (at).sha,
+              /** @type {{ path: string }} */ (at).path,
+              root,
+            ),
+      );
+    const lines = cache.get(key) ?? null;
+    if (lines === null) {
+      out.push(`${where}\t${token}\tNO SOURCE`);
+      continue;
+    }
+    const picked = suggestAnchor(lines, line, citation.endLine ?? line);
+    if (picked === null) {
+      out.push(`${where}\t${token}\tNO ANCHOR`);
+      continue;
+    }
+    const span =
+      picked.line === picked.endLine
+        ? `${picked.line}`
+        : `${picked.line}-${picked.endLine}`;
+    const body = live
+      ? `${citation.path}:${span}::${picked.anchor}`
+      : `git show ${/** @type {{ sha: string }} */ (at).sha}:${
+          /** @type {{ path: string }} */ (at).path
+        }:${span}::${picked.anchor}`;
+    const widened =
+      picked.line !== line || picked.endLine !== (citation.endLine ?? line);
+    out.push(`${where}\t${token}\t${body}${widened ? "  [WIDENED]" : ""}`);
+  }
+  return out;
 }
 
 /**
