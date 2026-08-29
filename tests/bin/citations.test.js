@@ -244,6 +244,37 @@ void test("scan retains a colon-separated line part as malformed", () => {
   });
 });
 
+void test("scan retains a point continuation as checked malformed debt exclusion", () => {
+  const root = fixture({ "a.js": "// `:12`\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(
+    [citation.kind, citation.shape, citation.path],
+    ["malformed", "anchored", ""],
+  );
+  assert.equal(classify(citation, root), "checked");
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MISSING");
+  assert.deepEqual(buildLedger([citation], root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
+void test("scan retains a range continuation as malformed", () => {
+  const root = fixture({ "a.js": "// `:12-18`\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MISSING");
+});
+
+void test("scan ignores a nonnumeric colon token", () => {
+  const root = fixture({ "a.js": "// `:name`\n" });
+  assert.deepEqual(scan([join(root, "a.js")]), []);
+});
+
 void test("scan retains an absolute anchored path as malformed", () => {
   const root = fixture({
     "a.js": "// `/src/x.ts::export function go`\n",
@@ -392,6 +423,27 @@ void test("an anchor occurring on more than one line is refused", () => {
   assert.equal(r.ok, false);
   assert.equal(r.code, "ANCHOR_MULTIPLE");
   assert.match(r.message ?? "", /lengthen it/);
+});
+
+void test("a live self-citation excludes only its own raw anchor echo", () => {
+  const root = fixture({
+    "a.js": "// `a.js:2::export function go`\nexport function go() {}\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(validate(citation, root), { ok: true, line: 2 });
+});
+
+void test("a live self-citation still rejects a second real occurrence", () => {
+  const root = fixture({
+    "a.js":
+      "// `a.js:2::export function go`\n" +
+      "export function go() {}\n" +
+      "// export function go is named again\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MULTIPLE");
 });
 
 // Spec §4.2's literal table: seven rejects, three accepts. Each fragment is

@@ -367,7 +367,7 @@ function assertStatedCountMatchesMarkers(
 /**
  * Lines between a marker pair. Regions are stated, never inferred from
  * headings: workflows.md carries a legitimate prose enumeration at column 0
- * (`:484`, `:495`, `:506`) that heading inference reads as entries 1-3. That
+ * (`tests/migration-inventory/workflows.md:497::Node-absence: renamed the top-level`, `tests/migration-inventory/workflows.md:503::single leading space`, `tests/migration-inventory/workflows.md:516::forbidden publish configuration at`) that heading inference reads as entries 1-3. That
  * enumeration sits *inside* the mapped span, so position alone cannot exclude
  * it — see `mappedLinesOf` and the `inventory:ignore` kind.
  * @param {string[]} lines

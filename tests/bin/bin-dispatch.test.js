@@ -4,9 +4,9 @@
 // inventory this file maps to 1:1).
 //
 // Every case names the tools present on its PATH at the assertion. The shell
-// mutated one shared fakebin in place and restored it — `:174-178` asserted
-// three commands work with git absent, a fact that lived 17 lines earlier at
-// `:157`. That is the isolation-sensitive class this port exists to make
+// mutated one shared fakebin in place and restored it. The successor block `tests/bin/bin-dispatch.test.js:259-289::Item 40's successor.`
+// carries the three git-absent cases; its surviving contract is stated at `tests/bin/bin-dispatch.test.js:263::item 40 actually protected`.
+// That is the isolation-sensitive class this port exists to make
 // visible.
 
 import assert from "node:assert/strict";
