@@ -56,7 +56,7 @@ function writeJson(jsonPath, value) {
  * Produces the real `npm pack --dry-run --json` report for this repo, plus
  * the same report's single packed entry pulled out of npm's one-element
  * array shape — mirrors the shell driver's `pack-raw.json` step and the
- * Python reshape step at tests/test_npm_pack_contents.sh:15-34.
+ * Python reshape step at `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh:15-34::python3 - "$tmpdir/pack-`.
  * @param {string} scratchDir
  * @returns {{ rawPath: string, packed: Record<string, unknown> }}
  */
@@ -67,7 +67,7 @@ function packRealReport(scratchDir) {
     encoding: "utf8",
   });
   // Mirrors the shell driver's `command -v npm` precondition
-  // (tests/test_npm_pack_contents.sh:9): name what broke without letting
+  // (`git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh:9::required`): name what broke without letting
   // the raw spawn error (which carries an ENOENT-shaped message) reach the
   // assertion output.
   if (result.error) {
@@ -240,7 +240,7 @@ void test("npm-pack-contents", async (t) => {
 
   /**
    * Mirrors assert_rejected_identity() at
-   * tests/test_npm_pack_contents.sh:97-126.
+   * `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh:97-126::assert_rejected_identity(`.
    * @param {string} field
    * @param {string} value
    * @param {string} diagnostic
@@ -327,7 +327,7 @@ function escapeRegExp(value) {
 
 /**
  * Mirrors the six forbidden-path checks in the embedded Python at
- * tests/test_npm_pack_contents.sh:78-94. Returns the name of the first
+ * `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh:78-94::tuple`. Returns the name of the first
  * forbidden category a path matches, or `null` if it matches none.
  * Extracted as its own function (rather than inlined per-path assertions)
  * so both the real-pack check and the synthetic discriminating fixture

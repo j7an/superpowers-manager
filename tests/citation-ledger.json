@@ -1,11 +1,5 @@
 {
   "unanchored": {
-    "tests/bin/assert-matcher-gate.test.js": {
-      "tests/baseline/suite-runner.test.js:479": 1
-    },
-    "tests/bin/units.test.js": {
-      "src/effective-selection.ts:66": 1
-    },
     "tests/unit/adapter-result.test.js": {
       "src/adapter-result.ts:197-199": 1,
       "src/adapter-result.ts:174-180": 1,
@@ -74,30 +68,6 @@
     }
   },
   "deadReferent": {
-    "tests/bin/container-contract.test.js": {
-      "codex-offline-probe.sh:588": 1
-    },
-    "tests/bin/dispatch-fixture.js": {
-      "tests/test_bin_dispatch.sh:69": 1
-    },
-    "tests/bin/npm-pack-contents.test.js": {
-      "tests/test_npm_pack_contents.sh:15-34": 1,
-      "tests/test_npm_pack_contents.sh:9": 1,
-      "tests/test_npm_pack_contents.sh:97-126": 1,
-      "tests/test_npm_pack_contents.sh:78-94": 1
-    },
-    "tests/bin/workflow-support.js": {
-      "tests/test_workflows.sh:212-230": 1,
-      "tests/test_workflows.sh:32-43": 1,
-      "tests/test_workflows.sh:45-54": 1,
-      "tests/test_workflows.sh:197-210": 1
-    },
-    "tests/bin/workflows.test.js": {
-      "tests/test_workflows.sh:665-692": 1,
-      "tests/test_workflows.sh:646": 1,
-      "tests/test_workflows.sh:650-657": 1,
-      "tests/test_workflows.sh:632": 1
-    },
     "tests/unit/adapter-result.test.js": {
       "tests/test_adapter_protocol.py:473-528": 1,
       "tests/test_adapter_protocol.py:544": 1

@@ -193,7 +193,7 @@ export function usesTarget(value, path) {
  * Collect every external (non `./`) action target in a parsed document.
  *
  * Ported 1:1 from `collect_external_targets` in the shell driver's Ruby
- * checker (tests/test_workflows.sh:212-230).
+ * checker (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:212-230::def collect_external_targets`).
  *
  * @param {unknown} value parsed workflow or subtree
  * @param {string} path diagnostic path
@@ -228,7 +228,7 @@ export function collectExternalTargets(value, path) {
 /**
  * Index of the single step whose `uses:` names `target`.
  *
- * Ported 1:1 from `unique_step_target_index` (tests/test_workflows.sh:32-43).
+ * Ported 1:1 from `unique_step_target_index` (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:32-43::def unique_step_target_index`).
  *
  * @param {unknown[]} steps
  * @param {string} target
@@ -256,7 +256,7 @@ export function uniqueStepTargetIndex(steps, target) {
 /**
  * Index of the single step whose `run:` equals `command` exactly.
  *
- * Ported 1:1 from `unique_run_step_index` (tests/test_workflows.sh:45-54).
+ * Ported 1:1 from `unique_run_step_index` (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:45-54::def unique_run_step_index`).
  *
  * @param {unknown[]} steps
  * @param {string} command
@@ -285,7 +285,7 @@ const FORBIDDEN_PUBLISH_CONFIG =
 /**
  * Throw if any key or string value carries forbidden publish configuration.
  *
- * Ported 1:1 from `assert_no_forbidden` (tests/test_workflows.sh:197-210),
+ * Ported 1:1 from `assert_no_forbidden` (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:197-210::def assert_no_forbidden`),
  * including its recursion over mapping keys as well as values.
  *
  * @param {unknown} value

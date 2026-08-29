@@ -149,7 +149,7 @@ function buildPackageRoot(kind) {
   );
   if (kind === "real") {
     // Read-only, from the real working tree, exactly as the shell driver did
-    // (tests/test_bin_dispatch.sh:69). tests/run-node-suites.js already fails
+    // (`git show 3aad181b824ae8b1e34592f87fd087c940af5815:tests/test_bin_dispatch.sh:69::cp -`). tests/run-node-suites.js already fails
     // closed on a missing or stale dist/ (:31, :49, :68).
     cpSync(join(ROOT, "dist"), join(root, "dist"), { recursive: true });
   } else if (kind === "throwing") {
