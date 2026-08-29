@@ -5,8 +5,8 @@
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup.
 
-// Two statements, not one. tests/bin/migration-inventory.test.js:57 matches
-// /^import test from "node:test";$/m and asserts it at :529-532, because the
+// Two statements, not one. `tests/bin/migration-inventory.test.js:65::const TEST_IMPORT` matches
+// /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.js:716-719::TEST_IMPORT.test(portSource)`, because the
 // static call-site counter recognises exactly one binding form and fails closed
 // rather than miscount. Both `import { describe, test } from "node:test";` and
 // `import test, { describe } from "node:test";` FAIL that regex — verified.
@@ -50,7 +50,7 @@ const { successResult, failureResult } = await import(
   new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 
-// Fixture JSON, verbatim from tests/test_uninstall_commands.sh:101-108.
+// Fixture JSON, verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:101-108::plugin_present='{"installed":[{"pluginId":"superpowers@superpowers-manager`.
 const PLUGIN_PRESENT =
   '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager"}],"available":[]}';
 const PLUGIN_ABSENT = '{"installed":[],"available":[]}';
@@ -67,7 +67,7 @@ const BOTH_PLUGINS_PRESENT =
 const BOTH_MARKETPLACES_PRESENT =
   '{"marketplaces":[{"name":"superpowers-manager","root":"/manager"},{"name":"superpowers-wrapper","root":"/legacy"}]}';
 
-// Verbatim from tests/test_uninstall_commands.sh:176. `git` is deliberately
+// Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:176::mktemp`. `git` is deliberately
 // absent; `python3` and `node` are appended separately below, exactly as the
 // shell did at :180-181.
 const NO_GIT_TOOLS = [
@@ -155,7 +155,7 @@ function assertNoRemoves(log) {
  * How many ownership inspections reached Codex.
  *
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
- * then one `codex plugin marketplace list --json` (src/adapter.ts:871, :883).
+ * then one `codex plugin marketplace list --json` (`src/adapter.ts:869-872::const plugins`, :883).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
  * --json` does not contain it as a substring, and nothing else in
  * `src/commands/uninstall.ts`'s ownership-inspect / adapter-uninstall /
@@ -186,7 +186,7 @@ function ownershipInspections(codex) {
  *
  * WHAT IT DOES NOT CATCH: an adapter uninstall that was invoked and then failed
  * before issuing any Codex command — `requireCodex` or the workspace creation
- * failing inside `runUninstall` (src/adapter.ts:713-719). That leaves one
+ * failing inside `runUninstall` (`src/adapter.ts:717-724::superpowers-manager.adapter-uninstall.`). That leaves one
  * inspection and no removes, and passes here where the shell's
  * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
  * theoretical, and it is accepted only because in all six call sites the abort
@@ -222,7 +222,7 @@ function assertNoAdapterUninstall(codex, message) {
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
- * (src/adapter.ts:740, :757).
+ * (`src/adapter.ts:740-741::plugin not installed; skipping`, :757).
  *
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
@@ -398,7 +398,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   // and `COMMAND_REQUIREMENTS.uninstall` drops from `["python3", "codex"]` to
   // `["codex"]` at the flip, because `python3` was only ever required so
   // `spw_invoke_adapter` could run validate-adapter-response.py per call
-  // (scripts/core/adapter.sh:37-44). The condition those three items asserted —
+  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:37-44::--response "$response_file" --result "$result_file" \`). The condition those three items asserted —
   // uninstall fails, names python3, and reaches no Codex — can no longer occur
   // in either direction, and its inverse is a wholly new property with no shell
   // counterpart, so this case is kept as one `test(` site carrying the
@@ -504,7 +504,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
-    // of each (src/adapter.ts:740, :757) — so together they pin both the call
+    // of each (`src/adapter.ts:740-741::plugin not installed; skipping`, :757) — so together they pin both the call
     // and the both-false pair. The completion check is kept beneath them as the
     // ordering witness it actually is.
     assert.ok(
@@ -529,7 +529,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     );
     // DELIBERATE version literal. `0.1.1` is not a dependency pin that moves on
     // someone else's schedule: it is user-facing guidance owned in-repo at
-    // scripts/core/lifecycle.sh:52,77, naming the last superpowers-wrapper
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:52::'Run: npx superpowers-wrapper@0.1.1 uninstall' \`,77, naming the last superpowers-wrapper
     // release that can uninstall legacy state. The exact text is the contract,
     // so assert it exactly. Repeated verbatim in the mixed-state case below.
     assert.ok(
@@ -578,7 +578,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
-    // `plugin list --json` (src/adapter.ts:871) and one
+    // `plugin list --json` (`src/adapter.ts:869-872::const plugins`) and one
     // `plugin marketplace list --json` (:883); `ownershipInspections` (below)
     // already counts the former. The adapter uninstall op itself issues no
     // listing, only the two removes asserted at :277-281 further down, so
@@ -897,7 +897,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // which would be false here: the marketplace remove fails, so the flow dies
     // before scripts/uninstall:29's verify-after inspection. The true/true flag
     // pair is witnessed instead by the two removes at :437-438, which the
-    // adapter issues only when both flags are true (src/adapter.ts:729-761).
+    // adapter issues only when both flags are true (`src/adapter.ts:726-761::pluginPresent === "true"`).
     // :437-438
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
