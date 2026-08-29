@@ -537,7 +537,7 @@ function validateProbe(probe) {
     // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
     // single-quoted strings `\"` is not an escape sequence, so the
     // required text carries literal backslashes and guards the JSON
-    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:588::"command": "sh \"${PLUGIN_ROOT}/hooks/session-start-codex\""`.
+    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:588::sh \`.
     'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
