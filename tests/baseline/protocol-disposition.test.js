@@ -69,7 +69,7 @@ function markdownCells(line) {
 }
 
 // Uses String.prototype.match rather than the RegExp.prototype.exec form in
-// traceability.test.js:58-62. Identical result for a non-global pattern; the
+// `tests/baseline/traceability.test.js:60::const match`. Identical result for a non-global pattern; the
 // exec form trips this repo's security hook, which reads it as child_process.
 /** @param {string} cell */
 function uncode(cell) {

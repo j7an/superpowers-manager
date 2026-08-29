@@ -1,10 +1,10 @@
 // @ts-check
-// Test-only runner. NOT a *.test.js file: tests/run-node-suites.js:15 would
+// Test-only runner. NOT a *.test.js file: `tests/run-node-suites.js:15::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]` would
 // otherwise register it as a suite.
 //
 // runPrepare is called in a child process, not in the test process, because
 // ctx.env does not govern what its dependencies actually run under: runGit
-// (src/git.ts:22) spreads process.env and never sees ctx.env, and runBuild's
+// (`src/git.ts:32::env: { ...process.env`) spreads process.env and never sees ctx.env, and runBuild's
 // `withWorkspace(tmpdir(), …)` reads process.env too. Spawning with the
 // case's environment as the child's REAL process.env is what makes PATH,
 // TMPDIR, and git configuration hermetic.

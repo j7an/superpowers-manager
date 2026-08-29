@@ -2,7 +2,7 @@
 // Non-test helper. Shared by tests/baseline/probe.test.js and, from Task 6,
 // by tests/baseline/cli-parity.test.js's PROBE-READONLY-01 rewrite.
 //
-// This is NOT a *.test.js file, deliberately: tests/run-node-suites.js:15
+// This is NOT a *.test.js file, deliberately: `tests/run-node-suites.js:15::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`
 // registers every top-level *.test.js under tests/{bin,unit,baseline}, so a
 // suite imported as a helper re-executes and re-registers its own tests
 // inside the importer. tests/baseline/support.js and
@@ -25,8 +25,8 @@ import { UPSTREAM } from "../bin/lifecycle-fixture.js";
 /**
  * Every environment name runProbe's dependencies read. Declared, never
  * derived: a predicate would also accept an env that lost a name.
- * runAdapter merges process.env (src/adapter.ts:977) and runGit spreads it
- * (src/git.ts:31), so an unset name here leaks the developer's shell into a
+ * runAdapter merges process.env (`src/adapter.ts:978::const env`) and runGit spreads it
+ * (`src/git.ts:32::env: { ...process.env`), so an unset name here leaks the developer's shell into a
  * supposedly hermetic case.
  */
 export const REQUIRED_ENV = [
@@ -55,10 +55,10 @@ export function caseEnv(c, extra = {}) {
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(c.home, ".codex"),
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
-    // (tests/bin/lifecycle-fakes.js:235-241) exactly as runScript supplies it for
-    // the spawned lifecycle ports (tests/bin/lifecycle-fixture.js:328).
+    // (`tests/bin/lifecycle-fakes.js:226::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
+    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.js:492::const env = {`).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
-    // (src/adapter.ts:977), so this is the only channel that reaches it.
+    // (`src/adapter.ts:978::const env`), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with
     // `fixture: SPW_FIXTURE_STATE is unset` -- which is why the declared
     // hermeticity guard does not need to cover it.
@@ -93,7 +93,7 @@ export const SHORT = DESIRED.slice(0, 7);
  * `pluginListings` is an ARRAY, one entry per `codex plugin list --json`
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
  * Probe issues that command twice per run and the two calls need different
- * answers -- `inspect --view fingerprint` (src/adapter.ts:797) then
+ * answers -- `inspect --view fingerprint` (`src/adapter.ts:795-800::const listing`) then
  * `inspect --view ownership` (:871). With a single listing, a manager version
  * present for `installed_commit` also forces `identity_state=manager`, so
  * scenario 1 and the four-state identity matrix could not be written at all.
@@ -204,7 +204,7 @@ async function invoke(c, argv, env) {
 /**
  * An environment-selected run: SUPERPOWERS_REF is the fixture tag's commit and
  * SUPERPOWERS_UPSTREAM_URL is the fixture upstream. A 40-hex requested ref is
- * a `raw-commit` resolution (src/upstream.ts:160-162), so this shape reaches
+ * a `raw-commit` resolution (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so this shape reaches
  * no Git process at all.
  * @param {CaseEnv} c
  * @param {string[]} argv

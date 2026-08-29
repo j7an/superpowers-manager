@@ -402,7 +402,8 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // directory-walk symlink guard (run-node-suites.js:67-69) ran rather than a
+  // directory-walk symlink guard (`tests/run-node-suites.js:140::entry.isSymbolicLink()`)
+  // ran rather than a
   // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
   // broken symlink (it inspects the link itself, not its target), so this is
   // now rejected as a symlink rather than reported as uninspectable. This

@@ -93,7 +93,7 @@ process.on("exit", () => {
 // Per-invocation identity flags only. These write no git config at any scope
 // and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
 // convention `IDENTITY` in tests/baseline/ref-resolution.test.js documents — a
-// deliberate departure from tests/test_selection_commands.sh:20-21's own
+// deliberate departure from `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:20-21::git -C "$upstream" config user.email`'s own
 // `git config user.email`/`user.name` (repo-scoped, but still a config
 // write this port avoids on principle).
 const IDENTITY = [
@@ -233,7 +233,7 @@ async function withFakeGitPath(dir, envVars, fn) {
 
 /**
  * A real upstream repository shaped exactly like
- * tests/test_selection_commands.sh:19-34's inline setup: a lightweight
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:19-34::git -C "$tmpdir" init upstream` inline setup: a lightweight
  * release tag (v1.0.0), a second commit carrying an annotated pre-release tag
  * (v1.1.0-rc.1), a branch named like a tag (v9.9.9) at the same commit, and
  * that commit's own blob object — enough to exercise every pin/unpin
@@ -309,7 +309,7 @@ const UPSTREAM = buildUpstreamRepo();
  * the real process environment, the raw-commit verification workspace's
  * *parent* directory has no such per-call seam, so this is the only way to
  * point it at a caller-controlled directory the same way
- * tests/test_selection_commands.sh:132's `TMPDIR="$raw_tmp" run_pin ...` did.
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:132::TMPDIR="$raw_tmp" run_pin` did.
  * Safe only because this file runs its tests sequentially.
  * @template T
  * @param {string} dir
@@ -331,7 +331,7 @@ async function withTmpdir(dir, fn) {
  * Runs `fn` with the process's cwd pinned to `dir`, restoring it afterward.
  * `src/upstream.ts`'s `gitSafeSource` resolves a relative or dash-prefixed
  * source against `process.cwd()`, the same seam
- * tests/test_selection_commands.sh:141-145/151-157/166-170/177-181 exercises
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:141-145::SUPERPOWERS_CONFIG_DIR="$relative_config"` exercises
  * by `cd`-ing into `$tmpdir` before invoking `pin` with a relative
  * `SUPERPOWERS_UPSTREAM_URL`. Safe only because this file runs sequentially.
  * @template T
@@ -351,7 +351,7 @@ async function withCwd(dir, fn) {
 
 /**
  * Asserts `dir` holds nothing at all — the port of
- * tests/test_selection_commands.sh:58-65's `assert_path_empty`, used at every
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:58-65::assert_path_empty() {`, used at every
  * point in REF-PIN-SOURCE-01 where the raw-commit verification workspace's
  * *parent* is expected to be left with none of its own temporary content
  * (unlike REF-PIN-CLEANUP-01's `assertOnlySiblingKept`, whose workspace
@@ -365,7 +365,7 @@ function assertWorkspaceParentEmpty(dir) {
 /**
  * Asserts a workspace-parent directory holds exactly the one sibling file
  * this suite seeds it with, byte-for-byte — the pairing
- * tests/test_selection_commands.sh:338-339 checks twice (content, then
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:338-339::cat "$raw_tmp/sibling"` checks twice (content, then
  * count), and the same shape as `assertOnlySiblingKept` in
  * tests/baseline/ref-resolution.test.js, which that suite already uses for
  * fetchExactCommit's cleanup proofs.
@@ -517,8 +517,7 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     // buildUpstreamRepo above), so "upstream" is already a valid relative
     // source once cwd is SCRATCH — no fixture copy needed. The dash-prefixed
     // name is a symlink to it, mirroring
-    // tests/test_selection_commands.sh:151's `ln -s upstream
-    // "$tmpdir/-upstream"`.
+    // `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:151::ln -s upstream`.
     const relativeName = "upstream";
     const dashName = "-upstream";
     symlinkSync(relativeName, join(SCRATCH, dashName));
@@ -722,7 +721,7 @@ function makeCapture() {
 // paths and the real git binary reach it only through the
 // FAKE_GIT_PIN_SIGNAL_*_VAR environment variables at run time, mirroring
 // tests/baseline/ref-resolution.test.js's FAKE_GIT_SIGNAL_BODY convention.
-// Ports tests/test_selection_commands.sh:287-296's fixture: every `fetch`
+// Ports `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:287-296::cat > "$signal_bin/git"` fixture: every `fetch`
 // invocation hangs instead of completing, so the parent can interrupt it
 // mid-flight — matching the shell fixture's own broader `*' fetch '*` match
 // (verifyRawCommit's only fetch call is `fetch --no-tags --`, so there is no
@@ -748,7 +747,7 @@ const FAKE_GIT_PIN_SIGNAL_BODY = [
  * Polls for `path` to exist, returning `false` on timeout rather than
  * throwing, so the caller can attach its own diagnostic. Mirrors
  * tests/baseline/ref-resolution.test.js's waitForMarker, itself a port of
- * tests/test_selection_commands.sh:322-324's Python marker wait.
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:322-324::while not marker.exists()` Python marker wait.
  * @param {string} path
  * @param {number} timeoutMs
  * @returns {Promise<boolean>}
@@ -789,7 +788,7 @@ void test("REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace", 
   // `detached: true` makes this child the leader of its own process group, so
   // signalling `-child.pid` below reaches both it and the `/bin/sleep`
   // descendant the fake `git` starts — the Node analogue of
-  // tests/test_selection_commands.sh:301-330's Python fixture, which uses
+  // `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:301-330::start_new_session=True` Python fixture, which uses
   // `start_new_session=True` plus `os.killpg` for exactly this reason, the
   // same shape tests/baseline/ref-resolution.test.js's REF-CLEANUP-01 already
   // uses.
@@ -831,7 +830,7 @@ void test("REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace", 
   // listeners, then re-raises, so the process dies BY the signal rather than
   // exiting with a number — `128+N` is a shell convention, not a POSIX
   // guarantee, so this asserts the signal itself rather than 143. Strictly
-  // stronger than, and so merges, tests/test_selection_commands.sh:332-337's
+  // stronger than, and so merges, `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:332-337::signal-interrupted raw verification returned`'s
   // bare `test "$rc" -ne 143` check.
   assert.equal(result.signal, "SIGTERM");
   assert.equal(result.code, null);
@@ -954,7 +953,7 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
 });
 
 void test("track-latest defaults its saved source to the official upstream, and fails closed on an existing record of an unrecognized schema", async () => {
-  // tests/test_selection_commands.sh:437-441. The explicit-source write
+  // `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:437-441::official_config=`. The explicit-source write
   // (:429-435) and the extra-argument usage error (:452-455) are already
   // exercised by tests/unit/commands-track-latest.test.js's "track-latest
   // writes the record and prints one line" and "track-latest rejects extra
@@ -962,7 +961,7 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // note above already covers. The one behavior that unit suite does not
   // exercise is the true package-default source (SUPERPOWERS_UPSTREAM_URL
   // set to the empty string, matching runTrackLatest's `||` fallback — see
-  // src/commands/track-latest.ts:31 — not the variable left absent, which
+  // `src/commands/track-latest.ts:37::SUPERPOWERS_UPSTREAM_URL` — not the variable left absent, which
   // the shell's own `${VAR:-default}` treats identically but this project
   // otherwise treats presence-vs-emptiness as distinct — e.g. the
   // presence branch in `selectionConfigDir`, where `requireAbsolute`
@@ -995,7 +994,7 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // honest parity — but this `assert.match` earns its place anyway: it is
   // the empirical proof that this fixture actually reaches
   // `validateRecord`'s `schema_version must equal integer 1` branch
-  // (src/selection.ts:198), not the JSON-parse-failure branch
+  // (`src/selection.ts:198::schema_version must equal integer 1`), not the JSON-parse-failure branch
   // tests/unit/commands-track-latest.test.js's "refuses to overwrite a
   // corrupt saved record" exercises — the exact distinction Important 1's
   // retirement citation got wrong, made self-evident here once
@@ -1074,7 +1073,7 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
     assert.match(errCtx.stderr.text(), /remove it manually after inspecting/); // :482
     // lstatSync succeeding at all (rather than throwing ENOENT) is itself the
     // proof that the path still exists as some filesystem entry — strictly
-    // stronger than tests/test_selection_commands.sh:483's
+    // stronger than `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:483::test -e "$unpin_config/selection.json"`'s
     // `test -e ... || test -L ...`, which exists only to also admit a broken
     // symlink that `-e` alone would call absent.
     const info = lstatSync(statePath);
