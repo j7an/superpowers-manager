@@ -28,7 +28,7 @@ const CHILD = fileURLToPath(new URL("./prepare-child.js", import.meta.url));
 // the choice `IDENTITY` in ref-resolution.test.js documents. The Global
 // Constraints' `git add -A` ban governs the repository under development, not a
 // throwaway fixture repo like this one; the shell original stages the same way
-// at tests/test_prepare_with_fake_upstream.sh:182.
+// at `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:191::git -C "$upstream" add -A`.
 const IDENTITY = [
   "-c",
   "user.name=superpowers-manager",
@@ -141,7 +141,7 @@ function buildUpstream() {
   );
   // The two committed layout fixtures both list
   // skills/brainstorming/branch.txt, because the shell original added it on
-  // main before branching (tests/test_prepare_with_fake_upstream.sh:131-133).
+  // main before branching (`git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:131-133::main branch update`).
   // Every branch here descends from this commit, so the file is present for the
   // two listing comparisons and harmless everywhere else.
   writeFileSync(
@@ -234,7 +234,7 @@ function buildUpstream() {
     copyFileSync(join(MANIFESTS, "upstream-active-hooks.json"), manifest);
   });
   // declared-hooks.txt is the listing of the shell original's `hooks-string-array`
-  // branch (tests/test_prepare_with_fake_upstream.sh:212-217, :874-876), whose
+  // branch (`git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:212-217::git -C "$upstream" checkout -b hooks-string-array`, :874-876), whose
   // manifest declares TWO hook paths outside hooks/. The `hooks` value is
   // rewritten here rather than read from a fifth committed manifest, exactly as
   // the shell rewrote it with set_manifest_hooks; every other key, including
@@ -269,7 +269,7 @@ function buildUpstream() {
     symlinkSync("../../outside", join(upstream, "hooks", "escape"));
   });
   // P1 — a `hooks` value no classification branch accepts, so the adapter's
-  // `hook classification failed:` wrapper (src/adapter.ts:380) is the
+  // `hook classification failed:` wrapper (`src/adapter.ts:381::hook classification failed`) is the
   // diagnostic under test.
   //
   // The value is a NUMBER on purpose. classifyHooks accepts
@@ -291,15 +291,15 @@ function buildUpstream() {
     writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
   });
   // P2a — the hooks ROOT is a relative symlink escaping the upstream checkout,
-  // so the SOURCE-side validateSubtreeSymlinks call (src/hooks.ts:358) fails
+  // so the SOURCE-side validateSubtreeSymlinks call (`src/hooks.ts:362::validateSubtreeSymlinks(sourceHooks`) fails
   // its containment check at :303. Ports the retired driver's
   // hooks-root-escape-symlink and hooks-root-broken-symlink cases (items 128
   // and 127), which share this branch.
   //
   // classifyHooks returns copyHooksSubtree: hooksRootPresent
-  // (src/hooks.ts:230), and a symlink is present rather than missing, so
+  // (`src/hooks.ts:234::return { copyHooksSubtree: hooksRootPresent, declaredPaths: paths }`), and a symlink is present rather than missing, so
   // materializeHooks reaches the validation. The link is relative, so it
-  // passes the absolute-symlink rejection at src/hooks.ts:296-298 first.
+  // passes the absolute-symlink rejection at `src/hooks.ts:300-302::absolute subtree symlink is not allowed` first.
   branchWith("hooks-root-escape-symlink", () => {
     const declared = JSON.parse(
       readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
@@ -316,13 +316,13 @@ function buildUpstream() {
   });
   // P2b — the hooks ROOT is a relative symlink to source-contained content
   // that never reaches the candidate, so SOURCE validation passes and the
-  // CANDIDATE validation at src/hooks.ts:367 fails.
+  // CANDIDATE validation at `src/hooks.ts:371::validateSubtreeSymlinks(candidateHooks` fails.
   //
   // `.git` is the target for the same reason the retired shell fixture used
   // it: it exists in the upstream checkout, so validateSubtreeSymlinks's
   // containment check accepts it on the source side, and it is absent from
   // COPY_PATHS's five copied paths, so the symlink recreated at
-  // src/hooks.ts:359-360 dangles in the candidate. Any target outside those
+  // `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)` dangles in the candidate. Any target outside those
   // five works; this one keeps the ported case recognisable against the file
   // it replaces.
   branchWith("hooks-root-contained-source-only", () => {
@@ -334,14 +334,14 @@ function buildUpstream() {
     rmSync(join(upstream, "hooks"), { recursive: true, force: true });
     symlinkSync(".git", join(upstream, "hooks"));
   });
-  // P4 — a CONTAINED relative hooks-root symlink, which src/hooks.ts:359-360
+  // P4 — a CONTAINED relative hooks-root symlink, which `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks`
   // recreates in the candidate rather than dereferencing.
   //
   // The target must live under `assets/`. COPY_PATHS copies
   // exactly five paths into the candidate — skills, assets, LICENSE,
   // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
   // directory would dangle in the candidate and fail the SECOND
-  // validateSubtreeSymlinks call at src/hooks.ts:367. That is precisely what
+  // validateSubtreeSymlinks call at `src/hooks.ts:371::validateSubtreeSymlinks(candidateHooks`. That is precisely what
   // P2b's `.git` fixture does on purpose; this one is its mirror image, and
   // the two differ only in whether the target is one of the copied five.
   branchWith("hooks-root-contained-materialized", () => {
@@ -385,7 +385,7 @@ export const REFS = {
  * all go through here so none of them can disturb the shared UPSTREAM.
  *
  * Returns the new commit, which callers pass as SUPERPOWERS_REF: a 40-hex ref
- * is a `raw-commit` resolution (src/upstream.ts:160-162), so the case reaches
+ * is a `raw-commit` resolution (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so the case reaches
  * no ref-resolution Git process at all.
  *
  * @param {string} destination

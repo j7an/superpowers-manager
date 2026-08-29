@@ -1,33 +1,5 @@
 {
   "unanchored": {
-    "tests/baseline/prepare-child.js": {
-      "tests/run-node-suites.js:15": 1,
-      "src/git.ts:22": 1
-    },
-    "tests/baseline/prepare-fixture.js": {
-      "src/adapter.ts:380": 1,
-      "src/hooks.ts:358": 1,
-      "src/hooks.ts:230": 1,
-      "src/hooks.ts:296-298": 1,
-      "src/hooks.ts:367": 2,
-      "src/hooks.ts:359-360": 2,
-      "src/upstream.ts:160-162": 1
-    },
-    "tests/baseline/prepare.test.js": {
-      "tests/baseline/probe.test.js:65": 1,
-      "src/adapter.ts:380": 1,
-      "src/adapter.ts:389": 1,
-      "src/hooks.ts:303": 2,
-      "src/adapter.ts:542-547": 1,
-      "src/hooks.ts:35": 1,
-      "src/upstream.ts:277": 1,
-      "tests/unit/upstream.test.js:404": 1,
-      "src/hooks.ts:279": 1,
-      "tests/container.sh:8-12": 1,
-      "src/hooks.ts:359-360": 1,
-      "tests/baseline/generated-plugin-corpus.test.js:812-880": 1,
-      "src/hooks.ts:367": 1
-    },
     "tests/baseline/ref-resolution.test.js": {
       "tests/bin/lifecycle-fixture.js:84-86": 1
     },
@@ -153,16 +125,6 @@
     }
   },
   "deadReferent": {
-    "tests/baseline/prepare-fixture.js": {
-      "tests/test_prepare_with_fake_upstream.sh:182": 1,
-      "tests/test_prepare_with_fake_upstream.sh:131-133": 1,
-      "tests/test_prepare_with_fake_upstream.sh:212-217": 1
-    },
-    "tests/baseline/prepare.test.js": {
-      "tests/test_prepare_with_fake_upstream.sh:459-479": 1,
-      "tests/test_prepare_with_fake_upstream.sh:864-876": 1,
-      "tests/test_prepare_with_fake_upstream.sh:1001-1022": 1
-    },
     "tests/baseline/protocol-disposition.test.js": {
       "traceability.test.js:58-62": 1
     },
