@@ -1,37 +1,5 @@
 {
   "unanchored": {
-    "tests/baseline/cli-parity.test.js": {
-      "tests/run-node-suites.js:15": 1,
-      "src/adapter.ts:258-270": 1,
-      "src/adapter.ts:797": 1,
-      "src/upstream.ts:160-162": 1,
-      "src/adapter.ts:120-122": 1,
-      "src/validator.ts:382": 1,
-      "src/validator.ts:370-377": 1,
-      "src/codex-json.ts:103": 1,
-      "tests/bin/lifecycle-fakes.js:148": 1,
-      "tests/bin/lifecycle-fakes.js:89-91": 1,
-      "tests/bin/probe-fakes.js:33": 1,
-      "src/adapter.ts:303-557": 1,
-      "tests/bin/lifecycle-config.js:17-24": 1,
-      "src/adapter.ts:784-855": 1,
-      "src/codex-state.ts:43-50": 1,
-      "src/adapter.ts:264": 2,
-      "src/commands/probe.ts:231": 1,
-      "src/adapter.ts:263-264": 2,
-      "src/adapter.ts:263": 2,
-      "src/adapter.ts:184-186": 1,
-      "src/adapter.ts:982": 1,
-      "src/adapter.ts:577": 1,
-      "src/adapter.ts:843-847": 2,
-      "src/adapter.ts:827": 1,
-      "src/adapter.ts:834": 1,
-      "src/adapter.ts:828-832": 1,
-      "src/adapter.ts:826": 1,
-      "src/adapter.ts:580-585": 1,
-      "src/adapter.ts:626": 1,
-      "src/adapter.ts:666-671": 1
-    },
     "tests/baseline/prepare-child.js": {
       "tests/run-node-suites.js:15": 1,
       "src/git.ts:22": 1
@@ -207,13 +175,6 @@
     }
   },
   "deadReferent": {
-    "tests/baseline/cli-parity.test.js": {
-      "lifecycle-fixture.js:120-129": 1,
-      "install-fakes.js:145-150": 1,
-      "tests/test_adapter_protocol.sh:526-548": 1,
-      "tests/test_adapter_protocol.sh:563-579": 1,
-      "tests/test_adapter_protocol.sh:301-311": 1
-    },
     "tests/baseline/prepare-fixture.js": {
       "tests/test_prepare_with_fake_upstream.sh:182": 1,
       "tests/test_prepare_with_fake_upstream.sh:131-133": 1,

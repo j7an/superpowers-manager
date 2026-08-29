@@ -40,7 +40,7 @@ import {
 } from "../bin/lifecycle-fixture.js";
 // From the NON-TEST helper, not from probe.test.js: importing a *.test.js
 // module re-executes and re-registers its tests inside this suite
-// (tests/run-node-suites.js:15).
+// (`tests/run-node-suites.js:15::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`).
 import { caseEnv, seedCodex } from "./probe-fixture.js";
 import { capture } from "../unit/helpers/command-harness.js";
 import { caseContext } from "../bin/command-context.js";
@@ -102,7 +102,7 @@ function withSandbox(callback) {
 
 /**
  * Runs `fn` with the process's cwd pinned to `dir`, restoring it afterward.
- * `commandAvailable` (src/adapter.ts:258-270) resolves a RELATIVE candidate
+ * `commandAvailable` (`src/adapter.ts:254-266::async function commandAvailable`) resolves a RELATIVE candidate
  * path against `process.cwd()`, which is the seam both PATH-shape halves of
  * CLI-ENV-CODEX-LISTING-01 turn on; the retired shell driver got the same
  * effect by `cd`-ing inside a subshell. Same shape as `withCwd` in
@@ -185,7 +185,7 @@ function createReleaseRepo(sandbox, name = "upstream") {
 
 /**
  * A `codex` that answers the two listing commands the in-process probe's
- * adapter views issue (`src/adapter.ts:797`, `:871`, `:883` — the argument
+ * adapter views issue (`src/adapter.ts:795-800::const listing`, `:871`, `:883` — the argument
  * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
  * `tests/migration-inventory/probe.md` cite them) with empty inventories, and
  * rejects anything else. `writeNoopTool`'s `exit 0` stub is
@@ -785,7 +785,7 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     // one that would resolve the package-default ref against the public
     // upstream URL, so it is pinned to the same local repository `pin` uses —
     // a 40-hex RAW_COMMIT, which resolves without reaching Git at all
-    // (src/upstream.ts:160-162). Both are hermeticity requirements, not
+    // (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`). Both are hermeticity requirements, not
     // conveniences.
     writeListingCodex(sandbox);
     for (const [command, argv] of cases) {
@@ -1224,7 +1224,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
     //
     // "Wholesale" is true of the manager's own process but NOT of this witness:
     // runAdapter's runCommand deletes NODE_OPTIONS and NODE_PATH from the child
-    // environment before execFile (src/adapter.ts:120-122, landed by this
+    // environment before execFile (`src/adapter.ts:121-123::delete childEnv.NODE_OPTIONS`), landed by this
     // slice's Task 1). The dump below therefore covers those two names as well
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
@@ -1279,10 +1279,10 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       SUPERPOWERS_PLUGIN_ROOT: join(sandbox.root, "custom plugin"),
       SUPERPOWERS_MANIFEST_TEMPLATE: join(sandbox.root, "custom template.json"),
       // Empty, and deliberately so. `update` is a VALIDATOR_COMMAND, and
-      // src/validator.ts:382's configurationErrors rejects the run before any
+      // `src/validator.ts:382::configurationErrors` rejects the run before any
       // adapter call when both validator names are non-empty -- so a distinctive
       // path here would abort preflight and the codex child would never run.
-      // src/validator.ts:370-377 reads "" as unset without trimming, which is
+      // `src/validator.ts:370-377::export function bothConfigured` reads "" as unset without trimming, which is
       // what clears the conflict. The key is still forwarded and still asserted:
       // a dropped variable is an ABSENT key in superpowers_env and `null` in
       // passthrough, and neither equals "" under deepEqual.
@@ -1984,7 +1984,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   const err = capture();
   const status = await runProbe(["--porcelain"], {
     root: c.pkg,
-    // `v1.0.0` is the annotated tag lifecycle-fixture.js:120-129 creates on
+    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.js:124-132::tag.gpgsign=false` creates on
     // UPSTREAM; both values come from the fixture, neither is invented.
     env: caseEnv(c, {
       SUPERPOWERS_REF: "v1.0.0",
@@ -2009,7 +2009,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
 // the shapes tests/bin/uninstall-commands.test.js already exercises against
 // the real adapter's ownership parser (installedListingHas), plus a
 // "version" field on the manager entry: unlike uninstall, `install`'s own
-// fingerprint inspect calls activePluginVersionFromJson (src/codex-json.ts:103),
+// fingerprint inspect calls activePluginVersionFromJson (`src/codex-json.ts:103::activePluginVersionFromJson`),
 // which fails closed ("active plugin version is invalid") without one.
 const FIXTURE_PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}';
 const FIXTURE_MARKETPLACE_ABSENT = '{"marketplaces":[]}';
@@ -2041,12 +2041,12 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * `codex` — never a fake adapter. `createCase` is what writes both fakes.
  *
  * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
- * discipline — `nextPluginList` (tests/bin/lifecycle-fakes.js:148), which
+ * discipline — `nextPluginList` (`tests/bin/lifecycle-fakes.js:148::const counterPath`), which
  * fails closed when a fixture makes more listing calls than it configured —
  * is NOT in force for these five IDs, and is deliberately not simulated.
  * `respondToListing` consults `nextPluginList` only when its caller passes
- * `sequencePluginList` (tests/bin/lifecycle-fakes.js:89-91), and only
- * tests/bin/probe-fakes.js:33 passes it; the install and uninstall fakes read
+ * `sequencePluginList` (`tests/bin/lifecycle-fakes.js:88-91::const resolved = request.sequencePluginList`), and only
+ * `tests/bin/probe-fakes.js:33::sequencePluginList` passes it; the install and uninstall fakes read
  * the flat `plugin_list.json` this helper writes. Adopting it here would mean
  * setting that flag in both lifecycle fakes, which every existing case in
  * tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js
@@ -2149,7 +2149,7 @@ void test("INSTALL-ORDER-01 install prepares and validates before adapter mutati
     assert.match(out, /additional plugin validation failed/);
     // The probe triple (fingerprint: one listing; ownership: two listings)
     // runs before prepare's `build` step rejects the candidate — build issues
-    // no Codex command of its own (src/adapter.ts:303-557, `runBuild`), so a
+    // no Codex command of its own (`src/adapter.ts:304-558::async function runBuild`, `runBuild`), so a
     // mutation line appearing here would prove the reject happened too late.
     assert.deepEqual(codexOperations(c), [
       "plugin list --json",
@@ -2348,7 +2348,7 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
 void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", async () => {
   {
     // `pluginAdd: "stale"` makes the fake Codex's install branch write a
-    // deliberately wrong cached commit (install-fakes.js:145-150), so the
+    // deliberately wrong cached commit (`tests/bin/install-fakes.js:146::data.commit = "0".repeat(40)`), so the
     // post-install fingerprint verification finds a real, installed, but
     // MISMATCHED commit — install's own verification failure, not a fixture
     // fault.
@@ -2372,7 +2372,7 @@ void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", as
 
   {
     // `removesMutateState: false` ports the shell driver's `remove_noop`
-    // marker (tests/bin/lifecycle-config.js:17-24): the adapter's uninstall
+    // marker (`tests/bin/lifecycle-config.js:17-24::remove_noop`): the adapter's uninstall
     // op runs and reports success, but the fake Codex's listings never
     // change, so the post-removal ownership re-inspect still finds the
     // manager plugin installed.
@@ -2408,7 +2408,7 @@ void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", 
   });
   // The manager plugin listing claims version 1.0.0 is installed, so the
   // fingerprint inspect that runs before the legacy-state check
-  // (src/adapter.ts:784-855, the "fingerprint" view) needs a matching cached
+  // (`src/adapter.ts:785-858::if (view === "fingerprint")`, the "fingerprint" view) needs a matching cached
   // tree to read, or it fails on a DIFFERENT diagnostic ("cannot inspect
   // active Codex plugin fingerprint") than this ID's own contract. The
   // commit value itself is irrelevant: the legacy check runs on
@@ -2493,7 +2493,7 @@ function writeVersionCodex(sandbox, toolPath, version, log) {
 
 /**
  * Seed the installed plugin cache the fingerprint view reads.
- * `installedRootForVersion` (src/codex-state.ts:43-50) builds
+ * `installedRootForVersion` (`src/codex-state.ts:43-50::installedRootForVersion`) builds
  * `<searchRoot>/plugins/cache/<marketplace>/<plugin>/<version>`.
  * @param {string} searchRoot
  * @param {string} version
@@ -2575,7 +2575,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
 
   // Half three pins the loop body of
   // `for (const directory of env.PATH.split(delimiter))`
-  // (src/adapter.ts:264): an EMPTY component is KEPT, so `join("", command)`
+  // (`src/adapter.ts:260::for (const directory of env.PATH.split(delimiter))`): an EMPTY component is KEPT, so `join("", command)`
   // yields a bare relative path and the lookup resolves from the current
   // directory, the way execvp-style PATH search does. Neither half above can
   // catch a regression here: both run with PATH === sandbox.bin, a single
@@ -2586,17 +2586,17 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // src/cli.ts's preflight resolves the same command name with its own
   // `findTool`, which DROPS empty components via its `.filter(Boolean)`, so
   // a CLI run fails at preflight with "required command not found" before
-  // src/adapter.ts:264 is reached at all. `runAdapter` is the function the CLI
-  // dispatches into (ctx.adapter, src/commands/probe.ts:231).
+  // `src/adapter.ts:260::for (const directory of env.PATH.split(delimiter))` is reached at all. `runAdapter` is the function the CLI
+  // dispatches into (ctx.adapter, `src/commands/probe.ts:232::result = await ctx.adapter`).
   //
   // Be precise about what that buys, because the next reader auditing whether
-  // src/adapter.ts:263-264 is reachable needs the true answer: the preflight
+  // `src/adapter.ts:259-260::env.PATH === undefined` is reachable needs the true answer: the preflight
   // makes both branch outcomes unobservable on EVERY product path, not merely
   // the common one. src/cli.ts is the sole site that binds runAdapter to a
   // context (the `adapter: runAdapter` binding), and it runs the preflight
   // first. The one entry point that called runAdapter with a bare process.env
   // and no preflight was src/adapter-cli.ts, and PR 11.5 slice 5 deleted it, so
-  // nothing shipped reaches src/adapter.ts:263-264 unguarded. So this half and
+  // nothing shipped reaches `src/adapter.ts:259-260::env.PATH === undefined` unguarded. So this half and
   // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
   // production code, pinned at the layer where the rule actually lives -- not
   // proof that a user-reachable invocation exercises it.
@@ -2636,14 +2636,14 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   }
 
   // Half four pins `if (env.PATH === undefined) return false;`
-  // (src/adapter.ts:263): an absent PATH does not synthesize a
+  // (`src/adapter.ts:259::env.PATH === undefined`): an absent PATH does not synthesize a
   // current-directory search component. No populated-PATH case can catch
   // this -- the branch is only reached when PATH is absent, and every other
   // case in this file defines it.
   //
   // The overridden name is `true`, and that choice is what makes the case
   // discriminating rather than decorative. A launch ENOENT maps to the SAME
-  // `command-not-found` code the precheck raises (src/adapter.ts:184-186), so
+  // `command-not-found` code the precheck raises (`src/adapter.ts:180-182::if (code === "ENOENT"`), so
   // a name that resolves nowhere would report `command-not-found` whether the
   // precheck failed closed or wrongly passed and the spawn then failed. `true`
   // resolves from execvp's built-in default path even with PATH unset, so a
@@ -2660,9 +2660,9 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   //
   // In-process for the same reason as half three: src/cli.ts's preflight
   // rejects an absent PATH first, so a CLI run never reaches
-  // src/adapter.ts:263. Deleting PATH from the CONTEXT env is not enough
+  // `src/adapter.ts:259::env.PATH === undefined`. Deleting PATH from the CONTEXT env is not enough
   // either -- runAdapter merges `{ ...process.env, ...context.env }`
-  // (src/adapter.ts:982), so the runner's own PATH would survive the merge.
+  // (`src/adapter.ts:978::const env`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
   // CLI-HOST-TOOLS-01/02 (`:578`, `:622`) restore it.
   const absentPath = createSandbox();
@@ -2722,7 +2722,7 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
     const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
     // The MUTATING call specifically. Listing calls alone would satisfy
     // CLI-ENV-CODEX-LISTING-01 and say nothing about this row, whose contract
-    // names the mutation path (src/adapter.ts:577).
+    // names the mutation path (`src/adapter.ts:560::async function runInstall`).
     assert.ok(
       calls.some((line) => line.startsWith("plugin marketplace add ")),
       calls.join(" | "),
@@ -2760,7 +2760,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     seedInstalledCache(join(sandbox.home, ".codex"), version, CACHE_COMMIT);
     // Deliberately NOT seeded at sandbox.codex, the harness default: a run
     // that read the harness value would find no cache and fail closed at
-    // src/adapter.ts:843-847 rather than reporting CACHE_COMMIT.
+    // `src/adapter.ts:839-843::cannot inspect active Codex plugin fingerprint under` rather than reporting CACHE_COMMIT.
     const upstream = createReleaseRepo(sandbox);
     const result = runCliWithoutEnvironment(
       sandbox,
@@ -2779,7 +2779,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // Half two: the empty string reaches the same default. This is not a
   // restatement of half one -- it asserts that two specific lines agree.
   // validateEnvironment skips path checking when `value === ""`, so the
-  // empty value survives to the manager; src/adapter.ts:827 tests
+  // empty value survives to the manager; `src/adapter.ts:823::if (!searchRoot)` tests
   // `if (!searchRoot)`, which is true for absent and empty alike. Step 5's
   // second mutation makes that equality an asserted property rather than a
   // reading of the source.
@@ -2805,13 +2805,13 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   });
 
   // Half three: an EMPTY HOME composes the root as `/.codex`, not as a
-  // cwd-relative `.codex`. Replaces tests/test_adapter_protocol.sh:526-548,
+  // cwd-relative `.codex`. Replaces `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:526-548::cd "$empty_home_cwd"`,
   // which drove the same fixture through `inspect --view fingerprint` and
   // asserted the resolved root by name.
   //
   // Not a restatement of halves one and two: those pin which VARIABLE supplies
   // the root when both defaults hold. This one pins the `|| "/"` composition in
-  // `join(env.HOME || "/", ".codex")` (src/adapter.ts:834) -- the arm reached
+  // `join(env.HOME || "/", ".codex")` (`src/adapter.ts:830::searchRoot = join`) -- the arm reached
   // only once HOME is present but empty, where shell expansion of `$HOME/.codex`
   // yielded `/.codex` and this port must agree.
   //
@@ -2870,7 +2870,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     // Exact, because the resolved root inside this text IS the contract: it is
     // the only observable that separates `/.codex` from the decoy. probe
     // replays the adapter outcome's own failure (the `replayOutcome` loop),
-    // so the adapter's fail() text (src/adapter.ts:843-847) arrives verbatim.
+    // so the adapter's fail() text (`src/adapter.ts:839-843::cannot inspect active Codex plugin fingerprint under`) arrives verbatim.
     // Whole-stream equality also carries the retiring case's second guard --
     // that this is a CONTROLLED failure -- since a protocol violation would
     // have added an `error: invalid adapter response:` line here.
@@ -2891,10 +2891,10 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   });
 
   // Half four: an ABSENT HOME fails closed BEFORE any composition, with its own
-  // diagnostic. Replaces tests/test_adapter_protocol.sh:563-579.
+  // diagnostic. Replaces `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:563-579::cd "$unset_home_cwd"`.
   //
   // A separate code path from half three, and the two must not be merged into
-  // one "no usable HOME" case: src/adapter.ts:828-832 tests
+  // one "no usable HOME" case: `src/adapter.ts:824-828::env.HOME === undefined` tests
   // `env.HOME === undefined` and returns early, so an absent HOME never reaches
   // the `|| "/"` fallback half three pins. The messages differ, and asserting
   // each exactly is what keeps either branch from being deleted in favour of
@@ -2916,7 +2916,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     // BOTH names deleted. Unsetting only HOME would leave
     // SUPERPOWERS_INSTALLED_SEARCH_ROOT -- which baseEnvironment always sets
     // (its `SUPERPOWERS_INSTALLED_SEARCH_ROOT: sandbox.codex` entry) --
-    // winning at src/adapter.ts:826, and the HOME branch would never be
+    // winning at `src/adapter.ts:822::SUPERPOWERS_INSTALLED_SEARCH_ROOT`, and the HOME branch would never be
     // reached at all.
     const result = runCliWithoutEnvironment(
       sandbox,
@@ -2974,7 +2974,7 @@ void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin
 
 void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation", () => {
   // Half one: a third value is refused, and the refusal happens BEFORE the
-  // mutation. src/adapter.ts:580-585 validates the enumeration three
+  // mutation. `src/adapter.ts:576-581::unsupported SUPERPOWERS_INSTALL_REFRESH_MODE` validates the enumeration three
   // statements after requireCodex and before the marketplace lookup.
   withSandbox((sandbox) => {
     writeListingCodex(sandbox);
@@ -3034,17 +3034,17 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   // enumeration of two, and halves one and two together only establish that
   // `add-only` is in it and `replace` is not -- an implementation that
   // rejected `remove-add` would leave both of them green. The retiring
-  // witness (tests/test_adapter_protocol.sh:301-311) drove `remove-add`
+  // witness (`git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:301-311::SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add`) drove `remove-add`
   // explicitly and asserted the removal and the addition both reached Codex;
   // dropping that half here would have narrowed the contract without saying
   // so.
   //
   // This half needs a fixture the other two do not. writeListingCodex exits
   // 99 on `plugin marketplace add`, so the run fails closed at
-  // src/adapter.ts:626 and never reaches the refresh-mode branch at :665.
+  // `src/adapter.ts:624::codex marketplace add failed` and never reaches the refresh-mode branch at :665.
   // writeVersionCodex accepts the marketplace add, so the run gets as far as
   // the plugin mutations. `plugin remove` is deliberately NOT accepted by it
-  // and does not need to be: src/adapter.ts:666-671 issues that command
+  // and does not need to be: `src/adapter.ts:661-668::if (refreshMode === "remove-add")` issues that command
   // without checking its status, so the run continues to `plugin add`
   // regardless -- and the stub records every invocation before dispatching on
   // it, so the attempt is observable either way.
