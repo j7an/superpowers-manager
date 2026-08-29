@@ -26,7 +26,7 @@
 // Restored from tests/bin/lifecycle-fixture-selftest.test.js
 // (`git show 76131cf`), deleted in `ccde130` on the rationale that the ports
 // now exercise every path it proved. That rationale covered exercise, not
-// assertion: tests/bin/lifecycle-fakes.js:29-31 still says the re-validation
+// assertion: `tests/bin/lifecycle-fakes.js:29-31::eagerly` still says the re-validation
 // "is what makes a hand-written config.json ... fail closed too", and since
 // PR 11.5 slice 4a both fakes reach it through runFake's single call site
 // (:241) rather than calling it themselves — one loader for two fakes, and a
@@ -158,7 +158,7 @@ void test("readLog returns an empty array for an absent log", () => {
 void test("createCase rejects an unknown config key eagerly", () => {
   // Eagerly, at case creation — NOT when a fake is eventually invoked. Cases
   // that make zero fake calls would otherwise never validate their config at
-  // all, which is exactly the property lifecycle-config.js:107-110 claims.
+  // all, which is exactly the property `tests/bin/lifecycle-config.js:107-110::Throws on an unknown key or an invalid value` claims.
   assert.throws(
     () => createCase({ fakes: "uninstall", config: { pluginRemoove: "noop" } }),
     /unknown fixture config key: pluginRemoove/,

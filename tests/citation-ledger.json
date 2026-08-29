@@ -3,34 +3,6 @@
     "tests/bin/assert-matcher-gate.test.js": {
       "tests/baseline/suite-runner.test.js:479": 1
     },
-    "tests/bin/command-context.js": {
-      "tests/bin/lifecycle-fixture.js:279-288": 1
-    },
-    "tests/bin/install-commands.test.js": {
-      "tests/bin/migration-inventory.test.js:57": 1,
-      "src/adapter.ts:433-452": 1,
-      "src/status.ts:21": 1,
-      "src/adapter.ts:591-672": 2,
-      "src/adapter.ts:626": 1,
-      "src/adapter.ts:650-657": 1,
-      "src/adapter.ts:685": 1,
-      "tests/migration-inventory/install-commands.md:588": 1,
-      "src/adapter.ts:806-813": 1,
-      "src/codex-state.ts:67-84": 1
-    },
-    "tests/bin/install-fakes.js": {
-      "src/adapter.ts:831-844": 1
-    },
-    "tests/bin/lifecycle-config.js": {
-      "src/adapter.ts:831-844": 1
-    },
-    "tests/bin/lifecycle-fakes.js": {
-      "src/adapter.ts:797": 1,
-      "src/adapter.ts:871": 1
-    },
-    "tests/bin/lifecycle-fixture.test.js": {
-      "tests/bin/lifecycle-fakes.js:29-31": 1
-    },
     "tests/bin/uninstall-commands.test.js": {
       "tests/bin/migration-inventory.test.js:57": 1,
       "src/adapter.ts:871": 2,
@@ -118,43 +90,11 @@
     "tests/bin/dispatch-fixture.js": {
       "tests/test_bin_dispatch.sh:69": 1
     },
-    "tests/bin/install-commands.test.js": {
-      "tests/test_install_commands.sh:16-21": 1,
-      "scripts/core/lifecycle.sh:52": 1,
-      "scripts/core/status.sh:11-23": 1,
-      "scripts/core/lifecycle.sh:109": 1,
-      "scripts/core/lifecycle.sh:92": 1,
-      "scripts/core/lifecycle.sh:7-26": 1,
-      "lifecycle-fixture.js:120-129": 1
-    },
-    "tests/bin/install-fakes.js": {
-      "tests/test_install_commands.sh:101-169": 1
-    },
-    "tests/bin/lifecycle-config.js": {
-      "tests/test_uninstall_commands.sh:71": 1
-    },
-    "tests/bin/lifecycle-fakes.test.js": {
-      "lifecycle-fixture.js:28-36": 1
-    },
-    "tests/bin/lifecycle-fixture.js": {
-      "tests/test_install_commands.sh:418-423": 1,
-      "tests/test_install_commands.sh:51-67": 1,
-      "tests/test_uninstall_commands.sh:172-182": 1,
-      "scripts/core/selection.sh:22-28": 1,
-      "tests/test_install_commands.sh:306": 1,
-      "tests/test_install_commands.sh:390": 1
-    },
-    "tests/bin/lifecycle-fixture.test.js": {
-      "lifecycle-config.js:107-110": 1
-    },
     "tests/bin/npm-pack-contents.test.js": {
       "tests/test_npm_pack_contents.sh:15-34": 1,
       "tests/test_npm_pack_contents.sh:9": 1,
       "tests/test_npm_pack_contents.sh:97-126": 1,
       "tests/test_npm_pack_contents.sh:78-94": 1
-    },
-    "tests/bin/probe-fakes.js": {
-      "tests/test_probe.sh:234-247": 1
     },
     "tests/bin/uninstall-commands.test.js": {
       "tests/test_uninstall_commands.sh:101-108": 1,

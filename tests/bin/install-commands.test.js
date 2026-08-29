@@ -8,8 +8,8 @@
 // has no counterpart here, and why each case must state the preconditions the
 // shell inherited from the scenario above it. See the inventory for those.
 
-// Two statements, not one. tests/bin/migration-inventory.test.js:57 matches
-// /^import test from "node:test";$/m and asserts it at :529-532, because the
+// Two statements, not one. `tests/bin/migration-inventory.test.js:65::const TEST_IMPORT` matches
+// /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.js:716-719::TEST_IMPORT.test(portSource)`, because the
 // static call-site counter recognises exactly one binding form and fails closed
 // rather than miscount. Both `import { describe, test } from "node:test";` and
 // `import test, { describe } from "node:test";` FAIL that regex.
@@ -63,7 +63,7 @@ const { successResult, failureResult } = await import(
   new URL("../../dist/adapter-result.js", import.meta.url).href
 );
 
-// Verbatim from tests/test_install_commands.sh:16-21.
+// Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:16-21::forbidden_literals =`.
 const FORBIDDEN_LITERALS = [
   "requirements.toml",
   "hooks.state",
@@ -200,7 +200,7 @@ function assertNoCodexMutation(log) {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (src/adapter.ts:433-452). The
+ * candidate into `plugins/superpowers` (`src/adapter.ts:443-452::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -229,7 +229,7 @@ function copyFallbackManifestIntoCandidate(argv) {
 
 /**
  * Reconstructs the generated-tree precondition the shell driver inherited from
- * the scenario above it. `src/status.ts:21` returns "needs prepare"
+ * the scenario above it. `src/status.ts:22-23::return "needs prepare"` returns "needs prepare"
  * whenever the package root carries no `.superpowers-upstream.json`, and
  * lifecycle-fixture.js's buildSnapshot() copies only `plugin.template.json`
  * into the snapshot — so a fresh `c.pkg` always probes as "needs prepare". In
@@ -543,7 +543,7 @@ async function assertLegacyIdentityStops(c, identityState) {
   );
   // :442-444. DELIBERATE version literal: `0.1.1` is not a dependency pin that
   // moves on someone else's schedule — it is user-facing guidance owned in-repo
-  // at scripts/core/lifecycle.sh:52, naming the last superpowers-wrapper
+  // at `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:52::'Run: npx superpowers-wrapper@0.1.1 uninstall' \`, naming the last superpowers-wrapper
   // release that can uninstall legacy state. The exact text is the contract.
   assert.ok(
     hasLine(out, "Legacy superpowers-wrapper Codex state is installed."),
@@ -1062,13 +1062,13 @@ void describe("install commands", { concurrency: true }, () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // Precondition. `prepareGeneratedTree` proves the generated provenance
     // exists and `seedInstalledCurrent` copies that same file into the Codex
-    // cache, so scripts/core/status.sh:11-23 reports "current" — the branch
+    // cache, so `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:11-23::spw_status_for_commits` reports "current" — the branch
     // this case exists to cover. Without the tree the package root probes as
     // "needs prepare" and the subject re-runs prepare, which this catches.
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (src/adapter.ts:591-672), and the second of them
+    // the three commands below (`src/adapter.ts:590-672::const marketplaceList`), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
@@ -1117,7 +1117,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // src/adapter.ts:626 compares the two through `pathsEqual`, so a
+    // `src/adapter.ts:626-627::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1274,7 +1274,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (src/adapter.ts:650-657).
+    // the previous root it already removed (`src/adapter.ts:650-657::adding`).
     assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
     assert.ok(out.includes(otherRoot), out);
     // :632-634
@@ -1353,7 +1353,7 @@ void describe("install commands", { concurrency: true }, () => {
     // :671 — the hint text lives in runInstall's
     // `verification_hints.mismatch`, returned after the `pluginAdded`
     // mutation, and is replayed from the adapter result by
-    // scripts/core/lifecycle.sh:109,121; core owns no copy of it.
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:109::mismatch`,121; core owns no copy of it.
     assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     // :672-674
     assert.ok(
@@ -1378,7 +1378,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — src/adapter.ts:685, replayed through the install result.
+    // :685 — `src/adapter.ts:685-686::missing:`, replayed through the install result.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
   });
 
@@ -1387,16 +1387,16 @@ void describe("install commands", { concurrency: true }, () => {
     // its claim. The shell fixture made the FAKE adapter print
     // "fingerprint inspection failed in adapter fixture" and exit 99, so :695's
     // `out.includes("fingerprint inspection")` matched the fixture's own stderr
-    // line — tests/migration-inventory/install-commands.md:588 records this
+    // line — `tests/migration-inventory/install-commands.md:598::104. Output` records this
     // as item 104: it proves the string appears, not that the subject produced
     // it.
     //
     // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
     // plugin as installed at 1.0.0 without materialising its cached tree, so
     // the REAL adapter's fingerprint handler resolves an active version
-    // (src/adapter.ts:806-813), builds the installed root for it (:831-836),
+    // (`src/adapter.ts:806-813::let activeVersion`), builds the installed root for it (:831-836),
     // and finds nothing readable there — installedCommitFromRoot returns ""
-    // (src/codex-state.ts:67-84) — and fails with a controlled inspect-failed
+    // (`src/codex-state.ts:67-84::installedCommitFromRoot`) — and fails with a controlled inspect-failed
     // outcome. The case therefore needs no interception and is not
     // seam-dependent.
     const c = installCase({
@@ -1413,7 +1413,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :695, re-anchored onto the SUBJECT's own diagnostic at
-    // scripts/core/lifecycle.sh:92, whole-line so no substring of a longer
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`, whole-line so no substring of a longer
     // adapter or fixture message can satisfy it.
     assert.ok(
       hasLine(
@@ -1493,7 +1493,7 @@ void describe("install commands", { concurrency: true }, () => {
     // The shell's $pkg carried a complete generated tree at this point and
     // corrupted only the provenance file, so the remediation exercised
     // spw_replace_generated_tree's replace-an-existing-tree path
-    // (scripts/core/lifecycle.sh:7-26). Building the tree first keeps that.
+    // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:7-26::spw_replace_generated_tree`). Building the tree first keeps that.
     await prepareGeneratedTree(c);
     clearLogs(c);
     // :754
@@ -1504,14 +1504,14 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :756 — `v1.0.0` is the fixture's own tag (lifecycle-fixture.js:120-129),
+    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.js:124-132::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
-    // (src/adapter.ts:591-672): the marketplace add carries the same package
+    // (`src/adapter.ts:590-672::const marketplaceList`): the marketplace add carries the same package
     // root the original needle pinned, and the plugin add is unconditional.
     // clearLogs above means both lines can only have come from this run.
     assertOrder(
