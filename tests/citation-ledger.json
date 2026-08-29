@@ -66,9 +66,6 @@
       "src/selection.ts:42": 1,
       "src/upstream.ts:35": 1
     },
-    "src/lifecycle.ts": {
-      "src/adapter.ts:818": 1
-    },
     "src/manifest-overlay.ts": {
       "src/strict-json.ts:227-232": 1
     },
@@ -283,9 +280,6 @@
       "scripts/core/common.sh:71": 1,
       "apply-manifest-overlay.py:42": 1
     },
-    "src/cli.ts": {
-      "scripts/core/adapter.sh:37-44": 1
-    },
     "src/commands/install.ts": {
       "scripts/core/adapter.sh:58-73": 1,
       "scripts/core/lifecycle.sh:91-94": 1,
@@ -316,29 +310,6 @@
       "scripts/core/selection.sh:4-29": 1,
       "selection-state-cli.ts:39": 1,
       "scripts/core/selection.sh:88-162": 1
-    },
-    "src/lifecycle.ts": {
-      "scripts/core/lifecycle.sh:50-53": 2,
-      "scripts/core/lifecycle.sh:75-77": 1,
-      "scripts/core/lifecycle.sh:43-60": 1,
-      "scripts/core/lifecycle.sh:72-85": 1,
-      "scripts/core/lifecycle.sh:62-70": 1,
-      "scripts/core/lifecycle.sh:87-124": 1,
-      "scripts/core/provenance.sh:62": 1,
-      "scripts/core/lifecycle.sh:126-141": 1,
-      "scripts/core/adapter.sh:58-73": 1,
-      "scripts/core/adapter.sh:70": 1
-    },
-    "src/provenance.ts": {
-      "scripts/core/lifecycle.sh:28-31": 1,
-      "scripts/core/lifecycle.sh:33-37": 1
-    },
-    "src/status.ts": {
-      "scripts/core/status.sh:4-9": 1,
-      "scripts/core/status.sh:11-27": 1
-    },
-    "src/upstream.ts": {
-      "scripts/core/upstream.sh:6-13": 1
     },
     "tests/baseline/cli-parity.test.js": {
       "lifecycle-fixture.js:120-129": 1,
