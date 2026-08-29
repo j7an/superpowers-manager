@@ -59,7 +59,7 @@ const RESOLUTION_KINDS: readonly ResolutionKind[] = [
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
 // reads .message only. Same arrangement as hookError
-// (`src/hooks.ts:40::function hookError`).
+// (`src/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
 }
@@ -140,7 +140,7 @@ function resolveFromCwd(value: string, cwd: string): string {
   return isAbsolute(value) ? value : resolve(cwd, value);
 }
 
-// readManifest (`src/hooks.ts:109::readManifest`) owns the read and the parse completely: byte
+// readManifest (`src/hooks.ts:113::readManifest`) owns the read and the parse completely: byte
 // read so invalid UTF-8 is rejected rather than replaced, cause dropped, three
 // hand-written messages naming the path, object check included. Its
 // diagnostics are pinned by
@@ -588,7 +588,7 @@ export async function runPrepare(
     // failure (its cause is the shared runner's (src/validator.ts) captured
     // spawn error, which oneLine never reads -- it takes .message only);
     // readManifest's three hookError messages
-    // (`src/hooks.ts:109-134::readManifest`), pinned by
+    // (`src/hooks.ts:113-138::readManifest`), pinned by
     // `tests/unit/hooks.test.js:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.

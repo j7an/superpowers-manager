@@ -261,7 +261,7 @@ async function inspect(
   const value = (outcome.result as Record<string, unknown> | null)?.[key];
   // The Python reader printed the empty string for a JSON null
   // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (`src/adapter.ts:819::fingerprint: null`).
+  // whenever no plugin version is active (`src/adapter.ts:820::fingerprint: null`).
   if (value === null || value === undefined) {
     return { ok: true, value: "", outcome };
   }

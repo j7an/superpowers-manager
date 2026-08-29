@@ -76,7 +76,7 @@ function presenceFlag(
 // lines); outcome.ok && status !== 0 gets a hand-written message naming the
 // operation; a stop issues no further calls; and an unrelated throw (a
 // non-AdapterFailure cause --
-// `src/adapter.ts:1000-1009::if (cause instanceof AdapterFailure) {`) gets a
+// `src/adapter.ts:1001-1010::if (cause instanceof AdapterFailure) {`) gets a
 // hand-written message naming the operation too, never the caught error's text
 // (AGENTS.md). `argv` here is always this module's own literal, bounded
 // construction -- never adapter-controlled text -- so naming it is safe.
@@ -374,7 +374,7 @@ export async function runUninstall(
     // blindly.
     //
     // ctx.adapter's non-AdapterFailure rethrow
-    // (`src/adapter.ts:1000-1009::if (cause instanceof AdapterFailure) {`) does
+    // (`src/adapter.ts:1001-1010::if (cause instanceof AdapterFailure) {`) does
     // NOT reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.

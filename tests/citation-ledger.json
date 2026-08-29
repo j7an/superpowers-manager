@@ -1,26 +1,5 @@
 {
   "unanchored": {
-    "src/adapter.ts": {
-      "src/adapter-result.ts:133": 1
-    },
-    "src/commands/pin.ts": {
-      "src/selection-store.ts:103": 1
-    },
-    "src/commands/track-latest.ts": {
-      "src/selection-store.ts:103": 1
-    },
-    "src/effective-selection.ts": {
-      "src/selection.ts:41": 1
-    },
-    "src/hooks.ts": {
-      "src/provenance.ts:19": 1,
-      "src/selection-store.ts:19": 1,
-      "src/selection.ts:42": 1,
-      "src/upstream.ts:35": 1
-    },
-    "src/manifest-overlay.ts": {
-      "src/strict-json.ts:227-232": 1
-    },
     "tests/baseline/cli-parity.test.js": {
       "tests/run-node-suites.js:15": 1,
       "src/adapter.ts:258-270": 1,
@@ -228,15 +207,6 @@
     }
   },
   "deadReferent": {
-    "src/adapter.ts": {
-      "scripts/core/common.sh:71": 1,
-      "apply-manifest-overlay.py:42": 1
-    },
-    "src/effective-selection.ts": {
-      "scripts/core/selection.sh:4-29": 1,
-      "selection-state-cli.ts:39": 1,
-      "scripts/core/selection.sh:88-162": 1
-    },
     "tests/baseline/cli-parity.test.js": {
       "lifecycle-fixture.js:120-129": 1,
       "install-fakes.js:145-150": 1,

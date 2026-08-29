@@ -116,10 +116,11 @@ function translate(cause: unknown, source: string, path: string): SafetyError {
       { cause },
     );
   }
-  // strict-json reports `… at character N` (src/strict-json.ts:227-232), a
-  // zero-based offset. CPython reports one-based line and column. Convert so
-  // the message keeps CPython's shape. This does NOT claim the two parsers
-  // fail at the same place on the same malformed input — see the spec.
+  // strict-json reports `… at character N`
+  // (`src/strict-json.ts:227-232::"\\":`), a zero-based offset. CPython reports
+  // one-based line and column. Convert so the message keeps CPython's shape.
+  // This does NOT claim the two parsers fail at the same place on the same
+  // malformed input — see the spec.
   const match = /^(.*) at character (\d+)$/.exec(text);
   const reason = match?.[1] ?? text;
   const offset = match === null ? 0 : Number(match[2]);
