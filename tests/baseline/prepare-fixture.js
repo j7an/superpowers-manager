@@ -334,7 +334,7 @@ function buildUpstream() {
     rmSync(join(upstream, "hooks"), { recursive: true, force: true });
     symlinkSync(".git", join(upstream, "hooks"));
   });
-  // P4 — a CONTAINED relative hooks-root symlink, which `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks`
+  // P4 — a CONTAINED relative hooks-root symlink, which `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`
   // recreates in the candidate rather than dereferencing.
   //
   // The target must live under `assets/`. COPY_PATHS copies

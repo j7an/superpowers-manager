@@ -1160,7 +1160,7 @@ void test(
   },
 );
 
-// P4 — `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks`, the ACCEPTING side of the hooks-root symlink
+// P4 — `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the ACCEPTING side of the hooks-root symlink
 // policy, covering both halves the retired shell driver held alone (items
 // 83-85 in tests/migration-inventory/prepare.md, whose entry for item 83 ends
 // "Slice 3.5, read this before deleting the shell file").
