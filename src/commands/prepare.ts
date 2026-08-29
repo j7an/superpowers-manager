@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare
-
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
@@ -425,7 +420,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         // src/adapter.ts declined to own, so its text must never reach
         // ctx.stderr. Caught here rather than in runPrepare's outer catch,
         // the same treatment
-        // `src/commands/probe.ts:210-233::It does still THROW for a non-AdapterFailure cause`
+        // `src/commands/probe.ts:205-228::It does still THROW for a non-AdapterFailure cause`
         // gives it.
         return failed("cannot build the generated plugin candidate");
       }
@@ -663,7 +658,7 @@ export async function runPrepare(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:507-514::if (cleanupWarning`.
+    // `src/commands/install.ts:503-510::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

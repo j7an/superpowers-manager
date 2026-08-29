@@ -5,10 +5,6 @@
 // runInstall, each of which owns its own §4.2a-conformant invoke() gate. That
 // is also why update opens no temporary workspace of its own -- there is no
 // mutation here for one to protect.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update
 import { oneLine } from "../cli-arguments.js";
 import {
   requireManagedUpdateControl,
@@ -73,7 +69,7 @@ export async function runUpdate(
     // install's NOTE line.
     //
     // This is a THIRD consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:386-438::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:381-433::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first and src/commands/install.ts's runInstall catch
     // is the second. Because all three wrap the identical function, runProbe's
     // long comment there enumerates exactly what can reach this stream too; not

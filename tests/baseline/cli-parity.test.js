@@ -2587,7 +2587,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // `findTool`, which DROPS empty components via its `.filter(Boolean)`, so
   // a CLI run fails at preflight with "required command not found" before
   // `src/adapter.ts:260::for (const directory of env.PATH.split(delimiter))` is reached at all. `runAdapter` is the function the CLI
-  // dispatches into (ctx.adapter, `src/commands/probe.ts:232::result = await ctx.adapter`).
+  // dispatches into (ctx.adapter, `src/commands/probe.ts:227::result = await ctx.adapter`).
   //
   // Be precise about what that buys, because the next reader auditing whether
   // `src/adapter.ts:259-260::env.PATH === undefined` is reachable needs the true answer: the preflight

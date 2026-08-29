@@ -1,10 +1,6 @@
 // Ports scripts/uninstall. The shell sourced common.sh, provenance.sh,
 // lifecycle.sh and adapter.sh; the predicates now live in src/lifecycle.ts
 // and the adapter arrives through ctx.adapter.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import { oneLine } from "../cli-arguments.js";
@@ -103,7 +99,7 @@ async function invoke(
   // path, before any decision -- collected here and replayed by the caller
   // once gatherUninstall's try/catch has resolved, for the same EPIPE reason
   // gatherProbe carries its outcomes out rather than writing in place
-  // (`src/commands/probe.ts:294::The outcomes are CARRIED OUT rather than replayed in place`).
+  // (`src/commands/probe.ts:289::The outcomes are CARRIED OUT rather than replayed in place`).
   outcomes.push(result.outcome);
   const outcome = result.outcome;
   if (result.status !== 0 || !outcome.ok) {
@@ -173,7 +169,7 @@ interface GatherRun {
 
 // Every step that can throw or fail closed, returning the outcome as data and
 // performing NO writes. Same shape as gatherProbe
-// (`src/commands/probe.ts:285-286::readonly status: 0;`) and for the same
+// (`src/commands/probe.ts:280-281::readonly status: 0;`) and for the same
 // reason: a write inside this try could raise EPIPE, be caught here, and be
 // relabelled as a domain failure.
 async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
@@ -272,7 +268,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         const secondOutcome = second.result.outcome;
         if (!secondOutcome.ok) return failed(null);
         // Mirrors the inspect null/non-string branches
-        // (`src/commands/probe.ts:261-268::if (value === null || value === undefined) {`)
+        // (`src/commands/probe.ts:256-263::if (value === null || value === undefined) {`)
         // and the fingerprint read
         // (`src/lifecycle.ts:181-194::const raw = inspected.value.fingerprint;`):
         // a JSON null or a missing key defaults to "" (the Python reader's own

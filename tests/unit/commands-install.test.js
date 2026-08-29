@@ -435,12 +435,12 @@ void test("a legacy identity state stops before the workspace is created", async
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case above drives the outer guard's `"blocked"` arm
-  // (`src/commands/install.ts:428-435::const legacy = requireNoLegacyState(facts.identityState)`); this one drives its `"unknown"` arm
-  // (`src/commands/install.ts:436-439::if (legacy.kind === "unknown") {`). Each arm needs its own case: a mutant disabling the guard as a
+  // (`src/commands/install.ts:424-431::const legacy = requireNoLegacyState(facts.identityState)`); this one drives its `"unknown"` arm
+  // (`src/commands/install.ts:432-435::if (legacy.kind === "unknown") {`). Each arm needs its own case: a mutant disabling the guard as a
   // whole dies to the `"blocked"` case alone and so proves only that one of
   // the two is live -- the same blind spot that let the stage-1 re-inspection's
   // `"unknown"` arm survive as a fail-open. Distinct from the empty-state gate
-  // at `src/commands/install.ts:420-423::facts.identityState.length === 0`, which fires first and has its own text: "chaos" is non-empty,
+  // at `src/commands/install.ts:416-419::facts.identityState.length === 0`, which fires first and has its own text: "chaos" is non-empty,
   // so it clears that gate and reaches requireNoLegacyState's catch-all arm.
   const out = sink();
   const err = sink();

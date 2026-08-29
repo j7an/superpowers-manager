@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4, the last commit in which scripts/track-latest existed; it differs because
-// scripts/track-latest was deleted before the common citation anchor. They are unmaintained and will not be re-derived. Resolve one with:
-//   git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/track-latest
-
 import { oneLine } from "../cli-arguments.js";
 import {
   selectionStatePath,
