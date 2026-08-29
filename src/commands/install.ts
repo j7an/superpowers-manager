@@ -374,7 +374,7 @@ export async function runInstall(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:369-439::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:383-428::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
     // stream too, including the three foreign-text exceptions at :385-413:
@@ -382,7 +382,7 @@ export async function runInstall(
     //      into its text. Reached on probe's DEFAULT path, which that comment
     //      defines as every invocation NOT resolving a saved pin: a 40-hex
     //      ref returns a "raw-commit" resolution at
-    //      `src/upstream.ts:160-162::if (COMMIT_INPUT_RE.test(requestedRef)) {`
+    //      `src/upstream.ts:162-164::return { kind: "raw-commit"`
     //      before any git call, so it reaches no splice at all.
     //   2. :392-403 -- src/selection-store.ts's read path interpolates the
     //      caught error's own message, so Node errno prose can appear.
