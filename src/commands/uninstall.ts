@@ -21,7 +21,7 @@ import { replayOutcome } from "./probe.js";
 // THREE outcomes, not two. Collapsing "the call failed" into "the result is
 // malformed" would emit the Boolean diagnostic for a controlled adapter
 // failure, where the shell exits silently on the replay alone
-// (scripts/uninstall:23 is a bare command under set -eu). That is the same
+// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:23-24::plugin_present=` is a bare command under set -eu). That is the same
 // collapse Task 2 undoes in src/lifecycle.ts's resultObject. Spec §4.2a
 // clauses 2 and 4.
 type Presence =
@@ -157,7 +157,7 @@ class GatherFailure extends Error {
 // carries a post-success workspace-removal failure WITHOUT discarding the
 // outcome the callback already computed.
 //
-// scripts/uninstall:34-35 echoed both closing lines before the exit trap ran,
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete` echoed both closing lines before the exit trap ran,
 // and
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:25-30::spw_cleanup_workspace_trap(`
 // is `rm -rf "$path" || :` -- the shell swallowed the removal failure outright
@@ -177,7 +177,7 @@ interface GatherRun {
 // reason: a write inside this try could raise EPIPE, be caught here, and be
 // relabelled as a domain failure.
 async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
-  // scripts/uninstall:20-21 exported TMPDIR="$uninstall_workspace" so every
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:20-21::TMPDIR=` exported TMPDIR="$uninstall_workspace" so every
   // child confined its temporary files to the tree the workspace trap
   // removed. The AdapterContext passed to ctx.adapter below does the same.
   const parent = ctx.env.TMPDIR ?? tmpdir();
@@ -250,7 +250,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         if (!uninstallStage.ok) return failed(uninstallStage.message);
 
         // Stage 3: inspect ownership AGAIN. This overwrites the first
-        // inspection (scripts/uninstall:29), so everything below reads the
+        // inspection (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`), so everything below reads the
         // POST-uninstall state, not the pre-uninstall one read above.
         const second = await invoke(
           ctx,
@@ -264,7 +264,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         if (!verify.ok) return failed(verify.message);
 
         // identity_state comes from this SAME second inspection, matching
-        // scripts/uninstall:31's spw_adapter_result_get read of the
+        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:31::spw_adapter_result_get`'s spw_adapter_result_get read of the
         // overwritten inspect_result. `second.ok` already proved this call
         // succeeded, so outcome.ok is true here; the explicit check below is
         // for TypeScript's narrowing (a local variable, not a re-derivation
@@ -310,7 +310,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         if (verdict.kind !== "ok") {
           lines.push(...verdict.lines);
         }
-        // scripts/uninstall:34-35. The first line ports verbatim; the second
+        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete`. The first line ports verbatim; the second
         // changes scripts/prepare to npx superpowers-manager prepare (spec
         // §3.6) -- a deliberate, observable divergence, recorded as a
         // port-only entry in tests/migration-inventory/uninstall-commands.md.
@@ -367,7 +367,7 @@ export async function runUninstall(
     // throw the class is declared to carry (DIAG-ADAPTER-01). The
     // post-success cleanup failure no longer arrives here: gatherUninstall's
     // onCleanupFailure records it as `cleanupWarning` and the computed
-    // outcome survives, which is what scripts/uninstall:34-35 did. The
+    // outcome survives, which is what `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete` did. The
     // `instanceof` guard is defensive rather than load-bearing --
     // gatherUninstall's own catch is the only thing that can throw here, and
     // it always wraps -- but this catch does not assume that invariant

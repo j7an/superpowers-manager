@@ -41,7 +41,7 @@ async function attemptPin(
   // readSelectionState's own readOpenedRecord/parseRecordBytes is what
   // validates an existing record, via validateRecord at
   // `src/selection-store.ts:103::return validateRecord`). Calling loadSavedSelection here preserves
-  // scripts/pin:26-27's read-then-resolve-then-write shape, so this command
+  // `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/pin:26-27::read`'s read-then-resolve-then-write shape, so this command
   // stays fail-closed on its own terms rather than solely by depending on the
   // store's internals.
   await loadSavedSelection(ctx.env);
@@ -54,7 +54,7 @@ async function attemptPin(
     resolvedRef = requested;
     commit = await resolveExactTag(source, requested);
   } else {
-    // scripts/pin:39 lowercases a raw-commit request before use; both
+    // `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/pin:39::upper` lowercases a raw-commit request before use; both
     // requested_ref and resolved_ref end up equal to the normalized commit.
     resolvedRef = normalizeCommitInput(requested)!;
     commit = await verifyRawCommit(source, resolvedRef, tmpdir());
