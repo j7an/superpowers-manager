@@ -1129,6 +1129,48 @@ void test("the --suggest CLI dispatch proposes without writing", () => {
   );
 });
 
+void test("the --suggest CLI dispatch keeps --at separate from the optional prefix", () => {
+  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
+  unlinkSync(join(root, "old.sh"));
+  mkdirSync(join(root, "tests", "bin"), { recursive: true });
+  writeFileSync(
+    join(root, "tests", "bin", "a.js"),
+    "// ported from old.sh:1\n",
+  );
+  mkdirSync(join(root, "src"), { recursive: true });
+  for (const directory of ["baseline", "unit", "lib"])
+    mkdirSync(join(root, "tests", directory), { recursive: true });
+  const before = readFileSync(join(root, "tests", "bin", "a.js"), "utf8");
+  const at = `${sha}:old.sh`;
+  for (const args of [
+    ["--at", at],
+    ["tests/bin", "--at", at],
+    ["--at", at, "tests/bin"],
+  ]) {
+    const result = spawnSync(process.execPath, [TOOL, "--suggest", ...args], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, SPW_CITATIONS_ROOT: root },
+      timeout: 30000,
+    });
+    assert.equal(
+      result.signal,
+      null,
+      "the tool was killed at the harness bound",
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      new RegExp(`git show ${sha}:old\\.sh:1::begin`),
+    );
+  }
+  assert.equal(
+    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
+    before,
+    "historical --suggest proposals never write",
+  );
+});
+
 // ---- the two live gates -------------------------------------------------
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const LEDGER_PATH = join(ROOT, "tests", "citation-ledger.json");

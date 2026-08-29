@@ -613,7 +613,7 @@ export async function runPrepare(
     //      prose can reach this stream -- sanctioned, nothing here needs
     //      fixing.
     //   4. Every runGit call site in this module (fetch, clone, checkout) can
-    //      reject instead of resolving: `src/git.ts:47-51::if (typeof` wraps every string
+    //      reject instead of resolving: `src/git.ts:47-52::reject(new SafetyError` wraps every string
     //      errno other than ENOENT in
     //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
     //      and that Node spawn-level message reaches ctx.stderr through this

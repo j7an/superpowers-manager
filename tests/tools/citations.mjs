@@ -89,7 +89,11 @@ function fix() {
 function propose() {
   const rest = process.argv.slice(3);
   const atIndex = rest.indexOf("--at");
-  const prefix = rest.find((a) => !a.startsWith("--")) ?? "";
+  const prefix =
+    rest.find(
+      (a, index) =>
+        !a.startsWith("--") && (atIndex === -1 || index !== atIndex + 1),
+    ) ?? "";
   let at;
   if (atIndex !== -1) {
     const spec = rest[atIndex + 1] ?? "";
