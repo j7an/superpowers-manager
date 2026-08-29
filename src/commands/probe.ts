@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe
-
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import {
   assertFailureWritable,
@@ -46,7 +41,7 @@ interface Field {
 }
 
 // One ordered table drives both formats, so the porcelain key order
-// (scripts/probe:43-59) and the human label order (scripts/probe:61-77) cannot
+// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:43-59::printf 'requested_ref`) and the human label order (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:61-77::printf 'requested ref`) cannot
 // drift apart. Two parallel lists could each stay self-consistent while
 // disagreeing with one another.
 function fields(f: ProbeFacts): readonly Field[] {
@@ -149,7 +144,7 @@ export function formatHuman(f: ProbeFacts): string {
       return `${field.label}: ${shown}\n`;
     })
     .join("");
-  // scripts/probe:78-81.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:78-81::if [ "$SPW_SELECTION_ORIGIN`.
   if (f.selectionOrigin !== f.upstreamSourceOrigin) {
     text +=
       "warning: effective ref and source have mixed origins " +
@@ -303,7 +298,7 @@ type ProbeOutcome =
 // implementation awk-parsed the porcelain back into fields; that round trip is
 // gone.
 export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
-  // Order mirrors scripts/probe:24-40 exactly.
+  // Order mirrors `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:24-40::spw_compute_effective_selection` exactly.
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
   const generatedCommit = await generatedCommitOrEmpty(ctx.root);
 
@@ -348,7 +343,7 @@ export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
       upstreamSourceOrigin: selection.upstreamSourceOrigin,
       effectiveSource: displaySource(selection.effectiveSource),
       savedMode: saved.saved_mode,
-      // scripts/probe:26-30: an absent saved source stays empty rather than
+      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:26-30::if [ -`: an absent saved source stays empty rather than
       // being run through displaySource, which would render <redacted-source>.
       savedSource:
         saved.saved_source.length > 0 ? displaySource(saved.saved_source) : "",
@@ -364,7 +359,7 @@ export async function runProbe(
   argv: readonly string[],
   ctx: CommandContext,
 ): Promise<number> {
-  // scripts/probe:42 tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:42::porcelain` tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
   // flag silently produced human output. Rejecting it is a deliberate
   // narrowing, recorded as a port-only entry in
   // tests/migration-inventory/probe.md.

@@ -27,7 +27,11 @@ const WIDEN_LIMIT = 5;
 /** The enforced corpus, declared and never globbed. */
 export const CORPUS_DIRS = /** @type {const} */ (["src", "tests"]);
 
-const PATH = String.raw`(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+`;
+const PATH_PART = String.raw`[A-Za-z0-9_.-]+`;
+const DOTTED_PATH = String.raw`(?:${PATH_PART}\/)*${PATH_PART}\.[A-Za-z0-9]+`;
+const EXTENSIONLESS_PATH = String.raw`(?:${PATH_PART}\/)+${PATH_PART}`;
+const RESOLUTION_PATH = String.raw`(?:${DOTTED_PATH}|${EXTENSIONLESS_PATH})`;
+const PATH = RESOLUTION_PATH;
 const ANCHORED = new RegExp(
   String.raw`^(${PATH})(?::(\d+)(?:-(\d+))?)?::(.+)$`,
 );
@@ -35,7 +39,7 @@ const ANCHORED = new RegExp(
 // `:N` alone would be a line claim nothing can check, which is the fail-open
 // shape this grammar exists to refuse; it stays malformed.
 const RESOLUTION = new RegExp(
-  String.raw`^git show ([0-9a-f]{40}):(${PATH})(?:(?::(\d+)(?:-(\d+))?)?::(.+))?$`,
+  String.raw`^git show ([0-9a-f]{40}):(${RESOLUTION_PATH})(?:(?::(\d+)(?:-(\d+))?)?::(.+))?$`,
 );
 const LEGACY = new RegExp(String.raw`(${PATH}):(\d+)(?:-(\d+))?`, "g");
 const BACKTICKED = /`([^`\n]+)`/g;
@@ -45,11 +49,12 @@ const BACKTICKED = /`([^`\n]+)`/g;
 // which is a bypass, not a gap. Plain `path:N` is deliberately excluded --
 // that is a legitimate legacy citation and the legacy pass owns it.
 // The file-like fallback is intentionally broader than PATH only for candidate
-// retention: a plausible extension before the `::` separator is enough,
-// independently of valid PATH characters. ANCHORED remains the sole valid-path
-// parser.
+// retention: either a plausible dotted filename or a slash-bearing path before
+// `::` is enough, independently of valid PATH characters. ANCHORED remains the
+// sole valid-path parser.
+const FILELIKE_CANDIDATE = String.raw`(?:.+\.[^\s:]+|(?:[^\s:]+\/)+[^\s:]+)`;
 const CANDIDATE = new RegExp(
-  String.raw`^(?:git show\s+\S+:\S|.+\.[^\s:]+(?::.*)?::)`,
+  String.raw`^(?:git show\s+\S+:\S|${FILELIKE_CANDIDATE}(?::.*)?::|:\d+(?:-\d+)?$)`,
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
 const CONTROL_CONDITION = new Set(["for", "if", "while", "with"]);
@@ -743,6 +748,36 @@ export function classify(citation, root) {
 }
 
 /**
+ * Remove only the citation token that would otherwise prove its own anchor.
+ * A mismatch leaves the lines unchanged, preserving fail-closed uniqueness.
+ * @param {readonly string[]} lines
+ * @param {Citation} citation
+ * @param {string} target
+ * @returns {string[]}
+ */
+function withoutCitationEcho(lines, citation, target) {
+  try {
+    if (realpathSync(citation.file) !== realpathSync(target)) return [...lines];
+  } catch {
+    return [...lines];
+  }
+  const searchable = [...lines];
+  const index = citation.lineNumber - 1;
+  const source = searchable[index];
+  if (
+    source?.slice(citation.column, citation.column + citation.raw.length) !==
+    citation.raw
+  ) {
+    return searchable;
+  }
+  searchable[index] =
+    source.slice(0, citation.column) +
+    " ".repeat(citation.raw.length) +
+    source.slice(citation.column + citation.raw.length);
+  return searchable;
+}
+
+/**
  * @param {Citation} citation
  * @param {string} root
  * @returns {{ ok: true, line?: number, unverified?: "historical" } | { ok: false, code: string, line?: number, message: string }}
@@ -816,11 +851,9 @@ export function validate(citation, root) {
       message: `${citation.path} does not exist`,
     };
   }
-  return checkAnchor(
-    readLines(join(root, citation.path)),
-    citation,
-    citation.path,
-  );
+  const target = join(root, citation.path);
+  const lines = withoutCitationEcho(readLines(target), citation, target);
+  return checkAnchor(lines, citation, citation.path);
 }
 
 /**

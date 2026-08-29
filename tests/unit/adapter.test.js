@@ -39,7 +39,7 @@ async function buildWorkspace(t) {
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
   // `build` generates both from `--fallback-manifest` (`src/adapter.ts:357-360::manifestSource === "upstream" ?`,
-  // `:449`), so anything written here is overwritten before validation runs.
+  // `src/adapter.ts:451::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",

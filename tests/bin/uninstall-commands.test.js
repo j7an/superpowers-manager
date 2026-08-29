@@ -394,7 +394,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
 
   // Rewritten in place at PR 11.5 slice 4b, Task 8. Items 7, 8 and 9 are
   // RETIRED at the gap in tests/migration-inventory/uninstall-commands.md: the
-  // shell's `spw_require_command python3` (scripts/uninstall:10) has no port,
+  // shell's `spw_require_command python3` (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:10::spw_require_command`) has no port,
   // and `COMMAND_REQUIREMENTS.uninstall` drops from `["python3", "codex"]` to
   // `["codex"]` at the flip, because `python3` was only ever required so
   // `spw_invoke_adapter` could run validate-adapter-response.py per call
@@ -500,7 +500,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // :239
     assertNoRemoves(codex);
     // :240, re-anchored onto the SUBJECT's stdout. The ownership-inspection
-    // count alone would not do it: scripts/uninstall:23,29 emits two
+    // count alone would not do it: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:23-24::plugin_present=`,29 emits two
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
@@ -607,7 +607,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // :267
     assertTmpEmpty(c);
     // :268-270, re-anchored: two ownership inspections is the Codex-level
-    // witness that the fresh re-inspect (scripts/uninstall:29) ran. :271's
+    // witness that the fresh re-inspect (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`) ran. :271's
     // exactly-once claim is DROPPED here: a duplicate op adds `plugin remove`
     // lines `has()` does not count, and leaves this count at 2 regardless.
     assertAdapterUninstallRan(
@@ -895,7 +895,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const codex = readLog(c.codexLog);
     // :436, re-anchored onto codex.log — and NOT onto assertAdapterUninstallRan,
     // which would be false here: the marketplace remove fails, so the flow dies
-    // before scripts/uninstall:29's verify-after inspection. The true/true flag
+    // before `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`'s verify-after inspection. The true/true flag
     // pair is witnessed instead by the two removes at :437-438, which the
     // adapter issues only when both flags are true (`src/adapter.ts:726-761::pluginPresent === "true"`).
     // :437-438

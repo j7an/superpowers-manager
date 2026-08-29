@@ -961,7 +961,7 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // note above already covers. The one behavior that unit suite does not
   // exercise is the true package-default source (SUPERPOWERS_UPSTREAM_URL
   // set to the empty string, matching runTrackLatest's `||` fallback — see
-  // `src/commands/track-latest.ts:37::SUPERPOWERS_UPSTREAM_URL` — not the variable left absent, which
+  // `src/commands/track-latest.ts:32::SUPERPOWERS_UPSTREAM_URL` — not the variable left absent, which
   // the shell's own `${VAR:-default}` treats identically but this project
   // otherwise treats presence-vs-emptiness as distinct — e.g. the
   // presence branch in `selectionConfigDir`, where `requireAbsolute`

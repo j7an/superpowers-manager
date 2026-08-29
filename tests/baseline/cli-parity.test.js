@@ -185,7 +185,7 @@ function createReleaseRepo(sandbox, name = "upstream") {
 
 /**
  * A `codex` that answers the two listing commands the in-process probe's
- * adapter views issue (`src/adapter.ts:795-800::const listing`, `:871`, `:883` — the argument
+ * adapter views issue (`src/adapter.ts:795-800::const listing`, `src/adapter.ts:869::const plugins = await listingCommand`, `src/adapter.ts:881::const marketplaces = await listingCommand` — the argument
  * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
  * `tests/migration-inventory/probe.md` cite them) with empty inventories, and
  * rejects anything else. `writeNoopTool`'s `exit 0` stub is
@@ -2297,7 +2297,7 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
     // carries both: the generated tree is at `c.pkg/plugins/superpowers`, and
     // the manager's upstream cache — its own directory in the baseline, via
     // SUPERPOWERS_CACHE_DIR — defaults to `$root/.cache/upstream`
-    // (scripts/prepare:12, gatherPrepare's `cacheParent` resolution), which is
+    // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:12::SUPERPOWERS_CACHE_DIR`, gatherPrepare's `cacheParent` resolution), which is
     // inside `c.pkg` here because `runScript` sets no SUPERPOWERS_CACHE_DIR.
     // A readdirSync of top-level names would see neither a change inside
     // `.codex-plugin/` nor a cache appearing. Same form as
@@ -2587,7 +2587,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // `findTool`, which DROPS empty components via its `.filter(Boolean)`, so
   // a CLI run fails at preflight with "required command not found" before
   // `src/adapter.ts:260::for (const directory of env.PATH.split(delimiter))` is reached at all. `runAdapter` is the function the CLI
-  // dispatches into (ctx.adapter, `src/commands/probe.ts:232::result = await ctx.adapter`).
+  // dispatches into (ctx.adapter, `src/commands/probe.ts:227::result = await ctx.adapter`).
   //
   // Be precise about what that buys, because the next reader auditing whether
   // `src/adapter.ts:259-260::env.PATH === undefined` is reachable needs the true answer: the preflight
@@ -2664,7 +2664,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // either -- runAdapter merges `{ ...process.env, ...context.env }`
   // (`src/adapter.ts:978::const env`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`:578`, `:622`) restore it.
+  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.js:536::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.js:580::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2736,8 +2736,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`:1408`)
-// and CLI-ENV-PREPARE-01 (`:1454`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.js:1357::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.js:1403::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

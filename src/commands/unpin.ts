@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4, the last commit in which scripts/unpin existed; it differs because
-// scripts/unpin was deleted before the common citation anchor. They are unmaintained and will not be re-derived. Resolve one with:
-//   git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/unpin
-
 import { lstat, unlink } from "node:fs/promises";
 import { oneLine } from "../cli-arguments.js";
 import { selectionStatePath } from "../effective-selection.js";
@@ -30,7 +25,7 @@ type UnpinOutcome =
 // data instead of writing it — see UnpinOutcome above for why.
 async function attemptUnpin(ctx: CommandContext): Promise<UnpinOutcome> {
   const statePath = selectionStatePath(ctx.env);
-  // The packaged fallback ignores an active SUPERPOWERS_REF: scripts/unpin:12
+  // The packaged fallback ignores an active SUPERPOWERS_REF: `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/unpin:12::spw_config_ref`
   // cleared it deliberately so the reported value is the packaged one.
   const fallback = await readConfigRef(ctx.root, {
     ...ctx.env,

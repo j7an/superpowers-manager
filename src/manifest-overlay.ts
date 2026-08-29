@@ -96,8 +96,8 @@ function setMember(
 
 /**
  * Map strict-json's diagnostics onto the CPython wording the callers assert.
- * The phrasing is frozen deliberately: the convention decision is carried-forward
- * row `:1174`, owned by PR 11, and changing it here would pre-empt that.
+ * Repository policy at `AGENTS.md:90::most diagnostics are asserted as`
+ * freezes most of these diagnostics as complete-string contracts.
  */
 function translate(cause: unknown, source: string, path: string): SafetyError {
   const text = cause instanceof Error ? cause.message : String(cause);

@@ -666,9 +666,9 @@ async function validateHookSubtree(
     try {
       isLink = (await inspectLink(path, deps)) === "symlink";
     } catch {
-      // `:300` reaches `:305`, the same site-specific text as the `:303`
-      // readlink below. The three probes sharing the *subtree* string are
-      // `:324`/`:332`/`:340`, not this one.
+      // The `src/generated-plugin.ts:667::isLink =` probe reaches the first catch bounded by `src/generated-plugin.ts:672-676::let rawTarget`; the `src/generated-plugin.ts:678::rawTarget = decodePathBytes` readlink reaches the same site text.
+      // The three probes sharing the *subtree* string are `src/generated-plugin.ts:711::resolvedDirectory =`, `src/generated-plugin.ts:721::children =`, and
+      // `src/generated-plugin.ts:730::deps, true)) === "directory"`, not this one.
       errors.push(`generated hook symlink could not be inspected: ${path}`);
       return false;
     }

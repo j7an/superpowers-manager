@@ -83,9 +83,12 @@ function gitFixture(name, body) {
     return result.stdout.trim();
   };
   git(["init", "--quiet", "."]);
-  writeFileSync(join(root, name), body);
-  const blob = git(["hash-object", "-w", name]);
-  const sha = git(["mktree"], "100644 blob " + blob + "\t" + name + "\n");
+  const target = join(root, name);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, body);
+  git(["add", "--", name]);
+  const sha = git(["write-tree"]);
+  assert.equal(git(["rev-list", "--count", "--all"]), "0");
   assert.match(sha, /^[0-9a-f]{40}$/);
   return { root, sha };
 }
@@ -166,6 +169,44 @@ void test("scan parses all four citation forms", () => {
   assert.equal(found[4].raw, "src/x.ts:44");
 });
 
+void test("anchored citations accept a slash-bearing extensionless target", () => {
+  const root = fixture({
+    "a.js": "// `tests/container/Dockerfile:1::ENV SPW_CONTAINER`\n",
+    "tests/container/Dockerfile": "ENV SPW_CONTAINER=1\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "anchored");
+  assert.equal(citation.path, "tests/container/Dockerfile");
+  assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
+});
+
+void test("legacy scanning recognizes a slash-bearing extensionless path", () => {
+  const root = fixture({ "a.js": "// scripts/install:13\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(
+    [citation.kind, citation.path, citation.line],
+    ["legacy", "scripts/install", 13],
+  );
+});
+
+void test("a bare word without a slash is not a citation path", () => {
+  const root = fixture({ "a.js": "// install:13\n" });
+  assert.deepEqual(scan([join(root, "a.js")]), []);
+});
+
+void test("an invalid extensionless anchored near-miss is retained", () => {
+  const root = fixture({ "a.js": "// `scripts/in@stall:13::spw_main`\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MISSING");
+  assert.deepEqual(buildLedger([citation], root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
 void test("scan does not read a citation out of a string literal", () => {
   const root = fixture({ "a.js": 'const s = "src/x.ts:44";\n' });
   assert.deepEqual(scan([join(root, "a.js")]), []);
@@ -239,6 +280,37 @@ void test("scan retains a colon-separated line part as malformed", () => {
     unanchored: {},
     deadReferent: {},
   });
+});
+
+void test("scan retains a point continuation as checked malformed debt exclusion", () => {
+  const root = fixture({ "a.js": "// `:12`\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(
+    [citation.kind, citation.shape, citation.path],
+    ["malformed", "anchored", ""],
+  );
+  assert.equal(classify(citation, root), "checked");
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MISSING");
+  assert.deepEqual(buildLedger([citation], root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
+void test("scan retains a range continuation as malformed", () => {
+  const root = fixture({ "a.js": "// `:12-18`\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MISSING");
+});
+
+void test("scan ignores a nonnumeric colon token", () => {
+  const root = fixture({ "a.js": "// `:name`\n" });
+  assert.deepEqual(scan([join(root, "a.js")]), []);
 });
 
 void test("scan retains an absolute anchored path as malformed", () => {
@@ -391,6 +463,27 @@ void test("an anchor occurring on more than one line is refused", () => {
   assert.match(r.message ?? "", /lengthen it/);
 });
 
+void test("a live self-citation excludes only its own raw anchor echo", () => {
+  const root = fixture({
+    "a.js": "// `a.js:2::export function go`\nexport function go() {}\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(validate(citation, root), { ok: true, line: 2 });
+});
+
+void test("a live self-citation still rejects a second real occurrence", () => {
+  const root = fixture({
+    "a.js":
+      "// `a.js:2::export function go`\n" +
+      "export function go() {}\n" +
+      "// export function go is named again\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MULTIPLE");
+});
+
 // Spec §4.2's literal table: seven rejects, three accepts. Each fragment is
 // unique in its one-line target, so uniqueness alone would admit it; only the
 // boundary rule tells them apart. Fixture bodies are double-quoted, never
@@ -526,6 +619,21 @@ void test("a resolution citation whose path exists at that object validates", ()
   const [citation] = scan([join(root, "a.js")]);
   assert.equal(citation.kind, "resolution");
   assert.deepEqual(validate(citation, root), { ok: true });
+});
+
+void test("resolution citations accept a slash-bearing extensionless path", () => {
+  const { root, sha } = gitFixture(
+    "scripts/install",
+    "spw_main() {\n  return 0\n}\n",
+  );
+  writeFileSync(
+    join(root, "a.js"),
+    "// `git show " + sha + ":scripts/install:1::spw_main`\n",
+  );
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "resolution");
+  assert.equal(citation.path, "scripts/install");
+  assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
 });
 
 void test("a resolution citation whose path is absent at that object fails", () => {

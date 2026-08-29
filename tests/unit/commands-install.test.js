@@ -186,7 +186,7 @@ void test("install re-inspects ownership and update control itself", async () =>
 });
 
 void test("a successful install prints the fingerprint verification lines and no porcelain", async () => {
-  // The parity trap scripts/install:18's probe_output=$(...) capture creates:
+  // The parity trap `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:18::porcelain`'s probe_output=$(...) capture creates:
   // the porcelain never reaches the terminal on a successful run.
   const out = sink();
   const err = sink();
@@ -373,7 +373,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
 // --- Named parity cases ---
 
 void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
-  // scripts/install:19-20. Guards the PROBE-derived value, not the
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:19-20::identity_state=$(spw_probe_field`. Guards the PROBE-derived value, not the
   // re-inspected one (src/commands/install.ts's `identity.kind ===
   // "malformed"` arm already owns that path). A JSON null identity_state on
   // gatherProbe's own ownership inspect becomes "" (the JSON-null
@@ -435,12 +435,12 @@ void test("a legacy identity state stops before the workspace is created", async
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case above drives the outer guard's `"blocked"` arm
-  // (`src/commands/install.ts:428-435::const legacy = requireNoLegacyState(facts.identityState)`); this one drives its `"unknown"` arm
-  // (`src/commands/install.ts:436-439::if (legacy.kind === "unknown") {`). Each arm needs its own case: a mutant disabling the guard as a
+  // (`src/commands/install.ts:424-431::const legacy = requireNoLegacyState(facts.identityState)`); this one drives its `"unknown"` arm
+  // (`src/commands/install.ts:432-435::if (legacy.kind === "unknown") {`). Each arm needs its own case: a mutant disabling the guard as a
   // whole dies to the `"blocked"` case alone and so proves only that one of
   // the two is live -- the same blind spot that let the stage-1 re-inspection's
   // `"unknown"` arm survive as a fail-open. Distinct from the empty-state gate
-  // at `src/commands/install.ts:420-423::facts.identityState.length === 0`, which fires first and has its own text: "chaos" is non-empty,
+  // at `src/commands/install.ts:416-419::facts.identityState.length === 0`, which fires first and has its own text: "chaos" is non-empty,
   // so it clears that gate and reaches requireNoLegacyState's catch-all arm.
   const out = sink();
   const err = sink();
@@ -498,7 +498,7 @@ void test("an unsupported update-control capability refuses before any install m
 });
 
 void test("an unrecognised probe status writes the porcelain then dies without swallowing it", () => {
-  // scripts/install:29-32's `case ... *)` wildcard. statusForCommits
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:29-32::printf`'s `case ... *)` wildcard. statusForCommits
   // (src/status.ts) can only ever return one of three literals, so this
   // branch is unreachable through runInstall's own call to gatherProbe --
   // ProbeFacts.status is typed `string`, though, and a hand-built facts
@@ -779,7 +779,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // reached verifyInstalledFingerprint, leaving that function's "call-failed" arm
 // (`src/lifecycle.ts:157-166::inspected.kind === "call-failed"`) dead and dropping the post-install verification
 // claim entirely. The shell handed its inspect result to
-// spw_verify_installed_fingerprint unconditionally (scripts/install:57) and
+// spw_verify_installed_fingerprint unconditionally (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and
 // printed BOTH lines — the adapter's own error and
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`'s. The flip surfaced it: the shell-parity case
 // in tests/bin/install-commands.test.js titled "a failed fingerprint

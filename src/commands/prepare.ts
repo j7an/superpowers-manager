@@ -1,8 +1,3 @@
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare
-
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
@@ -31,7 +26,7 @@ import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
 import { replayOutcome } from "./probe.js";
 
-// scripts/prepare:64-67, via spw_require_upstream_path. Order is the shell's;
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:64-67::spw_require_upstream_path "$cache/skills`, via spw_require_upstream_path. Order is the shell's;
 // the first miss wins.
 const REQUIRED_UPSTREAM = [
   { path: "skills", label: "skills/" },
@@ -40,7 +35,7 @@ const REQUIRED_UPSTREAM = [
   { path: "CODE_OF_CONDUCT.md", label: "CODE_OF_CONDUCT.md" },
 ] as const;
 
-// scripts/prepare:73-77. Same names on both sides.
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:73-77::spw_copy_path_if_present "$cache/skills`. Same names on both sides.
 const COPY_PATHS = [
   "skills",
   "assets",
@@ -81,7 +76,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-// `[ -f ]` — regular file. scripts/prepare:42, :80, and :108 all use -f, and
+// `[ -f ]` — regular file. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:42::missing`, :80, and :108 all use -f, and
 // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
 // template bytes and non-file rejection" asserts a DIRECTORY passed as
 // SUPERPOWERS_MANIFEST_TEMPLATE is rejected before any adapter build. A
@@ -94,7 +89,7 @@ async function regularFileExists(path: string): Promise<boolean> {
   }
 }
 
-// `[ -d ]` — scripts/prepare:50. A regular file named `.git` is what a git
+// `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
 // worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
 // fetch branch and let git follow its `gitdir:` pointer, where the shell took
 // the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
@@ -134,7 +129,7 @@ async function copyPathIfPresent(
   );
 }
 
-// scripts/prepare:17-24. Only cache_parent and plugin_root are resolved against
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:17-24::case "$cache_parent`. Only cache_parent and plugin_root are resolved against
 // the invocation cwd; manifest_template (:14) is not.
 function resolveFromCwd(value: string, cwd: string): string {
   return isAbsolute(value) ? value : resolve(cwd, value);
@@ -249,7 +244,7 @@ interface PrepareRun {
 
 async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
   const env = ctx.env;
-  // scripts/prepare:16 — captured before the two case statements below.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:16::invocation_root=` — captured before the two case statements below.
   // getcwd(3) returns the physical path, so this matches `pwd -P` without a
   // realpath call.
   const cwd = process.cwd();
@@ -291,7 +286,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       });
       const candidate = join(workspace, "superpowers");
       const selection = await computeEffectiveSelection(ctx.root, env);
-      // scripts/prepare:42 — `[ -f ]`.
+      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:42::missing` — `[ -f ]`.
       if (!(await regularFileExists(manifestTemplate))) {
         return failed(
           `missing fallback manifest template: ${manifestTemplate}`,
@@ -321,7 +316,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
             source,
           ]);
           // runGit returns its status rather than throwing, so no git output is
-          // in scope. scripts/prepare:52 names the source and nothing else, and
+          // in scope. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:52::spw_die "cannot fetch` names the source and nothing else, and
           // computeEffectiveSelection ran validateSource first, so a
           // credential-bearing source never reaches here.
           if (fetched.status !== 0) {
@@ -372,7 +367,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
 
       const upstreamManifest = join(cache, ".codex-plugin", "plugin.json");
       let upstreamManifestVersion = "";
-      // scripts/prepare:80 — `[ -f ]`.
+      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:80::if [ -f` — `[ -f ]`.
       if (await regularFileExists(upstreamManifest)) {
         upstreamManifestVersion =
           await readUpstreamManifestVersion(upstreamManifest);
@@ -425,7 +420,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         // src/adapter.ts declined to own, so its text must never reach
         // ctx.stderr. Caught here rather than in runPrepare's outer catch,
         // the same treatment
-        // `src/commands/probe.ts:210-233::It does still THROW for a non-AdapterFailure cause`
+        // `src/commands/probe.ts:205-228::It does still THROW for a non-AdapterFailure cause`
         // gives it.
         return failed("cannot build the generated plugin candidate");
       }
@@ -447,7 +442,7 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
 
       let validator = NO_VALIDATOR_OUTPUT;
       if (additionalValidator.length > 0) {
-        // scripts/prepare:108 — `[ -f ]`.
+        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` — `[ -f ]`.
         if (!(await regularFileExists(additionalValidator))) {
           return {
             kind: "failed",
@@ -663,7 +658,7 @@ export async function runPrepare(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:507-514::if (cleanupWarning`.
+    // `src/commands/install.ts:503-510::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

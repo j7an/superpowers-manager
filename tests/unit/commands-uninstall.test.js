@@ -549,7 +549,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
     assert.equal(calls.length, 3);
     // The outcome collected from the FIRST call -- well before the cleanup
     // failure -- still reaches stdout, AND the domain outcome survives it,
-    // exactly as scripts/uninstall:34-35 behaved. Dropping either half is a
+    // exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete` behaved. Dropping either half is a
     // divergence from the shell.
     assert.equal(
       out.chunks.join(""),

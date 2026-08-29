@@ -5,10 +5,6 @@
 // runInstall, each of which owns its own §4.2a-conformant invoke() gate. That
 // is also why update opens no temporary workspace of its own -- there is no
 // mutation here for one to protect.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update
 import { oneLine } from "../cli-arguments.js";
 import {
   requireManagedUpdateControl,
@@ -24,7 +20,7 @@ import {
 import { runInstall } from "./install.js";
 import { runPrepare } from "./prepare.js";
 
-// scripts/update:29-32's `case ... *)` wildcard. Same unreachability shape as
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:29-32::echo "$probe_output`'s `case ... *)` wildcard. Same unreachability shape as
 // src/commands/install.ts's renderUnknownProbeStatus: statusForCommits
 // (src/status.ts) can only ever return "needs prepare", "needs
 // install" or "current", so this branch is NOT reachable through runUpdate's
@@ -43,9 +39,9 @@ export function renderUnknownProbeStatus(
   facts: ProbeFacts,
   ctx: CommandContext,
 ): void {
-  // scripts/update:30-31 -- `echo "$probe_output"` (stdout), then the error
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:30-31::echo "$probe_output` -- `echo "$probe_output"` (stdout), then the error
   // to stderr via an explicit `>&2`. This is a DIFFERENT mechanism from
-  // scripts/install:30-31's `spw_die`, even though both end up writing the
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:30-31::printf`'s `spw_die`, even though both end up writing the
   // porcelain to stdout and an `error: `-prefixed line to stderr: install's
   // error text flows through spw_die's own `error: $*` formatting, while
   // update's is spelled out inline in the shell literal already. The two
@@ -73,7 +69,7 @@ export async function runUpdate(
     // install's NOTE line.
     //
     // This is a THIRD consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:386-438::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:381-433::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first and src/commands/install.ts's runInstall catch
     // is the second. Because all three wrap the identical function, runProbe's
     // long comment there enumerates exactly what can reach this stream too; not
@@ -91,8 +87,8 @@ export async function runUpdate(
   }
   const facts = probe.facts;
 
-  // scripts/update:9-10. Guards the PROBE-derived value only, matching
-  // src/commands/install.ts's identical guard at scripts/install:19-20: a
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:9-10::identity_state=`. Guards the PROBE-derived value only, matching
+  // src/commands/install.ts's identical guard at `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:19-20::identity_state=$(spw_probe_field`: a
   // probe that reports no identity state at all is a different failure from
   // one that reports an unrecognised one, and requireNoLegacyState("") would
   // otherwise reach its "unknown" arm and print a symptom rather than the
@@ -102,7 +98,7 @@ export async function runUpdate(
     return 1;
   }
 
-  // scripts/update:11.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:11::spw_require_no_legacy_state`.
   const legacy = requireNoLegacyState(facts.identityState);
   if (legacy.kind === "blocked") {
     // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`
@@ -116,8 +112,8 @@ export async function runUpdate(
     return 1;
   }
 
-  // scripts/update:13-14. install checks only identity_state
-  // (scripts/install:20); update checks update_control too -- the first of
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:13-14::update_control=`. install checks only identity_state
+  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:20::report`); update checks update_control too -- the first of
   // §4.4's two corrections. Both emptiness checks run before the switch, not
   // just one.
   if (facts.updateControl.length === 0) {
@@ -127,9 +123,9 @@ export async function runUpdate(
     return 1;
   }
 
-  // scripts/update:16-34, the four-way switch.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:16-34::case`, the four-way switch.
   if (facts.status === "current") {
-    // scripts/update:18 -- gated BEFORE printing anything. §4.4's second
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:18::spw_require_managed_update_control` -- gated BEFORE printing anything. §4.4's second
     // correction: an update that printed "manager is current" under an
     // unsupported adapter would be asserting managed control it had not
     // verified.
@@ -138,8 +134,8 @@ export async function runUpdate(
       ctx.stderr.write(`error: ${managed.message}\n`);
       return 1;
     }
-    // scripts/update:19-20. Unlike install, which never lets the porcelain
-    // reach the terminal on a successful run (scripts/install:18's
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:19-20::printf`. Unlike install, which never lets the porcelain
+    // reach the terminal on a successful run (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:18::porcelain`'s
     // probe_output=$(...) capture), update prints it here.
     ctx.stdout.write(formatPorcelain(facts));
     ctx.stdout.write("manager is current\n");

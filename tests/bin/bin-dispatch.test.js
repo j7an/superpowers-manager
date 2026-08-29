@@ -4,9 +4,9 @@
 // inventory this file maps to 1:1).
 //
 // Every case names the tools present on its PATH at the assertion. The shell
-// mutated one shared fakebin in place and restored it — `:174-178` asserted
-// three commands work with git absent, a fact that lived 17 lines earlier at
-// `:157`. That is the isolation-sensitive class this port exists to make
+// mutated one shared fakebin in place and restored it. The successor block `tests/bin/bin-dispatch.test.js:259-289::Item 40's successor.`
+// carries the three git-absent cases; its surviving contract is stated at `tests/bin/bin-dispatch.test.js:263::item 40 actually protected`.
+// That is the isolation-sensitive class this port exists to make
 // visible.
 
 import assert from "node:assert/strict";
@@ -317,7 +317,7 @@ void test("`unpin` succeeds in-process with no POSIX shell on PATH", () => {
 
 // `track-latest` never required `sh` (spawn dispatch required it for every
 // command uniformly), but it did require `python3` before this flip — the
-// shell's `spw_require_command python3` at scripts/track-latest:11. Neither
+// shell's `spw_require_command python3` at `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/track-latest:11::spw_require_command`. Neither
 // property has any shell counterpart, unlike unpin's analogous cases above:
 // there was never a shell driver in which `track-latest` could run without
 // `python3` at all. Both tools are checked absent together in one case
@@ -338,7 +338,7 @@ void test("`track-latest` succeeds in-process with python3 and no POSIX shell on
 // `python3` (`COMMAND_REQUIREMENTS.pin` moves from `["git", "python3"]` to
 // `["git"]`), which is a wholly new property: the shell's `scripts/pin`
 // genuinely required `python3` (`spw_require_command python3`,
-// `scripts/pin:17`), so no shell counterpart to "succeeds with `python3`
+// `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/pin:17::python3`), so no shell counterpart to "succeeds with `python3`
 // absent" ever existed for `pin`. This needs real git resolution to succeed
 // (`pinUpstream: true` composes a real `git` and upstream onto `fakeBin`
 // alongside `tools`, unlike every other case in this file), and, unlike

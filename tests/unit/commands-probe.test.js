@@ -69,7 +69,7 @@ const EXPECTED_KEYS = [
 // PROBE_PORCELAIN_KEYS, which is derived from the same fields() table
 // formatPorcelain walks and so could not catch the two moving together. Do not
 // "simplify" either assertion to reuse PROBE_PORCELAIN_KEYS: this one is what
-// pins the contract to the 17 names scripts/probe:43-59 emits, and the
+// pins the contract to the 17 names `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:43-59::printf 'requested_ref` emits, and the
 // ordering one is what pins formatPorcelain's output to the same list.
 void test("the exported key list is the frozen seventeen", () => {
   assert.deepEqual([...PROBE_PORCELAIN_KEYS], EXPECTED_KEYS);
@@ -106,7 +106,7 @@ void test("porcelain leaves an empty value empty", () => {
 });
 
 void test("human mode substitutes the two absence labels", () => {
-  // scripts/probe:64-65 — these two fields, and only these two, print a
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:64-65::present` — these two fields, and only these two, print a
   // stand-in rather than an empty value.
   const text = formatHuman({
     ...FULL,

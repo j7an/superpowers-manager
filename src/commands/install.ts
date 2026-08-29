@@ -2,10 +2,6 @@
 // status.sh, lifecycle.sh and adapter.sh; the predicates now live in
 // src/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
 // and the adapter arrives through ctx.adapter.
-// FROZEN CITATIONS: `scripts/…:NN` references below resolve against the tree at
-// ad56569a4c161e7b122967442e2b026eeb6395f6, the last commit in which those paths existed. They are unmaintained
-// and will not be re-derived. Resolve one with:
-//   git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
 import { oneLine } from "../cli-arguments.js";
@@ -28,7 +24,7 @@ import {
 } from "./probe.js";
 import { runPrepare } from "./prepare.js";
 
-// scripts/install:13, verbatim, and always first: the shell echoed it before
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:13::conflicting`, verbatim, and always first: the shell echoed it before
 // even invoking probe.
 const NOTE =
   "Note: remove or disable conflicting Superpowers providers yourself before" +
@@ -74,7 +70,7 @@ function readStringField(
 // The failure variant carries the AdapterResult whenever one exists, which is
 // every failure except a ctx.adapter throw. Stage 4 needs it: the shell handed
 // its inspect result to spw_verify_installed_fingerprint unconditionally
-// (scripts/install:57) and let that function's own :91 guard turn a failed
+// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and let that function's own :91 guard turn a failed
 // inspection into the post-install verification diagnostic. Every other stage
 // ignores the field and short-circuits on `ok` alone.
 type StageResult =
@@ -180,7 +176,7 @@ interface StageRun {
   readonly cleanupWarning: string | null;
 }
 
-// scripts/install:44-58, wrapped in the temporary workspace scripts/install
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:44-58::TMPDIR=`, wrapped in the temporary workspace scripts/install
 // created via spw_make_workspace + spw_install_workspace_trap. Performs no
 // writes of its own -- same EPIPE-avoidance shape as gatherProbe and
 // src/commands/uninstall.ts's gatherUninstall.
@@ -188,7 +184,7 @@ async function gatherInstallStages(
   ctx: CommandContext,
   desiredCommit: string,
 ): Promise<StageRun> {
-  // scripts/install:38 -- ${TMPDIR:-/tmp}. Matches
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:38::tmp_parent=` -- ${TMPDIR:-/tmp}. Matches
   // src/commands/uninstall.ts's gatherUninstall.
   const parent = ctx.env.TMPDIR ?? tmpdir();
   const outcomes: AdapterOutcome[] = [];
@@ -257,7 +253,7 @@ async function gatherInstallStages(
         // Stage 4: inspect fingerprint, to verify the mutation actually took.
         //
         // Deliberately NOT short-circuited on `!inspected.ok`, unlike stages
-        // 1-3. scripts/install:57 handed the inspect result to
+        // 1-3. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint` handed the inspect result to
         // spw_verify_installed_fingerprint whatever it contained, and that
         // function's first guard, from
         // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:91-94::spw_inspect_fingerprint`,
@@ -318,7 +314,7 @@ async function gatherInstallStages(
   }
 }
 
-// scripts/install:29-32 kept its shell `case ... *)` wildcard even though the
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:29-32::printf` kept its shell `case ... *)` wildcard even though the
 // three inputs the shell's own probe could ever emit were bounded by the same
 // three-way status.sh logic this port's statusForCommits (src/status.ts) now
 // owns exactly. statusForCommits can only ever return "needs prepare",
@@ -331,7 +327,7 @@ async function gatherInstallStages(
 //
 // Exported specifically so a direct test can reach it. That is ONE STEP
 // FURTHER than
-// `src/commands/probe.ts:372-377::This guard is NOT the production path.`'s own
+// `src/commands/probe.ts:367-372::This guard is NOT the production path.`'s own
 // precedent: that comment licenses RETAINING an unreachable branch inside an
 // already-public function (runProbe was public before that comment existed),
 // not EXPORTING a new one. This module does the latter, deliberately, because
@@ -348,8 +344,8 @@ export function renderUnknownProbeStatus(
   facts: ProbeFacts,
   ctx: CommandContext,
 ): void {
-  // scripts/install:30-31 -- the porcelain reaches the terminal ONLY here.
-  // Every other path swallows it, matching scripts/install:18's
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:30-31::printf` -- the porcelain reaches the terminal ONLY here.
+  // Every other path swallows it, matching `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:18::porcelain`'s
   // probe_output=$(...) capture.
   ctx.stdout.write(formatPorcelain(facts));
   ctx.stderr.write(`error: unknown probe status: ${facts.status}\n`);
@@ -374,20 +370,20 @@ export async function runInstall(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:404-438::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:399-433::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
-    // stream too, including the three foreign-text exceptions at :404-438:
-    //   1. :404-415 -- resolveRef splices git's own combined stdout+stderr
+    // stream too, including the three foreign-text exceptions at :399-433:
+    //   1. :399-410 -- resolveRef splices git's own combined stdout+stderr
     //      into its text. Reached on probe's DEFAULT path, which that comment
     //      defines as every invocation NOT resolving a saved pin: a 40-hex
     //      ref returns a "raw-commit" resolution at
     //      `src/upstream.ts:162-164::return { kind: "raw-commit"`
     //      before any git call, so it reaches no splice at all.
-    //   2. :416-428 -- src/selection-store.ts's read path interpolates the
+    //   2. :411-423 -- src/selection-store.ts's read path interpolates the
     //      caught error's own message, so Node errno prose can appear.
     //      AGENTS.md grandfathers that module's wording.
-    //   3. :429-438 -- a SPAWN-level git failure, a different channel from
+    //   3. :424-433 -- a SPAWN-level git failure, a different channel from
     //      exception 1's exit-status one: on the non-ENOENT arm of
     //      `src/git.ts:47-52::if (typeof failure.code === "string") {`, runGit
     //      rejects with "cannot run git: " followed by the Node spawn error's
@@ -406,7 +402,7 @@ export async function runInstall(
   }
   const facts = probe.facts;
 
-  // scripts/install:19-20. Guards the PROBE-derived value only -- the
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:19-20::identity_state=$(spw_probe_field`. Guards the PROBE-derived value only -- the
   // re-inspection at :198 reads through readStringField, which already has
   // its own "malformed" arm for a non-string value, and an empty string
   // there is legitimately absent (the JSON-null convention), not an error.
@@ -422,7 +418,7 @@ export async function runInstall(
     return 1;
   }
 
-  // scripts/install:21, run BEFORE the workspace is ever created and before
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:20-21::report`, run BEFORE the workspace is ever created and before
   // any further adapter call -- a legacy identity is fatal on sight, not
   // something worth spending a mutation attempt on.
   const legacy = requireNoLegacyState(facts.identityState);
@@ -438,7 +434,7 @@ export async function runInstall(
     return 1;
   }
 
-  // scripts/install:22-33.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:22-33::status=`.
   if (facts.status === "needs prepare") {
     // Called as a FUNCTION: a failure propagates as a status, never through
     // `set -eu`. runPrepare has already replayed its own outcomes and
@@ -451,7 +447,7 @@ export async function runInstall(
     return 1;
   }
 
-  // scripts/install:35-36. The STRICT reader, never the lenient
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:35-36::spw_metadata_commit_or_empty`. The STRICT reader, never the lenient
   // generatedCommitOrEmpty gatherProbe already used for facts.generatedCommit:
   // a throw, an absent key, or a non-string value are all treated as absent
   // here, matching spw_metadata_commit_or_empty's `|| true` plus the
