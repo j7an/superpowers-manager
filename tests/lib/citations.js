@@ -31,7 +31,7 @@ const PATH_PART = String.raw`[A-Za-z0-9_.-]+`;
 const DOTTED_PATH = String.raw`(?:${PATH_PART}\/)*${PATH_PART}\.[A-Za-z0-9]+`;
 const EXTENSIONLESS_PATH = String.raw`(?:${PATH_PART}\/)+${PATH_PART}`;
 const RESOLUTION_PATH = String.raw`(?:${DOTTED_PATH}|${EXTENSIONLESS_PATH})`;
-const PATH = DOTTED_PATH;
+const PATH = RESOLUTION_PATH;
 const ANCHORED = new RegExp(
   String.raw`^(${PATH})(?::(\d+)(?:-(\d+))?)?::(.+)$`,
 );
@@ -49,10 +49,10 @@ const BACKTICKED = /`([^`\n]+)`/g;
 // which is a bypass, not a gap. Plain `path:N` is deliberately excluded --
 // that is a legitimate legacy citation and the legacy pass owns it.
 // The file-like fallback is intentionally broader than PATH only for candidate
-// retention: a plausible extension before the `::` separator is enough,
-// independently of valid PATH characters. ANCHORED remains the sole valid-path
-// parser.
-const FILELIKE_CANDIDATE = String.raw`.+\.[^\s:]+`;
+// retention: either a plausible dotted filename or a slash-bearing path before
+// `::` is enough, independently of valid PATH characters. ANCHORED remains the
+// sole valid-path parser.
+const FILELIKE_CANDIDATE = String.raw`(?:.+\.[^\s:]+|(?:[^\s:]+\/)+[^\s:]+)`;
 const CANDIDATE = new RegExp(
   String.raw`^(?:git show\s+\S+:\S|${FILELIKE_CANDIDATE}(?::.*)?::|:\d+(?:-\d+)?$)`,
 );

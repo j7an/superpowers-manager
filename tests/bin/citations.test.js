@@ -169,6 +169,44 @@ void test("scan parses all four citation forms", () => {
   assert.equal(found[4].raw, "src/x.ts:44");
 });
 
+void test("anchored citations accept a slash-bearing extensionless target", () => {
+  const root = fixture({
+    "a.js": "// `tests/container/Dockerfile:1::ENV SPW_CONTAINER`\n",
+    "tests/container/Dockerfile": "ENV SPW_CONTAINER=1\n",
+  });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.equal(citation.kind, "anchored");
+  assert.equal(citation.path, "tests/container/Dockerfile");
+  assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
+});
+
+void test("legacy scanning recognizes a slash-bearing extensionless path", () => {
+  const root = fixture({ "a.js": "// scripts/install:13\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual(
+    [citation.kind, citation.path, citation.line],
+    ["legacy", "scripts/install", 13],
+  );
+});
+
+void test("a bare word without a slash is not a citation path", () => {
+  const root = fixture({ "a.js": "// install:13\n" });
+  assert.deepEqual(scan([join(root, "a.js")]), []);
+});
+
+void test("an invalid extensionless anchored near-miss is retained", () => {
+  const root = fixture({ "a.js": "// `scripts/in@stall:13::spw_main`\n" });
+  const [citation] = scan([join(root, "a.js")]);
+  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
+  const verdict = validate(citation, root);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.code, "ANCHOR_MISSING");
+  assert.deepEqual(buildLedger([citation], root), {
+    unanchored: {},
+    deadReferent: {},
+  });
+});
+
 void test("scan does not read a citation out of a string literal", () => {
   const root = fixture({ "a.js": 'const s = "src/x.ts:44";\n' });
   assert.deepEqual(scan([join(root, "a.js")]), []);
