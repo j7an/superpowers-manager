@@ -34,9 +34,10 @@ const NOTE =
   "Note: remove or disable conflicting Superpowers providers yourself before" +
   " relying on manager skills.\n";
 
-// scripts/core/adapter.sh:58-73 via the same convention src/commands/probe.ts's
-// inspect() and src/commands/uninstall.ts's identity_state read both use: a
-// JSON null or missing key is the Python reader's own "" convention
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`
+// via the same convention src/commands/probe.ts's inspect() and
+// src/commands/uninstall.ts's identity_state read both use: a JSON null or
+// missing key is the Python reader's own "" convention
 // (scripts/core/provenance.sh), but a present, non-null, NON-STRING value is a
 // distinct, fail-closed "malformed" case with its own text -- never silently
 // stringified. AGENTS.md's fail-closed rule wins over shell parity here.
@@ -258,13 +259,16 @@ async function gatherInstallStages(
         // Deliberately NOT short-circuited on `!inspected.ok`, unlike stages
         // 1-3. scripts/install:57 handed the inspect result to
         // spw_verify_installed_fingerprint whatever it contained, and that
-        // function's first guard (scripts/core/lifecycle.sh:91-94) is what
-        // turns a failed inspection into "error: installed manager fingerprint
-        // inspection failed after install." verifyInstalledFingerprint's
-        // "call-failed" arm (src/lifecycle.ts:148-156) exists for exactly this
-        // and is reachable only from here. Returning failed() instead reported
-        // the adapter's own generic diagnostic and dropped the post-install
-        // verification claim -- a mutation had already been issued at stage 3,
+        // function's first guard, from
+        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:91-94::spw_inspect_fingerprint`,
+        // is what turns a failed inspection into "error: installed manager
+        // fingerprint inspection failed after install."
+        // verifyInstalledFingerprint's "call-failed" arm
+        // (`src/lifecycle.ts:158::if (inspected.kind === "call-failed") {`)
+        // exists for exactly this and is reachable only from here. Returning
+        // failed() instead reported the adapter's own generic diagnostic and
+        // dropped the post-install verification claim -- a mutation had
+        // already been issued at stage 3,
         // so "the install could not be verified" is the contract, not "an
         // adapter call failed". A ctx.adapter THROW is the one case with no
         // result to verify against, and keeps the short-circuit.
@@ -326,10 +330,12 @@ async function gatherInstallStages(
 // proceed.
 //
 // Exported specifically so a direct test can reach it. That is ONE STEP
-// FURTHER than src/commands/probe.ts:355-360's own precedent: that comment
-// licenses RETAINING an unreachable branch inside an already-public
-// function (runProbe was public before that comment existed), not EXPORTING
-// a new one. This module does the latter, deliberately, because runInstall
+// FURTHER than
+// `src/commands/probe.ts:369-374::This guard is NOT the production path.`'s own
+// precedent: that comment licenses RETAINING an unreachable branch inside an
+// already-public function (runProbe was public before that comment existed),
+// not EXPORTING a new one. This module does the latter, deliberately, because
+// runInstall
 // itself has no way to construct the unreachable input. Not part of the
 // interface Task 5 or Task 8 consume.
 //
@@ -368,22 +374,24 @@ export async function runInstall(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // src/commands/probe.ts:369-439's runProbe catch is the first. Because
-    // both consumers wrap the identical function, its long comment there
-    // enumerates exactly what can reach THIS stream too, including the three
-    // foreign-text exceptions at :385-413:
+    // `src/commands/probe.ts:369-439::THREE exceptions, all inherited and none a regression:`'s
+    // runProbe catch is the first. Because both consumers wrap the identical
+    // function, its long comment there enumerates exactly what can reach THIS
+    // stream too, including the three foreign-text exceptions at :385-413:
     //   1. :386-391 -- resolveRef splices git's own combined stdout+stderr
     //      into its text. Reached on probe's DEFAULT path, which that comment
     //      defines as every invocation NOT resolving a saved pin: a 40-hex
-    //      ref returns a "raw-commit" resolution at src/upstream.ts:160-162
+    //      ref returns a "raw-commit" resolution at
+    //      `src/upstream.ts:160-162::if (COMMIT_INPUT_RE.test(requestedRef)) {`
     //      before any git call, so it reaches no splice at all.
     //   2. :392-403 -- src/selection-store.ts's read path interpolates the
     //      caught error's own message, so Node errno prose can appear.
     //      AGENTS.md grandfathers that module's wording.
     //   3. :404-413 -- a SPAWN-level git failure, a different channel from
     //      exception 1's exit-status one: on the non-ENOENT arm of
-    //      src/git.ts:47-52, runGit rejects with "cannot run git: " followed
-    //      by the Node spawn error's own message.
+    //      `src/git.ts:47-52::if (typeof failure.code === "string") {`, runGit
+    //      rejects with "cannot run git: " followed by the Node spawn error's
+    //      own message.
     // Not repeated in full here; read it there.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
@@ -419,9 +427,9 @@ export async function runInstall(
   // something worth spending a mutation attempt on.
   const legacy = requireNoLegacyState(facts.identityState);
   if (legacy.kind === "blocked") {
-    // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
-    // lines to stderr, no `error: ` prefix; :54 is the `return 1` that
-    // follows it, reached without spw_die.
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`
+    // is a single printf writing three bare lines to stderr, no `error: `
+    // prefix; :54 is the `return 1` that follows it, reached without spw_die.
     for (const line of legacy.lines) ctx.stderr.write(`${line}\n`);
     return 1;
   }

@@ -3,13 +3,6 @@
     "src/adapter.ts": {
       "src/adapter-result.ts:133": 1
     },
-    "src/commands/install.ts": {
-      "src/lifecycle.ts:148-156": 1,
-      "src/commands/probe.ts:355-360": 1,
-      "src/commands/probe.ts:369-439": 1,
-      "src/upstream.ts:160-162": 1,
-      "src/git.ts:47-52": 1
-    },
     "src/commands/pin.ts": {
       "src/selection-store.ts:103": 1
     },
@@ -28,17 +21,6 @@
     },
     "src/commands/track-latest.ts": {
       "src/selection-store.ts:103": 1
-    },
-    "src/commands/uninstall.ts": {
-      "src/adapter.ts:1009": 2,
-      "src/commands/probe.ts:279-284": 1,
-      "src/workspace.ts:120": 2,
-      "src/commands/probe.ts:285": 1,
-      "src/commands/probe.ts:250-257": 1,
-      "src/lifecycle.ts:171-190": 1
-    },
-    "src/commands/update.ts": {
-      "src/commands/probe.ts:369-439": 1
     },
     "src/effective-selection.ts": {
       "src/selection.ts:41": 1
@@ -263,24 +245,9 @@
       "scripts/core/common.sh:71": 1,
       "apply-manifest-overlay.py:42": 1
     },
-    "src/commands/install.ts": {
-      "scripts/core/adapter.sh:58-73": 1,
-      "scripts/core/lifecycle.sh:91-94": 1,
-      "scripts/core/lifecycle.sh:50-53": 1
-    },
     "src/commands/probe.ts": {
       "scripts/core/lifecycle.sh:39-41": 1,
       "scripts/core/validate-adapter-response.py:268": 1
-    },
-    "src/commands/uninstall.ts": {
-      "scripts/core/adapter.sh:58-73": 1,
-      "scripts/core/adapter.sh:70": 2,
-      "scripts/core/common.sh:25-30": 1,
-      "scripts/core/provenance.sh:62": 1,
-      "scripts/core/validate-adapter-response.py:268": 1
-    },
-    "src/commands/update.ts": {
-      "scripts/core/lifecycle.sh:50-53": 1
     },
     "src/effective-selection.ts": {
       "scripts/core/selection.sh:4-29": 1,

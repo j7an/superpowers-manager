@@ -14,8 +14,9 @@ import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
 import type { CommandContext } from "./context.js";
 import { replayOutcome } from "./probe.js";
 
-// scripts/core/adapter.sh:58-73. A non-Boolean is a HARD failure, never a
-// falsy absent -- the shell spw_die'd rather than defaulting.
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`.
+// A non-Boolean is a HARD failure, never a falsy absent -- the shell spw_die'd
+// rather than defaulting.
 //
 // THREE outcomes, not two. Collapsing "the call failed" into "the result is
 // malformed" would emit the Boolean diagnostic for a controlled adapter
@@ -31,7 +32,9 @@ type Presence =
   // rather than assuming its caller always gates first.
   | { readonly kind: "call-failed" }
   // Clause 4: the call succeeded and the content is unusable. This -- and
-  // only this -- gets scripts/core/adapter.sh:70's Boolean text.
+  // only this -- gets
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`'s
+  // Boolean text.
   | { readonly kind: "malformed"; readonly key: "plugin" | "marketplace" }
   | { readonly kind: "ok"; readonly value: boolean };
 
@@ -47,7 +50,8 @@ function presenceFlag(
   // Mirrors src/lifecycle.ts's verifyUninstalledResources: a missing or
   // non-object `resources` falls THROUGH to the Boolean check rather than
   // getting its own message, for parity with
-  // scripts/core/adapter.sh:70's single "expected Boolean..." text on {}.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`'s
+  // single "expected Boolean..." text on {}.
   const resources =
     typeof value === "object" && value !== null && !Array.isArray(value)
       ? (value as Record<string, unknown>).resources
@@ -71,8 +75,9 @@ function presenceFlag(
 // null` -- replayOutcome already wrote the adapter's own error:/hint:
 // lines); outcome.ok && status !== 0 gets a hand-written message naming the
 // operation; a stop issues no further calls; and an unrelated throw (a
-// non-AdapterFailure cause -- src/adapter.ts:1009) gets a hand-written
-// message naming the operation too, never the caught error's own text
+// non-AdapterFailure cause --
+// `src/adapter.ts:1000-1009::if (cause instanceof AdapterFailure) {`) gets a
+// hand-written message naming the operation too, never the caught error's text
 // (AGENTS.md). `argv` here is always this module's own literal, bounded
 // construction -- never adapter-controlled text -- so naming it is safe.
 type StageResult =
@@ -98,7 +103,7 @@ async function invoke(
   // path, before any decision -- collected here and replayed by the caller
   // once gatherUninstall's try/catch has resolved, for the same EPIPE reason
   // gatherProbe carries its outcomes out rather than writing in place
-  // (src/commands/probe.ts:279-284).
+  // (`src/commands/probe.ts:293::The outcomes are CARRIED OUT rather than replayed in place`).
   outcomes.push(result.outcome);
   const outcome = result.outcome;
   if (result.status !== 0 || !outcome.ok) {
@@ -125,8 +130,10 @@ type UninstallOutcome =
     };
 
 // withWorkspace throws for mkdtemp failure before the callback ever runs
-// ("cannot create workspace", src/workspace.ts:120). A bare re-throw would
-// silently drop every outcome collected before that point -- a narrow
+// ("cannot create workspace",
+// `src/workspace.ts:120::throw new SafetyError("workspace", "cannot create workspace"`).
+// A bare re-throw would silently drop every outcome collected before that
+// point -- a narrow
 // DIAG-ADAPTER-01 regression the shell never had, since it replayed each
 // adapter response as it went rather than batching replay to the end. This
 // carries the outcomes collected so far alongside the original cause, so
@@ -151,8 +158,9 @@ class GatherFailure extends Error {
 // outcome the callback already computed.
 //
 // scripts/uninstall:34-35 echoed both closing lines before the exit trap ran,
-// and spw_cleanup_workspace_trap (scripts/core/common.sh:25-30) is
-// `rm -rf "$path" || :` -- the shell swallowed the removal failure outright
+// and
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:25-30::spw_cleanup_workspace_trap(`
+// is `rm -rf "$path" || :` -- the shell swallowed the removal failure outright
 // and kept its exit status. So the shell reported the removal it was asked to
 // perform on this path, and a port that drops "uninstall complete" is the one
 // that diverges. The port still exits 1 and names the leaked workspace, which
@@ -164,9 +172,10 @@ interface GatherRun {
 }
 
 // Every step that can throw or fail closed, returning the outcome as data and
-// performing NO writes. Same shape as gatherProbe (src/commands/probe.ts:285)
-// and for the same reason: a write inside this try could raise EPIPE, be
-// caught here, and be relabelled as a domain failure.
+// performing NO writes. Same shape as gatherProbe
+// (`src/commands/probe.ts:284-285::readonly status: 0;`) and for the same
+// reason: a write inside this try could raise EPIPE, be caught here, and be
+// relabelled as a domain failure.
 async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
   // scripts/uninstall:20-21 exported TMPDIR="$uninstall_workspace" so every
   // child confined its temporary files to the tree the workspace trap
@@ -262,17 +271,21 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
         // of that fact) rather than a live branch.
         const secondOutcome = second.result.outcome;
         if (!secondOutcome.ok) return failed(null);
-        // Mirrors src/commands/probe.ts:250-257's inspect() and
-        // src/lifecycle.ts:171-190's fingerprint read: a JSON null or a
-        // missing key defaults to "" (the Python reader's own convention for
-        // a JSON null, scripts/core/provenance.sh's spw_json_get), but a
-        // present, non-null, NON-STRING value is a distinct, fail-closed
-        // "malformed" case with its own text -- never silently stringified.
+        // Mirrors the inspect null/non-string branches
+        // (`src/commands/probe.ts:260-267::if (value === null || value === undefined) {`)
+        // and the fingerprint read
+        // (`src/lifecycle.ts:181-194::const raw = inspected.value.fingerprint;`):
+        // a JSON null or a missing key defaults to "" (the Python reader's own
+        // convention for a JSON null, scripts/core/provenance.sh's
+        // spw_json_get), but a present, non-null, NON-STRING value is a
+        // distinct, fail-closed "malformed" case with its own text -- never
+        // silently stringified.
         // (A previous draft of this comment claimed parity with the shell's
-        // stringify-and-compare behaviour at scripts/core/provenance.sh:62;
-        // that was wrong on inspection, and it cited these same two call
-        // sites as support even though both of them fail closed on a
-        // non-string value rather than stringifying it. AGENTS.md's
+        // stringify-and-compare behaviour at
+        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value`;
+        // that was wrong on inspection, and it cited these same two call sites
+        // as support even though both of them fail closed on a non-string value
+        // rather than stringifying it. AGENTS.md's
         // fail-closed rule wins over shell parity here.)
         const parsed = secondOutcome.result as Record<string, unknown> | null;
         const identityRaw = parsed?.identity_state;
@@ -347,8 +360,9 @@ export async function runUninstall(
   } catch (cause) {
     // gatherUninstall throws exactly one shape: GatherFailure, wrapping
     // withWorkspace's "cannot create workspace" SafetyError
-    // (src/workspace.ts:120), alongside whatever outcomes were collected
-    // before that throw -- none, for that cause. Replaying first, before
+    // (`src/workspace.ts:120::throw new SafetyError("workspace", "cannot create workspace"`),
+    // alongside whatever outcomes were collected before that throw -- none,
+    // for that cause. Replaying first, before
     // reporting the cause, keeps the arm honest for any outcome-bearing
     // throw the class is declared to carry (DIAG-ADAPTER-01). The
     // post-success cleanup failure no longer arrives here: gatherUninstall's
@@ -359,8 +373,9 @@ export async function runUninstall(
     // it always wraps -- but this catch does not assume that invariant
     // blindly.
     //
-    // ctx.adapter's non-AdapterFailure rethrow (src/adapter.ts:1009) does NOT
-    // reach here: invoke() catches it inside gatherUninstall and converts it
+    // ctx.adapter's non-AdapterFailure rethrow
+    // (`src/adapter.ts:1000-1009::if (cause instanceof AdapterFailure) {`) does
+    // NOT reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.
     //
@@ -377,7 +392,7 @@ export async function runUninstall(
   const { outcome, cleanupWarning } = run;
   // Replay first, on both paths: the shell validator replayed every
   // response's messages whether or not that response was a failure
-  // (scripts/core/validate-adapter-response.py:268).
+  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/validate-adapter-response.py:268::replay(messages)`).
   for (const each of outcome.outcomes) replayOutcome(each, ctx);
   let status: number;
   if (outcome.status === 1) {

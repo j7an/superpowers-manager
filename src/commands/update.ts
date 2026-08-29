@@ -73,10 +73,11 @@ export async function runUpdate(
     // install's NOTE line.
     //
     // This is a THIRD consumer of gatherProbe's throw channel --
-    // src/commands/probe.ts:369-439's runProbe catch is the first and
-    // src/commands/install.ts's runInstall catch is the second. Because all
-    // three wrap the identical function, runProbe's long comment there
-    // enumerates exactly what can reach this stream too; not repeated here.
+    // `src/commands/probe.ts:369-439::THREE exceptions, all inherited and none a regression:`'s
+    // runProbe catch is the first and src/commands/install.ts's runInstall catch
+    // is the second. Because all three wrap the identical function, runProbe's
+    // long comment there enumerates exactly what can reach this stream too; not
+    // repeated here.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
@@ -104,9 +105,9 @@ export async function runUpdate(
   // scripts/update:11.
   const legacy = requireNoLegacyState(facts.identityState);
   if (legacy.kind === "blocked") {
-    // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
-    // lines to stderr, no `error: ` prefix; :54 is the `return 1` that
-    // follows it, reached without spw_die.
+    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`
+    // is a single printf writing three bare lines to stderr, no `error: `
+    // prefix; :54 is the `return 1` that follows it, reached without spw_die.
     for (const line of legacy.lines) ctx.stderr.write(`${line}\n`);
     return 1;
   }
