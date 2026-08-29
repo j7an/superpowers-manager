@@ -1,32 +1,5 @@
 {
   "unanchored": {
-    "tests/unit/commands-install.test.js": {
-      "src/upstream.ts:160-162": 1,
-      "src/commands/install.ts:380-385": 1,
-      "src/lifecycle.ts:147-156": 1
-    },
-    "tests/unit/commands-pin.test.js": {
-      "tests/unit/manifest-overlay.test.js:5-7": 1
-    },
-    "tests/unit/commands-prepare.test.js": {
-      "src/upstream.ts:160-162": 1
-    },
-    "tests/unit/commands-probe.test.js": {
-      "tests/run-node-suites.js:15": 1
-    },
-    "tests/unit/commands-track-latest.test.js": {
-      "tests/unit/manifest-overlay.test.js:5-7": 1
-    },
-    "tests/unit/commands-uninstall.test.js": {
-      "src/workspace.ts:134-141": 1
-    },
-    "tests/unit/commands-unpin.test.js": {
-      "tests/unit/manifest-overlay.test.js:5-7": 1
-    },
-    "tests/unit/commands-update.test.js": {
-      "src/upstream.ts:160-162": 1,
-      "tests/baseline/prepare-fixture.js:32-67": 1
-    },
     "tests/unit/lifecycle.test.js": {
       "src/commands/probe.ts:247-252": 1,
       "src/adapter-result.ts:199": 1
@@ -38,25 +11,6 @@
     }
   },
   "deadReferent": {
-    "tests/unit/commands-install.test.js": {
-      "scripts/core/lifecycle.sh:50-53": 1,
-      "scripts/core/lifecycle.sh:57": 2,
-      "scripts/core/lifecycle.sh:92": 1
-    },
-    "tests/unit/commands-prepare.test.js": {
-      "scripts/core/provenance.sh:59": 1,
-      "scripts/core/provenance.sh:62": 1
-    },
-    "tests/unit/commands-probe.test.js": {
-      "tests/test_probe.sh:413": 1
-    },
-    "tests/unit/commands-uninstall.test.js": {
-      "scripts/core/lifecycle.sh:75-77": 1,
-      "scripts/core/common.sh:25-30": 1
-    },
-    "tests/unit/commands-update.test.js": {
-      "scripts/core/lifecycle.sh:50-53": 1
-    },
     "tests/unit/lifecycle.test.js": {
       "scripts/core/lifecycle.sh:50-53": 1,
       "scripts/core/lifecycle.sh:56-58": 1,

@@ -85,7 +85,7 @@ function writeJsonFile(path, value) {
 
 /**
  * A hermetic install ctx: a 40-hex SUPERPOWERS_REF is a raw-commit resolution
- * (src/upstream.ts:160-162), so computeEffectiveSelection never touches git,
+ * (`src/upstream.ts:162-164::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
  * matching tests/unit/commands-prepare.test.js's unitContext.
  *
  * `savedCommit`, when given, is written as a SEPARATE, valid pinned
@@ -420,7 +420,7 @@ void test("a legacy identity state stops before the workspace is created", async
   );
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` is a single printf writing three bare
   // lines to stderr, no `error: ` prefix; :54 is the `return 1` that follows
   // it, reached without spw_die.
   assert.equal(
@@ -435,12 +435,12 @@ void test("a legacy identity state stops before the workspace is created", async
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case above drives the outer guard's `"blocked"` arm
-  // (src/commands/install.ts:380-385); this one drives its `"unknown"` arm
-  // (:386-389). Each arm needs its own case: a mutant disabling the guard as a
+  // (`src/commands/install.ts:428-435::const legacy = requireNoLegacyState(facts.identityState)`); this one drives its `"unknown"` arm
+  // (`src/commands/install.ts:436-439::if (legacy.kind === "unknown") {`). Each arm needs its own case: a mutant disabling the guard as a
   // whole dies to the `"blocked"` case alone and so proves only that one of
   // the two is live -- the same blind spot that let the stage-1 re-inspection's
   // `"unknown"` arm survive as a fail-open. Distinct from the empty-state gate
-  // at :371-374, which fires first and has its own text: "chaos" is non-empty,
+  // at `src/commands/install.ts:420-423::facts.identityState.length === 0`, which fires first and has its own text: "chaos" is non-empty,
   // so it clears that gate and reaches requireNoLegacyState's catch-all arm.
   const out = sink();
   const err = sink();
@@ -457,7 +457,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   );
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  // scripts/core/lifecycle.sh:57 calls spw_die, which DOES prefix `error: ` --
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:57::spw_die "unknown adapter identity state: $identity_state` calls spw_die, which DOES prefix `error: ` --
   // unlike the bare three lines the `"blocked"` arm writes.
   assert.equal(
     err.chunks.join(""),
@@ -692,7 +692,7 @@ void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested
   );
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  // scripts/core/lifecycle.sh:57 calls spw_die, which DOES prefix `error: `.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:57::spw_die "unknown adapter identity state: $identity_state` calls spw_die, which DOES prefix `error: `.
   assert.equal(
     err.chunks.join(""),
     "error: unknown adapter identity state: chaos\n",
@@ -777,11 +777,11 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
 // rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
 // reached verifyInstalledFingerprint, leaving that function's "call-failed" arm
-// (src/lifecycle.ts:147-156) dead and dropping the post-install verification
+// (`src/lifecycle.ts:157-166::inspected.kind === "call-failed"`) dead and dropping the post-install verification
 // claim entirely. The shell handed its inspect result to
 // spw_verify_installed_fingerprint unconditionally (scripts/install:57) and
 // printed BOTH lines — the adapter's own error and
-// scripts/core/lifecycle.sh:92's. The flip surfaced it: the shell-parity case
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`'s. The flip surfaced it: the shell-parity case
 // in tests/bin/install-commands.test.js titled "a failed fingerprint
 // inspection is reported as an inspection failure (:687-700)", green against
 // /bin/sh through this same channel before Task 8, went red the moment the

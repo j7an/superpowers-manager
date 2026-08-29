@@ -15,7 +15,7 @@ import {
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
 // implicit `any`. Load the built module dynamically while typing it against
 // its `src/` source instead. Convention documented at
-// tests/unit/manifest-overlay.test.js:5-7.
+// `tests/unit/manifest-overlay.test.js:5-7::typecheck`.
 /** @type {typeof import("../../src/commands/track-latest.js")} */
 const { runTrackLatest } = await import(
   new URL("../../dist/commands/track-latest.js", import.meta.url).href
