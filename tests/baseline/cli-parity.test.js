@@ -2046,7 +2046,7 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * is NOT in force for these five IDs, and is deliberately not simulated.
  * `respondToListing` consults `nextPluginList` only when its caller passes
  * `sequencePluginList` (`tests/bin/lifecycle-fakes.js:88-91::const resolved = request.sequencePluginList`), and only
- * `tests/bin/probe-fakes.js:33::sequencePluginList` passes it; the install and uninstall fakes read
+ * `tests/bin/probe-fakes.js:33::sequencePluginList: true` passes it; the install and uninstall fakes read
  * the flat `plugin_list.json` this helper writes. Adopting it here would mean
  * setting that flag in both lifecycle fakes, which every existing case in
  * tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js
