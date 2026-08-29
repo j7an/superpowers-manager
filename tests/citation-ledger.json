@@ -13,23 +13,6 @@
     "src/commands/pin.ts": {
       "src/selection-store.ts:103": 1
     },
-    "src/commands/prepare.ts": {
-      "src/hooks.ts:40": 1,
-      "src/upstream.ts:330": 1,
-      "src/hooks.ts:109": 1,
-      "tests/unit/hooks.test.js:95": 2,
-      "src/workspace.ts:99-107": 1,
-      "src/workspace.ts:137": 1,
-      "src/adapter-result.ts:32-35": 1,
-      "src/commands/probe.ts:210-232": 1,
-      "src/atomic.ts:208-215": 1,
-      "src/workspace.ts:103-106": 1,
-      "src/hooks.ts:109-134": 1,
-      "tests/unit/upstream.test.js:460-469": 1,
-      "src/selection-store.ts:124": 1,
-      "src/git.ts:47-51": 1,
-      "src/commands/install.ts:499-506": 1
-    },
     "src/commands/probe.ts": {
       "src/adapter-result.ts:32-35": 1,
       "src/adapter.ts:818": 1,
@@ -284,13 +267,6 @@
       "scripts/core/adapter.sh:58-73": 1,
       "scripts/core/lifecycle.sh:91-94": 1,
       "scripts/core/lifecycle.sh:50-53": 1
-    },
-    "src/commands/prepare.ts": {
-      "common.sh:53-59": 1,
-      "common.sh:44-51": 1,
-      "scripts/core/common.sh:44-51": 1,
-      "scripts/core/provenance.sh:56-62": 1,
-      "provenance.sh:62": 1
     },
     "src/commands/probe.ts": {
       "scripts/core/lifecycle.sh:39-41": 1,
