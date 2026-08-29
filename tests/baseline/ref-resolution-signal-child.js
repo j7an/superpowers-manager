@@ -7,7 +7,7 @@
 // FAKE_GIT_SIGNAL_BODY in the test file), so the parent can interrupt this
 // process — and, via its own process group, the hung fetch descendant too —
 // with a real POSIX signal. Ports the child half of
-// tests/test_ref_resolution.sh:144-188's Python fixture.
+// `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:144-188::start_new_session=True`'s Python fixture.
 
 /** @type {typeof import("../../src/upstream.js")} */
 const { fetchExactCommit } = await import(

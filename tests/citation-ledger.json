@@ -1,8 +1,5 @@
 {
   "unanchored": {
-    "tests/baseline/ref-resolution.test.js": {
-      "tests/bin/lifecycle-fixture.js:84-86": 1
-    },
     "tests/baseline/selection-commands.test.js": {
       "src/commands/track-latest.ts:31": 1,
       "src/selection.ts:198": 1
@@ -127,23 +124,6 @@
   "deadReferent": {
     "tests/baseline/protocol-disposition.test.js": {
       "traceability.test.js:58-62": 1
-    },
-    "tests/baseline/ref-resolution-signal-child.js": {
-      "tests/test_ref_resolution.sh:144-188": 1
-    },
-    "tests/baseline/ref-resolution.test.js": {
-      "scripts/core/upstream.sh:6": 1,
-      "tests/test_ref_resolution.sh:12": 1,
-      "tests/test_ref_resolution.sh:41-57": 1,
-      "tests/test_ref_resolution.sh:92-93": 1,
-      "tests/test_ref_resolution.sh:173-178": 1,
-      "scripts/core/upstream.sh:6-13": 1,
-      "bin-dispatch.md:19-21": 1,
-      "tests/test_ref_resolution.sh:132-142": 1,
-      "tests/test_ref_resolution.sh:144-188": 1,
-      "tests/test_ref_resolution.sh:189": 1,
-      "tests/test_ref_resolution.sh:182-186": 1,
-      "tests/test_ref_resolution.sh:195-207": 1
     },
     "tests/baseline/selection-commands-signal-child.js": {
       "tests/test_selection_commands.sh:301-330": 1
