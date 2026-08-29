@@ -15,7 +15,7 @@ import {
 // no accompanying .d.ts, so checkJs treats every parameter along the chain as
 // implicit `any`. Load the built module dynamically while typing it against
 // its `src/` source instead. Convention documented at
-// tests/unit/manifest-overlay.test.js:5-7.
+// `tests/unit/manifest-overlay.test.js:5-7::typecheck`.
 /** @type {typeof import("../../src/commands/unpin.js")} */
 const { runUnpin } = await import(
   new URL("../../dist/commands/unpin.js", import.meta.url).href

@@ -15,7 +15,7 @@ export const UNINSTALL_SCHEMA = {
   marketplaceListRc: "integer",
   spuriousMutation: "boolean",
   // `removesMutateState: false` ports the shell driver's `remove_noop` marker,
-  // which is deliberately GLOBAL: tests/test_uninstall_commands.sh:71 gates the
+  // which is deliberately GLOBAL: `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:71::path, marketplace_name` gates the
   // marketplace mutation on the same marker as the plugin mutation, and :399
   // comments it "removes are logged but do not mutate the fixtures" — plural.
   // It is a separate key precisely so the global scope is visible at the call
@@ -46,7 +46,7 @@ export const INSTALL_SCHEMA = {
   marketplaceAdd: ["ok", "fail"],
   // `orphan` registers the plugin as installed without materialising its
   // cached tree, which is the only lever that makes the REAL adapter's
-  // fingerprint inspection fail (src/adapter.ts:831-844). It exists so the
+  // fingerprint inspection fail (`src/adapter.ts:831-844::const activeRoot`). It exists so the
   // failed-inspection case can assert the subject's own diagnostic instead of
   // intercepting the adapter — see install-commands.test.js's
   // "a failed fingerprint inspection is reported as an inspection failure".

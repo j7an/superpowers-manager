@@ -555,7 +555,7 @@ void test("tag-release.yml offers exactly the supported bump options", () => {
 });
 
 void test("the bump-option check reads `bump`, not a decoy sibling input", () => {
-  // Ported 1:1 from tests/test_workflows.sh:665-692. The shell's decoy
+  // Ported 1:1 from `git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:665-692::unsupported_option_fixture =`. The shell's decoy
   // guarded a hand-rolled indentation walker; the port's path addressing
   // makes the same mistake differently reachable, not unreachable —
   // tag-release.yml has exactly one input today, so a mistyped path only
@@ -595,7 +595,7 @@ void test("the bump-option check reads `bump`, not a decoy sibling input", () =>
 });
 
 void test("the bump-option check reports a missing options block distinctly from a wrong one (items 99-100)", () => {
-  // Item 100 (tests/test_workflows.sh:646): extract_bump_options raises
+  // Item 100 (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:646::raise ValueError("Tag Release bump options are missing`): extract_bump_options raises
   // "Tag Release bump options are missing" when the
   // on.workflow_dispatch.inputs.bump.options path is never found. A naive
   // port that only compares the returned options against
@@ -619,7 +619,7 @@ void test("the bump-option check reports a missing options block distinctly from
     /expected on\.workflow_dispatch\.inputs\.bump\.options to be a sequence/,
   );
 
-  // The "present but wrong" counterpart (tests/test_workflows.sh:650-657):
+  // The "present but wrong" counterpart (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:650-657::def assert_supported_bump_options`):
   // options exist as a sequence, but not the expected four values. This
   // must fail with a distinct message from the "missing" case above, so a
   // single wrong-shaped error cannot satisfy both regexes.
@@ -643,7 +643,7 @@ void test("the bump-option check reports a missing options block distinctly from
 });
 
 void test("a duplicated bump options block is rejected while parsing, distinctly from missing or wrong (item 99)", () => {
-  // Item 99 (tests/test_workflows.sh:632): extract_bump_options raised
+  // Item 99 (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:632::duplicated`): extract_bump_options raised
   // "Tag Release bump options are duplicated" when its indentation walker
   // encountered the on.workflow_dispatch.inputs.bump.options key path a
   // second time. Under a real YAML parser, two `options:` keys in the

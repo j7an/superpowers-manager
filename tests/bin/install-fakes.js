@@ -1,7 +1,7 @@
 // @ts-check
 // Executable, never imported. A two-line sh wrapper written by
 // lifecycle-fixture.js execs this as either `codex` or `adapter`.
-// Replaces the shell fake codex at tests/test_install_commands.sh:101-169 and
+// Replaces the shell fake codex at `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:101-169::cat > "$fake_codex` and
 // the recording adapter at :171-221.
 //
 // PR 11.5 slice 2 extracted only the read side (config load + the two
@@ -104,7 +104,7 @@ function runCodex(ctx) {
       // Codex reports the plugin installed at 1.0.0, but no cached tree is
       // ever written for it. The real adapter's fingerprint handler then
       // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — src/adapter.ts:831-844 — so it returns a
+      // finds nothing to read there — `src/adapter.ts:831-844::const activeRoot` — so it returns a
       // controlled inspect-failed outcome. No adapter interception needed.
       ctx.writeJson("plugin_list.json", {
         installed: [

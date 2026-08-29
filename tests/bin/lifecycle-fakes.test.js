@@ -31,7 +31,7 @@ import { registerScratch } from "./fixture-scratch.js";
 
 const BIN = fileURLToPath(new URL(".", import.meta.url));
 
-// mkdtemp under os.tmpdir() for the same reason lifecycle-fixture.js:28-36
+// mkdtemp under os.tmpdir() for the same reason `tests/bin/lifecycle-fixture.js:27-36::mkdtempSync(join(tmpdir(), "spw-lifecycle-"))`
 // gives: TMPDIR when the runner sets one, the platform default when it does
 // not, and uniqueness from mkdtemp rather than from a fixed name.
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-fakes-"));

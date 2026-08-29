@@ -1,7 +1,7 @@
 // @ts-check
 // Executable, never imported. A two-line sh wrapper written by
 // lifecycle-fixture.js execs this as either `codex` or `adapter`.
-// Replaces the shell fake codex at tests/test_uninstall_commands.sh:28-84 and
+// Replaces the shell fake codex at `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:28-84::cat > "$fake_codex` and
 // the recording adapter at :87-98, including their two python3 heredocs.
 //
 // PR 11.5 slice 2 extracted only the read side (config load + the two
@@ -34,7 +34,7 @@ function rendezvous() {
   const expect = Number(process.env.SPW_RENDEZVOUS_EXPECT);
   if (!dir || !Number.isInteger(expect) || expect < 1) return true;
   // ONCE PER PARTICIPANT, not once per codex call. A successful `uninstall`
-  // invokes the fake SIX times (tests/bin/uninstall-commands.test.js:434-439:
+  // invokes the fake SIX times (`tests/bin/uninstall-commands.test.js:433-439::assert.deepEqual(readLog`:
   // plugin list, marketplace list, plugin remove, marketplace remove, then both
   // listings again). Each call is a separate process, so a module-level flag
   // cannot carry the fact -- the identity has to live on disk, keyed on the

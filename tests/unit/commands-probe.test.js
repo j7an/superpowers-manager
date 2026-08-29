@@ -39,7 +39,7 @@ const FULL = {
 // Amended 2026-08-07 after adjudication finding 4. This list was previously
 // exported from THIS FILE for tests/baseline/probe.test.js to import — but
 // importing a *.test.js module re-executes and re-registers its tests inside
-// the importing suite (tests/run-node-suites.js:15,106-140 registers every
+// the importing suite (`tests/run-node-suites.js:15::const SUITE_DIRS`,106-140 registers every
 // top-level *.test.js). The list now lives in production, derived from the one
 // ordered fields() table, and both suites import it from dist/. That is
 // strictly better than any test-side copy: the expectation cannot drift from
@@ -77,7 +77,7 @@ void test("the exported key list is the frozen seventeen", () => {
 
 void test("porcelain emits exactly seventeen keys in the frozen order", () => {
   // Whole-list equality, not per-key membership: a `includes` check passes
-  // while the order drifts, and tests/test_probe.sh:413 asserted the order.
+  // while the order drifts, and `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:413::$expected_keys` asserted the order.
   const lines = formatPorcelain(FULL).split("\n").slice(0, -1);
   assert.deepEqual(
     lines.map((line) => line.slice(0, line.indexOf("="))),

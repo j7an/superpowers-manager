@@ -61,7 +61,7 @@ function scriptedAdapter(responses) {
 const CLEAN = { resources: { plugin: false, marketplace: false } };
 
 void test("a remaining legacy state is REPORTED on stdout, not stderr", async () => {
-  // scripts/core/lifecycle.sh:75-77 has no `>&2`, unlike :53. The retired
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:75-77::remains` has no `>&2`, unlike :53. The retired
   // shell driver witnessed the split through its capture form; LegacyVerdict
   // carries no channel by design, so this is the only witness after 4a.
   // Spec §6.2.3 item 2.
@@ -488,7 +488,7 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
 
 // --- Post-success withWorkspace cleanup failure (onCleanupFailure) ---
 //
-// src/workspace.ts:134-141: with `onCleanupFailure` supplied and the callback
+// `src/workspace.ts:134-141::await remove`: with `onCleanupFailure` supplied and the callback
 // not failed, a post-success cleanup failure is suppressed and the callback's
 // return value survives. uninstall.ts passes it, so the UninstallOutcome the
 // callback computed still reaches the operator, and the leaked workspace is
@@ -496,7 +496,7 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
 //
 // This is what scripts/uninstall did. It echoed "uninstall complete" and the
 // note at :34-35 before the exit trap ran, and spw_cleanup_workspace_trap
-// (scripts/core/common.sh:25-30) is `rm -rf "$path" || :`, so the removal
+// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:25-30::spw_cleanup_workspace_trap(`) is `rm -rf "$path" || :`, so the removal
 // failure never suppressed either line. An earlier port dropped both, frozen
 // by this test asserting stdout was the first inspection's note alone; the
 // shell is the authority and that assertion was pinning the defect.

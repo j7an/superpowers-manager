@@ -67,7 +67,7 @@ const INSTALL_NOTE =
 
 /**
  * A hermetic update ctx: a 40-hex SUPERPOWERS_REF is a raw-commit resolution
- * (src/upstream.ts:160-162), so computeEffectiveSelection never touches git,
+ * (`src/upstream.ts:162-164::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
  * matching tests/unit/commands-install.test.js's own makeCtx.
  *
  * @param {{
@@ -139,7 +139,7 @@ function probeNeedsInstall() {
 // scope. GIT_CONFIG_GLOBAL deliberately names a file that does not exist and
 // GIT_CONFIG_NOSYSTEM suppresses the system file, so the fixture repository is
 // not machine-dependent. Same arrangement as
-// tests/baseline/prepare-fixture.js:32-67, and the reason it is needed here is
+// `tests/baseline/prepare-fixture.js:32-67::const GIT_ENV`, and the reason it is needed here is
 // the same: `core.hooksPath` or `init.templateDir` inherited from the
 // developer would change what this repository ends up containing.
 const GIT_HOME = join(SCRATCH, "fixture-git-home");
@@ -597,7 +597,7 @@ void test("a legacy identity state stops before the update-control guard even ru
   );
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
-  // scripts/core/lifecycle.sh:50-53 is a single printf writing three bare
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` is a single printf writing three bare
   // lines to stderr, no `error: ` prefix; :54 is the `return 1` that follows
   // it, reached without spw_die.
   assert.equal(

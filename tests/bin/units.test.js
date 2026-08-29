@@ -230,7 +230,7 @@ assert.strictEqual(
 // --- the baseline sandbox refuses network egress through git ---
 // PR 11.5 slice 3. The in-process prepare CLONES, so any sandbox case that
 // forgets SUPERPOWERS_UPSTREAM_URL would reach the production default at
-// src/effective-selection.ts:66. Local paths must still pass through.
+// `src/effective-selection.ts:68::export const UPSTREAM_URL_DEFAULT`. Local paths must still pass through.
 {
   const support = await import(
     new URL("../baseline/support.js", import.meta.url).href

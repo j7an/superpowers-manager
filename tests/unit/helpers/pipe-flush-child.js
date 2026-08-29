@@ -2,7 +2,7 @@
 // @ts-check
 // Two-mode child proving that the idiom carried row :2041 prescribes is
 // load-bearing rather than cosmetic. Spawned through execFile, so stdout is a
-// pipe — the same channel src/adapter.ts:124-133 gives the fake `codex`.
+// pipe — the same channel `src/adapter.ts:124-133::execFile(` gives the fake `codex`.
 //
 // argv[2] is "exit" (the old idiom) or "exitCode" (the new one). The payload
 // deliberately exceeds the 64 KiB POSIX pipe buffer, because a payload that

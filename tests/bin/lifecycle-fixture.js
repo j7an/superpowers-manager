@@ -4,7 +4,7 @@
 // concurrently and none depends on another's cleanup. That independence is the
 // point: the shell drivers established a scenario's preconditions from an
 // unrelated scenario's cleanup twenty lines earlier
-// (tests/test_install_commands.sh:418-423).
+// (`git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:418-423::established`).
 
 import {
   cpSync,
@@ -95,7 +95,7 @@ const IDENTITY = [
  * across every case: `src/commands/prepare.ts` only ever fetches from it via
  * `src/upstream.ts`'s `fetchExactCommit` and `src/git.ts`, which is
  * read-only on the source, so concurrent cases cannot disturb one another
- * through it. Mirrors tests/test_install_commands.sh:51-67.
+ * through it. Mirrors `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:51-67::stable`.
  * @returns {string}
  */
 function buildUpstream() {
@@ -153,7 +153,7 @@ export const UPSTREAM = buildUpstream();
  * A two-line sh wrapper that execs an absolute node against a fake module. A
  * `#!/usr/bin/env node` shebang is deliberately avoided: it would add a
  * node-on-PATH dependency, and the uninstall port's stripped-PATH cases
- * (tests/test_uninstall_commands.sh:172-182, :196-198) manipulate PATH on
+ * (`git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:172-182::no_git_path=`, :196-198) manipulate PATH on
  * purpose. Paths come from mkdtempSync and process.execPath, so they contain
  * no shell metacharacters.
  * @param {string} dir
@@ -485,7 +485,7 @@ export async function runScript(caseEnv, script, options = {}) {
   // An explicit allowlist, not process.env. The shell drivers used
   // `env VAR=… sh …`, which inherits the developer's whole environment.
   //
-  // HOME is case-local, never the developer's: scripts/core/selection.sh:22-28
+  // HOME is case-local, never the developer's: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/selection.sh:22-28::required`
   // falls back to $HOME/.config/superpowers-manager when neither
   // SUPERPOWERS_CONFIG_DIR nor XDG_CONFIG_HOME is set, so a real HOME lets
   // production read the developer's actual selection state.
@@ -532,7 +532,7 @@ export function readLog(path) {
 
 /**
  * First occurrence. Mirrors `grep -Fn … | head -n1`
- * (tests/test_install_commands.sh:306).
+ * (`git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:306::grep -Fn "$1" "$log`).
  * @param {string[]} log
  * @param {string} needle
  * @returns {number}
@@ -543,7 +543,7 @@ export function firstIndex(log, needle) {
 
 /**
  * Last occurrence. Mirrors `grep -Fn … | tail -n1`
- * (tests/test_install_commands.sh:390, :400-401). Kept separate from
+ * (`git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:390::second_control_line=`, :400-401). Kept separate from
  * firstIndex on purpose: the shell drivers use both, and collapsing them
  * would silently change what several ordering assertions claim.
  * @param {string[]} log

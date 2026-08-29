@@ -40,14 +40,14 @@ void test("readUpstreamManifestVersion mirrors spw_json_get for the three shapes
     ),
     "6.0.3",
   );
-  // scripts/core/provenance.sh:59 — a missing key yields the empty string.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:59::break` — a missing key yields the empty string.
   assert.equal(
     await readUpstreamManifestVersion(
       manifestFile("absent", '{"name":"superpowers"}'),
     ),
     "",
   );
-  // scripts/core/provenance.sh:62 — an explicit null yields the empty string.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value` — an explicit null yields the empty string.
   assert.equal(
     await readUpstreamManifestVersion(manifestFile("null", '{"version":null}')),
     "",
@@ -113,7 +113,7 @@ void test("readUpstreamManifestVersion delegates every read and parse failure to
 
 /**
  * A ctx whose selection resolves without touching git: a 40-hex SUPERPOWERS_REF
- * is a raw-commit resolution (src/upstream.ts:160-162).
+ * is a raw-commit resolution (`src/upstream.ts:162-164::return { kind: "raw-commit"`).
  *
  * `adapter: notCalledAdapter` is safe for every case below: each fails
  * closed (a missing manifest template, a failed clone) before gatherPrepare

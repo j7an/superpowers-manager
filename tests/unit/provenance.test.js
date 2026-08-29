@@ -51,9 +51,9 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
     await assert.rejects(readCodexBuildSource(file), SafetyError, text);
   }
   // Bytes: the matrix says NO byte cap, and until PR-3 the only assertion of
-  // that was tests/test_adapter_protocol.sh:853-854 (a 1 MiB + 1 payload). Ported
+  // that was `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:852-854::large` (a 1 MiB + 1 payload). Ported
   // here so the cell keeps a witness after the driver is deleted. Mirrors
-  // tests/unit/codex-state.test.js:47 for the sibling reader.
+  // `tests/unit/codex-state.test.js:47::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
   await writeFile(
     file,
     `{"padding":"${"x".repeat(1_048_577)}","source":"https://example.invalid/repo"}`,
@@ -69,9 +69,9 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   // same unmodified reader rejects at depth 20000 under --stack-size=984 and
   // accepts under --stack-size=8192, so such an assertion would report RED on
   // a correct product under one node invocation and GREEN under another.
-  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (src/provenance.ts:36-39)
+  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (`src/provenance.ts:31-34::export const PROVENANCE_CODEX_SOURCE_PROFILE`)
   // sets no maxDepth, and nested(255) reaches container depth 256, which a
-  // `maxDepth: 256` mutant still ACCEPTS -- src/strict-json.ts:158 rejects only on
+  // `maxDepth: 256` mutant still ACCEPTS -- `src/strict-json.ts:158::if (this.profile.maxDepth` rejects only on
   // `depth > maxDepth`. nested(256) reaches 257 and is the first depth that
   // mutant crosses. The pair is already pinned against the strict profile,
   // which does cap at 256, by PROV-READER-STRICT-01's nested(255)/nested(256)
@@ -244,7 +244,7 @@ void test("generatedCommitOrEmpty reads the generated tree's provenance", async 
     "the metadata path must match src/provenance.ts's generatedMetadataPath",
   );
 
-  // Absent tree: empty, not a throw. scripts/core/lifecycle.sh:33-37 relied on
+  // Absent tree: empty, not a throw. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:33-37::spw_generated_commit_or_empty` relied on
   // the lenient reader so `probe` can report "needs prepare" instead of
   // aborting the remediation path.
   assert.equal(await generatedCommitOrEmpty(directory), "");

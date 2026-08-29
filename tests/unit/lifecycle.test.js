@@ -13,7 +13,7 @@ const {
   verifyUninstalledResources,
 } = await import(new URL("../../dist/lifecycle.js", import.meta.url).href);
 
-// Frozen operator text. scripts/core/lifecycle.sh:50-53 and :75-77 print these
+// Frozen operator text. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
 // they are whole-line exact and this suite keeps them that way.
 const BLOCKED_LINES = [
@@ -59,7 +59,7 @@ void test("reportLegacyState reports legacy and both with the frozen text", () =
 });
 
 // PORT-ONLY. tests/test_codex_state_units.sh never exercised the `*)` arms of
-// either case statement (scripts/core/lifecycle.sh:56-58 and :81-83), so the
+// either case statement (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:56-58::spw_die "unknown adapter identity state: $identity_state` and :81-83), so the
 // spw_die path was unwitnessed on the shell side. Recorded as port-only items
 // 1-4 in tests/migration-inventory/codex-state-units.md — the port-only region
 // restarts at 1 rather than continuing the mapped region's numbering.
@@ -154,7 +154,7 @@ void test("verifyInstalledFingerprint accepts an exact commit match", () => {
 });
 
 void test("verifyInstalledFingerprint accepts the seven-character short form", () => {
-  // scripts/core/status.sh:7 compares against `cut -c 1-7`, and commitMatches
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and commitMatches
   // in src/status.ts keeps that rule. This case is what pins the two together.
   const desired = "b".repeat(40);
   const verdict = verifyInstalledFingerprint(
@@ -189,9 +189,9 @@ void test("verifyInstalledFingerprint reports a mismatch and surfaces its hint",
 });
 
 void test("verifyInstalledFingerprint reports an undetectable fingerprint and its own hint", () => {
-  // scripts/core/lifecycle.sh:108-112 chooses between two hint keys on whether
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
-  // the Python reader's behaviour for JSON null (src/commands/probe.ts:247-252).
+  // the Python reader's behaviour for JSON null (`src/commands/probe.ts:261-267::const value`).
   const verdict = verifyInstalledFingerprint(
     "f".repeat(40),
     ok({ verification_hints: { missing: "codex reported nothing" } }),
@@ -234,11 +234,11 @@ void test("ADAPTER-SURROGATE-01 verifyInstalledFingerprint omits a hint carrying
   // `test(` call sites, so the second value is a row here rather than a case
   // of its own.
   //
-  // hasTerminalControl covers 0xd800-0xdfff (src/adapter-result.ts:199).
+  // hasTerminalControl covers 0xd800-0xdfff (`src/adapter-result.ts:199::(code >= 0xd800`).
   // U+D800 alone leaves that clause under-constrained: narrowing it to
   // `code <= 0xdbff` keeps a high-surrogate row green while admitting every
   // low surrogate. 0xdc9b is the value the retiring Python witness drove
-  // through verification_hints.missing (tests/test_adapter_protocol.py:544 at
+  // through verification_hints.missing (`git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.py:544::udc9b` at
   // fd94d7d).
   //
   // String.fromCharCode, never an inline escape: an escape typed into an
@@ -294,7 +294,7 @@ void test("verifyUninstalledResources rejects a surviving marketplace", () => {
 });
 
 void test("verifyUninstalledResources fails closed on a non-Boolean resource", () => {
-  // scripts/core/adapter.sh:58-73 died with `expected Boolean adapter result`
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean` died with `expected Boolean adapter result`
   // rather than treating an unparseable value as absent. Unparseable state is
   // never success — spec §4.3 rule 4.
   assert.deepEqual(
@@ -331,7 +331,7 @@ void test("an unparseable fingerprint result names parsing, not inspection", () 
 });
 
 void test("a non-string fingerprint is unparseable, not empty", () => {
-  // PORT-ONLY. The shell cannot construct this: provenance.sh:62 stringifies
+  // PORT-ONLY. The shell cannot construct this: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value` stringifies
   // any non-null scalar. Pinned so the branch cannot be deleted as dead.
   const verdict = verifyInstalledFingerprint(
     "abcdef1234567890abcdef1234567890abcdef12",
@@ -369,8 +369,8 @@ void test("the marketplace Boolean check names its own key", () => {
 });
 
 void test("a non-object resources falls through to the Boolean message", () => {
-  // Parity with scripts/core/adapter.sh:70 for input {} — the input
-  // tests/test_marketplace_reconcile.sh:224 writes. The distinct
+  // Parity with `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected` for input {} — the input
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_marketplace_reconcile.sh:224::printf '%s\n' '{}` writes. The distinct
   // "expected an object adapter result at resources" message was DELETED by
   // spec §6.2.3 item 3a; this case is what stops it coming back.
   const verdict = verifyUninstalledResources(ok({}));
@@ -390,7 +390,7 @@ void test("a non-object resources falls through to the Boolean message", () => {
 // The reportability half -- that an inspection can emit `unsupported` --
 // retires with the transport. src/adapter.ts's update-control view returns
 // the literal `managed`; the old witness at
-// tests/test_adapter_protocol.sh:102-104 ran a fixture SHELL adapter emitting
+// `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:102-104::run_adapter update` ran a fixture SHELL adapter emitting
 // a canned outcome, and no shell adapters remain. tests/migration-inventory/
 // probe.md item 92 instructs slice 5 to port that witness; it cannot be
 // ported, because there is nothing in-process that produces the value.

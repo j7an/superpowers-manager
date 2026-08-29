@@ -85,7 +85,7 @@ export function recordingAdapter(handler) {
  */
 export function caseContext(c, options) {
   // Resolved, segment-aware containment, copied from runScript
-  // (tests/bin/lifecycle-fixture.js:279-288): a lexical startsWith() also
+  // (`tests/bin/lifecycle-fixture.js:472-480::const resolvedPkg`): a lexical startsWith() also
   // accepts a sibling whose name merely extends the scratch path, so it would
   // not actually prevent an in-process command from mutating the real
   // checkout.

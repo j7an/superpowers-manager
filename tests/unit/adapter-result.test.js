@@ -138,7 +138,7 @@ void test("requireProtocolString accepts safe text and rejects terminal controls
     );
   }
   // rejected: the three ranges hasTerminalControl scans
-  // (src/adapter-result.ts:197-199), each sampled at both ends AND inside.
+  // (`src/adapter-result.ts:197-199::code < 0x20`), each sampled at both ends AND inside.
   // The interior samples are not decoration -- see the note below the fence:
   // with only the two surrogate endpoints, a predicate narrowed to
   // `code === 0xd800 || code === 0xdfff` passes this entire test.
@@ -223,7 +223,7 @@ void test("writeAdapterFailure writes the error and every hint to stderr in orde
 });
 
 // failureResult takes FIVE arguments -- (operation, code, message, hints,
-// messages) -- per src/adapter-result.ts:174-180. The fifth is neither
+// messages) -- per `src/adapter-result.ts:174-180::failureResult`. The fifth is neither
 // optional nor trailing-defaulted, and this file is typechecked: it carries
 // `// @ts-check` and annotates the destructured dist/ import with
 // `@type {typeof import("../../src/adapter-result.js")}`, so a four-argument
@@ -372,13 +372,13 @@ function assertRefused(run, out, offending, member) {
 // Each range is exercised at a BOUNDARY and in its INTERIOR, because a
 // boundary-only corpus cannot distinguish the range from its endpoints.
 // hasTerminalControl is `code < 0x20 || (code >= 0x7f && code <= 0x9f) || ...`
-// (src/adapter-result.ts:196-201): U+0001 is the bottom of C0, so narrowing
+// (`src/adapter-result.ts:196-201::code < 0x20`): U+0001 is the bottom of C0, so narrowing
 // to `code < 0x02` keeps it green while admitting U+0002-U+001F including ESC;
 // U+007F and U+009F are the two ends of the DEL/C1 clause, so narrowing to
 // `code === 0x7f || code === 0x9f` keeps both green while admitting
 // U+0080-U+009E including CSI. U+001B and U+009B are the interior values that
 // close both holes, and they are the two the retiring Python witness used
-// (tests/test_adapter_protocol.py:473-528 at fd94d7d).
+// (`git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.py:473-528::test_rejects_terminal_controls_in_terminal_facing_protocol_strings` at fd94d7d).
 
 void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused", async (t) => {
   // One subtest per MECHANISM, then one for the CLI boundary. Each is mutated
@@ -420,7 +420,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
     //
     // The expected text is written EXACTLY, not matched by pattern. Each of
     // these five code points is <= 0xff, so pythonUnicodeEscape takes the
-    // `\x%02x` branch (src/adapter-result.ts:118); a pattern like /\\x/ would
+    // `\x%02x` branch (`src/adapter-result.ts:118::else if (code <= 0xff)`); a pattern like /\\x/ would
     // also pass on an implementation that escaped only the first character of
     // a longer run.
     for (const [control, escaped] of [
@@ -509,7 +509,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
   // The route is constructible end to end with no product code bent to reach
   // it. SUPERPOWERS_CODEX may name any existing executable (preflight's
   // codexBin resolution accepts a path outright), a POSIX filename may carry
-  // any byte but NUL and slash, and src/adapter.ts:806-809 interpolates that
+  // any byte but NUL and slash, and `src/adapter.ts:801-805::commandFailed(listing)` interpolates that
   // path into an adapter-authored failure message when `codex plugin list
   // --json` exits non-zero. probe replays the resulting outcome AFTER its
   // try/catch has resolved (the loop below runProbe's catch), so the throw from
@@ -528,7 +528,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
       const codexBin = join(codexDir, "codex");
       // Writes a context line as well as failing: listingCommand appends the
       // child's stderr to the outcome's message records
-      // (src/adapter.ts:238-246). That record is what the hoist withholds, so
+      // (`src/adapter.ts:234-243::async function listingCommand`). That record is what the hoist withholds, so
       // its absence below is the end-to-end half of the atomicity contract.
       writeFileSync(
         codexBin,
@@ -554,7 +554,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
             // git must RESOLVE, because probe's preflight requires it
             // (COMMAND_REQUIREMENTS's probe entry). Nothing here reaches a git
             // PROCESS -- a 40-hex SUPERPOWERS_REF is a raw-commit resolution
-            // (src/upstream.ts:160-162) -- so the case stays hermetic, and
+            // (`src/upstream.ts:162-164::return { kind: "raw-commit"`) -- so the case stays hermetic, and
             // probe is read-only besides.
             PATH: process.env.PATH ?? "",
             SUPERPOWERS_CONFIG_DIR: join(
@@ -598,11 +598,11 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
 void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback", async (t) => {
   await t.test("refused at writeAdapterFailure", () => {
     // BOTH halves of the range, not just the high one. hasTerminalControl
-    // covers 0xd800-0xdfff (src/adapter-result.ts:199); a corpus of high
+    // covers 0xd800-0xdfff (`src/adapter-result.ts:199::(code >= 0xd800`); a corpus of high
     // surrogates alone stays green under a narrowing to `code <= 0xdbff`,
     // which admits every low surrogate. U+DC9B is the value the retiring
     // Python witness drove through code, message, hints, the message log,
-    // and the verification hint alike (tests/test_adapter_protocol.py:544
+    // and the verification hint alike (`git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.py:544::udc9b`
     // at fd94d7d).
     for (const surrogate of ["\ud800", "\udc9b"]) {
       for (const field of ["code", "message", "hint"]) {
@@ -637,7 +637,7 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
     // at the guard -- which is exactly the traceback this contract forbids.
     //
     // Both surrogates are > 0xff and <= 0xffff, so each takes the
-    // `\u%04x` branch (src/adapter-result.ts:119-120): the stored text
+    // `\u%04x` branch (`src/adapter-result.ts:119-120::else if (code <= 0xffff`): the stored text
     // is the six literal characters backslash-u-<four hex digits>, and
     // carries no surrogate at all. Both expected values were confirmed
     // against the built module rather than derived by hand.
@@ -658,7 +658,7 @@ void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing fa
   await t.test("byte ingress via appendBytes", () => {
     // The byte ingress cannot produce a surrogate AT ALL, and that -- not an
     // escape -- is what this half asserts. decodeBackslashReplace clamps the
-    // second byte after 0xed to 0x9f (src/adapter-result.ts:76), so the
+    // second byte after 0xed to 0x9f (`src/adapter-result.ts:76::if (first === 0xed`), so the
     // UTF-8 encoding of ANY surrogate fails validation and each of its three
     // bytes is byte-escaped on its own -- ed a0 80 for the high half, ed b2 9b
     // for the low one. Both rows store three double-backslash escapes and no
