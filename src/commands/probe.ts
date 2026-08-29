@@ -208,8 +208,9 @@ type Inspection =
     };
 
 // `runAdapter` reports a CONTROLLED failure by RETURN VALUE, not by throwing
-// (src/adapter-result.ts:32-35). The shell got fail-closed behaviour for
-// free: spw_invoke_adapter returned 1 and scripts/probe ran under `set -eu`.
+// (`src/adapter-result.ts:32-35::export interface AdapterResult`). The shell got
+// fail-closed behaviour for free: spw_invoke_adapter returned 1 and
+// scripts/probe ran under `set -eu`.
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
@@ -260,7 +261,7 @@ async function inspect(
   const value = (outcome.result as Record<string, unknown> | null)?.[key];
   // The Python reader printed the empty string for a JSON null
   // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (src/adapter.ts:818).
+  // whenever no plugin version is active (`src/adapter.ts:819::fingerprint: null`).
   if (value === null || value === undefined) {
     return { ok: true, value: "", outcome };
   }
@@ -297,8 +298,10 @@ type ProbeOutcome =
 // operator-visible result is identical -- probe emits nothing else until the
 // very end -- and the EPIPE hazard never exists.
 // Exported for src/commands/install.ts and src/commands/update.ts, which need
-// probe's FACTS rather than its rendering. scripts/core/lifecycle.sh:39-41
-// awk-parsed the porcelain back into fields; that round trip is gone.
+// probe's FACTS rather than its rendering. The historical
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:39-41::spw_probe_field`
+// implementation awk-parsed the porcelain back into fields; that round trip is
+// gone.
 export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
   // Order mirrors scripts/probe:24-40 exactly.
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
@@ -382,19 +385,21 @@ export async function runProbe(
     outcome = await gatherProbe(ctx);
   } catch (cause) {
     // Hand-written messages, per AGENTS.md's reader-diagnostics rule. Reachable
-    // here: the selectionErrors validateSource raises (src/selection.ts:137,
-    // :140, requireSingleLineString at :77), reached from
+    // here: the selectionErrors validateSource raises
+    // (`src/selection.ts:137::malformed`, :140, requireSingleLineString at :77),
+    // reached from
     // computeEffectiveSelection's validateSource call
     // (src/effective-selection.ts); the ones validateRecord raises
-    // (src/selection.ts:198, :219, requireObject at :47, requireExactKeys at
+    // (`src/selection.ts:198::integer`, :219, requireObject at :47, requireExactKeys at
     // :64, validatePinnedRecord at :170-183), reached from
-    // src/selection-store.ts:103 on the read path; the selectionErrors
-    // requireAbsolute and selectionConfigDir (src/effective-selection.ts) raise
+    // `src/selection-store.ts:103::return validateRecord` on the read path; the
+    // selectionErrors requireAbsolute and selectionConfigDir
+    // (src/effective-selection.ts) raise
     // for a non-absolute or missing config directory; readConfigRef's `cannot
     // read packaged upstream ref <path>` (src/upstream.ts); and resolveRef's own
     // two no-match diagnostics, `no stable semver tag found for latest-release`
     // and `cannot resolve upstream ref: <ref>` (src/upstream.ts). normalizeSaved
-    // (src/selection.ts:222-241) throws nothing at all.
+    // (`src/selection.ts:222-241::normalizeSaved`) throws nothing at all.
     //
     // THREE exceptions, all inherited and none a regression:
     //   1. resolveRef splices git's combined stdout+stderr into its own text
@@ -405,20 +410,25 @@ export async function runProbe(
     //      run reaches this rather than only an exotic corner -- though not
     //      every unpinned run does: resolveRef's COMMIT_INPUT_RE branch returns
     //      before any runGit call, so a 40-hex requested ref splices nothing.
-    //      Pinned by tests/unit/upstream.test.js:460, :471, and :483.
-    //   2. src/selection-store.ts:124 (same shape at :49, :86, :98) is the
-    //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
+    //      Pinned by
+    //      `tests/unit/upstream.test.js:460::void test("resolveRef reports a query failure for latest`,
+    //      :471, and :483.
+    //   2. The
+    //      `src/selection-store.ts:120-124::cause.module === "selection") {`
+    //      site (same shape at :49, :86, :98) is the module AGENTS.md's
+    //      `src/selection-store.ts` bullet grandfathers:
     //      it interpolates the caught error's own message, so Node errno
     //      prose can reach this stream. Reached on the READ path only, via
     //      loadSavedSelection (src/effective-selection.ts) ->
-    //      readSelectionState (src/selection-store.ts:149). This module's
-    //      four write-only interpolating sites -- ensureStateDirectory
+    //      readSelectionState
+    //      (`src/selection-store.ts:149::export async function readSelectionState`).
+    //      This module's four write-only interpolating sites -- ensureStateDirectory
     //      (:172), finalStateDiagnostic (:197), and the two in
     //      writeSelectionState's own catch (:225, :231) -- are all
     //      unreachable from probe, which never writes.
     //   3. Every runGit call site inside resolveRef (src/upstream.ts) can
     //      reject instead of resolving. On the non-ENOENT arm of
-    //      src/git.ts:47-52, runGit builds the message
+    //      `src/git.ts:47-52::if (typeof`, runGit builds the message
     //      "cannot run git: " followed by the Node spawn error's own message
     //      (:51) and rejects with a SafetyError carrying it (:52), so that
     //      Node spawn-level text reaches ctx.stderr through this catch. The
@@ -433,9 +443,10 @@ export async function runProbe(
     //
     // fetchExactCommit is deliberately NOT in this list, unlike prepare's
     // fetchExactCommit exception, which runPrepare's catch block documents.
-    // Its only callers are src/upstream-cli.ts:83 and gatherPrepare's own
-    // call in src/commands/prepare.ts (git grep -n fetchExactCommit -- src/
-    // is the check that keeps "only" true), so probe never reaches it and
+    // Its only callers are `src/upstream-cli.ts:83::await fetchExactCommit` and
+    // gatherPrepare's own call in src/commands/prepare.ts (git grep -n
+    // fetchExactCommit -- src/ is the check that keeps "only" true), so probe
+    // never reaches it and
     // its splice sites cannot appear on this stream. Do not add it back by
     // symmetry with prepare.
     //
@@ -456,8 +467,8 @@ export async function runProbe(
     return 1;
   }
   // Replay first, on both paths: the shell validator replayed every response's
-  // messages whether or not that response was a failure
-  // (scripts/core/validate-adapter-response.py:268).
+  // messages whether or not that response was a failure at
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/validate-adapter-response.py:268::replay(messages)`.
   for (const each of outcome.outcomes) replayOutcome(each, ctx);
   if (outcome.status === 1) {
     // null means replayOutcome already emitted the adapter's own `error:`

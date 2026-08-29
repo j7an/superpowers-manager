@@ -331,7 +331,7 @@ async function gatherInstallStages(
 //
 // Exported specifically so a direct test can reach it. That is ONE STEP
 // FURTHER than
-// `src/commands/probe.ts:369-374::This guard is NOT the production path.`'s own
+// `src/commands/probe.ts:372-377::This guard is NOT the production path.`'s own
 // precedent: that comment licenses RETAINING an unreachable branch inside an
 // already-public function (runProbe was public before that comment existed),
 // not EXPORTING a new one. This module does the latter, deliberately, because
@@ -374,7 +374,7 @@ export async function runInstall(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:383-428::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:386-438::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
     // stream too, including the three foreign-text exceptions at :385-413:

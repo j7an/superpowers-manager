@@ -6,19 +6,6 @@
     "src/commands/pin.ts": {
       "src/selection-store.ts:103": 1
     },
-    "src/commands/probe.ts": {
-      "src/adapter-result.ts:32-35": 1,
-      "src/adapter.ts:818": 1,
-      "src/selection.ts:137": 1,
-      "src/selection.ts:198": 1,
-      "src/selection-store.ts:103": 1,
-      "src/selection.ts:222-241": 1,
-      "tests/unit/upstream.test.js:460": 1,
-      "src/selection-store.ts:124": 1,
-      "src/selection-store.ts:149": 1,
-      "src/git.ts:47-52": 1,
-      "src/upstream-cli.ts:83": 1
-    },
     "src/commands/track-latest.ts": {
       "src/selection-store.ts:103": 1
     },
@@ -244,10 +231,6 @@
     "src/adapter.ts": {
       "scripts/core/common.sh:71": 1,
       "apply-manifest-overlay.py:42": 1
-    },
-    "src/commands/probe.ts": {
-      "scripts/core/lifecycle.sh:39-41": 1,
-      "scripts/core/validate-adapter-response.py:268": 1
     },
     "src/effective-selection.ts": {
       "scripts/core/selection.sh:4-29": 1,

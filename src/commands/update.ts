@@ -73,7 +73,7 @@ export async function runUpdate(
     // install's NOTE line.
     //
     // This is a THIRD consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:383-428::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:386-438::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first and src/commands/install.ts's runInstall catch
     // is the second. Because all three wrap the identical function, runProbe's
     // long comment there enumerates exactly what can reach this stream too; not
