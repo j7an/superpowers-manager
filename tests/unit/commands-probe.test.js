@@ -170,13 +170,13 @@ void test("a thrown selection failure is an operational failure", async () => {
 
 // --- Outcome replay (spec §3.3, added 2026-08-07 after adjudication) ---
 //
-// scripts/core/validate-adapter-response.py ran on every adapter response and
-// did two things the first draft of this port dropped: replay(messages) at
-// :235-238 wrote each message to its own declared stream in array order, and
-// :269-272 printed `error: <message>` followed by one `hint: <h>` per hint.
-// DIAG-ADAPTER-01 is a retained contract, recorded in
-// docs/baseline/protocol-disposition.md. These tests hold it at the command
-// level; tests/unit/adapter.test.js holds it at the outcome level.
+// These four cases are supplementary command-boundary witnesses for
+// DIAG-ADAPTER-01: per-stream order, error/hint presence and order, no writes
+// before the terminal-safety guard, and a quiet clean success. The canonical
+// target remains tests/unit/adapter.test.js; these cases intentionally carry
+// no independent ID or traceability row. ADAPTER-REPLAY-01 remains retired
+// because it owned validation of a serialized response document, absent from
+// this in-process path.
 
 /** @param {Partial<import("../../src/adapter-result.js").AdapterOutcome>} over */
 function outcomeWith(over) {
