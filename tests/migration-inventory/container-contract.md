@@ -383,7 +383,7 @@ it).
    shell never guarded `:229`; added 2026-07-31 when review Finding 1
    corrected item 87 to require the correct backslash-bearing string (see
    the note under item 87 above), so both fixtures stay covered.
-2. **The Dockerfile installs exactly `ca-certificates git python3`.** Added by
+2. **The Dockerfile installs exactly `ca-certificates git procps python3`.** Added by
    PR 11.1 (2026-08-02) as the gate for the Ruby retirement. The Dockerfile's
    `apt-get install` line was previously unasserted — items 7-13 cover the base
    image, user, corepack, install, and build lines but not the package set — so
