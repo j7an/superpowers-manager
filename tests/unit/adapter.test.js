@@ -276,7 +276,13 @@ void test("a manifest overlay read fails closed when the file changes between th
   );
   assert.throws(
     () => new TextDecoder("utf-8", { fatal: true }).decode(finalBytes),
-    TypeError,
+    (error) => {
+      const typed = /** @type {TypeError & {code?: unknown}} */ (error);
+      assert.ok(typed instanceof TypeError);
+      assert.equal(typed.code, "ERR_ENCODING_INVALID_ENCODED_DATA");
+      assert.match(typed.message, /\butf-?8\b/i);
+      return true;
+    },
     "manifest on disk must still be invalid UTF-8 (unwritten, not repaired)",
   );
 });
@@ -494,9 +500,10 @@ void test("install rejects an invalid-UTF-8 marketplace listing without mutating
 // mapCodexLaunchFailure is never reached; on both platforms every other
 // candidate errno (ELOOP, ENAMETOOLONG, ...) fails the X_OK availability
 // check first and is peeled into command-not-found before a real spawn ever
-// happens. So the branch-through-the-outcome property — that this text
-// actually reaches `messages` via `log.appendBytes` — is exercised by
-// calling the mapping directly and is not covered end-to-end by any test.
+// happens.
+// Calling the mapping directly below exercises the errno-to-message mapping.
+// No end-to-end case reaches this branch through log.appendBytes, so the
+// branch-through-the-outcome property remains uncovered.
 void test("mapCodexLaunchFailure carries a validated errno, guards free-form codes, and still peels off ENOENT/EACCES", () => {
   const codexBin = "/opt/fake/codex";
 

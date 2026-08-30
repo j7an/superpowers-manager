@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -48,17 +49,27 @@ void test("PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix", asyn
   );
   assert.equal(await codexMetadataCommit(file), full);
 
-  for (const text of [
-    "{",
-    "[]",
-    "{}",
-    '{"commit":7}',
-    '{"commit":"d884ae04"}',
-    `{"commit":"${full}","padding":NaN}`,
-    `{"commit":"${full}","padding":${nested(256)}}`,
+  for (const [text, message] of [
+    ["{", `cannot read installed Codex JSON ${file}`],
+    ["[]", `invalid installed Codex JSON ${file}`],
+    ["{}", `invalid installed Codex commit in ${file}`],
+    ['{"commit":7}', `invalid installed Codex JSON ${file}`],
+    ['{"commit":"d884ae04"}', `invalid installed Codex commit in ${file}`],
+    [
+      `{"commit":"${full}","padding":NaN}`,
+      `cannot read installed Codex JSON ${file}`,
+    ],
+    [
+      `{"commit":"${full}","padding":${nested(256)}}`,
+      `cannot read installed Codex JSON ${file}`,
+    ],
   ]) {
     await writeFile(file, text);
-    await assert.rejects(codexMetadataCommit(file), SafetyError, text);
+    await assert.rejects(
+      codexMetadataCommit(file),
+      exactError(SafetyError, message),
+      text,
+    );
   }
 });
 
@@ -93,14 +104,21 @@ void test("MANIFEST-READER-INSTALLED-01 installed manifest complete matrix", asy
     `{"version":"6.1.1+manager.d884ae0","padding":"${"x".repeat(1_048_577)}"}`,
   );
   assert.equal(await manifestShortSha(file), "d884ae0");
-  for (const text of [
-    "{",
-    "[]",
-    '{"version":NaN}',
-    `{"version":"6.1.1+manager.d884ae0","padding":${nested(256)}}`,
+  for (const [text, message] of [
+    ["{", `cannot read installed Codex JSON ${file}`],
+    ["[]", `invalid installed Codex JSON ${file}`],
+    ['{"version":NaN}', `cannot read installed Codex JSON ${file}`],
+    [
+      `{"version":"6.1.1+manager.d884ae0","padding":${nested(256)}}`,
+      `cannot read installed Codex JSON ${file}`,
+    ],
   ]) {
     await writeFile(file, text);
-    await assert.rejects(manifestShortSha(file), SafetyError, text);
+    await assert.rejects(
+      manifestShortSha(file),
+      exactError(SafetyError, message),
+      text,
+    );
   }
 });
 

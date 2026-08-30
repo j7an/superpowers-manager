@@ -1,6 +1,7 @@
 // @ts-check
 import assert from "node:assert/strict";
 import test from "node:test";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -32,7 +33,7 @@ const nested = (depth) => "[".repeat(depth) + "0" + "]".repeat(depth);
 void test("duplicate policy compares decoded keys recursively", () => {
   assert.throws(
     () => parseStrictJson('{"outer":{"a":1,"\\u0061":2}}', reject),
-    SafetyError,
+    exactError(SafetyError, 'duplicate object key "a" at character 26'),
   );
   assert.deepEqual(parseStrictJson('{"outer":{"a":1,"\\u0061":2}}', lastWins), {
     outer: { a: 2 },
@@ -54,17 +55,32 @@ void test("depth cap accepts 256 containers and rejects 257", () => {
         nonStandardConstants: "reject",
         maxDepth: 256,
       }),
-    SafetyError,
+    exactError(SafetyError, "container depth exceeds 256 at character 256"),
   );
 });
 
 void test("uncapped recursion failure is converted to SafetyError", () => {
-  assert.throws(() => parseStrictJson(nested(20_000), reject), SafetyError);
+  assert.throws(
+    () => parseStrictJson(nested(20_000), reject),
+    exactError(SafetyError, "JSON parsing failed"),
+  );
 });
 
 void test("grammar rejects constants, malformed input, and trailing input", () => {
-  for (const text of ["NaN", "Infinity", "-Infinity", "{", "[1,]", "true x"]) {
-    assert.throws(() => parseStrictJson(text, reject), SafetyError, text);
+  const grammarRejected = [
+    ["NaN", "non-standard JSON constant NaN at character 0"],
+    ["Infinity", "non-standard JSON constant Infinity at character 0"],
+    ["-Infinity", "non-standard JSON constant -Infinity at character 0"],
+    ["{", "object key must be a string at character 1"],
+    ["[1,]", "expected JSON value at character 3"],
+    ["true x", "unexpected trailing input at character 5"],
+  ];
+  for (const [text, message] of grammarRejected) {
+    assert.throws(
+      () => parseStrictJson(text, reject),
+      exactError(SafetyError, message),
+      text,
+    );
   }
 });
 
@@ -82,8 +98,16 @@ void test("non-standard constants are an explicit exact-token policy", () => {
       text,
     );
   }
-  for (const text of ["nan", "infinity", "+Infinity"]) {
-    assert.throws(() => parseStrictJson(text, acceptConstants), SafetyError);
+  const constantSpellingRejected = [
+    ["nan", "invalid literal at character 0"],
+    ["infinity", "expected JSON value at character 0"],
+    ["+Infinity", "expected JSON value at character 0"],
+  ];
+  for (const [text, message] of constantSpellingRejected) {
+    assert.throws(
+      () => parseStrictJson(text, acceptConstants),
+      exactError(SafetyError, message),
+    );
   }
 });
 
@@ -104,7 +128,7 @@ void test("maxBytes rejects before UTF-8 decoding", () => {
 void test("byte input uses fatal UTF-8 decoding", () => {
   assert.throws(
     () => parseStrictJson(Uint8Array.from([0xc3, 0x28]), reject),
-    SafetyError,
+    exactError(SafetyError, "input is not valid UTF-8"),
   );
 });
 
@@ -112,7 +136,7 @@ void test("byte input rejects a UTF-8 BOM", () => {
   assert.throws(
     () =>
       parseStrictJson(Uint8Array.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d]), reject),
-    SafetyError,
+    exactError(SafetyError, "expected JSON value at character 0"),
   );
 });
 
@@ -132,7 +156,7 @@ void test("maxBytes is an inclusive UTF-8 byte boundary", () => {
         nonStandardConstants: "reject",
         maxBytes: 3,
       }),
-    SafetyError,
+    exactError(SafetyError, "input exceeds 3 UTF-8 bytes"),
   );
 });
 
@@ -160,8 +184,16 @@ void test("optional integer-token profile rejects decimal and exponent spellings
     integerNumbersOnly: true,
   };
   assert.equal(parseStrictJson("1", integersOnly), 1);
-  for (const text of ["1.0", "1e0"]) {
-    assert.throws(() => parseStrictJson(text, integersOnly), SafetyError, text);
+  const integerRejected = [
+    ["1.0", "non-integer JSON number at character 3"],
+    ["1e0", "non-integer JSON number at character 3"],
+  ];
+  for (const [text, message] of integerRejected) {
+    assert.throws(
+      () => parseStrictJson(text, integersOnly),
+      exactError(SafetyError, message),
+      text,
+    );
     assert.equal(parseStrictJson(text, reject), 1, text);
   }
 });

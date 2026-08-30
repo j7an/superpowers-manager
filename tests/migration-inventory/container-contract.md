@@ -413,8 +413,13 @@ it).
 - Port (`tests/bin/container-contract.test.js`): 173 assertions (**171 live
   of 172 numbered** — item 21 retired, its number not reused — 1:1-mapped
   to the shell, plus 2 strictly-additive port-only checks — see
-  the note under item 87 and port-only entries 1-2 below), grouped into `node:test` subtests by
-  section for readability. Items expressed as loops over a literal-string
+  the note under item 87 and port-only entries 1-2 below). Items 34-35 remain
+  top-level immediately before the hooks RPC parent so the existence/mode
+  preconditions run before its read; items 36-37, 116-142, and 153-172 remain
+  under that parent. The six resource-owning `node:test` parents still scope
+  one repo-controlled read apiece and add no behavioral assertion. This
+  reparenting preserves 73 test nodes, all 66 existing leaf names, and the
+  173-assertion port total. Items expressed as loops over a literal-string
   array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
   the same array inside `validateProbe`/`validateHooksRpc`, one `throw` per
   missing element (the loop bodies' `throw new ContractViolation(...)`

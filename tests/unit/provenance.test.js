@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/provenance.js")} */
 const {
@@ -46,14 +47,24 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   );
   await writeFile(file, '{"source":"first","source":"last"}');
   assert.equal(await readCodexBuildSource(file), "last");
-  for (const text of ["{", "[]", "{}", '{"source":7}', '{"source":""}']) {
+  for (const [text, message] of [
+    ["{", `cannot read Codex source from ${file}`],
+    ["[]", `invalid Codex source in ${file}`],
+    ["{}", `invalid Codex source in ${file}`],
+    ['{"source":7}', `invalid Codex source in ${file}`],
+    ['{"source":""}', `invalid Codex source in ${file}`],
+  ]) {
     await writeFile(file, text);
-    await assert.rejects(readCodexBuildSource(file), SafetyError, text);
+    await assert.rejects(
+      readCodexBuildSource(file),
+      exactError(SafetyError, message),
+      text,
+    );
   }
   // Bytes: the matrix says NO byte cap, and until PR-3 the only assertion of
   // that was `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:852-854::large` (a 1 MiB + 1 payload). Ported
   // here so the cell keeps a witness after the driver is deleted. Mirrors
-  // `tests/unit/codex-state.test.js:47::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
+  // `tests/unit/codex-state.test.js:48::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
   await writeFile(
     file,
     `{"padding":"${"x".repeat(1_048_577)}","source":"https://example.invalid/repo"}`,
@@ -108,19 +119,31 @@ void test("PROV-READER-STRICT-01 reads fields under the strict provenance profil
     true,
   );
   await writeFile(file, `{"padding":${nested(256)}}`);
-  await assert.rejects(readStrictProvenanceField(file, "padding"), SafetyError);
+  await assert.rejects(
+    readStrictProvenanceField(file, "padding"),
+    exactError(SafetyError, `cannot read strict provenance field from ${file}`),
+  );
 
-  for (const text of ["[]", "null", "NaN", "Infinity", "{"]) {
+  for (const [text, message] of [
+    ["[]", `provenance value must be an object: ${file}`],
+    ["null", `provenance value must be an object: ${file}`],
+    ["NaN", `cannot read strict provenance field from ${file}`],
+    ["Infinity", `cannot read strict provenance field from ${file}`],
+    ["{", `cannot read strict provenance field from ${file}`],
+  ]) {
     await writeFile(file, text);
     await assert.rejects(
       readStrictProvenanceField(file, "commit"),
-      SafetyError,
+      exactError(SafetyError, message),
       text,
     );
   }
 
   await writeFile(file, Uint8Array.from([0xc3, 0x28]));
-  await assert.rejects(readStrictProvenanceField(file, "commit"), SafetyError);
+  await assert.rejects(
+    readStrictProvenanceField(file, "commit"),
+    exactError(SafetyError, `cannot read strict provenance field from ${file}`),
+  );
   await writeFile(
     file,
     Uint8Array.from([
@@ -128,7 +151,10 @@ void test("PROV-READER-STRICT-01 reads fields under the strict provenance profil
       0x3a, 0x22, 0x61, 0x62, 0x63, 0x22, 0x7d,
     ]),
   );
-  await assert.rejects(readStrictProvenanceField(file, "commit"), SafetyError);
+  await assert.rejects(
+    readStrictProvenanceField(file, "commit"),
+    exactError(SafetyError, `cannot read strict provenance field from ${file}`),
+  );
 
   await writeFile(
     file,

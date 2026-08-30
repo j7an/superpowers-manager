@@ -808,11 +808,16 @@ Three groups, each verifiable from the port file rather than from this prose:*
   went with its case.*
 - ***Entries 1 and 2 name the wrong channel, not a missing assertion.***
   *`assertLegacyIdentityStops`'s non-vacuity guard still exists and still hoists
-  the negative it always hoisted, but it now reads the double —*
-  `adapter.calls.some((call) => call.join(" ") === "inspect --view ownership")` *—
-  rather than `readLog(c.adapterLog)`. Mapped item 43 records the same channel
-  change; port-only entry 33 already words it neutrally as "adapter ownership
-  non-vacuity guard", which is the wording these two should have taken.*
+  the negative it always hoisted, but it now reads the double through the
+  current two-step check —*
+  `const calls = adapter.calls.map((call) => call.join(" "));` *followed by*
+  `has(calls, "inspect --view ownership")` *— rather than
+  `readLog(c.adapterLog)`. This is the existing
+  `grep -Fq`-equivalent substring/presence contract: it tolerates added argv
+  tokens and does not claim exact argv, cardinality, or order. Mapped item 43
+  records the same channel change; port-only entry 33 already words it
+  neutrally as "adapter ownership non-vacuity guard", which is the wording
+  these two should have taken.*
 - ***Entry 7's adapter-log hoist is gone, and its successor is stronger.*** *The
   `build --upstream-root` membership read was replaced at Task 6 by*
   `assert.deepEqual(adapter.calls.map((call) => call[0]), ["build"])` *in

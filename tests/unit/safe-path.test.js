@@ -5,6 +5,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { exactError, matchingError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -31,7 +32,7 @@ void test("FS-HOOK-CONTAINMENT-01 existing containment rejects lexical and resol
   assert.equal(await paths.assertExistingContained(root, file), resolve(file));
   await assert.rejects(
     paths.assertExistingContained(root, join(base, "outside")),
-    SafetyError,
+    matchingError(SafetyError, /^path escapes containment root: .*\/outside$/),
   );
   const outside = join(base, "outside");
   await mkdir(outside);
@@ -39,7 +40,10 @@ void test("FS-HOOK-CONTAINMENT-01 existing containment rejects lexical and resol
   await writeFile(join(outside, "file"), "no");
   await assert.rejects(
     paths.assertExistingContained(root, join(root, "escape", "file")),
-    SafetyError,
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/outside\/file$/,
+    ),
   );
 });
 
@@ -54,7 +58,10 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
   await symlink(outside, join(root, "escape"), "dir");
   await assert.rejects(
     paths.assertProspectiveContained(root, join(root, "escape", "new")),
-    SafetyError,
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/outside\/new$/,
+    ),
   );
   await symlink(
     join(base, "missing-outside"),
@@ -63,7 +70,10 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
   );
   await assert.rejects(
     paths.assertProspectiveContained(root, join(root, "broken-escape", "new")),
-    SafetyError,
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/missing-outside\/new$/,
+    ),
   );
   await symlink(
     join(root, "missing-inside"),
@@ -89,7 +99,10 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves relative brok
       root,
       join(root, "directory-link", "broken-link", "new"),
     ),
-    SafetyError,
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/outside\/new$/,
+    ),
   );
 });
 
@@ -149,7 +162,7 @@ void test("SEL-READER-PATHS-01 no-follow classification distinguishes path types
   );
   await assert.rejects(
     paths.assertNoFollowType(link, ["regular-file"]),
-    SafetyError,
+    exactError(SafetyError, `path has disallowed type symlink: ${link}`),
   );
 });
 
@@ -163,12 +176,18 @@ void test("FS-SELECTION-TYPES-01 / SEL-READER-PARENT-01 designated parent", asyn
   await assert.doesNotReject(paths.assertProspectiveContained(root, absent));
   await assert.rejects(
     paths.assertDesignatedParentDirectory(absent),
-    SafetyError,
+    exactError(
+      SafetyError,
+      `designated parent must be a directory without following symlinks: ${linkedParent}`,
+    ),
   );
   await writeFile(join(realParent, "selection.json"), "{}");
   await assert.rejects(
     paths.assertDesignatedParentDirectory(absent),
-    SafetyError,
+    exactError(
+      SafetyError,
+      `designated parent must be a directory without following symlinks: ${linkedParent}`,
+    ),
   );
 });
 
@@ -186,10 +205,13 @@ void test("FS-SYMLINK-01 symlink targets must remain contained", async (t) => {
   );
   await assert.rejects(
     paths.assertSymlinkTargetContained(root, join(root, "outside-link")),
-    SafetyError,
+    matchingError(SafetyError, /^path escapes containment root: .*\/outside$/),
   );
   await assert.rejects(
     paths.assertSymlinkTargetContained(root, join(root, "broken-link")),
-    SafetyError,
+    exactError(
+      SafetyError,
+      `cannot resolve symlink target: ${join(root, "broken-link")}`,
+    ),
   );
 });

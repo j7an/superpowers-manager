@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -65,7 +66,7 @@ void test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and remov
         throw new Error("invalid");
       },
     }),
-    SafetyError,
+    exactError(SafetyError, "atomic file write failed during pre-replacement"),
   );
   assert.equal(await readFile(target, "utf8"), "before");
   assert.equal(await readFile(foreign, "utf8"), "keep");
