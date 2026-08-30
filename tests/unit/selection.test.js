@@ -11,6 +11,7 @@ import {
 import test from "node:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -149,7 +150,11 @@ void test("validateSource matches the bounded CPython urlsplit verdict corpus", 
     assert.throws(() => validateSource(source), message, source);
   }
   for (const source of ["", "line\nbreak", "nul\0byte"]) {
-    assert.throws(() => validateSource(source), SafetyError, source);
+    assert.throws(
+      () => validateSource(source),
+      exactError(SafetyError, "source must be a non-empty single-line string"),
+      source,
+    );
   }
 });
 

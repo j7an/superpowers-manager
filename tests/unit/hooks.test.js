@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/safety-error.js")} */
 const { SafetyError } = await import(
@@ -77,14 +78,19 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
   await writeFile(file, `{"padding":${nested(255)}}`);
   assert.ok("padding" in (await readManifest(file)));
 
-  for (const input of [
-    Buffer.from('{"padding":NaN}'),
-    Buffer.from(`{"padding":${nested(256)}}`),
-    Buffer.from("[]"),
-    Uint8Array.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xc3, 0x28]),
-  ]) {
+  /** @type {Array<[Uint8Array, string]>} */
+  const rejected = [
+    [Buffer.from('{"padding":NaN}'), `invalid manifest JSON in ${file}`],
+    [Buffer.from(`{"padding":${nested(256)}}`), `invalid manifest JSON in ${file}`],
+    [Buffer.from("[]"), `manifest must be a JSON object: ${file}`],
+    [
+      Uint8Array.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xc3, 0x28]),
+      `invalid manifest JSON in ${file}`,
+    ],
+  ];
+  for (const [input, message] of rejected) {
     await writeFile(file, input);
-    await assert.rejects(readManifest(file), SafetyError, String(input));
+    await assert.rejects(readManifest(file), exactError(SafetyError, message));
   }
 });
 
