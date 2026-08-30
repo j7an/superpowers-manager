@@ -155,7 +155,14 @@ Codex below describe the product integration, not a required agent harness.
   function that returns true. Never a bare call and never a string in that
   position. This is enforced by `tests/assert-matcher-gate.js`, which the
   suite runner loads into every suite, so a violation fails the test that
-  contains it. **Why:** `node:assert` reads a string
+  contains it. A bare error class passes that runtime check because it constrains the error
+  type, but it does not constrain the message. Repository tests must also pin the
+  message with a RegExp, object matcher, or validation function, unless a
+  class-only contract is listed by stable path, test name, matcher, and rationale
+  in `CONSTRUCTOR_MATCHER_EXEMPTIONS`. This static rule is enforced by
+  `tests/bin/error-assertions.test.js` through
+  `tests/lib/error-assertions.js`; the registry is empty unless a reviewed
+  class-only contract requires otherwise. **Why:** `node:assert` reads a string
   second argument as the failure *label* and an absent one as no constraint,
   so either form passes on any error. One such call left PR 10's entire
   rejection corpus asserting nothing through several reviews.

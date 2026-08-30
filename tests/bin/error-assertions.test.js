@@ -16,6 +16,18 @@ import {
 class ExpectedError extends Error {}
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
+void test("repository has no unreviewed constructor-only error matcher", () => {
+  assert.deepEqual(CONSTRUCTOR_MATCHER_EXEMPTIONS, []);
+  assert.deepEqual(
+    auditConstructorMatchers({
+      root: PACKAGE_ROOT,
+      tsconfigPath: join(PACKAGE_ROOT, "tests", "tsconfig.json"),
+      exemptions: CONSTRUCTOR_MATCHER_EXEMPTIONS,
+    }),
+    [],
+  );
+});
+
 void test("exactError requires the expected class and exact message", () => {
   assert.throws(
     () => {
@@ -91,9 +103,21 @@ void test("fixture", async () => {
     }).map(({ path, test: name, matcher }) => ({ path, test: name, matcher })),
     [
       { path: "tests/unit/subject.test.js", test: "fixture", matcher: "Alias" },
-      { path: "tests/unit/subject.test.js", test: "fixture", matcher: "CustomError" },
-      { path: "tests/unit/subject.test.js", test: "fixture", matcher: "CustomError" },
-      { path: "tests/unit/subject.test.js", test: "fixture", matcher: "CustomError" },
+      {
+        path: "tests/unit/subject.test.js",
+        test: "fixture",
+        matcher: "CustomError",
+      },
+      {
+        path: "tests/unit/subject.test.js",
+        test: "fixture",
+        matcher: "CustomError",
+      },
+      {
+        path: "tests/unit/subject.test.js",
+        test: "fixture",
+        matcher: "CustomError",
+      },
     ],
   );
   assert.throws(
@@ -181,10 +205,7 @@ void test("constructor audit fails closed on a dynamically destructured Node ass
   const root = mkdtempSync(join(tmpdir(), "spw-error-audit-shape-"));
   registerScratch(root);
   mkdirSync(join(root, "tests", "unit"), { recursive: true });
-  writeFileSync(
-    join(root, "package.json"),
-    JSON.stringify({ type: "module" }),
-  );
+  writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
   writeFileSync(
     join(root, "tests", "tsconfig.json"),
     JSON.stringify({
