@@ -115,6 +115,54 @@ void test("fixture", async () => {
   assert.deepEqual(CONSTRUCTOR_MATCHER_EXEMPTIONS, []);
 });
 
+void test("constructor audit excludes shadowed user-defined assertion methods", () => {
+  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-shadow-"));
+  registerScratch(root);
+  mkdirSync(join(root, "tests", "unit"), { recursive: true });
+  writeFileSync(
+    join(root, "tests", "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        allowJs: true,
+        checkJs: true,
+        noEmit: true,
+        strict: true,
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        types: ["node"],
+        typeRoots: [join(PACKAGE_ROOT, "node_modules", "@types")],
+      },
+      include: ["unit/**/*.js"],
+    }),
+  );
+  writeFileSync(
+    join(root, "tests", "unit", "shadowed.test.js"),
+    `import assert from "node:assert/strict";
+class CustomError extends Error {}
+/**
+ * @param {{
+ *   throws(callback: () => void, expected: typeof CustomError): void;
+ *   rejects(value: Promise<unknown>, expected: typeof CustomError): Promise<void>;
+ * }} assert
+ */
+async function exercise(assert) {
+  assert.throws(() => {}, CustomError);
+  await assert.rejects(Promise.resolve(), CustomError);
+}
+void exercise;
+`,
+  );
+  assert.deepEqual(
+    auditConstructorMatchers({
+      root,
+      tsconfigPath: join(root, "tests", "tsconfig.json"),
+      exemptions: [],
+    }),
+    [],
+  );
+});
+
 void test("constructor audit fails closed when the configured project is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "spw-error-audit-fail-"));
   registerScratch(root);

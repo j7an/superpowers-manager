@@ -244,12 +244,12 @@ export function auditConstructorMatchers({ root, tsconfigPath, exemptions }) {
         if (isCallExpression(node)) {
           const resolvedKind = resolvedNodeAssertKind(project, node);
           const boundKind = boundNodeAssertKind(node, bindings);
-          if (resolvedKind && !boundKind) {
+          if (resolvedKind && resolvedKind !== boundKind) {
             throw new Error(
               `unresolved node:assert call shape: ${path}:${lineOf(source, node)}`,
             );
           }
-          if (boundKind && node.arguments[1]) {
+          if (boundKind && boundKind === resolvedKind && node.arguments[1]) {
             const matcher = node.arguments[1];
             const matcherType = project.checker.getTypeAtLocation(matcher);
             if (!matcherType || isErrorType(matcherType)) {
@@ -328,7 +328,10 @@ export function auditConstructorMatchers({ root, tsconfigPath, exemptions }) {
     }
     return retained;
   } finally {
-    snapshot?.dispose();
-    api.close();
+    try {
+      snapshot?.dispose();
+    } finally {
+      api.close();
+    }
   }
 }
