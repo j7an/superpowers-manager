@@ -1,6 +1,7 @@
 // @ts-check
 import assert from "node:assert/strict";
 import test from "node:test";
+import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/codex-json.js")} */
 const {
@@ -38,7 +39,7 @@ void test("marketplace reader rejects invalid UTF-8 bytes", () => {
         ),
         "superpowers-manager",
       ),
-    SafetyError,
+    exactError(SafetyError, "cannot parse Codex JSON"),
   );
 });
 
@@ -88,23 +89,30 @@ void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => 
     ),
     false,
   );
-  for (const raw of [
-    "{",
-    "[]",
-    "{}",
-    '{"installed":{}}',
-    '{"installed":[{}]}',
-    '{"installed":[{"pluginId":42}]}',
-    '{"installed":[null]}',
-    '{"marketplaces":[{}]}',
-    '{"marketplaces":[{"name":42}]}',
-    '{"marketplaces":[null]}',
-    nested(2_000),
-  ]) {
+  const installedRejected = [
+    ["{", "cannot parse Codex JSON"],
+    ["[]", "Codex JSON must be an object"],
+    ["{}", "Codex JSON installed must be an array"],
+    ['{"installed":{}}', "Codex JSON installed must be an array"],
+    [
+      '{"installed":[{}]}',
+      "Codex JSON installed item needs non-empty pluginId",
+    ],
+    [
+      '{"installed":[{"pluginId":42}]}',
+      "Codex JSON installed item needs non-empty pluginId",
+    ],
+    ['{"installed":[null]}', "Codex JSON installed item must be an object"],
+    ['{"marketplaces":[{}]}', "Codex JSON installed must be an array"],
+    ['{"marketplaces":[{"name":42}]}', "Codex JSON installed must be an array"],
+    ['{"marketplaces":[null]}', "Codex JSON installed must be an array"],
+    [nested(2_000), "Codex JSON must be an object"],
+  ];
+  for (const [raw, message] of installedRejected) {
     assert.throws(
       () =>
         installedListingHas(raw, "installed", "pluginId", "target@provider"),
-      SafetyError,
+      exactError(SafetyError, message),
       raw,
     );
   }
@@ -158,21 +166,37 @@ void test("CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix", () => 
     ),
     "/manager",
   );
-  for (const raw of [
-    "{",
-    "[]",
-    "{}",
-    '{"marketplaces":{}}',
-    '{"marketplaces":["bad"]}',
-    '{"marketplaces":[{"root":"/x"}]}',
-    '{"marketplaces":[{"name":17,"root":"/x"}]}',
-    '{"marketplaces":[{"name":"superpowers-manager"}]}',
-    '{"marketplaces":[{"name":"superpowers-manager","root":17}]}',
-    nested(2_000),
-  ]) {
+  const marketplaceRejected = [
+    ["{", "cannot parse Codex JSON"],
+    ["[]", "Codex JSON must be an object"],
+    ["{}", "Codex JSON marketplaces must be an array"],
+    ['{"marketplaces":{}}', "Codex JSON marketplaces must be an array"],
+    [
+      '{"marketplaces":["bad"]}',
+      "Codex JSON marketplaces item must be an object",
+    ],
+    [
+      '{"marketplaces":[{"root":"/x"}]}',
+      "Codex JSON marketplaces item needs non-empty name",
+    ],
+    [
+      '{"marketplaces":[{"name":17,"root":"/x"}]}',
+      "Codex JSON marketplaces item needs non-empty name",
+    ],
+    [
+      '{"marketplaces":[{"name":"superpowers-manager"}]}',
+      "matching marketplace needs a non-empty root",
+    ],
+    [
+      '{"marketplaces":[{"name":"superpowers-manager","root":17}]}',
+      "matching marketplace needs a non-empty root",
+    ],
+    [nested(2_000), "Codex JSON must be an object"],
+  ];
+  for (const [raw, message] of marketplaceRejected) {
     assert.throws(
       () => marketplaceRootFromJson(raw, "superpowers-manager"),
-      SafetyError,
+      exactError(SafetyError, message),
       raw,
     );
   }
@@ -217,31 +241,77 @@ void test("CODEX-JSON-VERSION-01 active version reader complete matrix", () => {
     ),
     "3.0.0",
   );
-  for (const raw of [
-    '{"padding":Infinity,"installed":[]}',
-    "{",
-    "[]",
-    '{"installed":{}}',
-    '{"installed":[{}]}',
-    '{"installed":[{"pluginId":""}]}',
-    '{"installed":[{"pluginId":7}]}',
-    '{"installed":[{"pluginId":"target@provider"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":7}]}',
-    '{"installed":[{"pluginId":"target@provider","version":""}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"."}]}',
-    '{"installed":[{"pluginId":"target@provider","version":".."}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"bad/name"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"bad\\\\name"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"bad\\nname"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"bad\\rname"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"bad\\u001bname"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"bad\\u0085name"}]}',
-    '{"installed":[{"pluginId":"target@provider","version":"1"},{"pluginId":"target@provider","version":"2"}]}',
-    nested(2_000),
-  ]) {
+  const versionRejected = [
+    ['{"padding":Infinity,"installed":[]}', "cannot parse Codex JSON"],
+    ["{", "cannot parse Codex JSON"],
+    ["[]", "Codex JSON must be an object"],
+    ['{"installed":{}}', "Codex JSON installed must be an array"],
+    [
+      '{"installed":[{}]}',
+      "Codex JSON installed item needs non-empty pluginId",
+    ],
+    [
+      '{"installed":[{"pluginId":""}]}',
+      "Codex JSON installed item needs non-empty pluginId",
+    ],
+    [
+      '{"installed":[{"pluginId":7}]}',
+      "Codex JSON installed item needs non-empty pluginId",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":7}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":""}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"."}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":".."}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"bad/name"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"bad\\\\name"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"bad\\nname"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"bad\\rname"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"bad\\u001bname"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"bad\\u0085name"}]}',
+      "active plugin version is invalid",
+    ],
+    [
+      '{"installed":[{"pluginId":"target@provider","version":"1"},{"pluginId":"target@provider","version":"2"}]}',
+      "active plugin appears more than once",
+    ],
+    [nested(2_000), "Codex JSON must be an object"],
+  ];
+  for (const [raw, message] of versionRejected) {
     assert.throws(
       () => activePluginVersionFromJson(raw, "target@provider"),
-      SafetyError,
+      exactError(SafetyError, message),
       raw,
     );
   }
