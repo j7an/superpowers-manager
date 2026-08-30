@@ -18,6 +18,7 @@ import test from "node:test";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DISPOSITION = join(ROOT, "docs", "baseline", "protocol-disposition.md");
 const TRACEABILITY = join(ROOT, "docs", "baseline", "traceability.md");
+const INVENTORY = join(ROOT, "docs", "baseline", "behavioral-inventory.md");
 
 const SUITES = [
   "tests/test_adapter_protocol.py",
@@ -78,35 +79,42 @@ function uncode(cell) {
 }
 
 /**
+ * @param {string[]} lines
+ * @param {number} headerIndex
+ * @param {number} expectedColumns
+ * @param {string} label
+ */
+function assertMarkdownDelimiter(lines, headerIndex, expectedColumns, label) {
+  const delimiter = lines[headerIndex + 1] || "";
+  assert.match(delimiter, /^\|.*\|$/, `${label} delimiter row is missing`);
+  const cells = markdownCells(delimiter);
+  assert.equal(
+    cells.length,
+    expectedColumns,
+    `${label} delimiter must have ${expectedColumns} fields: ${delimiter}`,
+  );
+  for (const cell of cells) {
+    assert.match(
+      cell,
+      /^:?-{3,}:?$/,
+      `${label} has an invalid delimiter cell: ${cell}`,
+    );
+  }
+}
+
+/**
+ * @param {string} [source]
  * @returns {Array<{ id: string, disposition: string, suite: string, target: string, rationale: string }>}
  */
-function dispositionRows() {
-  const lines = readFileSync(DISPOSITION, "utf8").split("\n");
+function dispositionRows(source = readFileSync(DISPOSITION, "utf8")) {
+  const lines = source.split("\n");
   const headerIndex = lines.findIndex((line) => HEADER.test(line));
   assert.notEqual(
     headerIndex,
     -1,
     "the disposition table header row is missing or misspelled",
   );
-  const delimiter = lines[headerIndex + 1] || "";
-  assert.match(
-    delimiter,
-    /^\|.*\|$/,
-    "the disposition delimiter row is missing",
-  );
-  const delimiterCells = markdownCells(delimiter);
-  assert.equal(
-    delimiterCells.length,
-    5,
-    `the disposition delimiter must have five fields: ${delimiter}`,
-  );
-  for (const cell of delimiterCells) {
-    assert.match(
-      cell,
-      /^:?-{3,}:?$/,
-      `invalid disposition delimiter cell: ${cell}`,
-    );
-  }
+  assertMarkdownDelimiter(lines, headerIndex, 5, "disposition table");
   const rows = [];
   for (
     let index = headerIndex + 2;
@@ -128,6 +136,254 @@ function dispositionRows() {
     });
   }
   return rows;
+}
+
+/**
+ * @param {string} [source]
+ * @returns {Map<string, string>}
+ */
+function inventoryContracts(source = readFileSync(INVENTORY, "utf8")) {
+  const lines = source.split("\n");
+  /** @type {Map<string, string>} */
+  const contracts = new Map();
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/^\|\s*Behavior ID\s*\|/.test(lines[index])) continue;
+    const headers = markdownCells(lines[index]);
+    const contractColumns = ["Contract", "Production consumer and effect"]
+      .map((header) => headers.indexOf(header))
+      .filter((column) => column !== -1);
+    assert.equal(
+      contractColumns.length,
+      1,
+      `inventory table must name exactly one contract column: ${lines[index]}`,
+    );
+    assertMarkdownDelimiter(lines, index, headers.length, "inventory table");
+    const contractColumn = contractColumns[0];
+    index += 2;
+
+    while (/^\|.*\|$/.test(lines[index] || "")) {
+      const fields = markdownCells(lines[index]);
+      assert.equal(
+        fields.length,
+        headers.length,
+        `inventory row must have ${headers.length} fields: ${lines[index]}`,
+      );
+      const id = uncode(fields[0]);
+      assert.equal(
+        contracts.has(id),
+        false,
+        `duplicate behavioral inventory contract: ${id}`,
+      );
+      assert.notEqual(
+        fields[contractColumn],
+        "",
+        `${id}: behavioral inventory contract must not be empty`,
+      );
+      contracts.set(id, fields[contractColumn]);
+      index += 1;
+    }
+  }
+
+  assert.ok(contracts.size > 0, "behavioral inventory has no contracts");
+  return contracts;
+}
+
+/**
+ * @param {string} value
+ * @param {string} label
+ */
+function normalizeMarkdownWhitespace(value, label) {
+  let normalized = "";
+  let delimiterLength = 0;
+  let pendingSpace = false;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "`") {
+      let end = index;
+      while (value[end + 1] === "`") end += 1;
+      const run = value.slice(index, end + 1);
+      if (delimiterLength === 0) delimiterLength = run.length;
+      else if (delimiterLength === run.length) delimiterLength = 0;
+      if (pendingSpace && normalized.length > 0) normalized += " ";
+      pendingSpace = false;
+      normalized += run;
+      index = end;
+      continue;
+    }
+
+    if (delimiterLength === 0 && /[\t\n\r ]/.test(value[index])) {
+      pendingSpace = normalized.length > 0;
+      continue;
+    }
+    if (pendingSpace) normalized += " ";
+    pendingSpace = false;
+    normalized += value[index];
+  }
+
+  assert.equal(delimiterLength, 0, `${label}: unclosed Markdown code span`);
+  return normalized.trim();
+}
+
+/**
+ * @param {string} id
+ * @param {string} contractCell
+ */
+function leadingNormativeSentence(id, contractCell) {
+  const contract = normalizeMarkdownWhitespace(contractCell, `${id} contract`);
+  let delimiterLength = 0;
+
+  for (let index = 0; index < contract.length; index += 1) {
+    if (contract[index] === "`") {
+      let end = index;
+      while (contract[end + 1] === "`") end += 1;
+      const runLength = end - index + 1;
+      if (delimiterLength === 0) delimiterLength = runLength;
+      else if (delimiterLength === runLength) delimiterLength = 0;
+      index = end;
+      continue;
+    }
+    const terminator =
+      contract[index] === "." ||
+      contract[index] === "!" ||
+      contract[index] === "?";
+    const boundary =
+      index === contract.length - 1 || /[\t\n\r ]/.test(contract[index + 1]);
+    if (delimiterLength === 0 && terminator && boundary) {
+      return contract.slice(0, index + 1);
+    }
+  }
+
+  assert.fail(`${id}: current contract has no unambiguous leading sentence`);
+}
+
+/**
+ * @param {string} id
+ * @param {string} rationale
+ */
+function parseRationale(id, rationale) {
+  const normalized = normalizeMarkdownWhitespace(rationale, `${id} rationale`);
+  const prefix = 'Contract: "';
+  assert.equal(
+    normalized.startsWith(prefix),
+    true,
+    `${id}: rationale must start with ${prefix}`,
+  );
+  const closingQuote = normalized.indexOf('"', prefix.length);
+  assert.notEqual(
+    closingQuote,
+    -1,
+    `${id}: rationale contract quote is unclosed`,
+  );
+  const quote = normalized.slice(prefix.length, closingQuote);
+  assert.notEqual(
+    quote,
+    "",
+    `${id}: rationale contract quote must not be empty`,
+  );
+  assert.equal(
+    leadingNormativeSentence(id, quote),
+    normalizeMarkdownWhitespace(quote, `${id} quote`),
+    `${id}: rationale quote must contain exactly one contract sentence`,
+  );
+  const explanation = normalized.slice(closingQuote + 1);
+  assert.match(
+    explanation,
+    /^\s+\S/,
+    `${id}: rationale explanation must not be empty`,
+  );
+  return { quote, explanation: explanation.trim() };
+}
+
+/** @param {string[]} values */
+function duplicateValues(values) {
+  const seen = new Set();
+  return [
+    ...new Set(
+      values.filter((value) => {
+        if (seen.has(value)) return true;
+        seen.add(value);
+        return false;
+      }),
+    ),
+  ].sort();
+}
+
+/**
+ * @param {ReturnType<typeof dispositionRows>} rows
+ * @param {Map<string, string>} contracts
+ */
+function assertRationaleContracts(rows, contracts) {
+  const parsed = rows.map((row) => ({
+    ...row,
+    ...parseRationale(row.id, row.rationale),
+  }));
+  assert.deepEqual(
+    duplicateValues(parsed.map(({ quote }) => quote)),
+    [],
+    "duplicate disposition contract quotes",
+  );
+
+  for (const { id, disposition, quote } of parsed) {
+    const current = contracts.get(id);
+    if (disposition === "retire") {
+      assert.equal(
+        current,
+        undefined,
+        `${id}: retired behavior must be absent from the current inventory`,
+      );
+      continue;
+    }
+    if (disposition !== "remap") continue;
+    assert.ok(
+      current !== undefined,
+      `${id}: remapped behavior has no current inventory contract`,
+    );
+    assert.equal(
+      quote,
+      leadingNormativeSentence(id, current),
+      `${id}: rationale must quote its same-ID current leading contract`,
+    );
+  }
+}
+
+/**
+ * @param {string} source
+ * @param {string} id
+ * @param {string} rationale
+ */
+function replaceDispositionRationale(source, id, rationale) {
+  const lines = source.split("\n");
+  const matches = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.startsWith(`| \`${id}\` |`));
+  assert.equal(
+    matches.length,
+    1,
+    `mutation requires one disposition row: ${id}`,
+  );
+  const fields = markdownCells(matches[0].line);
+  assert.equal(fields.length, 5, `mutation row must have five fields: ${id}`);
+  fields[4] = rationale;
+  lines[matches[0].index] = `| ${fields.join(" | ")} |`;
+  return lines.join("\n");
+}
+
+/**
+ * @param {string} source
+ * @param {string} before
+ * @param {string} after
+ * @param {string} label
+ */
+function replaceOnce(source, before, after, label) {
+  const first = source.indexOf(before);
+  assert.notEqual(first, -1, `${label}: source text is missing`);
+  assert.equal(
+    source.indexOf(before, first + before.length),
+    -1,
+    `${label}: source text is ambiguous`,
+  );
+  return source.slice(0, first) + after + source.slice(first + before.length);
 }
 
 /**
@@ -252,6 +508,122 @@ void test("PROTOCOL-DISPOSITION-VALUES-01 every row is well formed", () => {
       statSync(absolute).isFile(),
       true,
       `${id}: remap target is not a file: ${target}`,
+    );
+  }
+  assertRationaleContracts(rows, inventoryContracts());
+});
+
+void test("PROTOCOL-DISPOSITION-RATIONALES-01 parser boundaries and required mutations fail closed", () => {
+  assert.equal(
+    normalizeMarkdownWhitespace("  A   `B  C`   D.  ", "whitespace fixture"),
+    "A `B  C` D.",
+  );
+  assert.equal(
+    leadingNormativeSentence(
+      "FIXTURE-01",
+      "Keep `file.name` and version 1.2 exact. Later prose.",
+    ),
+    "Keep `file.name` and version 1.2 exact.",
+  );
+  assert.throws(
+    () => leadingNormativeSentence("FIXTURE-02", "Keep `file.name` exact"),
+    {
+      name: "AssertionError",
+      message:
+        /FIXTURE-02: current contract has no unambiguous leading sentence/,
+    },
+  );
+  assert.throws(
+    () => normalizeMarkdownWhitespace("Keep `file.name exact.", "FIXTURE-03"),
+    {
+      name: "AssertionError",
+      message: /FIXTURE-03: unclosed Markdown code span/,
+    },
+  );
+
+  const inventorySource = readFileSync(INVENTORY, "utf8");
+  const dispositionSource = readFileSync(DISPOSITION, "utf8");
+  const rows = dispositionRows(dispositionSource);
+  /** @param {string} id */
+  const rationaleFor = (id) => {
+    const matches = rows.filter((row) => row.id === id);
+    assert.equal(matches.length, 1, `mutation requires one parsed row: ${id}`);
+    return matches[0].rationale;
+  };
+  const fingerprintSentence =
+    "Fingerprint inspection accepts null and exact 7- or 40-hex fingerprints in its exact result shape.";
+
+  const mutations = [
+    {
+      name: "opaque rationale",
+      inventory: inventorySource,
+      disposition: replaceDispositionRationale(
+        dispositionSource,
+        "ADAPTER-ENVELOPE-01",
+        "x",
+      ),
+      message: /ADAPTER-ENVELOPE-01: rationale must start with Contract:/,
+    },
+    {
+      name: "copied retired rationale",
+      inventory: inventorySource,
+      disposition: replaceDispositionRationale(
+        dispositionSource,
+        "ADAPTER-ENVELOPE-KEYS-01",
+        rationaleFor("ADAPTER-ENVELOPE-01"),
+      ),
+      message: /duplicate disposition contract quotes/,
+    },
+    {
+      name: "shortened remap quote",
+      inventory: inventorySource,
+      disposition: replaceDispositionRationale(
+        dispositionSource,
+        "ADAPTER-FINGERPRINT-01",
+        replaceOnce(
+          rationaleFor("ADAPTER-FINGERPRINT-01"),
+          fingerprintSentence,
+          "Fingerprint inspection accepts null and 7- or 40-hex fingerprints in its exact result shape.",
+          "shortened quote mutation",
+        ),
+      ),
+      message:
+        /ADAPTER-FINGERPRINT-01: rationale must quote its same-ID current leading contract/,
+    },
+    {
+      name: "empty explanation",
+      inventory: inventorySource,
+      disposition: replaceDispositionRationale(
+        dispositionSource,
+        "ADAPTER-FINGERPRINT-01",
+        `Contract: "${fingerprintSentence}"`,
+      ),
+      message:
+        /ADAPTER-FINGERPRINT-01: rationale explanation must not be empty/,
+    },
+    {
+      name: "stale after inventory edit",
+      inventory: replaceOnce(
+        inventorySource,
+        fingerprintSentence,
+        "Fingerprint inspection accepts only null and exact 7- or 40-hex fingerprints in its exact result shape.",
+        "inventory contract mutation",
+      ),
+      disposition: dispositionSource,
+      message:
+        /ADAPTER-FINGERPRINT-01: rationale must quote its same-ID current leading contract/,
+    },
+  ];
+
+  for (const mutation of mutations) {
+    assert.throws(
+      () =>
+        assertRationaleContracts(
+          dispositionRows(mutation.disposition),
+          inventoryContracts(mutation.inventory),
+        ),
+      { name: "AssertionError", message: mutation.message },
+      mutation.name,
     );
   }
 });
