@@ -129,10 +129,11 @@ Codex below describe the product integration, not a required agent harness.
 ## Testing
 
 - Run the closest targeted test while iterating.
-- Run `pnpm run check:static` (format, lint, build, typecheck — about 4s)
-  before submitting. `pnpm run check` adds the full suite (~85s) and cannot
-  run concurrently with other work. **Why:** three of PR 10's six remediation
-  tasks needed an extra fix round, and every one was a trivial static failure.
+- Run `pnpm run check:static` (format, lint, build, typecheck — a
+  seconds-scale gate) before submitting. `pnpm run check` adds the
+  minutes-scale full suite and cannot run concurrently with other work.
+  **Why:** three of PR 10's six remediation tasks needed an extra fix round,
+  and every one was a trivial static failure.
 - Before the host suite, run:
 
   ```sh

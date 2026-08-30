@@ -1047,12 +1047,12 @@ void test("container-contract", async (t) => {
   // subsumes it, because a duplicate "module" key resolving to Node16 fails
   // the positive assertions below. See the inventory for the retirement note.
 
-  const effectiveTsconfig = readEffectiveTsconfig();
-
   await t.test('tsconfig resolves "module" to NodeNext', () => {
+    const effectiveTsconfig = readEffectiveTsconfig();
     assert.equal(String(effectiveTsconfig.module).toLowerCase(), "nodenext");
   });
   await t.test('tsconfig resolves "moduleResolution" to NodeNext', () => {
+    const effectiveTsconfig = readEffectiveTsconfig();
     assert.equal(
       String(effectiveTsconfig.moduleResolution).toLowerCase(),
       "nodenext",
