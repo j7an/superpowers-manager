@@ -40,7 +40,10 @@ void test("FS-HOOK-CONTAINMENT-01 existing containment rejects lexical and resol
   await writeFile(join(outside, "file"), "no");
   await assert.rejects(
     paths.assertExistingContained(root, join(root, "escape", "file")),
-    matchingError(SafetyError, /^path escapes containment root: .*\/outside\/file$/),
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/outside\/file$/,
+    ),
   );
 });
 
@@ -55,7 +58,10 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
   await symlink(outside, join(root, "escape"), "dir");
   await assert.rejects(
     paths.assertProspectiveContained(root, join(root, "escape", "new")),
-    matchingError(SafetyError, /^path escapes containment root: .*\/outside\/new$/),
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/outside\/new$/,
+    ),
   );
   await symlink(
     join(base, "missing-outside"),
@@ -64,7 +70,10 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves the nearest e
   );
   await assert.rejects(
     paths.assertProspectiveContained(root, join(root, "broken-escape", "new")),
-    matchingError(SafetyError, /^path escapes containment root: .*\/missing-outside\/new$/),
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/missing-outside\/new$/,
+    ),
   );
   await symlink(
     join(root, "missing-inside"),
@@ -90,7 +99,10 @@ void test("FS-HOOK-CONTAINMENT-01 prospective containment resolves relative brok
       root,
       join(root, "directory-link", "broken-link", "new"),
     ),
-    matchingError(SafetyError, /^path escapes containment root: .*\/outside\/new$/),
+    matchingError(
+      SafetyError,
+      /^path escapes containment root: .*\/outside\/new$/,
+    ),
   );
 });
 

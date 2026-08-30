@@ -139,7 +139,7 @@ function resolveFromCwd(value: string, cwd: string): string {
 // read so invalid UTF-8 is rejected rather than replaced, cause dropped, three
 // hand-written messages naming the path, object check included. Its
 // diagnostics are pinned by
-// `tests/unit/hooks.test.js:105::void test("readManifest diagnostics`. This wrapper adds only
+// `tests/unit/hooks.test.js:108::void test("readManifest diagnostics`. This wrapper adds only
 // the `version` type check.
 export async function readUpstreamManifestVersion(
   path: string,
@@ -584,7 +584,7 @@ export async function runPrepare(
     // spawn error, which oneLine never reads -- it takes .message only);
     // readManifest's three hookError messages
     // (`src/hooks.ts:113-138::readManifest`), pinned by
-    // `tests/unit/hooks.test.js:105::void test("readManifest diagnostics` as carrying no reader vocabulary or
+    // `tests/unit/hooks.test.js:108::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //

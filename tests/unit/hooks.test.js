@@ -81,7 +81,10 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
   /** @type {Array<[Uint8Array, string]>} */
   const rejected = [
     [Buffer.from('{"padding":NaN}'), `invalid manifest JSON in ${file}`],
-    [Buffer.from(`{"padding":${nested(256)}}`), `invalid manifest JSON in ${file}`],
+    [
+      Buffer.from(`{"padding":${nested(256)}}`),
+      `invalid manifest JSON in ${file}`,
+    ],
     [Buffer.from("[]"), `manifest must be a JSON object: ${file}`],
     [
       Uint8Array.from([0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xc3, 0x28]),

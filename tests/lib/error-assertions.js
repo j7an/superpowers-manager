@@ -104,7 +104,9 @@ function assertDiagnosticFree(project, root, configPath) {
   if (diagnostics.length > 0) {
     throw new Error(
       diagnostics
-        .map((diagnostic) => formatDiagnostic(diagnostic, root, configPath, project))
+        .map((diagnostic) =>
+          formatDiagnostic(diagnostic, root, configPath, project),
+        )
         .join("\n"),
     );
   }
@@ -131,7 +133,8 @@ function nodeAssertBindings(source) {
     if (!clause) continue;
     if (clause.name) defaults.add(clause.name.text);
     const bindings = clause.namedBindings;
-    if (bindings && isNamespaceImport(bindings)) namespaces.add(bindings.name.text);
+    if (bindings && isNamespaceImport(bindings))
+      namespaces.add(bindings.name.text);
     if (bindings && isNamedImports(bindings)) {
       for (const specifier of bindings.elements) {
         const imported = specifier.propertyName?.text ?? specifier.name.text;
@@ -181,16 +184,25 @@ function boundNodeAssertKind(call, bindings) {
  */
 function resolvedNodeAssertKind(project, call) {
   const declaration = project.checker.getResolvedSignature(call)?.declaration;
-  if (!declaration || !declaration.path.replaceAll("\\\\", "/").endsWith("/@types/node/assert.d.ts")) {
+  if (
+    !declaration ||
+    !declaration.path
+      .replaceAll("\\\\", "/")
+      .endsWith("/@types/node/assert.d.ts")
+  ) {
     return undefined;
   }
   const node = declaration.resolve(project);
-  const declarationName = node && "name" in node
-    ? /** @type {import("typescript/unstable/ast").Node | undefined} */ (node.name)
-    : undefined;
-  const name = declarationName && isIdentifier(declarationName)
-    ? declarationName.text
-    : undefined;
+  const declarationName =
+    node && "name" in node
+      ? /** @type {import("typescript/unstable/ast").Node | undefined} */ (
+          node.name
+        )
+      : undefined;
+  const name =
+    declarationName && isIdentifier(declarationName)
+      ? declarationName.text
+      : undefined;
   return name === "throws" || name === "rejects" ? name : undefined;
 }
 
@@ -235,7 +247,8 @@ export function auditConstructorMatchers({ root, tsconfigPath, exemptions }) {
     const findings = [];
     for (const sourceName of project.program.getSourceFileNames()) {
       const source = project.program.getSourceFile(sourceName);
-      if (!source || project.program.isSourceFileFromExternalLibrary(source)) continue;
+      if (!source || project.program.isSourceFileFromExternalLibrary(source))
+        continue;
       const path = relativePath(root, source.fileName);
       if (!path.startsWith("tests/")) continue;
       const bindings = nodeAssertBindings(source);
@@ -264,11 +277,16 @@ export function auditConstructorMatchers({ root, tsconfigPath, exemptions }) {
               false,
             );
             if (!errorSymbol) {
-              throw new Error(`constructor matcher audit could not resolve Error in ${path}`);
+              throw new Error(
+                `constructor matcher audit could not resolve Error in ${path}`,
+              );
             }
-            const errorType = project.checker.getDeclaredTypeOfSymbol(errorSymbol);
+            const errorType =
+              project.checker.getDeclaredTypeOfSymbol(errorSymbol);
             if (!errorType || isErrorType(errorType)) {
-              throw new Error(`constructor matcher audit could not inspect Error in ${path}`);
+              throw new Error(
+                `constructor matcher audit could not inspect Error in ${path}`,
+              );
             }
             const constructs = project.checker.getSignaturesOfType(
               matcherType,
@@ -276,7 +294,8 @@ export function auditConstructorMatchers({ root, tsconfigPath, exemptions }) {
             );
             if (
               constructs.some((signature) => {
-                const returned = project.checker.getReturnTypeOfSignature(signature);
+                const returned =
+                  project.checker.getReturnTypeOfSignature(signature);
                 if (!returned || isErrorType(returned)) {
                   throw new Error(
                     `constructor matcher audit could not inspect ${path}:${lineOf(source, matcher)}`,
@@ -311,7 +330,8 @@ export function auditConstructorMatchers({ root, tsconfigPath, exemptions }) {
         throw new Error("constructor matcher exemption requires a rationale");
       }
       const key = `${exemption.path}\u0000${exemption.test}\u0000${exemption.matcher}`;
-      if (keys.has(key)) throw new Error(`duplicate constructor matcher exemption: ${key}`);
+      if (keys.has(key))
+        throw new Error(`duplicate constructor matcher exemption: ${key}`);
       keys.add(key);
     }
     const exempted = new Set();
