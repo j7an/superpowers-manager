@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { exactError } from "../lib/error-assertions.js";
 
 /** @type {typeof import("../../src/adapter.js")} */
 const { runAdapter, mapCodexLaunchFailure, runCommandForTest } = await import(
@@ -277,7 +276,13 @@ void test("a manifest overlay read fails closed when the file changes between th
   );
   assert.throws(
     () => new TextDecoder("utf-8", { fatal: true }).decode(finalBytes),
-    exactError(TypeError, "The encoded data was not valid for encoding utf-8"),
+    (error) => {
+      const typed = /** @type {TypeError & {code?: unknown}} */ (error);
+      assert.ok(typed instanceof TypeError);
+      assert.equal(typed.code, "ERR_ENCODING_INVALID_ENCODED_DATA");
+      assert.match(typed.message, /\butf-?8\b/i);
+      return true;
+    },
     "manifest on disk must still be invalid UTF-8 (unwritten, not repaired)",
   );
 });

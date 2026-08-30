@@ -1144,17 +1144,19 @@ void test("container-contract", async (t) => {
     );
   });
 
+  // --- inventory items 34-35: hooks-list-rpc.py file preconditions ------
+
+  await t.test("tests/container/hooks-list-rpc.py exists", () => {
+    assert.ok(existsSync(HOOKS_RPC_PATH));
+  });
+  await t.test("tests/container/hooks-list-rpc.py is not executable", () => {
+    assert.ok(!isExecutable(HOOKS_RPC_PATH));
+  });
+
   await t.test("hooks RPC resource contract", async (t) => {
     const hooksRpc = readFileSync(HOOKS_RPC_PATH, "utf8");
 
-    // --- inventory items 34-37: hooks-list-rpc.py file assertions --------
-
-    await t.test("tests/container/hooks-list-rpc.py exists", () => {
-      assert.ok(existsSync(HOOKS_RPC_PATH));
-    });
-    await t.test("tests/container/hooks-list-rpc.py is not executable", () => {
-      assert.ok(!isExecutable(HOOKS_RPC_PATH));
-    });
+    // --- inventory items 36-37: hooks-list-rpc.py content assertions -----
 
     await t.test(
       "hooks-list-rpc.py opts into postponed annotations (exact line)",
