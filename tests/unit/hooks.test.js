@@ -90,7 +90,11 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
   ];
   for (const [input, message] of rejected) {
     await writeFile(file, input);
-    await assert.rejects(readManifest(file), exactError(SafetyError, message));
+    await assert.rejects(
+      readManifest(file),
+      exactError(SafetyError, message),
+      String(input),
+    );
   }
 });
 
