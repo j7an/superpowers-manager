@@ -27,6 +27,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { exactError } from "../lib/error-assertions.js";
+
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 const DOCKERFILE_PATH = join(ROOT, "tests", "container", "Dockerfile");
@@ -902,100 +904,100 @@ void test("container-contract", async (t) => {
     assert.ok(existsSync(DOCKERIGNORE_PATH));
   });
 
-  const dockerfile = readFileSync(DOCKERFILE_PATH, "utf8");
-  const dockerfileLines = dockerfile.split("\n");
+  await t.test("Dockerfile resource contract", async (t) => {
+    const dockerfile = readFileSync(DOCKERFILE_PATH, "utf8");
+    const dockerfileLines = dockerfile.split("\n");
 
-  // --- inventory items 7-13: Dockerfile literal-text -------------------
+    // --- inventory items 7-13: Dockerfile literal-text -------------------
 
-  await t.test(
-    "Dockerfile base image is node:24-bookworm-slim (exact line)",
-    () => {
-      assert.ok(dockerfileLines.includes("FROM node:24-bookworm-slim"));
-    },
-  );
-  await t.test(
-    "Dockerfile creates the spw user with uid 10001 (exact line)",
-    () => {
+    await t.test(
+      "Dockerfile base image is node:24-bookworm-slim (exact line)",
+      () => {
+        assert.ok(dockerfileLines.includes("FROM node:24-bookworm-slim"));
+      },
+    );
+    await t.test(
+      "Dockerfile creates the spw user with uid 10001 (exact line)",
+      () => {
+        assert.ok(
+          dockerfileLines.includes("RUN useradd --create-home --uid 10001 spw"),
+        );
+      },
+    );
+    await t.test("Dockerfile switches to USER spw (exact line)", () => {
+      assert.ok(dockerfileLines.includes("USER spw"));
+    });
+    await t.test("Dockerfile smoke-tests the codex binary", () => {
       assert.ok(
-        dockerfileLines.includes("RUN useradd --create-home --uid 10001 spw"),
+        dockerfile.includes("./node_modules/.bin/codex --version >/dev/null"),
       );
-    },
-  );
-  await t.test("Dockerfile switches to USER spw (exact line)", () => {
-    assert.ok(dockerfileLines.includes("USER spw"));
-  });
-  await t.test("Dockerfile smoke-tests the codex binary", () => {
-    assert.ok(
-      dockerfile.includes("./node_modules/.bin/codex --version >/dev/null"),
+    });
+    await t.test("Dockerfile enables corepack", () => {
+      assert.ok(dockerfile.includes("corepack enable"));
+    });
+    await t.test("Dockerfile installs with a frozen lockfile", () => {
+      assert.ok(dockerfile.includes("pnpm install --frozen-lockfile"));
+    });
+    await t.test("Dockerfile builds the package", () => {
+      assert.ok(dockerfile.includes("pnpm run build"));
+    });
+
+    await t.test(
+      "Dockerfile installs exactly the expected system packages",
+      () => {
+        // Join every backslash-continued line into one logical line first, so a
+        // package added on a SECOND continuation line cannot hide. The first
+        // draft of this assertion captured only the first physical line after
+        // `--no-install-recommends`, which meant `curl \` on the next line was
+        // invisible while the assertion still claimed "exact set". Corrected
+        // 2026-08-02 after review.
+        const logicalLines = dockerfile.replace(/\\\n\s*/g, " ").split("\n");
+
+        const installLines = logicalLines.filter((line) =>
+          line.includes("apt-get install"),
+        );
+        assert.equal(
+          installLines.length,
+          1,
+          "expected exactly one apt-get install command in the Dockerfile",
+        );
+
+        // `--no-install-recommends` is its own contract, asserted separately
+        // rather than used as the parse boundary. Using it as the boundary
+        // would only see packages written AFTER it, so
+        // `apt-get install -y ruby --no-install-recommends` would install ruby
+        // and still pass. Found by the final whole-branch review, 2026-08-02.
+        assert.ok(
+          installLines[0].includes("--no-install-recommends"),
+          "apt-get install command lost its --no-install-recommends flag",
+        );
+
+        // The logical line is `RUN apt-get update && apt-get install -y
+        // --no-install-recommends <packages> && rm -rf …`. Slice from after
+        // `apt-get install`, stop at the next `&&` command boundary, and drop
+        // flag tokens wherever they appear — so a package is caught whether it
+        // is written before or after the flags, and on any continuation line.
+        const afterInstall = installLines[0].split("apt-get install")[1];
+        assert.ok(
+          afterInstall !== undefined,
+          "expected an `apt-get install` command in the Dockerfile",
+        );
+
+        const packages = afterInstall
+          .split("&&")[0]
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .filter((token) => !token.startsWith("-"))
+          .sort();
+        assert.deepEqual(
+          packages,
+          ["ca-certificates", "git", "procps", "python3"],
+          "the container's system package set changed — every entry is a supply-chain and toolchain commitment",
+        );
+      },
     );
   });
-  await t.test("Dockerfile enables corepack", () => {
-    assert.ok(dockerfile.includes("corepack enable"));
-  });
-  await t.test("Dockerfile installs with a frozen lockfile", () => {
-    assert.ok(dockerfile.includes("pnpm install --frozen-lockfile"));
-  });
-  await t.test("Dockerfile builds the package", () => {
-    assert.ok(dockerfile.includes("pnpm run build"));
-  });
-
-  await t.test(
-    "Dockerfile installs exactly the expected system packages",
-    () => {
-      const dockerfile = readFileSync(DOCKERFILE_PATH, "utf8");
-
-      // Join every backslash-continued line into one logical line first, so a
-      // package added on a SECOND continuation line cannot hide. The first
-      // draft of this assertion captured only the first physical line after
-      // `--no-install-recommends`, which meant `curl \` on the next line was
-      // invisible while the assertion still claimed "exact set". Corrected
-      // 2026-08-02 after review.
-      const logicalLines = dockerfile.replace(/\\\n\s*/g, " ").split("\n");
-
-      const installLines = logicalLines.filter((line) =>
-        line.includes("apt-get install"),
-      );
-      assert.equal(
-        installLines.length,
-        1,
-        "expected exactly one apt-get install command in the Dockerfile",
-      );
-
-      // `--no-install-recommends` is its own contract, asserted separately
-      // rather than used as the parse boundary. Using it as the boundary
-      // would only see packages written AFTER it, so
-      // `apt-get install -y ruby --no-install-recommends` would install ruby
-      // and still pass. Found by the final whole-branch review, 2026-08-02.
-      assert.ok(
-        installLines[0].includes("--no-install-recommends"),
-        "apt-get install command lost its --no-install-recommends flag",
-      );
-
-      // The logical line is `RUN apt-get update && apt-get install -y
-      // --no-install-recommends <packages> && rm -rf …`. Slice from after
-      // `apt-get install`, stop at the next `&&` command boundary, and drop
-      // flag tokens wherever they appear — so a package is caught whether it
-      // is written before or after the flags, and on any continuation line.
-      const afterInstall = installLines[0].split("apt-get install")[1];
-      assert.ok(
-        afterInstall !== undefined,
-        "expected an `apt-get install` command in the Dockerfile",
-      );
-
-      const packages = afterInstall
-        .split("&&")[0]
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .filter((token) => !token.startsWith("-"))
-        .sort();
-      assert.deepEqual(
-        packages,
-        ["ca-certificates", "git", "procps", "python3"],
-        "the container's system package set changed — every entry is a supply-chain and toolchain commitment",
-      );
-    },
-  );
 
   // --- inventory items 14-18: container tool package/lockfile ----------
 
@@ -1061,297 +1063,419 @@ void test("container-contract", async (t) => {
 
   // --- inventory items 22-28: tests/container.sh literal-text ----------
 
-  const runner = readFileSync(RUNNER_PATH, "utf8");
+  await t.test("container runner resource contract", async (t) => {
+    const runner = readFileSync(RUNNER_PATH, "utf8");
 
-  await t.test("runner disables networking", () => {
-    assert.ok(runner.includes("--network none"));
-  });
-  await t.test("runner runs read-only", () => {
-    assert.ok(runner.includes("--read-only"));
-  });
-  await t.test("runner pulls the base image on build", () => {
-    assert.ok(runner.includes("docker build --pull "));
-  });
-  await t.test("runner mounts a writable tmpfs home for uid 10001", () => {
-    assert.ok(
-      runner.includes(
-        "--tmpfs /home/spw:rw,nosuid,size=128m,uid=10001,gid=10001",
-      ),
-    );
-  });
-  await t.test("runner defines the codex-spike mode", () => {
-    assert.ok(runner.includes("codex-spike)"));
-  });
-  await t.test("runner reads the actual container uid", () => {
-    assert.ok(runner.includes("actual_uid=$(id -u)"));
-  });
-  await t.test("runner's UID guard diagnostic is present", () => {
-    assert.ok(
-      runner.includes("container acceptance suite must run as UID 10001"),
+    await t.test("runner disables networking", () => {
+      assert.ok(runner.includes("--network none"));
+    });
+    await t.test("runner runs read-only", () => {
+      assert.ok(runner.includes("--read-only"));
+    });
+    await t.test("runner pulls the base image on build", () => {
+      assert.ok(runner.includes("docker build --pull "));
+    });
+    await t.test("runner mounts a writable tmpfs home for uid 10001", () => {
+      assert.ok(
+        runner.includes(
+          "--tmpfs /home/spw:rw,nosuid,size=128m,uid=10001,gid=10001",
+        ),
+      );
+    });
+    await t.test("runner defines the codex-spike mode", () => {
+      assert.ok(runner.includes("codex-spike)"));
+    });
+    await t.test("runner reads the actual container uid", () => {
+      assert.ok(runner.includes("actual_uid=$(id -u)"));
+    });
+    await t.test("runner's UID guard diagnostic is present", () => {
+      assert.ok(
+        runner.includes("container acceptance suite must run as UID 10001"),
+      );
+    });
+
+    // --- inventory items 38-40: runner --inside structural check ---------
+
+    await t.test(
+      "runner's --inside branch gates UID 10001 before mode selection and dispatch, then routes suite mode through run.sh and the offline probe",
+      () => {
+        assert.doesNotThrow(() => validateRunnerInsideBranch(runner));
+      },
     );
   });
 
   // --- inventory items 29-33: .gitignore / .dockerignore exact lines ---
 
-  const gitignoreLines = readFileSync(GITIGNORE_PATH, "utf8").split("\n");
-  const dockerignoreLines = readFileSync(DOCKERIGNORE_PATH, "utf8").split("\n");
+  await t.test("gitignore resource contract", async (t) => {
+    const gitignoreLines = readFileSync(GITIGNORE_PATH, "utf8").split("\n");
 
-  await t.test(
-    ".gitignore ignores plugins/.superpowers.bak.*/ (exact line)",
-    () => {
-      assert.ok(gitignoreLines.includes("plugins/.superpowers.bak.*/"));
-    },
-  );
-  await t.test(".dockerignore ignores .superpowers/ (exact line)", () => {
-    assert.ok(dockerignoreLines.includes(".superpowers/"));
-  });
-  await t.test(".dockerignore ignores .worktrees/ (exact line)", () => {
-    assert.ok(dockerignoreLines.includes(".worktrees/"));
-  });
-  await t.test(
-    ".dockerignore ignores plugins/.superpowers.prepare.*/ (exact line)",
-    () => {
-      assert.ok(dockerignoreLines.includes("plugins/.superpowers.prepare.*/"));
-    },
-  );
-  await t.test(
-    ".dockerignore ignores plugins/.superpowers.bak.*/ (exact line)",
-    () => {
-      assert.ok(dockerignoreLines.includes("plugins/.superpowers.bak.*/"));
-    },
-  );
-
-  // --- inventory items 34-37: hooks-list-rpc.py file assertions --------
-
-  await t.test("tests/container/hooks-list-rpc.py exists", () => {
-    assert.ok(existsSync(HOOKS_RPC_PATH));
-  });
-  await t.test("tests/container/hooks-list-rpc.py is not executable", () => {
-    assert.ok(!isExecutable(HOOKS_RPC_PATH));
-  });
-
-  const hooksRpc = readFileSync(HOOKS_RPC_PATH, "utf8");
-
-  await t.test(
-    "hooks-list-rpc.py opts into postponed annotations (exact line)",
-    () => {
-      assert.ok(
-        hooksRpc.split("\n").includes("from __future__ import annotations"),
-      );
-    },
-  );
-  await t.test("hooks-list-rpc.py is syntactically valid Python", () => {
-    const result = spawnSync(
-      "python3",
-      ["-S", "-c", "import ast, sys; ast.parse(sys.stdin.read())"],
-      { input: hooksRpc, encoding: "utf8" },
+    await t.test(
+      ".gitignore ignores plugins/.superpowers.bak.*/ (exact line)",
+      () => {
+        assert.ok(gitignoreLines.includes("plugins/.superpowers.bak.*/"));
+      },
     );
-    if (result.error) {
-      assert.fail(
-        "python3 -S could not be run — is python3 installed and on PATH?",
+  });
+
+  await t.test("dockerignore resource contract", async (t) => {
+    const dockerignoreLines = readFileSync(DOCKERIGNORE_PATH, "utf8").split(
+      "\n",
+    );
+
+    await t.test(".dockerignore ignores .superpowers/ (exact line)", () => {
+      assert.ok(dockerignoreLines.includes(".superpowers/"));
+    });
+    await t.test(".dockerignore ignores .worktrees/ (exact line)", () => {
+      assert.ok(dockerignoreLines.includes(".worktrees/"));
+    });
+    await t.test(
+      ".dockerignore ignores plugins/.superpowers.prepare.*/ (exact line)",
+      () => {
+        assert.ok(
+          dockerignoreLines.includes("plugins/.superpowers.prepare.*/"),
+        );
+      },
+    );
+    await t.test(
+      ".dockerignore ignores plugins/.superpowers.bak.*/ (exact line)",
+      () => {
+        assert.ok(dockerignoreLines.includes("plugins/.superpowers.bak.*/"));
+      },
+    );
+  });
+
+  await t.test("hooks RPC resource contract", async (t) => {
+    const hooksRpc = readFileSync(HOOKS_RPC_PATH, "utf8");
+
+    // --- inventory items 34-37: hooks-list-rpc.py file assertions --------
+
+    await t.test("tests/container/hooks-list-rpc.py exists", () => {
+      assert.ok(existsSync(HOOKS_RPC_PATH));
+    });
+    await t.test("tests/container/hooks-list-rpc.py is not executable", () => {
+      assert.ok(!isExecutable(HOOKS_RPC_PATH));
+    });
+
+    await t.test(
+      "hooks-list-rpc.py opts into postponed annotations (exact line)",
+      () => {
+        assert.ok(
+          hooksRpc.split("\n").includes("from __future__ import annotations"),
+        );
+      },
+    );
+    await t.test("hooks-list-rpc.py is syntactically valid Python", () => {
+      const result = spawnSync(
+        "python3",
+        ["-S", "-c", "import ast, sys; ast.parse(sys.stdin.read())"],
+        { input: hooksRpc, encoding: "utf8" },
       );
-    }
+      if (result.error) {
+        assert.fail(
+          "python3 -S could not be run — is python3 installed and on PATH?",
+        );
+      }
+      assert.equal(
+        result.status,
+        0,
+        "hooks-list-rpc.py failed to parse as Python",
+      );
+    });
+
+    // --- inventory items 116-142: hooks-list-rpc.py protocol gates -------
+
+    await t.test(
+      "hooks-list-rpc.py satisfies the full protocol-gate/handshake-ordering contract",
+      () => {
+        assert.doesNotThrow(() => validateHooksRpc(hooksRpc));
+      },
+    );
+
+    // --- inventory items 153-172: RPC-helper semantic-mutation fixtures --
+    // Mirrors the `rpc_mutations` hash at :584-665.
+
+    /** @type {Record<string, { source: string; message: string }>} */
+    const rpcMutations = {
+      "missing pre-send process check": {
+        source: hooksRpc.replace(
+          "if process.poll() is not None or process.stdin is None:",
+          "if False:",
+        ),
+        message:
+          "RPC helper missing protocol gate: if process.poll() is not None or process.stdin is None:",
+      },
+      "missing send failure gate": {
+        source: hooksRpc.replace(
+          'fail(f"could not send request: {exc}")',
+          "pass",
+        ),
+        message:
+          'RPC helper missing protocol gate: fail(f"could not send request: {exc}")',
+      },
+      "missing malformed JSON gate": {
+        source: hooksRpc.replace(
+          'fail(f"malformed JSONL response: {exc}")',
+          "pass",
+        ),
+        message:
+          'RPC helper missing protocol gate: fail(f"malformed JSONL response: {exc}")',
+      },
+      "missing non-standard constant parser": {
+        source: hooksRpc.replace(", parse_constant=reject_constant", ""),
+        message:
+          "RPC helper missing protocol gate: parse_constant=reject_constant",
+      },
+      "weakened non-standard constant rejection": {
+        source: hooksRpc.replace(
+          'raise ValueError(f"non-standard numeric constant: {constant}")',
+          "return None",
+        ),
+        message:
+          'RPC helper missing protocol gate: raise ValueError(f"non-standard numeric constant: {constant}")',
+      },
+      "removed deadline": {
+        source: hooksRpc.replace(
+          "deadline = time.monotonic() + 25",
+          'deadline = float("inf")',
+        ),
+        message:
+          "RPC helper missing protocol gate: deadline = time.monotonic() + 25",
+      },
+      "unbounded selector wait": {
+        source: hooksRpc.replace(
+          "if remaining <= 0 or not selector.select(remaining):",
+          "if not selector.select():",
+        ),
+        message:
+          "RPC helper missing protocol gate: if remaining <= 0 or not selector.select(remaining):",
+      },
+      "missing EOF failure": {
+        source: hooksRpc.replace(
+          'fail("EOF before the required response")',
+          "return {}",
+        ),
+        message:
+          'RPC helper missing protocol gate: fail("EOF before the required response")',
+      },
+      "missing stream availability gate": {
+        source: hooksRpc.replace(
+          'fail("app-server stdout is unavailable")',
+          "pass",
+        ),
+        message:
+          'RPC helper missing protocol gate: fail("app-server stdout is unavailable")',
+      },
+      "missing JSON object check": {
+        source: hooksRpc.replace(
+          "if not isinstance(message, dict):",
+          "if False:",
+        ),
+        message:
+          "RPC helper missing protocol gate: if not isinstance(message, dict):",
+      },
+      "missing response id gate": {
+        source: hooksRpc.replace(
+          "if type(id_value) is not int or id_value != expected_id:",
+          "if False:",
+        ),
+        message:
+          "RPC helper missing protocol gate: if type(id_value) is not int or id_value != expected_id:",
+      },
+      "weakened exact response id type": {
+        source: hooksRpc.replace(
+          "if type(id_value) is not int or id_value != expected_id:",
+          "if id_value != expected_id:",
+        ),
+        message:
+          "RPC helper missing protocol gate: if type(id_value) is not int or id_value != expected_id:",
+      },
+      "missing RPC error gate": {
+        source: hooksRpc.replace('if "error" in message:', "if False:"),
+        message: 'RPC helper missing protocol gate: if "error" in message:',
+      },
+      "skipped initialize request": {
+        source: hooksRpc.replace(
+          '"method": "initialize",',
+          '"method": "not-initialize",',
+        ),
+        message:
+          "RPC helper must keep the staged initialize and hooks/list handshake",
+      },
+      "missing app-server pipe gate": {
+        source: hooksRpc.replace(
+          'fail("app-server stdout pipe was not created")',
+          "pass",
+        ),
+        message:
+          'RPC helper missing protocol gate: fail("app-server stdout pipe was not created")',
+      },
+      "skipped initialize response": {
+        source: hooksRpc.replace("receive(process, selector, 0)", "pass"),
+        message:
+          "RPC helper must keep the staged initialize and hooks/list handshake",
+      },
+      "skipped initialized notification": {
+        source: hooksRpc.replace(
+          'send(process, {"method": "initialized"})',
+          "pass",
+        ),
+        message:
+          "RPC helper must keep the staged initialize and hooks/list handshake",
+      },
+      "skipped hooks request": {
+        source: hooksRpc.replace(
+          'send(process, {"id": 1, "method": "hooks/list", "params": {"cwds": [cwd]}})',
+          "pass",
+        ),
+        message:
+          "RPC helper must keep the staged initialize and hooks/list handshake",
+      },
+      "missing hooks response presence gate": {
+        source: hooksRpc.replace(
+          "response = receive(process, selector, 1)",
+          'response = {"id": 1, "result": {"data": []}}',
+        ),
+        message:
+          "RPC helper must keep the staged initialize and hooks/list handshake",
+      },
+      "missing result gate": {
+        source: hooksRpc.replace('if "result" not in message:', "if False:"),
+        message:
+          'RPC helper missing protocol gate: if "result" not in message:',
+      },
+    };
     assert.equal(
-      result.status,
-      0,
-      "hooks-list-rpc.py failed to parse as Python",
+      Object.keys(rpcMutations).length,
+      20,
+      "rpcMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
     );
+
+    for (const [name, { source, message }] of Object.entries(rpcMutations)) {
+      await t.test(`RPC helper semantic mutation is rejected: ${name}`, () => {
+        assert.notEqual(
+          source,
+          hooksRpc,
+          `mutation fixture made no change: ${name}`,
+        );
+        assert.throws(
+          () => validateHooksRpc(source),
+          exactError(ContractViolation, message),
+          name,
+        );
+      });
+    }
   });
 
-  // --- inventory items 38-40: runner --inside structural check ---------
+  await t.test("offline probe resource contract", async (t) => {
+    const probe = readFileSync(PROBE_PATH, "utf8");
 
-  await t.test(
-    "runner's --inside branch gates UID 10001 before mode selection and dispatch, then routes suite mode through run.sh and the offline probe",
-    () => {
-      assert.doesNotThrow(() => validateRunnerInsideBranch(runner));
-    },
-  );
+    // --- inventory items 41-115: codex-offline-probe.sh structure --------
 
-  // --- inventory items 41-115: codex-offline-probe.sh structure --------
+    await t.test(
+      "codex-offline-probe.sh satisfies the full structural/ordering contract",
+      () => {
+        assert.doesNotThrow(() => validateProbe(probe));
+      },
+    );
 
-  const probe = readFileSync(PROBE_PATH, "utf8");
+    // --- inventory items 143-152: probe semantic-mutation fixtures -------
+    // Mirrors the `mutations` hash at :531-572: each entry is a single
+    // substring rewrite of the real probe text that must be rejected by
+    // validateProbe.
 
-  await t.test(
-    "codex-offline-probe.sh satisfies the full structural/ordering contract",
-    () => {
-      assert.doesNotThrow(() => validateProbe(probe));
-    },
-  );
+    /** @type {Record<string, { source: string; message: string }>} */
+    const probeMutations = {
+      "no-op run_manager": {
+        source: probe.replace(
+          /^run_manager\(\) \{\n[\s\S]*?^\}\n/m,
+          "run_manager() {\n  :\n}\n",
+        ),
+        message:
+          "run_manager must route through the local package with isolated manager state",
+      },
+      "unbracketed install lifecycle": {
+        source: probe.replace(
+          "hook_state_before=$(snapshot_hook_state)\nrun_manager install\nhook_state_after=$(snapshot_hook_state)",
+          "run_manager install",
+        ),
+        message:
+          "manager mutation must be immediately bracketed by hook-state snapshots: run_manager install",
+      },
+      "unbound fingerprint root": {
+        source: probe.replace(
+          'expected_root="$HOME/.codex/plugins/cache/superpowers-manager/superpowers/$expected_version"',
+          'expected_root="/tmp/unbound-manager-cache"',
+        ),
+        message:
+          "fingerprint helper must derive its exact cache root from expected_version",
+      },
+      "unbound Codex listing version": {
+        source: probe.replace(
+          'if matches[0].get("version") != expected_version:',
+          "if expected_version != expected_version:",
+        ),
+        message:
+          "fingerprint helper must bind active-root reads to Codex's reported version",
+      },
+      "required pluginId accepted": {
+        source: probe.replace('if "pluginId" in required:', "if False:"),
+        message:
+          "schema preflight must require optional, exact string-or-null pluginId",
+      },
+      "additional pluginId types accepted": {
+        source: probe.replace(
+          'if plugin_id_types != {"string", "null"}:',
+          'if not {"string", "null"}.issubset(plugin_id_types):',
+        ),
+        message:
+          "schema preflight must require optional, exact string-or-null pluginId",
+      },
+      "non-boolean enabled accepted": {
+        source: probe.replace(
+          'if actual.get("enabled") is not True:',
+          'if actual.get("enabled") != True:',
+        ),
+        message:
+          'active hook assertion missing exact metadata: if actual.get("enabled") is not True:',
+      },
+      "non-boolean isManaged accepted": {
+        source: probe.replace(
+          'if actual.get("isManaged") is not False:',
+          'if actual.get("isManaged") != False:',
+        ),
+        message:
+          'active hook assertion missing exact metadata: if actual.get("isManaged") is not False:',
+      },
+      "captured hooks stderr removed": {
+        source: probe.replace('cat "$hooks_stderr" >&2', ":"),
+        message:
+          "capture_hooks_response must emit captured app-server stderr only on RPC failure",
+      },
+      "captured hooks stderr leaked to stdout": {
+        source: probe.replace('cat "$hooks_stderr" >&2', 'cat "$hooks_stderr"'),
+        message:
+          "capture_hooks_response must emit captured app-server stderr only on RPC failure",
+      },
+    };
+    assert.equal(
+      Object.keys(probeMutations).length,
+      10,
+      "probeMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
+    );
 
-  // --- inventory items 116-142: hooks-list-rpc.py protocol gates -------
-
-  await t.test(
-    "hooks-list-rpc.py satisfies the full protocol-gate/handshake-ordering contract",
-    () => {
-      assert.doesNotThrow(() => validateHooksRpc(hooksRpc));
-    },
-  );
-
-  // --- inventory items 143-152: probe semantic-mutation fixtures -------
-  // Mirrors the `mutations` hash at :531-572: each entry is a single
-  // substring rewrite of the real probe text that must be rejected by
-  // validateProbe.
-
-  /** @type {Record<string, string>} */
-  const probeMutations = {
-    "no-op run_manager": probe.replace(
-      /^run_manager\(\) \{\n[\s\S]*?^\}\n/m,
-      "run_manager() {\n  :\n}\n",
-    ),
-    "unbracketed install lifecycle": probe.replace(
-      "hook_state_before=$(snapshot_hook_state)\nrun_manager install\nhook_state_after=$(snapshot_hook_state)",
-      "run_manager install",
-    ),
-    "unbound fingerprint root": probe.replace(
-      'expected_root="$HOME/.codex/plugins/cache/superpowers-manager/superpowers/$expected_version"',
-      'expected_root="/tmp/unbound-manager-cache"',
-    ),
-    "unbound Codex listing version": probe.replace(
-      'if matches[0].get("version") != expected_version:',
-      "if expected_version != expected_version:",
-    ),
-    "required pluginId accepted": probe.replace(
-      'if "pluginId" in required:',
-      "if False:",
-    ),
-    "additional pluginId types accepted": probe.replace(
-      'if plugin_id_types != {"string", "null"}:',
-      'if not {"string", "null"}.issubset(plugin_id_types):',
-    ),
-    "non-boolean enabled accepted": probe.replace(
-      'if actual.get("enabled") is not True:',
-      'if actual.get("enabled") != True:',
-    ),
-    "non-boolean isManaged accepted": probe.replace(
-      'if actual.get("isManaged") is not False:',
-      'if actual.get("isManaged") != False:',
-    ),
-    "captured hooks stderr removed": probe.replace(
-      'cat "$hooks_stderr" >&2',
-      ":",
-    ),
-    "captured hooks stderr leaked to stdout": probe.replace(
-      'cat "$hooks_stderr" >&2',
-      'cat "$hooks_stderr"',
-    ),
-  };
-  assert.equal(
-    Object.keys(probeMutations).length,
-    10,
-    "probeMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
-  );
-
-  for (const [name, mutated] of Object.entries(probeMutations)) {
-    await t.test(`probe semantic mutation is rejected: ${name}`, () => {
-      assert.notEqual(
-        mutated,
-        probe,
-        `mutation fixture made no change: ${name}`,
-      );
-      assert.throws(() => validateProbe(mutated), ContractViolation);
-    });
-  }
-
-  // --- inventory items 153-172: RPC-helper semantic-mutation fixtures --
-  // Mirrors the `rpc_mutations` hash at :584-665.
-
-  /** @type {Record<string, string>} */
-  const rpcMutations = {
-    "missing pre-send process check": hooksRpc.replace(
-      "if process.poll() is not None or process.stdin is None:",
-      "if False:",
-    ),
-    "missing send failure gate": hooksRpc.replace(
-      'fail(f"could not send request: {exc}")',
-      "pass",
-    ),
-    "missing malformed JSON gate": hooksRpc.replace(
-      'fail(f"malformed JSONL response: {exc}")',
-      "pass",
-    ),
-    "missing non-standard constant parser": hooksRpc.replace(
-      ", parse_constant=reject_constant",
-      "",
-    ),
-    "weakened non-standard constant rejection": hooksRpc.replace(
-      'raise ValueError(f"non-standard numeric constant: {constant}")',
-      "return None",
-    ),
-    "removed deadline": hooksRpc.replace(
-      "deadline = time.monotonic() + 25",
-      'deadline = float("inf")',
-    ),
-    "unbounded selector wait": hooksRpc.replace(
-      "if remaining <= 0 or not selector.select(remaining):",
-      "if not selector.select():",
-    ),
-    "missing EOF failure": hooksRpc.replace(
-      'fail("EOF before the required response")',
-      "return {}",
-    ),
-    "missing stream availability gate": hooksRpc.replace(
-      'fail("app-server stdout is unavailable")',
-      "pass",
-    ),
-    "missing JSON object check": hooksRpc.replace(
-      "if not isinstance(message, dict):",
-      "if False:",
-    ),
-    "missing response id gate": hooksRpc.replace(
-      "if type(id_value) is not int or id_value != expected_id:",
-      "if False:",
-    ),
-    "weakened exact response id type": hooksRpc.replace(
-      "if type(id_value) is not int or id_value != expected_id:",
-      "if id_value != expected_id:",
-    ),
-    "missing RPC error gate": hooksRpc.replace(
-      'if "error" in message:',
-      "if False:",
-    ),
-    "skipped initialize request": hooksRpc.replace(
-      '"method": "initialize",',
-      '"method": "not-initialize",',
-    ),
-    "missing app-server pipe gate": hooksRpc.replace(
-      'fail("app-server stdout pipe was not created")',
-      "pass",
-    ),
-    "skipped initialize response": hooksRpc.replace(
-      "receive(process, selector, 0)",
-      "pass",
-    ),
-    "skipped initialized notification": hooksRpc.replace(
-      'send(process, {"method": "initialized"})',
-      "pass",
-    ),
-    "skipped hooks request": hooksRpc.replace(
-      'send(process, {"id": 1, "method": "hooks/list", "params": {"cwds": [cwd]}})',
-      "pass",
-    ),
-    "missing hooks response presence gate": hooksRpc.replace(
-      "response = receive(process, selector, 1)",
-      'response = {"id": 1, "result": {"data": []}}',
-    ),
-    "missing result gate": hooksRpc.replace(
-      'if "result" not in message:',
-      "if False:",
-    ),
-  };
-  assert.equal(
-    Object.keys(rpcMutations).length,
-    20,
-    "rpcMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
-  );
-
-  for (const [name, mutated] of Object.entries(rpcMutations)) {
-    await t.test(`RPC helper semantic mutation is rejected: ${name}`, () => {
-      assert.notEqual(
-        mutated,
-        hooksRpc,
-        `mutation fixture made no change: ${name}`,
-      );
-      assert.throws(() => validateHooksRpc(mutated), ContractViolation);
-    });
-  }
+    for (const [name, { source, message }] of Object.entries(probeMutations)) {
+      await t.test(`probe semantic mutation is rejected: ${name}`, () => {
+        assert.notEqual(
+          source,
+          probe,
+          `mutation fixture made no change: ${name}`,
+        );
+        assert.throws(
+          () => validateProbe(source),
+          exactError(ContractViolation, message),
+          name,
+        );
+      });
+    }
+  });
 });
