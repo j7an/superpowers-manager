@@ -76,7 +76,11 @@ void test("grammar rejects constants, malformed input, and trailing input", () =
     ["true x", "unexpected trailing input at character 5"],
   ];
   for (const [text, message] of grammarRejected) {
-    assert.throws(() => parseStrictJson(text, reject), exactError(SafetyError, message), text);
+    assert.throws(
+      () => parseStrictJson(text, reject),
+      exactError(SafetyError, message),
+      text,
+    );
   }
 });
 
@@ -100,7 +104,10 @@ void test("non-standard constants are an explicit exact-token policy", () => {
     ["+Infinity", "expected JSON value at character 0"],
   ];
   for (const [text, message] of constantSpellingRejected) {
-    assert.throws(() => parseStrictJson(text, acceptConstants), exactError(SafetyError, message));
+    assert.throws(
+      () => parseStrictJson(text, acceptConstants),
+      exactError(SafetyError, message),
+    );
   }
 });
 
@@ -182,7 +189,11 @@ void test("optional integer-token profile rejects decimal and exponent spellings
     ["1e0", "non-integer JSON number at character 3"],
   ];
   for (const [text, message] of integerRejected) {
-    assert.throws(() => parseStrictJson(text, integersOnly), exactError(SafetyError, message), text);
+    assert.throws(
+      () => parseStrictJson(text, integersOnly),
+      exactError(SafetyError, message),
+      text,
+    );
     assert.equal(parseStrictJson(text, reject), 1, text);
   }
 });
