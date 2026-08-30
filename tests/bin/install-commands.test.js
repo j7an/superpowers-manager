@@ -562,8 +562,9 @@ async function assertLegacyIdentityStops(c, identityState) {
   // means the adapter's own unconditional `codex plugin add`
   // (runInstall's pluginAdded mutationCommand call) was structurally
   // impossible to reach either.
+  const calls = adapter.calls.map((call) => call.join(" "));
   assert.ok(
-    adapter.calls.some((call) => call.join(" ") === "inspect --view ownership"),
+    has(calls, "inspect --view ownership"),
     "adapter never inspected ownership, so 'no build or install' would pass vacuously",
   );
   assert.deepEqual(
@@ -1240,10 +1241,9 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(hasLine(out, "Then run: npx superpowers-manager install"), out);
     // :615-619, now structural: ownership WAS inspected (non-vacuous hoist)
     // and no call named "build" or "install" ever reached the double.
+    const calls = adapter.calls.map((call) => call.join(" "));
     assert.ok(
-      adapter.calls.some(
-        (call) => call.join(" ") === "inspect --view ownership",
-      ),
+      has(calls, "inspect --view ownership"),
       "adapter never inspected ownership, so 'no build or install' would pass vacuously",
     );
     assert.deepEqual(
