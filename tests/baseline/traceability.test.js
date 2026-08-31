@@ -141,6 +141,25 @@ function duplicates(values) {
   ].sort();
 }
 
+const EXPECTED_BEHAVIOR_ID_COUNT = 107;
+
+/**
+ * @param {string[]} inventory
+ * @param {Array<{ id: string }>} traceability
+ */
+function assertBehaviorIdCardinality(inventory, traceability) {
+  assert.equal(
+    inventory.length,
+    EXPECTED_BEHAVIOR_ID_COUNT,
+    `behavioral inventory must contain exactly ${EXPECTED_BEHAVIOR_ID_COUNT} behavior IDs`,
+  );
+  assert.equal(
+    traceability.length,
+    EXPECTED_BEHAVIOR_ID_COUNT,
+    `traceability must contain exactly ${EXPECTED_BEHAVIOR_ID_COUNT} behavior IDs`,
+  );
+}
+
 /**
  * @param {string} path
  * @param {string} label
@@ -165,9 +184,51 @@ function assertSafeRepositoryPath(path, label) {
   }
 }
 
+void test("TRACEABILITY-CARDINALITY-01 coordinated non-protocol deletion is rejected", () => {
+  const deletedId = "CLI-MODE-HELP-01";
+  const inventory = inventoryIds();
+  const traceability = traceabilityRows();
+  const inventoryAfterDeletion = inventory.filter((id) => id !== deletedId);
+  const traceabilityAfterDeletion = traceability.filter(
+    ({ id }) => id !== deletedId,
+  );
+
+  assert.equal(
+    inventory.length - inventoryAfterDeletion.length,
+    1,
+    "mutation setup must remove exactly one inventory row",
+  );
+  assert.equal(
+    traceability.length - traceabilityAfterDeletion.length,
+    1,
+    "mutation setup must remove exactly one traceability row",
+  );
+
+  assert.throws(
+    () =>
+      assertBehaviorIdCardinality(
+        inventoryAfterDeletion,
+        traceabilityAfterDeletion,
+      ),
+    {
+      name: "AssertionError",
+      message: /behavioral inventory must contain exactly 107 behavior IDs/,
+    },
+  );
+  assert.throws(
+    () => assertBehaviorIdCardinality(inventory, traceabilityAfterDeletion),
+    {
+      name: "AssertionError",
+      message: /traceability must contain exactly 107 behavior IDs/,
+    },
+  );
+});
+
 void test("TRACEABILITY-IDS-01 every assigned behavior ID has exactly one row", () => {
   const inventory = inventoryIds();
-  const traceability = traceabilityRows().map(({ id }) => id);
+  const traceabilityEntries = traceabilityRows();
+  assertBehaviorIdCardinality(inventory, traceabilityEntries);
+  const traceability = traceabilityEntries.map(({ id }) => id);
   assert.deepEqual(
     duplicates(inventory),
     [],
