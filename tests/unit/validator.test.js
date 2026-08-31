@@ -1,10 +1,8 @@
 // @ts-check
 // Unit coverage for src/validator.ts: the per-stream byte cap
 // (maxBytesPerStream), the timeout and the SIGTERM/SIGKILL escalation it drives,
-// the exit-inside-the-drain-window race, and the legacy path's parity contracts.
-// `drainMs` itself is exercised only through settlement timing -- no case here
-// would go red if drain handling alone changed. The policy is a real production
-// argument, not a test seam.
+// bounded drain content, grace-window output capture, the
+// exit-inside-the-drain-window race, and the legacy path's parity contracts.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import {
@@ -18,6 +16,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/validator.js")} */
 const {
@@ -113,6 +113,29 @@ const SUCCEEDS = {
   maxBytesPerStream: 256,
 };
 
+// Content, not elapsed time, is the oracle. The descendant writes at 4 s and
+// 8 s around a 6 s drain boundary. A halved drain loses the inside marker;
+// settling on close captures the outside marker.
+const DRAIN_CONTENT = {
+  kind: /** @type {const} */ ("bounded"),
+  timeoutMs: 30_000,
+  graceMs: 7_000,
+  drainMs: 6_000,
+  maxBytesPerStream: 256,
+};
+
+const GRACE_CHILD = fileURLToPath(
+  new URL("./helpers/validator-grace-child.js", import.meta.url),
+);
+
+const CAPTURES_GRACE_OUTPUT = {
+  kind: /** @type {const} */ ("bounded"),
+  timeoutMs: 10_000,
+  graceMs: 1_000,
+  drainMs: 200,
+  maxBytesPerStream: 256,
+};
+
 // For the exit-inside-the-drain-window race ONLY. The window is
 // [timeoutMs - drainMs, timeoutMs) = [800, 4000).
 //
@@ -157,6 +180,19 @@ function writeScript(dir, name, body) {
   const p = join(dir, name);
   writeFileSync(p, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
   return p;
+}
+
+/**
+ * Waits for one already-running fixture to expose its completion marker.
+ * It never reruns the fixture or changes a failed result into success.
+ * @param {string} path
+ * @param {number} timeoutMs
+ */
+async function waitForPath(path, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(path) && Date.now() < deadline) {
+    await delay(25);
+  }
 }
 
 void test("exit 0 is reported as exited with code 0", async () => {
@@ -447,6 +483,35 @@ void test("output written before the timeout is retained in the timedOut result"
   }
 });
 
+void test("timeout capture retains output written during the grace window", async () => {
+  const dir = sandbox();
+  try {
+    const run = await runValidator(
+      [process.execPath, GRACE_CHILD],
+      CAPTURES_GRACE_OUTPUT,
+      {},
+      dir,
+    );
+    assert.equal(
+      run.kind,
+      "timedOut",
+      "grace fixture must remain alive until timeout",
+    );
+    assert.match(
+      run.stdout.text,
+      /^ready$/m,
+      "fixture did not install the SIGTERM handler before timeout",
+    );
+    assert.match(
+      run.stdout.text,
+      /^during-grace$/m,
+      "capture must retain output written during the grace window",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", async () => {
   const dir = sandbox();
   try {
@@ -513,6 +578,45 @@ void test("PARITY: the unbounded policy captures output written after the child 
     );
     assert.equal(run.kind, "exited");
     assert.match(run.stdout.text, /late/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+void test("bounded drain captures only bytes written inside the window", async () => {
+  const dir = sandbox();
+  try {
+    const completion = join(dir, "drain-descendant-complete");
+    const exe = writeScript(
+      dir,
+      "drain-content.sh",
+      "( sleep 4; echo inside-drain; sleep 4; echo outside-drain; " +
+        ': > "$PR124C_DRAIN_COMPLETION" ) &\nexit 0',
+    );
+    const run = await runValidator(
+      [exe, "/candidate"],
+      DRAIN_CONTENT,
+      { PR124C_DRAIN_COMPLETION: completion },
+      dir,
+    );
+    assert.equal(run.kind, "exited");
+    assert.equal(run.code, 0);
+    await waitForPath(completion, 7_000);
+    assert.equal(
+      existsSync(completion),
+      true,
+      "fixture descendant never proved the outside marker was written",
+    );
+    assert.match(
+      run.stdout.text,
+      /^inside-drain$/m,
+      "capture must retain the inside-drain marker",
+    );
+    assert.doesNotMatch(
+      run.stdout.text,
+      /^outside-drain$/m,
+      "capture must exclude the outside-drain marker",
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -690,6 +794,8 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
     RUNS_THEN_TIMES_OUT,
     TRAPS_THEN_TIMES_OUT,
     SUCCEEDS,
+    DRAIN_CONTENT,
+    CAPTURES_GRACE_OUTPUT,
     DRAIN_RACE,
     BOUNDED_EXECUTABLE,
   })) {

@@ -3,7 +3,13 @@
 // and update. A NEW suite, deliberately: tests/baseline/prepare.test.js is frozen at
 // 31 call sites by tests/migration-inventory/prepare.md.
 import assert from "node:assert/strict";
-import { existsSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { createCase, runScript } from "../bin/lifecycle-fixture.js";
@@ -157,6 +163,48 @@ void test("a missing executable validator names itself, and still discloses", as
       `running external validator ${missing} (unresolved)`,
     ),
     `disclosure did not report the unresolved path:\n${result.stdout}`,
+  );
+});
+
+void test("prepare discloses a dangling executable-validator symlink", async () => {
+  const c = createCase({ fakes: "probe" });
+  const target = join(c.dir, "missing-validator-target");
+  const validator = join(c.dir, "dangling-validator");
+  symlinkSync(target, validator);
+
+  assert.equal(
+    lstatSync(validator).isSymbolicLink(),
+    true,
+    "fixture must configure a real symlink",
+  );
+  assert.equal(
+    existsSync(validator),
+    false,
+    "fixture symlink target must remain absent",
+  );
+
+  const result = await prepare(c, {
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
+  });
+  const disclosure =
+    `[superpowers-manager: running external validator ${validator} ` +
+    "(a symlink whose target could not be resolved)]";
+
+  assert.equal(result.status, 1);
+  assert.ok(
+    result.stdout.split("\n").includes(disclosure),
+    "stdout must contain the exact dangling-symlink disclosure",
+  );
+  assert.equal(
+    result.stderr,
+    `error: external plugin validator not found: ${validator}\n`,
+  );
+  assert.equal(
+    result.stdout.includes(
+      `[superpowers-manager: running external validator ${validator} (unresolved)]`,
+    ),
+    false,
+    "dangling symlink must not degrade to the generic unresolved disclosure",
   );
 });
 
