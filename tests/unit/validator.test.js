@@ -1,8 +1,8 @@
 // @ts-check
 // Unit coverage for src/validator.ts: the per-stream byte cap
 // (maxBytesPerStream), the timeout and the SIGTERM/SIGKILL escalation it drives,
-// bounded drain content, the exit-inside-the-drain-window race, and the legacy
-// path's parity contracts.
+// bounded drain content, grace-window output capture, the
+// exit-inside-the-drain-window race, and the legacy path's parity contracts.
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import {
@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 /** @type {typeof import("../../src/validator.js")} */
 const {
@@ -120,6 +121,18 @@ const DRAIN_CONTENT = {
   timeoutMs: 30_000,
   graceMs: 7_000,
   drainMs: 6_000,
+  maxBytesPerStream: 256,
+};
+
+const GRACE_CHILD = fileURLToPath(
+  new URL("./helpers/validator-grace-child.js", import.meta.url),
+);
+
+const CAPTURES_GRACE_OUTPUT = {
+  kind: /** @type {const} */ ("bounded"),
+  timeoutMs: 10_000,
+  graceMs: 1_000,
+  drainMs: 200,
   maxBytesPerStream: 256,
 };
 
@@ -470,6 +483,35 @@ void test("output written before the timeout is retained in the timedOut result"
   }
 });
 
+void test("timeout capture retains output written during the grace window", async () => {
+  const dir = sandbox();
+  try {
+    const run = await runValidator(
+      [process.execPath, GRACE_CHILD],
+      CAPTURES_GRACE_OUTPUT,
+      {},
+      dir,
+    );
+    assert.equal(
+      run.kind,
+      "timedOut",
+      "grace fixture must remain alive until timeout",
+    );
+    assert.match(
+      run.stdout.text,
+      /^ready$/m,
+      "fixture did not install the SIGTERM handler before timeout",
+    );
+    assert.match(
+      run.stdout.text,
+      /^during-grace$/m,
+      "capture must retain output written during the grace window",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", async () => {
   const dir = sandbox();
   try {
@@ -753,6 +795,7 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
     TRAPS_THEN_TIMES_OUT,
     SUCCEEDS,
     DRAIN_CONTENT,
+    CAPTURES_GRACE_OUTPUT,
     DRAIN_RACE,
     BOUNDED_EXECUTABLE,
   })) {
