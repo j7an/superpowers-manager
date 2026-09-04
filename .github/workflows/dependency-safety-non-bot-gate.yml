@@ -15,6 +15,4 @@ jobs:
   gate:
     permissions:
       statuses: write
-    # Unreleased candidate proposed by the held shared-workflows release run;
-    # release approval remains pending.
     uses: j7an/shared-workflows/.github/workflows/dependency-safety-non-bot-gate.yml@8aafcda9817cace8993dd7d356457bda549e5f74 # v4.6.0
