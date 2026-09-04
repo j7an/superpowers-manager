@@ -12,14 +12,64 @@ No npm token belongs in this path. The trusted publisher is exact to repository
 `npm publish` action. Package publishing access requires 2FA and disallows
 traditional tokens; OIDC remains allowed.
 
+## Release tag governance
+
+Before any future release, confirm these three active GitHub tag rulesets all
+target `v*`:
+
+- `Release tag creation` restricts creation and grants standing bypass only to
+  the Release Bot App.
+- `Prevent release tag updates` restricts updates and has no bypass actors.
+- `Prevent release tag deletion` restricts deletion and has no standing bypass
+  actors.
+
+GitHub repository settings are the enforcement source. The broader protected
+`v*` namespace reserves release-family tags for the bot, while only `v*.*.*`
+triggers npm publication. Do not create a `v*` tag directly. Use the Tag Release
+workflow, review its proposed tag and frozen source SHA, and approve its
+`release` environment only when both are intended.
+
+Published GitHub Releases are immutable: their associated tags and assets must
+not be moved, deleted, or replaced. Existing tags from before tag-ruleset
+activation are historical evidence and are never eligible for recovery.
+
+### Break-glass deletion of a never-published mistaken tag
+
+Break glass is an exceptional repository-settings operation, not a standing
+workflow or permission. It is allowed only when fresh evidence proves that the
+tag was created after ruleset activation, npm never published the version, no
+immutable GitHub Release exists, every tag-triggered publication run is stopped,
+the tag name, target SHA, triggering run, and relevant repository state are
+recorded, and the requested operation is deletion rather than movement or reuse.
+
+After separate approval naming the tag, target SHA, ruleset, and deletion:
+
+1. Keep `Release tag creation` and `Prevent release tag updates` active and
+   unchanged.
+2. Add a temporary administrator bypass only to
+   `Prevent release tag deletion`.
+3. Delete exactly the approved tag.
+4. Immediately restore the deletion ruleset's empty bypass list.
+5. Verify the tag is absent, verify all three rulesets match their normal
+   configuration, and confirm npm and GitHub Releases are unchanged and no
+   publication completed.
+6. Record the deleted tag name as permanently burned in the release-lineage
+   section, and correct any version-file state, through a normal reviewed pull
+   request before another release attempt. The lineage update is required even
+   when no version-file correction is needed.
+
+If deletion protection cannot be restored, freeze releases and keep the
+incident open. Never use this procedure for a tag that existed before ruleset
+activation, a published release, tag movement, or reuse of a deleted name.
+
 ## Release lineage and version computation
 
 `v0.1.2` and `v0.1.3` were failed and unpublished maintenance attempts.
 `v0.1.4` was the recovered maintenance publication.
 `v0.1.5` failed before publication and must never be moved, reused, rerun, or published.
 `v0.1.6` published successfully through OIDC and is immutable. Never move,
-delete, recreate, rerun, or republish any public release tag or published
-version.
+delete, recreate, rerun, or republish any published release tag, published
+version, or tag that existed before tag-ruleset activation.
 
 The pinned Tag Release workflow selects the highest SemVer tag in the entire
 repository, not only tags reachable from `main`. It updates the checked-in
@@ -127,7 +177,8 @@ execution must print the published stable version exactly.
 
 ## Failure recovery
 
-- Preserve every public tag and workflow run as immutable evidence.
+- Preserve every public tag and workflow run as immutable evidence, except for
+  a never-published mistaken tag deleted under the break-glass procedure above.
 - If a build fails before publication, fix through a reviewed higher version;
   never reuse or move the failed tag.
 - Never run or rerun a release workflow for `v0.1.5`, and never publish `superpowers-manager@0.1.5` by any path.
