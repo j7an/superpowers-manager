@@ -165,8 +165,11 @@ const DRAIN_RACE = {
   maxBytesPerStream: 256,
 };
 
-function sandbox() {
-  return mkdtempSync(join(tmpdir(), "spw-validator-"));
+/** @param {import("node:test").TestContext} t */
+function sandbox(t) {
+  const dir = mkdtempSync(join(tmpdir(), "spw-validator-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
 }
 
 /**
@@ -195,245 +198,197 @@ async function waitForPath(path, timeoutMs) {
   }
 }
 
-void test("exit 0 is reported as exited with code 0", async () => {
-  const dir = sandbox();
-  try {
-    const exe = writeScript(dir, "ok.sh", "echo out; echo err >&2; exit 0");
-    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+void test("exit 0 is reported as exited with code 0", async (t) => {
+  const dir = sandbox(t);
+  const exe = writeScript(dir, "ok.sh", "echo out; echo err >&2; exit 0");
+  const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+  assert.equal(run.kind, "exited");
+  assert.equal(run.code, 0);
+  assert.match(run.stdout.text, /out/);
+  assert.match(run.stderr.text, /err/);
+});
+
+void test("a nonzero exit is reported with its code", async (t) => {
+  const dir = sandbox(t);
+  const exe = writeScript(dir, "no.sh", "exit 3");
+  const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+  assert.equal(run.kind, "exited");
+  assert.equal(run.code, 3);
+});
+
+void test("a nonexistent path is a launch failure, not an exit", async (t) => {
+  const dir = sandbox(t);
+  const run = await runValidator(
+    [join(dir, "nope"), "/candidate"],
+    SUCCEEDS,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "launchFailed");
+  assert.equal(run.errno, "ENOENT");
+});
+
+void test("a file with the exec bit but no interpreter is rejected, and on darwin throws synchronously", async (t) => {
+  const dir = sandbox(t);
+  // Not a script and not a binary: spawn raises ENOEXEC. POSIX execvp falls
+  // back to re-running the file with /bin/sh when execve returns ENOEXEC, so
+  // the SAME file surfaces differently by platform: launchFailed/ENOEXEC on
+  // darwin -- raised SYNCHRONOUSLY, not on the error event -- and a nonzero
+  // `exited` on Linux, where /bin/sh interprets the bytes as a failing
+  // script. Measured divergence: this test reds under Layer 4's Linux
+  // container while Layers 1-3 on darwin cannot see it.
+  const bad = join(dir, "binary");
+  // Bytes, constructed programmatically rather than as a string literal, so
+  // this file stays text: embedding raw control characters as a literal would
+  // make the file BINARY to grep.
+  writeFileSync(bad, Buffer.from([0x00, 0x01, 0x6e, 0x6f]), { mode: 0o755 });
+  const run = await runValidator([bad, "/candidate"], SUCCEEDS, {}, dir);
+  // Portable assertion, true on every platform: the file must be REJECTED,
+  // whichever mechanism reports it -- never timedOut, and never a
+  // zero-code exit.
+  assert.notEqual(run.kind, "timedOut");
+  if (run.kind === "exited") {
+    assert.notEqual(run.code, 0);
+  } else {
+    assert.equal(run.kind, "launchFailed");
+  }
+  if (process.platform === "darwin") {
+    // The synchronous ENOEXEC throw is load-bearing here: removing the
+    // runner's synchronous try/catch reds exactly this assertion (confirmed
+    // by mutation in Task 2 review). Only darwin's execvp raises ENOEXEC
+    // synchronously for this file; Linux never reaches this branch.
+    assert.equal(run.kind, "launchFailed");
+    assert.equal(run.errno, "ENOEXEC");
+  }
+});
+
+void test("a file with the exec bit, no shebang, and a passing shell body is pinned per platform", async (t) => {
+  const dir = sandbox(t);
+  // Unlike the previous case, this file's contents ARE valid shell source
+  // (`exit 0`) -- it just lacks the `#!` line that would tell execve which
+  // interpreter to use. POSIX execvp falls back to re-running a file with
+  // /bin/sh when execve returns ENOEXEC, so on Linux this file is executed
+  // as shell source and its `exit 0` is a genuine, accepted success. On
+  // darwin execve raises ENOEXEC synchronously and the file is rejected
+  // outright, the same as the no-interpreter case above. This divergence is
+  // a pinned contract, not an accident: if a future change makes the two
+  // platforms agree, this assertion should go red and be revisited, not
+  // silently pass either branch.
+  const bad = join(dir, "no-shebang");
+  writeFileSync(bad, "exit 0\n", { mode: 0o755 });
+  const run = await runValidator([bad, "/candidate"], SUCCEEDS, {}, dir);
+  if (process.platform === "linux") {
     assert.equal(run.kind, "exited");
     assert.equal(run.code, 0);
-    assert.match(run.stdout.text, /out/);
-    assert.match(run.stderr.text, /err/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-void test("a nonzero exit is reported with its code", async () => {
-  const dir = sandbox();
-  try {
-    const exe = writeScript(dir, "no.sh", "exit 3");
-    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
-    assert.equal(run.kind, "exited");
-    assert.equal(run.code, 3);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-void test("a nonexistent path is a launch failure, not an exit", async () => {
-  const dir = sandbox();
-  try {
-    const run = await runValidator(
-      [join(dir, "nope"), "/candidate"],
-      SUCCEEDS,
-      {},
-      dir,
-    );
+  } else if (process.platform === "darwin") {
     assert.equal(run.kind, "launchFailed");
-    assert.equal(run.errno, "ENOENT");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
 });
 
-void test("a file with the exec bit but no interpreter is rejected, and on darwin throws synchronously", async () => {
-  const dir = sandbox();
-  try {
-    // Not a script and not a binary: spawn raises ENOEXEC. POSIX execvp falls
-    // back to re-running the file with /bin/sh when execve returns ENOEXEC, so
-    // the SAME file surfaces differently by platform: launchFailed/ENOEXEC on
-    // darwin -- raised SYNCHRONOUSLY, not on the error event -- and a nonzero
-    // `exited` on Linux, where /bin/sh interprets the bytes as a failing
-    // script. Measured divergence: this test reds under Layer 4's Linux
-    // container while Layers 1-3 on darwin cannot see it.
-    const bad = join(dir, "binary");
-    // Bytes, constructed programmatically rather than as a string literal, so
-    // this file stays text: embedding raw control characters as a literal would
-    // make the file BINARY to grep.
-    writeFileSync(bad, Buffer.from([0x00, 0x01, 0x6e, 0x6f]), { mode: 0o755 });
-    const run = await runValidator([bad, "/candidate"], SUCCEEDS, {}, dir);
-    // Portable assertion, true on every platform: the file must be REJECTED,
-    // whichever mechanism reports it -- never timedOut, and never a
-    // zero-code exit.
-    assert.notEqual(run.kind, "timedOut");
-    if (run.kind === "exited") {
-      assert.notEqual(run.code, 0);
-    } else {
-      assert.equal(run.kind, "launchFailed");
-    }
-    if (process.platform === "darwin") {
-      // The synchronous ENOEXEC throw is load-bearing here: removing the
-      // runner's synchronous try/catch reds exactly this assertion (confirmed
-      // by mutation in Task 2 review). Only darwin's execvp raises ENOEXEC
-      // synchronously for this file; Linux never reaches this branch.
-      assert.equal(run.kind, "launchFailed");
-      assert.equal(run.errno, "ENOEXEC");
-    }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a launch failure resolves as launchFailed, not as the close that follows it", async (t) => {
+  const dir = sandbox(t);
+  // A nonexistent path fires `error` (launchFailed) and then `close` (which
+  // would resolve as exited with a null code). The first settlement must win.
+  const run = await runValidator(
+    [join(dir, "nope"), "/candidate"],
+    SUCCEEDS,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "launchFailed");
+  assert.notEqual(run.kind, "exited");
 });
 
-void test("a file with the exec bit, no shebang, and a passing shell body is pinned per platform", async () => {
-  const dir = sandbox();
-  try {
-    // Unlike the previous case, this file's contents ARE valid shell source
-    // (`exit 0`) -- it just lacks the `#!` line that would tell execve which
-    // interpreter to use. POSIX execvp falls back to re-running a file with
-    // /bin/sh when execve returns ENOEXEC, so on Linux this file is executed
-    // as shell source and its `exit 0` is a genuine, accepted success. On
-    // darwin execve raises ENOEXEC synchronously and the file is rejected
-    // outright, the same as the no-interpreter case above. This divergence is
-    // a pinned contract, not an accident: if a future change makes the two
-    // platforms agree, this assertion should go red and be revisited, not
-    // silently pass either branch.
-    const bad = join(dir, "no-shebang");
-    writeFileSync(bad, "exit 0\n", { mode: 0o755 });
-    const run = await runValidator([bad, "/candidate"], SUCCEEDS, {}, dir);
-    if (process.platform === "linux") {
-      assert.equal(run.kind, "exited");
-      assert.equal(run.code, 0);
-    } else if (process.platform === "darwin") {
-      assert.equal(run.kind, "launchFailed");
-    }
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("the two stream caps are independent", async (t) => {
+  const dir = sandbox(t);
+  // A chatty stdout must not crowd out the reason on stderr: the contract says
+  // stderr carries it. A single combined cap would let stdout consume it.
+  const exe = writeScript(
+    dir,
+    "both.sh",
+    "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done\n" +
+      "echo the-reason >&2\nexit 1",
+  );
+  const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+  assert.equal(run.kind, "exited");
+  assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
+  assert.ok(run.stdout.droppedBytes > 0);
+  assert.match(run.stderr.text, /the-reason/);
+  assert.equal(run.stderr.droppedBytes, 0, "stderr must have its own budget");
 });
 
-void test("a launch failure resolves as launchFailed, not as the close that follows it", async () => {
-  const dir = sandbox();
-  try {
-    // A nonexistent path fires `error` (launchFailed) and then `close` (which
-    // would resolve as exited with a null code). The first settlement must win.
-    const run = await runValidator(
-      [join(dir, "nope"), "/candidate"],
-      SUCCEEDS,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "launchFailed");
-    assert.notEqual(run.kind, "exited");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("output past the cap is truncated and the drop is counted", async (t) => {
+  const dir = sandbox(t);
+  // 1000 bytes of stdout against a 256-byte cap.
+  const exe = writeScript(
+    dir,
+    "chatty.sh",
+    "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
+  );
+  const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+  assert.equal(run.kind, "exited");
+  assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
+  assert.equal(run.stdout.droppedBytes, 1000 - SUCCEEDS.maxBytesPerStream);
 });
 
-void test("the two stream caps are independent", async () => {
-  const dir = sandbox();
-  try {
-    // A chatty stdout must not crowd out the reason on stderr: the contract says
-    // stderr carries it. A single combined cap would let stdout consume it.
-    const exe = writeScript(
-      dir,
-      "both.sh",
-      "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done\n" +
-        "echo the-reason >&2\nexit 1",
-    );
-    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
-    assert.equal(run.kind, "exited");
-    assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
-    assert.ok(run.stdout.droppedBytes > 0);
-    assert.match(run.stderr.text, /the-reason/);
-    assert.equal(run.stderr.droppedBytes, 0, "stderr must have its own budget");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a validator far past the cap still exits cleanly, never blocking into a timeout", async (t) => {
+  const dir = sandbox(t);
+  // ~2 MB on EACH of stdout and stderr against a 256-byte cap and
+  // SUCCEEDS's 30s timeout. If either reader stopped consuming past the
+  // cap, that stream's OS pipe buffer would fill, the child would block
+  // on its next write to it, and the run would sit until the 30s
+  // deadline and settle as timedOut instead of exited. The two stream
+  // handlers are separate, structurally identical lines
+  // (src/validator.ts), so stdout draining is not evidence that stderr
+  // does too -- both streams are flooded here so a regression on either
+  // one is caught.
+  const exe = writeScript(
+    dir,
+    "flood.sh",
+    "i=0; while [ $i -lt 2000 ]; do printf '%01000d' 0; printf '%01000d' 0 >&2; i=$((i+1)); done; exit 0",
+  );
+  const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+  assert.equal(run.kind, "exited", "a drained flood must not become a timeout");
+  assert.equal(run.code, 0);
+  assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
+  assert.ok(run.stdout.droppedBytes > 1_000_000);
+  assert.equal(run.stderr.text.length, SUCCEEDS.maxBytesPerStream);
+  assert.ok(run.stderr.droppedBytes > 1_000_000);
 });
 
-void test("output past the cap is truncated and the drop is counted", async () => {
-  const dir = sandbox();
-  try {
-    // 1000 bytes of stdout against a 256-byte cap.
-    const exe = writeScript(
-      dir,
-      "chatty.sh",
-      "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
-    );
-    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
-    assert.equal(run.kind, "exited");
-    assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
-    assert.equal(run.stdout.droppedBytes, 1000 - SUCCEEDS.maxBytesPerStream);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("the unbounded policy retains everything", async (t) => {
+  const dir = sandbox(t);
+  const exe = writeScript(
+    dir,
+    "some.sh",
+    "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
+  );
+  const run = await runValidator(
+    [exe, "/candidate"],
+    UNBOUNDED_LEGACY,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "exited");
+  assert.equal(run.stdout.text.length, 1000);
+  assert.equal(run.stdout.droppedBytes, 0);
 });
 
-void test("a validator far past the cap still exits cleanly, never blocking into a timeout", async () => {
-  const dir = sandbox();
-  try {
-    // ~2 MB on EACH of stdout and stderr against a 256-byte cap and
-    // SUCCEEDS's 30s timeout. If either reader stopped consuming past the
-    // cap, that stream's OS pipe buffer would fill, the child would block
-    // on its next write to it, and the run would sit until the 30s
-    // deadline and settle as timedOut instead of exited. The two stream
-    // handlers are separate, structurally identical lines
-    // (src/validator.ts), so stdout draining is not evidence that stderr
-    // does too -- both streams are flooded here so a regression on either
-    // one is caught.
-    const exe = writeScript(
-      dir,
-      "flood.sh",
-      "i=0; while [ $i -lt 2000 ]; do printf '%01000d' 0; printf '%01000d' 0 >&2; i=$((i+1)); done; exit 0",
-    );
-    const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
-    assert.equal(
-      run.kind,
-      "exited",
-      "a drained flood must not become a timeout",
-    );
-    assert.equal(run.code, 0);
-    assert.equal(run.stdout.text.length, SUCCEEDS.maxBytesPerStream);
-    assert.ok(run.stdout.droppedBytes > 1_000_000);
-    assert.equal(run.stderr.text.length, SUCCEEDS.maxBytesPerStream);
-    assert.ok(run.stderr.droppedBytes > 1_000_000);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-void test("the unbounded policy retains everything", async () => {
-  const dir = sandbox();
-  try {
-    const exe = writeScript(
-      dir,
-      "some.sh",
-      "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
-    );
-    const run = await runValidator(
-      [exe, "/candidate"],
-      UNBOUNDED_LEGACY,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "exited");
-    assert.equal(run.stdout.text.length, 1000);
-    assert.equal(run.stdout.droppedBytes, 0);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-void test("the validator receives the candidate root as its SOLE argument, with no shell interpretation", async () => {
-  const dir = sandbox();
-  try {
-    // Guards two contract points at once: exactly one argument, and no shell
-    // interpretation -- a path containing shell metacharacters must arrive intact.
-    const exe = writeScript(dir, "argv.sh", 'echo "count=$#"; echo "one=$1"');
-    const candidate = "/tmp/a b;echo pwned";
-    const run = await runValidator([exe, candidate], SUCCEEDS, {}, dir);
-    assert.equal(run.kind, "exited");
-    assert.match(run.stdout.text, /count=1/);
-    assert.match(run.stdout.text, /one=\/tmp\/a b;echo pwned/);
-    assert.doesNotMatch(
-      run.stdout.text,
-      /^pwned$/m,
-      "the shell must not have interpreted it",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("the validator receives the candidate root as its SOLE argument, with no shell interpretation", async (t) => {
+  const dir = sandbox(t);
+  // Guards two contract points at once: exactly one argument, and no shell
+  // interpretation -- a path containing shell metacharacters must arrive intact.
+  const exe = writeScript(dir, "argv.sh", 'echo "count=$#"; echo "one=$1"');
+  const candidate = "/tmp/a b;echo pwned";
+  const run = await runValidator([exe, candidate], SUCCEEDS, {}, dir);
+  assert.equal(run.kind, "exited");
+  assert.match(run.stdout.text, /count=1/);
+  assert.match(run.stdout.text, /one=\/tmp\/a b;echo pwned/);
+  assert.doesNotMatch(
+    run.stdout.text,
+    /^pwned$/m,
+    "the shell must not have interpreted it",
+  );
 });
 
 void test("UNBOUNDED_LEGACY declares itself unbounded", () => {
@@ -441,347 +396,303 @@ void test("UNBOUNDED_LEGACY declares itself unbounded", () => {
   assert.equal(BOUNDED_EXECUTABLE.kind, "bounded");
 });
 
-void test("a hanging validator is reported as timedOut inside the bound", async () => {
-  const dir = sandbox();
-  try {
-    const exe = writeScript(dir, "hang.sh", "sleep 30");
-    const started = Date.now();
-    const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
-    assert.equal(run.kind, "timedOut");
-    assert.equal(run.afterMs, TIMES_OUT.timeoutMs);
-    // Settlement is timeout+grace+drain = 1640 ms; measured 1648-1657 ms across six
-    // full-suite runs, so this bound keeps ~3.3 s of margin.
-    assert.ok(
-      Date.now() - started < 5000,
-      "should not have waited for the sleep",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a hanging validator is reported as timedOut inside the bound", async (t) => {
+  const dir = sandbox(t);
+  const exe = writeScript(dir, "hang.sh", "sleep 30");
+  const started = Date.now();
+  const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
+  assert.equal(run.kind, "timedOut");
+  assert.equal(run.afterMs, TIMES_OUT.timeoutMs);
+  // Settlement is timeout+grace+drain = 1640 ms; measured 1648-1657 ms across six
+  // full-suite runs, so this bound keeps ~3.3 s of margin.
+  assert.ok(
+    Date.now() - started < 5000,
+    "should not have waited for the sleep",
+  );
 });
 
-void test("output written before the timeout is retained in the timedOut result", async () => {
-  const dir = sandbox();
-  try {
-    // Deterministic: the write happens long before any signal. This tests the
-    // MANAGER's obligation -- that it keeps what it read and hands it back on the
-    // timeout path. It deliberately does NOT test a SIGTERM trap: a group signal
-    // reaches the shell and its foreground child at once, so whether a trap runs
-    // first is a race. Measured over six identical runs, one lost the output. A
-    // flaky test is worse than an absent one.
-    const exe = writeScript(dir, "speaks.sh", "echo explaining >&2\nsleep 30");
-    const run = await runValidator(
-      [exe, "/candidate"],
-      RUNS_THEN_TIMES_OUT,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "timedOut");
-    assert.match(run.stderr.text, /explaining/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("output written before the timeout is retained in the timedOut result", async (t) => {
+  const dir = sandbox(t);
+  // Deterministic: the write happens long before any signal. This tests the
+  // MANAGER's obligation -- that it keeps what it read and hands it back on the
+  // timeout path. It deliberately does NOT test a SIGTERM trap: a group signal
+  // reaches the shell and its foreground child at once, so whether a trap runs
+  // first is a race. Measured over six identical runs, one lost the output. A
+  // flaky test is worse than an absent one.
+  const exe = writeScript(dir, "speaks.sh", "echo explaining >&2\nsleep 30");
+  const run = await runValidator(
+    [exe, "/candidate"],
+    RUNS_THEN_TIMES_OUT,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "timedOut");
+  assert.match(run.stderr.text, /explaining/);
 });
 
-void test("timeout capture retains output written during the grace window", async () => {
-  const dir = sandbox();
-  try {
-    const run = await runValidator(
-      [process.execPath, GRACE_CHILD],
-      CAPTURES_GRACE_OUTPUT,
-      {},
-      dir,
-    );
-    assert.equal(
-      run.kind,
-      "timedOut",
-      "grace fixture must remain alive until timeout",
-    );
-    assert.match(
-      run.stdout.text,
-      /^ready$/m,
-      "fixture did not install the SIGTERM handler before timeout",
-    );
-    assert.match(
-      run.stdout.text,
-      /^during-grace$/m,
-      "capture must retain output written during the grace window",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("timeout capture retains output written during the grace window", async (t) => {
+  const dir = sandbox(t);
+  const run = await runValidator(
+    [process.execPath, GRACE_CHILD],
+    CAPTURES_GRACE_OUTPUT,
+    {},
+    dir,
+  );
+  assert.equal(
+    run.kind,
+    "timedOut",
+    "grace fixture must remain alive until timeout",
+  );
+  assert.match(
+    run.stdout.text,
+    /^ready$/m,
+    "fixture did not install the SIGTERM handler before timeout",
+  );
+  assert.match(
+    run.stdout.text,
+    /^during-grace$/m,
+    "capture must retain output written during the grace window",
+  );
 });
 
-void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", async () => {
-  const dir = sandbox();
-  try {
-    const marker = join(dir, "survived");
-    // The backgrounded shell ignores TERM and would create the marker at
-    // install+20000ms. SIGKILL lands at timeout+grace (15400ms) and settlement
-    // follows it at timeout+grace+drain (15440ms), because the timedOut settle is
-    // nested inside the SIGKILL callback. Settlement is therefore AFTER the kill,
-    // not before it.
-    // The HISTORICAL DEFECT SHAPE this case guards against is the opposite
-    // ordering: a revision that settled first and let settlement cancel a pending
-    // SIGKILL. Under that shape SIGKILL never fires and the marker appears.
-    // `installed` is a POSITIVE CONTROL. The hazard this case had is on the SIGTERM
-    // side, not the marker side: if the descendant has not installed its trap by the
-    // time SIGTERM arrives at timeoutMs, it simply dies, the survival marker is never
-    // written, and the negative assertion below passes having tested nothing. Nothing
-    // about a vacuous run looks different from a genuine one. Asserting that the trap
-    // WAS installed is what makes that failure loud. Descendant sleeps 20 s so it is
-    // still alive at SIGKILL (timeout+grace = 15400 ms) with ~4.8 s of margin at the
-    // fastest observed install.
-    const installed = join(dir, "trap-installed");
-    const exe = writeScript(
-      dir,
-      "survivor.sh",
-      `sh -c 'trap "" TERM; : > ${installed}; sleep 20; : > ${marker}' &\nsleep 30`,
-    );
-    const run = await runValidator(
-      [exe, "/candidate"],
-      TRAPS_THEN_TIMES_OUT,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "timedOut");
-    // Settlement is timeout+grace+drain = 15440 ms, so this checks at ~25.4 s. The
-    // survival marker would be written at install+20000 ms, i.e. by ~22.6 s even at
-    // the 2619 ms cold excursion, leaving ~2.8 s before the check.
-    await new Promise((r) => setTimeout(r, 10000));
-    assert.equal(
-      existsSync(installed),
-      true,
-      "the descendant never installed its TERM trap: this case proved nothing",
-    );
-    assert.equal(
-      existsSync(marker),
-      false,
-      "the descendant outlived the run: SIGKILL was cancelled by settlement",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", async (t) => {
+  const dir = sandbox(t);
+  const marker = join(dir, "survived");
+  // The backgrounded shell ignores TERM and would create the marker at
+  // install+20000ms. SIGKILL lands at timeout+grace (15400ms) and settlement
+  // follows it at timeout+grace+drain (15440ms), because the timedOut settle is
+  // nested inside the SIGKILL callback. Settlement is therefore AFTER the kill,
+  // not before it.
+  // The HISTORICAL DEFECT SHAPE this case guards against is the opposite
+  // ordering: a revision that settled first and let settlement cancel a pending
+  // SIGKILL. Under that shape SIGKILL never fires and the marker appears.
+  // `installed` is a POSITIVE CONTROL. The hazard this case had is on the SIGTERM
+  // side, not the marker side: if the descendant has not installed its trap by the
+  // time SIGTERM arrives at timeoutMs, it simply dies, the survival marker is never
+  // written, and the negative assertion below passes having tested nothing. Nothing
+  // about a vacuous run looks different from a genuine one. Asserting that the trap
+  // WAS installed is what makes that failure loud. Descendant sleeps 20 s so it is
+  // still alive at SIGKILL (timeout+grace = 15400 ms) with ~4.8 s of margin at the
+  // fastest observed install.
+  const installed = join(dir, "trap-installed");
+  const exe = writeScript(
+    dir,
+    "survivor.sh",
+    `sh -c 'trap "" TERM; : > ${installed}; sleep 20; : > ${marker}' &\nsleep 30`,
+  );
+  const run = await runValidator(
+    [exe, "/candidate"],
+    TRAPS_THEN_TIMES_OUT,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "timedOut");
+  // Settlement is timeout+grace+drain = 15440 ms, so this checks at ~25.4 s. The
+  // survival marker would be written at install+20000 ms, i.e. by ~22.6 s even at
+  // the 2619 ms cold excursion, leaving ~2.8 s before the check.
+  await new Promise((r) => setTimeout(r, 10000));
+  assert.equal(
+    existsSync(installed),
+    true,
+    "the descendant never installed its TERM trap: this case proved nothing",
+  );
+  assert.equal(
+    existsSync(marker),
+    false,
+    "the descendant outlived the run: SIGKILL was cancelled by settlement",
+  );
 });
 
-void test("PARITY: the unbounded policy captures output written after the child exits", async () => {
-  const dir = sandbox();
-  try {
-    // The legacy path settles on `close`, so a backgrounded late write IS captured
-    // today. Under an exit-plus-drain settle it would be lost.
-    const exe = writeScript(dir, "late.sh", "(sleep 0.6; echo late) &\nexit 0");
-    const run = await runValidator(
-      [exe, "/candidate"],
-      UNBOUNDED_LEGACY,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "exited");
-    assert.match(run.stdout.text, /late/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("PARITY: the unbounded policy captures output written after the child exits", async (t) => {
+  const dir = sandbox(t);
+  // The legacy path settles on `close`, so a backgrounded late write IS captured
+  // today. Under an exit-plus-drain settle it would be lost.
+  const exe = writeScript(dir, "late.sh", "(sleep 0.6; echo late) &\nexit 0");
+  const run = await runValidator(
+    [exe, "/candidate"],
+    UNBOUNDED_LEGACY,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "exited");
+  assert.match(run.stdout.text, /late/);
 });
 
-void test("bounded drain captures only bytes written inside the window", async () => {
-  const dir = sandbox();
-  try {
-    const completion = join(dir, "drain-descendant-complete");
-    const exe = writeScript(
-      dir,
-      "drain-content.sh",
-      "( sleep 4; echo inside-drain; sleep 4; echo outside-drain; " +
-        ': > "$PR124C_DRAIN_COMPLETION" ) &\nexit 0',
-    );
-    const run = await runValidator(
-      [exe, "/candidate"],
-      DRAIN_CONTENT,
-      { PR124C_DRAIN_COMPLETION: completion },
-      dir,
-    );
-    assert.equal(run.kind, "exited");
-    assert.equal(run.code, 0);
-    await waitForPath(completion, 7_000);
-    assert.equal(
-      existsSync(completion),
-      true,
-      "fixture descendant never proved the outside marker was written",
-    );
-    assert.match(
-      run.stdout.text,
-      /^inside-drain$/m,
-      "capture must retain the inside-drain marker",
-    );
-    assert.doesNotMatch(
-      run.stdout.text,
-      /^outside-drain$/m,
-      "capture must exclude the outside-drain marker",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("bounded drain captures only bytes written inside the window", async (t) => {
+  const dir = sandbox(t);
+  const completion = join(dir, "drain-descendant-complete");
+  const exe = writeScript(
+    dir,
+    "drain-content.sh",
+    "( sleep 4; echo inside-drain; sleep 4; echo outside-drain; " +
+      ': > "$PR124C_DRAIN_COMPLETION" ) &\nexit 0',
+  );
+  const run = await runValidator(
+    [exe, "/candidate"],
+    DRAIN_CONTENT,
+    { PR124C_DRAIN_COMPLETION: completion },
+    dir,
+  );
+  assert.equal(run.kind, "exited");
+  assert.equal(run.code, 0);
+  await waitForPath(completion, 7_000);
+  assert.equal(
+    existsSync(completion),
+    true,
+    "fixture descendant never proved the outside marker was written",
+  );
+  assert.match(
+    run.stdout.text,
+    /^inside-drain$/m,
+    "capture must retain the inside-drain marker",
+  );
+  assert.doesNotMatch(
+    run.stdout.text,
+    /^outside-drain$/m,
+    "capture must exclude the outside-drain marker",
+  );
 });
 
-void test("PARITY: the legacy path is NOT spawned as a process-group leader", async () => {
-  const dir = sandbox();
-  try {
-    // The child prints its own process group. Under the unbounded policy it must
-    // inherit the manager's; under the bounded policy it must lead its own. Without
-    // this, reverting `detached` to unconditional passes every other parity test.
-    const exe = writeScript(dir, "pgid.sh", "ps -o pgid= -p $$");
-    const mine = execSync(`ps -o pgid= -p ${process.pid}`).toString().trim();
-    const legacy = await runValidator(
-      [exe, "/candidate"],
-      UNBOUNDED_LEGACY,
-      {},
-      dir,
-    );
-    assert.equal(legacy.kind, "exited");
-    assert.equal(
-      legacy.stdout.text.trim(),
-      mine,
-      "legacy must inherit the manager's group",
-    );
-    const bounded = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
-    assert.equal(bounded.kind, "exited");
-    assert.notEqual(
-      bounded.stdout.text.trim(),
-      mine,
-      "bounded must lead its own group",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("PARITY: the legacy path is NOT spawned as a process-group leader", async (t) => {
+  const dir = sandbox(t);
+  // The child prints its own process group. Under the unbounded policy it must
+  // inherit the manager's; under the bounded policy it must lead its own. Without
+  // this, reverting `detached` to unconditional passes every other parity test.
+  const exe = writeScript(dir, "pgid.sh", "ps -o pgid= -p $$");
+  const mine = execSync(`ps -o pgid= -p ${process.pid}`).toString().trim();
+  const legacy = await runValidator(
+    [exe, "/candidate"],
+    UNBOUNDED_LEGACY,
+    {},
+    dir,
+  );
+  assert.equal(legacy.kind, "exited");
+  assert.equal(
+    legacy.stdout.text.trim(),
+    mine,
+    "legacy must inherit the manager's group",
+  );
+  const bounded = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
+  assert.equal(bounded.kind, "exited");
+  assert.notEqual(
+    bounded.stdout.text.trim(),
+    mine,
+    "bounded must lead its own group",
+  );
 });
 
-void test("PARITY: a leading BOM survives decoding", async () => {
-  const dir = sandbox();
-  try {
-    // TextDecoder strips a BOM; Buffer.toString does not. The legacy path's
-    // current accumulator preserves it, so both paths must.
-    const exe = writeScript(dir, "bom.sh", "printf '\\357\\273\\277hi'");
-    const run = await runValidator(
-      [exe, "/candidate"],
-      UNBOUNDED_LEGACY,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "exited");
-    assert.equal(run.stdout.text, "\ufeffhi");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("PARITY: a leading BOM survives decoding", async (t) => {
+  const dir = sandbox(t);
+  // TextDecoder strips a BOM; Buffer.toString does not. The legacy path's
+  // current accumulator preserves it, so both paths must.
+  const exe = writeScript(dir, "bom.sh", "printf '\\357\\273\\277hi'");
+  const run = await runValidator(
+    [exe, "/candidate"],
+    UNBOUNDED_LEGACY,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "exited");
+  assert.equal(run.stdout.text, "\ufeffhi");
 });
 
-void test("a validator whose DESCENDANT holds the pipes still settles inside the bound", async () => {
-  const dir = sandbox();
-  try {
-    // The shell exits promptly; the backgrounded sleep inherits stdout and stderr
-    // and outlives it. A runner that settles on `close` waits for the sleep --
-    // measured at 5279 ms against a 300 ms timeout. What bounds it HERE is the
-    // timeout timer's own settlement, which fires whether or not any signal is
-    // delivered; the exit-based settle is not on this path at all. This case
-    // measures the bound and NOT termination -- `survivor.sh` and `stubborn.sh`
-    // are the cases that carry a termination oracle.
-    const exe = writeScript(dir, "descendant.sh", "sleep 30 &\nsleep 30");
-    const started = Date.now();
-    const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
-    assert.equal(run.kind, "timedOut");
-    assert.ok(
-      Date.now() - started < 5000,
-      "the descendant must not extend the run past the timeout",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a validator whose DESCENDANT holds the pipes still settles inside the bound", async (t) => {
+  const dir = sandbox(t);
+  // The shell exits promptly; the backgrounded sleep inherits stdout and stderr
+  // and outlives it. A runner that settles on `close` waits for the sleep --
+  // measured at 5279 ms against a 300 ms timeout. What bounds it HERE is the
+  // timeout timer's own settlement, which fires whether or not any signal is
+  // delivered; the exit-based settle is not on this path at all. This case
+  // measures the bound and NOT termination -- `survivor.sh` and `stubborn.sh`
+  // are the cases that carry a termination oracle.
+  const exe = writeScript(dir, "descendant.sh", "sleep 30 &\nsleep 30");
+  const started = Date.now();
+  const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
+  assert.equal(run.kind, "timedOut");
+  assert.ok(
+    Date.now() - started < 5000,
+    "the descendant must not extend the run past the timeout",
+  );
 });
 
-void test("a validator that ignores SIGTERM is still killed", async () => {
-  const dir = sandbox();
-  try {
-    // A real termination oracle. `kind === "timedOut"` and the elapsed bound are
-    // both produced by the settle alone and stay green with every signal
-    // suppressed, so neither measures a kill. The child ignores TERM -- and so
-    // does its `sleep`, because an ignored disposition survives exec -- leaving
-    // SIGKILL (at timeout+grace = 15400ms) as the only thing that can end it
-    // before the marker is written at ~20s.
-    const marker = join(dir, "outlived");
-    // Positive control, same reasoning as the survivor case: a child SIGTERMed before
-    // it reached its own `trap` line dies quietly, never writes the survival marker,
-    // and passes the negative assertion having tested nothing.
-    const installed = join(dir, "trap-installed");
-    const exe = writeScript(
-      dir,
-      "stubborn.sh",
-      `trap '' TERM\n: > ${installed}\nsleep 20\n: > ${marker}`,
-    );
-    const started = Date.now();
-    const run = await runValidator(
-      [exe, "/candidate"],
-      TRAPS_THEN_TIMES_OUT,
-      {},
-      dir,
-    );
-    assert.equal(run.kind, "timedOut");
-    assert.ok(Date.now() - started < 20_000, "SIGKILL should have ended it");
-    // Settlement is 15440 ms; this checks at ~25.4 s against a survival marker that
-    // would be written at install+20000 ms.
-    await new Promise((r) => setTimeout(r, 10000));
-    assert.equal(
-      existsSync(installed),
-      true,
-      "the validator never installed its TERM trap: this case proved nothing",
-    );
-    assert.equal(
-      existsSync(marker),
-      false,
-      "the validator outlived the run: SIGKILL never ended it",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a validator that ignores SIGTERM is still killed", async (t) => {
+  const dir = sandbox(t);
+  // A real termination oracle. `kind === "timedOut"` and the elapsed bound are
+  // both produced by the settle alone and stay green with every signal
+  // suppressed, so neither measures a kill. The child ignores TERM -- and so
+  // does its `sleep`, because an ignored disposition survives exec -- leaving
+  // SIGKILL (at timeout+grace = 15400ms) as the only thing that can end it
+  // before the marker is written at ~20s.
+  const marker = join(dir, "outlived");
+  // Positive control, same reasoning as the survivor case: a child SIGTERMed before
+  // it reached its own `trap` line dies quietly, never writes the survival marker,
+  // and passes the negative assertion having tested nothing.
+  const installed = join(dir, "trap-installed");
+  const exe = writeScript(
+    dir,
+    "stubborn.sh",
+    `trap '' TERM\n: > ${installed}\nsleep 20\n: > ${marker}`,
+  );
+  const started = Date.now();
+  const run = await runValidator(
+    [exe, "/candidate"],
+    TRAPS_THEN_TIMES_OUT,
+    {},
+    dir,
+  );
+  assert.equal(run.kind, "timedOut");
+  assert.ok(Date.now() - started < 20_000, "SIGKILL should have ended it");
+  // Settlement is 15440 ms; this checks at ~25.4 s against a survival marker that
+  // would be written at install+20000 ms.
+  await new Promise((r) => setTimeout(r, 10000));
+  assert.equal(
+    existsSync(installed),
+    true,
+    "the validator never installed its TERM trap: this case proved nothing",
+  );
+  assert.equal(
+    existsSync(marker),
+    false,
+    "the validator outlived the run: SIGKILL never ended it",
+  );
 });
 
-void test("a validator exiting inside the drain window is never signalled", async () => {
-  const dir = sandbox();
-  try {
-    // The race: a child exiting inside [timeoutMs - drainMs, timeoutMs) already
-    // has its drain settle QUEUED when the timeout comes due. If the exit handler
-    // does not clear the timeout timer, the timeout still fires, SIGTERMs the
-    // group of a validator that had already exited cleanly, and leaves the SIGKILL
-    // escalation pending behind a settle that reports "exited".
-    // `run.kind` cannot see this -- the buggy path reports "exited" too. The
-    // oracle is whether SIGTERM was DELIVERED, so the descendant CATCHES it and
-    // records the fact. Marker present means the bug is back.
-    //
-    // The `sleep 1` is the protection, not a timing guess: a hard FLOOR putting the
-    // exit above the window floor (timeoutMs - drainMs = 800 ms) on any host,
-    // however fast. Exec latency only pushes the exit later, and the ceiling
-    // (timeoutMs = 4000 ms) leaves 3000 ms for it. Measured spawn-to-exit for this
-    // exact script under full-suite load: 1260-1345 ms across 8
-    // samples, i.e. an exec of 260-345 ms against that 3000 ms of room -- ~8.7x.
-    // The descendant sleeps 8 s so it is certainly still alive at 4000 ms to catch
-    // the SIGTERM the buggy path would send.
-    const marker = join(dir, "was-signalled");
-    const exe = writeScript(
-      dir,
-      "quick.sh",
-      `sh -c 'trap ": > ${marker}" TERM; sleep 8' &\nsleep 1\nexit 0`,
-    );
-    const run = await runValidator([exe, "/candidate"], DRAIN_RACE, {}, dir);
-    assert.equal(run.kind, "exited");
-    assert.equal(run.code, 0);
-    // Settlement is exit+drain, already past the 4000 ms at which the buggy path
-    // would have signalled; this only adds margin.
-    await new Promise((r) => setTimeout(r, 500));
-    assert.equal(
-      existsSync(marker),
-      false,
-      "SIGTERM reached a validator that had already exited cleanly",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a validator exiting inside the drain window is never signalled", async (t) => {
+  const dir = sandbox(t);
+  // The race: a child exiting inside [timeoutMs - drainMs, timeoutMs) already
+  // has its drain settle QUEUED when the timeout comes due. If the exit handler
+  // does not clear the timeout timer, the timeout still fires, SIGTERMs the
+  // group of a validator that had already exited cleanly, and leaves the SIGKILL
+  // escalation pending behind a settle that reports "exited".
+  // `run.kind` cannot see this -- the buggy path reports "exited" too. The
+  // oracle is whether SIGTERM was DELIVERED, so the descendant CATCHES it and
+  // records the fact. Marker present means the bug is back.
+  //
+  // The `sleep 1` is the protection, not a timing guess: a hard FLOOR putting the
+  // exit above the window floor (timeoutMs - drainMs = 800 ms) on any host,
+  // however fast. Exec latency only pushes the exit later, and the ceiling
+  // (timeoutMs = 4000 ms) leaves 3000 ms for it. Measured spawn-to-exit for this
+  // exact script under full-suite load: 1260-1345 ms across 8
+  // samples, i.e. an exec of 260-345 ms against that 3000 ms of room -- ~8.7x.
+  // The descendant sleeps 8 s so it is certainly still alive at 4000 ms to catch
+  // the SIGTERM the buggy path would send.
+  const marker = join(dir, "was-signalled");
+  const exe = writeScript(
+    dir,
+    "quick.sh",
+    `sh -c 'trap ": > ${marker}" TERM; sleep 8' &\nsleep 1\nexit 0`,
+  );
+  const run = await runValidator([exe, "/candidate"], DRAIN_RACE, {}, dir);
+  assert.equal(run.kind, "exited");
+  assert.equal(run.code, 0);
+  // Settlement is exit+drain, already past the 4000 ms at which the buggy path
+  // would have signalled; this only adds margin.
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(
+    existsSync(marker),
+    false,
+    "SIGTERM reached a validator that had already exited cleanly",
+  );
 });
 
 void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
@@ -810,30 +721,22 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
   }
 });
 
-void test("a symlink is resolved and disclosed as one", async () => {
-  const dir = sandbox();
-  try {
-    const real = writeScript(dir, "real.sh", "exit 0");
-    const link = join(dir, "link");
-    symlinkSync(real, link);
-    const r = await resolveValidator(link);
-    assert.equal(r.isSymlink, true);
-    assert.equal(r.resolved, realpathSync(real));
-    assert.equal(r.isDirectory, false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a symlink is resolved and disclosed as one", async (t) => {
+  const dir = sandbox(t);
+  const real = writeScript(dir, "real.sh", "exit 0");
+  const link = join(dir, "link");
+  symlinkSync(real, link);
+  const r = await resolveValidator(link);
+  assert.equal(r.isSymlink, true);
+  assert.equal(r.resolved, realpathSync(real));
+  assert.equal(r.isDirectory, false);
 });
 
-void test("a directory is disclosed as one so EACCES can be disambiguated", async () => {
-  const dir = sandbox();
-  try {
-    const r = await resolveValidator(dir);
-    assert.equal(r.isDirectory, true);
-    assert.equal(r.isSymlink, false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+void test("a directory is disclosed as one so EACCES can be disambiguated", async (t) => {
+  const dir = sandbox(t);
+  const r = await resolveValidator(dir);
+  assert.equal(r.isDirectory, true);
+  assert.equal(r.isSymlink, false);
 });
 
 void test("a printable non-ASCII path is displayed verbatim", () => {
