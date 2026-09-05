@@ -25,15 +25,15 @@ follows. **Five** shell-owned behavior IDs retained no prior in-process
 witness and are ported here for the first time — `CLI-ENV-REFRESH-MODE-01`,
 `CLI-ENV-CODEX-MUTATION-01`, `CLI-ENV-CODEX-LISTING-01`,
 `CLI-ENV-INSTALLED-DEFAULTS-01`, and `CLI-ENV-INSTALLED-ROOT-01`, all to
-`tests/baseline/cli-parity.test.js`. A sixth shell-owned ID,
-`PROV-READER-CODEX-SOURCE-01`, ports to `tests/unit/provenance.test.js` but is
+`tests/baseline/cli-parity.test.ts`. A sixth shell-owned ID,
+`PROV-READER-CODEX-SOURCE-01`, ports to `tests/unit/provenance.test.ts` but is
 **not** a first-time port: PR-1 already witnessed that matrix row, and only
 its **Bytes** cell was unwitnessed, which PR-3.2 ported ahead of this deletion
-(see items 154-173 below). `tests/unit/adapter.test.js` already carries
+(see items 154-173 below). `tests/unit/adapter.test.ts` already carries
 most of the remaining remapped IDs but is excluded from this inventory's
 `ports` map: `node-cli-helper.md` already claims it, and no port file is
 claimed by two inventories. Where this inventory's items duplicate coverage
-`tests/unit/adapter.test.js` or another already-frozen inventory already
+`tests/unit/adapter.test.ts` or another already-frozen inventory already
 carries, they are marked **Retired at the gap** citing that existing coverage
 rather than claimed as a port of this record.
 
@@ -121,13 +121,13 @@ different languages sharing one record.
   is not scanned for citations, and an unnumbered sentence between two items
   inside the mapped region is a hard failure rather than a mapping. The item
   grammar is the migration gate's own, `^(\d+)(?:-(\d+))?\.\s`
-  (`tests/bin/migration-inventory.test.js:59`): a range heading such as
+  (`tests/bin/migration-inventory.test.ts:59`): a range heading such as
   `27-30.` claims four sequential item numbers for one written entry,
   matching `probe.md`'s and `container-contract.md`'s convention for a
   bundled group.
 - Disposition vocabulary: **Port** names a citation this record counts toward
-  its own `ports` declaration (`tests/baseline/cli-parity.test.js` or
-  `tests/unit/provenance.test.js`). **Duplicate witness** marks an item whose
+  its own `ports` declaration (`tests/baseline/cli-parity.test.ts` or
+  `tests/unit/provenance.test.ts`). **Duplicate witness** marks an item whose
   behavior ID is owned, per `docs/baseline/protocol-disposition.md`, by the
   *other* retired driver (most commonly the Python suite) and already
   remapped or retired there; the shell line is a second, now-deleted witness
@@ -186,7 +186,7 @@ different languages sharing one record.
    `ADAPTER-OWNERSHIP-01`, and `ADAPTER-UPDATE-CONTROL-01`'s recognition
    half — all owned by the Python suite per
    `docs/baseline/protocol-disposition.md` and already remapped to
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 
 ### A non-Codex-shaped adapter fails update-control inspection (`tests/test_adapter_protocol.sh:125-126`)
 
@@ -196,7 +196,7 @@ different languages sharing one record.
    **Duplicate witness** of `ADAPTER-UPDATE-CONTROL-01`'s recognition rule
    (the third-value/malformed rejection half), which remaps to
    `requireManagedUpdateControl` (`src/lifecycle.ts`), witnessed in
-   `tests/unit/lifecycle.test.js` — already claimed by `codex-state-units.md`.
+   `tests/unit/lifecycle.test.ts` — already claimed by `codex-state-units.md`.
 
 ### `assert_identity_state` call sites (`tests/test_adapter_protocol.sh:169-181`)
 
@@ -207,7 +207,7 @@ different languages sharing one record.
    (`tests/test_adapter_protocol.sh:169`, `tests/test_adapter_protocol.sh:173`,
    `tests/test_adapter_protocol.sh:177`, `tests/test_adapter_protocol.sh:181`).
    **Duplicate witness** of `ADAPTER-OWNERSHIP-01`, remapped to
-   `tests/unit/adapter.test.js`'s `identity_state` derivation coverage. The
+   `tests/unit/adapter.test.ts`'s `identity_state` derivation coverage. The
    helper's own body (lines 162 through 166) is not counted separately; see Divergences.
 
 ### Install verification hints, controlled failure, and malformed/noisy/crashed adapter responses (`tests/test_adapter_protocol.sh:187-220`)
@@ -215,14 +215,14 @@ different languages sharing one record.
 32-34. A successful install with both verification hints reports the exact
    `mismatch` and `missing` strings (`tests/test_adapter_protocol.sh:187`,
    `tests/test_adapter_protocol.sh:188`, `tests/test_adapter_protocol.sh:189`). **Duplicate witness** of `ADAPTER-INSTALL-RESULT-01`,
-   remapped to `tests/unit/adapter.test.js`.
+   remapped to `tests/unit/adapter.test.ts`.
 
 35-42. A controlled install failure replays its pre-failure messages and
    stderr warning, then its error and both hints, and yields no result
    (`tests/test_adapter_protocol.sh:192`, `tests/test_adapter_protocol.sh:193`, `tests/test_adapter_protocol.sh:194`, `tests/test_adapter_protocol.sh:195`, `tests/test_adapter_protocol.sh:196`,
    `tests/test_adapter_protocol.sh:197`, `tests/test_adapter_protocol.sh:198`, `tests/test_adapter_protocol.sh:199`). **Duplicate witness** of
    `ADAPTER-CONTROLLED-FAILURE-01` and `DIAG-ADAPTER-01`'s stream/order
-   contract, both remapped to `tests/unit/adapter.test.js`.
+   contract, both remapped to `tests/unit/adapter.test.ts`.
 
 43-45. A response whose `operation` does not match the invocation fails
    without a result file (`tests/test_adapter_protocol.sh:202`, `tests/test_adapter_protocol.sh:203`,
@@ -273,7 +273,7 @@ different languages sharing one record.
    traceback assertion for the failure-after-mutation case) and no `invalid
    adapter response` poisoning of the controlled-failure envelope
    (`tests/test_adapter_protocol.sh:415`). **Port**:
-   `tests/baseline/cli-parity.test.js`'s `CLI-ENV-REFRESH-MODE-01 install
+   `tests/baseline/cli-parity.test.ts`'s `CLI-ENV-REFRESH-MODE-01 install
    refuses a refresh mode outside add-only and remove-add, before any Codex
    mutation` and `CLI-ENV-CODEX-MUTATION-01 the install mutation uses the
    SUPERPOWERS_CODEX override` (the driver's own comment at lines 278-279
@@ -294,7 +294,7 @@ different languages sharing one record.
    test the other two cases use (`tests/test_adapter_protocol.sh:378`).
    **Duplicate witness** of
    `ADAPTER-TERMINAL-01` and `ADAPTER-SURROGATE-01`, both remapped to
-   `tests/unit/adapter-protocol.test.js` and `tests/unit/lifecycle.test.js`.
+   `tests/unit/adapter-protocol.test.js` and `tests/unit/lifecycle.test.ts`.
 
 ### Zero-argument, empty-operation, and unknown-operation CLI boundary failures (`tests/test_adapter_protocol.sh:387-412`)
 
@@ -312,7 +312,7 @@ different languages sharing one record.
    in-process `adapter-cli` dispatches on a TypeScript-enumerated operation
    set rather than an untyped POSIX argv, so no equivalent unrecognized-string
    boundary exists to port; the surviving argument-parsing failure paths are
-   covered by `tests/unit/adapter.test.js`'s split-dash-leading-ref cases.
+   covered by `tests/unit/adapter.test.ts`'s split-dash-leading-ref cases.
 
 ### An invalid inspect view is a controlled inspect failure (`tests/test_adapter_protocol.sh:430-436`)
 
@@ -334,7 +334,7 @@ different languages sharing one record.
    reports the active version's 40-hex commit; the same override with no
    installed plugin reports an empty fingerprint
    (`tests/test_adapter_protocol.sh:445`, `tests/test_adapter_protocol.sh:465`, `tests/test_adapter_protocol.sh:474`). **Port**:
-   `tests/baseline/cli-parity.test.js`'s `CLI-ENV-CODEX-LISTING-01 the
+   `tests/baseline/cli-parity.test.ts`'s `CLI-ENV-CODEX-LISTING-01 the
    fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves
    codex from PATH when it is unset` (the driver's own comment at line 458
    names the ID against this block directly).
@@ -354,7 +354,7 @@ different languages sharing one record.
    `invalid adapter response`, through an `if grep -Fq 'error: invalid
    adapter response:' …; then echo …; exit 1; fi` negative guard
    (`tests/test_adapter_protocol.sh:545`, `tests/test_adapter_protocol.sh:576`).
-   **Port**: `tests/baseline/cli-parity.test.js`'s
+   **Port**: `tests/baseline/cli-parity.test.ts`'s
    `CLI-ENV-INSTALLED-DEFAULTS-01` environment-default coverage (contract:
    "Without explicit overrides, Codex adapter fingerprint listing uses `codex`
    from `PATH` and installed fingerprint lookup uses `$HOME/.codex`," per
@@ -390,22 +390,22 @@ different languages sharing one record.
    clause. **Port** (the two `PATH`-resolution cases,
    `tests/test_adapter_protocol.sh:598`, `tests/test_adapter_protocol.sh:616`,
    `tests/test_adapter_protocol.sh:622`, `tests/test_adapter_protocol.sh:623`):
-   `tests/baseline/cli-parity.test.js`'s `CLI-ENV-CODEX-LISTING-01 the
+   `tests/baseline/cli-parity.test.ts`'s `CLI-ENV-CODEX-LISTING-01 the
    fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex
    from PATH when it is unset` — Codex executable resolution for the
    fingerprint listing, the same ID items 109-111 port. The port test carries
    four halves, and the two `PATH`-component edges these shell lines cover are
    the last two of them. Its first two — an absolute-path `SUPERPOWERS_CODEX`
-   override (`tests/baseline/cli-parity.test.js:2624-2639`) and `codex`
+   override (`tests/baseline/cli-parity.test.ts:2624-2639`) and `codex`
    resolving from `PATH` when the override is unset
-   (`tests/baseline/cli-parity.test.js:2644-2654`) — exercise neither edge.
+   (`tests/baseline/cli-parity.test.ts:2644-2654`) — exercise neither edge.
    The third asserts that an explicitly empty `PATH` component resolves a bare
    command planted only in the working directory, through a recording `codex`
    that exists nowhere on `PATH` whose listing log is the proof of resolution
-   (`tests/baseline/cli-parity.test.js:2681-2714`). The fourth asserts that an
+   (`tests/baseline/cli-parity.test.ts:2681-2714`). The fourth asserts that an
    absent `PATH` declines to synthesize one, failing `command-not-found` with
    the working-directory copy never run
-   (`tests/baseline/cli-parity.test.js:2746-2782`); its override names `true`
+   (`tests/baseline/cli-parity.test.ts:2746-2782`); its override names `true`
    for the reason the driver's did, that a launch `ENOENT` maps to the same
    `command-not-found` code the precheck raises, so only a name resolvable
    from execvp's default path separates a precheck that failed closed from one
@@ -436,18 +436,18 @@ different languages sharing one record.
    reversed**. PR 11.4 changed the synthesized launch failure from an empty
    stderr buffer to `cannot launch Codex command <bin>: <errno>`, because an
    empty buffer made `ENOEXEC`/`EMFILE`/`ENOMEM` indistinguishable from Codex
-   exiting non-zero; `tests/unit/adapter.test.js:487-498` records that
-   rationale and `tests/unit/adapter.test.js:499-526` is the surviving
+   exiting non-zero; `tests/unit/adapter.test.ts:487-498` records that
+   rationale and `tests/unit/adapter.test.ts:499-526` is the surviving
    witness, asserting
    `mapCodexLaunchFailure`'s stderr text directly. So this driver's assertion
    is superseded rather than ported: an in-process test asserting an empty
    stderr here would now fail. The remaining half — that the mapped text
    reaches the `inspect` envelope end-to-end — has **no** witness at all;
-   `tests/unit/adapter.test.js:496-498` says so in as many words ("is not
+   `tests/unit/adapter.test.ts:496-498` says so in as many words ("is not
    covered end-to-end by any test"), because the errno path cannot be provoked
    hermetically. Recorded here as an open gap rather than as coverage. (An
    earlier revision of this record cited
-   `tests/unit/adapter.test.js:431,453` as the in-process witness; those two
+   `tests/unit/adapter.test.ts:431,453` as the in-process witness; those two
    lines assert `inspect-failed` on a *listing-parse* failure — `cannot parse
    output of '<codex> plugin list --json'` — and neither spawns a broken
    executable, so neither witnesses a launch failure.) An earlier
@@ -463,7 +463,7 @@ different languages sharing one record.
    (`tests/test_adapter_protocol.sh:656`, `tests/test_adapter_protocol.sh:657`).
    **Duplicate witness** of `ADAPTER-FINGERPRINT-REJECT-01`-adjacent
    fail-closed handling of a malformed Codex plugin listing, already covered
-   by `tests/unit/adapter.test.js`'s invalid-UTF-8/malformed-listing cases.
+   by `tests/unit/adapter.test.ts`'s invalid-UTF-8/malformed-listing cases.
 
 ### A missing Codex command fails install, fingerprint, ownership, and uninstall inspection (`tests/test_adapter_protocol.sh:670-726`)
 
@@ -479,8 +479,8 @@ different languages sharing one record.
    ownership/uninstall loop (`tests/test_adapter_protocol.sh:726`).
    **Retired at the gap**: this exact
    message and `command-not-found` code are already covered by
-   `tests/unit/adapter.test.js:542`, `tests/bin/uninstall-commands.test.js:465,488`
-   (`uninstall-commands.md`), and `tests/baseline/probe.test.js:553`
+   `tests/unit/adapter.test.ts:542`, `tests/bin/uninstall-commands.test.ts:465,488`
+   (`uninstall-commands.md`), and `tests/baseline/probe.test.ts:553`
    (`probe.md`) — all pre-existing, none newly ported by this inventory.
 
 ### `PROV-READER-CODEX-SOURCE-01` Codex build source reader profile (`tests/test_adapter_protocol.sh:803-862`)
@@ -509,16 +509,16 @@ different languages sharing one record.
    "candidate provenance is missing or invalid" message — a second bare
    `! grep -Fq …` predicate under `set -eu`
    (`tests/test_adapter_protocol.sh:862`).
-   **Port**: `tests/unit/provenance.test.js`'s `PROV-READER-CODEX-SOURCE-01
-   Codex build source reader preserves its accepting profile` (`tests/unit/provenance.test.js:36`).
+   **Port**: `tests/unit/provenance.test.ts`'s `PROV-READER-CODEX-SOURCE-01
+   Codex build source reader preserves its accepting profile` (`tests/unit/provenance.test.ts:36`).
    `tests/test_adapter_protocol.sh:817-818` maps to that test's schema-rejection assertion at
-   `tests/unit/provenance.test.js:49-52` (the `for` loop over `"{", "[]",
+   `tests/unit/provenance.test.ts:49-52` (the `for` loop over `"{", "[]",
    "{}", '{"source":7}', '{"source":""}'`), not to its separate nesting
-   assertions (`tests/unit/provenance.test.js:79-86`) — the shell case never exercised depth rejection,
+   assertions (`tests/unit/provenance.test.ts:79-86`) — the shell case never exercised depth rejection,
    despite its proximity to a 2000-deep payload, so mapping it to the nesting
    assertion would record a port of a property the driver never tested.
    `tests/test_adapter_protocol.sh:853-854` maps to the same test's explicit port of this exact citation at
-   `tests/unit/provenance.test.js:53-56` (the 1 MiB + 1 payload), added by
+   `tests/unit/provenance.test.ts:53-56` (the 1 MiB + 1 payload), added by
    PR-3.2 before this deletion specifically so the Bytes cell of this matrix
    row kept a witness.
 
@@ -535,7 +535,7 @@ different languages sharing one record.
    synthetic envelope, a 7-hex and a `null` fingerprint
    (`tests/test_adapter_protocol.py:236`, `tests/test_adapter_protocol.py:254`).
    **Duplicate witness** of `ADAPTER-FINGERPRINT-01`, remapped to
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 
 ### `test_inspect_update_control_accepts_only_exact_allowed_values` (`tests/test_adapter_protocol.py:265`, `tests/test_adapter_protocol.py:273`, `tests/test_adapter_protocol.py:284`)
 
@@ -558,7 +558,7 @@ different languages sharing one record.
    loop over synthetic envelopes, `neither`/`legacy`/`both`
    (`tests/test_adapter_protocol.py:292`, `tests/test_adapter_protocol.py:322`).
    **Duplicate witness** of `ADAPTER-OWNERSHIP-01`, remapped to
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 
 ### `test_inspect_ownership_rejects_old_malformed_and_inconsistent_results` (`tests/test_adapter_protocol.py:364`)
 
@@ -575,14 +575,14 @@ different languages sharing one record.
    empty and a both-hints result
    (`tests/test_adapter_protocol.py:372`, `tests/test_adapter_protocol.py:386`).
    **Duplicate witness** of `ADAPTER-INSTALL-RESULT-01`, remapped to
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 
 ### `test_messages_replay_by_channel_in_order` (`tests/test_adapter_protocol.py:400`)
 
 185. Four interleaved stdout/stderr messages replay to their declared
    streams in array order (`tests/test_adapter_protocol.py:400`).
    **Duplicate witness** of `DIAG-ADAPTER-01`, remapped to
-   `tests/unit/adapter.test.js`'s two message-replay-order tests.
+   `tests/unit/adapter.test.ts`'s two message-replay-order tests.
 
 ### `test_enforces_inclusive_response_size_boundary_before_replay` (`tests/test_adapter_protocol.py:409`, `tests/test_adapter_protocol.py:416`)
 
@@ -607,7 +607,7 @@ different languages sharing one record.
    yields no result, and leaks no traceback
    (`tests/test_adapter_protocol.py:461`, `tests/test_adapter_protocol.py:462`, `tests/test_adapter_protocol.py:463`, `tests/test_adapter_protocol.py:470`, `tests/test_adapter_protocol.py:471`).
    **Duplicate witness** of `ADAPTER-CONTROLLED-FAILURE-01`, remapped to
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 
 ### `test_rejects_terminal_controls_in_terminal_facing_protocol_strings` (`tests/test_adapter_protocol.py:536`)
 
@@ -617,7 +617,7 @@ different languages sharing one record.
    with a fragment naming the offending field
    (`tests/test_adapter_protocol.py:536`). **Duplicate witness** of
    `ADAPTER-TERMINAL-01`, remapped to `tests/unit/adapter-protocol.test.js`
-   and `tests/unit/lifecycle.test.js`.
+   and `tests/unit/lifecycle.test.ts`.
 
 ### `test_rejects_surrogate_escapes_in_terminal_facing_protocol_strings` (`tests/test_adapter_protocol.py:603`, `tests/test_adapter_protocol.py:604`, `tests/test_adapter_protocol.py:605`, `tests/test_adapter_protocol.py:606`)
 
@@ -625,7 +625,7 @@ different languages sharing one record.
    escape, are rejected with no leaked surrogate byte on either stream
    (`tests/test_adapter_protocol.py:603`, `tests/test_adapter_protocol.py:604`, `tests/test_adapter_protocol.py:605`, `tests/test_adapter_protocol.py:606`).
    **Duplicate witness** of `ADAPTER-SURROGATE-01`, remapped to
-   `tests/unit/adapter-protocol.test.js` and `tests/unit/lifecycle.test.js`.
+   `tests/unit/adapter-protocol.test.js` and `tests/unit/lifecycle.test.ts`.
 
 ### `test_rejects_empty_malformed_non_object_and_extra_fields` (`tests/test_adapter_protocol.py:616`, `tests/test_adapter_protocol.py:617`, `tests/test_adapter_protocol.py:618`, `tests/test_adapter_protocol.py:620`, `tests/test_adapter_protocol.py:624`)
 
@@ -695,7 +695,7 @@ different languages sharing one record.
    — are each rejected with a fragment naming the violation
    (`tests/test_adapter_protocol.py:871`). **Split disposition**: the
    fingerprint case is a **duplicate witness** of
-   `ADAPTER-FINGERPRINT-REJECT-01` (remapped to `tests/unit/adapter.test.js`);
+   `ADAPTER-FINGERPRINT-REJECT-01` (remapped to `tests/unit/adapter.test.ts`);
    the ownership-schema cases duplicate `ADAPTER-OWNERSHIP-REJECT-01`'s
    wire-residue clause; the verification-hint cases are
    `ADAPTER-INSTALL-REJECT-01`, retired — no in-process construct rejects an
@@ -822,8 +822,8 @@ intentionally no longer resolvable at `HEAD`; use `git show
   "shellOriginal": 229,
   "portOnly": 0,
   "ports": {
-    "tests/baseline/cli-parity.test.js": 38,
-    "tests/unit/provenance.test.js": 5
+    "tests/baseline/cli-parity.test.ts": 38,
+    "tests/unit/provenance.test.ts": 5
   }
 }
 ```
@@ -834,11 +834,11 @@ intentionally no longer resolvable at `HEAD`; use `git show
   `unmapped`, plus the 22 negative guards the supplementary sweep recovers:
   212 − 5 + 22 = 229; see Counting rules and Divergences above for the full
   derivation).
-- Ports: `tests/baseline/cli-parity.test.js` carries the surviving witness for
+- Ports: `tests/baseline/cli-parity.test.ts` carries the surviving witness for
   five shell-owned behavior IDs with no prior in-process port
   (`CLI-ENV-REFRESH-MODE-01`, `CLI-ENV-CODEX-MUTATION-01`,
   `CLI-ENV-CODEX-LISTING-01`, `CLI-ENV-INSTALLED-DEFAULTS-01`,
-  `CLI-ENV-INSTALLED-ROOT-01`); `tests/unit/provenance.test.js` carries the
+  `CLI-ENV-INSTALLED-ROOT-01`); `tests/unit/provenance.test.ts` carries the
   surviving witness for `PROV-READER-CODEX-SOURCE-01` — a row PR-1 already
   witnessed, so not a first-time port — including the two
   citations (`tests/test_adapter_protocol.sh:853-854`) PR-3.2 ported ahead of
@@ -851,4 +851,12 @@ intentionally no longer resolvable at `HEAD`; use `git show
   disposed of, per this file's own disposition vocabulary (see Counting
   rules). One retired clause leaves an acknowledged gap rather than a
   successor: items 125-132's launch-failure envelope property, unwitnessed
-  end-to-end by design (`tests/unit/adapter.test.js:496-498`).
+  end-to-end by design (`tests/unit/adapter.test.ts:496-498`).
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/baseline/cli-parity.test.ts` (38 static `test(` call sites); `tests/unit/provenance.test.ts` (5 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

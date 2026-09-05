@@ -1,13 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { COMMIT_INPUT_RE } from "./domain/refs.js";
-import { escapePythonJsonString } from "./python-json.js";
-import { SafetyError } from "./safety-error.js";
+import { COMMIT_INPUT_RE } from "./domain/refs.ts";
+import { escapePythonJsonString } from "./python-json.ts";
+import { SafetyError } from "./safety-error.ts";
 import {
   parseStrictJson,
   type JsonValue,
   type StrictJsonProfile,
-} from "./strict-json.js";
+} from "./strict-json.ts";
 
 export interface ProvenanceRecord {
   readonly source: string;

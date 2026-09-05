@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { SafetyError } from "./safety-error.js";
+import { SafetyError } from "./safety-error.ts";
 
 export type GitResult =
   | {

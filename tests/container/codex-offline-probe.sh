@@ -16,7 +16,7 @@ sentinel="/tmp/superpowers-manager-hook-sentinel"
 requirements="$HOME/.codex/requirements.toml"
 
 cp -R /workspace "$package"
-chmod +x "$package/bin/superpowers-manager.js"
+chmod +x "$package/src/cli.ts"
 mkdir -p "$upstream/skills/probe" "$upstream/.codex-plugin" \
   "$upstream/hooks/support" "$state" "$HOME/.codex" \
   "$survivor/.agents/plugins" "$survivor/plugins/unrelated/skills/probe" \
@@ -37,7 +37,7 @@ run_manager() {
   SUPERPOWERS_CACHE_DIR="$state/cache" \
   SUPERPOWERS_CODEX=codex \
   SUPERPOWERS_INSTALLED_SEARCH_ROOT="$HOME/.codex" \
-    "$package/bin/superpowers-manager.js" "$@"
+    "$package/src/cli.ts" "$@"
 }
 
 run_codex() {

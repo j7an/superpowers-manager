@@ -1,26 +1,19 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     "noEmit": true,
     "strict": true,
     "noImplicitReturns": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2024",
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true
   },
   "include": [
-    "../bin/**/*.js",
-    "bin/**/*.js",
-    "unit/**/*.js",
-    "baseline/**/*.js",
-    "lib/**/*.js",
-    "run-node-suites.js",
-    "build-id.js",
-    "write-build-id.js",
-    "assert-matcher-gate.js",
-    "tools/**/*.js",
-    "tools/**/*.mjs"
+    "**/*.ts"
   ]
 }

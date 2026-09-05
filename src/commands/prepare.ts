@@ -1,17 +1,17 @@
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
-import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
-import { atomicReplaceDir } from "../atomic.js";
-import { oneLine } from "../cli-arguments.js";
-import { computeEffectiveSelection } from "../effective-selection.js";
-import { runGit } from "../git.js";
-import { readManifest } from "../hooks.js";
-import { writeProvenance } from "../provenance.js";
-import { SafetyError } from "../safety-error.js";
-import type { ResolutionKind } from "../upstream-version.js";
-import { manifestVersionForRef } from "../upstream-version.js";
-import { fetchExactCommit, gitSafeSource } from "../upstream.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
+import { atomicReplaceDir } from "../atomic.ts";
+import { oneLine } from "../cli-arguments.ts";
+import { computeEffectiveSelection } from "../effective-selection.ts";
+import { runGit } from "../git.ts";
+import { readManifest } from "../hooks.ts";
+import { writeProvenance } from "../provenance.ts";
+import { SafetyError } from "../safety-error.ts";
+import type { ResolutionKind } from "../upstream-version.ts";
+import { manifestVersionForRef } from "../upstream-version.ts";
+import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
 import {
   BOUNDED_EXECUTABLE,
   UNBOUNDED_LEGACY,
@@ -21,10 +21,10 @@ import {
   displayPath,
   type Captured,
   type ValidatorResolution,
-} from "../validator.js";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
-import type { CommandContext } from "./context.js";
-import { replayOutcome } from "./probe.js";
+} from "../validator.ts";
+import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import type { CommandContext } from "./context.ts";
+import { replayOutcome } from "./probe.ts";
 
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:64-67::spw_require_upstream_path "$cache/skills`, via spw_require_upstream_path. Order is the shell's;
 // the first miss wins.
@@ -139,7 +139,7 @@ function resolveFromCwd(value: string, cwd: string): string {
 // read so invalid UTF-8 is rejected rather than replaced, cause dropped, three
 // hand-written messages naming the path, object check included. Its
 // diagnostics are pinned by
-// `tests/unit/hooks.test.js:108::void test("readManifest diagnostics`. This wrapper adds only
+// `tests/unit/hooks.test.ts:95::void test("readManifest diagnostics`. This wrapper adds only
 // the `version` type check.
 export async function readUpstreamManifestVersion(
   path: string,
@@ -584,7 +584,7 @@ export async function runPrepare(
     // spawn error, which oneLine never reads -- it takes .message only);
     // readManifest's three hookError messages
     // (`src/hooks.ts:113-138::readManifest`), pinned by
-    // `tests/unit/hooks.test.js:108::void test("readManifest diagnostics` as carrying no reader vocabulary or
+    // `tests/unit/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //
@@ -595,7 +595,7 @@ export async function runPrepare(
     //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by
-    //      `tests/unit/upstream.test.js:460-469::void test("resolveRef reports a query failure for latest`,
+    //      `tests/unit/upstream.test.ts:453-462::void test("resolveRef reports a query failure for latest`,
     //      :471-481, and :483-501.
     //   2. fetchExactCommit splices the same combined stdout+stderr into its
     //      own text on the PINNED path (both of its own splice sites in

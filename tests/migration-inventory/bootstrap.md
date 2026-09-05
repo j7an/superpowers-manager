@@ -3,7 +3,7 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_bootstrap.sh -->
 
-Source read in full (226 lines). Ported to `tests/bin/bootstrap.test.js`.
+Source read in full (226 lines). Current native port: `tests/bin/bootstrap.test.ts`.
 
 No behavior ID in `docs/baseline/traceability.md` references `test_bootstrap`
 (confirmed by grep on 2026-07-31 — zero matches). This inventory, not the
@@ -36,6 +36,8 @@ the port unless a merge is called out.
 
 10. `package.json` contains `"type": "module"`
 11. `bin/superpowers-manager.js` does not contain `import.meta.main`
+    Native retirement (issue #113): the redundant thin bin is removed; its
+    containing text-content case survives with this one row removed.
 12. `config/upstream-ref` contains `latest-release`
 13. `.agents/plugins/marketplace.json` contains `"name": "superpowers-manager"`
 14. `.agents/plugins/marketplace.json` contains `"products": ["CODEX"]`
@@ -182,7 +184,7 @@ same real file and the same two fixture strings.
 {
   "shellOriginal": 99,
   "portOnly": 1,
-  "ports": { "tests/bin/bootstrap.test.js": 11 }
+  "ports": { "tests/bin/bootstrap.test.ts": 11 }
 }
 ```
 
@@ -192,14 +194,29 @@ same real file and the same two fixture strings.
   exactly-one-section checks, 1 ordering check, 5 pre-publication phrase
   checks, 4 post-publication phrase checks, and 2 negative-fixture rejection
   checks).
-- Port (`tests/bin/bootstrap.test.js`): 91 assertions retain counterparts,
-  one `node:test` case per numbered item above (items 1-85 grouped into
-  `node:test` subtests by source file for readability; each retains its own
-  `assert.*` call so a single dropped check still fails independently),
+- Port (`tests/bin/bootstrap.test.ts`): 90 mapped assertions retain counterparts
+  across the file-presence, text-content, and release-section cases,
   **plus** 1 port-only assertion (the unreadable-path guard added in Task 4)
   that has no shell counterpart and is outside the 1:1 mapping.
-- Reconciliation: **91 of 99** original items retain a port counterpart. Eight
-  absence assertions retire at their numbered gaps: items 8, 41, 48, 52, 54,
-  and 56-58. Items 5 and 9 invert into the repository absence set; items 42 and 55
+- Reconciliation: **90 of 99** original items retain a port counterpart. The eight
+  prior absence assertions remain historical at items 8, 41, 48, 52, 54,
+  and 56-58; issue #113 additionally retires only item 11. Items 5 and 9
+  invert into the repository absence set; items 42 and 55
   invert in the tarball manifest. The one additional port-only assertion is
   strictly additive coverage, not a reconciliation of a shell assertion.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/bootstrap.test.ts` (11 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.
+
+Item 11 alone loses its text assertion because the thin bin is deleted. The
+containing text-content case remains, with its row count 69 -> 68. The README
+build-command assertion now requires `node src/cli.ts`; the RELEASING build
+assertion requires `node tests/tools/pack.ts --out-dir`. Current mapped counts are
+6 expected files + 2 absent files + 68 text rows + 14 release checks = 90, plus
+one unreadable-input guard. All 11 static cases and release-section fixtures
+remain.

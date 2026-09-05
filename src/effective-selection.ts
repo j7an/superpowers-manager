@@ -6,10 +6,10 @@ import {
   selectionError,
   validateSource,
   type NormalizedSavedSelection,
-} from "./selection.js";
-import { readSelectionState } from "./selection-store.js";
-import { readConfigRef, resolveRef } from "./upstream.js";
-import { COMMIT_RE } from "./domain/refs.js";
+} from "./selection.ts";
+import { readSelectionState } from "./selection-store.ts";
+import { readConfigRef, resolveRef } from "./upstream.ts";
+import { COMMIT_RE } from "./domain/refs.ts";
 
 function requireAbsolute(value: string, variable: string): string {
   if (!value.startsWith("/")) {

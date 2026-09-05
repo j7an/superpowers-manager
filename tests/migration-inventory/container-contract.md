@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_container_contract.sh -->
 
-Source read in full (677 lines). Ported to
-`tests/bin/container-contract.test.js`.
+Source read in full (677 lines). Current native port:
+`tests/bin/container-contract.test.ts`.
 
 `grep -n 'test_container_contract' docs/baseline/traceability.md` on
 2026-07-31 returns zero matches: no behavior ID in
@@ -76,7 +76,7 @@ that block.
     7.0.2: `Node16`, `node16`, `NODE16`, and `nOdE16` all compile), so it
     could be bypassed by spelling alone. Numbering 22-172 is unchanged: this
     inventory is referenced by 16 range comments in
-    `tests/bin/container-contract.test.js`, and renumbering 151 items to
+    `tests/bin/container-contract.test.ts`, and renumbering 151 items to
     delete one would produce a large diff of pure arithmetic across the very
     artifact whose purpose is detecting undeclared count changes. This is a
     deliberate 1:1 divergence from the deleted shell driver.
@@ -400,7 +400,7 @@ it).
 {
   "shellOriginal": 172,
   "portOnly": 2,
-  "ports": { "tests/bin/container-contract.test.js": 1 }
+  "ports": { "tests/bin/container-contract.test.ts": 1 }
 }
 ```
 
@@ -410,7 +410,7 @@ it).
   file, 3 `--inside` structural, 75 `validate_probe!` structural (items
   41-115), 27 `validate_hooks_rpc!` protocol-gate (items 116-142), 10 probe
   semantic-mutation fixtures, 20 RPC semantic-mutation fixtures).
-- Port (`tests/bin/container-contract.test.js`): 173 assertions (**171 live
+- Port (`tests/bin/container-contract.test.ts`): 173 assertions (**171 live
   of 172 numbered** — item 21 retired, its number not reused — 1:1-mapped
   to the shell, plus 2 strictly-additive port-only checks — see
   the note under item 87 and port-only entries 1-2 below). Items 34-35 remain
@@ -437,3 +437,31 @@ it).
   it (see the note at item 21) — plus 2 additional port-only assertions (see
   item 87's note and port-only entries 1-2 below) that are strictly additive
   and outside the 1:1 mapping.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/container-contract.test.ts` (1 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.
+
+Task 6 completes the native container wiring. Historical item 7's exact single
+`FROM` line adapts to semantic two-stage roles: the final native harness selects
+24.12.0 or latest 24, and copies, smoke-tests, and declares the installed-package
+minimum Node 24.0.0 binary. Historical item 13's checkout build requirement adapts
+to native source execution without compilation, with executable `src/cli.ts`.
+The item 43 manager invocation and the package-copy chmod precondition now name
+`$package/src/cli.ts`; the remaining probe assertions and mutation cases are
+unchanged. Historical quoted paths and original numbered counts above remain
+historical evidence, not current launcher instructions.
+
+Existing runner and ignore cases additionally require the closed selector,
+version-specific image/build argument, invalid-selector rejection, both tmpfs
+mounts, removal on exit, the container declaration, and all existing build-context
+exclusions. The current nested case population and single static `test(` call
+site are unchanged. RED before implementation showed missing native/minimum
+stages, checkout-build dependence, old launcher references, and selector absence;
+the updated focused workflow/container/bootstrap group then passed 108/108.
+Real endpoint acceptance separately verifies both harnesses, copied minimum Node,
+installed package execution, and unchanged offline isolation before completion.

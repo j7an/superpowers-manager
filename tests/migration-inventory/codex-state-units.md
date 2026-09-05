@@ -3,7 +3,7 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show cf7163556388fa85192556ba8fd56d789946db56:tests/test_codex_state_units.sh -->
 
-Source read in full (47 lines). Ported to `tests/unit/lifecycle.test.js`.
+Source read in full (47 lines). Current native port: `tests/unit/lifecycle.test.ts`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_codex_state_units` (confirmed by `grep -c '^| *\`' docs/baseline/traceability.md`
@@ -26,46 +26,46 @@ returning 120 with zero `test_codex_state_units` hits). This inventory, not the
 ### `spw_require_no_legacy_state` admits the two clean identity states (`:11-14`)
 
 1. `[ -z "$output" ]` for `neither` (`:12-13`). Port:
-   `tests/unit/lifecycle.test.js:29-33`.
+   `tests/unit/lifecycle.test.ts:29-33`.
 2. `[ -z "$output" ]` for `manager` (`:12-13`). Port:
-   `tests/unit/lifecycle.test.js:29-33`.
+   `tests/unit/lifecycle.test.ts:29-33`.
 
 ### `spw_require_no_legacy_state` rejects `legacy` and `both` (`:16-26`)
 
 3. The `if …; then exit 1; fi` rejection for `legacy` (`:17-20`). Port:
-   `tests/unit/lifecycle.test.js:35-43`.
+   `tests/unit/lifecycle.test.ts:35-43`.
 4. The `if …; then exit 1; fi` rejection for `both` (`:17-20`). Port:
-   `tests/unit/lifecycle.test.js:35-43`.
+   `tests/unit/lifecycle.test.ts:35-43`.
 5. `grep -Fxq 'Legacy superpowers-wrapper Codex state is installed.'` for
-   `legacy` (`:21-22`). Port: `tests/unit/lifecycle.test.js:35-43`.
+   `legacy` (`:21-22`). Port: `tests/unit/lifecycle.test.ts:35-43`.
 6. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `legacy`
-   (`:23-24`). Port: `tests/unit/lifecycle.test.js:35-43`.
+   (`:23-24`). Port: `tests/unit/lifecycle.test.ts:35-43`.
 7. `grep -Fxq 'Then run: npx superpowers-manager install'` for `legacy`
-   (`:25-26`). Port: `tests/unit/lifecycle.test.js:35-43`.
+   (`:25-26`). Port: `tests/unit/lifecycle.test.ts:35-43`.
 8. `grep -Fxq 'Legacy superpowers-wrapper Codex state is installed.'` for
-   `both` (`:21-22`). Port: `tests/unit/lifecycle.test.js:35-43`.
+   `both` (`:21-22`). Port: `tests/unit/lifecycle.test.ts:35-43`.
 9. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `both`
-   (`:23-24`). Port: `tests/unit/lifecycle.test.js:35-43`.
+   (`:23-24`). Port: `tests/unit/lifecycle.test.ts:35-43`.
 10. `grep -Fxq 'Then run: npx superpowers-manager install'` for `both`
-    (`:25-26`). Port: `tests/unit/lifecycle.test.js:35-43`.
+    (`:25-26`). Port: `tests/unit/lifecycle.test.ts:35-43`.
 
 ### `spw_report_legacy_state` is silent for the two clean identity states (`:29-32`)
 
 11. `[ -z "$output" ]` for `neither` (`:30-31`). Port:
-    `tests/unit/lifecycle.test.js:45-49`.
+    `tests/unit/lifecycle.test.ts:45-49`.
 12. `[ -z "$output" ]` for `manager` (`:30-31`). Port:
-    `tests/unit/lifecycle.test.js:45-49`.
+    `tests/unit/lifecycle.test.ts:45-49`.
 
 ### `spw_report_legacy_state` reports `legacy` and `both` (`:34-40`)
 
 13. `grep -Fxq 'Legacy superpowers-wrapper Codex state remains installed.'`
-    for `legacy` (`:36-37`). Port: `tests/unit/lifecycle.test.js:51-59`.
+    for `legacy` (`:36-37`). Port: `tests/unit/lifecycle.test.ts:51-59`.
 14. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `legacy`
-    (`:38-39`). Port: `tests/unit/lifecycle.test.js:51-59`.
+    (`:38-39`). Port: `tests/unit/lifecycle.test.ts:51-59`.
 15. `grep -Fxq 'Legacy superpowers-wrapper Codex state remains installed.'`
-    for `both` (`:36-37`). Port: `tests/unit/lifecycle.test.js:51-59`.
+    for `both` (`:36-37`). Port: `tests/unit/lifecycle.test.ts:51-59`.
 16. `grep -Fxq 'Run: npx superpowers-wrapper@0.1.1 uninstall'` for `both`
-    (`:38-39`). Port: `tests/unit/lifecycle.test.js:51-59`.
+    (`:38-39`). Port: `tests/unit/lifecycle.test.ts:51-59`.
 
 <!-- inventory:mapped:end -->
 
@@ -107,23 +107,23 @@ or "counterpart" claim is quoted inline in that item.
 
 1. **New.** `requireNoLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: garbage" }` for an unrecognised state.
-   Port: `tests/unit/lifecycle.test.js:66-75`. No shell counterpart — the
+   Port: `tests/unit/lifecycle.test.ts:66-75`. No shell counterpart — the
    shell driver never called `spw_require_no_legacy_state` with a state
    outside `neither|manager|legacy|both`.
 2. **New.** `reportLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: garbage" }` for an unrecognised state.
-   Port: `tests/unit/lifecycle.test.js:66-75`. No shell counterpart, same
+   Port: `tests/unit/lifecycle.test.ts:66-75`. No shell counterpart, same
    rationale as item 1.
 3. **New.** `requireNoLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: " }` for an empty identity state. Port:
-   `tests/unit/lifecycle.test.js:77-86`. No shell counterpart, same
+   `tests/unit/lifecycle.test.ts:77-86`. No shell counterpart, same
    rationale as item 1.
 4. **New.** `reportLegacyState` returns `{ kind: "unknown", message:
    "unknown adapter identity state: " }` for an empty identity state. Port:
-   `tests/unit/lifecycle.test.js:77-86`. No shell counterpart, same
+   `tests/unit/lifecycle.test.ts:77-86`. No shell counterpart, same
    rationale as item 1.
 5. **New.** `requireManagedUpdateControl("managed")` returns `{ ok: true }`.
-   Port: `tests/unit/lifecycle.test.js:124-126`. No counterpart in
+   Port: `tests/unit/lifecycle.test.ts:124-126`. No counterpart in
    `tests/test_codex_state_units.sh` (which never calls the shell's
    `spw_require_managed_update_control`) or in
    `tests/test_marketplace_reconcile.sh` — `grep -ciE
@@ -131,14 +131,14 @@ or "counterpart" claim is quoted inline in that item.
    tests/test_marketplace_reconcile.sh` returns 0.
 6. **New.** `requireManagedUpdateControl("unsupported")` returns `{ ok: false,
    message: "adapter cannot guarantee manager-controlled updates" }`. Port:
-   `tests/unit/lifecycle.test.js:128-133`. No counterpart in either driver,
+   `tests/unit/lifecycle.test.ts:128-133`. No counterpart in either driver,
    same rationale as item 5.
 7. **New.** `requireManagedUpdateControl` rejects an unrecognised capability
    (`"weird"`) with `unknown adapter update-control capability: weird`. Port:
-   `tests/unit/lifecycle.test.js:135-140`. No counterpart in either driver,
+   `tests/unit/lifecycle.test.ts:135-140`. No counterpart in either driver,
    same rationale as item 5.
 8. `verifyInstalledFingerprint` returns `ok: true` for an exact 40-character
-   commit match. Port: `tests/unit/lifecycle.test.js:142-156`. No counterpart
+   commit match. Port: `tests/unit/lifecycle.test.ts:142-156`. No counterpart
    in `tests/test_codex_state_units.sh`. Counterpart in
    `tests/test_marketplace_reconcile.sh:275` (INSTALL-VERIFY-01): the bare
    `out=$(spw_verify_installed_fingerprint "$desired" ...)` call runs under
@@ -147,7 +147,7 @@ or "counterpart" claim is quoted inline in that item.
    case succeeds.
 9. `verifyInstalledFingerprint`'s `stdout` is exactly `["desired_commit=…",
    "installed_commit=…", "manager updated"]` for the same exact-match case.
-   Port: `tests/unit/lifecycle.test.js:142-156`. No counterpart in
+   Port: `tests/unit/lifecycle.test.ts:142-156`. No counterpart in
    `tests/test_codex_state_units.sh`. Partial counterpart in
    `tests/test_marketplace_reconcile.sh:276-277`: `grep -Fq "manager
    updated"` and `grep -Fq "installed_commit=$desired"` check two of the
@@ -155,20 +155,20 @@ or "counterpart" claim is quoted inline in that item.
    `desired_commit=` line, nor that these are the *only* three lines in this
    order.
 10. `verifyInstalledFingerprint`'s `stderr` is `[]` for the same exact-match
-    case. Port: `tests/unit/lifecycle.test.js:142-156`. No counterpart in
+    case. Port: `tests/unit/lifecycle.test.ts:142-156`. No counterpart in
     either driver: `tests/test_marketplace_reconcile.sh:275-278` captures
     only stdout (`out=$(...)`) and never inspects stderr for this case.
 11. `verifyInstalledFingerprint` returns `ok: true` for the seven-character
     short form (`scripts/core/status.sh:7`'s `cut -c 1-7` rule, pinned to
     `commitMatches` — see the test's own comment). Port:
-    `tests/unit/lifecycle.test.js:158-168`. No counterpart in
+    `tests/unit/lifecycle.test.ts:158-168`. No counterpart in
     `tests/test_codex_state_units.sh`. Counterpart in
     `tests/test_marketplace_reconcile.sh:281` (the short-form case), same
     implicit-success form as item 8.
 12. `verifyInstalledFingerprint` returns `ok: false` with `stderr` naming
     "inspection failed after install" when the *inspection call itself*
     fails (`AdapterResult.status !== 0`). Port:
-    `tests/unit/lifecycle.test.js:170-177`. No counterpart in
+    `tests/unit/lifecycle.test.ts:170-177`. No counterpart in
     `tests/test_codex_state_units.sh`. No counterpart in
     `tests/test_marketplace_reconcile.sh` either: `grep -c "inspection
     failed after install" tests/test_marketplace_reconcile.sh` returns 0.
@@ -181,11 +181,11 @@ or "counterpart" claim is quoted inline in that item.
     collapse onto this item's branch**, which is a behavioural divergence
     rather than a mapping gap — see the divergence note under item 14.
 13. Same case's `stdout` is `[]`. Port:
-    `tests/unit/lifecycle.test.js:170-177`. No counterpart in either driver,
+    `tests/unit/lifecycle.test.ts:170-177`. No counterpart in either driver,
     same rationale as item 12.
 14. Same case's `stderr` is exactly `["error: installed manager fingerprint
     inspection failed after install."]`. Port:
-    `tests/unit/lifecycle.test.js:170-177`. No counterpart in either driver,
+    `tests/unit/lifecycle.test.ts:170-177`. No counterpart in either driver,
     same rationale as item 12.
 
     **Divergence — a live shell assertion with no satisfying port.**
@@ -239,7 +239,7 @@ or "counterpart" claim is quoted inline in that item.
     fingerprint inspection result after install."` — matching
     `scripts/core/lifecycle.sh:95-97`'s branch and satisfying
     `tests/test_marketplace_reconcile.sh:312`'s `grep -Fq "parse"`. Pinned by
-    items 26-28 below (`tests/unit/lifecycle.test.js:272-287`, "an unparseable
+    items 26-28 below (`tests/unit/lifecycle.test.ts:272-287`, "an unparseable
     fingerprint result names parsing, not inspection"), of which item 27 is
     the `stderr` assertion that carries the "cannot parse" text. **Slice 4c's
     `marketplace-reconcile.md` must disposition `:312` as mapped by that
@@ -247,42 +247,42 @@ or "counterpart" claim is quoted inline in that item.
     history (per this file's own convention of amending rather than
     deleting), not as the current state.
 15. `verifyInstalledFingerprint` returns `ok: false` on a stale/mismatched
-    commit. Port: `tests/unit/lifecycle.test.js:179-191`. No counterpart in
+    commit. Port: `tests/unit/lifecycle.test.ts:179-191`. No counterpart in
     `tests/test_codex_state_units.sh`. Counterpart in
     `tests/test_marketplace_reconcile.sh:287-289` (the `if (...); then …
     exit 1; fi` guard around the stale-commit case).
 16. Same case's `stderr` is exactly `["error: installed manager fingerprint
     does not match the prepared plugin after install.", "hint: try
-    reinstalling"]`. Port: `tests/unit/lifecycle.test.js:179-191`. No
+    reinstalling"]`. Port: `tests/unit/lifecycle.test.ts:179-191`. No
     counterpart in `tests/test_codex_state_units.sh`. Partial counterpart in
     `tests/test_marketplace_reconcile.sh:290-291`: `grep -Fq "does not match
     the prepared plugin"` and `grep -Fq "adapter mismatch hint"` check the
     same two message strings independently, not as an exact two-line array.
 17. `verifyInstalledFingerprint` returns `ok: false` when the fingerprint is
     undetectable (`fingerprint: null`). Port:
-    `tests/unit/lifecycle.test.js:193-207`. No counterpart in
+    `tests/unit/lifecycle.test.ts:193-207`. No counterpart in
     `tests/test_codex_state_units.sh`. Counterpart in
     `tests/test_marketplace_reconcile.sh:295-302` (the undetectable-case
     guard, plus its explicit check that "manager updated" is absent).
 18. Same case's `stderr` is exactly `["error: installed manager fingerprint
     is not detectable after install.", "hint: codex reported nothing"]`.
-    Port: `tests/unit/lifecycle.test.js:193-207`. No counterpart in
+    Port: `tests/unit/lifecycle.test.ts:193-207`. No counterpart in
     `tests/test_codex_state_units.sh`. Partial counterpart in
     `tests/test_marketplace_reconcile.sh:298-299`: `grep -Fq "fingerprint is
     not detectable"` and `grep -Fq "adapter missing hint"` check the same two
     message strings independently, not as an exact two-line array.
 19. `verifyInstalledFingerprint` returns `ok: false` with no hint line when
     the adapter supplies no `verification_hints` at all. Port:
-    `tests/unit/lifecycle.test.js:209-217`. No counterpart in either driver:
+    `tests/unit/lifecycle.test.ts:209-217`. No counterpart in either driver:
     every call in `tests/test_marketplace_reconcile.sh` reuses the same
     `$install_result` file (`:272-274`), whose `verification_hints` always
     defines both `mismatch` and `missing` — a hintless mismatch is never
     constructed there.
 20. Same case's `stderr` has exactly one line (no `hint:` line appended).
-    Port: `tests/unit/lifecycle.test.js:209-217`. No counterpart in either
+    Port: `tests/unit/lifecycle.test.ts:209-217`. No counterpart in either
     driver, same rationale as item 19.
 21. `verifyUninstalledResources` returns `{ ok: true }` when both resources
-    are absent. Port: `tests/unit/lifecycle.test.js:219-226`. No counterpart
+    are absent. Port: `tests/unit/lifecycle.test.ts:219-226`. No counterpart
     in `tests/test_codex_state_units.sh`. Counterpart in
     `tests/test_marketplace_reconcile.sh:252-255` (UNINSTALL-VERIFY-01
     baseline case): the bare `spw_verify_uninstalled_resources
@@ -290,7 +290,7 @@ or "counterpart" claim is quoted inline in that item.
     that this case succeeds.
 22. `verifyUninstalledResources` rejects a surviving plugin with `"owned
     plugin resource is still installed after removal"`. Port:
-    `tests/unit/lifecycle.test.js:228-238`. No counterpart in
+    `tests/unit/lifecycle.test.ts:228-238`. No counterpart in
     `tests/test_codex_state_units.sh`. Counterpart in
     `tests/test_marketplace_reconcile.sh:231-251` (the `plugin` iteration of
     the UNINSTALL-VERIFY-01 loop): `residual_message='owned plugin resource
@@ -299,7 +299,7 @@ or "counterpart" claim is quoted inline in that item.
     failure (`:245-249`).
 23. `verifyUninstalledResources` rejects a surviving marketplace with `"owned
     marketplace resource is still registered after removal"`. Port:
-    `tests/unit/lifecycle.test.js:240-250`. No counterpart in
+    `tests/unit/lifecycle.test.ts:240-250`. No counterpart in
     `tests/test_codex_state_units.sh`. Counterpart in
     `tests/test_marketplace_reconcile.sh:231-251` (the `marketplace`
     iteration of the same loop): `residual_message='owned marketplace
@@ -308,7 +308,7 @@ or "counterpart" claim is quoted inline in that item.
 24. `verifyUninstalledResources` fails closed with `"expected a Boolean
     adapter result at resources.plugin"` when a resource field is present but
     not Boolean (`plugin: "false"`). Port:
-    `tests/unit/lifecycle.test.js:252-265`. No counterpart in
+    `tests/unit/lifecycle.test.ts:252-265`. No counterpart in
     `tests/test_codex_state_units.sh`. No counterpart in
     `tests/test_marketplace_reconcile.sh` either: `grep -cE "expected a
     Boolean|expected an object" tests/test_marketplace_reconcile.sh` returns
@@ -321,7 +321,7 @@ or "counterpart" claim is quoted inline in that item.
     case still never checks message text, only that the call fails.
 25. `verifyUninstalledResources` fails closed when the inspection itself
     failed (`AdapterResult.status !== 0`). Port:
-    `tests/unit/lifecycle.test.js:267-270`. No counterpart in
+    `tests/unit/lifecycle.test.ts:267-270`. No counterpart in
     `tests/test_codex_state_units.sh`. No counterpart in
     `tests/test_marketplace_reconcile.sh`: unlike
     `spw_verify_installed_fingerprint`, `spw_verify_uninstalled_resources`
@@ -331,14 +331,14 @@ or "counterpart" claim is quoted inline in that item.
     exit status.
 26. **New, this commit.** `verifyInstalledFingerprint` returns `ok: false`
     when the inspect call *succeeds* but its `result` is not an object (a
-    string, here). Port: `tests/unit/lifecycle.test.js:272-287` ("an
+    string, here). Port: `tests/unit/lifecycle.test.ts:272-287` ("an
     unparseable fingerprint result names parsing, not inspection").
     Counterpart in `tests/test_marketplace_reconcile.sh:304-316` (see item
     14's resolution paragraph for the full trace); no counterpart in
     `tests/test_codex_state_units.sh`.
 27. Same case's `stderr` is exactly `["error: cannot parse installed manager
     fingerprint inspection result after install."]` — naming "cannot parse",
-    not "inspection failed". Port: `tests/unit/lifecycle.test.js:272-287`.
+    not "inspection failed". Port: `tests/unit/lifecycle.test.ts:272-287`.
     This is the assertion that resolves item 14's divergence callout above:
     it is what makes `tests/test_marketplace_reconcile.sh:312`'s live
     `grep -Fq "parse"` satisfiable, per the `readResult`/`ResultRead` split
@@ -346,14 +346,14 @@ or "counterpart" claim is quoted inline in that item.
     `tests/test_marketplace_reconcile.sh:304-316`; no counterpart in
     `tests/test_codex_state_units.sh`.
 28. Same case's `stdout` is exactly `[]`. Port:
-    `tests/unit/lifecycle.test.js:272-287`. No counterpart in
+    `tests/unit/lifecycle.test.ts:272-287`. No counterpart in
     `tests/test_codex_state_units.sh`. Partial counterpart in
     `tests/test_marketplace_reconcile.sh:313-314`, which forbids the
     "manager updated" line on this path but reads one combined output
     capture and so never asserts that the call produced no stdout at all.
 29. **New, this commit.** `verifyInstalledFingerprint` fails closed on a
     non-string, non-null `fingerprint` (e.g. `42`) rather than coercing it.
-    Port: `tests/unit/lifecycle.test.js:289-301` ("a non-string fingerprint
+    Port: `tests/unit/lifecycle.test.ts:289-301` ("a non-string fingerprint
     is unparseable, not empty"). **No shell counterpart is possible**:
     `scripts/core/provenance.sh:62`'s `spw_json_get` stringifies any
     non-null scalar before `spw_verify_installed_fingerprint` ever sees it,
@@ -366,36 +366,36 @@ or "counterpart" claim is quoted inline in that item.
     fingerprint inspection result after install."]` — the same operator
     string item 27 pins for the unparseable-result case, so the two distinct
     triggers are confirmed to share one message rather than drifting apart.
-    Port: `tests/unit/lifecycle.test.js:289-301`. No shell counterpart is
+    Port: `tests/unit/lifecycle.test.ts:289-301`. No shell counterpart is
     possible, same rationale as item 29.
 31. **New, this commit.** `verifyUninstalledResources` returns `ok: false`
     when the inspection call itself failed — the same case item 25 covers,
     which asserted only `ok === false` and left the operator string
-    unpinned. Port: `tests/unit/lifecycle.test.js:303-312` ("an unreadable
+    unpinned. Port: `tests/unit/lifecycle.test.ts:303-312` ("an unreadable
     ownership inspection names reading, with its text"). No counterpart in
     either driver, same rationale as item 25.
 32. Same case's failure `message` is exactly `"cannot read the adapter
     ownership inspection after removal"`. This is the assertion that closes
     the operator-string gap item 25 left open. Port:
-    `tests/unit/lifecycle.test.js:303-312`. No counterpart in either driver,
+    `tests/unit/lifecycle.test.ts:303-312`. No counterpart in either driver,
     same rationale as item 25.
 33. **New, this commit.** `verifyUninstalledResources` returns `ok: false`
     when the `["plugin", "marketplace"]` Boolean-check loop meets a valid
     `plugin` and a non-Boolean `marketplace`. Port:
-    `tests/unit/lifecycle.test.js:314-325` ("the marketplace Boolean check
+    `tests/unit/lifecycle.test.ts:314-325` ("the marketplace Boolean check
     names its own key"). No counterpart in either driver: `grep -cE
     "resources\.marketplace" tests/test_marketplace_reconcile.sh` returns 0.
 34. Same case's failure `message` is exactly `"expected a Boolean adapter
     result at resources.marketplace"` — the loop names its own key rather
     than using a template that hardcoded `"plugin"` (which item 24 alone
     could not have caught, since item 24 only ever supplies a non-Boolean
-    `plugin`). Port: `tests/unit/lifecycle.test.js:314-325`. No counterpart
+    `plugin`). Port: `tests/unit/lifecycle.test.ts:314-325`. No counterpart
     in either driver, same rationale as item 33.
 35. **This commit; removes a port-only divergence rather than adding one.**
     `verifyUninstalledResources` returns `ok: false` on a non-object (or
     wholly absent) `resources` key (input `{}`), falling through to the same
     Boolean check as a present-but-wrong-type field. Port:
-    `tests/unit/lifecycle.test.js:327-338` ("a non-object resources falls
+    `tests/unit/lifecycle.test.ts:327-338` ("a non-object resources falls
     through to the Boolean message"). No counterpart in
     `tests/test_codex_state_units.sh`; `tests/test_marketplace_reconcile.sh`
     exercises the identical `{}` input at `:222-228`, but checks only that
@@ -403,7 +403,7 @@ or "counterpart" claim is quoted inline in that item.
 36. Same case's failure `message` is exactly `"expected a Boolean adapter
     result at resources.plugin"`, rather than the now-deleted distinct
     `"expected an object adapter result at resources"` message. Port:
-    `tests/unit/lifecycle.test.js:327-338`. Before spec §6.2.3 item 3a, the
+    `tests/unit/lifecycle.test.ts:327-338`. Before spec §6.2.3 item 3a, the
     deleted message was a **live-shell-tested divergence**, not a harmless
     hardening: `scripts/core/adapter.sh:70` emits this same "expected Boolean
     adapter result at resources.plugin" text for the identical `{}` input
@@ -420,7 +420,7 @@ or "counterpart" claim is quoted inline in that item.
 {
   "shellOriginal": 16,
   "portOnly": 36,
-  "ports": { "tests/unit/lifecycle.test.js": 28 }
+  "ports": { "tests/unit/lifecycle.test.ts": 28 }
 }
 ```
 
@@ -428,7 +428,7 @@ or "counterpart" claim is quoted inline in that item.
   `spw_require_no_legacy_state`, 2 rejection checks + 6 `grep -Fxq` checks for
   its `legacy`/`both` arm, 2 clean-state checks for `spw_report_legacy_state`,
   4 `grep -Fxq` checks for its `legacy`/`both` arm; sum: 2+2+6+2+4 = 16).
-- Port (`tests/unit/lifecycle.test.js`): 28 static `test(` call sites,
+- Port (`tests/unit/lifecycle.test.ts`): 28 static `test(` call sites,
   carrying all 16 shell assertions (each of the four `void test(...)` cases
   covering `neither`/`manager`/`legacy`/`both` groups multiple shell
   assertions behind one `assert.deepEqual`, since the port returns a verdict
@@ -472,7 +472,7 @@ or "counterpart" claim is quoted inline in that item.
   from 30 to 36, so that a single convention governs the whole region and
   the declared count means the same thing at both ends of it. No item text
   was retired and no cited range moved — each new row reuses its case's
-  existing `tests/unit/lifecycle.test.js` range, exactly as the 15/16, 17/18
+  existing `tests/unit/lifecycle.test.ts` range, exactly as the 15/16, 17/18
   and 19/20 pairs already do. The port-only region carries its own
   `1..portOnly` numbering, and item 30 was the highest number in the file,
   so nothing later is renumbered. `shellOriginal` (16) and `ports` (25) are
@@ -495,12 +495,20 @@ or "counterpart" claim is quoted inline in that item.
   ***Deferral discharged 2026-08-11, in the slice it named; recorded here at
   that slice's closeout so the bullet stops reading as outstanding.*** *Both
   halves landed, in the two command modules that consume the two arms.* **Block
-  path → stderr:** *`tests/unit/commands-install.test.js`'s legacy-blocked case
+  path → stderr:** *`tests/unit/commands-install.test.ts`'s legacy-blocked case
   asserts stderr is exactly the three `BLOCKED_LINES` and stdout carries only
   the unrelated note (`:427-433`).* **Report path → stdout, with its converse:**
-  *`tests/unit/commands-uninstall.test.js` asserts both report lines are in
+  *`tests/unit/commands-uninstall.test.ts` asserts both report lines are in
   stdout and then asserts stderr does **not** contain `remains installed`
   (`:84-101`) — the half that would otherwise pass silently if a caller wrote
   both verdicts to stderr.* The 30 port-only entries (items 1-30)
   are strictly additive test coverage — not a reconciliation of any shell
   assertion — and are excluded from the 16/16 arithmetic above.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/unit/lifecycle.test.ts` (28 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

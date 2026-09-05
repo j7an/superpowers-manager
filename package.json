@@ -20,17 +20,14 @@
   "type": "module",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "prebuild": "node --input-type=module -e \"import{rmSync}from'node:fs';rmSync('dist',{recursive:true,force:true})\"",
-    "build": "tsc -p tsconfig.json",
-    "postbuild": "node tests/write-build-id.js",
-    "prepack": "node --input-type=module -e \"import{existsSync}from'node:fs';if(!existsSync('dist/cli.js')){console.error('error: dist/cli.js is missing — run pnpm install --frozen-lockfile && pnpm run build');process.exit(1)}\"",
-    "lint": "oxlint src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.js tests/build-id.js tests/write-build-id.js tests/assert-matcher-gate.js",
-    "format": "prettier --write src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.js tests/build-id.js tests/write-build-id.js tests/assert-matcher-gate.js",
-    "format:check": "prettier --check src/ bin/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.js tests/build-id.js tests/write-build-id.js tests/assert-matcher-gate.js",
-    "typecheck:js": "tsc -p tests/tsconfig.json",
-    "test": "node tests/run-node-suites.js",
-    "check:static": "pnpm run format:check && pnpm run lint && pnpm run build && pnpm run typecheck:js",
-    "check": "pnpm run check:static && pnpm run test"
+    "prepack": "node --input-type=module -e \"console.error('error: use node tests/tools/pack.ts --out-dir <directory> to package this checkout');process.exitCode=1\"",
+    "lint": "oxlint src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.ts tests/assert-matcher-gate.ts",
+    "format": "prettier --write src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.ts tests/assert-matcher-gate.ts",
+    "format:check": "prettier --check src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.ts tests/assert-matcher-gate.ts",
+    "test": "node tests/run-node-suites.ts",
+    "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
+    "check": "pnpm run check:static && pnpm run test",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -49,15 +46,13 @@
     "url": "https://github.com/j7an/superpowers-manager/issues"
   },
   "bin": {
-    "superpowers-manager": "bin/superpowers-manager.js"
+    "superpowers-manager": "dist/cli.js"
   },
   "engines": {
     "node": ">=24"
   },
   "files": [
-    "bin/",
     "dist/",
-    "!dist/.build-id",
     "config/upstream-ref",
     ".agents/plugins/marketplace.json",
     "plugins/superpowers/.codex-plugin/plugin.template.json",

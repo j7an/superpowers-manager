@@ -1,4 +1,4 @@
-import { SEMVER_BASE_RE } from "./domain/refs.js";
+import { SEMVER_BASE_RE } from "./domain/refs.ts";
 
 export type ResolutionKind = "latest-release" | "tag" | "ref" | "raw-commit";
 

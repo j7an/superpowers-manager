@@ -5,16 +5,16 @@ import {
   atomicWriteFile,
   type AtomicErrorDetails,
   type AtomicWriteHooks,
-} from "./atomic.js";
-import { classifyPathNoFollow, type NoFollowPathType } from "./safe-path.js";
-import { SafetyError } from "./safety-error.js";
+} from "./atomic.ts";
+import { classifyPathNoFollow, type NoFollowPathType } from "./safe-path.ts";
+import { SafetyError } from "./safety-error.ts";
 import {
   selectionError,
   serializeRecord,
   validateRecord,
   type SelectionRecord,
-} from "./selection.js";
-import { parseStrictJson, type StrictJsonProfile } from "./strict-json.js";
+} from "./selection.ts";
+import { parseStrictJson, type StrictJsonProfile } from "./strict-json.ts";
 
 const SELECTION_JSON_PROFILE: StrictJsonProfile = {
   duplicateKeys: "reject",

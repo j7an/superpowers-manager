@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { SafetyError } from "./safety-error.js";
+import { SafetyError } from "./safety-error.ts";
 
 const MANAGED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
 type ManagedSignal = (typeof MANAGED_SIGNALS)[number];

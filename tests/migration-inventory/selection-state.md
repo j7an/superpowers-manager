@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_state.sh -->
 
-Source read in full (335 lines). Ported to
-`tests/baseline/selection-location.test.js`.
+Source read in full (335 lines). Current native port:
+`tests/baseline/selection-location.test.ts`.
 
 ## Counting rules applied
 
@@ -87,14 +87,14 @@ divergence exists.
 
 Not a registered behavior ID: `BUILDER-PERMISSION-01` matches no pattern in
 `docs/baseline/traceability.md`'s `ID_PATTERN`
-(`tests/baseline/traceability.test.js`), and the shell's own
+(`tests/baseline/traceability.test.ts`), and the shell's own
 `permission_root`/`permission_target`/`permission_parent` variables are never
 referenced again after this block. It exercises
 `tests/builders/baseline-scenario.sh`'s `permission-denied` scenario, not
 `scripts/core/selection.sh`.
 
 1. The builder's `ROOT=` output names a directory that exists (`:30`). Port:
-   `tests/baseline/selection-location.test.js:298`.
+   `tests/baseline/selection-location.test.ts:298`.
 2. Unless running as root, the builder's `TARGET=` output names a file that
    is not readable (`:34-37`, `if [ -r ... ]; then ... exit 1; fi`). Port:
    `:301-309` (root-skip branch at `:301`, the negative check itself at
@@ -103,7 +103,7 @@ referenced again after this block. It exercises
 ### Selection location chain and fail-closed bases (`:41-70`)
 
 3. `SUPERPOWERS_CONFIG_DIR`, explicit, wins over every other base (`:42`).
-   Port: `tests/baseline/selection-location.test.js:316-323`.
+   Port: `tests/baseline/selection-location.test.ts:316-323`.
 4. `XDG_CONFIG_HOME`, with `SUPERPOWERS_CONFIG_DIR` absent, wins over `HOME`
    (`:43`). Port: `:325-328`.
 5. An empty `XDG_CONFIG_HOME` is treated as absent, falling through to `HOME`
@@ -127,7 +127,7 @@ referenced again after this block. It exercises
    (`:61`). Port: `:356-359`.
 13. The CLI usage-error path unexpectedly succeeding is itself the
     failure (`:63-68`). **Merged** into the port's `assert.equal(usage.status,
-    2)` at `tests/baseline/selection-location.test.js:372`, which is strictly
+    2)` at `tests/baseline/selection-location.test.ts:372`, which is strictly
     stronger and subsumes this guard, same precedent as `bin-dispatch.md`
     item 15. No TypeScript counterpart exists for `spw_usage_error` itself:
     it was reachable in production only from `scripts/pin`, `scripts/unpin`,
@@ -140,15 +140,15 @@ referenced again after this block. It exercises
     Slice 4c re-expresses the case through `src/cli.ts:314-316`, the live
     usage-error implementation, rather than the deleted shell helper.
 14. The CLI usage-error path exits `2` (`:69`). Port:
-    `tests/baseline/selection-location.test.js`.
+    `tests/baseline/selection-location.test.ts`.
 15. Its stderr is `error: <msg>` followed by the complete usage block, while
-    stdout is empty (`:70`). Port: `tests/baseline/selection-location.test.js`.
+    stdout is empty (`:70`). Port: `tests/baseline/selection-location.test.ts`.
 
 ### Complete ref precedence — absent state (`:134-172`)
 
 16. Absent state resolves the packaged default ref, tag kind, one resolver
     call (`:137-142`, `assert_effective package-default default
-    package-default ...`). Port: `tests/baseline/selection-location.test.js:387-401`.
+    package-default ...`). Port: `tests/baseline/selection-location.test.ts:387-401`.
 17. `SPW_SAVED_MODE` is `none` for absent state (`:143`). Port: `:403`.
 18. Exactly one resolver call for the packaged-default path (`:144`). Ported
     as "exactly one `--tags` probe logged" — see the file header's note on
@@ -165,7 +165,7 @@ referenced again after this block. It exercises
 22. Track-latest state resolves `latest-release` to a distinct tag and commit
     (`:176-181`). This is the non-short-circuit path with distinct
     `resolvedRef`/`desiredCommit` values the file header's swap-detection note
-    describes. Port: `tests/baseline/selection-location.test.js:467-479`.
+    describes. Port: `tests/baseline/selection-location.test.ts:467-479`.
 23. `SPW_SAVED_MODE` is `track-latest` (`:182`). Port: `:481`.
 24. `SUPERPOWERS_REF` overrides track-latest's ref while the source stays
     saved (`:184-191`). Port: `:484-499`.
@@ -177,7 +177,7 @@ referenced again after this block. It exercises
 ### Complete ref precedence — pinned state (`:212-254`)
 
 27. Pinned state reuses its verified identity without querying the resolver
-    (`:213-219`). Port: `tests/baseline/selection-location.test.js:544-558`.
+    (`:213-219`). Port: `tests/baseline/selection-location.test.ts:544-558`.
 28. The resolver log is empty for the pinned short-circuit (`:220`). Port:
     `:560`.
 29. `SPW_SAVED_REQUESTED_REF` equals the saved pin's requested ref (`:221`).
@@ -198,11 +198,11 @@ referenced again after this block. It exercises
 ### Arbitrary ref and raw-commit resolution (`:255-280`)
 
 Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
-`tests/baseline/traceability.test.js`'s `ID_PATTERN` either.
+`tests/baseline/traceability.test.ts`'s `ID_PATTERN` either.
 
 37. An environment ref containing a shell glob character resolves as data,
     not as a pattern (`:256-264`). Port:
-    `tests/baseline/selection-location.test.js:636-651`.
+    `tests/baseline/selection-location.test.ts:636-651`.
 38. A raw-commit saved pin derives `raw-commit` resolution kind without
     resolver access (`:266-278`). Port: `:667-679`.
 39. The resolver log is empty for the raw-commit short-circuit (`:279`).
@@ -212,7 +212,7 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
 
 40. Malformed saved state (`schema_version: 2`) unexpectedly succeeding is
     itself the failure (`:283-295`). **Merged** into the port's
-    `assert.rejects` at `tests/baseline/selection-location.test.js:696-708`,
+    `assert.rejects` at `tests/baseline/selection-location.test.ts:696-708`,
     same rationale as item 7.
 41. The malformed-state diagnostic includes `schema_version must equal
     integer 1` (`:296`). Port: `:696-708`.
@@ -247,7 +247,7 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
 {
   "shellOriginal": 51,
   "portOnly": 0,
-  "ports": { "tests/baseline/selection-location.test.js": 5 }
+  "ports": { "tests/baseline/selection-location.test.ts": 5 }
 }
 ```
 
@@ -258,7 +258,7 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
   invalid-saved-state/safe-display/spw_selection_state; sum:
   2+13+6+5+10+3+12 = 51). See "Divergences from the derived 51" above for why
   this equals, but is not simply copied from, the mechanical grep's 51.
-- Port (`tests/baseline/selection-location.test.js`): 5 static `test(` call
+- Port (`tests/baseline/selection-location.test.ts`): 5 static `test(` call
   sites — one ordinary case for the permission-denied builder, the three
   behavior-ID cases (`SEL-LOCATION-01`, `SEL-PRECEDENCE-REF-01`,
   `SEL-PRECEDENCE-VALIDATE-01`), and one ordinary case for the
@@ -274,3 +274,11 @@ Not a registered behavior ID: `SEL-REF-GENERIC-01` matches no pattern in
   structurally because selection state is read in-process by
   `src/selection-store.ts`; no child Node process or helper path survives.
   47 + 4 = 51.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/baseline/selection-location.test.ts` (5 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

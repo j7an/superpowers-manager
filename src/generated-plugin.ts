@@ -2,9 +2,9 @@ import type { Buffer } from "node:buffer";
 import { lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { posix } from "node:path";
-import { COMMIT_RE } from "./domain/refs.js";
-import { pythonSplitlines, pythonStrip } from "./python-text.js";
-import { parseStrictJson, type JsonValue } from "./strict-json.js";
+import { COMMIT_RE } from "./domain/refs.ts";
+import { pythonSplitlines, pythonStrip } from "./python-text.ts";
+import { parseStrictJson, type JsonValue } from "./strict-json.ts";
 
 export interface GeneratedPluginValidationOptions {
   readonly pluginRoot: string;

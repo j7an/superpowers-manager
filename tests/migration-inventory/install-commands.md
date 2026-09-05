@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh -->
 
-Source read in full (782 lines). Ported to
-`tests/bin/install-commands.test.js`.
+Source read in full (782 lines). Current native port:
+`tests/bin/install-commands.test.ts`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_install_commands` (confirmed by
@@ -13,7 +13,7 @@ This inventory is the evidence that no assertion was dropped.
 
 Shell line references below are `:N` against the deleted
 `tests/test_install_commands.sh`; port line references are `:N` against
-`tests/bin/install-commands.test.js`.
+`tests/bin/install-commands.test.ts`.
 
 **POINTER PROVENANCE — port `:N` pointers.** An item's identity is the
 assertion text it quotes, not its line number; re-derive a pointer from that
@@ -32,7 +32,7 @@ slice 4c.1. The port-only region below is worse: only item 42's pointers were ad
 at `79851ea`; the rest predate slice 4b, when that file was 1270-1472 lines.
 The shell path is absent from the current tree, but every shell `:N` citation
 resolves through `81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh`.
-Nothing in CI reads any of these numbers: `tests/bin/migration-inventory.test.js`
+Nothing in CI reads any of these numbers: `tests/bin/migration-inventory.test.ts`
 validates the `json inventory` block's counts, this file's entry numbering and
 its region structure, and never parses one. Slice 4c.1 settled the last five
 stale-pointer dispositions in the mapped region; none remains there. The
@@ -153,7 +153,7 @@ the manager never creates managed hooks or mutates Codex trust state.
 
 **Channel changed (Task 6, D4, 2026-08-10).** This case now calls
 `runPrepare` in-process through an injected recording adapter
-(`tests/bin/command-context.js`) instead of spawning `scripts/prepare`
+(`tests/bin/command-context.ts`) instead of spawning `scripts/prepare`
 through the SPW_ADAPTER seam. All three items below survive as structural
 claims over the double's own recorded `calls` rather than as reads of
 `adapter.log` or `codex.log` — a channel change, not a behaviour change: the
@@ -219,20 +219,20 @@ already-typed `AdapterResult` object; there is no serialization step between
 the command module and its adapter for a double to corrupt, so nothing can
 reproduce "the adapter emitted invalid JSON" through this seam. The covering
 cases for "an adapter response can be reported as a failure" now live at the
-production layer that still has a real transport — `tests/unit/adapter.test.js`,
+production layer that still has a real transport — `tests/unit/adapter.test.ts`,
 which drives `runAdapter` (the REAL adapter, `src/adapter.ts`) against a
 genuinely unparseable Codex listing. Named explicitly, as Task 6's brief
 requires, rather than described:
 
 - **"the fingerprint view rejects an invalid-UTF-8 plugin listing"**
-  (`tests/unit/adapter.test.js:421-437`) — asserts `envelope.ok === false`,
+  (`tests/unit/adapter.test.ts:421-437`) — asserts `envelope.ok === false`,
   `error.code === "inspect-failed"`, and the exact message
   `cannot parse output of '<codex> plugin list --json'`.
 - **"the ownership view rejects an invalid-UTF-8 plugin listing"**
-  (`tests/unit/adapter.test.js:442-458`) — the same three claims for the
+  (`tests/unit/adapter.test.ts:442-458`) — the same three claims for the
   ownership view, whose fail-open would otherwise be silent.
 - **"install rejects an invalid-UTF-8 marketplace listing without mutating"**
-  (`tests/unit/adapter.test.js:464-485`) — `error.code === "install-failed"`,
+  (`tests/unit/adapter.test.ts:464-485`) — `error.code === "install-failed"`,
   the parse diagnostic for `plugin marketplace list --json`, and
   `deepStrictEqual(await sandbox.commands(), ["plugin marketplace list
   --json"])`, i.e. no mutation followed the unparseable read.
@@ -244,7 +244,7 @@ that the shell's own diagnostic literal, `invalid adapter response`, exists in
 exactly one place in the product — `scripts/core/validate-adapter-response.py:279`,
 a shell-only artefact — so the retired subject has no in-process producer to
 cover. No port `test(`
-call site carries this case any longer; `tests/bin/install-commands.test.js`'s
+call site carries this case any longer; `tests/bin/install-commands.test.ts`'s
 static count dropped by one for it (32 → 30, shared with item 107-111's
 retirement below).
 
@@ -254,18 +254,18 @@ three transport-fault cases. Two exist: this one and "Scenario 8b — malformed
 fingerprint inspection output" below. The transport-fault lever is a fixture
 config that makes the FAKE ADAPTER PROCESS write a bare `{` to stdout, and the
 whole fixture schema offers exactly two — `updateControl: "malformed"`
-(`tests/bin/install-fakes.js:222-226`) and `fingerprintInspect: "malformed"`
-(`tests/bin/install-fakes.js:273-277`). Those are also the only two
+(`tests/bin/install-fakes.ts:222-226`) and `fingerprintInspect: "malformed"`
+(`tests/bin/install-fakes.ts:273-277`). Those are also the only two
 `process.stdout.write("{")` sites anywhere under `tests/bin/`.
-`tests/bin/lifecycle-config.js:38-57` pins the enum surface that can reach
+`tests/bin/lifecycle-config.ts:38-57` pins the enum surface that can reach
 them: `updateControl` accepts `managed`, `unsupported`, `malformed`, `failure`,
 `managed-then-unsupported`; `fingerprintInspect` accepts `ok` and `malformed`.
 The uninstall driver has no such lever at all — its malformed-evidence cases
 write malformed *files*, not malformed adapter transport
-(`tests/bin/lifecycle-config.js:75`). The brief's third was almost certainly
+(`tests/bin/lifecycle-config.ts:75`). The brief's third was almost certainly
 `updateControl: "failure"` ("Failed update-control inspection exits exactly 1",
 items 25-27 below), which emits a well-formed `ok: false` envelope
-(`tests/bin/install-fakes.js:227-241`) rather than a transport fault, and was
+(`tests/bin/install-fakes.ts:227-241`) rather than a transport fault, and was
 therefore CONVERTED rather than retired — the correct disposition. Nothing was
 missed.
 
@@ -456,7 +456,7 @@ narrowing recorded at `uninstall-commands.md:316-329`.
     `assertOrder` items 66 and 67 also cite: its
     `plugin marketplace add ${c.pkg}` needle carries the same package root
     the deleted needle pinned, as the port records at
-    `tests/bin/install-commands.test.js:1085-1088`. Counted shared with
+    `tests/bin/install-commands.test.ts:1085-1088`. Counted shared with
     items 66 and 67.
 66. `plugin marketplace list` precedes `plugin marketplace add <pkg>`
     (`:527`, first `[ ]`). Port: `:1089-1097`.
@@ -471,7 +471,7 @@ narrowing recorded at `uninstall-commands.md:316-329`.
     `assertOrder` items 69 and 70 also cite: its
     `plugin marketplace add ${c.pkg}` needle carries the same package root
     the deleted needle pinned, as the port records at
-    `tests/bin/install-commands.test.js:1114-1117`. Counted shared with
+    `tests/bin/install-commands.test.ts:1114-1117`. Counted shared with
     items 69 and 70.
 69. `plugin marketplace remove superpowers-manager` precedes `plugin
     marketplace add <pkg>` (`:546`, first `[ ]`). Port: `:1118-1126`.
@@ -633,7 +633,7 @@ before the status switch that would otherwise report it).
 `fingerprintInspect: "malformed"` drove the FAKE ADAPTER PROCESS to write a
 bare `{` to stdout — a transport-level fault with no analogue through
 `ctx.adapter`, which returns an already-typed `AdapterResult` with nothing to
-garble in between. `tests/bin/install-commands.test.js`'s static `test(`
+garble in between. `tests/bin/install-commands.test.ts`'s static `test(`
 count dropped by one for this retirement, alongside items 22-24's (32 → 30
 combined).
 
@@ -676,7 +676,7 @@ combined).
     The adapter-log line itself is gone. The claim is witnessed by the
     `assertOrder` call: its `plugin marketplace add ${c.pkg}` needle carries
     the same package root the deleted needle pinned, as the port records at
-    `tests/bin/install-commands.test.js:1524-1528`. No other item names this
+    `tests/bin/install-commands.test.ts:1524-1528`. No other item names this
     call, so this item is counted as its own.
 121. The regenerated provenance carries a `commit` that is a string of
      exactly 40 hex digits (`:759-768`, rule 10). Port: `:1538`, helper at
@@ -691,7 +691,7 @@ combined).
     The adapter-log line itself is gone. The claim is witnessed by the
     `assertOrder` call: its `plugin marketplace add ${c.pkg}` needle carries
     the same package root the deleted needle pinned, as the port records at
-    `tests/bin/install-commands.test.js:1556-1557`. No other item names this
+    `tests/bin/install-commands.test.ts:1556-1557`. No other item names this
     call, so this item is counted as its own.
 
 <!-- inventory:mapped:end -->
@@ -762,8 +762,8 @@ Item 41 extends the shell's install-path provenance check to the update path.
 Item 42 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
 the shell had no in-process subject whose non-spawning could be guarded, so
 there is nothing for it to be additive, non-vacuous, or channel-changed
-*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.js`'s
-`tripwireTriggered` and its callers in `tests/bin/install-fakes.js`.
+*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.ts`'s
+`tripwireTriggered` and its callers in `tests/bin/install-fakes.ts`.
 
 Be precise about what that consumer witnesses, because the obvious reading is
 wrong. A subject that never spawns the adapter cannot, by running correctly,
@@ -794,7 +794,7 @@ Three groups, each verifiable from the port file rather than from this prose:*
 
 - ***The nine `assertNoCodexMutation` emptiness guards at entries 3, 4, 9, 11,
   12, 13, 15, 20 and 34 are gone.*** *Thirteen entries in this list name that
-  guard; `grep -c 'assertNoCodexMutation(readLog' tests/bin/install-commands.test.js`
+  guard; `grep -c 'assertNoCodexMutation(readLog' tests/bin/install-commands.test.ts`
   returns **4**. The four that survive are entries 21, 22, 32 and 38, whose cases
   were not converted. Every one of the nine that is gone belongs to a section
   this file's own Cardinality paragraph lists as converted — 13-15, 16-21, 25-27,
@@ -889,7 +889,7 @@ Three groups, each verifiable from the port file rather than from this prose:*
     thematically closest to, so adding it does not shift any other item's
     pointer. Two things, not one — an exit status alone cannot distinguish
     "refused" from "delegated, then failed" — mirroring
-    `tests/bin/lifecycle-fakes.test.js`'s own precedent for the same subject.
+    `tests/bin/lifecycle-fakes.test.ts`'s own precedent for the same subject.
     Counted as ONE port-only item, as it was when it held three assertions:
     the added half is this item's own non-vacuity guard, not a separate
     claim, and splitting it would move `portOnly` for no change in what the
@@ -1306,7 +1306,7 @@ merge cannot be falsified for one member alone.
 {
   "shellOriginal": 124,
   "portOnly": 42,
-  "ports": { "tests/bin/install-commands.test.js": 31 }
+  "ports": { "tests/bin/install-commands.test.ts": 31 }
 }
 ```
 
@@ -1322,7 +1322,7 @@ merge cannot be falsified for one member alone.
   sum: 6+6+3+4+2+3+3+5+3+3+12+3+3+8+3+3+4+4+3+4+4+2+4+4+3+4+5+4+2+4+3 = 124).
   Unchanged by Task 6: this is a fact about the deleted shell file, not about
   the port.
-- Port (`tests/bin/install-commands.test.js`): **31** static `test(` call
+- Port (`tests/bin/install-commands.test.ts`): **31** static `test(` call
   sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 32 before Task 6, then
   30, now 31), counted with `migration-inventory.test.js`'s own `stripInert` +
   `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. Task 6's drop
@@ -1568,7 +1568,7 @@ merge cannot be falsified for one member alone.
   fresh gate…" (36-38), "Legacy and mixed identity state…" (39-50), and
   "Scenario 3c…" (82-85) sections now asserts a structural claim over an
   injected recording adapter's own recorded calls (Task 6, D4,
-  `tests/bin/command-context.js`) rather than a `readLog(c.adapterLog)` read
+  `tests/bin/command-context.ts`) rather than a `readLog(c.adapterLog)` read
   — each section's own note above states which channel it moved to and why
   no behavioural change accompanies it. Four items (44, 50, 85, and item
   15's Codex-emptiness half — three marked, one argued in prose; see the
@@ -1585,3 +1585,11 @@ merge cannot be falsified for one member alone.
   making the claim strictly stronger. Neither changes the count. The 42
   port-only assertions (41 before Task 9, plus item 42's tripwire case) are
   strictly additive and are excluded from the 124-item accounting above.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/install-commands.test.ts` (31 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

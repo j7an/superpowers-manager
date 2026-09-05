@@ -4,14 +4,14 @@ import {
   COMMIT_INPUT_RE,
   compareStable,
   parseStableTag,
-} from "./domain/refs.js";
-import type { StableVersion } from "./domain/refs.js";
-import { runGit } from "./git.js";
-import type { GitResult } from "./git.js";
-import { SafetyError } from "./safety-error.js";
-import { displaySource } from "./selection.js";
-import type { ResolutionKind } from "./upstream-version.js";
-import { withWorkspace } from "./workspace.js";
+} from "./domain/refs.ts";
+import type { StableVersion } from "./domain/refs.ts";
+import { runGit } from "./git.ts";
+import type { GitResult } from "./git.ts";
+import { SafetyError } from "./safety-error.ts";
+import { displaySource } from "./selection.ts";
+import type { ResolutionKind } from "./upstream-version.ts";
+import { withWorkspace } from "./workspace.ts";
 
 const UNAVAILABLE_OBJECT_RE =
   /not our ref|unadvertised object|couldn't find remote ref/;

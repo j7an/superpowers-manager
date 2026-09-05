@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show f58289ed00b95635ffc4ea589b845ce83a7404ba:tests/test_probe.sh -->
 
-Source read in full (631 lines). Ported to `tests/baseline/probe.test.js`,
-`tests/unit/commands-probe.test.js`, and `tests/unit/status.test.js`.
+Source read in full (631 lines). Current native port: `tests/baseline/probe.test.ts`,
+`tests/unit/commands-probe.test.ts`, and `tests/unit/status.test.ts`.
 
 ## Counting rules applied
 
@@ -98,7 +98,7 @@ executable declaration below.
 ## Notes on two port constructions
 
 **Why the replay-ordering case is driven by an exhausted listing sequence.**
-`tests/baseline/probe.test.js`'s "adapter messages precede the error line on a
+`tests/baseline/probe.test.ts`'s "adapter messages precede the error line on a
 controlled failure" needs a *controlled* adapter failure whose envelope also
 carries messages. The obvious lever, `pluginListRc: 1`, cannot supply one:
 `listingCommand` (`src/adapter.ts:233-242`) logs only the child's **stderr**,
@@ -106,7 +106,7 @@ and the fake writes nothing there when it is merely returning a non-zero
 status, so the envelope carries no messages at all and `error:` lands at index
 0 — an ordering assertion built on it would pass vacuously or fail for the
 wrong reason. Exhausting the configured listing sequence is the failure that
-does write to the child's stderr (`tests/bin/lifecycle-fakes.js:145-167`), so
+does write to the child's stderr (`tests/bin/lifecycle-fakes.ts:145-167`), so
 that one fixture proves both the replay ordering and `nextPluginList`'s
 fail-closed branch: were the fake to repeat its last listing instead, the
 ownership inspection would succeed and the run would exit 0.
@@ -128,11 +128,11 @@ A case that runs probe twice needs four listings, not two.
 ### `test_probe_status`: defensive source display (`:19-22`)
 
 1. An acceptable source passes through `spw_display_source` unchanged
-   (`:19-20`). **Retired**: `tests/unit/selection.test.js:156-160` asserts the
+   (`:19-20`). **Retired**: `tests/unit/selection.test.ts:156-160` asserts the
    identical property of `displaySource`, which is the function
    `src/commands/probe.ts:325` actually calls.
 2. A credential-bearing source renders as `<redacted-source>` (`:21-22`).
-   **Retired**: `tests/unit/selection.test.js:161-164`.
+   **Retired**: `tests/unit/selection.test.ts:161-164`.
 
 ### `test_probe_status`: `spw_status_for_commits` branch order (`:24-31`)
 
@@ -140,12 +140,12 @@ A case that runs probe twice needs four listings, not two.
    generated with no fingerprint, matching generated with a foreign
    fingerprint, stale generated with a matching fingerprint, stale generated
    with a matching short fingerprint, all three equal, and all three equal
-   with a short fingerprint. Port: `tests/unit/status.test.js:39-46`, one
+   with a short fingerprint. Port: `tests/unit/status.test.ts:39-46`, one
    assertion per shell line in the same order.
 
 ### `test_probe_status`: `spw_commit_matches` (`:35-38`)
 
-11. A full SHA matches itself (`:35`). Port: `tests/unit/status.test.js:21`.
+11. A full SHA matches itself (`:35`). Port: `tests/unit/status.test.ts:21`.
 12. A 7-character prefix matches (`:36`). Port: `:22`.
 13. A different commit does not match (`:37`). Port: `:26`.
 14. An empty observed commit never matches (`:38`) — the load-bearing
@@ -154,43 +154,43 @@ A case that runs probe twice needs four listings, not two.
 
 ### `PROV-READER-STRICT-01` strict provenance reader profile (`:43-99`)
 
-Every item in this cluster is retired to `tests/unit/provenance.test.js:55`,
+Every item in this cluster is retired to `tests/unit/provenance.test.ts:55`,
 which this task's traceability re-point makes `PROV-READER-STRICT-01`'s
 selector. The shell marker was a second home for behaviour already ported; no
 new coverage is written for it here.
 
 15. A non-standard JSON constant is rejected (`:47-50`). **Retired**:
-    `tests/unit/provenance.test.js:79-86` rejects `NaN` and `Infinity`.
+    `tests/unit/provenance.test.ts:79-86` rejects `NaN` and `Infinity`.
 16. A document nested 257 deep is rejected (`:52-56`). **Retired**:
-    `tests/unit/provenance.test.js:75-76`.
+    `tests/unit/provenance.test.ts:75-76`.
 17. The depth diagnostic reads `JSON nesting exceeds limit` (`:57`).
     **Retired**: the strict reader's rejection is pinned by item 16's
     citation, which constrains the error class rather than its wording; the
     exact phrase survives only where it is still emitted, and is pinned there
-    by `tests/unit/manifest-overlay.test.js:111` and
-    `tests/baseline/selection-state.test.js:338`.
+    by `tests/unit/manifest-overlay.test.ts:111` and
+    `tests/baseline/selection-state.test.ts:338`.
 18. A document nested 255 deep is accepted and its field read (`:74-75`).
-    **Retired**: `tests/unit/provenance.test.js:71-74`.
+    **Retired**: `tests/unit/provenance.test.ts:71-74`.
 19. A duplicate key resolves to the last occurrence (`:77-78`). **Retired**:
-    `tests/unit/provenance.test.js:60-63`.
+    `tests/unit/provenance.test.ts:60-63`.
 20. A missing field on an empty object reads as empty (`:85`). **Retired**:
-    `tests/unit/provenance.test.js:65`.
+    `tests/unit/provenance.test.ts:65`.
 21. A non-object top level is rejected (`:80-83`). **Retired**:
-    `tests/unit/provenance.test.js:79-86` includes `"[]"`.
+    `tests/unit/provenance.test.ts:79-86` includes `"[]"`.
 22. A document larger than 1 MiB is still read (`:98-99`). **Retired**:
-    `tests/unit/provenance.test.js:99-104`.
+    `tests/unit/provenance.test.ts:99-104`.
 
 ### `PROV-READER-LENIENT-01` lenient commit reader profile (`:101-138`)
 
-Retired to `tests/unit/provenance.test.js:106` for the same reason as the
+Retired to `tests/unit/provenance.test.ts:106` for the same reason as the
 strict cluster above.
 
 23. A non-standard constant yields the empty string (`:105`). **Retired**:
-    `tests/unit/provenance.test.js:120-133`.
+    `tests/unit/provenance.test.ts:120-133`.
 24. A 2000-deep document yields the empty string (`:115`). **Retired**:
-    `tests/unit/provenance.test.js:146-147`.
+    `tests/unit/provenance.test.ts:146-147`.
 25. A duplicate key resolves to the last occurrence (`:117-118`). **Retired**:
-    `tests/unit/provenance.test.js:113-114`.
+    `tests/unit/provenance.test.ts:113-114`.
 26. A document larger than 1 MiB is still read (`:131-132`). **Retired**: the
     lenient unit test has no explicit >1 MiB case; both readers share
     `parseStrictJson`, which imposes no byte limit, and item 22's citation
@@ -198,24 +198,24 @@ strict cluster above.
     the file — it rests on a shared code path rather than on a literal
     counterpart.
 27. A 7-hex commit is not acceptable (`:134`). **Retired**:
-    `tests/unit/provenance.test.js:121`.
+    `tests/unit/provenance.test.ts:121`.
 28. Five malformed or wrong-typed documents each yield the empty string
     (`:137`, a loop counted once per the established "count the loop line,
     not the iterations" convention). **Retired**:
-    `tests/unit/provenance.test.js:120-133`.
+    `tests/unit/provenance.test.ts:120-133`.
 
 ### `test_probe_status`: `spw_generated_commit_or_empty` (`:140-177`)
 
 29. Malformed generated provenance yields the empty string (`:145`). Port:
-    `tests/baseline/probe.test.js`'s "malformed generated provenance reads as
+    `tests/baseline/probe.test.ts`'s "malformed generated provenance reads as
     absent rather than aborting", which asserts `generated_commit=` end to
     end.
 30. A non-string commit yields the empty string (`:148`). **Retired**:
-    `tests/unit/provenance.test.js:120-133` (`'{"commit":42}'`).
+    `tests/unit/provenance.test.ts:120-133` (`'{"commit":42}'`).
 31. A non-commit-shaped string yields the empty string (`:151`). **Retired**:
     same citation.
 32. A valid 40-hex commit is returned (`:154`). Port: every successful case in
-    `tests/baseline/probe.test.js` asserts `generated_commit=<the seeded
+    `tests/baseline/probe.test.ts` asserts `generated_commit=<the seeded
     commit>`.
 33. `spw_generated_metadata_path` does not clobber the caller's `$root`
     (`:160`). **Retired**: structurally impossible in the port —
@@ -226,7 +226,7 @@ strict cluster above.
 35. It does not clobber the caller's `$generated_metadata` (`:162`).
     **Retired**, same rationale.
 36. It prints the expected metadata path (`:163`). **Retired**:
-    `tests/unit/provenance.test.js:207-211`.
+    `tests/unit/provenance.test.ts:207-211`.
 37. `spw_generated_commit_or_empty` does not clobber the caller's `$root`
     (`:168`). **Retired**, same rationale as item 33.
 38. It does not clobber the caller's `$generated_root` (`:169`). **Retired**,
@@ -234,10 +234,10 @@ strict cluster above.
 39. It does not clobber the caller's `$generated_metadata` (`:170`).
     **Retired**, same rationale.
 40. It prints the expected commit (`:171`). **Retired**:
-    `tests/unit/provenance.test.js:202-204`.
+    `tests/unit/provenance.test.ts:202-204`.
 41. An unreadable metadata file reads as empty rather than aborting (`:175`).
     **Retired**: `readGeneratedCommitLenient` routes every read failure
-    through one `catch`, and `tests/unit/provenance.test.js:199-200` pins that
+    through one `catch`, and `tests/unit/provenance.test.ts:199-200` pins that
     catch's result for the absent-file case. A mode-000 file is the same
     branch, and the shell itself guarded the case behind `[ ! -r ]` because it
     does not hold for root.
@@ -247,12 +247,12 @@ strict cluster above.
 42. Malformed installed provenance falls back to the manifest short SHA, with
     the generated tree current and identity `neither` (`:391`, one
     `assert_probe_porcelain` call site bundling six checks). Port:
-    `tests/baseline/probe.test.js`'s "malformed installed metadata falls back
+    `tests/baseline/probe.test.ts`'s "malformed installed metadata falls back
     to the manifest short SHA".
 43. The adapter was invoked as `inspect --view fingerprint` (`:392`).
     **Retired**: the assertion reads the recording `SPW_ADAPTER`'s log, and
     in-process probe calls `runAdapter` as a function — there is no adapter
-    process and no `SPW_ADAPTER` seam. `tests/bin/probe-fakes.js:23-29` turns
+    process and no `SPW_ADAPTER` seam. `tests/bin/probe-fakes.ts:23-29` turns
     any adapter *spawn* into a loud fixture failure, and the view's result
     (`installed_commit`) is asserted by item 42, so "this view ran" is now
     proved by its output rather than by a dispatch log.
@@ -262,7 +262,7 @@ strict cluster above.
     **Retired**, same rationale; the view's result is `update_control`.
 46. The porcelain key list is exactly the seventeen names, in order
     (`:413`, comparing against the literal block at `:395-411`). Port:
-    `tests/baseline/probe.test.js` compares the emitted keys against
+    `tests/baseline/probe.test.ts` compares the emitted keys against
     `PROBE_PORCELAIN_KEYS` imported from `dist/commands/probe.js`, which is
     derived from the one ordered `fields()` table rather than a second
     hand-written list.
@@ -282,13 +282,13 @@ strict cluster above.
     in-process probe creates no invocation workspace of its own, so the
     assertion has no subject left — see port-only item 2. The adapter's own
     workspace lifecycle is `withWorkspace`'s contract, covered by
-    `tests/unit/workspace.test.js`.
+    `tests/unit/workspace.test.ts`.
 
 ### `test_probe_commands`: a saved exact pin is authoritative (`:428-450`)
 
 57. The pinned selection reports the manifest short SHA and stays current
     (`:438`, one `assert_probe_porcelain` call site). Port:
-    `tests/baseline/probe.test.js`'s "a saved exact pin stays authoritative
+    `tests/baseline/probe.test.ts`'s "a saved exact pin stays authoritative
     after its source disappears".
 58. `selection_origin=user-config` (`:439`). Port.
 59. `selection_mode=pinned` (`:440`). Port.
@@ -311,7 +311,7 @@ strict cluster above.
 ### `test_probe_commands`: an environment ref overrides only the ref (`:452-475`)
 
 70. `selection_origin=environment` (`:456`). Port:
-    `tests/baseline/probe.test.js`'s "an environment ref overrides only the
+    `tests/baseline/probe.test.ts`'s "an environment ref overrides only the
     ref side and the saved fields stay visible".
 71. `upstream_source_origin=user-config` (`:457`). Port.
 72. `saved_mode=pinned` (`:458`). Port.
@@ -337,19 +337,19 @@ strict cluster above.
 
 **Narrowing, recorded for honesty (slice 2 fix wave).** The port's
 dash-prefixed source is `join(c.dir, "-upstream")`
-(`tests/baseline/probe.test.js:284`) — an *absolute path* whose basename
+(`tests/baseline/probe.test.ts:284`) — an *absolute path* whose basename
 begins with `-`. `git` therefore never receives a token it could read as an
 option, and the `--` terminator is not load-bearing in these cases. Items
 86-89 are unaffected: they assert selection mode, effective source, and
 `saved_source`, none of which depend on the terminator. Item 90, the one that
 was about `--` placement, is retired below on a structural rationale. The
 case that does put a bare relative `-upstream` on a Git command line is
-`tests/baseline/selection-commands.test.js:504-542`.
+`tests/baseline/selection-commands.test.ts:504-542`.
 
 86. A `track-latest` selection over a dash-prefixed source reports the
     manifest short SHA and stays current (`:494`, one
     `assert_probe_porcelain` call site). Port:
-    `tests/baseline/probe.test.js`'s "a dash-prefixed local source saved by
+    `tests/baseline/probe.test.ts`'s "a dash-prefixed local source saved by
     track-latest stays usable".
 87. `selection_mode=track-latest` (`:495`). Port.
 88. `effective_source` is the dash-prefixed path (`:496`). Port.
@@ -389,9 +389,9 @@ case that does put a bare relative `-upstream` on a Git command line is
     Three nearby suites look like substitutes and are not. Each writes
     `unsupported` into a stubbed adapter *state* to prove a command **refuses
     to act** on it, which is gating, not reporting:
-    `tests/baseline/cli-parity.test.js:1595-1615` (`UPDATE-CONTROL-01`,
-    `update` refuses), `tests/bin/install-commands.test.js:504`/`:536`, and
-    `tests/bin/uninstall-commands.test.js:223`. None of them exercises an
+    `tests/baseline/cli-parity.test.ts:1595-1615` (`UPDATE-CONTROL-01`,
+    `update` refuses), `tests/bin/install-commands.test.ts:504`/`:536`, and
+    `tests/bin/uninstall-commands.test.ts:223`. None of them exercises an
     inspection producing the value.
 93. A malformed update-control inspection is an operational failure
     (`:513-516`). **Retired**: same injection seam, same slice-5 disposition
@@ -401,12 +401,12 @@ case that does put a bare relative `-upstream` on a Git command line is
     envelope for that view rather than an unparseable one. What is *not* lost
     is the general fail-closed property for a malformed inspection response:
     the port drives it through the fingerprint view in
-    `tests/baseline/probe.test.js`'s `PROBE-FAIL-CLOSED-01` clause 2, and the
+    `tests/baseline/probe.test.ts`'s `PROBE-FAIL-CLOSED-01` clause 2, and the
     validator-layer rejection of a truncated envelope is pinned by
     `tests/test_adapter_protocol.py:608-618`.
 94. A malformed `selection.json` fails before Git and adapter access
     (`:540`, one `assert_preflight_failure` call site bundling four checks).
-    Port: `tests/baseline/probe.test.js`'s `PROBE-FAIL-CLOSED-01`, first
+    Port: `tests/baseline/probe.test.ts`'s `PROBE-FAIL-CLOSED-01`, first
     sub-case; the empty-adapter-log check becomes `existsSync(c.codexLog)`
     being false, since the fake `codex` logs every invocation it receives.
 95. An unsupported `schema_version` fails the same way (`:546`). Port: second
@@ -417,7 +417,7 @@ case that does put a bare relative `-upstream` on a Git command line is
 ### `test_probe_commands`: every validated identity state (`:552-572`)
 
 97. `identity_state=manager` (`:557`). Port:
-    `tests/baseline/probe.test.js`'s "probe reports every validated identity
+    `tests/baseline/probe.test.ts`'s "probe reports every validated identity
     state without mutating anything", first row.
 98. `identity_state=legacy` (`:563`). Port: second row.
 99. `identity_state=both` (`:569`). Port: third row. The port adds a fourth
@@ -427,7 +427,7 @@ case that does put a bare relative `-upstream` on a Git command line is
 ### `test_probe_commands` scenario 1b: invalid provenance, valid manifest (`:574-582`)
 
 100. Semantically invalid installed provenance falls through to the manifest
-     fingerprint (`:580`). Port: `tests/baseline/probe.test.js`'s
+     fingerprint (`:580`). Port: `tests/baseline/probe.test.ts`'s
      "semantically invalid installed provenance falls through to the
      manifest".
 101. The adapter was invoked as `inspect --view fingerprint` (`:581`).
@@ -438,7 +438,7 @@ case that does put a bare relative `-upstream` on a Git command line is
 ### `test_probe_commands` scenario 2: no active plugin (`:584-593`)
 
 103. With no active plugin the fingerprint is null and the status is
-     `needs install` (`:591`). Port: `tests/baseline/probe.test.js`'s "no
+     `needs install` (`:591`). Port: `tests/baseline/probe.test.ts`'s "no
      active plugin yields a null fingerprint and needs install".
 104. The adapter was invoked as `inspect --view fingerprint` (`:592`).
      **Retired**, same rationale as item 43.
@@ -448,7 +448,7 @@ case that does put a bare relative `-upstream` on a Git command line is
 ### `test_probe_commands` scenario 2b: no installed manifest (`:595-601`)
 
 106. An absent manifest also yields a null fingerprint (`:599`). Port:
-     `tests/baseline/probe.test.js`'s "an absent installed manifest also
+     `tests/baseline/probe.test.ts`'s "an absent installed manifest also
      yields a null fingerprint".
 107. The adapter was invoked as `inspect --view fingerprint` (`:600`).
      **Retired**, same rationale as item 43.
@@ -459,7 +459,7 @@ case that does put a bare relative `-upstream` on a Git command line is
 
 109. Stale generated provenance outranks a null fingerprint and keeps the
      status at `needs prepare` (`:608`). Port:
-     `tests/baseline/probe.test.js`'s "stale generated provenance outranks a
+     `tests/baseline/probe.test.ts`'s "stale generated provenance outranks a
      null installed fingerprint".
 110. The adapter was invoked as `inspect --view fingerprint` (`:609`).
      **Retired**, same rationale as item 43.
@@ -469,7 +469,7 @@ case that does put a bare relative `-upstream` on a Git command line is
 ### `test_probe_commands` scenario 4: malformed generated provenance (`:612-623`)
 
 112. `desired_commit` still reports (`:617`). Port:
-     `tests/baseline/probe.test.js`'s "malformed generated provenance reads
+     `tests/baseline/probe.test.ts`'s "malformed generated provenance reads
      as absent rather than aborting".
 113. `generated_commit` is empty (`:618`). Port.
 114. `installed_commit` is empty (`:619`). Port.
@@ -506,11 +506,11 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    the full usage block. `PROBE_USAGE` survives as the same
    unreachable-from-CLI duplicate its two siblings carry.
 
-   Ports: `tests/bin/units.test.js` (four `parseArgs` usage-error inputs plus
-   the exact message), `tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01`
+   Ports: `tests/bin/units.test.ts` (four `parseArgs` usage-error inputs plus
+   the exact message), `tests/baseline/cli-parity.test.ts`'s `CLI-USAGE-01`
    (two end-to-end rows, plus a standalone block with `codex` genuinely absent
    that pins the before-preflight ordering), and
-   `tests/unit/commands-probe.test.js:134` ("an unrecognised argument is a
+   `tests/unit/commands-probe.test.ts:134` ("an unrecognised argument is a
    usage error on stderr") for the handler-side duplicate.
 2. The absent invocation workspace. `assert_probe_tmp_empty`
    (`tests/test_probe.sh:377-383`) asserted that the `TMPDIR` handed to
@@ -522,11 +522,11 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    context env a case controls — so an equivalent assertion on the case's own
    `TMPDIR` would be vacuously true no matter what either component did.
    The surviving property, that `withWorkspace` removes what it created, is
-   covered by `tests/unit/workspace.test.js`. Items 56, 69, 91, 102, 105,
+   covered by `tests/unit/workspace.test.ts`. Items 56, 69, 91, 102, 105,
    108, 111, and 118 are retired against this entry.
-3. The `process.exit()` sites in `tests/bin/install-fakes.js` and
-   `tests/bin/uninstall-fakes.js`. PR 11.5 slice 2 extracted only the read
-   side of the three lifecycle fakes into `tests/bin/lifecycle-fakes.js`,
+3. The `process.exit()` sites in `tests/bin/install-fakes.ts` and
+   `tests/bin/uninstall-fakes.ts`. PR 11.5 slice 2 extracted only the read
+   side of the three lifecycle fakes into `tests/bin/lifecycle-fakes.ts`,
    where every response-then-exit site uses `process.exitCode` plus a normal
    return so a pending pipe write cannot be truncated. PR 11.5 slice 4a
    converted the two fakes' remaining *mutation* branches the same way: all
@@ -543,14 +543,14 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    is 31. **"Across both files"** stopped being true when slice 4a's later
    shared-shell extraction moved each fake's `90`/`95`/`96`/`97`/`98`
    branches — five of the 31 per file, ten in all — into five shared sites in
-   `tests/bin/lifecycle-fakes.js`, alongside the shared `94` adapter tripwire
+   `tests/bin/lifecycle-fakes.ts`, alongside the shared `94` adapter tripwire
    that was already `process.exitCode` before the conversion. Twenty-one of
    the 31 stayed put: fourteen in `install-fakes.js`, seven in
    `uninstall-fakes.js`. `install-fakes.js` and `uninstall-fakes.js` both
    cite this inventory at their `:8-9`, which is why the entry is recorded
    here rather than in an install- or uninstall-scoped file.
 
-   `tests/unit/helpers/pipe-flush-child.js` proves the idiom is load-bearing
+   `tests/unit/helpers/pipe-flush-child.ts` proves the idiom is load-bearing
    on a pipe, not cosmetic: a 1 MiB write followed by `process.exit(0)`
    truncates to the 64 KiB POSIX pipe buffer (65536 of 1048576 bytes
    delivered), while the same write followed by `process.exitCode = 0`
@@ -563,7 +563,7 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
 
    **Accepted coverage gap:** no test exercises a converted line itself.
    Both new tests (the pipe-flush mutation proof and the oversized-listing
-   regression guard in `tests/bin/lifecycle-fixture.test.js`) pass with the
+   regression guard in `tests/bin/lifecycle-fixture.test.ts`) pass with the
    slice 4a conversion reverted back to `process.exit()`, because neither
    spawns install-fakes.js/uninstall-fakes.js with a payload sized to exceed
    the pipe buffer through one of the 31 converted branches specifically.
@@ -576,9 +576,9 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    test harness (a fixture bug that would surface as a flaky or wrong-looking
    assertion), not shipped behaviour reaching a real user. This entry
    documents the carried defect and its resolution without a port citation —
-   `tests/bin/lifecycle-fixture.test.js` is not one of this inventory's three
-   port files (`tests/baseline/probe.test.js`, `tests/unit/commands-probe.test.js`,
-   `tests/unit/status.test.js`), so it does not belong in `ports` below.
+   `tests/bin/lifecycle-fixture.test.ts` is not one of this inventory's three
+   port files (`tests/baseline/probe.test.ts`, `tests/unit/commands-probe.test.ts`,
+   `tests/unit/status.test.ts`), so it does not belong in `ports` below.
 
 <!-- inventory:port-only:end -->
 
@@ -593,7 +593,7 @@ Task 6 flipped `DISPATCH.probe` to `in-process` and **deleted nothing**.
 `sh "$root/scripts/probe" --porcelain` and read `identity_state`, `status`,
 and `update_control` back out of the porcelain through `spw_probe_field`.
 The shell driver `tests/test_probe.sh` is deleted in Task 2 of slice 4c after
-its replacement `tests/baseline/probe.test.js` was already landed in slice 2;
+its replacement `tests/baseline/probe.test.ts` was already landed in slice 2;
 the historical source pointers below remain an inventory of what was retired.
 Re-pointing those two callers at the in-process command is also rejected for
 this slice: their lifecycle fakes stub `SPW_ADAPTER`, a seam only
@@ -609,28 +609,28 @@ string in `tests/**/*.js`, because a spawn assumption expressed as
 
 | Bucket | Site | Why |
 |---|---|---|
-| Live shell caller | `scripts/install:18`, `scripts/update:8` | Production; the Task 6 Step 9 guard in `tests/bin/units.test.js` asserts both references, and Step 9a proved it fires |
+| Live shell caller | `scripts/install:18`, `scripts/update:8` | Production; the Task 6 Step 9 guard in `tests/bin/units.test.ts` asserts both references, and Step 9a proved it fires |
 | Live shell caller | `tests/expected_tarball_contents.txt:58` | The script still ships, because those two callers execute it at runtime |
-| Retired shell driver | `tests/test_probe.sh:346`, `:353` | Historical source pointers; the driver is deleted in slice 4c Task 2 and its replacement is `tests/baseline/probe.test.js` |
-| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-ENV-CODEX-PREFLIGHT-01` and the four `CLI-CHILD-STATUS-01` blocks | Re-pointed to `install`, vehicle-only comment added |
-| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-PREFLIGHT-01`'s requirements map | Replaced by a derivation over `commandRequirements()` and `DISPATCH`; the hand-written map encoded dispatch a second time through the presence of `sh` |
-| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `CLI-COMMANDS-01`'s `probe` row | Now takes the in-process branch; given a local upstream, a 40-hex ref, and a listing-answering `codex`, since an `exit 0` stub and the package-default upstream URL are respectively unusable and non-hermetic for a command that actually reads Codex state |
-| Executable spawn assumption | `tests/baseline/cli-parity.test.js` — `PROBE-READONLY-01` | Rewritten, not re-pointed: it drove the real script through an `SPW_ADAPTER` stub that no longer takes effect |
-| Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — `ROUTING_CASES[0]` | Removed; see `bin-dispatch.md` item 7's retirement note |
-| Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — exit-code propagation | Re-pointed to `install`; an in-process command has no child whose status could propagate |
-| Executable spawn assumption | `tests/bin/bin-dispatch.test.js` — the no-registered-handler backstop | Re-pointed to `prepare`: `probe` now has a registered handler, so overriding its dispatch entry no longer reaches the backstop |
-| Executable spawn assumption | `tests/bin/units.test.js:150-169` ("buildSpawn: POSIX executes the script directly") | `buildSpawn` path construction and argv passthrough, re-pointed to `prepare` at this slice. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned. Slice 3.4 replaced the `prepare` literal with a `vehicleCommand(DISPATCH)` derivation, which is why the block no longer names a command |
+| Retired shell driver | `tests/test_probe.sh:346`, `:353` | Historical source pointers; the driver is deleted in slice 4c Task 2 and its replacement is `tests/baseline/probe.test.ts` |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.ts` — `CLI-ENV-CODEX-PREFLIGHT-01` and the four `CLI-CHILD-STATUS-01` blocks | Re-pointed to `install`, vehicle-only comment added |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.ts` — `CLI-PREFLIGHT-01`'s requirements map | Replaced by a derivation over `commandRequirements()` and `DISPATCH`; the hand-written map encoded dispatch a second time through the presence of `sh` |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.ts` — `CLI-COMMANDS-01`'s `probe` row | Now takes the in-process branch; given a local upstream, a 40-hex ref, and a listing-answering `codex`, since an `exit 0` stub and the package-default upstream URL are respectively unusable and non-hermetic for a command that actually reads Codex state |
+| Executable spawn assumption | `tests/baseline/cli-parity.test.ts` — `PROBE-READONLY-01` | Rewritten, not re-pointed: it drove the real script through an `SPW_ADAPTER` stub that no longer takes effect |
+| Executable spawn assumption | `tests/bin/bin-dispatch.test.ts` — `ROUTING_CASES[0]` | Removed; see `bin-dispatch.md` item 7's retirement note |
+| Executable spawn assumption | `tests/bin/bin-dispatch.test.ts` — exit-code propagation | Re-pointed to `install`; an in-process command has no child whose status could propagate |
+| Executable spawn assumption | `tests/bin/bin-dispatch.test.ts` — the no-registered-handler backstop | Re-pointed to `prepare`: `probe` now has a registered handler, so overriding its dispatch entry no longer reaches the backstop |
+| Executable spawn assumption | `tests/bin/units.test.ts:150-169` ("buildSpawn: POSIX executes the script directly") | `buildSpawn` path construction and argv passthrough, re-pointed to `prepare` at this slice. A pure path computation, so it kept passing while asserting the spawn path of a command that is no longer spawned. Slice 3.4 replaced the `prepare` literal with a `vehicleCommand(DISPATCH)` derivation, which is why the block no longer names a command |
 | Historical prose | `src/commands/probe.ts` (7 sites), `src/effective-selection.ts:70`, `:91` | Provenance citations into the shell original, which still exists, so every citation still resolves |
 | Historical prose | `tests/migration-inventory/probe.md`, `install-commands.md:746`, `:760`, `selection-state.md:237` | The migration record of what the shell did |
-| Historical prose | `tests/unit/commands-probe.test.js:70`, `:77`, `:106`; `tests/baseline/probe.test.js:4`, `:155`, `:234`, `:398`; `tests/bin/probe-fakes.js:4`; `tests/baseline/selection-location.test.js:26`, `:788` | Comments citing the shell original as the source of a ported contract |
+| Historical prose | `tests/unit/commands-probe.test.ts:70`, `:77`, `:106`; `tests/baseline/probe.test.ts:4`, `:155`, `:234`, `:398`; `tests/bin/probe-fakes.ts:4`; `tests/baseline/selection-location.test.ts:26`, `:788` | Comments citing the shell original as the source of a ported contract |
 | Historical prose | `AGENTS.md:46` | "Keep `scripts/probe` read-only" still binds the surviving script, and `PROBE-READONLY-01` now holds the same property for the in-process command |
 
-`tests/bin/units.test.js:18-22` (`parseArgs(["probe", "--porcelain"])`), `:88`
+`tests/bin/units.test.ts:18-22` (`parseArgs(["probe", "--porcelain"])`), `:88`
 (the no-argument `run` loop), and `:194-199` (`preflight("probe", …)` must
 report `codex`) mention `probe` and are deliberately unchanged: `parseArgs` is
 dispatch-independent, and `COMMAND_REQUIREMENTS.probe` keeps `codex` — only
 `python3` left it.
-`tests/bin/bin-dispatch.test.js`'s "missing codex blocks `probe`" case also
+`tests/bin/bin-dispatch.test.ts`'s "missing codex blocks `probe`" case also
 stays on `probe`: it is the end-to-end net for that same requirement row, not
 a spawn vehicle. See the note on `bin-dispatch.md` items 42-44.
 
@@ -653,9 +653,9 @@ inspect the shell original.
   "shellOriginal": 118,
   "portOnly": 3,
   "ports": {
-    "tests/baseline/probe.test.js": 14,
-    "tests/unit/commands-probe.test.js": 11,
-    "tests/unit/status.test.js": 4
+    "tests/baseline/probe.test.ts": 14,
+    "tests/unit/commands-probe.test.ts": 11,
+    "tests/unit/status.test.ts": 4
   }
 }
 ```
@@ -669,12 +669,12 @@ inspect the shell original.
   2+8+4+8+6+13+15+13+16+6+5+3+3+3+3+3+7 = 118). See "Divergences from the
   derived 113" above for the full +16/-11/net5 derivation from the mechanical
   113.
-- Ports: `tests/baseline/probe.test.js` has 14 static `test(` call sites (the
+- Ports: `tests/baseline/probe.test.ts` has 14 static `test(` call sites (the
   hermeticity guard on the shared case environment, seven end-to-end scenario
   cases, the identity matrix, `PROBE-FAIL-CLOSED-01`, the unusable-Codex
   diagnostic case, and the replay-ordering/sequence-exhaustion case);
-  `tests/unit/commands-probe.test.js` has 11 (formatting, arity, the frozen
-  key list, and `replayEnvelope`); `tests/unit/status.test.js` has 4
+  `tests/unit/commands-probe.test.ts` has 11 (formatting, arity, the frozen
+  key list, and `replayEnvelope`); `tests/unit/status.test.ts` has 4
   (`commitMatches` and `statusForCommits`).
 - Reconciliation: 71 of the 118 shell items are mapped into those ports; the
   rest are **47 retired items** (1-2, 15-28, 30-31, 33-41, 43-45, 56, 68-69,
@@ -685,3 +685,11 @@ inspect the shell original.
   removal of the `SPW_ADAPTER` seam the assertion read through, naming the
   suite that still covers the underlying behaviour. 71 + 47 = 118. Plus 3
   port-only assertions with no shell counterpart.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/baseline/probe.test.ts` (14 static `test(` call sites); `tests/unit/commands-probe.test.ts` (11 static `test(` call sites); `tests/unit/status.test.ts` (4 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

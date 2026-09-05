@@ -122,9 +122,10 @@ tag recovery, or any other registry mutation.
 The pinned reusable publisher:
 
 1. checks out and validates the release tag;
-2. runs the caller command that enables Corepack, installs the frozen root
-   dependencies, builds `dist/cli.js`, and runs `sh tests/container.sh`;
-3. packs once and validates the allowlist;
+2. runs the CI caller command that installs the frozen root dependencies,
+   checks native TypeScript, and runs `sh tests/container.sh`;
+3. invokes `node tests/tools/pack.ts --out-dir .` once, compiling production
+   source in external temporary staging and validating the real package allowlist;
 4. continues the existing OIDC publish, registry verification, `npx`
    verification, and GitHub Release flow.
 
@@ -145,23 +146,45 @@ Run locally while iterating:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm run build
-pnpm run check
+pnpm run check:static
 sh tests/run.sh
-sh tests/container.sh
-npm pack --dry-run --json
-node --test tests/bin/npm-pack-contents.test.js
+SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh
+SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
+node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
+node --import ./tests/assert-matcher-gate.ts --test tests/bin/npm-pack-contents.test.ts tests/baseline/packaged-cli.test.ts
 git diff --check
 ```
 
-`pnpm run build` deletes `dist/` before compiling, so each verification run
-discards the previously generated output and regenerates it from source.
+Use Homebrew-managed pnpm by command name locally, without Corepack.
+Native source, tests, and packaging tooling require Node >=24.12.0; the installed
+package retains Node >=24. Static checking emits nothing into the checkout.
+Allocate the packaging command's existing output directory outside the checkout
+for developer verification. The command emits npm-compatible PackReport JSON,
+validates the actual tarball, and cleans its own external staging.
 
-The dependency-free `prepack` guard intentionally rejects packing when `dist/cli.js` is absent; it never builds the package implicitly.
+The dependency-free source `prepack` guard rejects bare checkout `npm pack`
+unconditionally, including absent or stale `dist/`, with explicit-command
+guidance. The staged package omits only that source guard. The protected
+publisher uses the same command with `--out-dir .`: its sealed tarball may briefly
+reside in the checkout before the publisher moves it to its artifact directory.
+Loose generated JavaScript remains external. This does not create an alternate
+release or approval path.
 
-The container suite is authoritative for Node 24 TypeScript checks and the real
-Codex CLI in an isolated offline home. The package assertion must expose only
-the manager executable and approved source allowlist.
+Run the two container endpoints sequentially. `SPW_NATIVE_NODE_VERSION` accepts
+only `24.12.0` and `24`, defaulting to `24`. Both run the native TypeScript suite
+and the real Codex CLI in an isolated offline home. Each image copies and
+smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
+`SPW_PACKAGE_NODE_VERSION`, then runs the installed package's emitted JavaScript
+with both that binary and the native harness binary. The minimum binary never
+runs TypeScript or installs dependencies during offline acceptance.
+
+PR CI runs focused native compatibility at Node 24.12.0 and one full container
+at latest Node 24. Static no-emit checking, tooling coverage, and historical
+citations run only on the latest-24 checkout entry. Release acceptance retains
+static checking and both offline container endpoints before the shared
+publisher's `pack-command` produces the tarball.
+The package assertion must expose only the manager executable and approved
+source allowlist.
 
 ### Pre-publication approval
 

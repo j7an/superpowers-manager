@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh -->
 
-Source read in full (457 lines). Ported to
-`tests/bin/uninstall-commands.test.js`.
+Source read in full (457 lines). Current native port:
+`tests/bin/uninstall-commands.test.ts`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_uninstall_commands` (confirmed by
@@ -13,7 +13,7 @@ This inventory is the evidence that no assertion was dropped.
 
 Shell line references below are `:N` against the deleted
 `tests/test_uninstall_commands.sh`; port line references are `:N` against
-`tests/bin/uninstall-commands.test.js`.
+`tests/bin/uninstall-commands.test.ts`.
 
 **POINTER PROVENANCE — port `:N` pointers.** An item's identity is the
 assertion text it quotes, not its line number; re-derive a pointer from that
@@ -32,7 +32,7 @@ worse: only item 21's pointers were added at `79851ea`; the rest predate slice
 current tree, but every shell `:N` citation resolves through
 `81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh`.
 Nothing in CI reads any of these numbers:
-`tests/bin/migration-inventory.test.js` validates the `json inventory` block's
+`tests/bin/migration-inventory.test.ts` validates the `json inventory` block's
 counts, this file's entry numbering and its region structure, and never parses
 one. Some items below mark their own pointer stale.
 
@@ -96,12 +96,12 @@ port reads `ROOT` rather than the copied package root.
 1. The public uninstall path contains no Codex-adapter implementation or
    environment seam (`:9-12`). Slice 4c re-anchors this gate onto the live
    `src/commands/uninstall.ts` source and checks `runAdapter` / `SPW_ADAPTER`,
-   beside `tests/unit/ctx-adapter-provenance.test.js`'s no-`runAdapter` import
+   beside `tests/unit/ctx-adapter-provenance.test.ts`'s no-`runAdapter` import
    gate. The old `scripts/adapters/codex/lib.sh` needle was inert because that
-   path did not exist. Port: `tests/bin/uninstall-commands.test.js`.
+   path did not exist. Port: `tests/bin/uninstall-commands.test.ts`.
 2. Shared lifecycle code names neither `SPW_PLUGIN_ID` nor
    `SPW_MARKETPLACE_NAME` (`:13-16`). Slice 4c re-anchors the same claim onto
-   live source `src/lifecycle.ts`. Port: `tests/bin/uninstall-commands.test.js`.
+   live source `src/lifecycle.ts`. Port: `tests/bin/uninstall-commands.test.ts`.
 
 ### Selection-independent recovery (`:162-190`)
 
@@ -110,7 +110,7 @@ must not prevent owned-resource removal and verification.
 
 **Channel changed (Task 6, D4, 2026-08-10).** Calls `runUninstall`
 in-process through an injected recording adapter
-(`tests/bin/command-context.js`) rather than spawning `scripts/uninstall`
+(`tests/bin/command-context.ts`) rather than spawning `scripts/uninstall`
 through the SPW_ADAPTER seam in `intercept` mode. The `updateControl:
 "unsupported"` fixture config is gone with it: `runUninstall`
 (`src/commands/uninstall.ts`) never calls `gatherProbe` and structurally
@@ -119,7 +119,7 @@ install/update, it does not route through probe — so item 5's claim is now a
 fact about which operations the double answers (ownership and uninstall
 only) rather than about a fixture value that used to make a fake adapter
 refuse to answer that call. The malformed selection.json and the git-less
-PATH are KEPT in the port (`tests/bin/uninstall-commands.test.js:332-345`)
+PATH are KEPT in the port (`tests/bin/uninstall-commands.test.ts:332-345`)
 for the property the case is named for — "selection-independent" — even
 though the in-process double does not route through either mechanism; see
 the port's own comment for why that is still meaningful documentation.
@@ -161,9 +161,9 @@ shell driver asserted no closing-note text at all — item 6 covers only
 `uninstall complete` — so within the 1:1 mapping there is nothing for the new
 wording to diverge *from*. And the assertion that pins the new wording,
 *"the two closing lines port verbatim except for the prepare invocation"*, lives
-in `tests/unit/commands-uninstall.test.js`, which is not this inventory's port
-file (`tests/bin/migration-inventory.test.js`'s `DECLARED` maps
-`uninstall-commands.md` to `tests/bin/uninstall-commands.test.js` alone).
+in `tests/unit/commands-uninstall.test.ts`, which is not this inventory's port
+file (`tests/bin/migration-inventory.test.ts`'s `DECLARED` maps
+`uninstall-commands.md` to `tests/bin/uninstall-commands.test.ts` alone).
 Neither `shellOriginal`, `portOnly` nor `ports` moves.
 
 ### Missing python3: clear requirement error, no Codex calls (`:192-212`)
@@ -227,7 +227,7 @@ longer proves PRODUCTION, that the real adapter emits that text for a missing
 binary. That half is covered independently, and was verified against the tree
 rather than assumed:
 
-- `tests/unit/adapter.test.js:532-546` asserts that `mapCodexLaunchFailure`
+- `tests/unit/adapter.test.ts:532-546` asserts that `mapCodexLaunchFailure`
   throws a failure whose `message` equals
   `` `required Codex command not found: ${codexBin}` `` for both `ENOENT` and
   `EACCES`; that literal is at `:542`.
@@ -300,7 +300,7 @@ those claims re-anchor onto `codex.log` rather than converting to a double.
 real fake-adapter/fake-Codex pipeline)". Keeping `runScript` is still true; what
 `runScript` launches is not. Task 8's flip retargeted it to*
 `process.execPath bin/superpowers-manager.js <command>`
-*(`tests/bin/lifecycle-fixture.js:341-346`), and `src/cli.ts:73` dispatches*
+*(`tests/bin/lifecycle-fixture.ts:341-346`), and `src/cli.ts:73` dispatches*
 `uninstall` *in-process, so this case's subject is `src/commands/uninstall.ts`
 and the fake adapter is not in its path at all — which this file's own port-only
 item 21 asserts directly, on this same scenario, by requiring the adapter log to
@@ -363,7 +363,7 @@ they are not reinstated:
   would not have caught it either.
 
 See the port's own comment in the "both present" case
-(`tests/bin/uninstall-commands.test.js`) for the same argument at the call
+(`tests/bin/uninstall-commands.test.ts`) for the same argument at the call
 site.
 
 **Reachable by `dist/` mutation as of Task 8's flip. This paragraph said the
@@ -375,13 +375,13 @@ while the shell is still the dispatched subject, a case that exercises the shell
 is exactly what this file should keep."* That was accurate at Task 6 and is
 false now. `runScript` launches
 `process.execPath bin/superpowers-manager.js uninstall`
-(`tests/bin/lifecycle-fixture.js:341-346`), which loads `dist/cli.js`, and
+(`tests/bin/lifecycle-fixture.ts:341-346`), which loads `dist/cli.js`, and
 `src/cli.ts:73` dispatches `uninstall` in-process — so a `dist/**/*.js` mutation
 sample **does** reach this case. **No future mutation sweep may skip it on this
 paragraph's authority.** The same correction applies to the "Missing Codex"
 section, which this paragraph paired itself with: its converted case calls
 `runUninstall` imported from `dist/commands/uninstall.js`
-(`tests/bin/uninstall-commands.test.js:46-48`), so it is inside `dist/`'s reach
+(`tests/bin/uninstall-commands.test.ts:46-48`), so it is inside `dist/`'s reach
 too. See that section for where its production-side witnesses live.
 
 24. The invocation TMPDIR is left empty — no leaked workspace or adapter
@@ -541,7 +541,7 @@ later task to act on, and Task 6 is that later task acting on it — see the
     filters the adapter log for `uninstall --`, it asserts
     `ownershipInspections(codex) === 1`. The pointer is correct; the
     sentence describes an assertion that no longer exists.
-    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    `tests/bin/uninstall-commands.test.ts:170-186` states the accepted gap
     in terms. Re-deriving the claim is out of scope here.
 47. No remove command reaches Codex (`:326`). Port: `:725`, helper at
     `:152-159`.
@@ -555,7 +555,7 @@ later task to act on, and Task 6 is that later task acting on it — see the
     filters the adapter log for `uninstall --`, it asserts
     `ownershipInspections(codex) === 1`. The pointer is correct; the
     sentence describes an assertion that no longer exists.
-    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    `tests/bin/uninstall-commands.test.ts:170-186` states the accepted gap
     in terms. Re-deriving the claim is out of scope here.
 50. No remove command reaches Codex (`:338`). Port: `:743`.
 
@@ -568,7 +568,7 @@ later task to act on, and Task 6 is that later task acting on it — see the
     filters the adapter log for `uninstall --`, it asserts
     `ownershipInspections(codex) === 1`. The pointer is correct; the
     sentence describes an assertion that no longer exists.
-    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    `tests/bin/uninstall-commands.test.ts:170-186` states the accepted gap
     in terms. Re-deriving the claim is out of scope here.
 53. No remove command reaches Codex (`:350`). Port: `:761`.
 54. Output contains `cannot parse output of` (`:351`,
@@ -584,7 +584,7 @@ later task to act on, and Task 6 is that later task acting on it — see the
     filters the adapter log for `uninstall --`, it asserts
     `ownershipInspections(codex) === 1`. The pointer is correct; the
     sentence describes an assertion that no longer exists.
-    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    `tests/bin/uninstall-commands.test.ts:170-186` states the accepted gap
     in terms. Re-deriving the claim is out of scope here.
 57. No remove command reaches Codex (`:365`). Port: `:784`.
 
@@ -597,7 +597,7 @@ later task to act on, and Task 6 is that later task acting on it — see the
     filters the adapter log for `uninstall --`, it asserts
     `ownershipInspections(codex) === 1`. The pointer is correct; the
     sentence describes an assertion that no longer exists.
-    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    `tests/bin/uninstall-commands.test.ts:170-186` states the accepted gap
     in terms. Re-deriving the claim is out of scope here.
 60. No remove command reaches Codex (`:377`). Port: `:802`.
 61. Output contains `cannot parse output of` (`:378`). Port: `:804-807`.
@@ -611,7 +611,7 @@ later task to act on, and Task 6 is that later task acting on it — see the
     filters the adapter log for `uninstall --`, it asserts
     `ownershipInspections(codex) === 1`. The pointer is correct; the
     sentence describes an assertion that no longer exists.
-    `tests/bin/uninstall-commands.test.js:170-186` states the accepted gap
+    `tests/bin/uninstall-commands.test.ts:170-186` states the accepted gap
     in terms. Re-deriving the claim is out of scope here.
 64. No remove command reaches Codex (`:392`). Port: `:825`.
 
@@ -705,8 +705,8 @@ empty log there is a fixture fault, never a legitimate state.
 Item 21 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
 the shell had no in-process subject whose non-spawning could be guarded, so
 there is nothing for it to be additive, non-vacuous, or channel-changed
-*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.js`'s
-`tripwireTriggered` and its callers in `tests/bin/uninstall-fakes.js`.
+*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.ts`'s
+`tripwireTriggered` and its callers in `tests/bin/uninstall-fakes.ts`.
 
 Be precise about what that consumer witnesses, because the obvious reading is
 wrong. A subject that never spawns the adapter cannot, by running correctly,
@@ -769,7 +769,7 @@ and seam.
     thematically closest to, so adding it does not shift any other item's
     pointer. Two things, not one — an exit status alone cannot distinguish
     "refused" from "delegated, then failed" — mirroring
-    `tests/bin/lifecycle-fakes.test.js`'s own precedent for the same subject.
+    `tests/bin/lifecycle-fakes.test.ts`'s own precedent for the same subject.
     Counted as ONE port-only item, as it was when it held three assertions:
     the added half is this item's own non-vacuity guard, not a separate
     claim, and splitting it would move `portOnly` for no change in what the
@@ -1031,7 +1031,7 @@ rows O1-O3.
 {
   "shellOriginal": 83,
   "portOnly": 21,
-  "ports": { "tests/bin/uninstall-commands.test.js": 19 }
+  "ports": { "tests/bin/uninstall-commands.test.ts": 19 }
 }
 ```
 
@@ -1043,7 +1043,7 @@ rows O1-O3.
   malformed-marketplace-list, 5 remove-noop, 5 verify-after-drift, 9
   marketplace-remove-fails; sum:
   2+4+3+4+4+6+12+4+4+4+3+4+3+4+3+5+5+9 = 83).
-- Port (`tests/bin/uninstall-commands.test.js`): **19** static `test(` call
+- Port (`tests/bin/uninstall-commands.test.ts`): **19** static `test(` call
   sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 18 before Task 9), one
   per shell scenario plus one port-only case with no shell scenario at all
   (17 `reset` call sites, the source-guard block at `:9-16` which precedes the
@@ -1108,3 +1108,11 @@ rows O1-O3.
   count. The 21 port-only assertions (20 before Task 9, plus item 21's
   tripwire case) are strictly additive and are excluded from the 83-item
   arithmetic above.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/uninstall-commands.test.ts` (19 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

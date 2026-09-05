@@ -1,15 +1,15 @@
 import { tmpdir } from "node:os";
-import { oneLine } from "../cli-arguments.js";
-import { isTagRef, normalizeCommitInput } from "../domain/refs.js";
+import { oneLine } from "../cli-arguments.ts";
+import { isTagRef, normalizeCommitInput } from "../domain/refs.ts";
 import {
   loadSavedSelection,
   selectionStatePath,
   UPSTREAM_URL_DEFAULT,
-} from "../effective-selection.js";
-import { normalizePinnedArguments, validateSource } from "../selection.js";
-import { writeSelectionState } from "../selection-store.js";
-import { resolveExactTag, verifyRawCommit } from "../upstream.js";
-import type { CommandContext } from "./context.js";
+} from "../effective-selection.ts";
+import { normalizePinnedArguments, validateSource } from "../selection.ts";
+import { writeSelectionState } from "../selection-store.ts";
+import { resolveExactTag, verifyRawCommit } from "../upstream.ts";
+import type { CommandContext } from "./context.ts";
 
 // The one success shape pin can produce, carried out of the try in runPin
 // below so the confirmation write happens only once resolution and the state

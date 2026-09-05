@@ -1,9 +1,9 @@
 import { lstat, unlink } from "node:fs/promises";
-import { oneLine } from "../cli-arguments.js";
-import { selectionStatePath } from "../effective-selection.js";
-import { selectionError } from "../selection.js";
-import { readConfigRef } from "../upstream.js";
-import type { CommandContext } from "./context.js";
+import { oneLine } from "../cli-arguments.ts";
+import { selectionStatePath } from "../effective-selection.ts";
+import { selectionError } from "../selection.ts";
+import { readConfigRef } from "../upstream.ts";
+import type { CommandContext } from "./context.ts";
 
 const NOT_REGULAR =
   "selection state path is not a regular file; remove it manually after inspecting";

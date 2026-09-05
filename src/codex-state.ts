@@ -1,12 +1,12 @@
 import { readFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { COMMIT_INPUT_RE } from "./domain/refs.js";
-import { SafetyError } from "./safety-error.js";
+import { COMMIT_INPUT_RE } from "./domain/refs.ts";
+import { SafetyError } from "./safety-error.ts";
 import {
   parseStrictJson,
   type JsonValue,
   type StrictJsonProfile,
-} from "./strict-json.js";
+} from "./strict-json.ts";
 
 const INSTALLED_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",

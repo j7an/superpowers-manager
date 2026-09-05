@@ -5,9 +5,9 @@ import {
   normalizePinnedArguments,
   normalizeSaved,
   validateSource,
-} from "./selection.js";
-import { readSelectionState, writeSelectionState } from "./selection-store.js";
-import { oneLine, parseFlags, UsageError } from "./cli-arguments.js";
+} from "./selection.ts";
+import { readSelectionState, writeSelectionState } from "./selection-store.ts";
+import { oneLine, parseFlags, UsageError } from "./cli-arguments.ts";
 
 const COMMAND_FLAGS = {
   read: ["path", "output"],

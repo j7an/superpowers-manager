@@ -1,18 +1,19 @@
+#!/usr/bin/env node
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { runAdapter } from "./adapter.js";
-import { oneLine } from "./cli-arguments.js";
-import type { CommandContext } from "./commands/context.js";
-import { runInstall } from "./commands/install.js";
-import { runPin } from "./commands/pin.js";
-import { runPrepare } from "./commands/prepare.js";
-import { runProbe } from "./commands/probe.js";
-import { runTrackLatest } from "./commands/track-latest.js";
-import { runUninstall } from "./commands/uninstall.js";
-import { runUnpin } from "./commands/unpin.js";
-import { runUpdate } from "./commands/update.js";
-import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
-import { configurationErrors } from "./validator.js";
+import { runAdapter } from "./adapter.ts";
+import { oneLine } from "./cli-arguments.ts";
+import type { CommandContext } from "./commands/context.ts";
+import { runInstall } from "./commands/install.ts";
+import { runPin } from "./commands/pin.ts";
+import { runPrepare } from "./commands/prepare.ts";
+import { runProbe } from "./commands/probe.ts";
+import { runTrackLatest } from "./commands/track-latest.ts";
+import { runUninstall } from "./commands/uninstall.ts";
+import { runUnpin } from "./commands/unpin.ts";
+import { runUpdate } from "./commands/update.ts";
+import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.ts";
+import { configurationErrors } from "./validator.ts";
 
 type Subcommand =
   | "pin"
