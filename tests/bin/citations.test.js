@@ -1001,6 +1001,21 @@ void test("applyFixEdits canonicalizes an accepted leading-zero citation in one 
 
 const TOOL = fileURLToPath(new URL("../tools/citations.mjs", import.meta.url));
 
+/** @param {string} root
+ * @param {string[]} args
+ */
+function runCitationTool(root, args) {
+  const result = spawnSync(process.execPath, [TOOL, ...args], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_CITATIONS_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null, "the tool was killed at the harness bound");
+  assert.equal(result.status, 0, result.stderr);
+  return result;
+}
+
 void test("the --fix CLI dispatch rewrites a scratch root, never the repository", () => {
   const root = fixture({
     "src/x.ts": TARGET,
@@ -1009,14 +1024,7 @@ void test("the --fix CLI dispatch rewrites a scratch root, never the repository"
     "tests/unit/.keep": "",
     "tests/lib/.keep": "",
   });
-  const result = spawnSync(process.execPath, [TOOL, "--fix"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, SPW_CITATIONS_ROOT: root },
-    timeout: 30000,
-  });
-  assert.equal(result.signal, null, "the tool was killed at the harness bound");
-  assert.equal(result.status, 0, result.stderr);
+  const result = runCitationTool(root, ["--fix"]);
   assert.match(result.stdout, /rewrote 1 citations in 1 files/);
   assert.equal(
     readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
@@ -1172,14 +1180,7 @@ void test("the --report CLI dispatch prints the unverified count", () => {
     "tests/unit/.keep": "",
     "tests/lib/.keep": "",
   });
-  const result = spawnSync(process.execPath, [TOOL, "--report"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, SPW_CITATIONS_ROOT: root },
-    timeout: 30000,
-  });
-  assert.equal(result.signal, null, "the tool was killed at the harness bound");
-  assert.equal(result.status, 0, result.stderr);
+  const result = runCitationTool(root, ["--report"]);
   assert.match(
     result.stdout,
     /^citations=1 unanchored=0 deadReferent=0 unverified=0 failing=0\n/,
@@ -1198,14 +1199,7 @@ void test("the --report CLI dispatch counts an unverified historical citation", 
     "tests/unit/.keep": "",
     "tests/lib/.keep": "",
   });
-  const result = spawnSync(process.execPath, [TOOL, "--report"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, SPW_CITATIONS_ROOT: root },
-    timeout: 30000,
-  });
-  assert.equal(result.signal, null, "the tool was killed at the harness bound");
-  assert.equal(result.status, 0, result.stderr);
+  const result = runCitationTool(root, ["--report"]);
   assert.match(
     result.stdout,
     /^citations=1 unanchored=0 deadReferent=0 unverified=1 failing=0\n/,
@@ -1221,14 +1215,7 @@ void test("the --suggest CLI dispatch proposes without writing", () => {
     "tests/lib/.keep": "",
   });
   const before = readFileSync(join(root, "tests", "bin", "a.js"), "utf8");
-  const result = spawnSync(process.execPath, [TOOL, "--suggest"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, SPW_CITATIONS_ROOT: root },
-    timeout: 30000,
-  });
-  assert.equal(result.signal, null, "the tool was killed at the harness bound");
-  assert.equal(result.status, 0, result.stderr);
+  const result = runCitationTool(root, ["--suggest"]);
   assert.match(result.stdout, /src\/x\.ts:2::/);
   assert.equal(
     readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
@@ -1255,18 +1242,7 @@ void test("the --suggest CLI dispatch keeps --at separate from the optional pref
     ["tests/bin", "--at", at],
     ["--at", at, "tests/bin"],
   ]) {
-    const result = spawnSync(process.execPath, [TOOL, "--suggest", ...args], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, SPW_CITATIONS_ROOT: root },
-      timeout: 30000,
-    });
-    assert.equal(
-      result.signal,
-      null,
-      "the tool was killed at the harness bound",
-    );
-    assert.equal(result.status, 0, result.stderr);
+    const result = runCitationTool(root, ["--suggest", ...args]);
     assert.match(
       result.stdout,
       new RegExp(`git show ${sha}:old\\.sh:1::begin`),
