@@ -1,5 +1,16 @@
 #!/usr/bin/env node
 
+// Spawned by REF-PIN-CLEANUP-01 in
+// tests/baseline/selection-commands.test.ts. Calls runPin against a real
+// fixture repository while a fake `git` on this process's PATH hangs the
+// inner raw-commit verification fetch (see FAKE_GIT_PIN_SIGNAL_BODY in the
+// test file), so the parent can interrupt this process — and, via its own
+// process group, the hung fetch descendant too — with a real POSIX signal.
+// Ports the child half of
+// `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:301-330::start_new_session=True`, the same shape
+// tests/baseline/ref-resolution-signal-child.ts already uses for
+// fetchExactCommit.
+
 import { runPin } from "../../src/commands/pin.ts";
 
 const [root, ref] = process.argv.slice(2);

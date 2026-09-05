@@ -168,7 +168,7 @@ export function findLiteralActionPinSnapshots(paths: string[]): string[] {
 }
 
 /**
- * Extract the action target from a `uses:` value, dropping any `
+ * Extract the action target from a `uses:` value, dropping any `@ref`.
  */
 export function usesTarget(value: unknown, path: string): string {
   if (typeof value !== "string") {

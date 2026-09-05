@@ -34,7 +34,7 @@ const SOURCE_EXTENSIONS = [".js", ".mjs", ".cjs", ".ts"];
 const JAVASCRIPT = /\.(?:js|mjs|cjs)$/;
 
 // Layer 4 (tests/container.sh) runs this suite inside an image built with
-// `COPY . .`, and .dockerignore deliberately excludes `.git`. The three legs
+// `COPY . .`, and .dockerignore deliberately excludes `.git`. The four legs
 // below that ask git which files are version-controlled have no answer there:
 // a container image is a copy of a checkout, not a checkout. The path-list
 // identity leg reads package.json only and runs everywhere.

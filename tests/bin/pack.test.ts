@@ -23,9 +23,24 @@ import {
   runPackDriver,
   startPackDriver,
   stopPackProcess,
+  type PackEvent,
 } from "./pack-fixture.ts";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
+
+async function settlePackCleanup(
+  events: Awaited<ReturnType<typeof listenPackEvents>>,
+  runs: readonly ReturnType<typeof startPackDriver>[],
+  pids: readonly (number | undefined)[],
+): Promise<void> {
+  await Promise.allSettled([
+    ...pids.map(async (pid) => {
+      if (pid !== undefined) stopPackProcess(pid);
+    }),
+    ...runs.map((run) => run.closed),
+    events.close(),
+  ]);
+}
 
 for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) {
   void test(
@@ -46,10 +61,12 @@ for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) {
       );
       const events = await listenPackEvents(f);
       const run = startPackDriver(f);
-      const ready = await events.next();
-      assert.equal(ready.event, "writer-ready");
-      assert.equal(typeof ready.writerPid, "number");
+      let ready: PackEvent | undefined;
       try {
+        const active = await events.next();
+        ready = active;
+        assert.equal(active.event, "writer-ready");
+        assert.equal(typeof active.writerPid, "number");
         run.child.kill(signal);
         const result = await run.closed;
         assert.equal(result.signal, signal, result.stderr);
@@ -59,11 +76,11 @@ for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) {
           false,
           "no subprocess may follow cancellation",
         );
-        assert.throws(() => process.kill(ready.writerPid!, 0), {
+        assert.throws(() => process.kill(active.writerPid!, 0), {
           code: "ESRCH",
           message: /ESRCH/,
         });
-        assert.throws(() => process.kill(ready.pid, 0), {
+        assert.throws(() => process.kill(active.pid, 0), {
           code: "ESRCH",
           message: /ESRCH/,
         });
@@ -86,11 +103,11 @@ for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) {
           "caller artifact",
         );
       } finally {
-        for (const pid of [ready.writerPid!, ready.pid, run.child.pid!]) {
-          stopPackProcess(pid);
-        }
-        await run.closed;
-        await events.close();
+        await settlePackCleanup(
+          events,
+          [run],
+          [ready?.writerPid, ready?.pid, run.child.pid],
+        );
       }
     },
   );
@@ -109,14 +126,16 @@ void test(
     );
     const events = await listenPackEvents(f);
     const run = startPackDriver(f);
-    const ready = await events.next();
-    assert.equal(ready.event, "writer-ready");
+    let ready: PackEvent | undefined;
     try {
+      const active = await events.next();
+      ready = active;
+      assert.equal(active.event, "writer-ready");
       run.child.kill("SIGTERM");
       const result = await run.closed;
       assert.equal(result.signal, "SIGTERM", result.stderr);
       assert.equal(result.stdout, "");
-      assert.throws(() => process.kill(ready.writerPid!, 0), {
+      assert.throws(() => process.kill(active.writerPid!, 0), {
         code: "ESRCH",
         message: /ESRCH/,
       });
@@ -135,11 +154,11 @@ void test(
         "caller artifact",
       );
     } finally {
-      for (const pid of [ready.writerPid!, ready.pid, run.child.pid!]) {
-        stopPackProcess(pid);
-      }
-      await run.closed;
-      await events.close();
+      await settlePackCleanup(
+        events,
+        [run],
+        [ready?.writerPid, ready?.pid, run.child.pid],
+      );
     }
   },
 );
@@ -157,9 +176,11 @@ void test(
     );
     const events = await listenPackEvents(f);
     const run = startPackDriver(f);
-    const ready = await events.next();
-    assert.equal(ready.event, "writer-ready");
+    let ready: PackEvent | undefined;
     try {
+      const active = await events.next();
+      ready = active;
+      assert.equal(active.event, "writer-ready");
       run.child.kill("SIGTERM");
       const result = await run.closed;
       assert.equal(result.signal, "SIGTERM", result.stderr);
@@ -168,7 +189,7 @@ void test(
         result.stderr,
         /cannot confirm package child process group exit/,
       );
-      assert.throws(() => process.kill(ready.writerPid!, 0), {
+      assert.throws(() => process.kill(active.writerPid!, 0), {
         code: "ESRCH",
         message: /ESRCH/,
       });
@@ -187,11 +208,11 @@ void test(
         "caller artifact",
       );
     } finally {
-      for (const pid of [ready.writerPid!, ready.pid, run.child.pid!]) {
-        stopPackProcess(pid);
-      }
-      await run.closed;
-      await events.close();
+      await settlePackCleanup(
+        events,
+        [run],
+        [ready?.writerPid, ready?.pid, run.child.pid],
+      );
     }
   },
 );
@@ -214,33 +235,37 @@ void test(
     const f = makePackFixture(t);
     packValidatorMode(f, "barrier");
     const events = await listenPackEvents(f);
-    t.after(() => events.close());
     const runs = [startPackDriver(f), startPackDriver(f)];
-    t.after(() => {
-      for (const run of runs) run.child.kill("SIGKILL");
-    });
-    assert.equal((await events.next()).event, "ready");
-    assert.equal((await events.next()).event, "ready");
-    events.release();
-    const results = await Promise.all(runs.map((run) => run.closed));
-    assert.deepEqual(
-      results
-        .map((result) => result.code)
-        .sort((a, b) => (a ?? -1) - (b ?? -1)),
-      [0, 1],
-    );
-    const winner = results.find((result) => result.code === 0)!;
-    const loser = results.find((result) => result.code !== 0)!;
-    assert.equal(loser.stdout, "");
-    assert.match(loser.stderr, /cannot deliver packaged artifact/);
-    const [report] = JSON.parse(winner.stdout);
-    const target = join(f.out, report.filename);
-    assert.deepEqual(readdirSync(f.out), [report.filename]);
-    assert.match(
-      execFileSync("tar", ["-tf", target], { encoding: "utf8" }),
-      /package\/dist\/cli.js/,
-    );
-    assert.deepEqual(readdirSync(f.temp), []);
+    try {
+      assert.equal((await events.next()).event, "ready");
+      assert.equal((await events.next()).event, "ready");
+      events.release();
+      const results = await Promise.all(runs.map((run) => run.closed));
+      assert.deepEqual(
+        results
+          .map((result) => result.code)
+          .sort((a, b) => (a ?? -1) - (b ?? -1)),
+        [0, 1],
+      );
+      const winner = results.find((result) => result.code === 0)!;
+      const loser = results.find((result) => result.code !== 0)!;
+      assert.equal(loser.stdout, "");
+      assert.match(loser.stderr, /cannot deliver packaged artifact/);
+      const [report] = JSON.parse(winner.stdout);
+      const target = join(f.out, report.filename);
+      assert.deepEqual(readdirSync(f.out), [report.filename]);
+      assert.match(
+        execFileSync("tar", ["-tf", target], { encoding: "utf8" }),
+        /package\/dist\/cli.js/,
+      );
+      assert.deepEqual(readdirSync(f.temp), []);
+    } finally {
+      await settlePackCleanup(
+        events,
+        runs,
+        runs.map((run) => run.child.pid),
+      );
+    }
   },
 );
 
