@@ -430,7 +430,11 @@ The manual probe is opt-in and covers native-only compatibility residue such as
 path/cache and version-precedence behavior against an intentionally real local
 Codex install. It is not part of acceptance. GitHub Actions runs both the
 toolchain check and the blocking container acceptance command on pull requests
-and pushes to `main`.
+and pushes to `main`. The `toolchain` job runs `pnpm run check:static` plus the
+tooling-coverage and citations suites, preserving checks that need a Git
+checkout and history. The `test` job runs the full suite and Codex offline
+probe in the container. When adding checks that require the host checkout,
+ensure the `toolchain` job covers them too.
 
 ## Repository layout
 
