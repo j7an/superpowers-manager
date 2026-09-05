@@ -1,16 +1,18 @@
-import { cp, mkdir, rm, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { mkdir, stat } from "node:fs/promises";
+import { dirname, join, sep } from "node:path";
 
-import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
+import { failureResult, type AdapterOutcome } from "../adapter-result.ts";
 import { atomicReplaceDir } from "../atomic.ts";
 import { oneLine } from "../cli-arguments.ts";
+import {
+  codexPreparationLocation,
+  prepareCodexCandidateWithBuild,
+  resolveFromCwd,
+  validateCodexPreparationBeforeFetch,
+} from "../codex-prepare.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
 import { runGit } from "../git.ts";
-import { readManifest } from "../hooks.ts";
-import { writeProvenance } from "../provenance.ts";
 import { SafetyError } from "../safety-error.ts";
-import type { ResolutionKind } from "../upstream-version.ts";
-import { manifestVersionForRef } from "../upstream-version.ts";
 import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
 import {
   BOUNDED_EXECUTABLE,
@@ -26,30 +28,7 @@ import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
 
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:64-67::spw_require_upstream_path "$cache/skills`, via spw_require_upstream_path. Order is the shell's;
-// the first miss wins.
-const REQUIRED_UPSTREAM = [
-  { path: "skills", label: "skills/" },
-  { path: "LICENSE", label: "LICENSE" },
-  { path: "README.md", label: "README.md" },
-  { path: "CODE_OF_CONDUCT.md", label: "CODE_OF_CONDUCT.md" },
-] as const;
-
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:73-77::spw_copy_path_if_present "$cache/skills`. Same names on both sides.
-const COPY_PATHS = [
-  "skills",
-  "assets",
-  "LICENSE",
-  "README.md",
-  "CODE_OF_CONDUCT.md",
-] as const;
-
-const RESOLUTION_KINDS: readonly ResolutionKind[] = [
-  "latest-release",
-  "tag",
-  "ref",
-  "raw-commit",
-];
+export { readUpstreamManifestVersion } from "../codex-prepare.ts";
 
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
@@ -59,28 +38,10 @@ function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
 }
 
-// `[ -e ]` — follows symlinks, so a dangling link is absent to the shell too.
-// Two call sites, each mirroring a distinct `-e` in the shell: the
-// REQUIRED_UPSTREAM loop
-// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:53-59::spw_require_upstream_path`
-// — e.g. skills/ is a directory, not a regular file) and copyPathIfPresent's
-// guard (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:44-51::spw_copy_path_if_present`). The `.git`
-// check below is NOT a third site: it needs `-d` (F1), not `-e`, and uses
-// directoryExists instead.
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// `[ -f ]` — regular file. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:42::missing`, :80, and :108 all use -f, and
+// `[ -f ]` — regular file. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` uses -f, and
 // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
-// template bytes and non-file rejection" asserts a DIRECTORY passed as
-// SUPERPOWERS_MANIFEST_TEMPLATE is rejected before any adapter build. A
-// stat-only predicate would accept it.
+// template bytes and non-file rejection" also covers the separately extracted
+// fallback check.
 async function regularFileExists(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isFile();
@@ -102,68 +63,14 @@ async function directoryExists(path: string): Promise<boolean> {
   }
 }
 
-// mkdir, cp, and rm throw raw ErrnoExceptions. Every prepare-owned call goes
-// through here so the message on the stream is this module's, not Node's.
+// mkdir throws raw ErrnoExceptions. Every command-owned call goes through here
+// so the message on the stream is this module's, not Node's.
 async function owned<T>(message: string, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (cause) {
     throw prepareError(message, cause);
   }
-}
-
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/common.sh:44-51::spw_copy_path_if_present`.
-// `cp -R` copies symlinks AS symlinks;
-// fs.cp's default rewrites relative link targets against the destination,
-// which would change what the adapter's containment checks see.
-async function copyPathIfPresent(
-  source: string,
-  destination: string,
-): Promise<void> {
-  if (!(await pathExists(source))) return;
-  await owned(`cannot clear candidate path: ${destination}`, () =>
-    rm(destination, { recursive: true, force: true }),
-  );
-  await owned(`cannot copy upstream path into candidate: ${source}`, () =>
-    cp(source, destination, { recursive: true, verbatimSymlinks: true }),
-  );
-}
-
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:17-24::case "$cache_parent`. Only cache_parent and plugin_root are resolved against
-// the invocation cwd; manifest_template (:14) is not.
-function resolveFromCwd(value: string, cwd: string): string {
-  return isAbsolute(value) ? value : resolve(cwd, value);
-}
-
-// readManifest (`src/hooks.ts:113::readManifest`) owns the read and the parse completely: byte
-// read so invalid UTF-8 is rejected rather than replaced, cause dropped, three
-// hand-written messages naming the path, object check included. Its
-// diagnostics are pinned by
-// `tests/unit/hooks.test.ts:95::void test("readManifest diagnostics`. This wrapper adds only
-// the `version` type check.
-export async function readUpstreamManifestVersion(
-  path: string,
-): Promise<string> {
-  const manifest = await readManifest(path);
-  const value = manifest.version;
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:56-62::for part in dotted_key.split`
-  // — absent key and JSON null both yield "".
-  if (value === undefined || value === null) return "";
-  if (typeof value !== "string") {
-    // The shell stringified any other type through Python's print()
-    // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value`), so `"version": 6` became "6" and flowed into both the
-    // provenance record and --upstream-manifest-version. Fail closed instead.
-    // Spec divergence 7.
-    throw prepareError(`upstream manifest version is not a string: ${path}`);
-  }
-  return value;
-}
-
-function asResolutionKind(value: string): ResolutionKind {
-  for (const kind of RESOLUTION_KINDS) {
-    if (kind === value) return kind;
-  }
-  throw prepareError(`unknown upstream resolution kind: ${value}`);
 }
 
 // Each stream's marker goes to that stream's own destination, so a reader of either
@@ -252,19 +159,10 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
     env.SUPERPOWERS_CACHE_DIR || join(ctx.root, ".cache", "upstream"),
     cwd,
   );
-  const pluginRoot = resolveFromCwd(
-    env.SUPERPOWERS_PLUGIN_ROOT || join(ctx.root, "plugins", "superpowers"),
-    cwd,
-  );
-  const manifestTemplate =
-    env.SUPERPOWERS_MANIFEST_TEMPLATE ||
-    join(
-      ctx.root,
-      "plugins",
-      "superpowers",
-      ".codex-plugin",
-      "plugin.template.json",
-    );
+  const pluginRoot = codexPreparationLocation({
+    root: ctx.root,
+    env,
+  }).destinationRoot;
   const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const cache = join(cacheParent, "superpowers");
@@ -286,11 +184,17 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
       });
       const candidate = join(workspace, "superpowers");
       const selection = await computeEffectiveSelection(ctx.root, env);
-      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:42::missing` — `[ -f ]`.
-      if (!(await regularFileExists(manifestTemplate))) {
-        return failed(
-          `missing fallback manifest template: ${manifestTemplate}`,
-        );
+      const prefetch = await validateCodexPreparationBeforeFetch({
+        root: ctx.root,
+        env,
+      });
+      if (!prefetch.outcome.ok) {
+        return {
+          kind: "failed",
+          outcomes: [prefetch.outcome],
+          validator: NO_VALIDATOR_OUTPUT,
+          message: null,
+        };
       }
       await owned(`cannot create directory: ${cacheParent}`, () =>
         mkdir(cacheParent, { recursive: true }),
@@ -347,96 +251,63 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         );
       }
 
-      for (const required of REQUIRED_UPSTREAM) {
-        // spw_require_upstream_path is `[ -e ]`, not `[ -f ]`: skills/ is a
-        // directory.
-        if (!(await pathExists(join(cache, required.path)))) {
-          return failed(`required upstream path missing: ${required.label}`);
-        }
-      }
-
-      await owned(`cannot clear candidate root: ${candidate}`, () =>
-        rm(candidate, { recursive: true, force: true }),
+      let rawBuildOutcome: AdapterOutcome | null = null;
+      const prepared = await prepareCodexCandidateWithBuild(
+        {
+          upstreamRoot: cache,
+          workspaceRoot: workspace,
+          candidateRoot: candidate,
+          selection,
+        },
+        { root: ctx.root, env },
+        async (input, adapterContext) => {
+          try {
+            const result = await ctx.adapter(
+              [
+                "build",
+                "--upstream-root",
+                input.upstreamRoot,
+                "--candidate-root",
+                input.candidateRoot,
+                "--requested-ref",
+                input.requestedRef,
+                "--resolved-ref",
+                input.resolvedRef,
+                "--commit",
+                input.commit,
+                "--manager-version",
+                input.managerVersion,
+                "--upstream-manifest-version",
+                input.upstreamManifestVersion,
+                "--fallback-manifest",
+                input.fallbackManifest,
+              ],
+              adapterContext,
+            );
+            rawBuildOutcome = result.outcome;
+            return result;
+          } catch {
+            return failureResult(
+              "build",
+              "invocation-failed",
+              "cannot build the generated plugin candidate",
+              [],
+              [],
+            );
+          }
+        },
       );
-      await owned(`cannot create candidate root: ${candidate}`, () =>
-        mkdir(join(candidate, ".codex-plugin"), { recursive: true }),
-      );
-      for (const name of COPY_PATHS) {
-        await copyPathIfPresent(join(cache, name), join(candidate, name));
-      }
-
-      const upstreamManifest = join(cache, ".codex-plugin", "plugin.json");
-      let upstreamManifestVersion = "";
-      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:80::if [ -f` — `[ -f ]`.
-      if (await regularFileExists(upstreamManifest)) {
-        upstreamManifestVersion =
-          await readUpstreamManifestVersion(upstreamManifest);
-      }
-
-      await writeProvenance(join(candidate, ".superpowers-upstream.json"), {
-        source: selection.effectiveSource,
-        requested_ref: selection.requestedRef,
-        resolved_ref: selection.resolvedRef,
-        commit: selection.desiredCommit,
-        upstream_manifest_version: upstreamManifestVersion,
-      });
-
-      const managerVersion = manifestVersionForRef({
-        requestedRef: selection.requestedRef,
-        resolutionKind: asResolutionKind(selection.resolutionKind),
-        resolvedRef: selection.resolvedRef,
-        commit: selection.desiredCommit,
-      });
-
-      let built: AdapterResult;
-      try {
-        built = await ctx.adapter(
-          [
-            "build",
-            "--upstream-root",
-            cache,
-            "--candidate-root",
-            candidate,
-            "--requested-ref",
-            selection.requestedRef,
-            "--resolved-ref",
-            selection.resolvedRef,
-            "--commit",
-            selection.desiredCommit,
-            "--manager-version",
-            managerVersion,
-            "--upstream-manifest-version",
-            upstreamManifestVersion,
-            "--fallback-manifest",
-            manifestTemplate,
-          ],
-          { root: ctx.root, env },
-        );
-      } catch {
-        // ctx.adapter reports CONTROLLED failures by return value
-        // (`src/adapter-result.ts:32-35::export interface AdapterResult`) but still THROWS for a
-        // non-AdapterFailure cause (runAdapter's closing `throw cause`,
-        // src/adapter.ts). That cause is by construction the one failure
-        // src/adapter.ts declined to own, so its text must never reach
-        // ctx.stderr. Caught here rather than in runPrepare's outer catch,
-        // the same treatment
-        // `src/commands/probe.ts:205-228::It does still THROW for a non-AdapterFailure cause`
-        // gives it.
-        return failed("cannot build the generated plugin candidate");
-      }
-      const outcomes = [built.outcome];
-      if (built.status !== 0 || !built.outcome.ok) {
+      const outcomes: readonly AdapterOutcome[] = prepared.outcome.ok
+        ? [rawBuildOutcome!]
+        : [prepared.outcome];
+      if (prepared.status !== 0 || !prepared.outcome.ok) {
         return {
           kind: "failed",
           outcomes,
           validator: NO_VALIDATOR_OUTPUT,
-          // replayOutcome emits the adapter's own error and hints; a second
-          // line here would duplicate them. The `ok && status !== 0`
-          // combination cannot arise from successResult/failureResult, so it
-          // gets its own hand-written message rather than a silent replay.
-          message: built.outcome.ok
-            ? "adapter reported failure without an error outcome"
-            : null,
+          // The extracted result owns both controlled failures and the
+          // defensive success/status mismatch, so replay it exactly once.
+          message: null,
         };
       }
 

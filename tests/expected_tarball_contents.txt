@@ -11,6 +11,7 @@ dist/atomic.js
 dist/cli-arguments.js
 dist/cli.js
 dist/codex-json.js
+dist/codex-prepare.js
 dist/codex-state.js
 dist/commands/context.js
 dist/commands/install.js
@@ -26,6 +27,7 @@ dist/domain/refs.js
 dist/effective-selection.js
 dist/generated-plugin.js
 dist/git.js
+dist/harness.js
 dist/hooks.js
 dist/lifecycle.js
 dist/manifest-overlay.js
