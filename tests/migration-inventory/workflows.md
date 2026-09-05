@@ -876,7 +876,7 @@ the reconciliation arithmetic in "Cardinality" below.
    requires only the Monday 06:00 UTC schedule and manual trigger, top-level
    `permissions: {}`, one reusable-only job with exactly `contents`,
    `pull-requests`, and `statuses` write access, the shared-workflows updater
-   target, inherited secrets, and `minimum_release_age_days: 5`. Adding the
+   target, only the Release Bot key, and `minimum_release_age_days: 5`. Adding the
    expected ninth external target and sixth shared-workflows target before
    creating the caller drove the test RED with `ENOENT`; the completed caller
    returned the workflow suite to 24/24 GREEN. Separate cron, job-permission,
@@ -1267,3 +1267,12 @@ After all 31 mutations were applied, observed RED, and restored:
 `git status -sb` reported a clean tree (only the branch line), and `git
 diff --stat` was empty repository-wide — confirmed both immediately after
 each individual restoration and once more after the complete sweep.
+
+## Issue 110 CI correction
+
+Zizmor rejected the updater caller's blanket secret inheritance. The caller
+now forwards only `RELEASE_BOT_PRIVATE_KEY`, following the existing tag-release
+caller and the reusable updater's declared secret contract. The semantic test
+was changed first and failed on `inherit`; the explicit mapping passes. This
+clarifies port-only item 7 without changing any inventory counts. The corrected
+secret contract and accompanying digest are submitted for reviewer re-freeze.

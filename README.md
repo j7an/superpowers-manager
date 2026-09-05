@@ -393,7 +393,7 @@ the shared updater bypasses that waiting period and discloses it in the PR.
 Major upgrades remain a manual decision; the lockfile is not updated by this
 workflow.
 
-The caller inherits `RELEASE_BOT_PRIVATE_KEY` and uses
+The caller forwards only `RELEASE_BOT_PRIVATE_KEY` and uses
 `vars.RELEASE_BOT_APP_ID` for App-authored PRs that can trigger CI. Keep both
 configured. After adopting the caller, verify a manual run's App authentication
 and inspect any resulting PR before treating live integration as validated.

@@ -16,4 +16,5 @@ jobs:
     uses: j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml@8aafcda9817cace8993dd7d356457bda549e5f74 # v4.6.0
     with:
       minimum_release_age_days: 5
-    secrets: inherit
+    secrets:
+      RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}

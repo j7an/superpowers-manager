@@ -393,7 +393,9 @@ void test("pnpm packageManager updates delegate on the weekly and manual trigger
     usesTarget(update.uses, "jobs.update.uses"),
     "j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml",
   );
-  assert.equal(update.secrets, "inherit");
+  assert.deepEqual(update.secrets, {
+    RELEASE_BOT_PRIVATE_KEY: "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}",
+  });
   assert.deepEqual(update.with, { minimum_release_age_days: 5 });
 });
 
