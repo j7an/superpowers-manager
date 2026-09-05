@@ -48,6 +48,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { capture, notCalledAdapter } from "../lib/command-doubles.js";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SIGNAL_CHILD = fileURLToPath(
@@ -376,15 +377,6 @@ function assertOnlySiblingKept(workspace) {
   assert.equal(readFileSync(join(workspace, "sibling"), "utf8"), "keep\n");
 }
 
-// None of pin/unpin/track-latest ever calls ctx.adapter (none of their
-// source modules even imports runAdapter), so freshContext's ctx.adapter is
-// a throwing stand-in: a loud failure instead of a silent pass-through if
-// that ever changes.
-/** @returns {Promise<never>} */
-async function notCalledAdapter() {
-  throw new Error("ctx.adapter must not be called by this command path");
-}
-
 /**
  * A fresh `SUPERPOWERS_CONFIG_DIR`, plus a `CommandContext` bound to it and
  * to a given `SUPERPOWERS_UPSTREAM_URL`. `root` is `ROOT` throughout this
@@ -400,32 +392,16 @@ async function notCalledAdapter() {
 function freshContext(label, envOverrides) {
   const configDir = mkdtempSync(join(SCRATCH, `${label}-config-`));
   const statePath = join(configDir, "selection.json");
-  const outChunks = /** @type {string[]} */ ([]);
-  const errChunks = /** @type {string[]} */ ([]);
+  const stdout = capture();
+  const stderr = capture();
   const ctx = {
     root: ROOT,
     env: { SUPERPOWERS_CONFIG_DIR: configDir, ...envOverrides },
-    stdout: /** @type {any} */ ({
-      write: (/** @type {string} */ s) => {
-        outChunks.push(s);
-        return true;
-      },
-    }),
-    stderr: /** @type {any} */ ({
-      write: (/** @type {string} */ s) => {
-        errChunks.push(s);
-        return true;
-      },
-    }),
+    stdout: stdout.stream,
+    stderr: stderr.stream,
     adapter: notCalledAdapter,
   };
-  return {
-    configDir,
-    statePath,
-    ctx,
-    stdout: { text: () => outChunks.join("") },
-    stderr: { text: () => errChunks.join("") },
-  };
+  return { configDir, statePath, ctx, stdout, stderr };
 }
 
 /**
@@ -560,10 +536,11 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     });
     await runPin(["v1.0.0"], ctx); // establish a "before" state
     const before = readFileSync(statePath, "utf8");
-    const errCtx = { ...ctx, stderr: makeCapture() };
+    const stderr = capture();
+    const errCtx = { ...ctx, stderr: stderr.stream };
     const status = await runPin(["v9.9.9"], errCtx);
     assert.equal(status, 1); // :196
-    assert.match(errCtx.stderr.text(), /upstream tag not found: v9\.9\.9/); // :197
+    assert.match(stderr.text(), /upstream tag not found: v9\.9\.9/); // :197
     assert.equal(readFileSync(statePath, "utf8"), before); // :198
   }
 
@@ -580,17 +557,15 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     // Exact-tag transport failure. :200-206
     {
       const missingUpstream = join(SCRATCH, "missing-upstream");
+      const stderr = capture();
       const failCtx = {
         ...ctx,
         env: { ...ctx.env, SUPERPOWERS_UPSTREAM_URL: missingUpstream },
-        stderr: makeCapture(),
+        stderr: stderr.stream,
       };
       const status = await runPin(["v1.0.0"], failCtx);
       assert.equal(status, 1); // :204
-      assert.match(
-        failCtx.stderr.text(),
-        /cannot query exact upstream tag v1\.0\.0/,
-      ); // :205
+      assert.match(stderr.text(), /cannot query exact upstream tag v1\.0\.0/); // :205
       assert.equal(readFileSync(statePath, "utf8"), before); // :206
     }
 
@@ -598,15 +573,13 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     {
       const missingCommit = "a".repeat(40);
       const rawTmp = mkdtempSync(join(SCRATCH, "raw-missing-"));
-      const failCtx = { ...ctx, stderr: makeCapture() };
+      const stderr = capture();
+      const failCtx = { ...ctx, stderr: stderr.stream };
       const status = await withTmpdir(rawTmp, () =>
         runPin([missingCommit], failCtx),
       );
       assert.equal(status, 1); // :214
-      assert.match(
-        failCtx.stderr.text(),
-        /source cannot supply requested commit/,
-      ); // :215
+      assert.match(stderr.text(), /source cannot supply requested commit/); // :215
       assert.equal(readFileSync(statePath, "utf8"), before); // :216
       assertWorkspaceParentEmpty(rawTmp); // :217
     }
@@ -614,12 +587,13 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     // Raw-commit blob-object rejection. :219-227
     {
       const rawTmp = mkdtempSync(join(SCRATCH, "raw-blob-"));
-      const failCtx = { ...ctx, stderr: makeCapture() };
+      const stderr = capture();
+      const failCtx = { ...ctx, stderr: stderr.stream };
       const status = await withTmpdir(rawTmp, () =>
         runPin([blobCommit], failCtx),
       );
       assert.equal(status, 1); // :224
-      assert.match(failCtx.stderr.text(), /requested object is not a commit/); // :225
+      assert.match(stderr.text(), /requested object is not a commit/); // :225
       assert.equal(readFileSync(statePath, "utf8"), before); // :226
       assertWorkspaceParentEmpty(rawTmp); // :227
     }
@@ -627,12 +601,13 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     // Raw-commit annotated-tag-object rejection. :229-237
     {
       const rawTmp = mkdtempSync(join(SCRATCH, "raw-tag-object-"));
-      const failCtx = { ...ctx, stderr: makeCapture() };
+      const stderr = capture();
+      const failCtx = { ...ctx, stderr: stderr.stream };
       const status = await withTmpdir(rawTmp, () =>
         runPin([annotatedTagObject], failCtx),
       );
       assert.equal(status, 1); // :234
-      assert.match(failCtx.stderr.text(), /requested object is not a commit/); // :235
+      assert.match(stderr.text(), /requested object is not a commit/); // :235
       assert.equal(readFileSync(statePath, "utf8"), before); // :236
       assertWorkspaceParentEmpty(rawTmp); // :237
     }
@@ -642,7 +617,8 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       const fakeBin = mkdtempSync(join(SCRATCH, "fetch-failure-bin-"));
       installFakeGit(fakeBin, FAKE_GIT_TRANSPORT_FAILURE_BODY);
       const rawTmp = mkdtempSync(join(SCRATCH, "raw-transport-"));
-      const failCtx = { ...ctx, stderr: makeCapture() };
+      const stderr = capture();
+      const failCtx = { ...ctx, stderr: stderr.stream };
       const status = await withFakeGitPath(
         fakeBin,
         { [FAKE_GIT_REAL_VAR]: realGitPath() },
@@ -650,10 +626,8 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       );
       assert.equal(status, 1); // :257
       assert.ok(
-        failCtx.stderr
-          .text()
-          .includes(`cannot fetch requested commit from ${repo}`),
-        failCtx.stderr.text(),
+        stderr.text().includes(`cannot fetch requested commit from ${repo}`),
+        stderr.text(),
       ); // :258
       assert.equal(readFileSync(statePath, "utf8"), before); // :259
       assertWorkspaceParentEmpty(rawTmp); // :260
@@ -695,27 +669,6 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     );
   }
 });
-
-/**
- * A minimal writable-stream stand-in that records every chunk written to it.
- * Typed `any` at the boundary (the same convention
- * tests/unit/helpers/command-harness.js's `capture` uses): it is deliberately
- * not shaped like the full `NodeJS.WritableStream` interface `ctx.stdout`/
- * `ctx.stderr` declare, only like the `write` method every handler in
- * src/commands/*.ts actually calls.
- * @returns {any}
- */
-function makeCapture() {
-  /** @type {string[]} */
-  const chunks = [];
-  return {
-    write: (/** @type {string} */ s) => {
-      chunks.push(s);
-      return true;
-    },
-    text: () => chunks.join(""),
-  };
-}
 
 // A fixed script body, containing no test-controlled value: the log/marker
 // paths and the real git binary reach it only through the
@@ -870,7 +823,7 @@ void test("pin's writer revalidates saved state after Git verification and rejec
         : '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}';
     const fakeBin = mkdtempSync(join(SCRATCH, `race-bin-${conflict}-`));
     installFakeGit(fakeBin, FAKE_GIT_RACE_BODY);
-    const errCtx = { ...ctx, stderr: makeCapture() };
+    const errCtx = { ...ctx, stderr: capture().stream };
     const status = await withFakeGitPath(
       fakeBin,
       {
@@ -903,7 +856,7 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
     const status = await withFakeGitPath(
       guardBin,
       { [FAKE_GIT_REAL_VAR]: realGitPath(), [FAKE_GIT_LOG_VAR]: gitLog },
-      () => runPin(["v1.0.0"], { ...ctx, stderr: makeCapture() }),
+      () => runPin(["v1.0.0"], { ...ctx, stderr: capture().stream }),
     );
     return { status, gitLog, statePath };
   }
@@ -937,17 +890,15 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
     const gitLog = join(configDir, "git.log");
     const guardBin = mkdtempSync(join(SCRATCH, "state-guard-bin-source-"));
     installFakeGit(guardBin, FAKE_GIT_LOG_AND_FORWARD_BODY);
-    const errCtx = { ...ctx, stderr: makeCapture() };
+    const stderr = capture();
+    const errCtx = { ...ctx, stderr: stderr.stream };
     const status = await withFakeGitPath(
       guardBin,
       { [FAKE_GIT_REAL_VAR]: realGitPath(), [FAKE_GIT_LOG_VAR]: gitLog },
       () => runPin(["v1.0.0"], errCtx),
     );
     assert.equal(status, 1); // :414
-    assert.match(
-      errCtx.stderr.text(),
-      /HTTP\(S\) source must not include userinfo/,
-    ); // :415
+    assert.match(stderr.text(), /HTTP\(S\) source must not include userinfo/); // :415
     assert.equal(existsSync(gitLog), false); // :416
   }
 });
@@ -1004,10 +955,11 @@ void test("track-latest defaults its saved source to the official upstream, and 
       '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}';
     const { statePath, ctx } = freshContext("track-newer", {});
     writeFileSync(statePath, newerBytes, "utf8");
-    const errCtx = { ...ctx, stderr: makeCapture() };
+    const stderr = capture();
+    const errCtx = { ...ctx, stderr: stderr.stream };
     const status = await runTrackLatest([], errCtx);
     assert.equal(status, 1); // :449
-    assert.match(errCtx.stderr.text(), /schema_version must equal integer 1/);
+    assert.match(stderr.text(), /schema_version must equal integer 1/);
     assert.equal(readFileSync(statePath, "utf8"), newerBytes); // :450
   }
 });
@@ -1029,11 +981,12 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
   writeFileSync(keep, "sibling", "utf8");
 
   {
-    const outCtx = { ...ctx, stdout: makeCapture() };
+    const stdout = capture();
+    const outCtx = { ...ctx, stdout: stdout.stream };
     const status = await runUnpin([], outCtx);
     assert.equal(status, 0);
     assert.equal(
-      outCtx.stdout.text(),
+      stdout.text(),
       `removed saved upstream selection; packaged fallback is ${fallback}\n` +
         "note: active SUPERPOWERS_REF override remains effective\n" +
         "note: active SUPERPOWERS_UPSTREAM_URL override remains effective\n",
@@ -1045,15 +998,16 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
   }
 
   {
+    const stdout = capture();
     const outCtx = {
       ...ctx,
       env: { SUPERPOWERS_CONFIG_DIR: configDir },
-      stdout: makeCapture(),
+      stdout: stdout.stream,
     };
     const status = await runUnpin([], outCtx);
     assert.equal(status, 0);
     assert.equal(
-      outCtx.stdout.text(),
+      stdout.text(),
       `no saved upstream selection; packaged fallback is ${fallback}\n`,
     ); // :473
     assert.equal(readFileSync(keep, "utf8"), "sibling"); // :474
@@ -1063,14 +1017,15 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
    * @param {"symlink" | "directory" | "special"} kind
    */
   async function assertUnpinRefuses(kind) {
+    const stderr = capture();
     const errCtx = {
       ...ctx,
       env: { SUPERPOWERS_CONFIG_DIR: configDir },
-      stderr: makeCapture(),
+      stderr: stderr.stream,
     };
     const status = await runUnpin([], errCtx);
     assert.equal(status, 1); // :481
-    assert.match(errCtx.stderr.text(), /remove it manually after inspecting/); // :482
+    assert.match(stderr.text(), /remove it manually after inspecting/); // :482
     // lstatSync succeeding at all (rather than throwing ENOENT) is itself the
     // proof that the path still exists as some filesystem entry — strictly
     // stronger than `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:483::test -e "$unpin_config/selection.json"`'s
