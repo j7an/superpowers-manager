@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { capture, scriptedAdapter } from "../lib/command-doubles.js";
 
 const { runUpdate, renderUnknownProbeStatus } = await import(
   new URL("../../dist/commands/update.js", import.meta.url).href
@@ -15,48 +16,6 @@ const { formatPorcelain, gatherProbe } = await import(
 const { successResult, failureResult } = await import(
   new URL("../../dist/adapter-result.js", import.meta.url).href
 );
-
-/** Collects writes without a real stream, so no EPIPE hazard exists here. */
-function sink() {
-  /** @type {string[]} */
-  const chunks = [];
-  return {
-    chunks,
-    stream: /** @type {NodeJS.WritableStream} */ (
-      /** @type {unknown} */ ({
-        write(/** @type {string} */ text) {
-          chunks.push(text);
-          return true;
-        },
-      })
-    ),
-  };
-}
-
-/**
- * @param {readonly import("../../src/adapter-result.js").AdapterResult[]} responses
- */
-function scriptedAdapter(responses) {
-  /** @type {string[][]} */
-  const calls = [];
-  let index = 0;
-  return {
-    calls,
-    /** @type {import("../../src/commands/context.js").CommandContext["adapter"]} */
-    adapter: async (argv) => {
-      calls.push([...argv]);
-      const response = responses[index++];
-      // Exhaustion is a FAILURE, not an empty answer. A double that runs out
-      // and returns a benign value satisfies every absence assertion while
-      // proving nothing -- the vacuity mode this slice exists to avoid.
-      assert.ok(
-        response !== undefined,
-        `scriptedAdapter exhausted at call ${index}: ${argv.join(" ")}`,
-      );
-      return response;
-    },
-  };
-}
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-update-"));
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
@@ -75,8 +34,8 @@ const INSTALL_NOTE =
  *   generatedCommit?: string,
  *   extraEnv?: Record<string, string>,
  * }} opts
- * @param {ReturnType<typeof sink>} out
- * @param {ReturnType<typeof sink>} err
+ * @param {ReturnType<typeof capture>} out
+ * @param {ReturnType<typeof capture>} err
  * @param {import("../../src/commands/context.js").CommandContext["adapter"]} adapter
  */
 function makeCtx(opts, out, err, adapter) {
@@ -223,8 +182,8 @@ const UPSTREAM = makeUpstreamRepo();
  * relocated into the `current` arm lets this status run runPrepare, whose
  * adapter build call then shows up in `calls`.
  *
- * @param {ReturnType<typeof sink>} out
- * @param {ReturnType<typeof sink>} err
+ * @param {ReturnType<typeof capture>} out
+ * @param {ReturnType<typeof capture>} err
  * @param {import("../../src/commands/context.js").CommandContext["adapter"]} adapter
  */
 function makePreparableCtx(out, err, adapter) {
@@ -251,8 +210,8 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   // real `facts` object, the other drives runUpdate. Comparing runUpdate's
   // stdout against formatPorcelain(facts) proves the exact text, not just a
   // substring of it.
-  const probeOnly = sink();
-  const probeErr = sink();
+  const probeOnly = capture();
+  const probeErr = capture();
   const { adapter: probeAdapter } = scriptedAdapter(probeCurrent());
   const probeCtx = makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -264,8 +223,8 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   assert.equal(probe.status, 0);
   assert.equal(probe.facts.status, "current");
 
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter(probeCurrent());
   const ctx = makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -276,10 +235,10 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   const status = await runUpdate([], ctx);
   assert.equal(status, 0);
   assert.equal(
-    out.chunks.join(""),
+    out.text(),
     `${formatPorcelain(probe.facts)}manager is current\n`,
   );
-  assert.equal(err.chunks.join(""), "");
+  assert.equal(err.text(), "");
   // The current arm issues no adapter call of its own: only gatherProbe's
   // three.
   assert.deepEqual(calls, [
@@ -294,8 +253,8 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
   // prints anything. An update reporting "manager is current" under an
   // unsupported adapter would be asserting managed control it had not
   // verified.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
     successResult("inspect", { identity_state: "manager" }, []),
@@ -309,9 +268,9 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
   );
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: adapter cannot guarantee manager-controlled updates\n",
   );
   assert.equal(calls.length, 3);
@@ -321,8 +280,8 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
   // requireManagedUpdateControl (src/lifecycle.ts) has three arms: managed,
   // unsupported, and a catch-all. A mutant collapsing the catch-all into the
   // "unsupported" arm would survive the case above alone.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
     successResult("inspect", { identity_state: "manager" }, []),
@@ -336,9 +295,9 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
   );
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: unknown adapter update-control capability: wat\n",
   );
   assert.equal(calls.length, 3);
@@ -351,8 +310,8 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
   // since none was created in this fixture -- becomes update's return value
   // verbatim, the property `set -eu` gave the shell for free and a function
   // call does not.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter(probeCurrent());
   const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
@@ -365,7 +324,7 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
     "plugin.template.json",
   );
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     `error: missing fallback manifest template: ${template}\n`,
   );
   // Only gatherProbe's own three calls: prepare fails before issuing any
@@ -382,8 +341,8 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
   // state it never installed -- so the assertion has to be the recorded
   // adapter sequence, not the exit status, which the defect reproduces
   // exactly.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     // update's own probe. No generated tree exists yet, so statusForCommits
     // returns "needs prepare" whatever the installed fingerprint says.
@@ -408,12 +367,12 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
 
   const status = await runUpdate([], ctx);
   assert.equal(status, 0);
-  assert.equal(err.chunks.join(""), "");
+  assert.equal(err.text(), "");
   // runPrepare's own success line, then runInstall's. Neither is written by
   // update, so the presence of the second one is itself evidence the second
   // statement of the arm ran.
   assert.equal(
-    out.chunks.join(""),
+    out.text(),
     `prepared ${UPSTREAM.commit} at ${UPSTREAM.commit}\n` +
       `${INSTALL_NOTE}desired_commit=${UPSTREAM.commit}\n` +
       `installed_commit=${UPSTREAM.commit}\nmanager updated\n`,
@@ -446,8 +405,8 @@ void test("needs install: delegates to runInstall alone, and a success propagate
   // update's own probe (3 calls) is not the same call as install's own probe
   // (3 more calls) -- so the fixture scripts both, then install's four
   // mutation stages.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     ...probeNeedsInstall(),
     ...probeNeedsInstall(),
@@ -467,10 +426,10 @@ void test("needs install: delegates to runInstall alone, and a success propagate
   // runInstall's own NOTE line, then its own success lines -- update writes
   // nothing of its own on this arm.
   assert.equal(
-    out.chunks.join(""),
+    out.text(),
     `${INSTALL_NOTE}desired_commit=${X}\ninstalled_commit=${X}\nmanager updated\n`,
   );
-  assert.equal(err.chunks.join(""), "");
+  assert.equal(err.text(), "");
   assert.deepEqual(calls.slice(6), [
     ["inspect", "--view", "ownership"],
     ["inspect", "--view", "update-control"],
@@ -480,8 +439,8 @@ void test("needs install: delegates to runInstall alone, and a success propagate
 });
 
 void test("needs install: a non-zero runInstall return propagates as update's status, not swallowed", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     ...probeNeedsInstall(),
     ...probeNeedsInstall(),
@@ -498,12 +457,12 @@ void test("needs install: a non-zero runInstall return propagates as update's st
   assert.equal(status, 1);
   // runInstall's OWN diagnostic, verbatim -- update adds no second message.
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: adapter cannot guarantee manager-controlled updates\n",
   );
   // runInstall's own NOTE line reaches stdout, unaltered; update writes
   // nothing of its own on this arm, success or failure alike.
-  assert.equal(out.chunks.join(""), INSTALL_NOTE);
+  assert.equal(out.text(), INSTALL_NOTE);
   assert.equal(calls.length, 8);
 });
 
@@ -533,8 +492,8 @@ void test("an unrecognised probe status writes the porcelain then reports the er
     savedCommit: X,
     updateControl: "managed",
   };
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   renderUnknownProbeStatus(FACTS, {
     root: "/unused",
     env: {},
@@ -548,8 +507,8 @@ void test("an unrecognised probe status writes the porcelain then reports the er
   // stderr via an explicit `>&2`. Each stream is asserted on its own channel,
   // not just as a joined substring, so a mutant that swapped the two streams
   // cannot pass by accident.
-  assert.equal(out.chunks.join(""), formatPorcelain(FACTS));
-  assert.equal(err.chunks.join(""), "error: unknown probe status: weird\n");
+  assert.equal(out.text(), formatPorcelain(FACTS));
+  assert.equal(err.text(), "error: unknown probe status: weird\n");
 });
 
 // --- The two emptiness checks that run BEFORE the switch (§4.4's first
@@ -558,8 +517,8 @@ void test("an unrecognised probe status writes the porcelain then reports the er
 // never checks at all. ---
 
 void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
     successResult("inspect", { identity_state: null }, []),
@@ -574,16 +533,16 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: probe did not report adapter identity state\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.equal(calls.length, 3);
 });
 
 void test("a legacy identity state stops before the update-control guard even runs", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
     successResult("inspect", { identity_state: "both" }, []),
@@ -601,12 +560,12 @@ void test("a legacy identity state stops before the update-control guard even ru
   // lines to stderr, no `error: ` prefix; :54 is the `return 1` that follows
   // it, reached without spw_die.
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "Legacy superpowers-wrapper Codex state is installed.\n" +
       "Run: npx superpowers-wrapper@0.1.1 uninstall\n" +
       "Then run: npx superpowers-manager install\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.equal(calls.length, 3);
 });
 
@@ -615,8 +574,8 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
   // one drives its "unknown" arm (src/lifecycle.ts, reached for any
   // identity_state outside the four known ones). Each arm needs its own
   // case: a mutant disabling both at once dies to the "blocked" case alone.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
     successResult("inspect", { identity_state: "chaos" }, []),
@@ -632,11 +591,8 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
   assert.equal(status, 1);
   // scripts/core/lifecycle.sh calls spw_die for the catch-all, which DOES
   // prefix `error: ` -- unlike the bare three lines the "blocked" arm writes.
-  assert.equal(
-    err.chunks.join(""),
-    "error: unknown adapter identity state: chaos\n",
-  );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
+  assert.equal(out.text(), "");
   assert.equal(calls.length, 3);
 });
 
@@ -647,8 +603,8 @@ void test("an empty probe-reported update-control capability fails closed, and r
   // current" output: the assertion is that NO call past gatherProbe's own
   // three ever happens, not merely that this particular arm's text is
   // absent.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
     successResult("inspect", { identity_state: "manager" }, []),
@@ -663,10 +619,10 @@ void test("an empty probe-reported update-control capability fails closed, and r
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: probe did not report adapter update-control capability\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "fingerprint"],
     ["inspect", "--view", "ownership"],
@@ -688,8 +644,8 @@ void test("an empty probe-reported update-control capability fails closed, and r
 // capability the command has not accepted.
 
 void test("needs prepare: an empty identity state refuses before prepare, not inside the current arm", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: null }, []),
     successResult("inspect", { identity_state: null }, []),
@@ -699,10 +655,10 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: probe did not report adapter identity state\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "fingerprint"],
     ["inspect", "--view", "ownership"],
@@ -711,8 +667,8 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
 });
 
 void test("needs prepare: a legacy identity state refuses before prepare, not inside the current arm", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: null }, []),
     successResult("inspect", { identity_state: "both" }, []),
@@ -722,12 +678,12 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "Legacy superpowers-wrapper Codex state is installed.\n" +
       "Run: npx superpowers-wrapper@0.1.1 uninstall\n" +
       "Then run: npx superpowers-manager install\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "fingerprint"],
     ["inspect", "--view", "ownership"],
@@ -736,8 +692,8 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
 });
 
 void test("needs prepare: an empty update control refuses before prepare, not inside the current arm", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: null }, []),
     successResult("inspect", { identity_state: "manager" }, []),
@@ -747,10 +703,10 @@ void test("needs prepare: an empty update control refuses before prepare, not in
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: probe did not report adapter update-control capability\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "fingerprint"],
     ["inspect", "--view", "ownership"],
@@ -767,8 +723,8 @@ void test("needs prepare: an empty update control refuses before prepare, not in
 // hand-written message) and one for clause 2 (replay-only, no second line).
 
 void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   /** @type {readonly import("../../src/adapter-result.js").AdapterResult[]} */
   const responses = [
     {
@@ -787,16 +743,16 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: adapter reported a failure status for inspect --view fingerprint\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
 });
 
 void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the replayed diagnostic", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     failureResult(
       "inspect",
@@ -812,16 +768,16 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   // No second, command-authored line: replayOutcome already wrote the
   // adapter's own error:/hint: lines, and probe.message is null here.
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: cannot inspect fingerprint\nhint: check codex is installed\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
 });
 
 void test("argv is ignored by src/commands/update.ts", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter } = scriptedAdapter(probeCurrent());
   const ctx = makeCtx(
     { desiredCommit: X, generatedCommit: X },

@@ -4,6 +4,7 @@ import { chmodSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { capture, scriptedAdapter } from "../lib/command-doubles.js";
 
 const { runUninstall } = await import(
   new URL("../../dist/commands/uninstall.js", import.meta.url).href
@@ -15,48 +16,6 @@ const { workspaceRemovalFailure } = await import(
   new URL("../../dist/workspace.js", import.meta.url).href
 );
 
-/** Collects writes without a real stream, so no EPIPE hazard exists here. */
-function sink() {
-  /** @type {string[]} */
-  const chunks = [];
-  return {
-    chunks,
-    stream: /** @type {NodeJS.WritableStream} */ (
-      /** @type {unknown} */ ({
-        write(/** @type {string} */ text) {
-          chunks.push(text);
-          return true;
-        },
-      })
-    ),
-  };
-}
-
-/**
- * @param {readonly import("../../src/adapter-result.js").AdapterResult[]} responses
- */
-function scriptedAdapter(responses) {
-  /** @type {string[][]} */
-  const calls = [];
-  let index = 0;
-  return {
-    calls,
-    /** @type {import("../../src/commands/context.js").CommandContext["adapter"]} */
-    adapter: async (argv) => {
-      calls.push([...argv]);
-      const response = responses[index++];
-      // Exhaustion is a FAILURE, not an empty answer. A double that runs out
-      // and returns a benign value satisfies every absence assertion while
-      // proving nothing -- the vacuity mode this slice exists to avoid.
-      assert.ok(
-        response !== undefined,
-        `scriptedAdapter exhausted at call ${index}: ${argv.join(" ")}`,
-      );
-      return response;
-    },
-  };
-}
-
 /** @type {Record<string, unknown>} */
 const CLEAN = { resources: { plugin: false, marketplace: false } };
 
@@ -65,8 +24,8 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
   // shell driver witnessed the split through its capture form; LegacyVerdict
   // carries no channel by design, so this is the only witness after 4a.
   // Spec §6.2.3 item 2.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "both" }, []),
     successResult("uninstall", {}, []),
@@ -80,7 +39,7 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
     adapter,
   });
   assert.equal(status, 0);
-  const stdout = out.chunks.join("");
+  const stdout = out.text();
   assert.ok(
     stdout.includes(
       "Legacy superpowers-wrapper Codex state remains installed.\n",
@@ -95,7 +54,7 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
   // verdicts to stderr would satisfy a stdout-only assertion nowhere and a
   // "contains" assertion on the joined output everywhere.
   assert.equal(
-    err.chunks.join("").includes("remains installed"),
+    err.text().includes("remains installed"),
     false,
     "the report must NOT reach stderr",
   );
@@ -103,8 +62,8 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
 });
 
 void test("the two closing lines port verbatim except for the prepare invocation", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -119,18 +78,18 @@ void test("the two closing lines port verbatim except for the prepare invocation
   });
   assert.equal(status, 0);
   assert.equal(
-    out.chunks.join(""),
+    out.text(),
     "uninstall complete\n" +
       "note: local generated artifacts under plugins/superpowers/ and " +
       ".cache/upstream/ were left in place; remove them manually or " +
       "regenerate with npx superpowers-manager prepare.\n",
   );
-  assert.equal(err.chunks.join(""), "");
+  assert.equal(err.text(), "");
 });
 
 void test("the adapter calls are issued in order with the FIRST inspection's read presence booleans", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult(
       "inspect",
@@ -159,8 +118,8 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
 });
 
 void test("a plugin resource still installed after removal is a distinct, named failure", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -182,16 +141,16 @@ void test("a plugin resource still installed after removal is a distinct, named 
   });
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: owned plugin resource is still installed after removal\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.equal(calls.length, 3);
 });
 
 void test("an unrecognised identity state after removal is a distinct, named failure", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -205,11 +164,8 @@ void test("an unrecognised identity state after removal is a distinct, named fai
     adapter,
   });
   assert.equal(status, 1);
-  assert.equal(
-    err.chunks.join(""),
-    "error: unknown adapter identity state: wat\n",
-  );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(err.text(), "error: unknown adapter identity state: wat\n");
+  assert.equal(out.text(), "");
   assert.equal(calls.length, 3);
 });
 
@@ -220,8 +176,8 @@ void test("a non-string identity_state after removal fails closed with its own d
   // -> a dedicated fail-closed message, never silently stringified and never
   // collapsed into the "unknown adapter identity state: " (empty) text a
   // stringify-then-compare reading would produce for this same input.
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -236,10 +192,10 @@ void test("a non-string identity_state after removal fails closed with its own d
   });
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: adapter returned a non-string identity_state for inspect --view ownership\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.equal(calls.length, 3);
 });
 
@@ -254,8 +210,8 @@ void test("a non-string identity_state after removal fails closed with its own d
 // has reappeared.
 
 void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diagnostic", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     failureResult(
       "inspect",
@@ -276,16 +232,16 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
   // Clause 2: replayOutcome already wrote the adapter's own error:/hint:
   // lines. NO second, command-authored line may follow them.
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: cannot inspect ownership\nhint: check codex is installed\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
 });
 
 void test("stage 1 malformed presence content is a DIFFERENT failure than stage 1's adapter failure", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult(
       "inspect",
@@ -305,10 +261,10 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
   });
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: expected a Boolean adapter result at resources.plugin\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
 });
 
@@ -319,8 +275,8 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
   // to reach the one combination invoke()'s gate must distinguish from both
   // clause 2 (!outcome.ok, replay-only) and clause 4 (a malformed but
   // successful result).
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   /** @type {readonly import("../../src/adapter-result.js").AdapterResult[]} */
   const responses = [
     {
@@ -344,16 +300,16 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
   });
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: adapter reported a failure status for inspect --view ownership\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
 });
 
 void test("stage 2 (uninstall) failure stops before the post-removal inspection", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult(
       "inspect",
@@ -379,8 +335,8 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
     adapter,
   });
   assert.equal(status, 1);
-  assert.equal(err.chunks.join(""), "error: cannot remove owned resources\n");
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(err.text(), "error: cannot remove owned resources\n");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "ownership"],
     ["uninstall", "--plugin-present", "true", "--marketplace-present", "true"],
@@ -388,8 +344,8 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
 });
 
 void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the replayed diagnostic", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -409,11 +365,8 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
     adapter,
   });
   assert.equal(status, 1);
-  assert.equal(
-    err.chunks.join(""),
-    "error: cannot inspect ownership after removal\n",
-  );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(err.text(), "error: cannot inspect ownership after removal\n");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "ownership"],
     [
@@ -428,8 +381,8 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
 });
 
 void test("stage 3 malformed presence content is a DIFFERENT failure than stage 3's adapter failure", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -451,10 +404,10 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
   });
   assert.equal(status, 1);
   assert.equal(
-    err.chunks.join(""),
+    err.text(),
     "error: expected a Boolean adapter result at resources.plugin\n",
   );
-  assert.equal(out.chunks.join(""), "");
+  assert.equal(out.text(), "");
   assert.deepEqual(calls, [
     ["inspect", "--view", "ownership"],
     [
@@ -469,8 +422,8 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
 });
 
 void test("argv is ignored by src/commands/uninstall.ts", async () => {
-  const out = sink();
-  const err = sink();
+  const out = capture();
+  const err = capture();
   const { adapter } = scriptedAdapter([
     successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     successResult("uninstall", {}, []),
@@ -508,8 +461,8 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
   if (process.getuid?.() === 0) return; // chmod does not gate root
   const parent = mkdtempSync(join(tmpdir(), "spw-uninstall-workspace-"));
   try {
-    const out = sink();
-    const err = sink();
+    const out = capture();
+    const err = capture();
     const responses = [
       successResult("inspect", { ...CLEAN, identity_state: "neither" }, [
         { channel: "stdout", text: "note: first inspection ran" },
@@ -552,7 +505,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
     // exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete` behaved. Dropping either half is a
     // divergence from the shell.
     assert.equal(
-      out.chunks.join(""),
+      out.text(),
       "note: first inspection ran\n" +
         "uninstall complete\n" +
         "note: local generated artifacts under plugins/superpowers/ and " +
@@ -566,10 +519,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
       `expected exactly one leftover workspace directory in ${parent}, found: ${entries.join(", ")}`,
     );
     const workspace = join(parent, entries[0]);
-    assert.equal(
-      err.chunks.join(""),
-      `error: ${workspaceRemovalFailure(workspace)}\n`,
-    );
+    assert.equal(err.text(), `error: ${workspaceRemovalFailure(workspace)}\n`);
   } finally {
     try {
       chmodSync(parent, 0o700);
