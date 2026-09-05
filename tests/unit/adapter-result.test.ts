@@ -117,6 +117,16 @@ void test("adapter result exposes an outcome with no protocol tag", () => {
   assert.equal(ok.outcome.operation, "build");
 });
 
+void test("typed success preserves a non-JSON internal result", () => {
+  const marker = Symbol("removal-input");
+  const value = { marker };
+  const result = successResult("inspect", value, []);
+  assert.equal(result.status, 0);
+  assert.equal(result.outcome.ok, true);
+  if (!result.outcome.ok) assert.fail("expected success");
+  assert.equal(result.outcome.result.marker, marker);
+});
+
 void test("requireProtocolString accepts safe text and rejects terminal controls", () => {
   const cp: (...codes: number[]) => string = (...codes) =>
     String.fromCodePoint(...codes);
@@ -524,7 +534,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
       const codexBin = join(codexDir, "codex");
       // Writes a context line as well as failing: listingCommand appends the
       // child's stderr to the outcome's message records
-      // (`src/adapter.ts:234-243::async function listingCommand`). That record is what the hoist withholds, so
+      // (`src/adapter.ts:251-260::async function listingCommand`). That record is what the hoist withholds, so
       // its absence below is the end-to-end half of the atomicity contract.
       writeFileSync(
         codexBin,

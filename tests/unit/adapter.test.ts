@@ -7,6 +7,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  codexBuild,
+  codexInspect,
+  codexInstall,
+  codexRemove,
   runAdapter,
   mapCodexLaunchFailure,
   runCommandForTest,
@@ -37,8 +41,8 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:357-360::manifestSource === "upstream" ?`,
-  // `src/adapter.ts:452::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:371-374::manifestSource === "upstream" ?`,
+  // `src/adapter.ts:464::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -91,7 +95,8 @@ function buildArgv(
 
 void test("the adapter replays the validator success line as one stdout record", async (t) => {
   const workspace = await buildWorkspace(t);
-  const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
+  const context = { root: PACKAGE_ROOT };
+  const result = await runAdapter(buildArgv(workspace), context);
   assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
   assert.deepStrictEqual(result.outcome.messages, [
     {
@@ -99,6 +104,22 @@ void test("the adapter replays the validator success line as one stdout record",
       text: `generated plugin validation passed: ${workspace.candidate}`,
     },
   ]);
+  assert.deepEqual(
+    await codexBuild(
+      {
+        upstreamRoot: workspace.upstream,
+        candidateRoot: workspace.candidate,
+        requestedRef: "latest-release",
+        resolvedRef: "v6.1.1",
+        commit: COMMIT,
+        managerVersion: "6.1.1+manager.d884ae0",
+        upstreamManifestVersion: "6.1.1",
+        fallbackManifest: workspace.fallback,
+      },
+      context,
+    ),
+    result,
+  );
 });
 
 void test("the adapter replays a multi-error failure as one record per line", async (t) => {
@@ -123,7 +144,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/adapter.ts:396-399::const rawManifestBytes`) must surface exactly `cannot read manifest JSON
+// call (`src/adapter.ts:411-414::const rawManifestBytes`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/hooks.ts) must keep succeeding, so this exercises the read at
@@ -410,6 +431,35 @@ async function codexSandbox(t: import("node:test").TestContext) {
   };
 }
 
+void test("typed inspection matches the compatibility adapter result", async () => {
+  const context = { root: PACKAGE_ROOT, env: {} };
+  assert.deepEqual(
+    await codexInspect("update-control", context),
+    await runAdapter(["inspect", "--view", "update-control"], context),
+  );
+});
+
+void test("typed removal matches the compatibility adapter result", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const context = { root: PACKAGE_ROOT, env: sandbox.env({}) };
+  assert.deepEqual(
+    await codexRemove(
+      { pluginPresent: false, marketplacePresent: false },
+      context,
+    ),
+    await runAdapter(
+      [
+        "uninstall",
+        "--plugin-present",
+        "false",
+        "--marketplace-present",
+        "false",
+      ],
+      context,
+    ),
+  );
+});
+
 // The adapter reads `codex plugin list --json` as raw bytes: `CommandResult`'s
 // `stdout: Buffer` field, read by `activePluginVersionFromJson`. `@@BAD@@` is
 // a raw 0xff byte inside an otherwise well-formed JSON string, so a lossy
@@ -460,7 +510,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/adapter.ts:602-607::registeredRoot = marketplaceRootFromJson`) is the destructive
+// The install reconciliation read (`src/adapter.ts:615-620::registeredRoot = marketplaceRootFromJson`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -812,11 +862,26 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
       { verification_hints: hints },
       refreshMode,
     );
+    assert.deepEqual(
+      await codexInstall(sandbox.packageRoot, {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({
+          SUPERPOWERS_INSTALL_REFRESH_MODE: refreshMode,
+          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({
+            marketplaces: [
+              { name: "superpowers-manager", root: sandbox.packageRoot },
+            ],
+          }),
+        }),
+      }),
+      result,
+      refreshMode,
+    );
   }
 });
 
 /**
- * Drive the adapter install operation to `src/adapter.ts:654-662::recover`, the one
+ * Drive the adapter install operation to `src/adapter.ts:666-674::recover`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -854,13 +919,13 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: `src/adapter.ts:576-585::refreshMode !== "add-only"` enumerates only "add-only"
+      // executor's shell: `src/adapter.ts:587-596::refreshMode !== "add-only"` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/adapter.ts:627-631::pathsEqual(packageRoot, registeredRoot)`, which is
+      // exercises is the marketplace branch at `src/adapter.ts:638-642::pathsEqual(packageRoot, registeredRoot)`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/adapter.ts:575::const refreshMode`) and so the value these witnesses
+      // the default (`src/adapter.ts:585::const refreshMode`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -889,7 +954,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. `src/adapter.ts:654-662::recover` is the one in-process failure with
+  // witness that. `src/adapter.ts:666-674::recover` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);

@@ -56,6 +56,22 @@ const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 // possible here regardless of import direction.
 export type { AdapterContext };
 
+export interface CodexBuildInput {
+  readonly upstreamRoot: string;
+  readonly candidateRoot: string;
+  readonly requestedRef: string;
+  readonly resolvedRef: string;
+  readonly commit: string;
+  readonly managerVersion: string;
+  readonly upstreamManifestVersion: string;
+  readonly fallbackManifest: string;
+}
+
+export interface CodexRemovalInput {
+  readonly pluginPresent: boolean;
+  readonly marketplacePresent: boolean;
+}
+
 class AdapterFailure extends Error {
   readonly code: string;
   readonly hints: readonly string[];
@@ -303,15 +319,11 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 async function runBuild(
-  argv: readonly string[],
-  root: string,
+  input: CodexBuildInput,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<JsonValue> {
-  const flags = parseFlags(argv, BUILD_FLAGS);
-  const upstreamRoot = flags["--upstream-root"];
-  const candidateRoot = flags["--candidate-root"];
-  const fallbackManifest = flags["--fallback-manifest"];
+  const { upstreamRoot, candidateRoot, fallbackManifest } = input;
   if (!isAbsolute(upstreamRoot)) {
     fail("invalid-arguments", "--upstream-root must be an absolute path");
   }
@@ -417,7 +429,7 @@ async function runBuild(
         try {
           overlaid = applyManifestOverlay(
             source,
-            flags["--manager-version"],
+            input.managerVersion,
             candidateManifest,
           );
         } catch (cause) {
@@ -479,13 +491,13 @@ async function runBuild(
           readonly name: string;
         }> = [
           { value: candidateRoot, name: "--plugin-root" },
-          { value: flags["--requested-ref"], name: "--requested-ref" },
-          { value: flags["--resolved-ref"], name: "--resolved-ref" },
-          { value: flags["--commit"], name: "--commit" },
-          { value: flags["--manager-version"], name: "--manager-version" },
+          { value: input.requestedRef, name: "--requested-ref" },
+          { value: input.resolvedRef, name: "--resolved-ref" },
+          { value: input.commit, name: "--commit" },
+          { value: input.managerVersion, name: "--manager-version" },
           { value: manifestSource, name: "--manifest-source" },
           {
-            value: flags["--upstream-manifest-version"],
+            value: input.upstreamManifestVersion,
             name: "--upstream-manifest-version",
           },
         ];
@@ -511,12 +523,12 @@ async function runBuild(
           errors = await validateGeneratedPlugin({
             pluginRoot: candidateRoot,
             source: upstreamSource,
-            requestedRef: flags["--requested-ref"],
-            resolvedRef: flags["--resolved-ref"],
-            commit: flags["--commit"],
-            manifestVersion: flags["--manager-version"],
+            requestedRef: input.requestedRef,
+            resolvedRef: input.resolvedRef,
+            commit: input.commit,
+            manifestVersion: input.managerVersion,
             manifestSource,
-            upstreamManifestVersion: flags["--upstream-manifest-version"],
+            upstreamManifestVersion: input.upstreamManifestVersion,
           });
         } catch {
           fail(
@@ -559,12 +571,10 @@ async function runBuild(
 }
 
 async function runInstall(
-  argv: readonly string[],
+  packageRoot: string,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<JsonValue> {
-  const flags = parseFlags(argv, ["--package-root"]);
-  const packageRoot = flags["--package-root"];
   if (!isAbsolute(packageRoot)) {
     fail("invalid-arguments", "--package-root must be an absolute path");
   }
@@ -702,19 +712,11 @@ async function runInstall(
 }
 
 async function runUninstall(
-  argv: readonly string[],
+  input: CodexRemovalInput,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<JsonValue> {
-  const flags = parseFlags(argv, ["--plugin-present", "--marketplace-present"]);
-  const pluginPresent = flags["--plugin-present"];
-  const marketplacePresent = flags["--marketplace-present"];
-  if (pluginPresent !== "true" && pluginPresent !== "false") {
-    fail("invalid-arguments", "--plugin-present must be true or false");
-  }
-  if (marketplacePresent !== "true" && marketplacePresent !== "false") {
-    fail("invalid-arguments", "--marketplace-present must be true or false");
-  }
+  const { pluginPresent, marketplacePresent } = input;
   const codexBin = env.SUPERPOWERS_CODEX || "codex";
   await requireCodex(codexBin, env);
   let entered = false;
@@ -724,7 +726,7 @@ async function runUninstall(
       "superpowers-manager.adapter-uninstall.",
       async () => {
         entered = true;
-        if (pluginPresent === "true") {
+        if (pluginPresent) {
           const result = await mutationCommand(
             log,
             codexBin,
@@ -741,7 +743,7 @@ async function runUninstall(
         } else {
           log.appendText("stdout", "plugin not installed; skipping");
         }
-        if (marketplacePresent === "true") {
+        if (marketplacePresent) {
           const result = await mutationCommand(
             log,
             codexBin,
@@ -774,12 +776,10 @@ async function runUninstall(
 }
 
 async function runInspect(
-  argv: readonly string[],
+  view: "ownership" | "update-control" | "fingerprint",
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<JsonValue> {
-  const flags = parseFlags(argv, ["--view"]);
-  const view = flags["--view"];
   if (view === "update-control") {
     return { view: "update-control", update_control: "managed" };
   }
@@ -966,37 +966,23 @@ async function runInspect(
       throw cause;
     }
   }
-  fail("invalid-arguments", `unsupported inspect view: ${view}`);
+  const unsupportedView: string = view;
+  fail("invalid-arguments", `unsupported inspect view: ${unsupportedView}`);
 }
 
-export async function runAdapter(
-  argv: readonly string[],
+async function runCodexOperation(
+  operation: string,
   context: AdapterContext,
+  execute: (
+    env: NodeJS.ProcessEnv,
+    log: AdapterMessageLog,
+  ) => Promise<JsonValue>,
 ): Promise<AdapterResult> {
-  const rawOperation = argv[0];
-  const operation = rawOperation || "adapter";
-  const args = argv.slice(1);
   const env = { ...process.env, ...context.env };
   const log = new AdapterMessageLog();
 
   try {
-    let result: JsonValue;
-    if (rawOperation === undefined || rawOperation.length === 0) {
-      fail("invalid-arguments", "missing adapter operation");
-    } else if (operation === "build") {
-      result = await runBuild(args, context.root, env, log);
-    } else if (operation === "install") {
-      result = await runInstall(args, env, log);
-    } else if (operation === "uninstall") {
-      result = await runUninstall(args, env, log);
-    } else if (operation === "inspect") {
-      result = await runInspect(args, env, log);
-    } else {
-      fail(
-        "unsupported-operation",
-        `unsupported adapter operation: ${operation}`,
-      );
-    }
+    const result = await execute(env, log);
     return successResult(operation, result, log.snapshot());
   } catch (cause) {
     if (cause instanceof AdapterFailure) {
@@ -1006,6 +992,125 @@ export async function runAdapter(
         cause.message,
         cause.hints,
         log.snapshot(),
+      );
+    }
+    throw cause;
+  }
+}
+
+export function codexBuild(
+  input: CodexBuildInput,
+  context: AdapterContext,
+): Promise<AdapterResult> {
+  return runCodexOperation("build", context, (env, log) =>
+    runBuild(input, env, log),
+  );
+}
+
+export function codexInstall(
+  packageRoot: string,
+  context: AdapterContext,
+): Promise<AdapterResult> {
+  return runCodexOperation("install", context, (env, log) =>
+    runInstall(packageRoot, env, log),
+  );
+}
+
+export function codexRemove(
+  input: CodexRemovalInput,
+  context: AdapterContext,
+): Promise<AdapterResult> {
+  return runCodexOperation("uninstall", context, (env, log) =>
+    runUninstall(input, env, log),
+  );
+}
+
+export function codexInspect(
+  view: "ownership" | "update-control" | "fingerprint",
+  context: AdapterContext,
+): Promise<AdapterResult> {
+  return runCodexOperation("inspect", context, (env, log) =>
+    runInspect(view, env, log),
+  );
+}
+
+export async function runAdapter(
+  argv: readonly string[],
+  context: AdapterContext,
+): Promise<AdapterResult> {
+  const rawOperation = argv[0];
+  const operation = rawOperation || "adapter";
+  const args = argv.slice(1);
+
+  try {
+    if (rawOperation === undefined || rawOperation.length === 0) {
+      fail("invalid-arguments", "missing adapter operation");
+    } else if (operation === "build") {
+      const flags = parseFlags(args, BUILD_FLAGS);
+      return codexBuild(
+        {
+          upstreamRoot: flags["--upstream-root"]!,
+          candidateRoot: flags["--candidate-root"]!,
+          requestedRef: flags["--requested-ref"]!,
+          resolvedRef: flags["--resolved-ref"]!,
+          commit: flags["--commit"]!,
+          managerVersion: flags["--manager-version"]!,
+          upstreamManifestVersion: flags["--upstream-manifest-version"]!,
+          fallbackManifest: flags["--fallback-manifest"]!,
+        },
+        context,
+      );
+    } else if (operation === "install") {
+      const flags = parseFlags(args, ["--package-root"]);
+      return codexInstall(flags["--package-root"]!, context);
+    } else if (operation === "uninstall") {
+      const flags = parseFlags(args, [
+        "--plugin-present",
+        "--marketplace-present",
+      ]);
+      const pluginPresent = flags["--plugin-present"]!;
+      const marketplacePresent = flags["--marketplace-present"]!;
+      if (pluginPresent !== "true" && pluginPresent !== "false") {
+        fail("invalid-arguments", "--plugin-present must be true or false");
+      }
+      if (marketplacePresent !== "true" && marketplacePresent !== "false") {
+        fail(
+          "invalid-arguments",
+          "--marketplace-present must be true or false",
+        );
+      }
+      return codexRemove(
+        {
+          pluginPresent: pluginPresent === "true",
+          marketplacePresent: marketplacePresent === "true",
+        },
+        context,
+      );
+    } else if (operation === "inspect") {
+      const flags = parseFlags(args, ["--view"]);
+      const view = flags["--view"]!;
+      if (
+        view !== "ownership" &&
+        view !== "update-control" &&
+        view !== "fingerprint"
+      ) {
+        fail("invalid-arguments", `unsupported inspect view: ${view}`);
+      }
+      return codexInspect(view, context);
+    } else {
+      fail(
+        "unsupported-operation",
+        `unsupported adapter operation: ${operation}`,
+      );
+    }
+  } catch (cause) {
+    if (cause instanceof AdapterFailure) {
+      return failureResult(
+        operation,
+        cause.code,
+        cause.message,
+        cause.hints,
+        [],
       );
     }
     throw cause;
