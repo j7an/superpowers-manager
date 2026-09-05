@@ -74,28 +74,28 @@ function invalidStatus<T>(
   );
 }
 
-function resultRecord(result: AdapterResult): Record<string, unknown> {
+function resultRecord(result: AdapterResult): Record<string, unknown> | null {
   const value = result.outcome.ok ? result.outcome.result : null;
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
-    : {};
+    : null;
 }
 
 function stringField(
-  result: AdapterResult,
+  result: Record<string, unknown>,
   key: string,
 ): { readonly ok: true; readonly value: string } | { readonly ok: false } {
-  const raw = resultRecord(result)[key];
+  const raw = result[key];
   if (raw === null || raw === undefined) return { ok: true, value: "" };
   if (typeof raw === "string") return { ok: true, value: raw };
   return { ok: false };
 }
 
 function resourceFlag(
-  result: AdapterResult,
+  result: Record<string, unknown>,
   key: "plugin" | "marketplace",
 ): boolean | null {
-  const resources = resultRecord(result).resources;
+  const resources = result.resources;
   const bag =
     typeof resources === "object" &&
     resources !== null &&
@@ -142,21 +142,29 @@ export function normalizeCodexOwnership(
     );
   }
 
-  const pluginPresent = resourceFlag(result, "plugin");
+  const record = resultRecord(result);
+  if (record === null) {
+    return malformed(
+      result,
+      "adapter returned a non-object result for inspect --view ownership",
+    );
+  }
+
+  const pluginPresent = resourceFlag(record, "plugin");
   if (pluginPresent === null) {
     return malformed(
       result,
       "expected a Boolean adapter result at resources.plugin",
     );
   }
-  const marketplacePresent = resourceFlag(result, "marketplace");
+  const marketplacePresent = resourceFlag(record, "marketplace");
   if (marketplacePresent === null) {
     return malformed(
       result,
       "expected a Boolean adapter result at resources.marketplace",
     );
   }
-  const identity = stringField(result, "identity_state");
+  const identity = stringField(record, "identity_state");
   if (!identity.ok) {
     return malformed(
       result,
@@ -228,7 +236,14 @@ export function normalizeCodexControl(
       "adapter reported a failure status for inspect --view update-control",
     );
   }
-  const control = stringField(result, "update_control");
+  const record = resultRecord(result);
+  if (record === null) {
+    return malformed(
+      result,
+      "adapter returned a non-object result for inspect --view update-control",
+    );
+  }
+  const control = stringField(record, "update_control");
   if (!control.ok) {
     return malformed(
       result,
@@ -279,7 +294,14 @@ export function normalizeCodexInstalled(
       "adapter reported a failure status for inspect --view fingerprint",
     );
   }
-  const fingerprint = stringField(result, "fingerprint");
+  const record = resultRecord(result);
+  if (record === null) {
+    return malformed(
+      result,
+      "adapter returned a non-object result for inspect --view fingerprint",
+    );
+  }
+  const fingerprint = stringField(record, "fingerprint");
   if (!fingerprint.ok) {
     return malformed(
       result,
@@ -314,7 +336,14 @@ export function normalizeCodexInstall(
       "adapter reported a failure status for install",
     );
   }
-  const hints = resultRecord(result).verification_hints;
+  const record = resultRecord(result);
+  if (record === null) {
+    return malformed(
+      result,
+      "adapter returned a non-object result for install",
+    );
+  }
+  const hints = record.verification_hints;
   const bag =
     typeof hints === "object" && hints !== null && !Array.isArray(hints)
       ? (hints as Record<string, unknown>)

@@ -195,6 +195,76 @@ void test("normalizers preserve controlled native failure outcomes unchanged", (
   }
 });
 
+void test("normalizers reject scalar, null, and array successful payloads before field defaults", () => {
+  const messages = [{ channel: "stdout" as const, text: "captured context" }];
+  const cases = [
+    {
+      operation: "inspect",
+      normalize: (result: AdapterResult) => normalizeCodexOwnership(result),
+      message:
+        "adapter returned a non-object result for inspect --view ownership",
+    },
+    {
+      operation: "inspect",
+      normalize: (result: AdapterResult) => normalizeCodexControl(result),
+      message:
+        "adapter returned a non-object result for inspect --view update-control",
+    },
+    {
+      operation: "inspect",
+      normalize: (result: AdapterResult) =>
+        normalizeCodexInstalled(result, DESIRED),
+      message:
+        "adapter returned a non-object result for inspect --view fingerprint",
+    },
+    {
+      operation: "install",
+      normalize: (result: AdapterResult) => normalizeCodexInstall(result),
+      message: "adapter returned a non-object result for install",
+    },
+  ] as const;
+  const invalidPayloads: JsonValue[] = ["scalar", null, []];
+  for (const each of cases) {
+    for (const payload of invalidPayloads) {
+      const normalized = each.normalize(
+        successResult(each.operation, payload, messages),
+      );
+      assert.equal(normalized.outcome.ok, false);
+      if (normalized.outcome.ok) {
+        assert.fail("expected non-object payload rejection");
+      }
+      assert.equal(normalized.outcome.error.code, "malformed-result");
+      assert.equal(normalized.outcome.error.message, each.message);
+      assert.deepEqual(normalized.outcome.messages, messages);
+    }
+  }
+});
+
+void test("nonzero successful statuses take precedence over top-level payload validation", () => {
+  const outcome = successResult("inspect", null, []).outcome;
+  const inconsistent: AdapterResult = { status: 1, outcome };
+  const cases = [
+    [
+      normalizeCodexOwnership(inconsistent),
+      "adapter reported a failure status for inspect --view ownership",
+    ],
+    [
+      normalizeCodexControl(inconsistent),
+      "adapter reported a failure status for inspect --view update-control",
+    ],
+    [
+      normalizeCodexInstalled(inconsistent, DESIRED),
+      "adapter reported a failure status for inspect --view fingerprint",
+    ],
+  ] as const;
+  for (const [normalized, message] of cases) {
+    assert.equal(normalized.outcome.ok, false);
+    if (normalized.outcome.ok) assert.fail("expected invalid status rejection");
+    assert.equal(normalized.outcome.error.code, "invalid-status");
+    assert.equal(normalized.outcome.error.message, message);
+  }
+});
+
 void test("control normalization separates probe completeness from mutation policy", () => {
   const managed = unwrap(
     normalizeCodexControl(
