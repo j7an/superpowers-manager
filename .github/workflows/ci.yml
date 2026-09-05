@@ -65,4 +65,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check toolchain and CLI build
-        run: pnpm run check
+        run: pnpm run check:static
+
+      # The full suite runs in `test`. These suites also need the Git checkout
+      # and history that are deliberately excluded from the container image.
+      - name: Check tooling coverage and historical citations
+        run: node --import ./tests/assert-matcher-gate.js --test tests/bin/tooling-coverage.test.js tests/bin/citations.test.js

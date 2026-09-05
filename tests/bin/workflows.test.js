@@ -337,13 +337,25 @@ void test("ci.yml `toolchain` job runs the checks in order", () => {
     uniqueStepTargetIndex(steps, "actions/setup-node"),
     uniqueRunStepIndex(steps, "corepack enable"),
     uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile"),
-    uniqueRunStepIndex(steps, "pnpm run check"),
+    uniqueRunStepIndex(steps, "pnpm run check:static"),
+    uniqueRunStepIndex(
+      steps,
+      "node --import ./tests/assert-matcher-gate.js --test tests/bin/tooling-coverage.test.js tests/bin/citations.test.js",
+    ),
   ];
   assert.deepEqual(
     order,
     [...order].sort((a, b) => a - b),
     "toolchain steps are out of order",
   );
+  for (const index of order.slice(4)) {
+    const step = requireMapping(steps[index], "toolchain validation step");
+    assert.ok(!Object.hasOwn(step, "if"), "validation must always run");
+    assert.ok(
+      !Object.hasOwn(step, "continue-on-error"),
+      "validation must remain blocking",
+    );
+  }
 
   const setupNode = requireMapping(steps[order[2]], "setup-node step");
   assert.equal(
