@@ -62,6 +62,10 @@ const EXPECTED_EXTERNAL_PINS = [
     "j7an/shared-workflows/.github/workflows/dependency-safety-non-bot-gate.yml",
   ],
   [
+    ".github/workflows/pnpm-packagemanager-update.yml",
+    "j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml",
+  ],
+  [
     ".github/workflows/release.yml",
     "j7an/shared-workflows/.github/workflows/publish-npm.yml",
   ],
@@ -77,7 +81,7 @@ const EXPECTED_EXTERNAL_PINS = [
 
 assert.equal(
   EXPECTED_EXTERNAL_PINS.length,
-  8,
+  9,
   "EXPECTED_EXTERNAL_PINS lost or gained a case — update tests/migration-inventory/workflows.md",
 );
 
@@ -164,7 +168,7 @@ void test("all shared-workflows pins agree with one another", () => {
   );
   assert.equal(
     shared.length,
-    5,
+    6,
     "shared-workflows pin count changed — update tests/migration-inventory/workflows.md",
   );
 
@@ -354,6 +358,45 @@ void test("ci.yml exists and blocking mode creates no compatibility workflow", (
     !existsSync(join(WORKFLOW_DIR, "codex-compatibility.yml")),
     "blocking mode must not create codex-compatibility.yml",
   );
+});
+
+void test("pnpm packageManager updates delegate on the weekly and manual triggers", () => {
+  const workflow = requireMapping(
+    loadWorkflow(join(WORKFLOW_DIR, "pnpm-packagemanager-update.yml")),
+    "pnpm packageManager update workflow",
+  );
+  const triggers = requireMapping(workflow.on, "on");
+
+  assert.deepEqual(Object.keys(triggers).sort(), [
+    "schedule",
+    "workflow_dispatch",
+  ]);
+  assert.deepEqual(triggers.schedule, [{ cron: "0 6 * * 1" }]);
+  assert.deepEqual(triggers.workflow_dispatch ?? {}, {});
+  assert.deepEqual(workflow.permissions, {});
+
+  const jobs = requireMapping(workflow.jobs, "jobs");
+  assert.deepEqual(Object.keys(jobs), ["update"]);
+  const update = requireMapping(jobs.update, "jobs.update");
+  assert.deepEqual(Object.keys(update).sort(), [
+    "permissions",
+    "secrets",
+    "uses",
+    "with",
+  ]);
+  assert.deepEqual(update.permissions, {
+    contents: "write",
+    "pull-requests": "write",
+    statuses: "write",
+  });
+  assert.equal(
+    usesTarget(update.uses, "jobs.update.uses"),
+    "j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml",
+  );
+  assert.deepEqual(update.secrets, {
+    RELEASE_BOT_PRIVATE_KEY: "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}",
+  });
+  assert.deepEqual(update.with, { minimum_release_age_days: 5 });
 });
 
 // --- inventory items 72-83: the release workflow contract --------------

@@ -383,6 +383,21 @@ updates the official provider or any other provider automatically.
   SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add npx superpowers-manager update
   ```
 
+## pnpm updates
+
+A weekly Monday workflow (06:00 UTC), also available through manual dispatch,
+opens or refreshes a dedicated pull request updating only `package.json`'s
+`packageManager` pin. It selects a newer, non-deprecated stable pnpm release
+within the pinned major after five days. If the current pin is deprecated,
+the shared updater bypasses that waiting period and discloses it in the PR.
+Major upgrades remain a manual decision; the lockfile is not updated by this
+workflow.
+
+The caller forwards only `RELEASE_BOT_PRIVATE_KEY` and uses
+`vars.RELEASE_BOT_APP_ID` for App-authored PRs that can trigger CI. Keep both
+configured. After adopting the caller, verify a manual run's App authentication
+and inspect any resulting PR before treating live integration as validated.
+
 ## Tests
 
 ```sh

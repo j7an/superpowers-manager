@@ -292,8 +292,9 @@ findings" assertion below it.
 Ported to three cases in `tests/bin/workflows.test.js` — "external action
 inventory matches the workflows", "every inventoried pin is a semantic
 40-hex pin", and "all shared-workflows pins agree with one another" — built
-on the `EXPECTED_EXTERNAL_PINS` fixture (the port's carrier for the 8-row
-manifest) and `collectExternalTargets`, added to
+on the `EXPECTED_EXTERNAL_PINS` fixture (the port's carrier for the original
+8-row manifest, plus maintained callers added after the migration) and
+`collectExternalTargets`, added to
 `tests/bin/workflow-support.js` in this task.
 
 30. The set of external (`uses:`) action targets discovered by scanning
@@ -328,8 +329,10 @@ one assertion (items 31-38). The port's "every inventoried pin is a
 semantic 40-hex pin" case iterates `EXPECTED_EXTERNAL_PINS` with one
 `assert.doesNotThrow` per row inside a `for` loop, preserving the 1:1
 per-row shape rather than merging it into a single combined assertion, so
-items 31-38 map onto eight distinct assertion sites in the port — no merge,
-no drop. Per Task 5's brief: `actionPinPair` already throws unless the
+items 31-38 map onto the original eight rows in the port — no merge, no
+drop. The additional pnpm packageManager updater row is current port-only
+coverage recorded as item 7 below. Per Task 5's brief: `actionPinPair`
+already throws unless the
 reference is a 40-hex lowercase SHA with an agreeing semver comment, so
 *not throwing is the assertion* — no `assert.match(pair.sha,
 /^[0-9a-f]{40}$/)` is added, since the function already rejects everything
@@ -867,6 +870,22 @@ the reconciliation arithmetic in "Cardinality" below.
    early return turned it GREEN again, with all other 21 fixtures unaffected
    throughout. Port-only — it has no shell counterpart.
    (`tests/bin/action-pins.test.js`)
+7. **The pnpm packageManager updater is a minimal scheduled and manual
+   reusable-workflow caller.** Issue 96 added a maintained caller after the
+   shell-to-Node migration, so it has no shell counterpart. The caller test
+   requires only the Monday 06:00 UTC schedule and manual trigger, top-level
+   `permissions: {}`, one reusable-only job with exactly `contents`,
+   `pull-requests`, and `statuses` write access, the shared-workflows updater
+   target, only the Release Bot key, and `minimum_release_age_days: 5`. Adding the
+   expected ninth external target and sixth shared-workflows target before
+   creating the caller drove the test RED with `ENOENT`; the completed caller
+   returned the workflow suite to 24/24 GREEN. Separate cron, job-permission,
+   inherited-secrets, and minimum-age mutations each drove the same case RED
+   before restoration. This mapped-suite topology change updates the live port
+   count while leaving the 100 shell-original assertions unchanged. The
+   accompanying digest update is a pending reviewer re-freeze under the
+   repository's inventory policy. Verified 2026-09-04.
+   (`tests/bin/workflows.test.js`)
 
 <!-- inventory:port-only:end -->
 
@@ -875,10 +894,10 @@ the reconciliation arithmetic in "Cardinality" below.
 ```json inventory
 {
   "shellOriginal": 100,
-  "portOnly": 6,
+  "portOnly": 7,
   "ports": {
     "tests/bin/action-pins.test.js": 8,
-    "tests/bin/workflows.test.js": 23
+    "tests/bin/workflows.test.js": 24
   }
 }
 ```
@@ -927,12 +946,14 @@ the reconciliation arithmetic in "Cardinality" below.
   assertions (items 30-41, 97-98), no merges: item 30 → "external action
   inventory matches the workflows" (`:130-143`); items 31-38 (one
   `assert.doesNotThrow` per manifest row inside a `for` loop, preserving
-  the shell's per-row shape — see "Port shape note (items 31-38)" above) →
+  the shell's per-row shape for the original eight rows, plus the additive
+  updater row — see "Port shape note (items 31-38)" above) →
   "every inventoried pin is a semantic 40-hex pin" (`:145-159`); item 39 →
   the agreement loop inside "all shared-workflows pins agree with one
-  another" (`:174-180`); item 40 → the top-level
-  `assert.equal(EXPECTED_EXTERNAL_PINS.length, 8, …)` (`:78-82`); item 41 →
-  `assert.equal(shared.length, 5, …)` inside the same case (`:165-169`);
+  another" (`:174-180`); item 40 → the maintained top-level
+  `EXPECTED_EXTERNAL_PINS.length` count guard (`:78-82`), now
+  9 after issue 96; item 41 → the maintained shared-workflows count guard
+  inside the same case (`:165-169`), now 6;
   item 97 → "external-pin manifest fixture entries are well-formed (item
   97)" (`:95-109`); item 98 → "external-pin manifest fixture has no
   duplicate entries (item 98)" (`:111-118`). Reconciliation: 1:1 for all
@@ -988,21 +1009,22 @@ the reconciliation arithmetic in "Cardinality" below.
   99)" (`:635-683`). Item 100 → "the bump-option check reports a missing
   options block distinctly from a wrong one (items 99-100)" (`:587-633`).
   Reconciliation: 1:1 for all 15, no merges, no drops.
-- **Port total: 45 `node:test` cases at runtime** — 22 executed from
+- **Port total: 46 `node:test` cases at runtime** — 22 executed from
   `tests/bin/action-pins.test.js` (action-pin matcher and literal-pin
-  detector) and 23 from `tests/bin/workflows.test.js` (source policy, pin
-  inventory, ci.yml, release.yml, tag-release.yml) — plus the one
+  detector) and 24 from `tests/bin/workflows.test.js` (source policy, pin
+  inventory, ci.yml, pnpm packageManager updates, release.yml,
+  tag-release.yml) — plus the one
   top-level pin-inventory fixture self-check (`:78-82`) that runs outside
   any `test()`, matching the total above with no numbered entry left
-  without a port location. **45 is a runtime case count, not a static
+  without a port location. **46 is a runtime case count, not a static
   `test(` call-site count:** `action-pins.test.js` has only **8** static
   `test(` call sites — three of them (`:52`, `:155`, `:200`) iterate
   fixture tables and each generate several runtime cases, expanding to the
-  22 above — while `workflows.test.js`'s **23** static call sites are 1:1
-  with its 23 runtime cases. The `json inventory` block above records
-  these static counts (8 and 23) under `ports`, per the checker's
-  static-coupling contract; this bullet's 45/22/23 figures describe
-  runtime behavior and are unchanged. Reconciliation: 1:1 for all 100 original
+  22 above — while `workflows.test.js`'s **24** static call sites are 1:1
+  with its 24 runtime cases. The `json inventory` block above records
+  these static counts (8 and 24) under `ports`, per the checker's
+  static-coupling contract; this bullet's 46/22/24 figures describe
+  runtime behavior. Reconciliation: 1:1 for all 100 original
   entries except three recorded merges (all read directly from the
   source, not carried forward from any earlier draft): items 1-2 (2:1 —
   the unquoted accepted-block pair comparison and its
@@ -1029,16 +1051,17 @@ the reconciliation arithmetic in "Cardinality" below.
   enforced — a missing file fails the case — so this is a mechanism
   divergence, not a drop.
 - Port-only assertions live in their own table, outside this arithmetic:
-  the six items numbered in "Port-only assertions" below (the YAML 1.2
+  the seven items numbered in "Port-only assertions" below (the YAML 1.2
   canary; the anchored-prefix-match, quote-close-boundary, and
   reference-count-ordering action-pin fixtures; and the
-  literal-pin-detector boundary and one-finding-per-line fixtures) —
+  literal-pin-detector boundary and one-finding-per-line fixtures; and the
+  pnpm packageManager updater caller contract) —
   **plus two more port-only assertions that exist in the port but are
   documented in prose within their own subsections rather than added to
   that numbered list**: the forbidden-publish detector's
   planted-violation case (`test_release_workflow` above, `:450-459`) and
   the source-policy non-empty-scan guard (`test_workflow_pin_source_policy`
-  above, `:195-198`). Recorded here, outside the 100/45 arithmetic above,
+  above, `:195-198`). Recorded here, outside the 100/46 arithmetic above,
   rather than silently folded into it.
 
 ## Mutation proof
@@ -1244,3 +1267,12 @@ After all 31 mutations were applied, observed RED, and restored:
 `git status -sb` reported a clean tree (only the branch line), and `git
 diff --stat` was empty repository-wide — confirmed both immediately after
 each individual restoration and once more after the complete sweep.
+
+## Issue 110 CI correction
+
+Zizmor rejected the updater caller's blanket secret inheritance. The caller
+now forwards only `RELEASE_BOT_PRIVATE_KEY`, following the existing tag-release
+caller and the reusable updater's declared secret contract. The semantic test
+was changed first and failed on `inherit`; the explicit mapping passes. This
+clarifies port-only item 7 without changing any inventory counts. The corrected
+secret contract and accompanying digest are submitted for reviewer re-freeze.
