@@ -16,16 +16,21 @@ npx superpowers-manager probe
 npx superpowers-manager update
 ```
 
-Use the official marketplace for the simplest native Codex installation. Use
-Superpowers Manager when you want immediate stable-upstream freshness after a
-user-triggered install/update, per-invocation release or commit selection,
-recorded upstream provenance, diagnostics, upstream-owned Codex hook handling,
-and explicit install/update/probe/uninstall lifecycle control.
+Use Superpowers Manager to follow the latest stable Superpowers release directly
+from upstream and apply updates with one command. By default, `install` and
+`update` resolve the highest stable `vX.Y.Z` tag when invoked; saved pins and
+invocation overrides take precedence. `probe` reports whether your installation
+matches that selection without changing Codex state. Updates are user-triggered.
 
-| Choose | Best fit |
-|---|---|
-| Official marketplace | Simplest Codex-native installation and marketplace-managed cadence |
-| `superpowers-manager` | Direct stable-upstream freshness when invoked, exact ref selection, provenance, diagnostics, and lifecycle control |
+| Choose | Version source | Best fit |
+|---|---|---|
+| `superpowers-manager` | Latest stable upstream tag by default, or your saved/overridden selection | Follow upstream stable with drift reporting and verified updates |
+| Direct upstream repository | The configured Git ref, or the repository's default branch | Use Codex's native Git marketplace support |
+| `superpowers@openai-curated` | The copy distributed in the curated marketplace | Use the curated integration and its refresh policy |
+
+See [Comparing installation routes](#comparing-installation-routes) for commands
+and update behavior. Use one provider at a time; see
+[Provider ownership](#provider-ownership) before switching.
 
 ### Moving from `superpowers-wrapper`
 
@@ -72,6 +77,78 @@ Network needs depend on the saved policy. `pin` verifies its target;
 of a saved exact pin can reuse its recorded identity without upstream access.
 Updates remain user-triggered; the manager does not run automatic or background
 updates.
+
+## Comparing installation routes
+
+### Getting the latest stable release
+
+The manager selects the highest stable upstream `vX.Y.Z` tag when its effective
+policy is `latest-release`. It does not require the curated marketplace to
+publish that release first. Saved pins and environment overrides can select a
+different version or source; see [Choosing the upstream version](#choosing-the-upstream-version).
+
+The direct repository route uses the Git ref you configure. Adding the repository
+without `--ref` uses its default branch, which is not a latest-stable release
+policy. The curated route uses the
+[copy in `openai/plugins`](https://github.com/openai/plugins/tree/main/plugins/superpowers).
+Refreshing that snapshot does not independently resolve the latest stable tag
+from `obra/superpowers`; curated may match upstream or lag behind it.
+
+The native CLI examples below were checked against Codex `0.153.3`. Upstream's
+[marketplace manifest](https://github.com/obra/superpowers/blob/main/.agents/plugins/marketplace.json)
+names its marketplace `superpowers-dev`.
+
+### First install
+
+These are alternative routes; do not run both to install duplicate providers.
+
+| Step | Superpowers Manager | Direct upstream repository |
+|---|---|---|
+| 1 | `npx superpowers-manager install` | `codex plugin marketplace add https://github.com/obra/superpowers` |
+| 2 | — | `codex plugin add superpowers@superpowers-dev` |
+
+The manager follows upstream stable by default. For a specific release on the
+direct route, choose its tag and add `--ref TAG` to the marketplace-add command.
+
+### Staying current
+
+| Action | Superpowers Manager | Direct upstream repository |
+|---|---|---|
+| Explicit update | `npx superpowers-manager update` | `codex plugin marketplace upgrade superpowers-dev` |
+| Optional inspection | `npx superpowers-manager probe` | `codex plugin list` |
+
+The manager probes first, skips prepare/install when current and update control
+is valid, and verifies the resulting installed state after a refresh. `probe`
+reports requested and resolved refs, desired/generated/installed commits, and
+status. With a saved pin, "current" means matching that pin, not necessarily
+matching the latest upstream release. See [Lifecycle commands](#lifecycle-commands).
+
+Native marketplace upgrade follows its configured ref. In the checked Codex
+version, it can skip unchanged snapshots and refreshes installed plugins when
+the marketplace changes; a second `plugin add` is not required for that refresh.
+Codex also has an automatic refresh path for configured Git marketplaces.
+See the [native upgrade implementation](https://github.com/openai/codex/blob/rust-v0.153.3/codex-rs/core-plugins/src/manager.rs).
+`plugin list` shows installed versions; comparing them with upstream stable is
+separate inspection work, not a prerequisite for running an update.
+
+### Changing the selected version
+
+Replace `TAG` below with the exact release tag you want. For an already registered
+direct marketplace, remove/add is a CLI route to changing its ref:
+
+| Step | Superpowers Manager | Direct upstream repository |
+|---|---|---|
+| 1 | `npx superpowers-manager pin TAG` | `codex plugin marketplace remove superpowers-dev` |
+| 2 | `npx superpowers-manager update` | `codex plugin marketplace add https://github.com/obra/superpowers --ref TAG` |
+| 3 | — | `codex plugin add superpowers@superpowers-dev` |
+
+The manager's `pin` saves verified intent without changing Codex state; `update`
+applies it. To resume following stable releases, run
+`npx superpowers-manager track-latest`, then `npx superpowers-manager update`.
+The native sequence changes marketplace configuration immediately. In the checked
+CLI, `marketplace upgrade` has no `--ref` option, and adding the same marketplace
+name with a different ref is rejected. This sequence does not imply that editing
+native configuration is impossible.
 
 ## What it does
 
