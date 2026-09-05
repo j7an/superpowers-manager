@@ -8,150 +8,23 @@ import { computeEffectiveSelection } from "../effective-selection.ts";
 import { generatedCommitOrEmpty } from "../provenance.ts";
 import { displaySource } from "../selection.ts";
 import { statusForCommits } from "../status.ts";
+import {
+  formatHuman,
+  formatPorcelain,
+  type ProbeFacts,
+} from "../codex-presentation.ts";
 import type { CommandContext } from "./context.ts";
+
+export {
+  fields,
+  formatHuman,
+  formatPorcelain,
+  PROBE_PORCELAIN_KEYS,
+  type ProbeFacts,
+} from "../codex-presentation.ts";
 
 export const PROBE_USAGE =
   "error: usage: superpowers-manager probe [--porcelain]\n";
-
-export interface ProbeFacts {
-  readonly requestedRef: string;
-  readonly resolvedRef: string;
-  readonly desiredCommit: string;
-  readonly generatedCommit: string;
-  readonly installedCommit: string;
-  readonly identityState: string;
-  readonly status: string;
-  readonly selectionOrigin: string;
-  readonly selectionMode: string;
-  readonly upstreamSourceOrigin: string;
-  readonly effectiveSource: string;
-  readonly savedMode: string;
-  readonly savedSource: string;
-  readonly savedRequestedRef: string;
-  readonly savedResolvedRef: string;
-  readonly savedCommit: string;
-  readonly updateControl: string;
-}
-
-interface Field {
-  readonly key: string;
-  readonly label: string;
-  readonly value: string;
-  readonly absent?: string;
-}
-
-// One ordered table drives both formats, so the porcelain key order
-// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:43-59::printf 'requested_ref`) and the human label order (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:61-77::printf 'requested ref`) cannot
-// drift apart. Two parallel lists could each stay self-consistent while
-// disagreeing with one another.
-function fields(f: ProbeFacts): readonly Field[] {
-  return [
-    { key: "requested_ref", label: "requested ref", value: f.requestedRef },
-    { key: "resolved_ref", label: "resolved ref", value: f.resolvedRef },
-    { key: "desired_commit", label: "desired commit", value: f.desiredCommit },
-    {
-      key: "generated_commit",
-      label: "generated plugin commit",
-      value: f.generatedCommit,
-      absent: "not present",
-    },
-    {
-      key: "installed_commit",
-      label: "installed manager commit or fingerprint",
-      value: f.installedCommit,
-      absent: "not detected",
-    },
-    {
-      key: "identity_state",
-      label: "Codex identity state",
-      value: f.identityState,
-    },
-    { key: "status", label: "status", value: f.status },
-    {
-      key: "selection_origin",
-      label: "selection origin",
-      value: f.selectionOrigin,
-    },
-    { key: "selection_mode", label: "selection mode", value: f.selectionMode },
-    {
-      key: "upstream_source_origin",
-      label: "upstream source origin",
-      value: f.upstreamSourceOrigin,
-    },
-    {
-      key: "effective_source",
-      label: "effective source",
-      value: f.effectiveSource,
-    },
-    { key: "saved_mode", label: "saved mode", value: f.savedMode },
-    { key: "saved_source", label: "saved source", value: f.savedSource },
-    {
-      key: "saved_requested_ref",
-      label: "saved requested ref",
-      value: f.savedRequestedRef,
-    },
-    {
-      key: "saved_resolved_ref",
-      label: "saved resolved ref",
-      value: f.savedResolvedRef,
-    },
-    { key: "saved_commit", label: "saved commit", value: f.savedCommit },
-    { key: "update_control", label: "update control", value: f.updateControl },
-  ];
-}
-
-// Derived from the same fields() table, so the key list a test asserts and
-// the key list formatPorcelain emits cannot be different lists. The facts
-// argument is irrelevant here — fields() is total over ProbeFacts and the
-// keys do not depend on the values.
-const NO_FACTS: ProbeFacts = {
-  requestedRef: "",
-  resolvedRef: "",
-  desiredCommit: "",
-  generatedCommit: "",
-  installedCommit: "",
-  identityState: "",
-  status: "",
-  selectionOrigin: "",
-  selectionMode: "",
-  upstreamSourceOrigin: "",
-  effectiveSource: "",
-  savedMode: "",
-  savedSource: "",
-  savedRequestedRef: "",
-  savedResolvedRef: "",
-  savedCommit: "",
-  updateControl: "",
-};
-
-export const PROBE_PORCELAIN_KEYS: readonly string[] = fields(NO_FACTS).map(
-  (field) => field.key,
-);
-
-export function formatPorcelain(f: ProbeFacts): string {
-  return fields(f)
-    .map((field) => `${field.key}=${field.value}\n`)
-    .join("");
-}
-
-export function formatHuman(f: ProbeFacts): string {
-  let text = fields(f)
-    .map((field) => {
-      const shown =
-        field.value.length === 0 && field.absent !== undefined
-          ? field.absent
-          : field.value;
-      return `${field.label}: ${shown}\n`;
-    })
-    .join("");
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:78-81::if [ "$SPW_SELECTION_ORIGIN`.
-  if (f.selectionOrigin !== f.upstreamSourceOrigin) {
-    text +=
-      "warning: effective ref and source have mixed origins " +
-      `(ref: ${f.selectionOrigin}, source: ${f.upstreamSourceOrigin})\n`;
-  }
-  return text;
-}
 
 // Ports scripts/core/validate-adapter-response.py's replay (:235-238) and its
 // error/hint block (:269-272). The shell ran that validator on EVERY adapter

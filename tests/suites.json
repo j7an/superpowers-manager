@@ -40,6 +40,7 @@
     "tests/unit/adapter.test.ts",
     "tests/unit/atomic.test.ts",
     "tests/unit/codex-json.test.ts",
+    "tests/unit/codex-harness.test.ts",
     "tests/unit/codex-prepare.test.ts",
     "tests/unit/codex-state.test.ts",
     "tests/unit/commands-install.test.ts",

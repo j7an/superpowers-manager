@@ -10,8 +10,10 @@ dist/adapter.js
 dist/atomic.js
 dist/cli-arguments.js
 dist/cli.js
+dist/codex-harness.js
 dist/codex-json.js
 dist/codex-prepare.js
+dist/codex-presentation.js
 dist/codex-state.js
 dist/commands/context.js
 dist/commands/install.js
