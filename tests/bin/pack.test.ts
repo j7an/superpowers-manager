@@ -387,6 +387,11 @@ void test("compiler failure yields no package metadata or artifact", (t) => {
 
 void test("one staged package is delivered and all staging is removed", (t) => {
   const f = makePackFixture(t);
+  mkdirSync(join(f.root, "dist"));
+  writeFileSync(
+    join(f.root, "dist", "stale.js"),
+    "throw new Error('stale checkout output was packaged');\n",
+  );
   const result = runPackDriver(f);
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout);
@@ -395,12 +400,16 @@ void test("one staged package is delivered and all staging is removed", (t) => {
   assert.equal(typeof report[0].filename, "string");
   assert.deepEqual(readdirSync(f.out), [report[0].filename]);
   assert.deepEqual(readdirSync(f.temp), []);
+  const tarball = join(f.out, report[0].filename);
+  const listing = execFileSync("tar", ["-tf", tarball], {
+    encoding: "utf8",
+  });
+  assert.match(listing, /^package\/dist\/cli\.js$/m);
+  assert.doesNotMatch(listing, /^package\/dist\/stale\.js$/m);
   const sealed = JSON.parse(
-    execFileSync(
-      "tar",
-      ["-xOf", join(f.out, report[0].filename), "package/package.json"],
-      { encoding: "utf8" },
-    ),
+    execFileSync("tar", ["-xOf", tarball, "package/package.json"], {
+      encoding: "utf8",
+    }),
   );
   assert.equal(sealed.name, "superpowers-manager");
   assert.equal(sealed.version, "0.0.0-fixture");

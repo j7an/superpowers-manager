@@ -178,10 +178,11 @@ smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
 with both that binary and the native harness binary. The minimum binary never
 runs TypeScript or installs dependencies during offline acceptance.
 
-CI checks both native endpoints; static no-emit checking runs only on latest
-Node 24, while both checkout entries run tooling coverage and historical
-citations. Release acceptance runs static checking and both offline container
-endpoints before the shared publisher's `pack-command` produces the tarball.
+PR CI runs focused native compatibility at Node 24.12.0 and one full container
+at latest Node 24. Static no-emit checking, tooling coverage, and historical
+citations run only on the latest-24 checkout entry. Release acceptance retains
+static checking and both offline container endpoints before the shared
+publisher's `pack-command` produces the tarball.
 The package assertion must expose only the manager executable and approved
 source allowlist.
 

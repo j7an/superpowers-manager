@@ -449,16 +449,18 @@ for the tested Codex build. It is not a stable Superpowers Manager API.
 
 The manual probe is opt-in and covers native-only compatibility residue such as
 path/cache and version-precedence behavior against an intentionally real local
-Codex install. It is not part of acceptance. GitHub Actions runs both the
-toolchain check and the blocking container acceptance command on pull requests
-and pushes to `main`. The `toolchain` job runs `pnpm run check:static` plus the
-tooling-coverage and citations suites, preserving checks that need a Git
-checkout and history. The `test` job runs the full suite and Codex offline
-probe in the container. When adding checks that require the host checkout,
-ensure the `toolchain` job covers them too. Native acceptance runs at Node
-24.12.0 and latest 24.x, including checkout-dependent gates; the installed npm
-executable is also tested with Node 24.0.0. These CI runtime selectors are
-separate from the Homebrew-managed local commands above.
+Codex install. It is not part of acceptance. GitHub Actions runs two focused
+`toolchain` entries and one blocking container acceptance job on pull requests
+and pushes to `main`. The Node 24.12.0 toolchain entry checks native source
+loading, the suite runner/assertion preload, and package-producer success and
+failure. The latest-24 toolchain entry alone runs `pnpm run check:static` plus
+the tooling-coverage and citations suites that need a Git checkout and history.
+The `test` job runs the full suite and Codex offline probe once on latest Node
+24.x. When adding checks that require the host checkout, ensure the latest-24
+toolchain entry covers them. Release acceptance still runs full containers at
+both native endpoints, and the installed npm executable is tested with Node
+24.0.0. These runtime selectors are separate from the Homebrew-managed local
+commands above.
 
 ## Repository layout
 
