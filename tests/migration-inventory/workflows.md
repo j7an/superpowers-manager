@@ -3,9 +3,9 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh -->
 
-Source read in full (739 lines). Ported to `tests/bin/workflows.test.js` and
-`tests/bin/action-pins.test.js`, with shared helpers in
-`tests/bin/workflow-support.js`.
+Source read in full (739 lines). Current native port: `tests/bin/workflows.test.ts` and
+`tests/bin/action-pins.test.ts`, with shared helpers in
+`tests/bin/workflow-support.ts`.
 
 No behavior ID in `docs/baseline/traceability.md` references `test_workflows`
 (confirmed by `grep -n 'test_workflows' docs/baseline/traceability.md` on
@@ -97,8 +97,8 @@ shape:
 
 ### `test_action_pin_helper` — action-pin matcher (`:347-419`)
 
-Ported to `actionPinPair` in `tests/bin/workflow-support.js`, exercised by
-`tests/bin/action-pins.test.js`.
+Current native port: `actionPinPair` in `tests/bin/workflow-support.ts`, exercised by
+`tests/bin/action-pins.test.ts`.
 
 <!-- inventory:mapped:start -->
 
@@ -180,8 +180,8 @@ they test ordering or anchoring.
 
 ### `test_literal_action_pin_detector` — literal-pin detector (`:486-537`)
 
-Ported to `findLiteralActionPinSnapshots` in `tests/bin/workflow-support.js`,
-exercised by `tests/bin/action-pins.test.js`.
+Current native port: `findLiteralActionPinSnapshots` in `tests/bin/workflow-support.ts`,
+exercised by `tests/bin/action-pins.test.ts`.
 
 Positive fixtures: eight literal-pin-shaped lines written to `source_file`
 are each detected by `find_literal_action_pin_snapshots` at their correct
@@ -242,7 +242,7 @@ tells a correct implementation apart from a broken one on these two axes.
 The migration did not lose this coverage; porting is what revealed it was
 never there. Two port-only fixtures (see "Port-only assertions" below) close
 the gap. Each was proven discriminating by breaking the corresponding line
-in `tests/bin/workflow-support.js`, observing that fixture (and only that
+in `tests/bin/workflow-support.ts`, observing that fixture (and only that
 one) go RED, and restoring the correct behavior by editing the file back:
 - Boundary check: breaking it turned "literal pin detector port-only: a sha
   immediately followed by a non-hex letter is not a boundary and is
@@ -256,9 +256,9 @@ one) go RED, and restoring the correct behavior by editing the file back:
 
 ### `test_workflow_pin_source_policy` — source policy (`:539-550`)
 
-Ported to the "no test source embeds a literal action pin snapshot" case in
-`tests/bin/workflows.test.js`, using `findLiteralActionPinSnapshots` from
-`tests/bin/workflow-support.js`.
+Current native port: the "no test source embeds a literal action pin snapshot" case in
+`tests/bin/workflows.test.ts`, using `findLiteralActionPinSnapshots` from
+`tests/bin/workflow-support.ts`.
 
 29. No literal (un-parameterized) SHA-pinned `uses:`-shaped string exists
     anywhere in `tests/*.sh`, `tests/*.py`, `tests/lib/*.sh`, or
@@ -268,7 +268,7 @@ Ported to the "no test source embeds a literal action pin snapshot" case in
 `tests/*.py`, `tests/lib/*.sh`, `tests/lib/*.py` — four non-recursive globs
 that exclude JavaScript. Porting the driver to JS would have moved the
 repository's densest collection of SHA-shaped fixtures (in
-`tests/bin/action-pins.test.js`, added by Tasks 3-4) outside its own policy.
+`tests/bin/action-pins.test.ts`, added by Tasks 3-4) outside its own policy.
 The port scans `tests/` recursively for `.sh`, `.py`, `.js`, and `.mjs`: a
 strict superset. The design doc measured this on 2026-08-02, before Tasks 3
 and 4 existed, at 65 files with zero findings. Re-measured on 2026-08-02
@@ -276,7 +276,7 @@ after those tasks landed their SHA-shaped fixtures: **68 files, zero
 findings** — those fixtures construct SHA-shaped strings via
 `padStart`/`repeat` rather than embedding literal 40-hex pins, so the
 widened scan still passes. Verified empirically by running the port's own
-test (`tests/bin/workflows.test.js`, "no test source embeds a literal
+test (`tests/bin/workflows.test.ts`, "no test source embeds a literal
 action pin snapshot") — GREEN — and by planting a literal 40-hex pin in a
 throwaway `tests/bin/tmp-policy-probe.js`, confirming it goes RED naming
 that file, then removing the probe and confirming GREEN again. Scope
@@ -289,13 +289,13 @@ findings" assertion below it.
 
 ### `test_workflow_pin_contracts` — pin inventory (`:434-484`)
 
-Ported to three cases in `tests/bin/workflows.test.js` — "external action
+Current native port: three cases in `tests/bin/workflows.test.ts` — "external action
 inventory matches the workflows", "every inventoried pin is a semantic
 40-hex pin", and "all shared-workflows pins agree with one another" — built
 on the `EXPECTED_EXTERNAL_PINS` fixture (the port's carrier for the original
 8-row manifest, plus maintained callers added after the migration) and
 `collectExternalTargets`, added to
-`tests/bin/workflow-support.js` in this task.
+`tests/bin/workflow-support.ts` in this task.
 
 30. The set of external (`uses:`) action targets discovered by scanning
     every `.github/workflows/*.yml`/`*.yaml` file exactly matches the
@@ -351,13 +351,13 @@ with a clean `git diff`.
 
 ### `test_ci_workflow` — ci.yml (`:552-567`)
 
-Ported to four cases in `tests/bin/workflows.test.js` — "ci.yml declares the
+Current native port: four cases in `tests/bin/workflows.test.ts` — "ci.yml declares the
 expected top-level contract", "ci.yml `test` job runs the container
 acceptance suite in order", "ci.yml `toolchain` job runs the checks in
 order", and "ci.yml exists and blocking mode creates no compatibility
 workflow" — using `requireMapping` (local to `workflows.test.js`) plus
 `uniqueStepTargetIndex` and `uniqueRunStepIndex`, both added to
-`tests/bin/workflow-support.js` in this task as 1:1 ports of Ruby's
+`tests/bin/workflow-support.ts` in this task as 1:1 ports of Ruby's
 `unique_step_target_index` (`:32-43`) and `unique_run_step_index` (`:45-54`).
 
 42. `.github/workflows/ci.yml` exists. (`:557`)
@@ -426,14 +426,14 @@ own message, then was restored the same way.
 
 ### `test_release_workflow` — release.yml (`:569-579`)
 
-Ported to four cases in `tests/bin/workflows.test.js` — "release.yml
+Current native port: four cases in `tests/bin/workflows.test.ts` — "release.yml
 triggers only on version tags", "release.yml publish job delegates to the
 shared workflow", "release.yml contains no forbidden publish
 configuration", and the port-only "the forbidden-publish detector rejects
 a planted violation" — using `requireMapping` (local to
 `workflows.test.js`) plus `usesTarget` (already exported from
-`tests/bin/workflow-support.js`) and `assertNoForbidden`, added to
-`tests/bin/workflow-support.js` in this task as a 1:1 port of Ruby's
+`tests/bin/workflow-support.ts`) and `assertNoForbidden`, added to
+`tests/bin/workflow-support.ts` in this task as a 1:1 port of Ruby's
 `assert_no_forbidden` (`:197-210`).
 
 72. `.github/workflows/release.yml` exists. (`:573`)
@@ -535,7 +535,7 @@ with the same `/i` flag as the Ruby original.
 
 ### `test_tag_release_workflow` — tag-release.yml (`:581-729`)
 
-Ported to eight cases in `tests/bin/workflows.test.js` — "tag-release.yml
+Current native port: eight cases in `tests/bin/workflows.test.ts` — "tag-release.yml
 wires the shared tag-release workflow", "tag-release.yml offers exactly the
 supported bump options", "the bump-option check reads `bump`, not a decoy
 sibling input", "the bump-option check reports a missing options block
@@ -545,7 +545,7 @@ is rejected while parsing, distinctly from missing or wrong (item 99)",
 carries the manager name and a stable semver version", and "the
 stable-semver check rejects a prerelease" — using `requireMapping` (local to
 `workflows.test.js`, already added in the ci.yml task) plus `parseWorkflow`,
-added to `tests/bin/workflow-support.js` in this task so a fixture can be
+added to `tests/bin/workflow-support.ts` in this task so a fixture can be
 constructed directly from a YAML string rather than only read from a file
 (`loadWorkflow` now delegates to it: `parseWorkflow(readFileSync(path,
 "utf8"))`).
@@ -630,7 +630,7 @@ the stable-numbering rule: later tasks match by citation, never by position.
     (a).** The shell's mechanism (parse a tab-separated manifest *file*,
     raise on a line that doesn't split into exactly two non-empty fields)
     does not exist in the port: `EXPECTED_EXTERNAL_PINS` in
-    `tests/bin/workflows.test.js` is a JS array literal, not text parsed
+    `tests/bin/workflows.test.ts` is a JS array literal, not text parsed
     from a file, so there is no line to malform. The underlying **claim**
     survives unchanged, though: every entry must still have exactly two
     non-empty fields, and `@ts-check` does not enforce this —
@@ -694,7 +694,7 @@ the stable-numbering rule: later tasks match by citation, never by position.
     values") survives; the layer that catches it moved from this file's own
     walker into the parser it now delegates to. Ported as "a duplicated bump
     options block is rejected while parsing, distinctly from missing or
-    wrong (item 99)" in `tests/bin/workflows.test.js`, asserting
+    wrong (item 99)" in `tests/bin/workflows.test.ts`, asserting
     `parseWorkflow(fixture)` throws matching `/Map keys must be unique/` for
     a `bump:` fragment with two `options:` siblings, alongside a control
     assertion that the same fragment with the duplication removed does
@@ -723,7 +723,7 @@ the stable-numbering rule: later tasks match by citation, never by position.
     subgroup. (`:646`)
 
     **Ported (Task 8, 2026-08-02) — the load-bearing entry.** `bumpOptions`
-    in `tests/bin/workflows.test.js` asserts `Array.isArray(bump.options)`
+    in `tests/bin/workflows.test.ts` asserts `Array.isArray(bump.options)`
     with the message "expected on.workflow_dispatch.inputs.bump.options to
     be a sequence" *before* any comparison against
     `EXPECTED_BUMP_OPTIONS` runs, so a `tag-release.yml` fixture that lost
@@ -736,7 +736,7 @@ the stable-numbering rule: later tasks match by citation, never by position.
     missing, `/Tag Release bump options must be exactly/` for wrong), so a
     single wrong-shaped error cannot satisfy both. Ported as "the
     bump-option check reports a missing options block distinctly from a
-    wrong one (items 99-100)" in `tests/bin/workflows.test.js`, which
+    wrong one (items 99-100)" in `tests/bin/workflows.test.ts`, which
     constructs one fixture with a `bump:` mapping that has no `options:` key
     (asserting `bumpOptions` throws the missing-shaped message) and a
     second fixture with a two-option `bump.options` (asserting
@@ -793,7 +793,7 @@ the reconciliation arithmetic in "Cardinality" below.
    `["name","on","concurrency","permissions","jobs"]`. Mutation-tested:
    inverting the negation on the `"true"`-key check reproduces the failure
    this assertion exists to catch. Port-only — it has no shell counterpart
-   and is outside the 1:1 mapping. (`tests/bin/workflows.test.js`)
+   and is outside the 1:1 mapping. (`tests/bin/workflows.test.ts`)
 
 2. **Anchored prefix match: a target embedded mid-line, not at the start, is
    rejected.** `actionPinPair` requires `line.indexOf(target + "@") === 0`
@@ -810,7 +810,7 @@ the reconciliation arithmetic in "Cardinality" below.
    drove only this fixture RED (`AssertionError: Missing expected
    exception`); restoring the anchored check turned it GREEN again, with
    all other fixtures unaffected throughout. Port-only — it has no shell
-   counterpart. (`tests/bin/action-pins.test.js`)
+   counterpart. (`tests/bin/action-pins.test.ts`)
 3. **Quote-close boundary: a reference opened with one quote and apparently
    closed with a different quote is rejected.** `actionPinPair` requires the
    character immediately before the `" # "` separator to equal the opening
@@ -822,7 +822,7 @@ the reconciliation arithmetic in "Cardinality" below.
    stripping the last character without checking it matches the opening
    quote) drove only this fixture RED; restoring the check turned it GREEN
    again. Port-only — it has no shell counterpart.
-   (`tests/bin/action-pins.test.js`)
+   (`tests/bin/action-pins.test.ts`)
 4. **Reference-count ordering: a bare reference alongside a valid one to the
    same target forces a count disagreement.** `actionPinPair` increments
    `referenceCount` for every anchored match *before* checking for the
@@ -838,7 +838,7 @@ the reconciliation arithmetic in "Cardinality" below.
    the `referenceCount += 1` increment to after the separator check (so a
    bare reference is never counted at all) drove only this fixture RED;
    restoring the original order turned it GREEN again. Port-only — it has
-   no shell counterpart. (`tests/bin/action-pins.test.js`)
+   no shell counterpart. (`tests/bin/action-pins.test.ts`)
 5. **Boundary check: a SHA immediately followed by a non-hex letter, with no
    intervening whitespace or punctuation, is rejected.**
    `findLiteralActionPinSnapshots` requires the character right after a
@@ -855,7 +855,7 @@ the reconciliation arithmetic in "Cardinality" below.
    to be strictly deep-equal: ... - []`, actual had one unwanted finding);
    restoring the check turned it GREEN again, with all other 21 fixtures
    unaffected throughout. Port-only — it has no shell counterpart.
-   (`tests/bin/action-pins.test.js`)
+   (`tests/bin/action-pins.test.ts`)
 6. **One finding per line: two independently valid pins on the same line
    still produce exactly one finding.** `findLiteralActionPinSnapshots`
    `return`s out of the per-line scan as soon as it reports a finding,
@@ -869,7 +869,7 @@ the reconciliation arithmetic in "Cardinality" below.
    `actual`, length 2, against an `expected` of length 1); restoring the
    early return turned it GREEN again, with all other 21 fixtures unaffected
    throughout. Port-only — it has no shell counterpart.
-   (`tests/bin/action-pins.test.js`)
+   (`tests/bin/action-pins.test.ts`)
 7. **The pnpm packageManager updater is a minimal scheduled and manual
    reusable-workflow caller.** Issue 96 added a maintained caller after the
    shell-to-Node migration, so it has no shell counterpart. The caller test
@@ -885,7 +885,7 @@ the reconciliation arithmetic in "Cardinality" below.
    count while leaving the 100 shell-original assertions unchanged. The
    accompanying digest update is a pending reviewer re-freeze under the
    repository's inventory policy. Verified 2026-09-04.
-   (`tests/bin/workflows.test.js`)
+   (`tests/bin/workflows.test.ts`)
 
 <!-- inventory:port-only:end -->
 
@@ -896,8 +896,8 @@ the reconciliation arithmetic in "Cardinality" below.
   "shellOriginal": 100,
   "portOnly": 7,
   "ports": {
-    "tests/bin/action-pins.test.js": 8,
-    "tests/bin/workflows.test.js": 24
+    "tests/bin/action-pins.test.ts": 8,
+    "tests/bin/workflows.test.ts": 24
   }
 }
 ```
@@ -909,7 +909,7 @@ the reconciliation arithmetic in "Cardinality" below.
   **12**; tag-release.yml **15** (13 derived initially + items 99-100
   reinstated on controller adjudication). Sum check:
   16 + 12 + 1 + 14 + 30 + 12 + 15 = 100, matching the total above.
-- Action-pin matcher port (`tests/bin/action-pins.test.js`): 15 `node:test`
+- Action-pin matcher port (`tests/bin/action-pins.test.ts`): 15 `node:test`
   cases 1:1-reconciling the 16 shell assertions (3 accepted-form + 1
   agreeing-duplicate + 11 rejected cases), via one 2:1 merge — items 1-2
   both exercise the unquoted accepted block and are subsumed by the port's
@@ -921,7 +921,7 @@ the reconciliation arithmetic in "Cardinality" below.
   named merge, no drops; the 3 additional port-only fixtures are strictly
   additive coverage for a gap discovered in the shell corpus, not a
   reconciliation of any shell assertion.
-- Literal-pin detector port (`tests/bin/action-pins.test.js`): 2 `node:test`
+- Literal-pin detector port (`tests/bin/action-pins.test.ts`): 2 `node:test`
   cases 1:1-reconciling the 12 shell assertions (8 positive-form fixtures
   bundled into one `assert.deepEqual` over the full expected output block,
   plus 4 negative fixtures bundled into one emptiness `assert.deepEqual`) —
@@ -932,7 +932,7 @@ the reconciliation arithmetic in "Cardinality" below.
   no drops; the 2 additional port-only fixtures are strictly additive
   coverage for a gap discovered in the shell corpus, not a reconciliation of
   any shell assertion.
-- Source-policy port (`tests/bin/workflows.test.js:186-201`): 1 `node:test`
+- Source-policy port (`tests/bin/workflows.test.ts:186-201`): 1 `node:test`
   case ("no test source embeds a literal action pin snapshot")
   1:1-reconciling the 1 shell assertion (item 29) via
   `assert.deepEqual(findLiteralActionPinSnapshots(scanned), [])` (`:200`) —
@@ -940,7 +940,7 @@ the reconciliation arithmetic in "Cardinality" below.
   (`:195-198`) that has no shell counterpart (documented under
   `test_workflow_pin_source_policy` above, not added to the numbered
   "Port-only assertions" list below). Reconciliation: 1:1, no drop.
-- Pin-inventory port (`tests/bin/workflows.test.js:78-82,95-181`): 5
+- Pin-inventory port (`tests/bin/workflows.test.ts:78-82,95-181`): 5
   `node:test` cases plus one top-level fixture self-check (outside any
   `test()`, executed at module load) 1:1-reconciling all 14 shell
   assertions (items 30-41, 97-98), no merges: item 30 → "external action
@@ -958,7 +958,7 @@ the reconciliation arithmetic in "Cardinality" below.
   97)" (`:95-109`); item 98 → "external-pin manifest fixture has no
   duplicate entries (item 98)" (`:111-118`). Reconciliation: 1:1 for all
   14, no merges, no drops.
-- ci.yml port (`tests/bin/workflows.test.js:223-357`): 4 `node:test` cases
+- ci.yml port (`tests/bin/workflows.test.ts:223-357`): 4 `node:test` cases
   1:1-reconciling all 30 shell assertions (items 42-71), no merges: items
   42-43 → "ci.yml exists and blocking mode creates no compatibility
   workflow" (`:351-357`); items 44-45 → "ci.yml declares the expected
@@ -971,7 +971,7 @@ the reconciliation arithmetic in "Cardinality" below.
   that the counting rules split into two named claims; both sides express
   the compound in one construct, so no additional merge is recorded here.
   Reconciliation: 1:1 for all 30, no merges, no drops.
-- release.yml port (`tests/bin/workflows.test.js:383-459`): 3 `node:test`
+- release.yml port (`tests/bin/workflows.test.ts:383-459`): 3 `node:test`
   cases plus 1 port-only case, 1:1-reconciling all 12 shell assertions
   (items 72-83): item 72 (`.github/workflows/release.yml` exists) is
   checked only implicitly, by `loadWorkflow`'s `readFileSync` throwing
@@ -990,7 +990,7 @@ the reconciliation arithmetic in "Cardinality" below.
   `test_release_workflow` above but not yet added to the numbered
   "Port-only assertions" list below. Reconciliation: 1:1 for all 12, no
   merges, no drops.
-- tag-release.yml port (`tests/bin/workflows.test.js:514-706`): 8
+- tag-release.yml port (`tests/bin/workflows.test.ts:514-706`): 8
   `node:test` cases 1:1-reconciling all 15 shell assertions (items 84-96,
   99-100), no merges: items 84, 87-90 → "tag-release.yml wires the shared
   tag-release workflow" (`:514-539`; item 84 implicit via `loadWorkflow` at
@@ -1010,8 +1010,8 @@ the reconciliation arithmetic in "Cardinality" below.
   options block distinctly from a wrong one (items 99-100)" (`:587-633`).
   Reconciliation: 1:1 for all 15, no merges, no drops.
 - **Port total: 46 `node:test` cases at runtime** — 22 executed from
-  `tests/bin/action-pins.test.js` (action-pin matcher and literal-pin
-  detector) and 24 from `tests/bin/workflows.test.js` (source policy, pin
+  `tests/bin/action-pins.test.ts` (action-pin matcher and literal-pin
+  detector) and 24 from `tests/bin/workflows.test.ts` (source policy, pin
   inventory, ci.yml, pnpm packageManager updates, release.yml,
   tag-release.yml) — plus the one
   top-level pin-inventory fixture self-check (`:78-82`) that runs outside
@@ -1276,3 +1276,34 @@ caller and the reusable updater's declared secret contract. The semantic test
 was changed first and failed on `inherit`; the explicit mapping passes. This
 clarifies port-only item 7 without changing any inventory counts. The corrected
 secret contract and accompanying digest are submitted for reviewer re-freeze.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/action-pins.test.ts` (8 static `test(` call sites); `tests/bin/workflows.test.ts` (24 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.
+
+Task 6 completes the native workflow wiring within the existing test cases.
+The CI acceptance job now requires native endpoints 24.12.0 and latest 24 with
+fail-fast disabled and the validated selector passed as step environment. The
+checkout toolchain matrix uses the same endpoints, frozen installation on both,
+latest-only no-emit static checking, and native `.ts` tooling/citation suites on
+both. Both checkouts retain full history; checkout compilation and duplicate full
+host runs are rejected. These adapt historical items 69-71's check ordering and single-runtime
+command expectations without changing their recorded historical evidence.
+
+The release caller's existing contract case now requires static checking and
+both sequential container endpoints in `test-command`, followed by the sole
+native packaging producer through `pack-command: node tests/tools/pack.ts --out-dir .`.
+Package directory stays at default `.`, and the shared workflow identity/pin,
+permissions, pack-content validator, trusted-publishing policy, and exact npx
+verification command remain unchanged. The existing source-policy scan continues
+to reject literal dependency/action snapshots; the runtime values above express
+accepted compatibility floors and matrix semantics. Both current port static
+counts remain unchanged. RED before implementation showed absent matrices and
+the old release build command; the updated focused workflow/container/bootstrap
+group then passed 108/108. The associated bootstrap case adds selector and
+separate-runtime documentation checks while preserving its existing table,
+section ordering, required approval evidence, and negative fixtures.

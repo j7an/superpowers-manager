@@ -1,4 +1,4 @@
-import type { AdapterContext, AdapterResult } from "../adapter-result.js";
+import type { AdapterContext, AdapterResult } from "../adapter-result.ts";
 
 export interface CommandContext {
   readonly root: string;

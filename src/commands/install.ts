@@ -3,26 +3,26 @@
 // src/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
 // and the adapter arrives through ctx.adapter.
 import { tmpdir } from "node:os";
-import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
-import { oneLine } from "../cli-arguments.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
+import { oneLine } from "../cli-arguments.ts";
 import {
   requireManagedUpdateControl,
   requireNoLegacyState,
   verifyInstalledFingerprint,
-} from "../lifecycle.js";
+} from "../lifecycle.ts";
 import {
   generatedMetadataPath,
   readStrictProvenanceField,
-} from "../provenance.js";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
-import type { CommandContext } from "./context.js";
+} from "../provenance.ts";
+import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import type { CommandContext } from "./context.ts";
 import {
   formatPorcelain,
   gatherProbe,
   replayOutcome,
   type ProbeFacts,
-} from "./probe.js";
-import { runPrepare } from "./prepare.js";
+} from "./probe.ts";
+import { runPrepare } from "./prepare.ts";
 
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:13::conflicting`, verbatim, and always first: the shell echoed it before
 // even invoking probe.
@@ -127,11 +127,13 @@ async function invoke(
 // src/commands/uninstall.ts's GatherFailure, duplicated for the same reason
 // invoke() is: no shared dependency between the two modules.
 class GatherFailure extends Error {
-  constructor(
-    readonly inner: unknown,
-    readonly outcomes: readonly AdapterOutcome[],
-  ) {
+  readonly inner: unknown;
+  readonly outcomes: readonly AdapterOutcome[];
+
+  constructor(inner: unknown, outcomes: readonly AdapterOutcome[]) {
     super("install gather failed");
+    this.inner = inner;
+    this.outcomes = outcomes;
   }
 }
 

@@ -1,4 +1,4 @@
-import { SafetyError } from "./safety-error.js";
+import { SafetyError } from "./safety-error.ts";
 
 /**
  * Render a JSON number token the way CPython's `json.dump` does.

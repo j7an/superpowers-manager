@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
-import { COMMIT_RE, TAG_RE, normalizeCommitInput } from "./domain/refs.js";
-import { escapePythonJsonString } from "./python-json.js";
-import { SafetyError } from "./safety-error.js";
+import { COMMIT_RE, TAG_RE, normalizeCommitInput } from "./domain/refs.ts";
+import { escapePythonJsonString } from "./python-json.ts";
+import { SafetyError } from "./safety-error.ts";
 
 export interface PinnedSelectionRecord {
   readonly schema_version: 1;

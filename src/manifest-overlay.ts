@@ -1,12 +1,12 @@
-import { escapeNonAscii, formatPythonNumber } from "./python-json-format.js";
-import { SafetyError } from "./safety-error.js";
+import { escapeNonAscii, formatPythonNumber } from "./python-json-format.ts";
+import { SafetyError } from "./safety-error.ts";
 import {
   isRawNumber,
   isRawObject,
   parseStrictJsonPreservingNumbers,
   type RawJsonValue,
   type StrictJsonProfile,
-} from "./strict-json.js";
+} from "./strict-json.ts";
 
 const OVERLAY_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
@@ -96,7 +96,7 @@ function setMember(
 
 /**
  * Map strict-json's diagnostics onto the CPython wording the callers assert.
- * Repository policy at `AGENTS.md:90::most diagnostics are asserted as`
+ * Repository policy at `AGENTS.md:91::most diagnostics are asserted as`
  * freezes most of these diagnostics as complete-string contracts.
  */
 function translate(cause: unknown, source: string, path: string): SafetyError {
@@ -117,7 +117,7 @@ function translate(cause: unknown, source: string, path: string): SafetyError {
     );
   }
   // strict-json reports `… at character N`
-  // (`src/strict-json.ts:305::at character ${this.index}`), a zero-based offset. CPython reports
+  // (`src/strict-json.ts:312::at character ${this.index}`), a zero-based offset. CPython reports
   // one-based line and column. Convert so the message keeps CPython's shape.
   // This does NOT claim the two parsers fail at the same place on the same
   // malformed input — see the spec.

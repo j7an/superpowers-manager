@@ -5,20 +5,20 @@
 // runInstall, each of which owns its own §4.2a-conformant invoke() gate. That
 // is also why update opens no temporary workspace of its own -- there is no
 // mutation here for one to protect.
-import { oneLine } from "../cli-arguments.js";
+import { oneLine } from "../cli-arguments.ts";
 import {
   requireManagedUpdateControl,
   requireNoLegacyState,
-} from "../lifecycle.js";
-import type { CommandContext } from "./context.js";
+} from "../lifecycle.ts";
+import type { CommandContext } from "./context.ts";
 import {
   formatPorcelain,
   gatherProbe,
   replayOutcome,
   type ProbeFacts,
-} from "./probe.js";
-import { runInstall } from "./install.js";
-import { runPrepare } from "./prepare.js";
+} from "./probe.ts";
+import { runInstall } from "./install.ts";
+import { runPrepare } from "./prepare.ts";
 
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:29-32::echo "$probe_output`'s `case ... *)` wildcard. Same unreachability shape as
 // src/commands/install.ts's renderUnknownProbeStatus: statusForCommits

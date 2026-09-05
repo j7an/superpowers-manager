@@ -4,7 +4,7 @@ import { sep } from "node:path";
 import {
   hasTerminalControl,
   pythonUnicodeEscapeBytes,
-} from "./adapter-result.js";
+} from "./adapter-result.ts";
 
 export type ValidatorPolicy =
   | { readonly kind: "unbounded" }
@@ -67,8 +67,11 @@ class Sink {
   private readonly chunks: Buffer[] = [];
   private kept = 0;
   private dropped = 0;
+  private readonly limit: number | null;
 
-  constructor(private readonly limit: number | null) {}
+  constructor(limit: number | null) {
+    this.limit = limit;
+  }
 
   push(chunk: Buffer): void {
     if (this.limit === null) {

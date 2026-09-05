@@ -1,9 +1,9 @@
 import { realpathSync } from "node:fs";
-import { oneLine, parseFlags, UsageError } from "./cli-arguments.js";
+import { oneLine, parseFlags, UsageError } from "./cli-arguments.ts";
 import {
   validateGeneratedPlugin,
   type GeneratedPluginValidationOptions,
-} from "./generated-plugin.js";
+} from "./generated-plugin.ts";
 
 const FLAGS = [
   "plugin-root",

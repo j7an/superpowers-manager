@@ -18,30 +18,30 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.js";
+} from "./adapter-result.ts";
 import {
   activePluginVersionFromJson,
   installedListingHas,
   marketplaceRootFromJson,
-} from "./codex-json.js";
-import { oneLine } from "./cli-arguments.js";
+} from "./codex-json.ts";
+import { oneLine } from "./cli-arguments.ts";
 import {
   installedCommitFromRoot,
   installedRootForVersion,
   pathsEqual,
-} from "./codex-state.js";
-import { validateGeneratedPlugin } from "./generated-plugin.js";
+} from "./codex-state.ts";
+import { validateGeneratedPlugin } from "./generated-plugin.ts";
 import {
   classifyHooks,
   materializeHooks,
   readManifest,
   type ManifestSource,
-} from "./hooks.js";
-import { applyManifestOverlay } from "./manifest-overlay.js";
-import { readCodexBuildSource } from "./provenance.js";
-import type { JsonValue } from "./strict-json.js";
-import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.js";
-import { withWorkspace, workspaceRemovalFailure } from "./workspace.js";
+} from "./hooks.ts";
+import { applyManifestOverlay } from "./manifest-overlay.ts";
+import { readCodexBuildSource } from "./provenance.ts";
+import type { JsonValue } from "./strict-json.ts";
+import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.ts";
+import { withWorkspace, workspaceRemovalFailure } from "./workspace.ts";
 
 const PLUGIN_ID = "superpowers@superpowers-manager";
 const MARKETPLACE_NAME = "superpowers-manager";
@@ -57,12 +57,13 @@ const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 export type { AdapterContext };
 
 class AdapterFailure extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly hints: readonly string[] = [],
-  ) {
+  readonly code: string;
+  readonly hints: readonly string[];
+
+  constructor(code: string, message: string, hints: readonly string[] = []) {
     super(message);
+    this.code = code;
+    this.hints = hints;
   }
 }
 

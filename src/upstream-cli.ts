@@ -1,15 +1,15 @@
 import { realpathSync } from "node:fs";
-import { oneLine, parseFlags, UsageError } from "./cli-arguments.js";
-import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.js";
+import { oneLine, parseFlags, UsageError } from "./cli-arguments.ts";
+import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.ts";
 import {
   fetchExactCommit,
   gitSafeSource,
   resolveExactTag,
   resolveRef,
   verifyRawCommit,
-} from "./upstream.js";
-import { manifestVersionForRef } from "./upstream-version.js";
-import type { ResolutionKind } from "./upstream-version.js";
+} from "./upstream.ts";
+import { manifestVersionForRef } from "./upstream-version.ts";
+import type { ResolutionKind } from "./upstream-version.ts";
 
 const COMMAND_FLAGS = {
   "resolve-ref": ["source", "ref"],

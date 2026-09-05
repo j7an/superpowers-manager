@@ -1,4 +1,4 @@
-import type { JsonValue } from "./strict-json.js";
+import type { JsonValue } from "./strict-json.ts";
 
 export type AdapterChannel = "stdout" | "stderr";
 

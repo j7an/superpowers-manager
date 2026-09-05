@@ -13,11 +13,11 @@ import {
   assertExistingContained,
   assertProspectiveContained,
   classifyPathNoFollow,
-} from "./safe-path.js";
-import type { NoFollowPathType } from "./safe-path.js";
-import { SafetyError } from "./safety-error.js";
-import { parseStrictJson } from "./strict-json.js";
-import type { JsonValue, StrictJsonProfile } from "./strict-json.js";
+} from "./safe-path.ts";
+import type { NoFollowPathType } from "./safe-path.ts";
+import { SafetyError } from "./safety-error.ts";
+import { parseStrictJson } from "./strict-json.ts";
+import type { JsonValue, StrictJsonProfile } from "./strict-json.ts";
 
 export type ManifestSource = "upstream" | "fallback";
 

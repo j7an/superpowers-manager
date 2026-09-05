@@ -9,7 +9,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { SafetyError } from "./safety-error.js";
+import { SafetyError } from "./safety-error.ts";
 
 export interface AtomicErrorDetails {
   readonly phase: "pre-replacement" | "post-replacement";

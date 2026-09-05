@@ -3,7 +3,7 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_node_tooling.sh -->
 
-Source read in full (22 lines). Ported to `tests/bin/node-tooling.test.js`.
+Source read in full (22 lines). Current native port: `tests/bin/node-tooling.test.ts`.
 
 No behavior ID in `docs/baseline/traceability.md` references
 `test_node_tooling` (confirmed by grep on 2026-07-31 — zero matches). This
@@ -27,8 +27,8 @@ dropped.
    file, never for a reason rooted in repository behavior). A 2026-08-01
    review restored the message check as its own independently-typed
    literal (`MISSING_COMPILER_DIAGNOSTIC` in
-   `tests/bin/node-tooling.test.js`, not imported by or into
-   `runJsTypecheck`), verified byte-for-byte against the deleted shell
+   `tests/bin/node-tooling.test.ts`, not imported by or into
+   `runTsTypecheck`), verified byte-for-byte against the deleted shell
    script (`git show d41fb88^:tests/test_node_tooling.sh | od -An -tx1`
    confirms bytes `e2 80 94` at the dash, i.e. U+2014, not a hyphen). That
    is not the tautology the earlier draft avoided: the test's literal and
@@ -66,7 +66,7 @@ false to equal true`.
 {
   "shellOriginal": 3,
   "portOnly": 0,
-  "ports": { "tests/bin/node-tooling.test.js": 2 }
+  "ports": { "tests/bin/node-tooling.test.ts": 2 }
 }
 ```
 
@@ -79,7 +79,7 @@ false to equal true`.
   branch (`tests/test_node_tooling.sh:11-14` both prints and exits), raised
   from 2 to 3 on 2026-08-01 when the message check was restored (see item
   1's history above).
-- Port (`tests/bin/node-tooling.test.js`): 2 `node:test` cases, one per
+- Port (`tests/bin/node-tooling.test.ts`): 2 `node:test` cases, one per
   shell branch, together carrying all 3 assertions — the missing-binary
   case (`:88-105`) asserts both `outcome.ok === false` and
   `outcome.diagnostic === MISSING_COMPILER_DIAGNOSTIC`; the
@@ -88,3 +88,15 @@ false to equal true`.
 - Reconciliation: 3:3, no merges, no drops. No test-case count changed —
   the message assertion joined the existing missing-binary case rather than
   adding a third `node:test` case.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/node-tooling.test.ts` (2 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.
+
+Both compiler-selection cases and the complete missing-compiler diagnostic are
+unchanged. The local helper is named `runTsTypecheck`; the actual compiler still
+checks `tests/tsconfig.json`, now owning all maintained native test/tool sources.

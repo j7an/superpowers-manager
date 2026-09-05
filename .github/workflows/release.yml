@@ -11,13 +11,17 @@ permissions:
 jobs:
   publish:
     permissions:
-      contents: write   # GitHub release, created by the reusable workflow
-      id-token: write   # npm trusted publishing; validated against THIS workflow's filename
+      contents: write # GitHub release, created by the reusable workflow
+      id-token: write # npm trusted publishing; validated against THIS workflow's filename
     uses: j7an/shared-workflows/.github/workflows/publish-npm.yml@8aafcda9817cace8993dd7d356457bda549e5f74 # v4.6.0
     with:
       tag: ${{ github.ref_name }}
       package-name: superpowers-manager
-      test-command: corepack enable && pnpm install --frozen-lockfile && pnpm run build && sh tests/container.sh
+      test-command: >-
+        corepack enable && pnpm install --frozen-lockfile && pnpm run check:static &&
+        SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh &&
+        SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
+      pack-command: node tests/tools/pack.ts --out-dir .
       pack-contents-script: tests/assert_pack_contents.sh
       verify-command: |
         attempt=1

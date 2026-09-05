@@ -75,9 +75,9 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
   return unknownState(identityState);
 }
 
-import type { AdapterResult } from "./adapter-result.js";
-import { hasTerminalControl } from "./adapter-result.js";
-import { commitMatches } from "./status.js";
+import type { AdapterResult } from "./adapter-result.ts";
+import { hasTerminalControl } from "./adapter-result.ts";
+import { commitMatches } from "./status.ts";
 
 export interface Refusal {
   readonly ok: false;
@@ -181,7 +181,7 @@ export function verifyInstalledFingerprint(
   const raw = inspected.value.fingerprint;
   // The Python reader printed the empty string for a JSON null, and
   // `fingerprint` is null whenever no plugin version is active
-  // (`src/adapter.ts:820::fingerprint: null`). Anything non-string and non-null
+  // (`src/adapter.ts:821::fingerprint: null`). Anything non-string and non-null
   // is unparseable.
   //
   // PORT-ONLY, and intentional. The shell cannot construct this trigger:

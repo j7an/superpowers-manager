@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { SafetyError } from "./safety-error.js";
+import { SafetyError } from "./safety-error.ts";
 
 export type JsonValue =
   null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -119,12 +119,19 @@ function parseWith<T>(
 
 class Parser<T> {
   private index = 0;
+  private readonly text: string;
+  private readonly profile: StrictJsonProfile;
+  private readonly builder: TreeBuilder<T>;
 
   constructor(
-    private readonly text: string,
-    private readonly profile: StrictJsonProfile,
-    private readonly builder: TreeBuilder<T>,
-  ) {}
+    text: string,
+    profile: StrictJsonProfile,
+    builder: TreeBuilder<T>,
+  ) {
+    this.text = text;
+    this.profile = profile;
+    this.builder = builder;
+  }
 
   parse(): T {
     this.skipWhitespace();

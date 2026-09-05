@@ -45,7 +45,7 @@ to separate launcher preflight, listing, and mutation use.
 
 | Behavior ID | Contract |
 |---|---|
-| `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the public `SUPERPOWERS_*` overrides verified by `PASSTHROUGH_VARIABLES` (`tests/baseline/support.js`); it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
+| `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the public `SUPERPOWERS_*` overrides verified by `PASSTHROUGH_VARIABLES` (`tests/baseline/support.ts`); it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
 | `CLI-ENV-PREPARE-PATHS-01` | Relative `SUPERPOWERS_CACHE_DIR` and `SUPERPOWERS_PLUGIN_ROOT` values are resolved from the invocation directory. |
 | `CLI-ENV-INSTALLED-DEFAULTS-01` | Without explicit overrides, Codex adapter fingerprint listing uses `codex` from `PATH` and installed fingerprint lookup uses `$HOME/.codex`. |
 | `SEL-PRECEDENCE-VALIDATE-01` | Saved selection and the resulting source are validated before ref resolution. Invalid saved state cannot be bypassed by environment ref/source overrides. |
@@ -309,7 +309,7 @@ Observable filesystem and external-state effects:
 | `DIAG-SELECTION-UNPIN-01` | Canonical successful `unpin` text reports saved-state removal, the packaged fallback, and active ref/source override notes, each on its own line. |
 | `DIAG-PROBE-01` | A public read-only porcelain probe reports a 40-hex `desired_commit` line and the exact `status=needs prepare` value for the frozen scenario. |
 | `DIAG-ADAPTER-01` | Validated adapter messages, controlled errors, and hints retain their declared stream and array order. |
-| `PACKAGE-REPO-01` | The public bin resolves package root from the physical bin location, loads the package-local generated `dist/cli.js`, and runs from a repository/copy checkout without relying on the caller’s current directory. |
+| `PACKAGE-REPO-01` | The maintained `src/cli.ts` entry resolves package root from its physical source location and runs natively from a repository/copy checkout without dist or reliance on the caller’s current directory. |
 | `PACKAGE-TARBALL-01` | The declared `superpowers-manager` bin loads the packaged `dist/cli.js` from an offline installed npm tarball and exposes package-local help/version without reaching the repository checkout or network. |
 
 Absolute temporary paths, upstream Git/Codex/library wording, and unasserted

@@ -1,14 +1,14 @@
-import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import {
   assertFailureWritable,
   writeAdapterFailure,
-} from "../adapter-result.js";
-import { oneLine } from "../cli-arguments.js";
-import { computeEffectiveSelection } from "../effective-selection.js";
-import { generatedCommitOrEmpty } from "../provenance.js";
-import { displaySource } from "../selection.js";
-import { statusForCommits } from "../status.js";
-import type { CommandContext } from "./context.js";
+} from "../adapter-result.ts";
+import { oneLine } from "../cli-arguments.ts";
+import { computeEffectiveSelection } from "../effective-selection.ts";
+import { generatedCommitOrEmpty } from "../provenance.ts";
+import { displaySource } from "../selection.ts";
+import { statusForCommits } from "../status.ts";
+import type { CommandContext } from "./context.ts";
 
 export const PROBE_USAGE =
   "error: usage: superpowers-manager probe [--porcelain]\n";
@@ -256,7 +256,7 @@ async function inspect(
   const value = (outcome.result as Record<string, unknown> | null)?.[key];
   // The Python reader printed the empty string for a JSON null
   // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (`src/adapter.ts:820::fingerprint: null`).
+  // whenever no plugin version is active (`src/adapter.ts:821::fingerprint: null`).
   if (value === null || value === undefined) {
     return { ok: true, value: "", outcome };
   }
@@ -406,7 +406,7 @@ export async function runProbe(
     //      every unpinned run does: resolveRef's COMMIT_INPUT_RE branch returns
     //      before any runGit call, so a 40-hex requested ref splices nothing.
     //      Pinned by
-    //      `tests/unit/upstream.test.js:460::void test("resolveRef reports a query failure for latest`,
+    //      `tests/unit/upstream.test.ts:453::void test("resolveRef reports a query failure for latest`,
     //      :471, and :483.
     //   2. The
     //      `src/selection-store.ts:120-124::cause.module === "selection") {`

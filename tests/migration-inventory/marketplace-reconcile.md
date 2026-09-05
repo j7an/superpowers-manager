@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show ccd1884007a6e7b77218d7ff41c75e69d84d5a5b:tests/test_marketplace_reconcile.sh -->
 
-Source read in full (319 lines). Migrated to
-`tests/baseline/marketplace-reconcile.test.js`; the three behavior-ID cases
+Source read in full (319 lines). Current native port:
+`tests/baseline/marketplace-reconcile.test.ts`; the three behavior-ID cases
 remain named there so `docs/baseline/traceability.md` can resolve them.
 
 The shell-original anchor is the last commit in which the driver existed:
@@ -40,10 +40,10 @@ through this anchor, not at `HEAD`.
    Port: `a marketplace-list command failure fails without mutation`.
 4. Malformed marketplace JSON fails without mutation (`:123-125`). **Retired
    at the gap**: the strict parser branch is already covered by
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 5. Invalid UTF-8 marketplace JSON fails without mutation (`:126-128`).
    **Retired at the gap**: the strict byte reader is already covered by
-   `tests/unit/adapter.test.js`.
+   `tests/unit/adapter.test.ts`.
 6. An unexpected marketplace-list schema fails without mutation (`:130-131`).
    **Retired at the gap**: parser schema coverage already lives in the unit
    adapter suite.
@@ -111,14 +111,14 @@ through this anchor, not at `HEAD`.
 {
   "shellOriginal": 31,
   "portOnly": 0,
-  "ports": { "tests/baseline/marketplace-reconcile.test.js": 6 }
+  "ports": { "tests/baseline/marketplace-reconcile.test.ts": 6 }
 }
 ```
 
 - Shell original: **31** assertions (the mechanical predicate count used by
   the migration inventories; helper call-site and loop conventions are stated
   above). The anchor commit preserves all shell-original citations.
-- Port (`tests/baseline/marketplace-reconcile.test.js`): 6 static `node:test`
+- Port (`tests/baseline/marketplace-reconcile.test.ts`): 6 static `node:test`
   cases: the three retained behavior IDs plus focused list-failure and
   unrelated-root reconciliation cases, and the install-reconciliation remove
   failure. Repeated fixture rows are merged within those cases only where the
@@ -126,3 +126,11 @@ through this anchor, not at `HEAD`.
 - Reconciliation: all 31 shell items are accounted for by a port, an explicit
   merge note, or an explicit retirement note at the numbered gap. No number is
   reused.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/baseline/marketplace-reconcile.test.ts` (6 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

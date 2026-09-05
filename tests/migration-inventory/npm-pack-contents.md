@@ -3,7 +3,7 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh -->
 
-Source read in full (148 lines). Ported to `tests/bin/npm-pack-contents.test.js`.
+Source read in full (148 lines). Current native port: `tests/bin/npm-pack-contents.test.ts`.
 
 `grep -n 'test_npm_pack_contents' docs/baseline/traceability.md` on
 2026-07-31 returns zero matches: no behavior ID in
@@ -183,7 +183,7 @@ ENOENT-shaped text can reach stdout/stderr.
    PR 11.1 (2026-08-02) alongside the `yaml` devDependency: that dependency's
    justification is that it is dev-only, and before this assertion no test
    constrained the **root** manifest's runtime dependency set.
-   `container-contract.test.js:950` constrains `tests/container/package.json`,
+   `container-contract.test.ts:950` constrains `tests/container/package.json`,
    which is a different file with a different contract.
    Port-only — it has no shell counterpart and is outside the 1:1 mapping.
 
@@ -195,14 +195,14 @@ ENOENT-shaped text can reach stdout/stderr.
 {
   "shellOriginal": 27,
   "portOnly": 8,
-  "ports": { "tests/bin/npm-pack-contents.test.js": 2 }
+  "ports": { "tests/bin/npm-pack-contents.test.ts": 2 }
 }
 ```
 
 - Shell original: **27** assertions (3 shape-acceptance, 10
   malformed-shape-rejection, 6 forbidden-path-category, 6
   identity-tampering-rejection, 2 dist-less-prepack).
-- Port (`tests/bin/npm-pack-contents.test.js`): 27 assertions 1:1-mapped to
+- Port (`tests/bin/npm-pack-contents.test.ts`): 27 assertions 1:1-mapped to
   the shell, one `node:test` `assert.*` call per numbered item above,
   grouped into `node:test` subtests by fixture/scenario for readability,
   **plus** 8 port-only assertions (6 synthetic per-category discriminating
@@ -212,3 +212,25 @@ ENOENT-shaped text can reach stdout/stderr.
 - Reconciliation: 1:1 for all 27 original items, no merges, no drops. The 8
   additional port-only assertions are strictly additive test coverage, not
   a reconciliation of any shell assertion.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/bin/npm-pack-contents.test.ts` (2 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.
+
+The real report comes from `node tests/tools/pack.ts --out-dir <external-dir>`
+and still drives the unchanged shell validator. Items 26-27 now reject source
+packing for both absent and stale dist, with the exact explicit-command
+diagnostic. This adds a second execution of the same two assertions; the 27
+historical mapped obligations and eight port-only checks remain, with no
+retirements. Real report shapes, identity tampering, forbidden paths, and the
+zero-runtime-dependency contract are unchanged.
+
+The native producer adapter additionally checks that `tar` can list the delivered
+artifact and compares those real paths to `tests/expected_tarball_contents.txt`.
+These two infrastructure assertions bind the same existing package allowlist to
+the delivered bytes; they do not replace any mapped validator assertion or add a
+new static case.

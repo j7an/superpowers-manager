@@ -4,7 +4,6 @@
 .agents/plugins/marketplace.json
 LICENSE
 README.md
-bin/superpowers-manager.js
 config/upstream-ref
 dist/adapter-result.js
 dist/adapter.js

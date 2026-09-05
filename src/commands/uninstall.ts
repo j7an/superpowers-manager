@@ -2,13 +2,13 @@
 // lifecycle.sh and adapter.sh; the predicates now live in src/lifecycle.ts
 // and the adapter arrives through ctx.adapter.
 import { tmpdir } from "node:os";
-import type { AdapterOutcome, AdapterResult } from "../adapter-result.js";
-import { oneLine } from "../cli-arguments.js";
-import type { Check } from "../lifecycle.js";
-import { reportLegacyState, verifyUninstalledResources } from "../lifecycle.js";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.js";
-import type { CommandContext } from "./context.js";
-import { replayOutcome } from "./probe.js";
+import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
+import { oneLine } from "../cli-arguments.ts";
+import type { Check } from "../lifecycle.ts";
+import { reportLegacyState, verifyUninstalledResources } from "../lifecycle.ts";
+import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import type { CommandContext } from "./context.ts";
+import { replayOutcome } from "./probe.ts";
 
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`.
 // A non-Boolean is a HARD failure, never a falsy absent -- the shell spw_die'd
@@ -72,7 +72,7 @@ function presenceFlag(
 // lines); outcome.ok && status !== 0 gets a hand-written message naming the
 // operation; a stop issues no further calls; and an unrelated throw (a
 // non-AdapterFailure cause --
-// `src/adapter.ts:1001::if (cause instanceof AdapterFailure) {`) gets a
+// `src/adapter.ts:1002::if (cause instanceof AdapterFailure) {`) gets a
 // hand-written message naming the operation too, never the caught error's text
 // (AGENTS.md). `argv` here is always this module's own literal, bounded
 // construction -- never adapter-controlled text -- so naming it is safe.
@@ -141,11 +141,13 @@ type UninstallOutcome =
 // outcome-carrying is still load-bearing for mkdtemp, and the shape stays
 // identical to src/commands/install.ts's GatherFailure.
 class GatherFailure extends Error {
-  constructor(
-    readonly inner: unknown,
-    readonly outcomes: readonly AdapterOutcome[],
-  ) {
+  readonly inner: unknown;
+  readonly outcomes: readonly AdapterOutcome[];
+
+  constructor(inner: unknown, outcomes: readonly AdapterOutcome[]) {
     super("uninstall gather failed");
+    this.inner = inner;
+    this.outcomes = outcomes;
   }
 }
 
@@ -370,7 +372,7 @@ export async function runUninstall(
     // blindly.
     //
     // A cause outside ctx.adapter's AdapterFailure guard
-    // (`src/adapter.ts:1001::if (cause instanceof AdapterFailure) {`) does NOT
+    // (`src/adapter.ts:1002::if (cause instanceof AdapterFailure) {`) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.

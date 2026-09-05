@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh -->
 
-Source read in full (506 lines). Ported to
-`tests/baseline/selection-commands.test.js`.
+Source read in full (506 lines). Current native port:
+`tests/baseline/selection-commands.test.ts`.
 
 ## Counting rules applied
 
@@ -108,7 +108,7 @@ Not a registered behavior ID. Every check in this cluster exercises
 `src/cli.ts`'s `parseArgs` — the `TAG_RE`/`COMMIT_INPUT_RE` gate that now runs
 strictly before any handler, tool lookup, or Git access (`main()` exits on a
 `"usage-error"` result at `:322-326`, before `preflight`/dispatch ever run).
-`tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01` (`:594-628`) and
+`tests/baseline/cli-parity.test.ts`'s `CLI-USAGE-01` (`:594-628`) and
 `CLI-PIN-REF-01` (`:630-716`) already exercise this exact boundary with far
 more inputs than this driver's three malformed refs, including the
 numeric-component grammar (`v01.2.3`, `v1.02.3`, `v1.2.03`) that makes the
@@ -146,7 +146,7 @@ either regex — the same structural guarantee that already retired
 ### `REF-PIN-SOURCE-01` exact tag and raw commit pins prove selected source (`:114-281`)
 
 7. Pinning `v1.0.0` prints the confirmation naming the resolved ref and
-   commit (`:117`). Port: `tests/baseline/selection-commands.test.js:443-446`.
+   commit (`:117`). Port: `tests/baseline/selection-commands.test.ts:443-446`.
 8-12. The saved record's `mode`, `source`, `requested_ref`, `resolved_ref`,
    and `commit` all match the exact-tag pin (`:118-122`). **Merged** into one
    `assert.deepEqual` (`:457-464`), strictly stronger than five separate
@@ -188,7 +188,7 @@ either regex — the same structural guarantee that already retired
     on a covered example, so the risk of this retirement is low but not the
     same "literal counterpart" claim as the other five.
 29. A branch named like a tag (`v9.9.9`) fails the exact-tag pin with status
-    1 (`:196`). Port: `tests/baseline/selection-commands.test.js:554`.
+    1 (`:196`). Port: `tests/baseline/selection-commands.test.ts:554`.
 30. The failure names the ref: `upstream tag not found: v9.9.9` (`:197`).
     Port: `:555`.
 31. Saved state is unchanged after the branch-like-tag failure (`:198`). Port:
@@ -227,7 +227,7 @@ either regex — the same structural guarantee that already retired
 54. The interrupted raw-commit fetch must actually reach the signal fixture
     before the signal is sent, or the interruption proves nothing (`:325`,
     the embedded Python fixture's readiness guard). Port:
-    `tests/baseline/selection-commands.test.js:802-807` (`waitForMarker` plus
+    `tests/baseline/selection-commands.test.ts:802-807` (`waitForMarker` plus
     the `assert.fail` on timeout).
 55. The interrupted child's exit status is non-zero (`:333`, `if [ "$rc" -ne
     143 ]`). **Merged** into the port's `assert.equal(result.signal,
@@ -261,7 +261,7 @@ runs, strictly earlier than the write.
 59. A conflicting write injected during `ls-remote` (malformed bytes, or a
     schema the port does not understand) makes the pin attempt fail with
     status 1, for both conflict shapes (`:368`, looped). Port:
-    `tests/baseline/selection-commands.test.js:872`.
+    `tests/baseline/selection-commands.test.ts:872`.
 60. The conflicting write survives untouched — not silently overwritten by
     the pin attempt's own proposed record — for both conflict shapes
     (`:373`, looped). Port: `:873`.
@@ -273,7 +273,7 @@ existing state of an unrecognized schema, and a credential-bearing source
 each fail before any Git process runs at all — not merely that they fail.
 
 61. A malformed existing selection record fails the pin attempt with status 1
-    (`:393`). Port: `tests/baseline/selection-commands.test.js:904`.
+    (`:393`). Port: `tests/baseline/selection-commands.test.ts:904`.
 62. No Git process is invoked (`:394`). Port: `:905`.
 63. The malformed bytes are unchanged (`:395`). Port: `:906`.
 64. An existing record of an unrecognized `schema_version` fails the pin
@@ -298,7 +298,7 @@ property — it has no port here.
 
 70. track-latest with an explicit `SUPERPOWERS_UPSTREAM_URL` prints the
     one-line confirmation (`:432`). **Retired**:
-    `tests/unit/commands-track-latest.test.js`'s "track-latest writes the
+    `tests/unit/commands-track-latest.test.ts`'s "track-latest writes the
     record and prints one line" (`:20-46`) exercises the identical message
     text against the identical code path.
 71. The saved `mode` is `track-latest` (`:434`). **Retired**, same citation.
@@ -306,12 +306,12 @@ property — it has no port here.
     citation.
 73. With `SUPERPOWERS_UPSTREAM_URL` set to the empty string, the saved
     `source` defaults to the official upstream (`:441`). Port:
-    `tests/baseline/selection-commands.test.js:971` — the one behavior in
+    `tests/baseline/selection-commands.test.ts:971` — the one behavior in
     this cluster the cited unit test does not exercise (it always sets an
     explicit URL).
 74. An existing record of an unrecognized `schema_version` fails the
     track-latest attempt with status 1 (`:449`). Port: `:996`. Not retired
-    against `tests/unit/commands-track-latest.test.js`'s "track-latest
+    against `tests/unit/commands-track-latest.test.ts`'s "track-latest
     refuses to overwrite a corrupt saved record" (`:67-92`): that test's
     fixture is `{ not json` and asserts `error: invalid JSON in ${state}:
     line 1 column 3: …` — `validateRecord`'s JSON-*parse*-failure branch, not
@@ -326,7 +326,7 @@ property — it has no port here.
     tests/test_selection_commands.sh itself is gone.
 75. The unrecognized-schema bytes are unchanged (`:450`). Port: `:999`.
 76. track-latest with an extra argument fails with usage status 2 (`:455`).
-    **Retired**: `tests/unit/commands-track-latest.test.js`'s "track-latest
+    **Retired**: `tests/unit/commands-track-latest.test.ts`'s "track-latest
     rejects extra arguments with exit 2" (`:94-109`) exercises the identical
     diagnostic and status, and `CLI-USAGE-01`'s `["track-latest", "extra"]`
     case (`:609-611`) covers the same `parseArgs` boundary independently.
@@ -337,7 +337,7 @@ property — it has no port here.
     packaged fallback, plus a note for each active override
     (`SUPERPOWERS_REF`, `SUPERPOWERS_UPSTREAM_URL`) (`:466-468`). **Merged**
     into one exact-text `assert.equal`
-    (`tests/baseline/selection-commands.test.js:1023-1028`), strictly
+    (`tests/baseline/selection-commands.test.ts:1023-1028`), strictly
     stronger than three separate `grep -Fxq`/`grep -Fq` checks — it also
     proves nothing else was printed.
 80. The selection state file is actually removed (`:469`). Port: `:1031`.
@@ -377,7 +377,7 @@ map onto.
    caught error with `code === "ENOENT"` as absence and fails closed with
    `cannot inspect selection state: <path>` on any other errno, per the
    fail-closed rule in `AGENTS.md`. Port:
-   `tests/unit/commands-unpin.test.js:103-124` ("unpin fails closed when the
+   `tests/unit/commands-unpin.test.ts:103-124` ("unpin fails closed when the
    state path cannot be inspected", which denies read access to the
    containing directory to force a non-`ENOENT` `lstat` failure).
 2. `unlink` vs `rm -f` TOCTOU divergence (`src/commands/unpin.ts:54-61`).
@@ -401,7 +401,7 @@ map onto.
 {
   "shellOriginal": 87,
   "portOnly": 2,
-  "ports": { "tests/baseline/selection-commands.test.js": 6 }
+  "ports": { "tests/baseline/selection-commands.test.ts": 6 }
 }
 ```
 
@@ -410,7 +410,7 @@ map onto.
   guards, 7 track-latest, 11 `FS-SELECTION-UNPIN-TYPES-01`; sum:
   6+47+5+2+9+7+11 = 87). See "Divergences from the derived 89" above for the
   full +5/-7/net-2 derivation from the mechanical 89.
-- Port (`tests/baseline/selection-commands.test.js`): 6 static `test(` call
+- Port (`tests/baseline/selection-commands.test.ts`): 6 static `test(` call
   sites — the three named behavior-ID cases (`REF-PIN-SOURCE-01`,
   `REF-PIN-CLEANUP-01`, `FS-SELECTION-UNPIN-TYPES-01`) plus three unregistered
   cases (the writer's revalidation-under-race proof, the pre-Git fail-closed
@@ -422,10 +422,18 @@ map onto.
   76, 87). 75 mapped + 12 retired = 87.
 - Reconciliation: 75 of 87 shell items are mapped into the port; 12 are
   retired, each with a citation to the pre-existing coverage (either
-  `tests/baseline/cli-parity.test.js`'s `CLI-USAGE-01`/`CLI-PIN-REF-01`, or
-  `tests/unit/commands-track-latest.test.js`) that already supersedes it, or
+  `tests/baseline/cli-parity.test.ts`'s `CLI-USAGE-01`/`CLI-PIN-REF-01`, or
+  `tests/unit/commands-track-latest.test.ts`) that already supersedes it, or
   to a structural guarantee (`parseArgs`'s ordering, for items 5-6) that
   makes a runtime check unnecessary — unlike `bin-dispatch.md`'s retired
   items, none of these lost a live shell subject; each simply has nothing
   left to prove that isn't already proven elsewhere or true by construction.
   75 + 12 = 87.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/baseline/selection-commands.test.ts` (6 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

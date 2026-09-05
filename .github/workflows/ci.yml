@@ -14,6 +14,10 @@ permissions: {}
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        native: ["24.12.0", "24"]
     permissions:
       contents: read
     steps:
@@ -32,10 +36,20 @@ jobs:
           fetch-depth: 0
 
       - name: Run container acceptance suite
+        env:
+          SPW_NATIVE_NODE_VERSION: ${{ matrix.native }}
         run: sh tests/container.sh
 
   toolchain:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - native: "24.12.0"
+            static: false
+          - native: "24"
+            static: true
     permissions:
       contents: read
     steps:
@@ -56,7 +70,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "24"
+          node-version: ${{ matrix.native }}
 
       - name: Enable Corepack
         run: corepack enable
@@ -64,10 +78,11 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check toolchain and CLI build
+      - name: Check static toolchain
+        if: matrix.static
         run: pnpm run check:static
 
       # The full suite runs in `test`. These suites also need the Git checkout
       # and history that are deliberately excluded from the container image.
       - name: Check tooling coverage and historical citations
-        run: node --import ./tests/assert-matcher-gate.js --test tests/bin/tooling-coverage.test.js tests/bin/citations.test.js
+        run: node --import ./tests/assert-matcher-gate.ts --test tests/bin/tooling-coverage.test.ts tests/bin/citations.test.ts

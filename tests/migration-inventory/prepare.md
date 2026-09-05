@@ -3,8 +3,8 @@
 <!-- Port pointers are NOT maintained. An item's identity is its quoted assertion text, not its number. -->
 <!-- Resolve shell-original citations with: git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh -->
 
-Source read in full (1278 lines). Ported to `tests/baseline/prepare.test.js`,
-`tests/unit/commands-prepare.test.js`, and `tests/unit/atomic.test.js`.
+Source read in full (1278 lines). Current native port: `tests/baseline/prepare.test.ts`,
+`tests/unit/commands-prepare.test.ts`, and `tests/unit/atomic.test.ts`.
 
 **The shell driver is gone.** PR 11.5 slice 3.5 deleted
 `tests/test_prepare_with_fake_upstream.sh` after porting the five behaviours it
@@ -56,7 +56,7 @@ references" below.
   when the property is asserted inside one of the three files this inventory
   declares in its `ports` block, *even if the asserting case has a different
   trigger or fixture* — `probe.md` set this precedent when it mapped its item
-  32 onto "every successful case in `tests/baseline/probe.test.js`" and its
+  32 onto "every successful case in `tests/baseline/probe.test.ts`" and its
   item 67 onto a deliberately stronger construction than the shell's. An item
   carries the `Retired` label when the surviving witness is outside those three
   files (another suite), when the property is a structural guarantee no runtime
@@ -106,7 +106,7 @@ counterpart, because this driver runs no `spw_section` and propagates nothing.
 ## Notes on four port constructions
 
 **Why the fixture has eight upstream branches and the design said seven.**
-`tests/baseline/prepare-fixture.js:131-270` builds a manifest-less base commit
+`tests/baseline/prepare-fixture.ts:131-270` builds a manifest-less base commit
 on `main` plus seven manifest-bearing branches. The eighth exists because
 `tests/fixtures/baseline/generated-tree/declared-hooks.txt` was captured from
 the shell's `hooks-string-array` branch (`:212-217`, `:864-876`), whose manifest
@@ -136,7 +136,7 @@ a shape check, and no inventory item below claims a splice site is exercised.
 `scripts/prepare:50` is `[ -d "$cache/.git" ]`, and
 `src/commands/prepare.ts:310` is `directoryExists(join(cache, ".git"))` —
 fidelity, not divergence. The shell never asserted it, so it contributes no
-mapped item; `tests/unit/commands-prepare.test.js`'s "runPrepare takes the clone
+mapped item; `tests/unit/commands-prepare.test.ts`'s "runPrepare takes the clone
 branch, not fetch, when the cache's `.git` is a regular file" is coverage the
 shell did not have. It is recorded here as prose rather than as a numbered
 port-only entry, because counting it would overstate `portOnly`.
@@ -165,14 +165,14 @@ apart, so a bare string match would prove nothing about which branch ran:
 
 The pre-existing `escapes or is broken` matches remain what they were and none
 of them covers this string: `symlink escapes or is broken`
-(`tests/unit/hooks.test.js:376`, `:393`), `materialized hook destination escapes
+(`tests/unit/hooks.test.ts:376`, `:393`), `materialized hook destination escapes
 or is broken` (`:460`, `:493`), and `generated hook symlink escapes or is
-broken` (the validator's own, `tests/unit/generated-plugin.test.js:714`).
+broken` (the validator's own, `tests/unit/generated-plugin.test.ts:714`).
 
 *(b) `hook classification failed:` — the adapter's wrapper prefix.*
 `src/adapter.ts:380` emits it, and until slice 3.5 the eight shell lines items
 113-120 record were the only assertions of it anywhere. It is now witnessed by
-`tests/baseline/prepare.test.js`'s "a classification failure reaches stderr
+`tests/baseline/prepare.test.ts`'s "a classification failure reaches stderr
 through the adapter wrapper". **What moved is the wrapper, not the causes.**
 Each item's *inner* message was already message-exact in the `classifyHooks`
 unit test it cites and still is; those unit tests are untouched. The one case
@@ -180,13 +180,13 @@ above adds the half no unit test could reach — that a classification failure
 travels out through the adapter carrying this prefix — and one reaching it is
 enough, because the prefix does not vary by cause. The materialization twin
 `src/adapter.ts:389` was witnessed all along, by
-`tests/baseline/prepare.test.js:338` and
-`tests/baseline/cli-parity.test.js:1613`.
+`tests/baseline/prepare.test.ts:338` and
+`tests/baseline/cli-parity.test.ts:1613`.
 
 *(c) The accepted contained relative hooks-root symlink.* `src/hooks.ts:359-360`
 recreates such a symlink in the candidate rather than dereferencing it, and
 until slice 3.5 nothing exercised the accepting path on either side. It is now
-witnessed by `tests/baseline/prepare.test.js`'s "a contained relative hooks
+witnessed by `tests/baseline/prepare.test.ts`'s "a contained relative hooks
 root is recreated as a symlink in the candidate", which asserts all three
 halves items 83-85 record: the root is still a symlink after materialization,
 its target is byte-identical to the upstream one, and the content behind it is
@@ -197,10 +197,10 @@ because `src/commands/prepare.ts:29-35` copies exactly five paths into the
 candidate and `assets` is one of them.
 
 The surrounding rejection coverage is unchanged and still does not reach this
-path: `tests/unit/hooks.test.js` covers only the rejecting root shapes (`:337`
+path: `tests/unit/hooks.test.ts` covers only the rejecting root shapes (`:337`
 absolute, `:351` not a directory); the only other place the hooks *root* is a
 symlink is the twelve-case matrix in
-`tests/baseline/generated-plugin-corpus.test.js`'s "the hook subtree rejects
+`tests/baseline/generated-plugin-corpus.test.ts`'s "the hook subtree rejects
 unsafe symlinks for allowing policies" (`:812-880`), whose `location === "root"`
 arm symlinks `hooks` itself and whose every one of the twelve cases asserts
 `status === 1`. The two corpus cases items 83-85 used to lean on do **not**
@@ -219,7 +219,7 @@ is itself a rejection case, ending in
 
 1. The builder produced the scenario root for each of `broken-symlink` and
    `escaping-symlink` (`:18`). **Retired**:
-   `tests/baseline/cli-parity.test.js`'s `FS-SYMLINK-01 escaping and broken
+   `tests/baseline/cli-parity.test.ts`'s `FS-SYMLINK-01 escaping and broken
    symlinks fail closed` (`:1601-1602`) drives the same two
    `tests/builders/baseline-scenario.sh` scenarios and fails if the builder
    stops producing either tree. The parent spec's §11 lists porting
@@ -232,7 +232,7 @@ is itself a rejection case, ending in
 ### A saved exact pin is authoritative (`:642-662`)
 
 3. The generated provenance carries the saved commit (`:652`). Port:
-   `tests/baseline/prepare.test.js`'s "prepare honours a pinned saved
+   `tests/baseline/prepare.test.ts`'s "prepare honours a pinned saved
    selection", which asserts `provenance.commit` against the saved record and
    sets no `SUPERPOWERS_REF`, so it is the branch that reaches
    `fetchExactCommit`.
@@ -246,7 +246,7 @@ is itself a rejection case, ending in
    same two citations.
 7. No `ls-remote` ran — a saved exact pin must not be re-resolved (`:656-660`).
    **Retired**: the port has no recording `git` to read an argv log from.
-   `tests/unit/effective-selection.test.js`'s "a saved pin short-circuits
+   `tests/unit/effective-selection.test.ts`'s "a saved pin short-circuits
    resolution and reports tag kind" asserts the property directly against
    `computeEffectiveSelection`, which is the function
    `src/commands/prepare.ts:290` calls.
@@ -255,7 +255,7 @@ is itself a rejection case, ending in
    `fetchExactCommit` (`src/upstream.ts:262-272`), so its shape is structural
    rather than something a run can vary. The observable consequence — the cache
    holds the requested commit object after an exact fetch — is asserted by
-   `tests/baseline/ref-resolution.test.js`'s `REF-SOURCE-PROOF-01 selected
+   `tests/baseline/ref-resolution.test.ts`'s `REF-SOURCE-PROOF-01 selected
    source must supply a commit object`.
 9. The recording adapter saw `--requested-ref v6.0.3 --resolved-ref v6.0.3
    --commit <commit>` (`:662`). **Retired**: in-process `prepare` calls
@@ -267,7 +267,7 @@ is itself a rejection case, ending in
 ### A cached object is not source proof (`:664-682`)
 
 10. The primed cache really holds the requested commit object (`:669`).
-    **Retired**: `tests/baseline/ref-resolution.test.js`'s `REF-SOURCE-PROOF-01`
+    **Retired**: `tests/baseline/ref-resolution.test.ts`'s `REF-SOURCE-PROOF-01`
     makes the identical check — a verification-only `git cat-file -e
     <commit>^{commit}` against the cache `fetchExactCommit` just populated.
 11. A source override that cannot supply the saved commit fails (`:673-678`).
@@ -278,7 +278,7 @@ is itself a rejection case, ending in
     <commit>` (`:679`). **Retired**: `REF-SOURCE-PROOF-01` asserts that exact
     message with an error-matching function.
 13. The prior generated tree survives the failure (`:681`). Port:
-    `tests/baseline/prepare.test.js`'s "prepare keeps hostile git output off its
+    `tests/baseline/prepare.test.ts`'s "prepare keeps hostile git output off its
     stream on both fetch branches" seeds a sentinel tree on its pinned half and
     compares `snapshotTree` byte-for-byte afterwards.
 14. The adapter never ran — failure precedes adapter access (`:682`). Port:
@@ -296,15 +296,15 @@ is itself a rejection case, ending in
 15. An environment ref resolves against the *saved* source (`:689`).
     **Retired**, and the citation is narrower than the property. The
     composition half — an environment ref combined with the saved source — is
-    `tests/baseline/probe.test.js`'s "an environment ref overrides only the ref
+    `tests/baseline/probe.test.ts`'s "an environment ref overrides only the ref
     side and the saved fields stay visible", which asserts
     `selection_origin=environment` alongside `upstream_source_origin=user-config`
     and `effective_source=<the saved source>`. The *resolution* half is not
     witnessed there: that case passes a 40-hex `SUPERPOWERS_REF` and renames
-    the source directory away (`tests/baseline/probe.test.js:216`, `:239`), so
+    the source directory away (`tests/baseline/probe.test.ts:216`, `:239`), so
     a raw-commit short-circuit means no ref is ever resolved against the saved
-    source. Ref resolution itself is `tests/unit/upstream.test.js`'s
-    `resolveRef` cluster and `tests/baseline/ref-resolution.test.js`. Both
+    source. Ref resolution itself is `tests/unit/upstream.test.ts`'s
+    `resolveRef` cluster and `tests/baseline/ref-resolution.test.ts`. Both
     halves are covered; the *combination* the shell drove here — a non-40-hex
     environment ref resolved against a saved source — has no counterpart.
 16. The provenance `source` is still the saved source (`:690`). **Retired**,
@@ -314,7 +314,7 @@ is itself a rejection case, ending in
     `selection_mode=override`).
 18. An environment source can supply the still-authoritative saved pin
     (`:698`). **Retired**: the mirror-image half. The saved pin's authority is
-    `tests/unit/effective-selection.test.js`'s "a saved pin short-circuits
+    `tests/unit/effective-selection.test.ts`'s "a saved pin short-circuits
     resolution and reports tag kind"; that an environment
     `SUPERPOWERS_UPSTREAM_URL` is what gets used and validated when a record is
     saved is asserted by the same file's "source validation precedes ref
@@ -334,7 +334,7 @@ is itself a rejection case, ending in
 prepare-level dash-prefixed case, and could not have: every prepare case's
 `SUPERPOWERS_UPSTREAM_URL` must be an absolute path under the case scratch
 tree, and the fixture's own hermeticity guard hard-fails anything else before
-the child is spawned (`tests/baseline/prepare-fixture.js:465-482`, whose
+the child is spawned (`tests/baseline/prepare-fixture.ts:465-482`, whose
 `startsWith("/")` predicate is at `:480`). A dash-prefixed *relative* source is
 the whole point of the shell cluster, so the narrowing is structural rather
 than an omission: closing it would mean relaxing the guard that keeps this
@@ -343,10 +343,10 @@ suite hermetic.
 What survives is the shared `gitSafeSource` code path plus a sibling suite's
 dash-prefixed case, verified rather than assumed:
 
-- `tests/baseline/probe.test.js:282` — "a dash-prefixed local source saved by
+- `tests/baseline/probe.test.ts:282` — "a dash-prefixed local source saved by
   `track-latest` stays usable" — exercises the same
   `computeEffectiveSelection` result `prepare` consumes.
-- `tests/baseline/selection-commands.test.js:432` —
+- `tests/baseline/selection-commands.test.ts:432` —
   `REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source` — is
   the one case that actually puts a bare relative `-upstream` on a Git command
   line. Its dash-prefixed block is `:504-542`; the symlink that creates the
@@ -357,7 +357,7 @@ two, not on a prepare-level counterpart.
 
 22. A `track-latest` selection over a dash-prefixed source prepares the release
     commit (`:721`). **Retired**, as the recorded narrowing above:
-    `tests/baseline/probe.test.js:282`'s "a dash-prefixed local source saved by
+    `tests/baseline/probe.test.ts:282`'s "a dash-prefixed local source saved by
     `track-latest` stays usable" proves the same selection resolves, and
     `prepare` consumes the identical `computeEffectiveSelection` result.
 23. The provenance `source` is the dash-prefixed path verbatim (`:722`).
@@ -366,9 +366,9 @@ two, not on a prepare-level counterpart.
 24. The recording Git log shows `ls-remote --tags -- <physical>/-upstream
     refs/tags/v*` (`:723`). **Retired**: no recording `git`, and the `--`
     terminator is written into a literal array
-    (`src/upstream.ts:140-147`). `tests/unit/upstream.test.js`'s "gitSafeSource
+    (`src/upstream.ts:140-147`). `tests/unit/upstream.test.ts`'s "gitSafeSource
     anchors bare relative paths and leaves others alone" pins the anchoring,
-    and `tests/baseline/selection-commands.test.js:432`'s
+    and `tests/baseline/selection-commands.test.ts:432`'s
     `REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source`
     (dash-prefixed block `:504-542`) is the one case that actually puts a bare
     relative `-upstream` on a Git command line.
@@ -388,7 +388,7 @@ two, not on a prepare-level counterpart.
 27. A malformed `selection.json` fails closed, with an empty Git log, an empty
     adapter log, and the prior tree intact (`:754`, one
     `assert_prepare_preflight_failure` call site bundling five checks).
-    **Retired**: `tests/unit/effective-selection.test.js`'s "an invalid saved
+    **Retired**: `tests/unit/effective-selection.test.ts`'s "an invalid saved
     record rejects rather than defaulting to none" pins the rejection.
     Ordering is structural in the port:
     `src/commands/prepare.ts:290` calls `computeEffectiveSelection` before the
@@ -397,14 +397,14 @@ two, not on a prepare-level counterpart.
     building" witnesses that ordering one line later by asserting no cache
     directory exists.
 28. An unsupported `schema_version` fails the same way (`:761`). **Retired**:
-    `tests/baseline/selection-location.test.js:760` and
-    `tests/baseline/selection-commands.test.js:984-998` both pin
+    `tests/baseline/selection-location.test.ts:760` and
+    `tests/baseline/selection-commands.test.ts:984-998` both pin
     `schema_version must equal integer 1`; the same ordering argument as item
     27 applies.
 29. A credential-bearing source fails the same way (`:765`). **Retired**:
-    `tests/unit/effective-selection.test.js`'s "source validation precedes ref
+    `tests/unit/effective-selection.test.ts`'s "source validation precedes ref
     resolution" asserts `HTTP(S) source must not include userinfo` and is
-    constructed specifically to prove the ordering; `tests/unit/selection.test.js:132-134`
+    constructed specifically to prove the ordering; `tests/unit/selection.test.ts:132-134`
     pins the userinfo matrix.
 
 ### The recorded adapter build invocation (`:770-778`)
@@ -457,23 +457,23 @@ two, not on a prepare-level counterpart.
     `src/commands/prepare.ts:373-375` is the one call site, guarded by a single
     `regularFileExists`, so "exactly once" is structural; the shell needed the
     count because `spw_json_get` re-read and re-parsed the file per field.
-    `tests/unit/commands-prepare.test.js`'s "readUpstreamManifestVersion mirrors
+    `tests/unit/commands-prepare.test.ts`'s "readUpstreamManifestVersion mirrors
     `spw_json_get` for the three shapes" pins what that one read returns.
 38. The provenance commit is the release commit (`:820`). Port: "prepare writes
     complete provenance and is idempotent" asserts `provenance.commit` against
     the fixture's own `rev-list`. The `latest-release` resolution that produced
-    it is retired to `tests/unit/upstream.test.js`'s "selectLatestRelease picks
+    it is retired to `tests/unit/upstream.test.ts`'s "selectLatestRelease picks
     the greatest stable tag and prefers peeled shas" and "resolveRef selects
     the greatest stable tag for latest-release".
 39. The generated manifest version is `6.0.3+manager.<short>` (`:821`).
-    **Retired**: `tests/unit/upstream.test.js`'s "manifestVersionForRef
+    **Retired**: `tests/unit/upstream.test.ts`'s "manifestVersionForRef
     reproduces the shell derivation table" asserts this exact form as its first
     row, against `shortCommit` computed in the same test.
 40. The upstream `description` survives into the generated manifest (`:822`).
-    **Retired**: `tests/unit/manifest-overlay.test.js`'s "sets version and
+    **Retired**: `tests/unit/manifest-overlay.test.ts`'s "sets version and
     skills, preserving unknown fields and key order" is the overlay's contract
     for every field it does not own, and
-    `tests/baseline/generated-plugin-corpus.test.js`'s "the valid candidate and
+    `tests/baseline/generated-plugin-corpus.test.ts`'s "the valid candidate and
     an unknown manifest field pass" is the validator's end of it.
 41. The generated manifest `skills` is `./skills/` (`:824`). Port:
     `GENERATED-FALLBACK-01` asserts it on the fallback path.
@@ -528,7 +528,7 @@ two, not on a prepare-level counterpart.
 59. `config/hooks-first.json`'s copied bytes are the fixture's (`:868`).
     **Retired**: case 6's multi-path half asserts the file's *presence* through
     the `declared-hooks.txt` listing but not its bytes.
-    `tests/unit/hooks.test.js`'s "materializeHooks copies a declared file"
+    `tests/unit/hooks.test.ts`'s "materializeHooks copies a declared file"
     asserts the copy's content directly, which is the property this line was
     about.
 60. `alternate/hooks-second.json`'s copied bytes are the fixture's (`:871`).
@@ -538,16 +538,16 @@ two, not on a prepare-level counterpart.
     fixture.
 62. An inline hooks object reaches the generated manifest (`:879`).
     **Retired**: no port case uses the inline form. Three citations, because
-    the line has three parts. `tests/unit/hooks.test.js`'s "classifyHooks
+    the line has three parts. `tests/unit/hooks.test.ts`'s "classifyHooks
     treats an inline object as a subtree copy" pins the classification;
-    `tests/baseline/generated-plugin-corpus.test.js`'s "upstream hook shapes
+    `tests/baseline/generated-plugin-corpus.test.ts`'s "upstream hook shapes
     are accepted" pins the validator's acceptance; and the part neither of
     those covers — that the overlay *carries the declared value through* into
-    the generated manifest — is `tests/unit/manifest-overlay.test.js`'s "sets
+    the generated manifest — is `tests/unit/manifest-overlay.test.ts`'s "sets
     version and skills, preserving unknown fields and key order", the same
     citation items 40 and 70 rely on.
 63. The inline form still copies `hooks/hooks-codex.json` (`:882`).
-    **Retired**: `tests/unit/hooks.test.js`'s "materializeHooks copies a
+    **Retired**: `tests/unit/hooks.test.ts`'s "materializeHooks copies a
     regular hook subtree" is the subtree-copy contract the inline
     classification selects.
 64. The inline form still copies `hooks/session-start-codex` (`:883`).
@@ -556,7 +556,7 @@ two, not on a prepare-level counterpart.
     **Retired**, same citation — it is the nested entry that case asserts by
     content.
 66. An inline hooks *array* reaches the generated manifest (`:887`).
-    **Retired**: `tests/unit/hooks.test.js`'s "classifyHooks treats an object
+    **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks treats an object
     array as a subtree copy".
 67. The inline-array form copies `hooks/hooks-codex.json` (`:890`).
     **Retired**: "materializeHooks copies a regular hook subtree".
@@ -568,9 +568,9 @@ two, not on a prepare-level counterpart.
 ### Absent declaration with and without `hooks/hooks.json` (`:894-906`)
 
 70. An absent `hooks` key stays absent from the generated manifest (`:895`).
-    **Retired**: `tests/unit/hooks.test.js`'s "classifyHooks default-discovers
+    **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks default-discovers
     when hooks is absent" pins the classification, and
-    `tests/unit/manifest-overlay.test.js`'s "sets version and skills,
+    `tests/unit/manifest-overlay.test.ts`'s "sets version and skills,
     preserving unknown fields and key order" pins that the overlay adds no key
     it does not own.
 71. Default discovery copies `hooks/hooks.json` (`:896`). **Retired**:
@@ -583,7 +583,7 @@ two, not on a prepare-level counterpart.
 74. Default discovery copies `hooks/support/helper.txt` (`:899`).
     **Retired**, same citation.
 75. An absent declaration *without* `hooks/hooks.json` keeps the key absent
-    (`:902`). **Retired**: `tests/unit/hooks.test.js`'s "classifyHooks default
+    (`:902`). **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks default
     discovery needs a regular hooks.json".
 76. …and copies no `hooks/` subtree (`:903-906`). **Retired**: same
     classification citation for the decision; the no-subtree consequence is
@@ -596,7 +596,7 @@ two, not on a prepare-level counterpart.
 77. A declared path under `config/` reaches the generated manifest (`:909`).
     Port: case 6's multi-path half declares two paths, both outside `hooks/`.
     The single-string spelling of the same shape is pinned by
-    `tests/unit/hooks.test.js`'s "classifyHooks accepts a string declaration".
+    `tests/unit/hooks.test.ts`'s "classifyHooks accepts a string declaration".
 78. The declared file was copied to `config/` (`:912`). Port: case 6's
     `declared-hooks.txt` listing enumerates `config/hooks-first.json`.
 79. The `hooks/` subtree is copied *as well* (`:913`). Port: the same listing
@@ -608,11 +608,11 @@ two, not on a prepare-level counterpart.
 ### A contained hooks root that targets materialized content (`:917-932`)
 
 82. The inline declaration reaches the generated manifest (`:919`).
-    **Retired**: `tests/unit/hooks.test.js`'s "classifyHooks treats an inline
+    **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks treats an inline
     object as a subtree copy" — the declaration shape is the same inline object
     item 62 covers.
 83. The hooks root remains a symlink in the candidate (`:921-924`). Port:
-    `tests/baseline/prepare.test.js`'s "a contained relative hooks root is
+    `tests/baseline/prepare.test.ts`'s "a contained relative hooks root is
     recreated as a symlink in the candidate" asserts
     `lstatSync(join(generated(c), "hooks")).isSymbolicLink()` on a successful
     run. This closes the gap note (c) recorded: before slice 3.5 the accepting
@@ -632,7 +632,7 @@ two, not on a prepare-level counterpart.
 ### Every ref shape's commit and manager version (`:934-970`)
 
 86. An exact prerelease tag prepares its commit (`:936`). **Retired**: exact
-    tag resolution is `tests/unit/upstream.test.js`'s `resolveExactTag`
+    tag resolution is `tests/unit/upstream.test.ts`'s `resolveExactTag`
     cluster ("reports a query failure", "reports the tag as not found when
     absent from otherwise-valid output", "prefers the peeled entry over the
     direct one"); that the resolved commit reaches provenance is item 38's
@@ -641,9 +641,9 @@ two, not on a prepare-level counterpart.
     **Retired**: "manifestVersionForRef reproduces the shell derivation table",
     second row.
 88. A branch ref prepares its head commit (`:941`). **Retired**: generic ref
-    resolution is `tests/baseline/ref-resolution.test.js`'s
+    resolution is `tests/baseline/ref-resolution.test.ts`'s
     `REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup` and
-    `tests/unit/upstream.test.js`'s "resolveRef falls through to the first
+    `tests/unit/upstream.test.ts`'s "resolveRef falls through to the first
     generic ls-remote entry".
 89. `main`'s manager version is `0.0.0-main+manager.<short>` (`:942`).
     **Retired**: the derivation table's third row.
@@ -658,7 +658,7 @@ two, not on a prepare-level counterpart.
     derivation table's fourth row, which uses this exact ref.
 93. A leading-zero branch ref prepares its head commit (`:952`). **Retired**:
     same generic-ref citations as item 88;
-    `tests/unit/upstream.test.js`'s "selectLatestRelease ignores malformed
+    `tests/unit/upstream.test.ts`'s "selectLatestRelease ignores malformed
     leading-zero tags" covers the tag side of the same hazard.
 94. `042`'s manager version is `0.0.0-ref-042+manager.<short>` (`:953`).
     **Retired**: the derivation table's fifth row, which uses this exact ref.
@@ -681,13 +681,13 @@ two, not on a prepare-level counterpart.
     — `src/commands/prepare.ts:371-376` initializes the value to `""` and
     assigns it only when `regularFileExists(upstreamManifest)` holds, so a
     manifest-less ref cannot produce anything else.
-    `tests/unit/commands-prepare.test.js`'s "readUpstreamManifestVersion
+    `tests/unit/commands-prepare.test.ts`'s "readUpstreamManifestVersion
     mirrors `spw_json_get` for the three shapes" pins the empty-string result
     for the two shapes that *do* reach the reader.
 98. The fallback manifest's `skills` is `./skills/` (`:961`). Port:
     `GENERATED-FALLBACK-01` asserts `manifest.skills === "./skills/"`.
 99. The fallback manifest has no `hooks` key (`:962`). **Retired**:
-    `tests/unit/hooks.test.js`'s "classifyHooks allows a fallback manifest
+    `tests/unit/hooks.test.ts`'s "classifyHooks allows a fallback manifest
     without hooks" and "classifyHooks rejects hooks in a fallback manifest"
     are the policy's two halves.
 100. The fallback plugin has no `hooks/` directory (`:963-966`). Port:
@@ -695,7 +695,7 @@ two, not on a prepare-level counterpart.
      `existsSync(join(generated(c), "hooks")) === false`, annotated with
      AGENTS.md's hook policy.
 101. A raw 40-hex ref prepares that commit (`:969`). **Retired**:
-     `tests/unit/upstream.test.js`'s "resolveRef treats a 40-hex ref as a raw
+     `tests/unit/upstream.test.ts`'s "resolveRef treats a 40-hex ref as a raw
      commit without querying" — and the port relies on that branch throughout,
      because `cloneUpstream` returns a commit every negative case passes as
      `SUPERPOWERS_REF` precisely to reach no Git resolution.
@@ -710,7 +710,7 @@ required the diagnostic to carry a *location* — `invalid JSON in
 `error: invalid manifest JSON in <path>\n`, with no line or column: the
 diagnostics convention forbids interpolating the parser's own text into a
 prepare-owned message. The line/column property survives where it is still
-emitted, pinned by `tests/unit/manifest-overlay.test.js`'s "a malformed
+emitted, pinned by `tests/unit/manifest-overlay.test.ts`'s "a malformed
 manifest reports line and column".
 
 103. A malformed upstream manifest fails closed with a JSON diagnostic, no
@@ -721,17 +721,17 @@ manifest reports line and column".
      every errno name), and compares the seeded prior tree byte-for-byte.
 104. A non-standard JSON constant is rejected (`:975`). Port: "prepare rejects
      an upstream manifest carrying NaN", same four-part contract;
-     `tests/unit/commands-prepare.test.js`'s "readUpstreamManifestVersion
+     `tests/unit/commands-prepare.test.ts`'s "readUpstreamManifestVersion
      delegates every read and parse failure to readManifest" is the unit half.
 105. A document nested 257 deep is rejected (`:976`). Port: "prepare rejects an
      upstream manifest nested beyond the depth limit", which builds 257 nested
      arrays and cites the 256-container profile.
 106. A document nested exactly 256 deep is accepted and its ref-derived version
      computed (`:981`). **Retired**: acceptance at the boundary is
-     `tests/unit/manifest-overlay.test.js`'s "nesting at exactly 256 is
+     `tests/unit/manifest-overlay.test.ts`'s "nesting at exactly 256 is
      accepted"; the version form is the derivation table's generic-ref row.
 107. …and its `upstream_manifest_version` is read out of it (`:984`).
-     **Retired**: `tests/unit/hooks.test.js`'s "MANIFEST-READER-MATERIALIZE-01
+     **Retired**: `tests/unit/hooks.test.ts`'s "MANIFEST-READER-MATERIALIZE-01
      hook manifest reader complete matrix" pins the reader's profile at the
      boundary, and item 37's citation pins that an accepted manifest's
      `version` reaches the caller.
@@ -742,7 +742,7 @@ manifest reports line and column".
      survives.
 109. A manifest larger than 1 MiB is still read and its unknown field
      preserved (`:990`). **Retired**:
-     `tests/unit/manifest-overlay.test.js`'s "trailing whitespace beyond 1 MiB
+     `tests/unit/manifest-overlay.test.ts`'s "trailing whitespace beyond 1 MiB
      is accepted" pins the size acceptance and "sets version and skills,
      preserving unknown fields and key order" pins the preservation.
 110. A manifest that cannot be read is rejected (`:994`). Port: "prepare
@@ -760,12 +760,12 @@ manifest reports line and column".
      emitter to assert against, so a port would have had to invent a behaviour
      rather than witness one. What remains unasserted is what an unpaired
      surrogate in `version` does downstream; the nearest witness is
-     `tests/unit/generated-plugin.test.js`'s "an unpaired surrogate in a
+     `tests/unit/generated-plugin.test.ts`'s "an unpaired surrogate in a
      manifest path fails during resolution", a different field on a different
      reader. Recorded here so the gap survives the driver's deletion.
 112. A document nested 2000 deep is rejected (`:996`). Port: "prepare rejects
      an upstream manifest nested beyond the depth limit" — the same branch, one
-     step past the boundary rather than 2000 past it; `tests/baseline/generated-plugin-corpus.test.js`'s
+     step past the boundary rather than 2000 past it; `tests/baseline/generated-plugin-corpus.test.ts`'s
      "JSON rejects excessive nesting without a traceback" is the validator's
      end.
 
@@ -779,7 +779,7 @@ generated tree preserved.
 eight shell diagnostics begin `hook classification failed:` —
 `src/adapter.ts:380`'s wrapper — and that prefix was asserted nowhere outside
 this shell file until slice 3.5 added
-`tests/baseline/prepare.test.js`'s "a classification failure reaches stderr
+`tests/baseline/prepare.test.ts`'s "a classification failure reaches stderr
 through the adapter wrapper"; see note (b) above.
 
 Read each citation below as two halves. The *inner* message stays where it
@@ -790,13 +790,13 @@ no unit test goes through the adapter, is carried by that one new case for all
 eight items at once: the prefix does not vary by cause, so one branch reaching
 it witnesses the wrapping for every branch that can reach it. Nothing about
 these eight causes was re-ported, and no item below should be read as claiming
-its cause moved into `tests/baseline/prepare.test.js`.
+its cause moved into `tests/baseline/prepare.test.ts`.
 
 Items 121-128's `hook materialization failed:` twin never had this problem —
-it is asserted by `tests/baseline/prepare.test.js:338`.
+it is asserted by `tests/baseline/prepare.test.ts:338`.
 
 113. A scalar `hooks` value is rejected (`:999`). Port: inner message,
-     `tests/unit/hooks.test.js`'s "classifyHooks rejects scalar, mixed, and
+     `tests/unit/hooks.test.ts`'s "classifyHooks rejects scalar, mixed, and
      null declarations"; wrapper prefix, "a classification failure reaches
      stderr through the adapter wrapper", which drives this same
      `unsupported or mixed hooks declaration` cause end to end.
@@ -836,7 +836,7 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
      same `symlink escapes or is broken` branch, reached by a broken link
      rather than an escaping one.
 125. A hooks root symlinked to source-only content is rejected (`:1035`).
-     Port: `tests/baseline/prepare.test.js`'s "a source-only hooks root fails
+     Port: `tests/baseline/prepare.test.ts`'s "a source-only hooks root fails
      closed on the candidate side". **This is the CANDIDATE-side call**, and
      the distinction is the correction this slice exists to make. The shell's
      root here is `ln -s .git`: `.git` exists inside the upstream checkout, so
@@ -852,7 +852,7 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
      `absolute subtree symlink is not allowed` message — a different emit site
      (`src/hooks.ts:297`), reached before either containment check.
 127. A broken relative hooks-root symlink is rejected (`:1041`). Port:
-     `tests/baseline/prepare.test.js`'s "an escaping hooks-root symlink fails
+     `tests/baseline/prepare.test.ts`'s "an escaping hooks-root symlink fails
      closed on the source side". **This is the SOURCE-side call** at
      `src/hooks.ts:358`: a root whose target does not resolve inside the
      upstream checkout fails containment before anything is copied, so the
@@ -867,7 +867,7 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
 ### The JSON reader on an unreadable path (`:1048-1061`)
 
 129. `spw_json_get` refuses a path it cannot read as JSON (`:1051-1055`). Port:
-     `tests/unit/commands-prepare.test.js`'s "readUpstreamManifestVersion
+     `tests/unit/commands-prepare.test.ts`'s "readUpstreamManifestVersion
      delegates every read and parse failure to readManifest", whose fourth
      fixture is a mode-`0o000` file and which asserts the rejection rather than
      a value.
@@ -881,7 +881,7 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
      `doesNotMatch(error.message, /EACCES|EPERM|errno|open .../)`, and
      "prepare reports an unreadable upstream manifest without an errno" runs
      `assertNoLeakedInternals`, whose pattern includes `Traceback` and sixteen
-     enumerated errno names (`tests/baseline/prepare.test.js:75`).
+     enumerated errno names (`tests/baseline/prepare.test.ts:75`).
 
 ### The complete generated tree (`:1063-1081`)
 
@@ -909,13 +909,13 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
 142. The test `HOME` provides no Codex plugin-creator validator, so only the
      shipped one can run (`:1084-1087`). **Retired**: structural in the port —
      `createCase` gives every case a fresh `HOME` under the suite's `mkdtemp`
-     scratch tree, and `tests/baseline/prepare-fixture.js:372-377` fails the
+     scratch tree, and `tests/baseline/prepare-fixture.ts:372-377` fails the
      case outright if the child environment omits `HOME` or any other name in
      `REQUIRED_ENV`, so no ambient `HOME` can leak in.
 143. Built-in validation runs before the additional validator (`:1102`).
      **Retired**: structural — `src/commands/prepare.ts` runs the adapter build
      and its validation at `:395` and reaches the additional-validator block
-     only at `:444`. `tests/baseline/cli-parity.test.js`'s `PREPARE-VALIDATE-01
+     only at `:444`. `tests/baseline/cli-parity.test.ts`'s `PREPARE-VALIDATE-01
      validation completes before activation` is the surviving end-to-end
      witness for the ordering, and it still drives the shell script this slice.
 144. An explicit additional validator really runs (`:1107`). Port: "prepare
@@ -931,13 +931,13 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
 
 147. Invalid skill frontmatter is rejected (`:1130-1143`). **Retired**: the
      frontmatter rule is
-     `tests/baseline/generated-plugin-corpus.test.js`'s "the required tree and
+     `tests/baseline/generated-plugin-corpus.test.ts`'s "the required tree and
      skill structure fail closed" and "frontmatter uses the first closing fence
      and owned keys only"; the end-to-end shape of a built-in validation
      failure — exit 1, the validator's line replayed, prepare's trailer, the
      prior tree intact — is `GENERATED-WRONG-NAME-01`'s port.
 148. The diagnostic is `exactly one top-level \`description:\`` (`:1144`).
-     **Retired**: `tests/baseline/generated-plugin-corpus.test.js`'s
+     **Retired**: `tests/baseline/generated-plugin-corpus.test.ts`'s
      "frontmatter uses the first closing fence and owned keys only" asserts
      `exactly one top-level \`name:\`` at `:962` and `:965`. Both strings come
      from the one interpolated template at `src/generated-plugin.ts:632`, so
@@ -946,14 +946,14 @@ it is asserted by `tests/baseline/prepare.test.js:338`.
 149. The failure removes its own staged plugin tree (`:1145-1148`). Port:
      "prepare rejects a directory as the fallback manifest template before
      building" asserts no `.superpowers.prepare.` entry remains under the
-     plugin root's parent, and `tests/unit/workspace.test.js`'s two
+     plugin root's parent, and `tests/unit/workspace.test.ts`'s two
      `FS-CLEANUP-01` cases pin `withWorkspace`'s removal on both the success
      and the callback-failure path.
 150. The failure does not remove another invocation's staged tree
-     (`:1149-1152`). **Retired**: `tests/unit/workspace.test.js`'s
+     (`:1149-1152`). **Retired**: `tests/unit/workspace.test.ts`'s
      "`REF-CLEANUP-01` / `REF-PIN-CLEANUP-01` signals clean only active
      workspaces" is the invocation-scoping contract, and
-     `tests/baseline/cli-parity.test.js`'s `FS-CLEANUP-01 interrupted state
+     `tests/baseline/cli-parity.test.ts`'s `FS-CLEANUP-01 interrupted state
      cleanup is invocation-scoped` is its end-to-end net.
 151. The additional validator does not run after a built-in failure
      (`:1153-1156`). **Retired**: structural — the built-in failure returns
@@ -975,7 +975,7 @@ called `spw_replace_generated_tree` directly (`:1191-1196`) through a
 `prepare` case. Its TypeScript counterpart is therefore a unit test of
 `atomicReplaceDir`, not a driver case. PR 11.5 slice 3 Task 2 re-pointed
 `docs/baseline/traceability.md:104` to
-`tests/unit/atomic.test.js::FS-ATOMIC-SWAP-01 EXDEV activation restores the
+`tests/unit/atomic.test.ts::FS-ATOMIC-SWAP-01 EXDEV activation restores the
 prior tree`.
 
 153. The failed activation exits non-zero (`:1198`). Port:
@@ -998,7 +998,7 @@ prior tree`.
 158. The committed manifest template was not mutated by the run
      (`:1208-1211`). **Retired**: structural — every case points
      `SUPERPOWERS_MANIFEST_TEMPLATE` at its own package copy
-     (`tests/baseline/prepare-fixture.js:355-358`), never at the repository's
+     (`tests/baseline/prepare-fixture.ts:355-358`), never at the repository's
      file, and `CLI-ENV-PREPARE-PATHS-01` additionally snapshots the package
      root's generated tree before the run and asserts it unchanged after.
 
@@ -1027,7 +1027,7 @@ softened. `runCommand` (`src/adapter.ts:110-156`) copies the environment it is
 given and `delete`s `NODE_OPTIONS` and `NODE_PATH` before `execFile`
 (`:120-122`); the same grep now returns **three** hits, all in
 `src/adapter.ts` — the explanatory comment at `:116` and those two deletes. The
-change is covered by `tests/unit/adapter.test.js:549`, *"runCommand strips
+change is covered by `tests/unit/adapter.test.ts:549`, *"runCommand strips
 NODE_OPTIONS and NODE_PATH from the child env"*, which drives the real
 `runCommand` through an exported test alias (`src/adapter.ts:158-160`) rather
 than restating the deletes.
@@ -1063,7 +1063,7 @@ beside this one — items 83-85, 113-120, and 125/127/128 — and narrowed item
      4b: the property has a successor at the child that does exist —
      `runCommand` deletes `NODE_OPTIONS` before spawning `codexBin`
      (`src/adapter.ts:120-122`, called at `:207`), pinned by
-     `tests/unit/adapter.test.js:549`. The §11 citation still does *not* cover
+     `tests/unit/adapter.test.ts:549`. The §11 citation still does *not* cover
      this, because §11 declines the *dispatcher* boundary, not the child's;
      it no longer needs to. See the cluster note above.
 163. `NODE_PATH` was unset for that launch (`:1272`). **Retired**, same
@@ -1084,9 +1084,9 @@ map onto.
    a numeric `"version": 6` became the string `"6"` and flowed into both the
    provenance record and `--upstream-manifest-version`. The port rejects it
    with a hand-written message naming the manifest path. Spec divergence 7.
-   Ports: `tests/baseline/prepare.test.js`'s "prepare rejects a non-string
+   Ports: `tests/baseline/prepare.test.ts`'s "prepare rejects a non-string
    upstream manifest version" (case 20) end to end, and
-   `tests/unit/commands-prepare.test.js`'s "readUpstreamManifestVersion fails
+   `tests/unit/commands-prepare.test.ts`'s "readUpstreamManifestVersion fails
    closed on a non-string version" at the reader.
 2. Validator stdout and stderr are captured and written through `ctx` at
    command end rather than streamed live through inherited stdio.
@@ -1122,7 +1122,7 @@ map onto.
    path, not only the swap's. The shell asserted a surviving tree only for
    `FS-ATOMIC-SWAP-01`, and elsewhere only that a sentinel *file* still
    existed. The port's `snapshotTree` records `path\tkind[\tsha256]` for every
-   entry, and every negative case in `tests/baseline/prepare.test.js` seeds a
+   entry, and every negative case in `tests/baseline/prepare.test.ts` seeds a
    tree and compares the full snapshot afterwards.
 6. **New.** The hook-subtree **walk** failure — `src/hooks.ts:279`,
    `collectEntries`'s `readdir` — is witnessed for the first time on either
@@ -1132,7 +1132,7 @@ map onto.
    it. The precondition is a directory permission, which git cannot store, so
    the case runs `prepare` once to populate the upstream cache, captures
    `hooks/support`'s real mode, chmods it to `0o000`, runs again, and restores
-   in a `finally`. Ports: `tests/baseline/prepare.test.js`'s "an unreadable
+   in a `finally`. Ports: `tests/baseline/prepare.test.ts`'s "an unreadable
    hooks subdirectory fails closed naming the subdirectory" (case 28). The
    emitted **path** is the assertion, not the message: `:279` names the failing
    subdirectory, which is what discriminates it from the two `:303` witnesses,
@@ -1155,13 +1155,13 @@ assertion this port added, so counting any of it would overstate `portOnly`.
 one is left:
 
 - **Retired in slice 3.4.** Roughly twenty `prepare` cases in
-  `tests/baseline/cli-parity.test.js` were calibrated against
+  `tests/baseline/cli-parity.test.ts` were calibrated against
   `tests/fixtures/baseline/bin/stateful-adapter` rather than a real build.
   Slice 3.4 re-derived those cases and flipped dispatch. Note that this fixture
   is **not** synthetic for `build`, the only operation `prepare` invokes: its
   `build` branch (`stateful-adapter:159-188`) logs the invocation and then
   `os.execv`s `SPW_BASELINE_RUNTIME_ADAPTER`, the real shipped adapter, which
-  `tests/baseline/support.js:590` provisions. For `build` it is a **logging
+  `tests/baseline/support.ts:590` provisions. For `build` it is a **logging
   delegator**; it is genuinely synthetic only for `install` and `uninstall`.
 - **Live.** The lifecycle test fakes stub `SPW_ADAPTER`, a seam only
   `scripts/core/adapter.sh` honours and the in-process `runAdapter` does not.
@@ -1169,7 +1169,7 @@ one is left:
   `tests/bin/adapter-seam.js`; **slice 4 deletes the script**, beside
   `scripts/probe`.
 
-`tests/bin/units.test.js` carries the retention guard, which asserts the
+`tests/bin/units.test.ts` carries the retention guard, which asserts the
 relationship — the script exists and both callers still invoke it — rather than
 a line number, and it was mutation-proved once per caller.
 
@@ -1182,7 +1182,7 @@ ever left dangling: `CLI-ENV-PREPARE-PATHS-01`, `MANIFEST-READER-UPSTREAM-01`,
 `GENERATED-HOOKS-FORBID-01`, `GENERATED-HOOKS-DEFAULT-01` and
 `GENERATED-HOOKS-DEFAULT-LAYOUT-01` (both on case 5), and
 `FS-HOOK-CONTAINMENT-01`. `FS-ATOMIC-SWAP-01` is the one row that had already
-moved, to `tests/unit/atomic.test.js` (slice 3, Task 2); `BUILDER-SYMLINK-01`
+moved, to `tests/unit/atomic.test.ts` (slice 3, Task 2); `BUILDER-SYMLINK-01`
 has no traceability row at all, and its two assertions are retired against
 `FS-SYMLINK-01`.
 
@@ -1190,7 +1190,7 @@ One of the ten is a partial anchor and is recorded as such in
 `docs/baseline/traceability.md` itself: `GENERATED-HOOKS-FORBID-01` names two
 claims in `docs/baseline/behavioral-inventory.md:230`, and the case its row
 anchors exercises only the exact-`hooks: {}` half. The manifest-less-fallback
-half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
+half is asserted at `tests/baseline/prepare.test.ts:224`, inside the case
 `GENERATED-FALLBACK-01`'s own row anchors.
 
 ## Cardinality
@@ -1200,9 +1200,9 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   "shellOriginal": 163,
   "portOnly": 6,
   "ports": {
-    "tests/baseline/prepare.test.js": 31,
-    "tests/unit/commands-prepare.test.js": 6,
-    "tests/unit/atomic.test.js": 8
+    "tests/baseline/prepare.test.ts": 31,
+    "tests/unit/commands-prepare.test.ts": 6,
+    "tests/unit/atomic.test.ts": 8
   }
 }
 ```
@@ -1221,7 +1221,7 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   2+7+5+7+5+3+3+4+10+2+6+7+8+7+5+4+17+10+16+3+10+5+6+5+1+5 = 163). See
   "Divergences from the derived 158" above for the full +15/-10/net5 derivation
   from the mechanical 158.
-- Ports: `tests/baseline/prepare.test.js` has 31 static `test(` call sites (8
+- Ports: `tests/baseline/prepare.test.ts` has 31 static `test(` call sites (8
   named for the baseline case IDs they own, and 23 further end-to-end cases —
   the adapter classification wrapper, source-side hooks-root containment,
   candidate-side hooks-root containment, the pinned saved selection,
@@ -1233,14 +1233,14 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   contained hooks-root symlink, the post-success workspace cleanup failure
   that keeps the prepared outcome, and the cleanup failure after a failed
   prepare that still replays the outcome ahead of the warning);
-  `tests/unit/commands-prepare.test.js` has 6 (three for
+  `tests/unit/commands-prepare.test.ts` has 6 (three for
   `readUpstreamManifestVersion` and three for `runPrepare`'s `-f`/`-d`
-  predicates); `tests/unit/atomic.test.js` has 8 (five for `atomicWriteFile`
+  predicates); `tests/unit/atomic.test.ts` has 8 (five for `atomicWriteFile`
   and three for `atomicReplaceDir`, two of which carry `FS-ATOMIC-SWAP-01`).
 - Reconciliation: 80 of the 163 shell items are mapped into those ports — 73
-  into `tests/baseline/prepare.test.js`, 2 into
-  `tests/unit/commands-prepare.test.js`, and 5 into
-  `tests/unit/atomic.test.js`, with items 104, 105, 110, 112, and 131
+  into `tests/baseline/prepare.test.ts`, 2 into
+  `tests/unit/commands-prepare.test.ts`, and 5 into
+  `tests/unit/atomic.test.ts`, with items 104, 105, 110, 112, and 131
   additionally witnessed in the unit file. The rest are **83 retired items**
   (1-2, 7-12, 15-34, 37, 39-40, 59-60, 62-76, 82, 86-89, 91-97, 99, 101-102,
   106-107, 109, 111, 121, 123-124, 126, 142-143, 147-148, 150-151, 158-163),
@@ -1261,7 +1261,7 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
      false today: that `src/` scrubs neither variable anywhere, and that
      `runCommand` passes `env` through untouched. `src/adapter.ts:120-122`
      copies the environment and deletes both variables before `execFile`, with
-     `tests/unit/adapter.test.js:549` as its witness. What closed is the
+     `tests/unit/adapter.test.ts:549` as its witness. What closed is the
      property, at the only child the in-process path spawns
      (`src/adapter.ts:207`). What is **not** resurrected is items 162-163
      themselves: the `adapter-cli.js` launch they observed does not occur
@@ -1296,3 +1296,11 @@ half is asserted at `tests/baseline/prepare.test.js:224`, inside the case
   a prepare-level counterpart structurally impossible. Item 15 is narrower
   than its citation in a related way — both halves are covered, the
   combination is not.
+
+## Native TypeScript reconciliation (issue #113)
+
+Current ports: `tests/baseline/prepare.test.ts` (31 static `test(` call sites); `tests/unit/commands-prepare.test.ts` (6 static `test(` call sites); `tests/unit/atomic.test.ts` (8 static `test(` call sites).
+The `.ts` paths identify the current native counterparts; the quoted shell
+assertions, original counts, historical dispositions, freeze header, and Git
+resolution anchors remain historical. Imports, child entry points, preloads, and
+maintained helper references follow the renamed native source paths.

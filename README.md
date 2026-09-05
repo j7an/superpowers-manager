@@ -44,10 +44,11 @@ It never removes the legacy provider automatically.
 
 ## Requirements and platforms
 
-Superpowers Manager requires Node 24+, and Codex is the only supported
+The installed Superpowers Manager package requires Node >=24. Native source,
+tests, and packaging tooling require Node >=24.12.0. Codex is the only supported
 integration today. Every other requirement is per command, enforced by
 preflight before any dispatch. This table is checked against production by
-`tests/bin/readme-requirements.test.js`; edit it when a command's requirements
+`tests/bin/readme-requirements.test.ts`; edit it when a command's requirements
 change, in the same pull request.
 
 <!-- requirements:begin -->
@@ -401,15 +402,35 @@ and inspect any resulting PR before treating live integration as validated.
 ## Tests
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run build
-sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
-sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command
-sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
+rtk proxy pnpm install --frozen-lockfile
+rtk proxy pnpm run check:static
+rtk proxy node src/cli.ts --help
+rtk proxy sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
+rtk proxy sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command
+rtk proxy sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
 ```
 
-`pnpm run build` deletes `dist/` before compiling, so every build is a clean
-rebuild and stale artifacts of deleted or renamed modules cannot survive.
+Use a Homebrew-managed local pnpm through `rtk proxy pnpm`; do not use Corepack.
+`check:static` checks formatting, lints, and typechecks production and tests without
+emitting JavaScript. Run the maintained CLI directly with `node src/cli.ts`.
+Tests and their subprocesses execute TypeScript against `src/` with no checkout
+build. Future production coverage covers `src/`, including `src/cli.ts`; emitted
+distribution files, tests, and packaging tools are outside that source scope.
+No coverage collection is enabled by this migration.
+
+Packaging compiles only production source into fresh external temporary staging:
+
+```sh
+rtk proxy node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
+```
+
+Allocate the existing output directory outside the checkout before running this
+command. It returns npm-compatible JSON for one validated tarball and removes its
+own staging. Bare checkout `npm pack` always fails with this command's guidance,
+even if stale `dist/` exists. Maintained or manager-generated JavaScript must not
+remain in the checkout; dependencies and generated upstream plugin content have
+separate ownership. This developer command does not authorize publication; follow
+`RELEASING.md` for the protected release procedure.
 
 Layers 1-3 stay offline and hermetic: they use a fake local upstream repo plus
 host-side fixtures, and they perform no mutation of the developer's or runner's
@@ -434,14 +455,16 @@ and pushes to `main`. The `toolchain` job runs `pnpm run check:static` plus the
 tooling-coverage and citations suites, preserving checks that need a Git
 checkout and history. The `test` job runs the full suite and Codex offline
 probe in the container. When adding checks that require the host checkout,
-ensure the `toolchain` job covers them too.
+ensure the `toolchain` job covers them too. Native acceptance runs at Node
+24.12.0 and latest 24.x, including checkout-dependent gates; the installed npm
+executable is also tested with Node 24.0.0. These CI runtime selectors are
+separate from the Homebrew-managed local commands above.
 
 ## Repository layout
 
 ```
 .agents/plugins/marketplace.json          # local marketplace definition (tracked)
 .github/                                  # CI, security, dependency, and release workflows (tracked)
-bin/superpowers-manager.js                # public thin loader for dist/cli.js
 config/upstream-ref                       # packaged upstream fallback policy (tracked)
 docs/                                     # adapter result contract and baseline evidence (tracked)
 package.json pnpm-lock.yaml tsconfig.json # package contract and locked toolchain (tracked)
@@ -449,12 +472,12 @@ plugins/superpowers/
   .codex-plugin/plugin.template.json      # fallback manifest template (tracked)
   generated plugin tree                   # prepared from upstream (gitignored)
 src/                                      # in-process TypeScript runtime (tracked)
-  cli.ts                                  # CLI parsing, preflight, and command dispatch
+  cli.ts                                  # sole maintained CLI entry, parsing, preflight, dispatch
   commands/                               # lifecycle and selection command handlers
   adapter.ts                              # Codex integration
 tests/                                    # hermetic suite and manual Codex probe (tracked)
   migration-inventory/                     # frozen historical evidence
-dist/                                     # generated ESM build tree (gitignored)
+  tools/pack.ts                           # external staging and validated package emission
 ```
 
 Everything under `plugins/superpowers/` except the fallback manifest template is

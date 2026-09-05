@@ -1,12 +1,12 @@
-import { oneLine } from "../cli-arguments.js";
+import { oneLine } from "../cli-arguments.ts";
 import {
   selectionStatePath,
   loadSavedSelection,
   UPSTREAM_URL_DEFAULT,
-} from "../effective-selection.js";
-import { validateSource } from "../selection.js";
-import { writeSelectionState } from "../selection-store.js";
-import type { CommandContext } from "./context.js";
+} from "../effective-selection.ts";
+import { validateSource } from "../selection.ts";
+import { writeSelectionState } from "../selection-store.ts";
+import type { CommandContext } from "./context.ts";
 
 export async function runTrackLatest(
   argv: readonly string[],
