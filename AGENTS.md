@@ -138,9 +138,9 @@ Codex below describe the product integration, not a required agent harness.
 - Before the host suite, run:
 
   ```sh
-  rtk proxy pnpm install --frozen-lockfile
-  rtk proxy pnpm run check:static
-  rtk proxy sh tests/run.sh
+  pnpm install --frozen-lockfile
+  pnpm run check:static
+  sh tests/run.sh
   ```
 
 - Run `node src/cli.ts` for the maintained CLI; native tests import production

@@ -145,17 +145,17 @@ tag, or attempt to overwrite the immutable npm version.
 Run locally while iterating:
 
 ```sh
-rtk proxy pnpm install --frozen-lockfile
-rtk proxy pnpm run check:static
-rtk proxy sh tests/run.sh
-rtk proxy env SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh
-rtk proxy env SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
-rtk proxy node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
-rtk proxy node --import ./tests/assert-matcher-gate.ts --test tests/bin/npm-pack-contents.test.ts tests/baseline/packaged-cli.test.ts
-rtk proxy git diff --check
+pnpm install --frozen-lockfile
+pnpm run check:static
+sh tests/run.sh
+SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh
+SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
+node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
+node --import ./tests/assert-matcher-gate.ts --test tests/bin/npm-pack-contents.test.ts tests/baseline/packaged-cli.test.ts
+git diff --check
 ```
 
-Use Homebrew-managed pnpm through `rtk proxy pnpm` locally, without Corepack.
+Use Homebrew-managed pnpm by command name locally, without Corepack.
 Native source, tests, and packaging tooling require Node >=24.12.0; the installed
 package retains Node >=24. Static checking emits nothing into the checkout.
 Allocate the packaging command's existing output directory outside the checkout

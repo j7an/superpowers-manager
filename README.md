@@ -402,15 +402,15 @@ and inspect any resulting PR before treating live integration as validated.
 ## Tests
 
 ```sh
-rtk proxy pnpm install --frozen-lockfile
-rtk proxy pnpm run check:static
-rtk proxy node src/cli.ts --help
-rtk proxy sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
-rtk proxy sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command
-rtk proxy sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
+pnpm install --frozen-lockfile
+pnpm run check:static
+node src/cli.ts --help
+sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
+sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command
+sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
 ```
 
-Use a Homebrew-managed local pnpm through `rtk proxy pnpm`; do not use Corepack.
+Use a Homebrew-managed local pnpm by command name; do not use Corepack.
 `check:static` checks formatting, lints, and typechecks production and tests without
 emitting JavaScript. Run the maintained CLI directly with `node src/cli.ts`.
 Tests and their subprocesses execute TypeScript against `src/` with no checkout
@@ -421,7 +421,7 @@ No coverage collection is enabled by this migration.
 Packaging compiles only production source into fresh external temporary staging:
 
 ```sh
-rtk proxy node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
+node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
 ```
 
 Allocate the existing output directory outside the checkout before running this
