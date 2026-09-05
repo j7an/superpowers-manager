@@ -1286,13 +1286,18 @@ resolution anchors remain historical. Imports, child entry points, preloads, and
 maintained helper references follow the renamed native source paths.
 
 Task 6 completes the native workflow wiring within the existing test cases.
-The CI acceptance job now requires native endpoints 24.12.0 and latest 24 with
-fail-fast disabled and the validated selector passed as step environment. The
-checkout toolchain matrix uses the same endpoints, frozen installation on both,
-latest-only no-emit static checking, and native `.ts` tooling/citation suites on
-both. Both checkouts retain full history; checkout compilation and duplicate full
-host runs are rejected. These adapt historical items 69-71's check ordering and single-runtime
-command expectations without changing their recorded historical evidence.
+The PR acceptance job now runs exactly one full container suite at
+`tests/container.sh`'s latest-24 default, with no native matrix or selector
+environment. The checkout toolchain keeps its two endpoints and frozen
+installation: 24.12.0 runs focused native source CLI, suite-runner/assertion
+preload, and package-producer success/failure coverage; latest 24 alone runs
+no-emit static checking plus the native `.ts` tooling/citation suites. Both
+jobs are unconditional, every workflow, job, and step environment scope omits
+`SPW_NATIVE_NODE_VERSION`, and their complete run-command inventories reject
+extra container, broad host-suite, package/tooling duplicate, or other commands.
+Both checkouts retain full history. These adapt historical items 69-71's check
+ordering and single-runtime command expectations without changing their recorded
+historical evidence.
 
 The release caller's existing contract case now requires static checking and
 both sequential container endpoints in `test-command`, followed by the sole

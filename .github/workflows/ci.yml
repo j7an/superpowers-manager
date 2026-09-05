@@ -14,10 +14,6 @@ permissions: {}
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        native: ["24.12.0", "24"]
     permissions:
       contents: read
     steps:
@@ -36,8 +32,6 @@ jobs:
           fetch-depth: 0
 
       - name: Run container acceptance suite
-        env:
-          SPW_NATIVE_NODE_VERSION: ${{ matrix.native }}
         run: sh tests/container.sh
 
   toolchain:
@@ -78,6 +72,13 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check native compatibility floor
+        if: matrix.native == '24.12.0'
+        run: |
+          node --import ./tests/assert-matcher-gate.ts --test tests/bin/native-source.test.ts
+          node --import ./tests/assert-matcher-gate.ts --test tests/bin/assert-matcher-gate.test.ts
+          node --import ./tests/assert-matcher-gate.ts --test --test-name-pattern='^(compiler failure yields no package metadata or artifact|one staged package is delivered and all staging is removed)$' tests/bin/pack.test.ts
+
       - name: Check static toolchain
         if: matrix.static
         run: pnpm run check:static
@@ -85,4 +86,5 @@ jobs:
       # The full suite runs in `test`. These suites also need the Git checkout
       # and history that are deliberately excluded from the container image.
       - name: Check tooling coverage and historical citations
+        if: matrix.static
         run: node --import ./tests/assert-matcher-gate.ts --test tests/bin/tooling-coverage.test.ts tests/bin/citations.test.ts

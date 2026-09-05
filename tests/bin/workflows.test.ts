@@ -220,15 +220,43 @@ function requireMapping(value: unknown, path: string): Record<string, any> {
   return value as Record<string, any>;
 }
 
+function assertNoNativeSelectorEnv(
+  scope: Record<string, any>,
+  path: string,
+): void {
+  if (!Object.hasOwn(scope, "env")) return;
+
+  const env = requireMapping(scope.env, `${path}.env`);
+  assert.ok(
+    !Object.hasOwn(env, "SPW_NATIVE_NODE_VERSION"),
+    `${path}.env must not set SPW_NATIVE_NODE_VERSION`,
+  );
+}
+
+function runCommandInventory(steps: unknown[], path: string): string[] {
+  return steps.flatMap((candidate, index) => {
+    const step = requireMapping(candidate, `${path}[${index}]`);
+    return typeof step.run === "string" ? [step.run] : [];
+  });
+}
+
 void test("ci.yml declares the expected top-level contract", () => {
   const ci = requireMapping(loadWorkflow(join(WORKFLOW_DIR, "ci.yml")), "ci");
 
+  assertNoNativeSelectorEnv(ci, "ci");
+  assert.deepEqual(Object.keys(ci).sort(), [
+    "concurrency",
+    "jobs",
+    "name",
+    "on",
+    "permissions",
+  ]);
   assert.deepEqual(ci.permissions, {});
   const jobs = requireMapping(ci.jobs, "jobs");
   assert.deepEqual(Object.keys(jobs), ["test", "toolchain"]);
 });
 
-void test("ci.yml `test` job runs the container acceptance suite in order", () => {
+void test("ci.yml `test` job runs one latest container acceptance suite in order", () => {
   const ci = requireMapping(loadWorkflow(join(WORKFLOW_DIR, "ci.yml")), "ci");
   const jobs = requireMapping(ci.jobs, "jobs");
   const testJob = requireMapping(jobs.test, "jobs.test");
@@ -237,25 +265,35 @@ void test("ci.yml `test` job runs the container acceptance suite in order", () =
     !Object.hasOwn(testJob, "continue-on-error"),
     "jobs.test must not use continue-on-error",
   );
+  assert.ok(
+    !Object.hasOwn(testJob, "if"),
+    "jobs.test must run unconditionally",
+  );
+  assertNoNativeSelectorEnv(testJob, "jobs.test");
   assert.equal(testJob["runs-on"], "ubuntu-latest");
   assert.equal(
     requireMapping(testJob.permissions, "jobs.test.permissions").contents,
     "read",
   );
 
-  const strategy: Record<string, unknown> = requireMapping(
-    testJob.strategy,
-    "jobs.test.strategy",
+  assert.ok(
+    !Object.hasOwn(testJob, "strategy"),
+    "the PR container acceptance runs once at its latest-24 default",
   );
-  assert.equal(strategy["fail-fast"], false);
-  const matrix: Record<string, unknown> = requireMapping(
-    strategy.matrix,
-    "jobs.test.strategy.matrix",
-  );
-  assert.deepEqual(matrix.native, ["24.12.0", "24"]);
 
   const steps = testJob.steps;
   assert.ok(Array.isArray(steps), "expected jobs.test.steps to be an array");
+  assert.deepEqual(
+    runCommandInventory(steps, "jobs.test.steps"),
+    ["sh tests/container.sh"],
+    "jobs.test must contain only the one container acceptance run command",
+  );
+  steps.forEach((candidate, index) => {
+    assertNoNativeSelectorEnv(
+      requireMapping(candidate, `jobs.test.steps[${index}]`),
+      `jobs.test.steps[${index}]`,
+    );
+  });
 
   const hardenIndex = uniqueStepTargetIndex(
     steps,
@@ -314,14 +352,13 @@ void test("ci.yml `test` job runs the container acceptance suite in order", () =
     steps[acceptance.index],
     "container acceptance step",
   );
-  const acceptanceEnv: Record<string, unknown> = requireMapping(
-    acceptanceStep.env,
-    "container acceptance step.env",
+  assert.ok(
+    !Object.hasOwn(acceptanceStep, "env"),
+    "container acceptance must use tests/container.sh's latest-24 default",
   );
-  assert.equal(acceptanceEnv.SPW_NATIVE_NODE_VERSION, "${{ matrix.native }}");
   assert.ok(
     !Object.hasOwn(acceptanceStep, "if"),
-    "both native endpoints must run",
+    "container acceptance must run in the PR job",
   );
   assert.ok(
     !Object.hasOwn(acceptanceStep, "continue-on-error"),
@@ -338,6 +375,11 @@ void test("ci.yml `toolchain` job runs the checks in order", () => {
     !Object.hasOwn(toolchain, "continue-on-error"),
     "jobs.toolchain must not use continue-on-error",
   );
+  assert.ok(
+    !Object.hasOwn(toolchain, "if"),
+    "jobs.toolchain must run unconditionally",
+  );
+  assertNoNativeSelectorEnv(toolchain, "jobs.toolchain");
   assert.equal(toolchain["runs-on"], "ubuntu-latest");
   assert.equal(
     requireMapping(toolchain.permissions, "jobs.toolchain.permissions")
@@ -365,12 +407,66 @@ void test("ci.yml `toolchain` job runs the checks in order", () => {
     "expected jobs.toolchain.steps to be an array",
   );
 
+  const expectedNativeCompatibilityCommand = `${[
+    "node --import ./tests/assert-matcher-gate.ts --test tests/bin/native-source.test.ts",
+    "node --import ./tests/assert-matcher-gate.ts --test tests/bin/assert-matcher-gate.test.ts",
+    "node --import ./tests/assert-matcher-gate.ts --test --test-name-pattern='^(compiler failure yields no package metadata or artifact|one staged package is delivered and all staging is removed)$' tests/bin/pack.test.ts",
+  ].join("\n")}\n`;
+  const expectedToolchainRunCommands = [
+    "corepack enable",
+    "pnpm install --frozen-lockfile",
+    expectedNativeCompatibilityCommand,
+    "pnpm run check:static",
+    "node --import ./tests/assert-matcher-gate.ts --test tests/bin/tooling-coverage.test.ts tests/bin/citations.test.ts",
+  ];
+  assert.deepEqual(
+    runCommandInventory(steps, "jobs.toolchain.steps"),
+    expectedToolchainRunCommands,
+    "jobs.toolchain run commands must be exactly the frozen install and bounded validation inventory",
+  );
+  steps.forEach((candidate, index) => {
+    assertNoNativeSelectorEnv(
+      requireMapping(candidate, `jobs.toolchain.steps[${index}]`),
+      `jobs.toolchain.steps[${index}]`,
+    );
+  });
+
+  const nativeCompatibilitySteps = steps.filter(
+    (step) =>
+      step !== null &&
+      typeof step === "object" &&
+      typeof (step as Record<string, unknown>).run === "string" &&
+      (step as Record<string, string>).run.includes(
+        "tests/bin/native-source.test.ts",
+      ),
+  );
+  assert.equal(
+    nativeCompatibilitySteps.length,
+    1,
+    "expected exactly one focused native compatibility step",
+  );
+  const nativeCompatibility = requireMapping(
+    nativeCompatibilitySteps[0],
+    "native compatibility step",
+  );
+  assert.equal(
+    nativeCompatibility.if,
+    "matrix.native == '24.12.0'",
+    "native compatibility must run only at the supported source floor",
+  );
+  assert.deepEqual(
+    nativeCompatibility.run,
+    expectedNativeCompatibilityCommand,
+    "native compatibility must cover source loading, runner preload, and package producer success and failure",
+  );
+
   const order = [
     uniqueStepTargetIndex(steps, "step-security/harden-runner"),
     uniqueStepTargetIndex(steps, "actions/checkout"),
     uniqueStepTargetIndex(steps, "actions/setup-node"),
     uniqueRunStepIndex(steps, "corepack enable"),
     uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile"),
+    steps.indexOf(nativeCompatibilitySteps[0]),
     uniqueRunStepIndex(steps, "pnpm run check:static"),
     uniqueRunStepIndex(
       steps,
@@ -387,11 +483,17 @@ void test("ci.yml `toolchain` job runs the checks in order", () => {
     if (index === order[5]) {
       assert.equal(
         step.if,
+        "matrix.native == '24.12.0'",
+        "native compatibility runs only at the source floor",
+      );
+    } else if (index === order[6] || index === order[7]) {
+      assert.equal(
+        step.if,
         "matrix.static",
-        "static checking runs on latest native only",
+        "static and Git-backed checks run on latest native only",
       );
     } else {
-      assert.ok(!Object.hasOwn(step, "if"), "validation must always run");
+      assert.ok(!Object.hasOwn(step, "if"), "installation must always run");
     }
     assert.ok(
       !Object.hasOwn(step, "continue-on-error"),
