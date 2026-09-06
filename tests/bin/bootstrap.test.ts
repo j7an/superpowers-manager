@@ -103,7 +103,7 @@ const textContentCases: Array<[string, string, boolean]> = [
   ],
   [
     "AGENTS.md",
-    "Run `sh tests/container.sh` before declaring a change complete.",
+    "Complete acceptance is static validation followed by `pnpm run test:acceptance`",
     true,
   ],
   [
@@ -124,7 +124,7 @@ const textContentCases: Array<[string, string, boolean]> = [
   ["README.md", "Layer 4 is the Docker acceptance path", true],
   [
     "README.md",
-    "sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command",
+    "The package scripts above are alternative iteration selectors",
     true,
   ],
   ["README.md", "pnpm install --frozen-lockfile", true],

@@ -31,8 +31,8 @@ jobs:
           # every one of them unresolvable.
           fetch-depth: 0
 
-      - name: Run container acceptance suite
-        run: sh tests/container.sh
+      - name: Run offline Codex integration
+        run: sh tests/container.sh codex-spike
 
   toolchain:
     runs-on: ubuntu-latest
@@ -61,10 +61,25 @@ jobs:
           # every one of them unresolvable.
           fetch-depth: 0
 
+      - name: Set up package minimum Node
+        if: matrix.static
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.0.0"
+          package-manager-cache: false
+
+      - name: Preserve package minimum executable
+        if: matrix.static
+        run: |
+          node -e 'const m=/^>=(\d+)$/.exec(require("./package.json").engines.node); if (!m || process.versions.node !== `${m[1]}.0.0`) { console.error("package minimum Node setup did not match engines.node"); process.exit(1); }'
+          printf 'SPW_PACKAGE_NODE=%s\n' "$(node -p 'process.execPath')" >> "$GITHUB_ENV"
+          printf 'SPW_PACKAGE_NODE_VERSION=%s\n' "$(node -p 'process.versions.node')" >> "$GITHUB_ENV"
+
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.native }}
+          check-latest: ${{ matrix.static }}
 
       - name: Enable Corepack
         run: corepack enable
@@ -83,8 +98,6 @@ jobs:
         if: matrix.static
         run: pnpm run check:static
 
-      # The full suite runs in `test`. These suites also need the Git checkout
-      # and history that are deliberately excluded from the container image.
-      - name: Check tooling coverage and historical citations
+      - name: Run shared tests and package minimum checks
         if: matrix.static
-        run: node --import ./tests/assert-matcher-gate.ts --test tests/bin/tooling-coverage.test.ts tests/bin/citations.test.ts
+        run: sh tests/run.sh --require-package-node

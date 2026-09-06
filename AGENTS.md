@@ -135,13 +135,27 @@ Codex below describe the product integration, not a required agent harness.
   minutes-scale full suite and cannot run concurrently with other work.
   **Why:** three of PR 10's six remediation tasks needed an extra fix round,
   and every one was a trivial static failure.
-- Before the host suite, run:
+- Install dependencies once, run the static gate before submission, and choose
+  the package script that matches the current iteration scope:
 
   ```sh
   pnpm install --frozen-lockfile
   pnpm run check:static
-  sh tests/run.sh
+  pnpm test
+  pnpm run test:unit
+  pnpm run test:integration
+  pnpm run test:harness:codex
+  pnpm run test:acceptance
   ```
+
+  These are alternative iteration selectors; do not run every row sequentially
+  as a substitute for acceptance. Complete acceptance is static validation followed by `pnpm run test:acceptance`
+  with explicit package-minimum runtime evidence. For controlled shared-suite
+  comparisons, use `sh tests/run.sh --concurrency 1` and
+  `sh tests/run.sh --concurrency 2`. A completed shared phase emits both
+  `run-node-suites: complete status=<status>` and
+  `tests/run.sh: complete failed=<count>`; absence of either sentinel means the
+  run is incomplete.
 
 - Run `node src/cli.ts` for the maintained CLI; native tests import production
   `src/` directly and need no build. Future production coverage includes all of
@@ -152,18 +166,56 @@ Codex below describe the product integration, not a required agent harness.
   happen in invocation-owned external staging. Bare checkout `npm pack` is
   rejected by the source `prepack` guard even when stale dist exists. Protected
   publishing remains governed by `RELEASING.md`.
-- Run `sh tests/run.sh` while iterating on the inner hermetic host suite.
-- Run `sh tests/container.sh` before declaring a change complete. Validate both
-  native endpoints sequentially with `SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh`
-  and `SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh`; the default is `24` and
+- For macOS acceptance, reuse an existing exact package-minimum Node executable
+  when available by exporting its absolute path as `SPW_PACKAGE_NODE` and
+  `24.0.0` as `SPW_PACKAGE_NODE_VERSION`, then verify that executable reports
+  the declared version. Otherwise, from the worktree with a supported native
+  Node already on `PATH`, provision the official archive in invocation-owned
+  temporary storage:
+
+  ```sh
+  spw_runtime_dir=$(mktemp -d)
+  SPW_PACKAGE_NODE_VERSION=$(node -p 'const e=require("./package.json").engines.node; const m=/^>=(\d+)$/.exec(e); if(!m) throw Error("unsupported engines.node"); `${m[1]}.0.0`')
+  case "$(uname -m)" in
+    arm64) spw_node_arch=arm64 ;;
+    x86_64) spw_node_arch=x64 ;;
+    *) echo "unsupported macOS architecture" >&2; exit 1 ;;
+  esac
+  spw_node_archive="node-v${SPW_PACKAGE_NODE_VERSION}-darwin-${spw_node_arch}.tar.gz"
+  (
+    set -eu
+    cd "$spw_runtime_dir"
+    curl --fail --location --remote-name "https://nodejs.org/dist/v${SPW_PACKAGE_NODE_VERSION}/${spw_node_archive}"
+    curl --fail --location --remote-name "https://nodejs.org/dist/v${SPW_PACKAGE_NODE_VERSION}/SHASUMS256.txt"
+    rg -F "  ${spw_node_archive}" SHASUMS256.txt > selected-sha256.txt
+    test "$(wc -l < selected-sha256.txt)" -eq 1
+    read -r spw_node_sha spw_selected_archive < selected-sha256.txt
+    test "$spw_selected_archive" = "$spw_node_archive"
+    shasum -a 256 -c selected-sha256.txt
+    tar -xzf "$spw_node_archive"
+  ) || exit 1
+  SPW_PACKAGE_NODE="$spw_runtime_dir/node-v${SPW_PACKAGE_NODE_VERSION}-darwin-${spw_node_arch}/bin/node"
+  export SPW_PACKAGE_NODE SPW_PACKAGE_NODE_VERSION
+  ```
+
+  This leaves the native `PATH` unchanged. Run `pnpm run check:static` and
+  `pnpm run test:acceptance`, then remove only `$spw_runtime_dir` and unset the
+  package-runtime variables. The checksum selection count/name checks and
+  `set -eu` prevent absent, ambiguous, wrong-archive, or failed checksums from
+  reaching extraction. Linux CI uses `actions/setup-node`; test cases never
+  download runtimes.
+- Release validation is the deliberate combined-path exception: validate both
+  native endpoints sequentially with
+  `SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh` and
+  `SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh`. The default is `24` and
   all other selectors are rejected. Each image also runs the installed package
   on Node 24.0.0 through its verified `SPW_PACKAGE_NODE` binary, declared by
   `SPW_PACKAGE_NODE_VERSION`. The minimum binary never runs TypeScript tooling.
 - Keep Layers 1-3 hermetic: no network access and no mutation of the developer's or runner's real Codex state.
-- Layer 4 lives behind `sh tests/container.sh` and is blocking: it exercises
-  the real Codex CLI only inside an isolated container home with networking
-  disabled, so it may mutate that throwaway container state but never the
-  developer's or runner's real Codex state.
+- Layer 4 lives behind `pnpm run test:harness:codex` and is blocking: it
+  exercises the real Codex CLI only inside an isolated container home with
+  networking disabled, so it may mutate that throwaway container state but
+  never the developer's or runner's real Codex state.
 - Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the

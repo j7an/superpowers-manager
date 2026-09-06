@@ -1122,7 +1122,13 @@ void test("container-contract", async (t) => {
       );
     });
     await t.test("runner defines the codex-spike mode", () => {
-      assert.ok(runner.includes("codex-spike)"));
+      const branch = /^\s*codex-spike\)(.*)$/m.exec(runner);
+      assert.ok(branch, "runner must define codex-spike mode");
+      assert.equal(
+        branch[1].trim(),
+        "exec sh tests/container/codex-offline-probe.sh ;;",
+        "codex-spike must execute only the offline Codex probe",
+      );
     });
     await t.test("runner reads the actual container uid", () => {
       assert.ok(runner.includes("actual_uid=$(id -u)"));

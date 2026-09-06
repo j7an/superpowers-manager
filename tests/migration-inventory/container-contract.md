@@ -465,3 +465,16 @@ stages, checkout-build dependence, old launcher references, and selector absence
 the updated focused workflow/container/bootstrap group then passed 108/108.
 Real endpoint acceptance separately verifies both harnesses, copied minimum Node,
 installed package execution, and unchanged offline isolation before completion.
+
+## Test-suite separation reconciliation (2026-09-06)
+
+Historical item 26 remains recorded as the original substring assertion. Its
+live counterpart now parses the `codex-spike)` dispatch line and requires its
+body to be exactly `exec sh tests/container/codex-offline-probe.sh ;;`. This
+proves the independent CI job cannot regain the shared suite through the
+container launcher. The combined `suite)` sequence, UID gate, isolation checks,
+and all other runner assertions remain unchanged. The existing nested subtest
+and the file's single static `test(` call are preserved. The focused
+workflow/container/bootstrap group passed 118/118 on 2026-09-06. The inventory
+and digest change is submitted for independent reviewer authorization; this
+note does not authorize its own re-freeze.
