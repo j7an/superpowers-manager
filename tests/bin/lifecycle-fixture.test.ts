@@ -737,13 +737,15 @@ void test("the process.exitCode idiom is what delivers a large pipe payload", as
     const stdout = proc.stdout;
     if (stdout === null) throw new Error("pipe child stdout was not piped");
     let deliveredBytes = 0;
+    let resolveFirstDelivery: (() => void) | undefined;
+    const firstDelivery = new Promise<void>((resolve) => {
+      resolveFirstDelivery = resolve;
+    });
     stdout.on("data", (chunk: Buffer) => {
       deliveredBytes += chunk.length;
+      resolveFirstDelivery?.();
+      resolveFirstDelivery = undefined;
     });
-    // Arm backpressure before telling the child to write. The child reports
-    // the stream's actual queued byte count, so this test does not assume a
-    // platform-specific pipe capacity or depend on parent/child scheduling.
-    stdout.pause();
 
     const exited = new Promise<{
       code: number | null;
@@ -756,60 +758,205 @@ void test("the process.exitCode idiom is what delivers a large pipe payload", as
       proc.once("close", () => resolveClose());
     });
     try {
-      async function readState(expectedPhase: "queued" | "finishing") {
-        const [message] = await withBound(
-          once(proc, "message"),
-          `pipe child did not report ${expectedPhase} stdout before the bound elapsed`,
-        );
+      type PipeState = {
+        phase: "seeded" | "queued" | "finishing" | "armed";
+        attemptedBytes: number;
+        queuedBytes: number;
+        pendingBytes: number;
+        pendingWrites: number;
+        corkedWrites: number;
+      };
+
+      function parseState(message: unknown): PipeState {
         if (
           typeof message !== "object" ||
           message === null ||
           !("phase" in message) ||
-          message.phase !== expectedPhase ||
+          (message.phase !== "seeded" &&
+            message.phase !== "queued" &&
+            message.phase !== "finishing" &&
+            message.phase !== "armed") ||
           !("attemptedBytes" in message) ||
           typeof message.attemptedBytes !== "number" ||
           !("queuedBytes" in message) ||
-          typeof message.queuedBytes !== "number"
+          typeof message.queuedBytes !== "number" ||
+          !("pendingBytes" in message) ||
+          typeof message.pendingBytes !== "number" ||
+          !("pendingWrites" in message) ||
+          typeof message.pendingWrites !== "number" ||
+          !("corkedWrites" in message) ||
+          typeof message.corkedWrites !== "number"
         ) {
           throw new Error("pipe child reported malformed state");
         }
         return {
+          phase: message.phase,
           attemptedBytes: message.attemptedBytes,
           queuedBytes: message.queuedBytes,
+          pendingBytes: message.pendingBytes,
+          pendingWrites: message.pendingWrites,
+          corkedWrites: message.corkedWrites,
         };
       }
 
-      const queuedPromise = readState("queued");
+      async function readState(
+        expectedPhase: "seeded" | "queued" | "finishing",
+      ) {
+        const [message] = await withBound(
+          once(proc, "message"),
+          `pipe child did not report ${expectedPhase} stdout before the bound elapsed`,
+        );
+        const parsed = parseState(message);
+        if (parsed.phase !== expectedPhase) {
+          throw new Error(
+            `pipe child reported ${parsed.phase} before ${expectedPhase}`,
+          );
+        }
+        return parsed;
+      }
+
+      function readStateOrExit(): Promise<
+        | { kind: "state"; state: PipeState }
+        | {
+            kind: "exit";
+            outcome: {
+              code: number | null;
+              signal: NodeJS.Signals | null;
+            };
+          }
+      > {
+        return new Promise((resolveEvent, rejectEvent) => {
+          function cleanup() {
+            proc.off("message", onMessage);
+            proc.off("exit", onExit);
+            proc.off("error", onError);
+          }
+          function onMessage(message: unknown) {
+            cleanup();
+            try {
+              resolveEvent({ kind: "state", state: parseState(message) });
+            } catch (error) {
+              rejectEvent(error);
+            }
+          }
+          function onExit(code: number | null, signal: NodeJS.Signals | null) {
+            cleanup();
+            resolveEvent({ kind: "exit", outcome: { code, signal } });
+          }
+          function onError(error: Error) {
+            cleanup();
+            rejectEvent(error);
+          }
+          proc.once("message", onMessage);
+          proc.once("exit", onExit);
+          proc.once("error", onError);
+        });
+      }
+
+      function assertPendingState(state: PipeState, phase: string) {
+        assert.ok(
+          state.queuedBytes > 0,
+          `pipe child had no queued output ${phase}`,
+        );
+        assert.ok(
+          state.pendingBytes > 0,
+          `pipe child had no pending bytes ${phase}`,
+        );
+        assert.ok(
+          state.pendingWrites > 0,
+          `pipe child had no pending writes ${phase}`,
+        );
+        assert.equal(
+          state.corkedWrites,
+          0,
+          `pipe child had corked output ${phase}`,
+        );
+      }
+
+      const seededPromise = readState("seeded");
       proc.send("write");
+      const seeded = await seededPromise;
+      await withBound(
+        firstDelivery,
+        "pipe child delivered no seed bytes before the bound elapsed",
+      );
+      assert.ok(
+        seeded.attemptedBytes > 0,
+        "pipe child attempted no seed output",
+      );
+      assert.ok(deliveredBytes > 0, "pipe child delivered no seed output");
+      assert.equal(seeded.corkedWrites, 0, "pipe child corked its seed output");
+
+      // Stop reading only after observing real bytes from the uncorked write.
+      // The child then fills adaptively until callback state stays pending
+      // across an event-loop turn, without assuming an OS pipe capacity.
+      stdout.pause();
+      const queuedPromise = readState("queued");
+      proc.send("fill");
       const queued = await queuedPromise;
-      assert.ok(queued.attemptedBytes > 0, "pipe child attempted no output");
-      assert.ok(queued.queuedBytes > 0, "pipe child queued no output");
+      assert.ok(
+        queued.attemptedBytes > seeded.attemptedBytes,
+        "pipe child attempted no output after its seed",
+      );
+      assertPendingState(queued, "before finishing");
 
       const finishingPromise = readState("finishing");
       proc.send("finish");
-      const finishing = await finishingPromise;
-      assert.equal(finishing.attemptedBytes, queued.attemptedBytes);
-      assert.ok(
-        finishing.queuedBytes > 0,
-        "pipe child had no queued output at the exit decision",
-      );
-      if (mode === "exit") {
-        await withBound(
-          exited,
-          "pipe child did not force exit before the bound elapsed",
+      let decisive = await finishingPromise;
+      let outcome:
+        { code: number | null; signal: NodeJS.Signals | null } | undefined;
+      for (;;) {
+        assert.ok(
+          decisive.attemptedBytes >= queued.attemptedBytes,
+          "pipe child lost attempted-byte accounting before the exit decision",
         );
+        assertPendingState(decisive, "at the exit decision");
+
+        const nextEvent = withBound(
+          readStateOrExit(),
+          "pipe child did not respond to the exit arm before the bound elapsed",
+        );
+        proc.send("arm");
+        const next = await nextEvent;
+        if (next.kind === "exit") {
+          assert.equal(
+            mode,
+            "exit",
+            "pipe child exited before the graceful arm",
+          );
+          outcome = next.outcome;
+          break;
+        }
+        if (next.state.phase === "finishing") {
+          decisive = next.state;
+          continue;
+        }
+        assert.equal(
+          next.state.phase,
+          "armed",
+          `pipe child reported ${next.state.phase} after the exit arm`,
+        );
+        assert.equal(
+          mode,
+          "exitCode",
+          "forced pipe child reported graceful readiness",
+        );
+        decisive = next.state;
+        assertPendingState(decisive, "when the graceful exitCode was set");
+        stdout.resume();
+        outcome = await withBound(
+          exited,
+          "pipe child did not exit after stdout drainage before the bound elapsed",
+        );
+        break;
       }
       stdout.resume();
-      const outcome = await withBound(
-        exited,
-        "pipe child did not exit after stdout drainage before the bound elapsed",
-      );
       await withBound(
         closed,
         "pipe child stdio did not close after exit before the bound elapsed",
       );
       assert.deepEqual(outcome, { code: 0, signal: null });
-      return { ...finishing, deliveredBytes };
+      return { ...decisive, deliveredBytes };
     } finally {
       stdout.resume();
       proc.kill("SIGKILL");
@@ -824,6 +971,10 @@ void test("the process.exitCode idiom is what delivers a large pipe payload", as
   assert.equal(complete.deliveredBytes, complete.attemptedBytes);
 
   const truncated = await run("exit");
+  assert.ok(
+    truncated.deliveredBytes > 0,
+    "process.exit() submitted no payload bytes to the OS pipe",
+  );
   assert.ok(
     truncated.deliveredBytes < truncated.attemptedBytes,
     `process.exit() delivered ${truncated.deliveredBytes} of ` +
