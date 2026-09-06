@@ -22,9 +22,11 @@ import { runInstall } from "../../src/commands/install.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
 import { runProbe } from "../../src/commands/probe.ts";
 import { runUninstall } from "../../src/commands/uninstall.ts";
+import { runUpdate } from "../../src/commands/update.ts";
 import type {
   InstalledState,
   OwnershipInspection,
+  PreparedState,
   UpdateControlInspection,
 } from "../../src/harness.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
@@ -47,6 +49,7 @@ void test("preparation does not require a Codex template or manifest", async (t)
 
 void test("a rejected candidate preserves the previous payload before validation or replacement", async (t) => {
   const fixture = await createHarnessFixture(t);
+  let workspaceRoot: string | undefined;
   mkdirSync(fixture.destinationRoot, { recursive: true });
   writeFileSync(
     join(fixture.destinationRoot, "payload.txt"),
@@ -58,6 +61,7 @@ void test("a rejected candidate preserves the previous payload before validation
     async prepareCandidate(
       input: Parameters<typeof fixture.adapter.prepareCandidate>[0],
     ) {
+      workspaceRoot = input.workspaceRoot;
       const prepared = await fixture.adapter.prepareCandidate(input, {
         root: fixture.ctx.root,
         env: fixture.ctx.env,
@@ -91,6 +95,8 @@ void test("a rejected candidate preserves the previous payload before validation
   );
   assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
   assert.equal(fixture.err.text(), "error: fixture candidate rejected\n");
+  assert.ok(workspaceRoot);
+  assert.equal(existsSync(workspaceRoot), false);
 });
 
 void test("preparation rejects unsafe locations before allocating a workspace", async (t) => {
@@ -264,6 +270,68 @@ void test("probe performs only the four read-only inspections", async (t) => {
     "inspect-control",
   ]);
   assert.equal(fixture.out.text(), "fixture status current\n");
+  assert.equal(fixture.err.text(), "");
+});
+
+void test("update composes probe, preparation, and installation through a non-Codex adapter", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  let preparedReads = 0;
+  const adapter = {
+    ...fixture.adapter,
+    async inspectPrepared(
+      inputSelection: typeof fixture.selection,
+      adapterCtx: {
+        readonly root: string;
+        readonly env?: NodeJS.ProcessEnv;
+      },
+    ): Promise<AdapterResult<PreparedState>> {
+      const result = await fixture.methods.inspectPrepared(
+        inputSelection,
+        adapterCtx,
+      );
+      preparedReads += 1;
+      if (preparedReads !== 1 || !result.outcome.ok) return result;
+      return successResult(
+        "inspect-prepared",
+        {
+          kind: "needs-prepare",
+          observedIdentity: fixture.selection.desiredCommit,
+        },
+        result.outcome.messages,
+      );
+    },
+    inspectInstalled: fixture.methods.inspectInstalled,
+    inspectOwnership: fixture.methods.inspectOwnership,
+    inspectUpdateControl: fixture.methods.inspectUpdateControl,
+    readPrepared: fixture.methods.readPrepared,
+    install: fixture.methods.install,
+  };
+
+  assert.equal(await runUpdate([], { ...fixture.ctx, adapter }), 0);
+  assert.deepEqual(fixture.calls, [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-control",
+    "location",
+    "prefetch",
+    "prepare",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-control",
+    "read-prepared",
+    "inspect-ownership",
+    "inspect-control",
+    "install",
+    "inspect-installed",
+  ]);
+  assert.equal(
+    fixture.out.text(),
+    `prepared ${fixture.selection.resolvedRef} at ${fixture.selection.desiredCommit}\n` +
+      `test install notice\n` +
+      `fixture installed ${fixture.selection.desiredCommit}\n`,
+  );
   assert.equal(fixture.err.text(), "");
 });
 
@@ -551,6 +619,46 @@ void test("residual owned resources fail after a successful remove", async (t) =
   ]);
   assert.equal(fixture.out.text().includes("uninstall complete"), false);
   assert.equal(fixture.err.text(), "error: fixture resources remain\n");
+});
+
+void test("a failed post-remove ownership inspection suppresses completion", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  let ownershipReads = 0;
+  const adapter = {
+    ...fixture.adapter,
+    remove: fixture.methods.remove,
+    async inspectOwnership(adapterCtx: {
+      readonly root: string;
+      readonly env?: NodeJS.ProcessEnv;
+    }): Promise<
+      AdapterResult<OwnershipInspection<{ readonly receipt: string }>>
+    > {
+      ownershipReads += 1;
+      if (ownershipReads === 2) {
+        fixture.calls.push("inspect-ownership");
+        return failureResult(
+          "inspect-ownership",
+          "fixture-post-remove-failure",
+          "fixture post-remove inspection failed",
+          [],
+          [],
+        );
+      }
+      return await fixture.methods.inspectOwnership(adapterCtx);
+    },
+  };
+
+  assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 1);
+  assert.deepEqual(fixture.calls, [
+    "inspect-ownership",
+    "remove",
+    "inspect-ownership",
+  ]);
+  assert.equal(fixture.out.text(), "");
+  assert.equal(
+    fixture.err.text(),
+    "error: fixture post-remove inspection failed\n",
+  );
 });
 
 void test("retained legacy state is reported without changing the private removal input", async (t) => {
