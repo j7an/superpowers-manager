@@ -215,9 +215,10 @@ async function gatherInstallStages<R>(
         // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:91-94::spw_inspect_fingerprint`,
         // is what turns a failed inspection into "error: installed manager
         // fingerprint inspection failed after install."
-        // verifyInstalledFingerprint's "call-failed" arm
-        // (`src/codex-presentation.ts:207::if (inspected.kind === "call-failed") {`)
-        // exists for exactly this and is reachable only from here. Returning
+        // renderInstallVerification's failed-inspection arm
+        // (`src/codex-presentation.ts:306::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
+        // exists for this result-bearing path; the lifecycle compatibility
+        // export delegates through the same arm. Returning
         // failed() instead reported the adapter's own generic diagnostic and
         // dropped the post-install verification claim -- a mutation had
         // already been issued at stage 3,
@@ -387,8 +388,8 @@ export async function runInstall<R>(
     status = 1;
   } else {
     // :99-100 printed both lines BEFORE deciding, on every path that got this
-    // far; verifyInstalledFingerprint already encodes that, so both arrays
-    // are written in order regardless of verdict.ok.
+    // far; the verified outcome already carries both renderer arrays, so they
+    // are written in order regardless of its status.
     for (const line of outcome.stdout) ctx.stdout.write(`${line}\n`);
     for (const line of outcome.stderr) ctx.stderr.write(`${line}\n`);
     status = outcome.status;

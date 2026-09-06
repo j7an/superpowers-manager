@@ -26,8 +26,8 @@ applies to message `text`, error `code`, error `message`, every error hint, and
 every install verification hint. Three constructs enforce it, one per
 population: `writeAdapterFailure` (`src/adapter-result.ts`) refuses the error
 `code`, `message`, and hints before the first write; `AdapterMessageLog`
-escapes message `text` on ingress; and `verifyInstalledFingerprint`
-(`src/lifecycle.ts`) omits an unsafe verification hint.
+escapes message `text` on ingress; and `normalizeCodexInstall`
+(`src/codex-harness.ts`) omits an unsafe verification hint before presentation.
 
 Messages are replayed in array order to their declared streams.
 

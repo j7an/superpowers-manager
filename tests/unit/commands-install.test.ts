@@ -404,7 +404,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/codex-harness.ts:175-184::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:328::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:329::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
@@ -704,9 +704,8 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // Rewritten at PR 11.5 slice 4b, Task 8. This case previously asserted the
 // stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
 // rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
-// reached verifyInstalledFingerprint, leaving that function's "call-failed" arm
-// (`src/codex-presentation.ts:207::if (inspected.kind === "call-failed") {`) dead and dropping the post-install verification
-// claim entirely. The shell handed its inspect result to
+// reached renderInstallVerification, leaving its failed-inspection arm
+// (`src/codex-presentation.ts:306::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
 // spw_verify_installed_fingerprint unconditionally (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and
 // printed BOTH lines — the adapter's own error and
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`'s. The flip surfaced it: the shell-parity case
@@ -752,7 +751,7 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
 // Stage 4 no longer short-circuits on `!inspected.ok`, but it still does on the
 // one failure `invoke()` cannot produce a result for: `ctx.adapter` itself
 // throwing. Without its own case, a mutant collapsing the two arms — sending
-// the throw path into verifyInstalledFingerprint too, or restoring the blanket
+// the throw path into renderInstallVerification too, or restoring the blanket
 // short-circuit — would die to only one of them and falsely certify both. The
 // distinguishing observation is the stderr: a throw has no outcome to replay
 // and no result to verify, so it must produce invoke()'s own hand-written
@@ -798,9 +797,10 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
 // --- A fingerprint MISMATCH, not just an inspection failure (:244-255) ---
 //
 // Every stage-4 case above tests the INSPECT CALL failing. None of them ever
-// let verifyInstalledFingerprint actually RUN and come back `ok: false` --
-// so nothing pinned that a mismatch (a) still returns status 1, not 0
-// (`verdict.ok ? 0 : 1`), and (b) still writes BOTH `desired_commit=` and
+// let renderInstallVerification actually RUN with a mismatch -- so nothing
+// pinned that it (a) still returns status 1, not 0 through the command's
+// current-kind check (`src/commands/install.ts:245-252::const verified =`), and
+// (b) still writes BOTH `desired_commit=` and
 // `installed_commit=` to stdout, not just on the success path. (b) is
 // spec §4.3's own explicit prohibition ("the port must not move them into
 // the success branch") -- this is the case that would notice a port that

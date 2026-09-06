@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   failureResult,
@@ -72,6 +73,50 @@ function ownershipResult(
   if (identityState !== undefined) payload.identity_state = identityState;
   return successResult("inspect", payload, []);
 }
+
+void test("Codex verification modules are safe in every supported entry order", () => {
+  const urls = {
+    harness: pathToFileURL(join(PACKAGE_ROOT, "src/codex-harness.ts")).href,
+    lifecycle: pathToFileURL(join(PACKAGE_ROOT, "src/lifecycle.ts")).href,
+    presentation: pathToFileURL(join(PACKAGE_ROOT, "src/codex-presentation.ts"))
+      .href,
+  };
+  for (const order of [
+    ["lifecycle", "presentation", "harness"],
+    ["presentation", "lifecycle", "harness"],
+    ["harness", "lifecycle", "presentation"],
+  ] as const) {
+    const script = `
+      const urls = ${JSON.stringify(urls)};
+      const loaded = {};
+      for (const name of ${JSON.stringify(order)}) loaded[name] = await import(urls[name]);
+      if (loaded.harness.codexHarness.presentation !== loaded.presentation.codexPresentation) {
+        throw new Error("presentation identity changed");
+      }
+      const desired = "a".repeat(40);
+      const ok = (result) => ({
+        status: 0,
+        outcome: { operation: "inspect", ok: true, messages: [], result, error: null },
+      });
+      const verdict = loaded.lifecycle.verifyInstalledFingerprint(
+        desired,
+        ok({ verification_hints: {} }),
+        ok({ view: "fingerprint", fingerprint: desired }),
+      );
+      if (!verdict.ok) throw new Error("verification export changed");
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ["--input-type=module", "--eval", script],
+      { encoding: "utf8" },
+    );
+    assert.equal(
+      result.status,
+      0,
+      `${order.join(" first, then ")}: ${result.stderr}`,
+    );
+  }
+});
 
 void test("ownership normalization preserves every Codex removal flag combination", () => {
   for (const pluginPresent of [false, true]) {

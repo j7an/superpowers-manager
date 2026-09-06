@@ -1,7 +1,9 @@
 import type { AdapterResult } from "./adapter-result.ts";
-import { hasTerminalControl } from "./adapter-result.ts";
+import {
+  normalizeCodexInstall,
+  normalizeCodexInstalled,
+} from "./codex-harness.ts";
 import { displaySource } from "./selection.ts";
-import { commitMatches } from "./status.ts";
 import type {
   FailureSite,
   HarnessPresentation,
@@ -40,7 +42,7 @@ interface Field {
 }
 
 // One ordered table drives both formats, preserving the public human and
-// porcelain field order while the concrete renderer moves behind the harness.
+// porcelain field order exposed through the harness presentation.
 export function fields(f: ProbeFacts): readonly Field[] {
   return [
     { key: "requested_ref", label: "requested ref", value: f.requestedRef },
@@ -145,22 +147,6 @@ export function formatHuman(f: ProbeFacts): string {
   return text;
 }
 
-type ResultRead =
-  | { readonly kind: "object"; readonly value: Record<string, unknown> }
-  | { readonly kind: "call-failed" }
-  | { readonly kind: "unusable" };
-
-function readResult(adapterResult: AdapterResult): ResultRead {
-  if (adapterResult.status !== 0) return { kind: "call-failed" };
-  const outcome = adapterResult.outcome;
-  if (!outcome.ok) return { kind: "call-failed" };
-  const value = outcome.result;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { kind: "unusable" };
-  }
-  return { kind: "object", value: value as Record<string, unknown> };
-}
-
 export type FingerprintVerdict =
   | {
       readonly ok: true;
@@ -196,69 +182,25 @@ export function codexInstallReceipt(
   };
 }
 
-// Compatibility export target for src/lifecycle.ts. Existing command code and
-// its frozen tests keep using this pure verdict while Task 4 changes callers.
+// Compatibility export target for src/lifecycle.ts. Delegate to the production
+// normalizers and renderer so the retained verdict cannot drift from commands.
 export function verifyInstalledFingerprint(
   desiredCommit: string,
   installResult: AdapterResult,
   inspectResult: AdapterResult,
 ): FingerprintVerdict {
-  const inspected = readResult(inspectResult);
-  if (inspected.kind === "call-failed") {
-    return {
-      ok: false,
-      stdout: [],
-      stderr: [
-        "error: installed manager fingerprint inspection failed after install.",
-      ],
-    };
-  }
-  if (inspected.kind === "unusable") {
-    return {
-      ok: false,
-      stdout: [],
-      stderr: [
-        "error: cannot parse installed manager fingerprint inspection result after install.",
-      ],
-    };
-  }
-  const raw = inspected.value.fingerprint;
-  if (raw !== null && raw !== undefined && typeof raw !== "string") {
-    return {
-      ok: false,
-      stdout: [],
-      stderr: [
-        "error: cannot parse installed manager fingerprint inspection result after install.",
-      ],
-    };
-  }
-  const installedCommit = typeof raw === "string" ? raw : "";
-  const stdout = [
-    `desired_commit=${desiredCommit}`,
-    `installed_commit=${installedCommit}`,
-  ];
-
-  if (
-    installedCommit.length > 0 &&
-    commitMatches(desiredCommit, installedCommit)
-  ) {
-    return { ok: true, stdout: [...stdout, "manager updated"], stderr: [] };
-  }
-
-  const installed = readResult(installResult);
-  const hints =
-    installed.kind === "object" ? installed.value.verification_hints : null;
-  let hint = "";
-  if (typeof hints === "object" && hints !== null && !Array.isArray(hints)) {
-    const key = installedCommit.length > 0 ? "mismatch" : "missing";
-    const value = (hints as Record<string, unknown>)[key];
-    if (typeof value === "string" && !hasTerminalControl(value)) hint = value;
-  }
-  const failure = verificationOutput(
-    installedCommit.length > 0 ? "mismatch" : "missing",
-    hint,
+  const receipt = normalizeCodexInstall(installResult);
+  const inspection = normalizeCodexInstalled(inspectResult, desiredCommit);
+  const output = codexPresentation.renderInstallVerification(
+    desiredCommit,
+    receipt,
+    inspection,
   );
-  return { ok: false, stdout, stderr: failure.stderr };
+  const ok =
+    inspection.status === 0 &&
+    inspection.outcome.ok &&
+    inspection.outcome.result.kind === "current";
+  return { ok, stdout: output.stdout, stderr: output.stderr };
 }
 
 function probeFacts(facts: ProbeSnapshot<CodexRemovalInput>): ProbeFacts {

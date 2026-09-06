@@ -22,6 +22,13 @@ import {
   isStringLiteral,
 } from "typescript/unstable/ast/is";
 import { API } from "typescript/unstable/sync";
+import type {} from "../../src/adapter.ts";
+import type {} from "../../src/codex-harness.ts";
+import type {} from "../../src/hooks.ts";
+import type {} from "../../src/lifecycle.ts";
+import type {} from "../../src/provenance.ts";
+import type {} from "../../src/status.ts";
+import type {} from "../../src/upstream-version.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -82,7 +89,17 @@ function moduleSpecifiers(
 
 function isConcreteCodexModule(specifier: string): boolean {
   const name = specifier.split("/").at(-1) ?? "";
-  return name === "adapter.ts" || name.startsWith("codex-");
+  return (
+    name === "adapter.ts" ||
+    name.startsWith("codex-") ||
+    [
+      "hooks.ts",
+      "lifecycle.ts",
+      "provenance.ts",
+      "status.ts",
+      "upstream-version.ts",
+    ].includes(name)
+  );
 }
 
 void test("no module under src/commands/ imports runAdapter", () => {
@@ -196,21 +213,35 @@ void test("no src/ module derives its adapter from env or argv", () => {
 });
 
 void test("both gates reject every evasion form they claim to cover", () => {
-  // Mutation proof for BOTH regexes. The first draft of this file proved only
-  // the import one, which is how a gate ships passing for the wrong reason —
-  // the seam registry's own order-sensitive pattern failed open through 4a
-  // for exactly that reason.
-  const IMPORTS = [
-    'import { runAdapter } from "../adapter.js";',
-    'import {\n  runAdapter,\n} from "../adapter.js";',
-    'import runAdapter from "../adapter.js";',
-  ];
-  for (const form of IMPORTS) {
+  // Mutation proof for the actual syntax-aware import gate. These type-only
+  // imports are inert at runtime, but the same project parser and classifier
+  // used above must discover and reject every concrete policy/artifact module.
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tests/tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const source = project.program.getSourceFile(
+    join(ROOT, "tests/unit/ctx-adapter-provenance.test.ts"),
+  );
+  assert.ok(source, "parser did not load its boundary-gate self-check");
+  const imported = moduleSpecifiers(source);
+  for (const specifier of [
+    "../../src/adapter.ts",
+    "../../src/codex-harness.ts",
+    "../../src/hooks.ts",
+    "../../src/lifecycle.ts",
+    "../../src/provenance.ts",
+    "../../src/status.ts",
+    "../../src/upstream-version.ts",
+  ]) {
     assert.ok(
-      /\bimport\b[^;]*\brunAdapter\b/s.test(form),
-      `import gate missed: ${JSON.stringify(form)}`,
+      imported.includes(specifier) && isConcreteCodexModule(specifier),
+      `concrete import gate missed: ${specifier}`,
     );
   }
+  snapshot.dispose();
+  api.close();
 
   const DERIVATIONS = [
     "const adapter = process.env.SPW_ADAPTER;",

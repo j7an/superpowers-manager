@@ -432,5 +432,7 @@ export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
     );
   },
   requirements,
-  presentation: codexPresentation,
+  get presentation() {
+    return codexPresentation;
+  },
 };
