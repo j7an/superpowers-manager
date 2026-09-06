@@ -229,8 +229,14 @@ void test("a malformed saved selection stops before fetch or integration inspect
   const config = fixture.ctx.env.SUPERPOWERS_CONFIG_DIR;
   assert.ok(config);
   writeFileSync(join(config, "selection.json"), "{", "utf8");
-  const env = { ...fixture.ctx.env };
-  delete env.SUPERPOWERS_REF;
+  const env = {
+    ...fixture.ctx.env,
+    SUPERPOWERS_UPSTREAM_URL: join(
+      fixture.ctx.root,
+      "upstream-resolution-must-not-run",
+    ),
+    SUPERPOWERS_REF: "resolution-must-not-run",
+  };
 
   assert.equal(await runProbe([], { ...fixture.ctx, env }), 1);
   assert.deepEqual(fixture.calls, []);
