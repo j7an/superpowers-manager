@@ -76,8 +76,11 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
 }
 
 import type { AdapterResult } from "./adapter-result.ts";
-import { hasTerminalControl } from "./adapter-result.ts";
-import { commitMatches } from "./status.ts";
+
+export {
+  verifyInstalledFingerprint,
+  type FingerprintVerdict,
+} from "./codex-presentation.ts";
 
 export interface Refusal {
   readonly ok: false;
@@ -124,118 +127,6 @@ function readResult(adapterResult: AdapterResult): ResultRead {
     return { kind: "unusable" };
   }
   return { kind: "object", value: value as Record<string, unknown> };
-}
-
-// A discriminated union on a LITERAL `ok`, matching `Check`. A plain
-// `boolean` gives callers no narrowing where `Check` gives it, and that
-// asymmetry gets papered over with a cast at the first call site. The three
-// result conventions in this module stay three shapes on purpose —
-// LegacyVerdict keeps its `kind` tag and its deliberate stream-freedom — but
-// each one narrows. Spec §6.2.3 item 7.
-export type FingerprintVerdict =
-  | {
-      readonly ok: true;
-      readonly stdout: readonly string[];
-      readonly stderr: readonly string[];
-    }
-  | {
-      readonly ok: false;
-      readonly stdout: readonly string[];
-      readonly stderr: readonly string[];
-    };
-
-// Ported from
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:87-124::spw_verify_installed_fingerprint`.
-// The shell performed the inspection itself at :91; a pure function cannot, so
-// the caller performs it and a failure arrives here as an AdapterResult with a
-// non-zero status.
-export function verifyInstalledFingerprint(
-  desiredCommit: string,
-  installResult: AdapterResult,
-  inspectResult: AdapterResult,
-): FingerprintVerdict {
-  const inspected = readResult(inspectResult);
-  if (inspected.kind === "call-failed") {
-    return {
-      ok: false,
-      stdout: [],
-      stderr: [
-        "error: installed manager fingerprint inspection failed after install.",
-      ],
-    };
-  }
-  if (inspected.kind === "unusable") {
-    // A well-formed outcome whose `result` is not an object is the port's
-    // analogue of the shell's own split: the inspect call SUCCEEDED and only
-    // the content is unusable. This is the branch
-    // tests/unit/lifecycle.test.js's "an unparseable fingerprint result
-    // names parsing, not inspection" exercises. Spec §6.2.3 items 3 and 4.
-    return {
-      ok: false,
-      stdout: [],
-      stderr: [
-        "error: cannot parse installed manager fingerprint inspection result after install.",
-      ],
-    };
-  }
-  const raw = inspected.value.fingerprint;
-  // The Python reader printed the empty string for a JSON null, and
-  // `fingerprint` is null whenever no plugin version is active
-  // (`src/adapter.ts:821::fingerprint: null`). Anything non-string and non-null
-  // is unparseable.
-  //
-  // PORT-ONLY, and intentional. The shell cannot construct this trigger:
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value`
-  // stringifies any non-null scalar, so a non-string fingerprint never reaches
-  // spw_verify_installed_fingerprint.
-  // The port CAN encounter the shape and must fail closed rather than
-  // coerce. Pinned by a test below and recorded in
-  // tests/migration-inventory/codex-state-units.md. Spec §6.2.3 item 3.
-  if (raw !== null && raw !== undefined && typeof raw !== "string") {
-    return {
-      ok: false,
-      stdout: [],
-      stderr: [
-        "error: cannot parse installed manager fingerprint inspection result after install.",
-      ],
-    };
-  }
-  const installedCommit = typeof raw === "string" ? raw : "";
-
-  // :99-100 printed both lines BEFORE deciding, on every path that got this
-  // far. Moving them into the success branch would silently drop them from the
-  // failure output an operator reads to diagnose the mismatch.
-  const stdout = [
-    `desired_commit=${desiredCommit}`,
-    `installed_commit=${installedCommit}`,
-  ];
-
-  if (
-    installedCommit.length > 0 &&
-    commitMatches(desiredCommit, installedCommit)
-  ) {
-    return { ok: true, stdout: [...stdout, "manager updated"], stderr: [] };
-  }
-
-  // :106-113 — which hint key is read depends on whether a commit was
-  // detected at all, and the hint is optional in both directions.
-  const installed = readResult(installResult);
-  const hints =
-    installed.kind === "object" ? installed.value.verification_hints : null;
-  let hint = "";
-  if (typeof hints === "object" && hints !== null && !Array.isArray(hints)) {
-    const key = installedCommit.length > 0 ? "mismatch" : "missing";
-    const value = (hints as Record<string, unknown>)[key];
-    if (typeof value === "string" && !hasTerminalControl(value)) hint = value;
-  }
-
-  const stderr = [
-    installedCommit.length > 0
-      ? "error: installed manager fingerprint does not match the prepared plugin after install."
-      : "error: installed manager fingerprint is not detectable after install.",
-  ];
-  if (hint.length > 0) stderr.push(`hint: ${hint}`);
-  return { ok: false, stdout, stderr };
 }
 
 // Ported from

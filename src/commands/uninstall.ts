@@ -4,125 +4,57 @@
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
-import type { Check } from "../lifecycle.ts";
-import { reportLegacyState, verifyUninstalledResources } from "../lifecycle.ts";
+import type { Output } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
 
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`.
-// A non-Boolean is a HARD failure, never a falsy absent -- the shell spw_die'd
-// rather than defaulting.
-//
-// THREE outcomes, not two. Collapsing "the call failed" into "the result is
-// malformed" would emit the Boolean diagnostic for a controlled adapter
-// failure, where the shell exits silently on the replay alone
-// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:23-24::plugin_present=` is a bare command under set -eu). That is the same
-// collapse Task 2 undoes in src/lifecycle.ts's resultObject. Spec §4.2a
-// clauses 2 and 4.
-type Presence =
-  // Clause 2/3: the call itself did not produce a usable outcome. The
-  // caller already knows -- via the `invoke()` gate below -- which of clause
-  // 2 or 3 applies and what (if any) message to write; this arm exists so
-  // presenceFlag stays a total function over an arbitrary AdapterResult
-  // rather than assuming its caller always gates first.
-  | { readonly kind: "call-failed" }
-  // Clause 4: the call succeeded and the content is unusable. This -- and
-  // only this -- gets
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`'s
-  // Boolean text.
-  | { readonly kind: "malformed"; readonly key: "plugin" | "marketplace" }
-  | { readonly kind: "ok"; readonly value: boolean };
-
-function presenceFlag(
-  result: AdapterResult,
-  key: "plugin" | "marketplace",
-): Presence {
-  const outcome = result.outcome;
-  if (result.status !== 0 || !outcome.ok) {
-    return { kind: "call-failed" };
-  }
-  const value = outcome.result;
-  // Mirrors src/lifecycle.ts's verifyUninstalledResources: a missing or
-  // non-object `resources` falls THROUGH to the Boolean check rather than
-  // getting its own message, for parity with
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`'s
-  // single "expected Boolean..." text on {}.
-  const resources =
-    typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>).resources
-      : undefined;
-  const bag: Record<string, unknown> =
-    typeof resources === "object" &&
-    resources !== null &&
-    !Array.isArray(resources)
-      ? (resources as Record<string, unknown>)
-      : {};
-  const flag = bag[key];
-  if (typeof flag !== "boolean") {
-    return { kind: "malformed", key };
-  }
-  return { kind: "ok", value: flag };
-}
-
-// Every ctx.adapter call site obeys spec §4.2a's five clauses, in order:
-// replay every outcome (the caller pushes it below before deciding
-// anything); !outcome.ok stops with no additional diagnostic (`message:
-// null` -- replayOutcome already wrote the adapter's own error:/hint:
-// lines); outcome.ok && status !== 0 gets a hand-written message naming the
-// operation; a stop issues no further calls; and an unrelated throw (a
-// non-AdapterFailure cause --
-// `src/adapter.ts:1002::if (cause instanceof AdapterFailure) {`) gets a
-// hand-written message naming the operation too, never the caught error's text
-// (AGENTS.md). `argv` here is always this module's own literal, bounded
-// construction -- never adapter-controlled text -- so naming it is safe.
-type StageResult =
-  | { readonly ok: true; readonly result: AdapterResult }
+type StageResult<T> =
+  | {
+      readonly ok: true;
+      readonly result: {
+        readonly status: 0;
+        readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
+      };
+    }
   | { readonly ok: false; readonly message: string | null };
 
-async function invoke(
-  ctx: CommandContext,
-  env: NodeJS.ProcessEnv,
-  argv: readonly string[],
-  outcomes: AdapterOutcome[],
-): Promise<StageResult> {
-  let result: AdapterResult;
+async function invoke<T>(
+  call: () => Promise<AdapterResult<T>>,
+  failure: { readonly unexpected: string; readonly invalidStatus: string },
+  outcomes: AdapterOutcome<unknown>[],
+): Promise<StageResult<T>> {
+  let result: AdapterResult<T>;
   try {
-    result = await ctx.adapter(argv, { root: ctx.root, env });
+    result = await call();
   } catch {
-    return {
-      ok: false,
-      message: `cannot invoke Codex adapter for ${argv.join(" ")}`,
-    };
+    return { ok: false, message: failure.unexpected };
   }
-  // Clause 1: replay every outcome, on both the success and the failure
-  // path, before any decision -- collected here and replayed by the caller
-  // once gatherUninstall's try/catch has resolved, for the same EPIPE reason
-  // gatherProbe carries its outcomes out rather than writing in place
-  // (`src/commands/probe.ts:289::The outcomes are CARRIED OUT rather than replayed in place`).
   outcomes.push(result.outcome);
   const outcome = result.outcome;
   if (result.status !== 0 || !outcome.ok) {
     return {
       ok: false,
-      message: outcome.ok
-        ? `adapter reported a failure status for ${argv.join(" ")}`
-        : null,
+      message: outcome.ok ? failure.invalidStatus : null,
     };
   }
-  return { ok: true, result };
+  return {
+    ok: true,
+    result: { status: result.status, outcome },
+  };
 }
 
 type UninstallOutcome =
   | {
       readonly status: 1;
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly message: string | null;
+      readonly output: Output | null;
     }
   | {
       readonly status: 0;
-      readonly outcomes: readonly AdapterOutcome[];
-      readonly lines: readonly string[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
+      readonly output: Output;
     };
 
 // withWorkspace throws for mkdtemp failure before the callback ever runs
@@ -142,9 +74,9 @@ type UninstallOutcome =
 // identical to src/commands/install.ts's GatherFailure.
 class GatherFailure extends Error {
   readonly inner: unknown;
-  readonly outcomes: readonly AdapterOutcome[];
+  readonly outcomes: readonly AdapterOutcome<unknown>[];
 
-  constructor(inner: unknown, outcomes: readonly AdapterOutcome[]) {
+  constructor(inner: unknown, outcomes: readonly AdapterOutcome<unknown>[]) {
     super("uninstall gather failed");
     this.inner = inner;
     this.outcomes = outcomes;
@@ -171,10 +103,10 @@ interface GatherRun {
 
 // Every step that can throw or fail closed, returning the outcome as data and
 // performing NO writes. Same shape as gatherProbe
-// (`src/commands/probe.ts:280-281::readonly status: 0;`) and for the same
+// (`src/commands/probe.ts:114-117::readonly facts: ProbeSnapshot<R>;`) and for the same
 // reason: a write inside this try could raise EPIPE, be caught here, and be
 // relabelled as a domain failure.
-async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
+async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:20-21::TMPDIR=` exported TMPDIR="$uninstall_workspace" so every
   // child confined its temporary files to the tree the workspace trap
   // removed. The AdapterContext passed to ctx.adapter below does the same.
@@ -185,7 +117,7 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
   // collected before a workspace throw. Both `mkdtemp` failure (nothing
   // collected yet) and a post-success cleanup failure (everything the
   // callback collected) reach this same array.
-  const outcomes: AdapterOutcome[] = [];
+  const outcomes: AdapterOutcome<unknown>[] = [];
   let cleanupWarning: string | null = null;
   try {
     const outcome = await withWorkspace(
@@ -197,128 +129,63 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
           status: 1,
           outcomes,
           message,
+          output: null,
         });
+        const adapterContext = { root: ctx.root, env };
 
         // Stage 1: inspect ownership, before removal.
-        const first = await invoke(
-          ctx,
-          env,
-          ["inspect", "--view", "ownership"],
+        const beforeFailure = ctx.adapter.presentation.callFailure(
+          "remove-ownership",
+          adapterContext,
+        );
+        const before = await invoke(
+          () => ctx.adapter.inspectOwnership(adapterContext),
+          beforeFailure,
           outcomes,
         );
-        if (!first.ok) return failed(first.message);
+        if (!before.ok) return failed(before.message);
 
-        const pluginFlag = presenceFlag(first.result, "plugin");
-        if (pluginFlag.kind === "malformed") {
-          return failed(
-            `expected a Boolean adapter result at resources.${pluginFlag.key}`,
-          );
-        }
-        if (pluginFlag.kind === "call-failed") {
-          // Unreachable via this call path: `first.ok` above already proved
-          // status === 0 && outcome.ok, the only inputs presenceFlag reads
-          // to decide this arm. Handled anyway so presenceFlag stays total
-          // and this switch stays exhaustive rather than assuming its caller
-          // always gates first.
-          return failed(null);
-        }
-        const marketplaceFlag = presenceFlag(first.result, "marketplace");
-        if (marketplaceFlag.kind === "malformed") {
-          return failed(
-            `expected a Boolean adapter result at resources.${marketplaceFlag.key}`,
-          );
-        }
-        if (marketplaceFlag.kind === "call-failed") {
-          return failed(null);
-        }
-
-        // Stage 2: uninstall, with the two presence Booleans read above.
-        const uninstallStage = await invoke(
-          ctx,
-          env,
-          [
-            "uninstall",
-            "--plugin-present",
-            String(pluginFlag.value),
-            "--marketplace-present",
-            String(marketplaceFlag.value),
-          ],
+        // Stage 2: remove, passing the private input through untouched.
+        const removalInput = before.result.outcome.result.removalInput;
+        const removeFailure = ctx.adapter.presentation.callFailure(
+          "remove",
+          adapterContext,
+          removalInput,
+        );
+        const removed = await invoke(
+          () => ctx.adapter.remove(removalInput, adapterContext),
+          removeFailure,
           outcomes,
         );
-        if (!uninstallStage.ok) return failed(uninstallStage.message);
+        if (!removed.ok) return failed(removed.message);
 
         // Stage 3: inspect ownership AGAIN. This overwrites the first
         // inspection (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`), so everything below reads the
         // POST-uninstall state, not the pre-uninstall one read above.
-        const second = await invoke(
-          ctx,
-          env,
-          ["inspect", "--view", "ownership"],
+        const afterFailure = ctx.adapter.presentation.callFailure(
+          "post-remove",
+          adapterContext,
+        );
+        const after = await invoke(
+          () => ctx.adapter.inspectOwnership(adapterContext),
+          afterFailure,
           outcomes,
         );
-        if (!second.ok) return failed(second.message);
-
-        const verify: Check = verifyUninstalledResources(second.result);
-        if (!verify.ok) return failed(verify.message);
-
-        // identity_state comes from this SAME second inspection, matching
-        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:31::spw_adapter_result_get`'s spw_adapter_result_get read of the
-        // overwritten inspect_result. `second.ok` already proved this call
-        // succeeded, so outcome.ok is true here; the explicit check below is
-        // for TypeScript's narrowing (a local variable, not a re-derivation
-        // of that fact) rather than a live branch.
-        const secondOutcome = second.result.outcome;
-        if (!secondOutcome.ok) return failed(null);
-        // Mirrors the inspect null/non-string branches
-        // (`src/commands/probe.ts:256-263::if (value === null || value === undefined) {`)
-        // and the fingerprint read
-        // (`src/lifecycle.ts:181-194::const raw = inspected.value.fingerprint;`):
-        // a JSON null or a missing key defaults to "" (the Python reader's own
-        // convention for a JSON null, scripts/core/provenance.sh's
-        // spw_json_get), but a present, non-null, NON-STRING value is a
-        // distinct, fail-closed "malformed" case with its own text -- never
-        // silently stringified.
-        // (A previous draft of this comment claimed parity with the shell's
-        // stringify-and-compare behaviour at
-        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value`;
-        // that was wrong on inspection, and it cited these same two call sites
-        // as support even though both of them fail closed on a non-string value
-        // rather than stringifying it. AGENTS.md's
-        // fail-closed rule wins over shell parity here.)
-        const parsed = secondOutcome.result as Record<string, unknown> | null;
-        const identityRaw = parsed?.identity_state;
-        let identityState: string;
-        if (identityRaw === null || identityRaw === undefined) {
-          identityState = "";
-        } else if (typeof identityRaw === "string") {
-          identityState = identityRaw;
-        } else {
-          return failed(
-            "adapter returned a non-string identity_state for inspect --view ownership",
-          );
+        if (!after.ok) return failed(after.message);
+        const ownership = after.result.outcome.result;
+        if (ownership.removalVerification.kind === "blocked") {
+          return {
+            status: 1,
+            outcomes,
+            message: null,
+            output: ownership.removalVerification.output,
+          };
         }
-        const verdict = reportLegacyState(identityState);
-        if (verdict.kind === "unknown") return failed(verdict.message);
-
-        const lines: string[] = [];
-        // verdict.kind is "ok" or "report" here (reportLegacyState never
-        // returns "blocked" -- that arm belongs to requireNoLegacyState --
-        // but LegacyVerdict is one shared union, so this narrows rather than
-        // assumes).
-        if (verdict.kind !== "ok") {
-          lines.push(...verdict.lines);
-        }
-        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete`. The first line ports verbatim; the second
-        // changes scripts/prepare to npx superpowers-manager prepare (spec
-        // §3.6) -- a deliberate, observable divergence, recorded as a
-        // port-only entry in tests/migration-inventory/uninstall-commands.md.
-        lines.push("uninstall complete");
-        lines.push(
-          "note: local generated artifacts under plugins/superpowers/ and " +
-            ".cache/upstream/ were left in place; remove them manually or " +
-            "regenerate with npx superpowers-manager prepare.",
-        );
-        return { status: 0, outcomes, lines };
+        return {
+          status: 0,
+          outcomes,
+          output: ctx.adapter.presentation.renderRemovalCompletion(ownership),
+        };
       },
       {
         // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure,
@@ -344,9 +211,9 @@ async function gatherUninstall(ctx: CommandContext): Promise<GatherRun> {
   }
 }
 
-export async function runUninstall(
+export async function runUninstall<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   // scripts/uninstall never reads "$@", so extra arguments are silently
   // ignored -- the same asymmetry runPrepare documents at its own
@@ -372,7 +239,7 @@ export async function runUninstall(
     // blindly.
     //
     // A cause outside ctx.adapter's AdapterFailure guard
-    // (`src/adapter.ts:1002::if (cause instanceof AdapterFailure) {`) does NOT
+    // (`src/adapter.ts:973-999::async function runCodexOperation(`) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.
@@ -399,11 +266,14 @@ export async function runUninstall(
     if (outcome.message !== null) {
       ctx.stderr.write(`error: ${outcome.message}\n`);
     }
+    if (outcome.output !== null) {
+      for (const line of outcome.output.stdout) ctx.stdout.write(`${line}\n`);
+      for (const line of outcome.output.stderr) ctx.stderr.write(`${line}\n`);
+    }
     status = 1;
   } else {
-    for (const line of outcome.lines) {
-      ctx.stdout.write(`${line}\n`);
-    }
+    for (const line of outcome.output.stdout) ctx.stdout.write(`${line}\n`);
+    for (const line of outcome.output.stderr) ctx.stderr.write(`${line}\n`);
     status = 0;
   }
   if (cleanupWarning !== null) {

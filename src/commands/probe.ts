@@ -5,153 +5,11 @@ import {
 } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
-import { generatedCommitOrEmpty } from "../provenance.ts";
-import { displaySource } from "../selection.ts";
-import { statusForCommits } from "../status.ts";
+import type { FailureSite, ProbeSnapshot } from "../harness.ts";
 import type { CommandContext } from "./context.ts";
 
 export const PROBE_USAGE =
   "error: usage: superpowers-manager probe [--porcelain]\n";
-
-export interface ProbeFacts {
-  readonly requestedRef: string;
-  readonly resolvedRef: string;
-  readonly desiredCommit: string;
-  readonly generatedCommit: string;
-  readonly installedCommit: string;
-  readonly identityState: string;
-  readonly status: string;
-  readonly selectionOrigin: string;
-  readonly selectionMode: string;
-  readonly upstreamSourceOrigin: string;
-  readonly effectiveSource: string;
-  readonly savedMode: string;
-  readonly savedSource: string;
-  readonly savedRequestedRef: string;
-  readonly savedResolvedRef: string;
-  readonly savedCommit: string;
-  readonly updateControl: string;
-}
-
-interface Field {
-  readonly key: string;
-  readonly label: string;
-  readonly value: string;
-  readonly absent?: string;
-}
-
-// One ordered table drives both formats, so the porcelain key order
-// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:43-59::printf 'requested_ref`) and the human label order (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:61-77::printf 'requested ref`) cannot
-// drift apart. Two parallel lists could each stay self-consistent while
-// disagreeing with one another.
-function fields(f: ProbeFacts): readonly Field[] {
-  return [
-    { key: "requested_ref", label: "requested ref", value: f.requestedRef },
-    { key: "resolved_ref", label: "resolved ref", value: f.resolvedRef },
-    { key: "desired_commit", label: "desired commit", value: f.desiredCommit },
-    {
-      key: "generated_commit",
-      label: "generated plugin commit",
-      value: f.generatedCommit,
-      absent: "not present",
-    },
-    {
-      key: "installed_commit",
-      label: "installed manager commit or fingerprint",
-      value: f.installedCommit,
-      absent: "not detected",
-    },
-    {
-      key: "identity_state",
-      label: "Codex identity state",
-      value: f.identityState,
-    },
-    { key: "status", label: "status", value: f.status },
-    {
-      key: "selection_origin",
-      label: "selection origin",
-      value: f.selectionOrigin,
-    },
-    { key: "selection_mode", label: "selection mode", value: f.selectionMode },
-    {
-      key: "upstream_source_origin",
-      label: "upstream source origin",
-      value: f.upstreamSourceOrigin,
-    },
-    {
-      key: "effective_source",
-      label: "effective source",
-      value: f.effectiveSource,
-    },
-    { key: "saved_mode", label: "saved mode", value: f.savedMode },
-    { key: "saved_source", label: "saved source", value: f.savedSource },
-    {
-      key: "saved_requested_ref",
-      label: "saved requested ref",
-      value: f.savedRequestedRef,
-    },
-    {
-      key: "saved_resolved_ref",
-      label: "saved resolved ref",
-      value: f.savedResolvedRef,
-    },
-    { key: "saved_commit", label: "saved commit", value: f.savedCommit },
-    { key: "update_control", label: "update control", value: f.updateControl },
-  ];
-}
-
-// Derived from the same fields() table, so the key list a test asserts and
-// the key list formatPorcelain emits cannot be different lists. The facts
-// argument is irrelevant here — fields() is total over ProbeFacts and the
-// keys do not depend on the values.
-const NO_FACTS: ProbeFacts = {
-  requestedRef: "",
-  resolvedRef: "",
-  desiredCommit: "",
-  generatedCommit: "",
-  installedCommit: "",
-  identityState: "",
-  status: "",
-  selectionOrigin: "",
-  selectionMode: "",
-  upstreamSourceOrigin: "",
-  effectiveSource: "",
-  savedMode: "",
-  savedSource: "",
-  savedRequestedRef: "",
-  savedResolvedRef: "",
-  savedCommit: "",
-  updateControl: "",
-};
-
-export const PROBE_PORCELAIN_KEYS: readonly string[] = fields(NO_FACTS).map(
-  (field) => field.key,
-);
-
-export function formatPorcelain(f: ProbeFacts): string {
-  return fields(f)
-    .map((field) => `${field.key}=${field.value}\n`)
-    .join("");
-}
-
-export function formatHuman(f: ProbeFacts): string {
-  let text = fields(f)
-    .map((field) => {
-      const shown =
-        field.value.length === 0 && field.absent !== undefined
-          ? field.absent
-          : field.value;
-      return `${field.label}: ${shown}\n`;
-    })
-    .join("");
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:78-81::if [ "$SPW_SELECTION_ORIGIN`.
-  if (f.selectionOrigin !== f.upstreamSourceOrigin) {
-    text +=
-      "warning: effective ref and source have mixed origins " +
-      `(ref: ${f.selectionOrigin}, source: ${f.upstreamSourceOrigin})\n`;
-  }
-  return text;
-}
 
 // Ports scripts/core/validate-adapter-response.py's replay (:235-238) and its
 // error/hint block (:269-272). The shell ran that validator on EVERY adapter
@@ -170,8 +28,8 @@ export function formatHuman(f: ProbeFacts): string {
 // This writes to ctx, so it MUST NOT be called from inside gatherProbe's try
 // -- see the ProbeOutcome note below.
 export function replayOutcome(
-  outcome: AdapterOutcome,
-  ctx: CommandContext,
+  outcome: AdapterOutcome<unknown>,
+  ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
 ): void {
   // Hoisted ABOVE the message loop, and that ordering is the point: a failure
   // whose code, message, or a hint carries a terminal control character must
@@ -188,18 +46,22 @@ export function replayOutcome(
   writeAdapterFailure(ctx, outcome);
 }
 
-type Inspection =
+type SuccessfulAdapterResult<T> = {
+  readonly status: 0;
+  readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
+};
+
+type Inspection<T> =
   | {
       readonly ok: true;
-      readonly value: string;
-      readonly outcome: AdapterOutcome;
+      readonly result: SuccessfulAdapterResult<T>;
     }
   | {
       readonly ok: false;
       // null when the outcome's own error already carries the diagnostic --
       // replayOutcome emits it, and adding a second line would duplicate it.
       readonly message: string | null;
-      readonly outcome: AdapterOutcome | null;
+      readonly result: AdapterResult<T> | null;
     };
 
 // `runAdapter` reports a CONTROLLED failure by RETURN VALUE, not by throwing
@@ -217,28 +79,16 @@ type Inspection =
 // adapter module: src/commands/prepare.ts and this module are the two the
 // injected double must observe, because install reaches the adapter through
 // gatherProbe and runPrepare. Spec §4.5.
-async function inspect(
-  view: string,
-  key: string,
-  ctx: CommandContext,
-): Promise<Inspection> {
-  let result: AdapterResult;
+async function inspect<T>(
+  call: () => Promise<AdapterResult<T>>,
+  unexpected: string,
+  invalidStatus: string,
+): Promise<Inspection<T>> {
+  let result: AdapterResult<T>;
   try {
-    result = await ctx.adapter(["inspect", "--view", view], {
-      root: ctx.root,
-      env: ctx.env,
-    });
+    result = await call();
   } catch {
-    // Deliberately does NOT interpolate the cause. A rethrown non-
-    // AdapterFailure is by construction the one failure src/adapter.ts chose
-    // not to own: free-form text of unknown provenance, which AGENTS.md bars
-    // from this stream. `view` is a bounded token -- one of three literals
-    // this function is ever called with -- so naming the input is safe.
-    return {
-      ok: false,
-      outcome: null,
-      message: `cannot inspect Codex adapter state for view ${view}`,
-    };
+    return { ok: false, result: null, message: unexpected };
   }
   const outcome = result.outcome;
   if (result.status !== 0 || !outcome.ok) {
@@ -247,39 +97,23 @@ async function inspect(
     // rather than falling through to a replay that would print nothing.
     return {
       ok: false,
-      outcome,
-      message: outcome.ok
-        ? `adapter reported a failure status for inspect --view ${view}`
-        : null,
+      result,
+      message: outcome.ok ? invalidStatus : null,
     };
   }
-  const value = (outcome.result as Record<string, unknown> | null)?.[key];
-  // The Python reader printed the empty string for a JSON null
-  // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (`src/adapter.ts:821::fingerprint: null`).
-  if (value === null || value === undefined) {
-    return { ok: true, value: "", outcome };
-  }
-  if (typeof value !== "string") {
-    return {
-      ok: false,
-      outcome,
-      message: `adapter returned a non-string ${key} for inspect --view ${view}`,
-    };
-  }
-  return { ok: true, value, outcome };
+  return { ok: true, result: { status: result.status, outcome } };
 }
 
-type ProbeOutcome =
+type ProbeOutcome<R> =
   | {
       readonly status: 1;
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly message: string | null;
     }
   | {
       readonly status: 0;
-      readonly outcomes: readonly AdapterOutcome[];
-      readonly facts: ProbeFacts;
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
+      readonly facts: ProbeSnapshot<R>;
     };
 
 // Runs every step that can throw or fail closed, returning the outcome as
@@ -297,67 +131,85 @@ type ProbeOutcome =
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:39-41::spw_probe_field`
 // implementation awk-parsed the porcelain back into fields; that round trip is
 // gone.
-export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
+export async function gatherProbe<R>(
+  ctx: CommandContext<R>,
+): Promise<ProbeOutcome<R>> {
   // Order mirrors `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:24-40::spw_compute_effective_selection` exactly.
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
-  const generatedCommit = await generatedCommitOrEmpty(ctx.root);
-
-  const outcomes: AdapterOutcome[] = [];
-  const collect = async (view: string, key: string): Promise<Inspection> => {
-    const result = await inspect(view, key, ctx);
-    if (result.outcome !== null) outcomes.push(result.outcome);
+  const outcomes: AdapterOutcome<unknown>[] = [];
+  const adapterContext = { root: ctx.root, env: ctx.env };
+  const collect = async <T>(
+    call: () => Promise<AdapterResult<T>>,
+    unexpected: string,
+    invalidStatus: string,
+  ): Promise<Inspection<T>> => {
+    const result = await inspect(call, unexpected, invalidStatus);
+    if (result.result !== null) outcomes.push(result.result.outcome);
     return result;
   };
 
-  const fingerprint = await collect("fingerprint", "fingerprint");
-  if (!fingerprint.ok) {
-    return { status: 1, outcomes, message: fingerprint.message };
+  const prepared = await collect(
+    () => ctx.adapter.inspectPrepared(selection, adapterContext),
+    "cannot inspect prepared harness state",
+    "adapter reported a failure status for prepared harness inspection",
+  );
+  if (!prepared.ok) {
+    return { status: 1, outcomes, message: prepared.message };
   }
-  const ownership = await collect("ownership", "identity_state");
+  const failure = (site: FailureSite) =>
+    ctx.adapter.presentation.callFailure(site, adapterContext);
+  const installedFailure = failure("probe-installed");
+  const installed = await collect(
+    () => ctx.adapter.inspectInstalled(selection, adapterContext),
+    installedFailure.unexpected,
+    installedFailure.invalidStatus,
+  );
+  if (!installed.ok) {
+    return { status: 1, outcomes, message: installed.message };
+  }
+  const ownershipFailure = failure("probe-ownership");
+  const ownership = await collect(
+    () => ctx.adapter.inspectOwnership(adapterContext),
+    ownershipFailure.unexpected,
+    ownershipFailure.invalidStatus,
+  );
   if (!ownership.ok) {
     return { status: 1, outcomes, message: ownership.message };
   }
-  const updateControl = await collect("update-control", "update_control");
-  if (!updateControl.ok) {
-    return { status: 1, outcomes, message: updateControl.message };
+  const controlFailure = failure("probe-control");
+  const control = await collect(
+    () => ctx.adapter.inspectUpdateControl(adapterContext),
+    controlFailure.unexpected,
+    controlFailure.invalidStatus,
+  );
+  if (!control.ok) {
+    return { status: 1, outcomes, message: control.message };
   }
 
-  const saved = selection.saved;
+  const preparedState = prepared.result.outcome.result;
+  const installedState = installed.result.outcome.result;
   return {
     status: 0,
     outcomes,
     facts: {
-      requestedRef: selection.requestedRef,
-      resolvedRef: selection.resolvedRef,
-      desiredCommit: selection.desiredCommit,
-      generatedCommit,
-      installedCommit: fingerprint.value,
-      identityState: ownership.value,
-      status: statusForCommits(
-        selection.desiredCommit,
-        generatedCommit,
-        fingerprint.value,
-      ),
-      selectionOrigin: selection.selectionOrigin,
-      selectionMode: selection.selectionMode,
-      upstreamSourceOrigin: selection.upstreamSourceOrigin,
-      effectiveSource: displaySource(selection.effectiveSource),
-      savedMode: saved.saved_mode,
-      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:26-30::if [ -`: an absent saved source stays empty rather than
-      // being run through displaySource, which would render <redacted-source>.
-      savedSource:
-        saved.saved_source.length > 0 ? displaySource(saved.saved_source) : "",
-      savedRequestedRef: saved.saved_requested_ref,
-      savedResolvedRef: saved.saved_resolved_ref,
-      savedCommit: saved.saved_commit,
-      updateControl: updateControl.value,
+      selection,
+      prepared: preparedState,
+      installed: installedState,
+      ownership: ownership.result.outcome.result,
+      control: control.result.outcome.result,
+      status:
+        preparedState.kind !== "current"
+          ? "needs prepare"
+          : installedState.kind !== "current"
+            ? "needs install"
+            : "current",
     },
   };
 }
 
-export async function runProbe(
+export async function runProbe<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:42::porcelain` tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
   // flag silently produced human output. Rejecting it is a deliberate
@@ -375,7 +227,7 @@ export async function runProbe(
     ctx.stderr.write(PROBE_USAGE);
     return 2;
   }
-  let outcome: ProbeOutcome;
+  let outcome: ProbeOutcome<R>;
   try {
     outcome = await gatherProbe(ctx);
   } catch (cause) {
@@ -473,8 +325,7 @@ export async function runProbe(
     }
     return 1;
   }
-  ctx.stdout.write(
-    porcelain ? formatPorcelain(outcome.facts) : formatHuman(outcome.facts),
-  );
+  const rendered = ctx.adapter.presentation.renderProbe(outcome.facts);
+  ctx.stdout.write(porcelain ? rendered.porcelain : rendered.human);
   return 0;
 }

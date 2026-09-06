@@ -172,7 +172,7 @@ function ownershipInspections(codex: string[]): number {
  *
  * WHAT IT DOES NOT CATCH: an adapter uninstall that was invoked and then failed
  * before issuing any Codex command — `requireCodex` or the workspace creation
- * failing inside `runUninstall` (`src/adapter.ts:717-724::superpowers-manager.adapter-uninstall.`). That leaves one
+ * failing inside `runUninstall` (`src/adapter.ts:726::superpowers-manager.adapter-uninstall.`). That leaves one
  * inspection and no removes, and passes here where the shell's
  * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
  * theoretical, and it is accepted only because in all six call sites the abort
@@ -206,7 +206,7 @@ function assertNoAdapterUninstall(codex: string[], message: string) {
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
- * (`src/adapter.ts:741-742::plugin not installed; skipping`, :757).
+ * (`src/adapter.ts:744::plugin not installed; skipping`, :761).
  *
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
@@ -358,14 +358,14 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // the two Codex removes on the real adapter), then ownership again --
     // and nothing else, including "inspect --view update-control".
     assert.deepEqual(
-      adapter.calls.map((call) => call.join(" ")),
-      [
-        "inspect --view ownership",
-        "uninstall --plugin-present true --marketplace-present true",
-        "inspect --view ownership",
-      ],
+      adapter.calls.map((call) => call.operation),
+      ["inspect-ownership", "remove", "inspect-ownership"],
       "uninstall must not inspect update control -- structurally, it never issues that call at all",
     );
+    assert.deepEqual(adapter.calls[1]?.input, {
+      pluginPresent: true,
+      marketplacePresent: true,
+    });
     // :190
     assert.ok(out.includes("uninstall complete"), out);
   });
@@ -450,8 +450,8 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // :226, structural: ownership was inspected -- it is the only call the
     // double answers before exhaustion would fail the case on anything else.
     assert.deepEqual(
-      adapter.calls.map((call) => call.join(" ")),
-      ["inspect --view ownership"],
+      adapter.calls.map((call) => call.operation),
+      ["inspect-ownership"],
       "ownership must be the only call made before the missing-Codex failure stops uninstall",
     );
     // :227
@@ -482,7 +482,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
-    // of each (`src/adapter.ts:741-742::plugin not installed; skipping`, :757) — so together they pin both the call
+    // of each (`src/adapter.ts:744::plugin not installed; skipping`, :761) — so together they pin both the call
     // and the both-false pair. The completion check is kept beneath them as the
     // ordering witness it actually is.
     assert.ok(
@@ -875,7 +875,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // which would be false here: the marketplace remove fails, so the flow dies
     // before `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`'s verify-after inspection. The true/true flag
     // pair is witnessed instead by the two removes at :437-438, which the
-    // adapter issues only when both flags are true (`src/adapter.ts:726-761::pluginPresent === "true"`).
+    // adapter issues only when both flags are true (`src/adapter.ts:728-761::if (pluginPresent) {`).
     // :437-438
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));

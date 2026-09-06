@@ -4,13 +4,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { capture, scriptedAdapter } from "../lib/command-doubles.ts";
-
 import {
-  runUpdate,
-  renderUnknownProbeStatus,
-} from "../../src/commands/update.ts";
-import { formatPorcelain, gatherProbe } from "../../src/commands/probe.ts";
+  capture,
+  operationNames,
+  scriptedAdapter,
+  successfulNonzeroResult,
+} from "../lib/command-doubles.ts";
+
+import { codexPresentation } from "../../src/codex-presentation.ts";
+import { runUpdate } from "../../src/commands/update.ts";
+import { gatherProbe } from "../../src/commands/probe.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-update-"));
@@ -34,7 +37,9 @@ function makeCtx(
   },
   out: ReturnType<typeof capture>,
   err: ReturnType<typeof capture>,
-  adapter: import("../../src/commands/context.ts").CommandContext["adapter"],
+  adapter: import("../../src/commands/context.ts").CommandContext<
+    import("../../src/adapter.ts").CodexRemovalInput
+  >["adapter"],
 ) {
   const dir = mkdtempSync(join(SCRATCH, "case-"));
   mkdirSync(join(dir, "config"), { recursive: true });
@@ -73,11 +78,18 @@ function makeCtx(
 
 const X = "1".repeat(40);
 
+function ownership(identityState: string | number | null) {
+  return {
+    resources: { plugin: false, marketplace: false },
+    identity_state: identityState,
+  };
+}
+
 /** gatherProbe's three stages, in call order, reporting a clean "current" state. */
 function probeCurrent() {
   return [
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ];
 }
@@ -86,7 +98,7 @@ function probeCurrent() {
 function probeNeedsInstall() {
   return [
     successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ];
 }
@@ -176,7 +188,9 @@ const UPSTREAM = makeUpstreamRepo();
 function makePreparableCtx(
   out: ReturnType<typeof capture>,
   err: ReturnType<typeof capture>,
-  adapter: import("../../src/commands/context.ts").CommandContext["adapter"],
+  adapter: import("../../src/commands/context.ts").CommandContext<
+    import("../../src/adapter.ts").CodexRemovalInput
+  >["adapter"],
 ) {
   const ctx = makeCtx(
     {
@@ -227,15 +241,16 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   assert.equal(status, 0);
   assert.equal(
     out.text(),
-    `${formatPorcelain(probe.facts)}manager is current\n`,
+    `${codexPresentation.renderProbe(probe.facts).porcelain}manager is current\n`,
   );
   assert.equal(err.text(), "");
   // The current arm issues no adapter call of its own: only gatherProbe's
   // three.
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
   ]);
 });
 
@@ -248,7 +263,7 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "unsupported" }, []),
   ]);
   const ctx = makeCtx(
@@ -264,7 +279,7 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
     err.text(),
     "error: adapter cannot guarantee manager-controlled updates\n",
   );
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
 
 void test('current: an UNRECOGNISED update control capability is its own diagnostic, distinct from "unsupported"', async () => {
@@ -275,7 +290,7 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "wat" }, []),
   ]);
   const ctx = makeCtx(
@@ -291,7 +306,7 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
     err.text(),
     "error: unknown adapter update-control capability: wat\n",
   );
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
 
 void test("needs prepare: a failing prepare's status propagates verbatim, and install never runs", async () => {
@@ -320,7 +335,7 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
   );
   // Only gatherProbe's own three calls: prepare fails before issuing any
   // adapter call of its own, and install is never reached.
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 6);
 });
 
 void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall, not by a bare success", async () => {
@@ -338,7 +353,7 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
     // update's own probe. No generated tree exists yet, so statusForCommits
     // returns "needs prepare" whatever the installed fingerprint says.
     successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "managed" }, []),
     // runPrepare's single adapter call. runPrepare itself creates and fills
     // the candidate root, so a scripted success is enough for the swap that
@@ -346,10 +361,10 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
     successResult("build", {}, []),
     // runInstall's own probe, which now sees the freshly prepared tree.
     successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "managed" }, []),
     // runInstall's four mutation stages.
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "managed" }, []),
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: UPSTREAM.commit }, []),
@@ -368,23 +383,24 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
       `${INSTALL_NOTE}desired_commit=${UPSTREAM.commit}\n` +
       `installed_commit=${UPSTREAM.commit}\nmanager updated\n`,
   );
-  assert.equal(calls.length, 11);
-  assert.deepEqual(calls.slice(0, 3), [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
-  ]);
-  // The build call's --candidate-root is a fresh workspace path, so only its
-  // operation is stable; everything on either side of it is asserted exactly.
-  assert.equal(calls[3][0], "build");
-  assert.deepEqual(calls.slice(4), [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
-    ["install", "--package-root", ctx.root],
-    ["inspect", "--view", "fingerprint"],
+  assert.equal(calls.length, 16);
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
+    "preparation-location",
+    "validate-preparation-before-fetch",
+    "prepare-candidate",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
+    "read-prepared",
+    "inspect-ownership",
+    "inspect-update-control",
+    "install",
+    "inspect-installed",
   ]);
 });
 
@@ -401,7 +417,7 @@ void test("needs install: delegates to runInstall alone, and a success propagate
   const { adapter, calls } = scriptedAdapter([
     ...probeNeedsInstall(),
     ...probeNeedsInstall(),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "managed" }, []),
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
@@ -421,11 +437,20 @@ void test("needs install: delegates to runInstall alone, and a success propagate
     `${INSTALL_NOTE}desired_commit=${X}\ninstalled_commit=${X}\nmanager updated\n`,
   );
   assert.equal(err.text(), "");
-  assert.deepEqual(calls.slice(6), [
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
-    ["install", "--package-root", ctx.root],
-    ["inspect", "--view", "fingerprint"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
+    "read-prepared",
+    "inspect-ownership",
+    "inspect-update-control",
+    "install",
+    "inspect-installed",
   ]);
 });
 
@@ -435,7 +460,7 @@ void test("needs install: a non-zero runInstall return propagates as update's st
   const { adapter, calls } = scriptedAdapter([
     ...probeNeedsInstall(),
     ...probeNeedsInstall(),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "unsupported" }, []),
   ]);
   const ctx = makeCtx(
@@ -454,52 +479,7 @@ void test("needs install: a non-zero runInstall return propagates as update's st
   // runInstall's own NOTE line reaches stdout, unaltered; update writes
   // nothing of its own on this arm, success or failure alike.
   assert.equal(out.text(), INSTALL_NOTE);
-  assert.equal(calls.length, 8);
-});
-
-void test("an unrecognised probe status writes the porcelain then reports the error without swallowing it", () => {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:29-32::echo "$probe_output`'s `case ... *)` wildcard. statusForCommits
-  // (src/status.ts) can only ever return one of three literals, so this
-  // branch is unreachable through runUpdate's own call to gatherProbe --
-  // ProbeFacts.status is typed `string`, though, and a hand-built facts
-  // object (as here) must still see it fail closed. Same technique as
-  // tests/unit/commands-install.test.js's own renderUnknownProbeStatus case.
-  const FACTS = {
-    requestedRef: "v1.2.3",
-    resolvedRef: "v1.2.3",
-    desiredCommit: X,
-    generatedCommit: X,
-    installedCommit: X,
-    identityState: "manager",
-    status: "weird",
-    selectionOrigin: "user-config",
-    selectionMode: "pinned",
-    upstreamSourceOrigin: "user-config",
-    effectiveSource: "https://example.invalid/upstream",
-    savedMode: "pinned",
-    savedSource: "https://example.invalid/upstream",
-    savedRequestedRef: "v1.2.3",
-    savedResolvedRef: "v1.2.3",
-    savedCommit: X,
-    updateControl: "managed",
-  };
-  const out = capture();
-  const err = capture();
-  renderUnknownProbeStatus(FACTS, {
-    root: "/unused",
-    env: {},
-    stdout: out.stream,
-    stderr: err.stream,
-    adapter: async () => {
-      throw new Error("must not be called");
-    },
-  });
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:30-31::echo "$probe_output` -- `echo "$probe_output"` on stdout, the error on
-  // stderr via an explicit `>&2`. Each stream is asserted on its own channel,
-  // not just as a joined substring, so a mutant that swapped the two streams
-  // cannot pass by accident.
-  assert.equal(out.text(), formatPorcelain(FACTS));
-  assert.equal(err.text(), "error: unknown probe status: weird\n");
+  assert.equal(calls.length, 11);
 });
 
 // --- The two emptiness checks that run BEFORE the switch (§4.4's first
@@ -512,7 +492,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: null }, []),
+    successResult("inspect", ownership(null), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
   const ctx = makeCtx(
@@ -528,7 +508,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     "error: probe did not report adapter identity state\n",
   );
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
 
 void test("a legacy identity state stops before the update-control guard even runs", async () => {
@@ -536,7 +516,7 @@ void test("a legacy identity state stops before the update-control guard even ru
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: "both" }, []),
+    successResult("inspect", ownership("both"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
   const ctx = makeCtx(
@@ -557,7 +537,7 @@ void test("a legacy identity state stops before the update-control guard even ru
       "Then run: npx superpowers-manager install\n",
   );
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
 
 void test("an UNKNOWN probe identity state is a distinct diagnostic from the legacy-blocked one", async () => {
@@ -569,7 +549,7 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: "chaos" }, []),
+    successResult("inspect", ownership("chaos"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
   const ctx = makeCtx(
@@ -584,7 +564,7 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
   // prefix `error: ` -- unlike the bare three lines the "blocked" arm writes.
   assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
 });
 
 void test("an empty probe-reported update-control capability fails closed, and runInstall never runs", async () => {
@@ -598,7 +578,7 @@ void test("an empty probe-reported update-control capability fails closed, and r
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: null }, []),
   ]);
   const ctx = makeCtx(
@@ -614,10 +594,11 @@ void test("an empty probe-reported update-control capability fails closed, and r
     "error: probe did not report adapter update-control capability\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
   ]);
 });
 
@@ -639,7 +620,7 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", { identity_state: null }, []),
+    successResult("inspect", ownership(null), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
   const ctx = makePreparableCtx(out, err, adapter);
@@ -650,10 +631,11 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
     "error: probe did not report adapter identity state\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
   ]);
 });
 
@@ -662,7 +644,7 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", { identity_state: "both" }, []),
+    successResult("inspect", ownership("both"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
   const ctx = makePreparableCtx(out, err, adapter);
@@ -675,10 +657,11 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
       "Then run: npx superpowers-manager install\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
   ]);
 });
 
@@ -687,7 +670,7 @@ void test("needs prepare: an empty update control refuses before prepare, not in
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", { identity_state: "manager" }, []),
+    successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: null }, []),
   ]);
   const ctx = makePreparableCtx(out, err, adapter);
@@ -698,10 +681,11 @@ void test("needs prepare: an empty update control refuses before prepare, not in
     "error: probe did not report adapter update-control capability\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "fingerprint"],
-    ["inspect", "--view", "ownership"],
-    ["inspect", "--view", "update-control"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-ownership",
+    "inspect-update-control",
   ]);
 });
 
@@ -716,21 +700,19 @@ void test("needs prepare: an empty update control refuses before prepare, not in
 void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
   const out = capture();
   const err = capture();
-
-  const responses: readonly import("../../src/adapter-result.ts").AdapterResult[] =
-    [
-      {
-        status: 1,
-        outcome: {
-          operation: "inspect",
-          ok: true,
-          messages: [],
-          result: null,
-          error: null,
-        },
-      },
-    ];
-  const { adapter, calls } = scriptedAdapter(responses);
+  const { adapter: scripted, calls } = scriptedAdapter([]);
+  const adapter = {
+    ...scripted,
+    async inspectInstalled(
+      selection: Parameters<typeof scripted.inspectInstalled>[0],
+    ) {
+      calls.push({ operation: "inspect-installed", input: selection });
+      return successfulNonzeroResult("inspect", {
+        kind: "absent" as const,
+        observedIdentity: "" as const,
+      });
+    },
+  };
   const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
@@ -739,7 +721,10 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
     "error: adapter reported a failure status for inspect --view fingerprint\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+  ]);
 });
 
 void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the replayed diagnostic", async () => {
@@ -764,7 +749,10 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
     "error: cannot inspect fingerprint\nhint: check codex is installed\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [["inspect", "--view", "fingerprint"]]);
+  assert.deepEqual(operationNames(calls), [
+    "inspect-prepared",
+    "inspect-installed",
+  ]);
 });
 
 void test("argv is ignored by src/commands/update.ts", async () => {

@@ -13,12 +13,12 @@ export interface AdapterError {
   readonly hints: readonly string[];
 }
 
-export type AdapterOutcome =
+export type AdapterOutcome<T = JsonValue> =
   | {
       readonly operation: string;
       readonly ok: true;
       readonly messages: readonly AdapterMessage[];
-      readonly result: JsonValue;
+      readonly result: T;
       readonly error: null;
     }
   | {
@@ -29,9 +29,9 @@ export type AdapterOutcome =
       readonly error: AdapterError;
     };
 
-export interface AdapterResult {
+export interface AdapterResult<T = JsonValue> {
   readonly status: 0 | 1;
-  readonly outcome: AdapterOutcome;
+  readonly outcome: AdapterOutcome<T>;
 }
 
 // Lives here, not in src/adapter.ts, rather than having context.ts import it
@@ -154,11 +154,11 @@ export class AdapterMessageLog {
   }
 }
 
-export function successResult(
+export function successResult<T>(
   operation: string,
-  result: JsonValue,
+  result: T,
   messages: readonly AdapterMessage[],
-): AdapterResult {
+): AdapterResult<T> {
   return {
     status: 0,
     outcome: {
@@ -177,7 +177,7 @@ export function failureResult(
   message: string,
   hints: readonly string[],
   messages: readonly AdapterMessage[],
-): AdapterResult {
+): AdapterResult<never> {
   return {
     status: 1,
     outcome: {
@@ -228,7 +228,7 @@ export function hasTerminalControl(value: string): boolean {
 // write would already have put the context lines on the stream when the guard
 // fired. Hoisting this above the message loop is what makes a refused failure
 // leave both streams untouched.
-export function assertFailureWritable(outcome: AdapterOutcome): void {
+export function assertFailureWritable(outcome: AdapterOutcome<unknown>): void {
   if (outcome.ok) return;
   if (hasTerminalControl(outcome.error.code)) {
     throw new Error(
@@ -256,7 +256,7 @@ export function assertFailureWritable(outcome: AdapterOutcome): void {
 // module at one that already imports from it.
 export function writeAdapterFailure(
   ctx: { readonly stderr: NodeJS.WritableStream },
-  outcome: AdapterOutcome,
+  outcome: AdapterOutcome<unknown>,
 ): void {
   assertFailureWritable(outcome);
   if (outcome.ok) return;

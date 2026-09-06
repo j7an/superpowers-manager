@@ -1,6 +1,6 @@
-import type { AdapterContext, AdapterResult } from "../adapter-result.ts";
+import type { HarnessAdapter } from "../harness.ts";
 
-export interface CommandContext {
+export interface CommandContext<R> {
   readonly root: string;
   readonly env: NodeJS.ProcessEnv;
   readonly stdout: NodeJS.WritableStream;
@@ -9,9 +9,7 @@ export interface CommandContext {
   // command module silently fall back to the real adapter in a test that
   // meant to inject one — the failure mode is a green case observing
   // nothing, which is the defect the seam registry exists to prevent.
-  // src/cli.ts supplies runAdapter at its one construction site.
-  readonly adapter: (
-    argv: readonly string[],
-    ctx: AdapterContext,
-  ) => Promise<AdapterResult>;
+  // src/cli.ts supplies the concrete Codex harness at its one construction
+  // site. Shared commands know only this typed boundary.
+  readonly adapter: HarnessAdapter<R>;
 }

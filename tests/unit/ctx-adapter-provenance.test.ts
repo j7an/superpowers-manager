@@ -1,16 +1,34 @@
-// The seam this slice adds must not become the seam it is removing.
+// The internal boundary must not become a renamed external seam or leak its
+// concrete Codex implementation into shared commands.
 //
-// SPW_ADAPTER was settable from outside the process. `ctx.adapter` is an
-// interface field, which is not — but only while nothing under src/ reads it
-// back out of the environment. Two properties, one file, because they fail
-// together: a command module that imports runAdapter has no seam at all, and
-// a module that derives the adapter from env has an environment seam wearing
-// an interface's clothes.
+// `ctx.adapter` is an interface field, not a public selector — but only while
+// nothing under src/ reads it back out of the environment. Two properties,
+// one file, because they fail together: a shared command that imports any
+// concrete Codex module has no generic boundary at all, and a module that
+// derives the adapter from env has an environment seam wearing an interface's
+// clothes.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { SyntaxKind } from "typescript/unstable/ast";
+import {
+  isCallExpression,
+  isExportDeclaration,
+  isIdentifier,
+  isImportDeclaration,
+  isPropertyAssignment,
+  isStringLiteral,
+} from "typescript/unstable/ast/is";
+import { API } from "typescript/unstable/sync";
+import type {} from "../../src/adapter.ts";
+import type {} from "../../src/codex-harness.ts";
+import type {} from "../../src/hooks.ts";
+import type {} from "../../src/lifecycle.ts";
+import type {} from "../../src/provenance.ts";
+import type {} from "../../src/status.ts";
+import type {} from "../../src/upstream-version.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -43,18 +61,102 @@ function tsFiles(dir: string): string[] {
 //     statement.
 // All three are real imports of `runAdapter` into a command module and would
 // sail through this gate uncaught.
-void test("no module under src/commands/ imports runAdapter", () => {
-  const offenders = tsFiles("src/commands").filter((relative) =>
-    /\bimport\b[^;]*\brunAdapter\b/s.test(
-      readFileSync(join(ROOT, relative), "utf8"),
-    ),
+function moduleSpecifiers(
+  parsed: import("typescript/unstable/ast").SourceFile,
+): string[] {
+  const specifiers: string[] = [];
+  const visit = (node: import("typescript/unstable/ast").Node): void => {
+    if (
+      (isImportDeclaration(node) || isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined &&
+      isStringLiteral(node.moduleSpecifier)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    }
+    if (
+      isCallExpression(node) &&
+      node.expression.kind === SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1 &&
+      isStringLiteral(node.arguments[0]!)
+    ) {
+      specifiers.push(node.arguments[0]!.text);
+    }
+    node.forEachChild(visit);
+  };
+  visit(parsed);
+  return specifiers;
+}
+
+function isConcreteCodexModule(specifier: string): boolean {
+  const name = specifier.split("/").at(-1) ?? "";
+  return (
+    name === "adapter.ts" ||
+    name.startsWith("codex-") ||
+    [
+      "hooks.ts",
+      "lifecycle.ts",
+      "provenance.ts",
+      "status.ts",
+      "upstream-version.ts",
+    ].includes(name)
   );
+}
+
+void test("no module under src/commands/ imports runAdapter", () => {
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const offenders = tsFiles("src/commands").filter((relative) => {
+    const source = project.program.getSourceFile(join(ROOT, relative));
+    assert.ok(source, `parser did not load ${relative}`);
+    return moduleSpecifiers(source).some(isConcreteCodexModule);
+  });
+  snapshot.dispose();
+  api.close();
   assert.deepEqual(
     offenders,
     [],
-    "a command module importing runAdapter bypasses ctx.adapter, so an " +
+    "a command module importing a concrete Codex module bypasses ctx.adapter, so an " +
       "injected double observes nothing — see spec §4.5",
   );
+});
+
+function concreteBindings(
+  parsed: import("typescript/unstable/ast").SourceFile,
+): number {
+  let count = 0;
+  const visit = (node: import("typescript/unstable/ast").Node): void => {
+    if (
+      isPropertyAssignment(node) &&
+      ((isIdentifier(node.name) && node.name.text === "adapter") ||
+        (isStringLiteral(node.name) && node.name.text === "adapter")) &&
+      isIdentifier(node.initializer) &&
+      node.initializer.text === "codexHarness"
+    ) {
+      count += 1;
+    }
+    node.forEachChild(visit);
+  };
+  visit(parsed);
+  return count;
+}
+
+void test("the CLI is the only production concrete harness binding", () => {
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const bindings = tsFiles("src").flatMap((relative) => {
+    const source = project.program.getSourceFile(join(ROOT, relative));
+    assert.ok(source, `parser did not load ${relative}`);
+    return Array.from({ length: concreteBindings(source) }, () => relative);
+  });
+  snapshot.dispose();
+  api.close();
+  assert.deepEqual(bindings, ["src/cli.ts"]);
 });
 
 // A BOUNDED HEURISTIC, and labelled as one. The repo has no parser dependency
@@ -111,21 +213,35 @@ void test("no src/ module derives its adapter from env or argv", () => {
 });
 
 void test("both gates reject every evasion form they claim to cover", () => {
-  // Mutation proof for BOTH regexes. The first draft of this file proved only
-  // the import one, which is how a gate ships passing for the wrong reason —
-  // the seam registry's own order-sensitive pattern failed open through 4a
-  // for exactly that reason.
-  const IMPORTS = [
-    'import { runAdapter } from "../adapter.js";',
-    'import {\n  runAdapter,\n} from "../adapter.js";',
-    'import runAdapter from "../adapter.js";',
-  ];
-  for (const form of IMPORTS) {
+  // Mutation proof for the actual syntax-aware import gate. These type-only
+  // imports are inert at runtime, but the same project parser and classifier
+  // used above must discover and reject every concrete policy/artifact module.
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tests/tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const source = project.program.getSourceFile(
+    join(ROOT, "tests/unit/ctx-adapter-provenance.test.ts"),
+  );
+  assert.ok(source, "parser did not load its boundary-gate self-check");
+  const imported = moduleSpecifiers(source);
+  for (const specifier of [
+    "../../src/adapter.ts",
+    "../../src/codex-harness.ts",
+    "../../src/hooks.ts",
+    "../../src/lifecycle.ts",
+    "../../src/provenance.ts",
+    "../../src/status.ts",
+    "../../src/upstream-version.ts",
+  ]) {
     assert.ok(
-      /\bimport\b[^;]*\brunAdapter\b/s.test(form),
-      `import gate missed: ${JSON.stringify(form)}`,
+      imported.includes(specifier) && isConcreteCodexModule(specifier),
+      `concrete import gate missed: ${specifier}`,
     );
   }
+  snapshot.dispose();
+  api.close();
 
   const DERIVATIONS = [
     "const adapter = process.env.SPW_ADAPTER;",

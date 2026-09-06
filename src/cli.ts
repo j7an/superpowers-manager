@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { runAdapter } from "./adapter.ts";
+import type { CodexRemovalInput } from "./adapter.ts";
 import { oneLine } from "./cli-arguments.ts";
+import { codexHarness } from "./codex-harness.ts";
 import type { CommandContext } from "./commands/context.ts";
 import { runInstall } from "./commands/install.ts";
 import { runPin } from "./commands/pin.ts";
@@ -13,6 +14,11 @@ import { runUninstall } from "./commands/uninstall.ts";
 import { runUnpin } from "./commands/unpin.ts";
 import { runUpdate } from "./commands/update.ts";
 import { COMMIT_INPUT_RE, TAG_RE } from "./domain/refs.ts";
+import type {
+  HarnessAdapter,
+  HarnessCommand,
+  ToolRequirement,
+} from "./harness.ts";
 import { configurationErrors } from "./validator.ts";
 
 type Subcommand =
@@ -54,7 +60,7 @@ const SUBCOMMANDS: readonly Subcommand[] = [
 
 type InProcessHandler = (
   argv: string[],
-  ctx: CommandContext,
+  ctx: CommandContext<CodexRemovalInput>,
 ) => Promise<number>;
 
 // Keyed by Subcommand itself. Until slice 6 this was keyed by a mapped type
@@ -81,15 +87,15 @@ const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
 // the in-process path has no validator process. It remains CONDITIONAL for
 // `prepare` through commandRequirements(env) below, unchanged from slice 3.4.
 // No command requires a POSIX shell any more.
-const COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
+const SHARED_COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
   "track-latest": [],
   unpin: [],
   prepare: ["git"],
-  probe: ["git", "codex"],
-  install: ["git", "codex"],
-  update: ["git", "codex"],
-  uninstall: ["codex"],
+  probe: ["git"],
+  install: ["git"],
+  update: ["git"],
+  uninstall: [],
 };
 
 // Walk upward from the bin's physical location to the directory containing
@@ -204,14 +210,49 @@ function findTool(
 // rather than inside preflight — an accessor that under-reports what
 // preflight enforces is the blind spot slice 2 closed when it made
 // CLI-PREFLIGHT-01 derive its map from production.
+function sharedRequirement(name: string): ToolRequirement {
+  return {
+    name,
+    executable: name,
+    lookup: "path",
+    missingMessage: `required command not found: ${name} — install ${name} and re-run`,
+  };
+}
+
+function commandRequirementsFor<R>(
+  env: NodeJS.ProcessEnv,
+  adapter: HarnessAdapter<R>,
+): Record<Subcommand, readonly ToolRequirement[]> {
+  const forCommand = (command: Subcommand): readonly ToolRequirement[] => {
+    const shared = SHARED_COMMAND_REQUIREMENTS[command].map(sharedRequirement);
+    if (command === "prepare" && env.SUPERPOWERS_VALIDATOR) {
+      shared.push(sharedRequirement("python3"));
+    }
+    return [...shared, ...adapter.requirements(command as HarnessCommand, env)];
+  };
+  return {
+    pin: forCommand("pin"),
+    "track-latest": forCommand("track-latest"),
+    unpin: forCommand("unpin"),
+    prepare: forCommand("prepare"),
+    probe: forCommand("probe"),
+    install: forCommand("install"),
+    update: forCommand("update"),
+    uninstall: forCommand("uninstall"),
+  };
+}
+
 function commandRequirements(
   env: NodeJS.ProcessEnv,
 ): Record<Subcommand, string[]> {
-  if (!env.SUPERPOWERS_VALIDATOR) return COMMAND_REQUIREMENTS;
-  return {
-    ...COMMAND_REQUIREMENTS,
-    prepare: [...COMMAND_REQUIREMENTS.prepare, "python3"],
-  };
+  return Object.fromEntries(
+    SUBCOMMANDS.map((command) => [
+      command,
+      commandRequirementsFor(env, codexHarness)[command].map(
+        (requirement) => requirement.name,
+      ),
+    ]),
+  ) as Record<Subcommand, string[]>;
 }
 
 // Preflight; never touches Codex state. It is the union of two exported
@@ -219,32 +260,31 @@ function commandRequirements(
 // commandRequirements (tool availability), both specific to the selected
 // command. No command requires a POSIX shell: slice 4b flipped the last
 // spawned command in-process, so there is no shell to discover.
+function preflightFor<R>(
+  cmd: Subcommand,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  adapter: HarnessAdapter<R>,
+): PreflightResult {
+  const errors: string[] = [...configurationErrors(cmd, env)];
+  for (const requirement of commandRequirementsFor(env, adapter)[cmd]) {
+    const found =
+      requirement.lookup === "explicit-path-or-path" &&
+      requirement.executable.includes(path.sep)
+        ? fs.existsSync(requirement.executable)
+        : Boolean(findTool(requirement.executable, env, platform));
+    if (!found) errors.push(requirement.missingMessage);
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true };
+}
+
 function preflight(
   cmd: Subcommand,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
 ): PreflightResult {
-  const errors: string[] = [...configurationErrors(cmd, env)];
-  for (const tool of commandRequirements(env)[cmd]) {
-    if (tool === "codex") {
-      const codexBin = env.SUPERPOWERS_CODEX || "codex";
-      // An explicit override may be a path rather than a PATH-resolvable name.
-      const found = codexBin.includes(path.sep)
-        ? fs.existsSync(codexBin)
-        : Boolean(findTool(codexBin, env, platform));
-      if (!found) {
-        errors.push(
-          `required command not found: ${codexBin} — install the Codex CLI or set SUPERPOWERS_CODEX`,
-        );
-      }
-    } else if (!findTool(tool, env, platform)) {
-      errors.push(
-        `required command not found: ${tool} — install ${tool} and re-run`,
-      );
-    }
-  }
-  if (errors.length) return { ok: false, errors };
-  return { ok: true };
+  return preflightFor(cmd, env, platform, codexHarness);
 }
 
 function usage(): string {
@@ -316,15 +356,13 @@ async function main(): Promise<never> {
     console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
     process.exit(1);
   }
-  const ctx: CommandContext = {
+  const ctx: CommandContext<CodexRemovalInput> = {
     root,
     env: process.env,
     stdout: process.stdout,
     stderr: process.stderr,
-    // The ONLY place runAdapter is bound to a context. Every command module
-    // reaches the adapter through this field; none imports runAdapter
-    // itself. tests/unit/ctx-adapter-provenance.test.js gates both halves.
-    adapter: runAdapter,
+    // The ONLY production binding of a concrete harness implementation.
+    adapter: codexHarness,
   };
   let status: number;
   try {
@@ -345,7 +383,9 @@ export {
   parseArgs,
   findTool,
   commandRequirements,
+  commandRequirementsFor,
   preflight,
+  preflightFor,
   usage,
   main,
 };

@@ -11,12 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { capture, notCalledAdapter } from "./helpers/command-harness.ts";
+import { capture } from "./helpers/command-harness.ts";
 
-import {
-  runPrepare,
-  readUpstreamManifestVersion,
-} from "../../src/commands/prepare.ts";
+import { runPrepare } from "../../src/commands/prepare.ts";
+import { readUpstreamManifestVersion } from "../../src/codex-prepare.ts";
+import { codexHarness } from "../../src/codex-harness.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-prepare-"));
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
@@ -136,7 +135,7 @@ function unitContext(dir: string, extra: Record<string, string> = {}) {
       },
       stdout: out.stream,
       stderr: err.stream,
-      adapter: notCalledAdapter,
+      adapter: codexHarness,
     },
   };
 }
