@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { shQuote } from "../lib/git-egress.ts";
 
 const RUNNER = fileURLToPath(new URL("../run-node-suites.ts", import.meta.url));
 const RUN_SH = fileURLToPath(new URL("../run.sh", import.meta.url));
@@ -43,7 +44,10 @@ function fakeRoot(
 ) {
   const root = mkdtempSync(join(tmpdir(), "spw-runner-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "package.json"), '{"type":"module"}\n');
+  writeFileSync(
+    join(root, "package.json"),
+    '{"type":"module","engines":{"node":">=24"}}\n',
+  );
   for (const dir of ["tests/bin", "tests/unit", "tests/baseline"]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
@@ -114,6 +118,22 @@ function assertRejectedWithoutExecution(
   assertNoRawFailure(result);
 }
 
+function packageNodeEvidence(
+  root: string,
+  observedVersion = "24.0.0",
+): Record<string, string> {
+  const binary = join(root, "package-node");
+  writeFileSync(
+    binary,
+    `#!/bin/sh\nprintf '%s\\n' ${shQuote(`v${observedVersion}`)}\n`,
+    { mode: 0o755 },
+  );
+  return {
+    SPW_PACKAGE_NODE: binary,
+    SPW_PACKAGE_NODE_VERSION: "24.0.0",
+  };
+}
+
 void test("group selection executes only members and all executes the union once", (t) => {
   const entries = [
     { path: "tests/unit/a.test.ts", group: "unit" },
@@ -165,6 +185,97 @@ void test("run.sh forwards group selection to the Node suite runner", (t) => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.split("EXECUTED:unit").length - 1, 1);
   assert.doesNotMatch(result.stdout, /EXECUTED:integration/);
+});
+
+void test("required package evidence rejects absence before suite execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      {
+        path: "tests/baseline/packaged-cli.test.ts",
+        group: "integration",
+      },
+    ],
+    files: { "tests/baseline/packaged-cli.test.ts": EXECUTED_SUITE },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, {}, ["--require-package-node"]),
+    /SPW_PACKAGE_NODE and SPW_PACKAGE_NODE_VERSION are required together/,
+  );
+});
+
+void test("required package evidence rejects a wrong advertised version", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      {
+        path: "tests/baseline/packaged-cli.test.ts",
+        group: "integration",
+      },
+    ],
+    files: { "tests/baseline/packaged-cli.test.ts": EXECUTED_SUITE },
+  });
+  const env = packageNodeEvidence(root);
+  env.SPW_PACKAGE_NODE_VERSION = "24.1.0";
+  assertRejectedWithoutExecution(
+    runIn(root, env, ["--require-package-node"]),
+    /SPW_PACKAGE_NODE_VERSION must match the declared package minimum/,
+  );
+});
+
+void test("required package evidence rejects a manifest without the package suite", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, packageNodeEvidence(root), ["--require-package-node"]),
+    /--require-package-node requires tests\/baseline\/packaged-cli\.test\.ts in the selected suites/,
+  );
+});
+
+void test("required package evidence rejects narrowed group selection", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      { path: "tests/unit/a.test.ts", group: "unit" },
+      {
+        path: "tests/baseline/packaged-cli.test.ts",
+        group: "integration",
+      },
+    ],
+    files: {
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
+      "tests/baseline/packaged-cli.test.ts": EXECUTED_SUITE,
+    },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, packageNodeEvidence(root), [
+      "--require-package-node",
+      "--group",
+      "integration",
+    ]),
+    /--require-package-node requires --group all/,
+  );
+});
+
+void test("valid required package evidence runs the package suite", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      {
+        path: "tests/baseline/packaged-cli.test.ts",
+        group: "integration",
+      },
+    ],
+    files: { "tests/baseline/packaged-cli.test.ts": EXECUTED_SUITE },
+  });
+  const result = runIn(root, packageNodeEvidence(root), [
+    "--require-package-node",
+  ]);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.split("EXECUTED:fixture").length - 1, 1);
+  assert.equal(
+    result.stdout.trimEnd().split("\n").at(-1),
+    "run-node-suites: complete status=0",
+  );
 });
 
 void test("invalid concurrency values are rejected before fixture execution", (t) => {
@@ -580,7 +691,7 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // directory-walk symlink guard (`tests/run-node-suites.ts:146::entry.isSymbolicLink()`)
+  // directory-walk symlink guard (`tests/run-node-suites.ts:152::entry.isSymbolicLink()`)
   // ran rather than a
   // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
   // broken symlink (it inspects the link itself, not its target), so this is

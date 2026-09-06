@@ -45,6 +45,7 @@ function fail(message: string): never {
 async function main() {
   let selectedGroup: string;
   let concurrency: string | undefined;
+  let requirePackageNode = false;
   try {
     const { values } = parseArgs({
       args: process.argv.slice(2),
@@ -53,13 +54,15 @@ async function main() {
       options: {
         group: { type: "string", default: "all" },
         concurrency: { type: "string" },
+        "require-package-node": { type: "boolean", default: false },
       },
     });
     selectedGroup = values.group ?? "all";
     concurrency = values.concurrency;
+    requirePackageNode = values["require-package-node"] ?? false;
   } catch {
     fail(
-      "usage: tests/run-node-suites.ts [--group unit|integration|repository|all] [--concurrency N]",
+      "usage: tests/run-node-suites.ts [--group unit|integration|repository|all] [--concurrency N] [--require-package-node]",
     );
   }
   if (
@@ -73,6 +76,9 @@ async function main() {
     concurrency === undefined ? [] : ["--test-concurrency", concurrency];
   if (selectedGroup !== "all" && !groups.has(selectedGroup as SuiteGroup)) {
     fail("unknown suite group; expected unit, integration, repository, or all");
+  }
+  if (requirePackageNode && selectedGroup !== "all") {
+    fail("--require-package-node requires --group all");
   }
 
   let parsed: unknown;
@@ -263,6 +269,60 @@ async function main() {
     fail(
       "the assert matcher gate could not be loaded — tests/assert-matcher-gate.ts must sit beside this runner, be readable, and evaluate cleanly",
     );
+  }
+
+  if (requirePackageNode) {
+    if (!ordered.includes("tests/baseline/packaged-cli.test.ts")) {
+      fail(
+        "--require-package-node requires tests/baseline/packaged-cli.test.ts in the selected suites",
+      );
+    }
+
+    let resolver: typeof import("./lib/package-runtime.ts").resolvePackageNode;
+    try {
+      resolver = (await import("./lib/package-runtime.ts")).resolvePackageNode;
+    } catch {
+      fail("package runtime helper could not be loaded");
+    }
+
+    let rootManifest: unknown;
+    try {
+      rootManifest = JSON.parse(
+        readFileSync(join(ROOT, "package.json"), "utf8"),
+      );
+    } catch {
+      fail("package.json could not be read as valid JSON");
+    }
+    const packageEngine =
+      typeof rootManifest === "object" &&
+      rootManifest !== null &&
+      "engines" in rootManifest &&
+      typeof rootManifest.engines === "object" &&
+      rootManifest.engines !== null &&
+      "node" in rootManifest.engines &&
+      typeof rootManifest.engines.node === "string"
+        ? rootManifest.engines.node
+        : undefined;
+    if (packageEngine === undefined) {
+      fail("package.json engines.node is missing or invalid");
+    }
+
+    const resolverDiagnostics = new Set([
+      "SPW_PACKAGE_NODE and SPW_PACKAGE_NODE_VERSION are required together",
+      "SPW_PACKAGE_NODE must be an absolute executable path",
+      "package.json engines.node does not declare a supported package minimum",
+      "SPW_PACKAGE_NODE_VERSION must match the declared package minimum",
+      "SPW_PACKAGE_NODE could not be verified",
+      "SPW_PACKAGE_NODE does not report the declared package minimum",
+    ]);
+    try {
+      resolver(process.env, true, packageEngine);
+    } catch (error) {
+      if (error instanceof Error && resolverDiagnostics.has(error.message)) {
+        fail(error.message);
+      }
+      fail("package runtime validation failed");
+    }
   }
 
   // A caller that itself runs under `node --test` (this runner is one such
