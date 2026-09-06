@@ -198,7 +198,7 @@ void test("the runner fails closed when the gate module is unreadable", (t) => {
   chmodSync(copiedGate, 0o000);
   // A privileged user ignores the permission bit; skip rather than assert a
   // guarantee the environment does not provide. Same guard as
-  // `tests/baseline/suite-runner.test.ts:670::Root ignores the mode bits`.
+  // `tests/baseline/suite-runner.test.ts:836::Root ignores the mode bits`.
   let readable = true;
   try {
     readFileSync(copiedGate);

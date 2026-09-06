@@ -44,19 +44,33 @@ function fail(message: string): never {
 
 async function main() {
   let selectedGroup: string;
+  let concurrency: string | undefined;
   try {
     const { values } = parseArgs({
       args: process.argv.slice(2),
       strict: true,
       allowPositionals: false,
-      options: { group: { type: "string", default: "all" } },
+      options: {
+        group: { type: "string", default: "all" },
+        concurrency: { type: "string" },
+      },
     });
     selectedGroup = values.group ?? "all";
+    concurrency = values.concurrency;
   } catch {
     fail(
-      "usage: tests/run-node-suites.ts [--group unit|integration|repository|all]",
+      "usage: tests/run-node-suites.ts [--group unit|integration|repository|all] [--concurrency N]",
     );
   }
+  if (
+    concurrency !== undefined &&
+    (!/^[1-9][0-9]*$/.test(concurrency) ||
+      !Number.isSafeInteger(Number(concurrency)))
+  ) {
+    fail("test concurrency must be a positive safe integer");
+  }
+  const concurrencyArgs =
+    concurrency === undefined ? [] : ["--test-concurrency", concurrency];
   if (selectedGroup !== "all" && !groups.has(selectedGroup as SuiteGroup)) {
     fail("unknown suite group; expected unit, integration, repository, or all");
   }
@@ -263,7 +277,7 @@ async function main() {
   delete childEnv.NODE_TEST_WORKER_ID;
   const result = spawnSync(
     process.execPath,
-    ["--import", gateUrl.href, "--test", ...ordered],
+    ["--import", gateUrl.href, "--test", ...concurrencyArgs, ...ordered],
     {
       cwd: ROOT,
       stdio: "inherit",

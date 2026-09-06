@@ -4,6 +4,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
@@ -166,6 +167,121 @@ void test("run.sh forwards group selection to the Node suite runner", (t) => {
   assert.doesNotMatch(result.stdout, /EXECUTED:integration/);
 });
 
+void test("invalid concurrency values are rejected before fixture execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  for (const concurrency of [
+    "0",
+    "-1",
+    "1.5",
+    "",
+    "many",
+    "9007199254740992",
+  ]) {
+    const result = runIn(root, {}, [`--concurrency=${concurrency}`]);
+    assertRejectedWithoutExecution(
+      result,
+      /test concurrency must be a positive safe integer/,
+    );
+    const lines = result.stdout.trimEnd().split("\n");
+    assert.equal(lines[lines.length - 1], "run-node-suites: complete status=1");
+  }
+});
+
+void test("concurrency two lets separate suite processes make simultaneous progress", (t) => {
+  const firstSuite = "tests/unit/first.test.ts";
+  const secondSuite = "tests/unit/second.test.ts";
+  const root = fakeRoot(t, {
+    suites: [firstSuite, secondSuite],
+    files: { [firstSuite]: PASSING_SUITE, [secondSuite]: PASSING_SUITE },
+  });
+  const scratch = join(root, "scratch");
+  mkdirSync(scratch);
+  const firstMarker = join(scratch, "first.pid");
+  const secondMarker = join(scratch, "second.pid");
+  const body = (own: string, peer: string) => `
+import assert from "node:assert/strict";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
+import test from "node:test";
+test("workers overlap in different processes", async () => {
+  writeFileSync(${JSON.stringify(`${own}.tmp`)}, String(process.pid));
+  renameSync(${JSON.stringify(`${own}.tmp`)}, ${JSON.stringify(own)});
+  const deadline = Date.now() + 10000;
+  while (!existsSync(${JSON.stringify(peer)}) && Date.now() < deadline) await delay(10);
+  assert.ok(existsSync(${JSON.stringify(peer)}), "peer worker did not start");
+  assert.notEqual(readFileSync(${JSON.stringify(peer)}, "utf8"), String(process.pid));
+});`;
+  writeFileSync(join(root, firstSuite), body(firstMarker, secondMarker));
+  writeFileSync(join(root, secondSuite), body(secondMarker, firstMarker));
+
+  const result = runIn(root, {}, ["--concurrency", "2"]);
+
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    result.stdout.split("workers overlap in different processes").length - 1,
+    2,
+  );
+  assert.match(result.stdout, /pass 2/);
+});
+
+void test("concurrency one is forwarded to the real Node test process", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/pass.test.ts"],
+    files: { "tests/unit/pass.test.ts": PASSING_SUITE },
+  });
+  const preloadPath = join(root, "record-spawn.mjs");
+  const recordPath = join(root, "spawn-record.json");
+  writeFileSync(
+    preloadPath,
+    `import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+import { writeFileSync } from "node:fs";
+const original = childProcess.spawnSync;
+childProcess.spawnSync = function(command, args, options) {
+  writeFileSync(process.env.SPW_TEST_SPAWN_RECORD, JSON.stringify({ command, args }));
+  return original(command, args, options);
+};
+syncBuiltinESMExports();
+`,
+  );
+  const env = { ...process.env };
+  delete env.SPW_PACKAGE_NODE;
+  delete env.SPW_PACKAGE_NODE_VERSION;
+  const result = spawnSync(
+    process.execPath,
+    ["--import", preloadPath, RUNNER, "--concurrency", "1"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...env,
+        SPW_RUNNER_ROOT: root,
+        SPW_TEST_SPAWN_RECORD: recordPath,
+      },
+      timeout: 30000,
+    },
+  );
+
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /pass 1/);
+  const recorded = JSON.parse(readFileSync(recordPath, "utf8")) as {
+    command: string;
+    args: string[];
+  };
+  assert.equal(recorded.command, process.execPath);
+  const concurrencyIndex = recorded.args.indexOf("--test-concurrency");
+  assert.notEqual(concurrencyIndex, -1);
+  assert.deepEqual(
+    recorded.args.slice(concurrencyIndex, concurrencyIndex + 2),
+    ["--test-concurrency", "1"],
+  );
+});
+
 void test("clean tree passes", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
@@ -208,7 +324,7 @@ void test("both sentinels reach a piped capture", (t) => {
     suites: ["tests/unit/fail.test.ts"],
     files: { "tests/unit/fail.test.ts": FAILING_SUITE },
   });
-  const r = spawnSync("sh", [RUN_SH], {
+  const r = spawnSync("sh", [RUN_SH, "--concurrency", "2"], {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, SPW_RUNNER_ROOT: root },
@@ -464,7 +580,7 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // directory-walk symlink guard (`tests/run-node-suites.ts:132::entry.isSymbolicLink()`)
+  // directory-walk symlink guard (`tests/run-node-suites.ts:146::entry.isSymbolicLink()`)
   // ran rather than a
   // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
   // broken symlink (it inspects the link itself, not its target), so this is
@@ -492,6 +608,56 @@ void test("failing child suite propagates", (t) => {
   // expected test output, not a leak from this runner's own error-handling
   // paths, and the two are indistinguishable by the generic `/\n\s+at /`
   // pattern.
+});
+
+void test("concurrent passing files do not hide one failing file", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      "tests/unit/first-pass.test.ts",
+      "tests/unit/fail.test.ts",
+      "tests/unit/second-pass.test.ts",
+    ],
+    files: {
+      "tests/unit/first-pass.test.ts": PASSING_SUITE,
+      "tests/unit/fail.test.ts": FAILING_SUITE,
+      "tests/unit/second-pass.test.ts": PASSING_SUITE,
+    },
+  });
+  const result = runIn(root, {}, ["--concurrency", "2"]);
+
+  assert.equal(result.signal, null);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /pass 2/);
+  assert.match(result.stdout, /fail 1/);
+  const lines = result.stdout.trimEnd().split("\n");
+  assert.equal(
+    lines[lines.length - 1],
+    `run-node-suites: complete status=${result.status}`,
+  );
+  assert.doesNotMatch(result.stdout, /run-node-suites: complete status=0/);
+});
+
+void test("a concurrent suite terminated by SIGTERM fails without killing the runner", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/pass.test.ts", "tests/unit/terminated.test.ts"],
+    files: {
+      "tests/unit/pass.test.ts": PASSING_SUITE,
+      "tests/unit/terminated.test.ts":
+        'import test from "node:test";\ntest("terminated", () => process.kill(process.pid, "SIGTERM"));\n',
+    },
+  });
+  const result = runIn(root, {}, ["--concurrency", "2"]);
+
+  assert.equal(result.signal, null);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /pass 1/);
+  assert.match(result.stdout, /fail 1/);
+  const lines = result.stdout.trimEnd().split("\n");
+  assert.equal(
+    lines[lines.length - 1],
+    `run-node-suites: complete status=${result.status}`,
+  );
+  assert.doesNotMatch(result.stdout, /run-node-suites: complete status=0/);
 });
 
 void test("failing child suite propagates even when the caller's own NODE_TEST_CONTEXT leaks into the child env", (t) => {
