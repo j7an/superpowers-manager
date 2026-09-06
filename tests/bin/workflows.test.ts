@@ -240,6 +240,21 @@ function runCommandInventory(steps: unknown[], path: string): string[] {
   });
 }
 
+const FULL_SHARED_PACKAGE_ALIASES = new Set([
+  "test",
+  "check",
+  "test:acceptance",
+]);
+
+function isFullSharedCommandLine(line: string): boolean {
+  const words = line.trim().split(/\s+/).filter(Boolean);
+  if (words[0] === "sh" && words[1] === "tests/run.sh") return true;
+  if (words[0] !== "pnpm") return false;
+
+  const alias = words[1] === "run" ? words[2] : words[1];
+  return FULL_SHARED_PACKAGE_ALIASES.has(alias);
+}
+
 void test("ci.yml declares the expected top-level contract", () => {
   const ci = requireMapping(loadWorkflow(join(WORKFLOW_DIR, "ci.yml")), "ci");
 
@@ -493,10 +508,22 @@ function validateCiToolchain(document: unknown): void {
   );
   assert.ok(mainSetup, "main setup must restore the matrix native runtime");
 
-  const packageEngine = JSON.parse(
+  const packageManifest = JSON.parse(
     readFileSync(join(ROOT, "package.json"), "utf8"),
-  ).engines.node;
+  );
+  const packageEngine = packageManifest.engines.node;
   const minimum = `${/^>=(\d+)$/.exec(packageEngine)![1]}.0.0`;
+  const packageScripts = requireMapping(
+    packageManifest.scripts,
+    "package.json scripts",
+  );
+  for (const alias of FULL_SHARED_PACKAGE_ALIASES) {
+    assert.equal(
+      typeof packageScripts[alias],
+      "string",
+      `full shared package alias must remain registered: ${alias}`,
+    );
+  }
   const packageWith = requireMapping(packageSetup.with, "package setup.with");
   assert.equal(packageWith["node-version"], minimum);
   assert.equal(packageWith["package-manager-cache"], false);
@@ -564,12 +591,24 @@ function validateCiToolchain(document: unknown): void {
     "native compatibility must cover source loading, runner preload, and package producer success and failure",
   );
 
-  const sharedSteps = steps.filter(
-    (step: any) =>
-      typeof step.run === "string" && /\bsh tests\/run\.sh\b/.test(step.run),
+  const sharedInvocations = steps.flatMap((step: any, index) =>
+    typeof step.run === "string"
+      ? step.run
+          .split("\n")
+          .filter(isFullSharedCommandLine)
+          .map((command: string) => ({ command, index }))
+      : [],
   );
-  assert.equal(sharedSteps.length, 1, "expected exactly one full shared run");
-  const shared = requireMapping(sharedSteps[0], "full shared step");
+  assert.equal(
+    sharedInvocations.length,
+    1,
+    "expected exactly one full shared invocation",
+  );
+  const sharedInvocation = sharedInvocations[0];
+  const shared = requireMapping(
+    steps[sharedInvocation.index],
+    "full shared step",
+  );
   assert.equal(
     shared.run,
     "sh tests/run.sh --require-package-node",
@@ -601,7 +640,7 @@ function validateCiToolchain(document: unknown): void {
     uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile"),
     steps.indexOf(nativeCompatibilitySteps[0]),
     uniqueRunStepIndex(steps, "pnpm run check:static"),
-    steps.indexOf(sharedSteps[0]),
+    sharedInvocation.index,
   ];
   assert.deepEqual(
     order,
@@ -729,6 +768,22 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
       assert.throws(
         () => validateCiToolchain(mutant),
         /must require package-minimum evidence without narrowing/,
+      );
+    });
+  }
+
+  for (const command of [
+    "pnpm test",
+    "pnpm run test",
+    "pnpm run check",
+    "pnpm run test:acceptance",
+  ]) {
+    await t.test(`rejects duplicate full shared alias: ${command}`, () => {
+      const mutant = structuredClone(ci);
+      toolchainSteps(mutant).push({ if: "matrix.static", run: command });
+      assert.throws(
+        () => validateCiToolchain(mutant),
+        /expected exactly one full shared invocation/,
       );
     });
   }

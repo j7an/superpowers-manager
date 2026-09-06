@@ -1342,3 +1342,24 @@ the old combined job and one-setup toolchain rejected; after implementation the
 focused workflow/container/bootstrap group passed 118/118. The inventory and
 digest change is submitted for independent reviewer authorization; this note
 does not authorize its own re-freeze.
+
+### Review correction (2026-09-06)
+
+Review 4 found that the full-shared count recognized only a literal
+`sh tests/run.sh` line, so an added `pnpm test` or `pnpm run test` step could
+duplicate the shared suite without entering that count. The corrected parsed
+workflow check counts command lines that invoke the canonical shell runner or
+the repository's registered full-shared package aliases. Besides both `test`
+forms, it covers the current `check` and `test:acceptance` aggregate aliases,
+which transitively execute the shared suite. The recognizer is deliberately
+bounded to these repository commands rather than interpreting general shell
+syntax.
+
+Four nested mutants establish this boundary. Before the correction, the
+workflow run was RED at 33/38: the `pnpm test`, `pnpm run test`, and
+`pnpm run test:acceptance` mutants raised no exception, while `pnpm run check`
+reached only an unrelated later prohibition. After the invocation counter was
+added, the workflow run passed 38/38 and each mutant failed with the dedicated
+single-full-shared assertion. The 24 static `test(` calls remain unchanged.
+This addresses the Review 4 HOLD; the updated workflows inventory and digest
+remain pending independent reviewer authorization and do not self-authorize.
