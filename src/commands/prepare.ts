@@ -306,6 +306,9 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       if (prepared.outcome.result.commit !== selection.desiredCommit) {
         return failed("adapter returned an unexpected preparation commit");
       }
+      if (prepared.outcome.result.compatibility.kind === "unsupported") {
+        return failed(prepared.outcome.result.compatibility.reason);
+      }
       let validator = NO_VALIDATOR_OUTPUT;
       if (additionalValidator.length > 0) {
         // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` — `[ -f ]`.

@@ -97,6 +97,87 @@ void test("a rejected candidate preserves the previous payload before validation
   assert.equal(fixture.err.text(), "error: fixture candidate rejected\n");
   assert.ok(workspaceRoot);
   assert.equal(existsSync(workspaceRoot), false);
+
+  await t.test(
+    "unsupported candidates do not reach validators or replacement",
+    async (subtest) => {
+      const unsupportedFixture = await createHarnessFixture(subtest);
+      mkdirSync(unsupportedFixture.destinationRoot, { recursive: true });
+      writeFileSync(
+        join(unsupportedFixture.destinationRoot, "payload.txt"),
+        "previous\n",
+        "utf8",
+      );
+      const validator = join(
+        unsupportedFixture.ctx.root,
+        "forbidden-validator",
+      );
+      const validatorSentinel = join(
+        unsupportedFixture.ctx.root,
+        "validator-ran",
+      );
+      writeFileSync(
+        validator,
+        '#!/bin/sh\n: > "$SPW_TEST_VALIDATOR_SENTINEL"\n',
+        "utf8",
+      );
+      chmodSync(validator, 0o755);
+      const unsupportedAdapter = {
+        ...unsupportedFixture.adapter,
+        async prepareCandidate(
+          input: Parameters<
+            typeof unsupportedFixture.adapter.prepareCandidate
+          >[0],
+        ) {
+          const prepared = await unsupportedFixture.adapter.prepareCandidate(
+            input,
+            {
+              root: unsupportedFixture.ctx.root,
+              env: unsupportedFixture.ctx.env,
+            },
+          );
+          if (!prepared.outcome.ok) return prepared;
+          return successResult(
+            prepared.outcome.operation,
+            {
+              ...prepared.outcome.result,
+              compatibility: {
+                kind: "unsupported" as const,
+                reason: "missing bootstrap",
+              },
+            },
+            prepared.outcome.messages,
+          );
+        },
+      };
+      const unsupportedContext = {
+        ...unsupportedFixture.ctx,
+        env: {
+          ...unsupportedFixture.ctx.env,
+          SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
+          SPW_TEST_VALIDATOR_SENTINEL: validatorSentinel,
+        },
+        adapter: unsupportedAdapter,
+      };
+
+      assert.equal(await runPrepare([], unsupportedContext), 1);
+      assert.equal(
+        readFileSync(
+          join(unsupportedFixture.destinationRoot, "payload.txt"),
+          "utf8",
+        ),
+        "previous\n",
+      );
+      assert.equal(existsSync(validatorSentinel), false);
+      assert.deepEqual(unsupportedFixture.calls, [
+        "location",
+        "prefetch",
+        "prepare",
+      ]);
+      assert.equal(unsupportedFixture.out.text(), "");
+      assert.equal(unsupportedFixture.err.text(), "error: missing bootstrap\n");
+    },
+  );
 });
 
 void test("preparation rejects unsafe locations before allocating a workspace", async (t) => {
