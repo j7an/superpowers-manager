@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 // The contract suite drives this runner against isolated fixture roots.
 // Production callers never set this.
@@ -11,6 +12,15 @@ const ROOT = process.env.SPW_RUNNER_ROOT
   : resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "tests", "suites.json");
 const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"];
+
+type SuiteGroup = "unit" | "integration" | "repository";
+
+interface SuiteEntry {
+  path: string;
+  group: SuiteGroup;
+}
+
+const groups = new Set<SuiteGroup>(["unit", "integration", "repository"]);
 
 // Emitted on EVERY exit path, including failure. Absence of this line means the
 // process was killed, which is the one thing a non-zero status cannot tell you.
@@ -33,6 +43,24 @@ function fail(message: string): never {
 }
 
 async function main() {
+  let selectedGroup: string;
+  try {
+    const { values } = parseArgs({
+      args: process.argv.slice(2),
+      strict: true,
+      allowPositionals: false,
+      options: { group: { type: "string", default: "all" } },
+    });
+    selectedGroup = values.group ?? "all";
+  } catch {
+    fail(
+      "usage: tests/run-node-suites.ts [--group unit|integration|repository|all]",
+    );
+  }
+  if (selectedGroup !== "all" && !groups.has(selectedGroup as SuiteGroup)) {
+    fail("unknown suite group; expected unit, integration, repository, or all");
+  }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(MANIFEST, "utf8"));
@@ -48,10 +76,34 @@ async function main() {
     fail("tests/suites.json must be an object with a `suites` array");
   }
   const declared = (parsed as { suites: unknown[] }).suites;
-  if (!declared.every((entry) => typeof entry === "string")) {
-    fail("every tests/suites.json entry must be a string");
+  const entries: SuiteEntry[] = [];
+  for (const entry of declared) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      Array.isArray(entry) ||
+      Object.keys(entry).length !== 2 ||
+      !("path" in entry) ||
+      !("group" in entry)
+    ) {
+      fail(
+        "every tests/suites.json entry must be an object with exactly `path` and `group`",
+      );
+    }
+    if (typeof entry.path !== "string" || entry.path.length === 0) {
+      fail("every tests/suites.json entry path must be a nonempty string");
+    }
+    if (
+      typeof entry.group !== "string" ||
+      !groups.has(entry.group as SuiteGroup)
+    ) {
+      fail(
+        "every tests/suites.json entry group must be unit, integration, or repository",
+      );
+    }
+    entries.push(entry as SuiteEntry);
   }
-  const expected = declared as string[];
+  const expected = entries.map((entry) => entry.path);
 
   const seen = new Set();
   const repeated = [];
@@ -174,7 +226,11 @@ async function main() {
 
   if (expected.length === 0) fail("tests/suites.json declares no suites");
 
-  const ordered = [...expected].sort();
+  const ordered = entries
+    .filter((entry) => selectedGroup === "all" || entry.group === selectedGroup)
+    .map((entry) => entry.path)
+    .sort();
+  if (ordered.length === 0) fail("requested suite group declares no suites");
 
   // Resolved as a sibling of this file, never against ROOT: SPW_RUNNER_ROOT
   // redirects ROOT into a fixture's temp directory, where no gate exists.

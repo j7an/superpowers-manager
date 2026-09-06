@@ -38,7 +38,7 @@ import {
 } from "../bin/lifecycle-fixture.ts";
 // From the NON-TEST helper, not from probe.test.js: importing a *.test.js
 // module re-executes and re-registers its tests inside this suite
-// (`tests/run-node-suites.ts:13::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`).
+// (`tests/run-node-suites.ts:14::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`).
 import { caseEnv, seedCodex } from "./probe-fixture.ts";
 import { capture } from "../unit/helpers/command-harness.ts";
 import { caseContext } from "../bin/command-context.ts";

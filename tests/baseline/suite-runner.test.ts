@@ -20,13 +20,25 @@ const RUN_SH = fileURLToPath(new URL("../run.sh", import.meta.url));
 const PASSING_SUITE = 'import test from "node:test";\ntest("ok", () => {});\n';
 const FAILING_SUITE =
   'import test from "node:test";\ntest("no", () => { throw new Error("x"); });\n';
+const EXECUTED_SUITE =
+  'import test from "node:test";\ntest("executed", () => console.log("EXECUTED:fixture"));\n';
+
+type SuiteGroup = "unit" | "integration" | "repository";
+
+interface SuiteEntry {
+  path: string;
+  group: SuiteGroup;
+}
 
 /**
  * Build an isolated fake repository root.
  */
 function fakeRoot(
   t: import("node:test").TestContext,
-  shape: { suites: string[]; files: Record<string, string> },
+  shape: {
+    suites: Array<string | SuiteEntry>;
+    files: Record<string, string>;
+  },
 ) {
   const root = mkdtempSync(join(tmpdir(), "spw-runner-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -39,19 +51,29 @@ function fakeRoot(
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, contents, "utf8");
   }
+  const suites = shape.suites.map((entry) =>
+    typeof entry === "string" ? { path: entry, group: "unit" } : entry,
+  );
   writeFileSync(
     join(root, "tests", "suites.json"),
-    JSON.stringify({ suites: shape.suites }, null, 2),
+    JSON.stringify({ suites }, null, 2),
     "utf8",
   );
   return root;
 }
 
-function runIn(root: string, extraEnv?: Record<string, string>) {
-  const result = spawnSync(process.execPath, [RUNNER], {
+function runIn(
+  root: string,
+  extraEnv: Record<string, string> = {},
+  args: string[] = [],
+) {
+  const env = { ...process.env };
+  delete env.SPW_PACKAGE_NODE;
+  delete env.SPW_PACKAGE_NODE_VERSION;
+  const result = spawnSync(process.execPath, [RUNNER, ...args], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, SPW_RUNNER_ROOT: root, ...extraEnv },
+    env: { ...env, ...extraEnv, SPW_RUNNER_ROOT: root },
     // A harness with no bound cannot assert prompt termination, and every case
     // in this file that asserts a status would read a kill as that status.
     timeout: 30000,
@@ -71,6 +93,78 @@ function assertNoRawFailure(r: { stdout: string; stderr: string }) {
     assert.doesNotMatch(stream, /Traceback/);
   }
 }
+
+function writeManifest(root: string, suites: unknown[]) {
+  writeFileSync(
+    join(root, "tests", "suites.json"),
+    JSON.stringify({ suites }, null, 2),
+    "utf8",
+  );
+}
+
+function assertRejectedWithoutExecution(
+  result: ReturnType<typeof runIn>,
+  diagnostic: RegExp,
+) {
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, diagnostic);
+  assert.doesNotMatch(result.stdout + result.stderr, /EXECUTED:/);
+  assertNoRawFailure(result);
+}
+
+void test("group selection executes only members and all executes the union once", (t) => {
+  const entries = [
+    { path: "tests/unit/a.test.ts", group: "unit" },
+    { path: "tests/baseline/b.test.ts", group: "integration" },
+    { path: "tests/bin/c.test.ts", group: "repository" },
+  ] satisfies SuiteEntry[];
+  const files = Object.fromEntries(
+    entries.map((entry) => [
+      entry.path,
+      `import test from "node:test"; test(${JSON.stringify(entry.group)}, () => console.log(${JSON.stringify(`EXECUTED:${entry.group}`)}));`,
+    ]),
+  );
+  const root = fakeRoot(t, { suites: entries, files });
+  for (const group of ["unit", "integration", "repository", "all"]) {
+    const result = runIn(root, {}, ["--group", group]);
+    assert.equal(result.signal, null);
+    assert.equal(result.status, 0, result.stderr);
+    for (const entry of entries) {
+      const count = result.stdout.split(`EXECUTED:${entry.group}`).length - 1;
+      assert.equal(count, group === "all" || entry.group === group ? 1 : 0);
+    }
+  }
+});
+
+void test("run.sh forwards group selection to the Node suite runner", (t) => {
+  const entries = [
+    { path: "tests/unit/a.test.ts", group: "unit" },
+    { path: "tests/baseline/b.test.ts", group: "integration" },
+  ] satisfies SuiteEntry[];
+  const root = fakeRoot(t, {
+    suites: entries,
+    files: Object.fromEntries(
+      entries.map((entry) => [
+        entry.path,
+        `import test from "node:test"; test(${JSON.stringify(entry.group)}, () => console.log(${JSON.stringify(`EXECUTED:${entry.group}`)}));`,
+      ]),
+    ),
+  });
+  const env = { ...process.env };
+  delete env.SPW_PACKAGE_NODE;
+  delete env.SPW_PACKAGE_NODE_VERSION;
+  const result = spawnSync("sh", [RUN_SH, "--group", "unit"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...env, SPW_RUNNER_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.split("EXECUTED:unit").length - 1, 1);
+  assert.doesNotMatch(result.stdout, /EXECUTED:integration/);
+});
 
 void test("clean tree passes", (t) => {
   const root = fakeRoot(t, {
@@ -246,6 +340,118 @@ void test("malformed manifest: suites is not an array", (t) => {
   assertNoRawFailure(r);
 });
 
+void test("a legacy string manifest entry is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  writeManifest(root, ["tests/unit/a.test.ts"]);
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /entry must be an object with exactly `path` and `group`/,
+  );
+});
+
+void test("an unknown manifest group is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  writeManifest(root, [{ path: "tests/unit/a.test.ts", group: "smoke" }]);
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /entry group must be unit, integration, or repository/,
+  );
+});
+
+void test("a non-string manifest path is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  writeManifest(root, [{ path: 7, group: "unit" }]);
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /entry path must be a nonempty string/,
+  );
+});
+
+void test("an empty manifest path is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  writeManifest(root, [{ path: "", group: "unit" }]);
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /entry path must be a nonempty string/,
+  );
+});
+
+void test("an extra manifest record key is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  writeManifest(root, [
+    { path: "tests/unit/a.test.ts", group: "unit", enabled: true },
+  ]);
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /entry must be an object with exactly `path` and `group`/,
+  );
+});
+
+void test("an unknown requested group is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: ["tests/unit/a.test.ts"],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, {}, ["--group", "smoke"]),
+    /unknown suite group; expected unit, integration, repository, or all/,
+  );
+});
+
+void test("a requested group with no suites is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: [{ path: "tests/baseline/a.test.ts", group: "integration" }],
+    files: { "tests/baseline/a.test.ts": EXECUTED_SUITE },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, {}, ["--group", "unit"]),
+    /requested suite group declares no suites/,
+  );
+});
+
+void test("unit selection still rejects a missing integration suite", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      { path: "tests/unit/a.test.ts", group: "unit" },
+      { path: "tests/baseline/missing.test.ts", group: "integration" },
+    ],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, {}, ["--group", "unit"]),
+    /declared.*absent from disk.*missing\.test\.ts/,
+  );
+});
+
+void test("unit selection still rejects an unregistered integration suite", (t) => {
+  const root = fakeRoot(t, {
+    suites: [{ path: "tests/unit/a.test.ts", group: "unit" }],
+    files: {
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
+      "tests/baseline/unregistered.test.ts": EXECUTED_SUITE,
+    },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root, {}, ["--group", "unit"]),
+    /present on disk.*absent from tests\/suites\.json.*unregistered\.test\.ts/,
+  );
+});
+
 void test("broken symlink suite", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/broken.test.ts"],
@@ -258,7 +464,7 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // directory-walk symlink guard (`tests/run-node-suites.ts:80::entry.isSymbolicLink()`)
+  // directory-walk symlink guard (`tests/run-node-suites.ts:132::entry.isSymbolicLink()`)
   // ran rather than a
   // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
   // broken symlink (it inspects the link itself, not its target), so this is
@@ -332,18 +538,29 @@ void test("nested non-test helper accepted", (t) => {
   assertNoRawFailure(r);
 });
 
-void test("a duplicate manifest entry is rejected", (t) => {
+void test("a duplicate same-group manifest path is rejected before execution", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts", "tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": PASSING_SUITE },
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
   });
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
+  assertRejectedWithoutExecution(
+    runIn(root),
     /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.ts/,
   );
-  assertNoRawFailure(r);
+});
+
+void test("a duplicate cross-group manifest path is rejected before execution", (t) => {
+  const root = fakeRoot(t, {
+    suites: [
+      { path: "tests/unit/a.test.ts", group: "unit" },
+      { path: "tests/unit/a.test.ts", group: "integration" },
+    ],
+    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
+  });
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.ts/,
+  );
 });
 
 void test("a symlinked suite file is rejected", (t) => {
