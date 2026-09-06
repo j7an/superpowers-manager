@@ -103,7 +103,7 @@ interface GatherRun {
 
 // Every step that can throw or fail closed, returning the outcome as data and
 // performing NO writes. Same shape as gatherProbe
-// (`src/commands/probe.ts:280-281::readonly status: 0;`) and for the same
+// (`src/commands/probe.ts:114-117::readonly facts: ProbeSnapshot<R>;`) and for the same
 // reason: a write inside this try could raise EPIPE, be caught here, and be
 // relabelled as a domain failure.
 async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
@@ -239,7 +239,7 @@ export async function runUninstall<R>(
     // blindly.
     //
     // A cause outside ctx.adapter's AdapterFailure guard
-    // (`src/adapter.ts:1002::if (cause instanceof AdapterFailure) {`) does NOT
+    // (`src/adapter.ts:973-999::async function runCodexOperation(`) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.

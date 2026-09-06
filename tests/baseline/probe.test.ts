@@ -135,7 +135,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/commands/probe.ts:349::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/codex-presentation.ts:281::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
@@ -522,9 +522,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
-// (`src/adapter.ts:1002::if (cause instanceof AdapterFailure)`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/adapter.ts:973-999::async function runCodexOperation(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/adapter.ts:268-274::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/adapter.ts:289::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -563,7 +563,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (`src/adapter.ts:234-242::async function listingCommand`), and the fake writes nothing there
+// child's stderr (`src/adapter.ts:251-259::async function listingCommand`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr. Recorded in tests/migration-inventory/probe.md.

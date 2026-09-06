@@ -404,7 +404,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/codex-harness.ts:175-184::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:327::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:328::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
@@ -705,7 +705,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
 // rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
 // reached verifyInstalledFingerprint, leaving that function's "call-failed" arm
-// (`src/lifecycle.ts:157-166::inspected.kind === "call-failed"`) dead and dropping the post-install verification
+// (`src/codex-presentation.ts:207::if (inspected.kind === "call-failed") {`) dead and dropping the post-install verification
 // claim entirely. The shell handed its inspect result to
 // spw_verify_installed_fingerprint unconditionally (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and
 // printed BOTH lines — the adapter's own error and

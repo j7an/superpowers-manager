@@ -3,10 +3,16 @@
 ## Scope
 
 This document defines the in-process adapter result contract used by the
-product CLI. `src/cli.ts` binds `runAdapter` directly into the lifecycle
-context, and handlers consume its `AdapterResult` in-process. There is no
-adapter-process exit or independent operation/response validation on this
-path.
+product CLI. `src/cli.ts` binds the concrete `codexHarness` as a typed
+`HarnessAdapter<CodexRemovalInput>`, while shared command handlers consume the
+generic `HarnessAdapter<R>` and `AdapterResult<T>` envelope in-process. The
+interface is internal TypeScript, not an external protocol. There is no
+adapter-process exit or independent operation/response validation on the
+product path.
+
+`runAdapter` remains a compatibility parser for the native Codex operation
+shape. It delegates to the same typed Codex engines used by the concrete
+harness; it is not the product CLI binding.
 
 ## Messages and errors
 
@@ -25,9 +31,13 @@ escapes message `text` on ingress; and `verifyInstalledFingerprint`
 
 Messages are replayed in array order to their declared streams.
 
-## Operation results
+## Native compatibility operation results
 
-| Operation/view | Exact result contract |
+The table below labels the retained `runAdapter` compatibility shape. The
+generic envelope preserves each typed result for in-process harness consumers;
+it does not require another integration to reproduce these Codex-native fields.
+
+| Compatibility operation/view | Exact native result contract |
 |---|---|
 | `install` | Exact key `verification_hints`; its object carries `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only`. Each hint satisfies the terminal-facing string rule. |
 | `inspect/fingerprint` | Exact keys `view` and `fingerprint`; view is `fingerprint`; `fingerprint` is `null` or a 7- or 40-character hexadecimal string. |

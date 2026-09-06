@@ -1,11 +1,12 @@
-// The seam this slice adds must not become the seam it is removing.
+// The internal boundary must not become a renamed external seam or leak its
+// concrete Codex implementation into shared commands.
 //
-// SPW_ADAPTER was settable from outside the process. `ctx.adapter` is an
-// interface field, which is not — but only while nothing under src/ reads it
-// back out of the environment. Two properties, one file, because they fail
-// together: a command module that imports runAdapter has no seam at all, and
-// a module that derives the adapter from env has an environment seam wearing
-// an interface's clothes.
+// `ctx.adapter` is an interface field, not a public selector — but only while
+// nothing under src/ reads it back out of the environment. Two properties,
+// one file, because they fail together: a shared command that imports any
+// concrete Codex module has no generic boundary at all, and a module that
+// derives the adapter from env has an environment seam wearing an interface's
+// clothes.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -100,7 +101,7 @@ void test("no module under src/commands/ imports runAdapter", () => {
   assert.deepEqual(
     offenders,
     [],
-    "a command module importing runAdapter bypasses ctx.adapter, so an " +
+    "a command module importing a concrete Codex module bypasses ctx.adapter, so an " +
       "injected double observes nothing — see spec §4.5",
   );
 });

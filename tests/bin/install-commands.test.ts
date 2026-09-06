@@ -182,7 +182,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/adapter.ts:443-452::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/adapter.ts:459::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -1104,7 +1104,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/adapter.ts:627-628::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/adapter.ts:638::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1262,7 +1262,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/adapter.ts:650-657::adding`).
+    // the previous root it already removed (`src/adapter.ts:664::adding`).
     assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
     assert.ok(out.includes(otherRoot), out);
     // :632-634
@@ -1366,7 +1366,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — `src/adapter.ts:686-687::missing:`, replayed through the install result.
+    // :685 — `src/adapter.ts:697::missing:`, replayed through the install result.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
   });
 

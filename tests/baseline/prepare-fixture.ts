@@ -255,7 +255,7 @@ function buildUpstream(): string {
     symlinkSync("../../outside", join(upstream, "hooks", "escape"));
   });
   // P1 — a `hooks` value no classification branch accepts, so the adapter's
-  // `hook classification failed:` wrapper (`src/adapter.ts:382::hook classification failed`) is the
+  // `hook classification failed:` wrapper (`src/adapter.ts:394::hook classification failed`) is the
   // diagnostic under test.
   //
   // The value is a NUMBER on purpose. classifyHooks accepts

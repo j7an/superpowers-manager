@@ -216,7 +216,7 @@ async function gatherInstallStages<R>(
         // is what turns a failed inspection into "error: installed manager
         // fingerprint inspection failed after install."
         // verifyInstalledFingerprint's "call-failed" arm
-        // (`src/lifecycle.ts:158::if (inspected.kind === "call-failed") {`)
+        // (`src/codex-presentation.ts:207::if (inspected.kind === "call-failed") {`)
         // exists for exactly this and is reachable only from here. Returning
         // failed() instead reported the adapter's own generic diagnostic and
         // dropped the post-install verification claim -- a mutation had
@@ -293,20 +293,20 @@ export async function runInstall<R>(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:399-433::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:251-309::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
-    // stream too, including the three foreign-text exceptions at :399-433:
-    //   1. :399-410 -- resolveRef splices git's own combined stdout+stderr
+    // stream too, including the three foreign-text exceptions at :251-296:
+    //   1. :251-262 -- resolveRef splices git's own combined stdout+stderr
     //      into its text. Reached on probe's DEFAULT path, which that comment
     //      defines as every invocation NOT resolving a saved pin: a 40-hex
     //      ref returns a "raw-commit" resolution at
     //      `src/upstream.ts:162-164::return { kind: "raw-commit"`
     //      before any git call, so it reaches no splice at all.
-    //   2. :411-423 -- src/selection-store.ts's read path interpolates the
+    //   2. :263-280 -- src/selection-store.ts's read path interpolates the
     //      caught error's own message, so Node errno prose can appear.
     //      AGENTS.md grandfathers that module's wording.
-    //   3. :424-433 -- a SPAWN-level git failure, a different channel from
+    //   3. :281-296 -- a SPAWN-level git failure, a different channel from
     //      exception 1's exit-status one: on the non-ENOENT arm of
     //      `src/git.ts:47-52::if (typeof failure.code === "string") {`, runGit
     //      rejects with "cannot run git: " followed by the Node spawn error's

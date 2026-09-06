@@ -10,8 +10,12 @@ import { computeEffectiveSelection } from "../../src/effective-selection.ts";
 import type {
   HarnessAdapter,
   HarnessPresentation,
+  InstallReceipt,
+  InstalledState,
   OwnershipInspection,
   PreparedArtifact,
+  PreparedState,
+  UpdateControlInspection,
 } from "../../src/harness.ts";
 import { capture } from "./command-doubles.ts";
 
@@ -22,14 +26,41 @@ export interface TestRemovalInput {
 const TEST_PRESENTATION: HarnessPresentation<TestRemovalInput> = {
   installNotice: "test install notice",
   currentNotice: "test current notice",
-  renderProbe() {
-    return { human: "", porcelain: "" };
+  renderProbe(facts) {
+    return {
+      human: `fixture status ${facts.status}\n`,
+      porcelain: `status=${facts.status}\n`,
+    };
   },
-  renderInstallVerification() {
-    return { stdout: [], stderr: [] };
+  renderInstallVerification(desiredCommit, _receipt, inspection) {
+    if (inspection.status !== 0 || !inspection.outcome.ok) {
+      return {
+        stdout: [],
+        stderr: ["error: fixture post-install inspection failed"],
+      };
+    }
+    if (inspection.outcome.result.kind === "absent") {
+      return {
+        stdout: [],
+        stderr: ["error: fixture installation is absent"],
+      };
+    }
+    if (inspection.outcome.result.kind === "mismatch") {
+      return {
+        stdout: [],
+        stderr: ["error: fixture installation is mismatched"],
+      };
+    }
+    return { stdout: [`fixture installed ${desiredCommit}`], stderr: [] };
   },
-  renderRemovalCompletion() {
-    return { stdout: [], stderr: [] };
+  renderRemovalCompletion(ownership) {
+    return {
+      stdout: [
+        ...ownership.postRemovalOutput.stdout,
+        "fixture uninstall complete",
+      ],
+      stderr: ownership.postRemovalOutput.stderr,
+    };
   },
   callFailure() {
     return {
@@ -101,6 +132,83 @@ export async function createHarnessFixture(t: TestContext) {
     postRemovalOutput: { stdout: [], stderr: [] },
     presentationValue: "fixture",
   };
+  const preparedArtifact: PreparedArtifact = {
+    root: destinationRoot,
+    commit: selection.desiredCommit,
+  };
+  const prepared: PreparedState = {
+    kind: "current",
+    artifact: preparedArtifact,
+    observedIdentity: selection.desiredCommit,
+  };
+  const installed: InstalledState = {
+    kind: "current",
+    observedIdentity: selection.desiredCommit,
+  };
+  const control: UpdateControlInspection = {
+    probeEligibility: { kind: "allowed" },
+    mutationEligibility: { kind: "allowed" },
+    presentationValue: "fixture",
+  };
+  const installReceipt: InstallReceipt = {
+    missingVerificationOutput: {
+      stdout: [],
+      stderr: ["error: fixture installation is absent"],
+    },
+    mismatchVerificationOutput: {
+      stdout: [],
+      stderr: ["error: fixture installation is mismatched"],
+    },
+  };
+  const removalInputs: TestRemovalInput[] = [];
+
+  // These are opt-in method replacements for the strict adapter below. Each
+  // records the real boundary call and returns one typed response. Tests spread
+  // only the methods their scenario permits, so an unexpected call still
+  // throws instead of inheriting a catch-all success default.
+  const methods: Pick<
+    HarnessAdapter<TestRemovalInput>,
+    | "inspectPrepared"
+    | "readPrepared"
+    | "inspectOwnership"
+    | "inspectUpdateControl"
+    | "inspectInstalled"
+    | "install"
+    | "remove"
+  > = {
+    inspectPrepared: async (inputSelection) => {
+      calls.push("inspect-prepared");
+      assert.deepEqual(inputSelection, selection);
+      return successResult("inspect-prepared", prepared, []);
+    },
+    readPrepared: async () => {
+      calls.push("read-prepared");
+      return successResult("read-prepared", preparedArtifact, []);
+    },
+    inspectOwnership: async () => {
+      calls.push("inspect-ownership");
+      return successResult("inspect-ownership", ownership, []);
+    },
+    inspectUpdateControl: async () => {
+      calls.push("inspect-control");
+      return successResult("inspect-control", control, []);
+    },
+    inspectInstalled: async (inputSelection) => {
+      calls.push("inspect-installed");
+      assert.deepEqual(inputSelection, selection);
+      return successResult("inspect-installed", installed, []);
+    },
+    install: async (artifact) => {
+      calls.push("install");
+      assert.deepEqual(artifact, preparedArtifact);
+      return successResult("install", installReceipt, []);
+    },
+    remove: async (input) => {
+      calls.push("remove");
+      removalInputs.push(input);
+      return successResult("remove", null, []);
+    },
+  };
   const adapter: HarnessAdapter<TestRemovalInput> = {
     preparationLocation() {
       calls.push("location");
@@ -161,5 +269,21 @@ export async function createHarnessFixture(t: TestContext) {
     stderr: err.stream,
     adapter,
   };
-  return { ctx, calls, destinationRoot, selection, adapter, out, err };
+  return {
+    ctx,
+    calls,
+    destinationRoot,
+    selection,
+    adapter,
+    methods,
+    preparedArtifact,
+    ownership,
+    control,
+    installed,
+    installReceipt,
+    removalInput,
+    removalInputs,
+    out,
+    err,
+  };
 }
