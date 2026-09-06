@@ -92,6 +92,8 @@
     { "path": "tests/unit/lifecycle.test.ts", "group": "unit" },
     { "path": "tests/unit/manifest-overlay.test.ts", "group": "unit" },
     { "path": "tests/unit/package-runtime.test.ts", "group": "unit" },
+    { "path": "tests/unit/pi-paths.test.ts", "group": "unit" },
+    { "path": "tests/unit/pi-settings.test.ts", "group": "unit" },
     { "path": "tests/unit/provenance.test.ts", "group": "unit" },
     { "path": "tests/unit/python-json-format.test.ts", "group": "unit" },
     { "path": "tests/unit/resource-lock.test.ts", "group": "integration" },
