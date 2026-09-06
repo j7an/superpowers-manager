@@ -25,6 +25,10 @@
     "format": "prettier --write src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.ts tests/assert-matcher-gate.ts",
     "format:check": "prettier --check src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.ts tests/assert-matcher-gate.ts",
     "test": "node tests/run-node-suites.ts",
+    "test:unit": "node tests/run-node-suites.ts --group unit",
+    "test:integration": "node tests/run-node-suites.ts --group integration",
+    "test:harness:codex": "sh tests/container.sh codex-spike",
+    "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "check": "pnpm run check:static && pnpm run test",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit"

@@ -403,14 +403,37 @@ and inspect any resulting PR before treating live integration as validated.
 
 ## Tests
 
+Install once, run the static gate before submission, and choose the package
+script that matches the scope you are iterating on:
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm run check:static
-node src/cli.ts --help
-sh tests/run.sh                          # Layers 1-3: host-side hermetic checks while iterating
-sh tests/container.sh                    # Layers 1-4: blocking Docker acceptance command
-sh tests/manual/codex-behavior-probe.sh  # optional native-only compatibility residue
+pnpm test
+pnpm run test:unit
+pnpm run test:integration
+pnpm run test:harness:codex
+pnpm run test:acceptance
 ```
+
+The package scripts above are alternative iteration selectors; do not run every
+row sequentially as a substitute for acceptance. `pnpm test` runs all shared
+suites once, while the unit and integration scripts select one shared group.
+`test:harness:codex` runs only the isolated Docker Codex probe. Complete
+acceptance is `pnpm run check:static` followed by `pnpm run test:acceptance`
+with explicit evidence for the package's minimum Node runtime.
+
+To compare shared-suite scheduling while iterating, use:
+
+```sh
+sh tests/run.sh --concurrency 1
+sh tests/run.sh --concurrency 2
+```
+
+Every normally completed shared run emits both `run-node-suites: complete
+status=<status>` and `tests/run.sh: complete failed=<count>`. Either sentinel
+may report failure; if either is absent, the run was interrupted and is
+incomplete.
 
 Use a Homebrew-managed local pnpm by command name; do not use Corepack.
 `check:static` checks formatting, lints, and typechecks production and tests without
@@ -419,6 +442,65 @@ Tests and their subprocesses execute TypeScript against `src/` with no checkout
 build. Future production coverage covers `src/`, including `src/cli.ts`; emitted
 distribution files, tests, and packaging tools are outside that source scope.
 No coverage collection is enabled by this migration.
+
+On macOS, reuse an existing exact package-minimum Node executable when one is
+already available:
+
+```sh
+export SPW_PACKAGE_NODE=/absolute/path/to/node-v24.0.0
+export SPW_PACKAGE_NODE_VERSION=24.0.0
+test "$("$SPW_PACKAGE_NODE" -p 'process.versions.node')" = "$SPW_PACKAGE_NODE_VERSION"
+```
+
+Otherwise, run this prerequisite setup from the worktree while a supported
+native Node remains on `PATH`. It downloads an official Node archive into a
+new temporary directory and verifies the selected checksum before extraction:
+
+```sh
+spw_runtime_dir=$(mktemp -d)
+SPW_PACKAGE_NODE_VERSION=$(node -p 'const e=require("./package.json").engines.node; const m=/^>=(\d+)$/.exec(e); if(!m) throw Error("unsupported engines.node"); `${m[1]}.0.0`')
+case "$(uname -m)" in
+  arm64) spw_node_arch=arm64 ;;
+  x86_64) spw_node_arch=x64 ;;
+  *) echo "unsupported macOS architecture" >&2; exit 1 ;;
+esac
+spw_node_archive="node-v${SPW_PACKAGE_NODE_VERSION}-darwin-${spw_node_arch}.tar.gz"
+(
+  set -eu
+  cd "$spw_runtime_dir"
+  curl --fail --location --remote-name "https://nodejs.org/dist/v${SPW_PACKAGE_NODE_VERSION}/${spw_node_archive}"
+  curl --fail --location --remote-name "https://nodejs.org/dist/v${SPW_PACKAGE_NODE_VERSION}/SHASUMS256.txt"
+  rg -F "  ${spw_node_archive}" SHASUMS256.txt > selected-sha256.txt
+  test "$(wc -l < selected-sha256.txt)" -eq 1
+  read -r spw_node_sha spw_selected_archive < selected-sha256.txt
+  test "$spw_selected_archive" = "$spw_node_archive"
+  shasum -a 256 -c selected-sha256.txt
+  tar -xzf "$spw_node_archive"
+) || exit 1
+SPW_PACKAGE_NODE="$spw_runtime_dir/node-v${SPW_PACKAGE_NODE_VERSION}-darwin-${spw_node_arch}/bin/node"
+export SPW_PACKAGE_NODE SPW_PACKAGE_NODE_VERSION
+```
+
+The native runtime on `PATH` remains unchanged. With the package runtime
+variables exported, complete acceptance is:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run check:static
+pnpm run test:acceptance
+```
+
+After the checks, remove only the temporary directory created by this
+invocation and clear its variables:
+
+```sh
+rm -rf -- "$spw_runtime_dir"
+unset SPW_PACKAGE_NODE SPW_PACKAGE_NODE_VERSION spw_node_arch spw_node_archive spw_runtime_dir
+```
+
+Linux CI provisions the exact package runtime with `actions/setup-node`.
+Downloads happen only during prerequisite setup, never inside the hermetic test
+cases.
 
 Packaging compiles only production source into fresh external temporary staging:
 
@@ -438,31 +520,35 @@ Layers 1-3 stay offline and hermetic: they use a fake local upstream repo plus
 host-side fixtures, and they perform no mutation of the developer's or runner's
 real Codex state.
 
-Layer 4 is the Docker acceptance path. It is the required completion command
-because the isolated-container Codex probe graduated from a temporary
-nonblocking spike to a blocking acceptance gate. `sh tests/container.sh` runs
-the inner `sh tests/run.sh` suite and then the real Codex offline probe inside
-an isolated container home with networking disabled. That container run may
-mutate the throwaway container-local Codex state, but it still performs no
-mutation of the developer's or runner's real Codex state.
+Layer 4 is the Docker acceptance path. `pnpm run test:harness:codex` runs the
+real Codex offline probe inside an isolated container home with networking
+disabled. `pnpm run test:acceptance` composes one host-side shared run with that
+probe. The container may mutate its throwaway container-local Codex state, but
+it performs no mutation of the developer's or runner's real Codex state.
+
+Release validation deliberately retains the combined shared-plus-Codex path at
+both native endpoints:
+
+```sh
+SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh
+SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
+```
 
 The container probe uses Codex's `hooks/list` only as compatibility evidence
 for the tested Codex build. It is not a stable Superpowers Manager API.
 
-The manual probe is opt-in and covers native-only compatibility residue such as
+`sh tests/manual/codex-behavior-probe.sh` remains opt-in and covers native-only compatibility residue such as
 path/cache and version-precedence behavior against an intentionally real local
 Codex install. It is not part of acceptance. GitHub Actions runs two focused
-`toolchain` entries and one blocking container acceptance job on pull requests
+`toolchain` entries and one blocking Codex integration job on pull requests
 and pushes to `main`. The Node 24.12.0 toolchain entry checks native source
 loading, the suite runner/assertion preload, and package-producer success and
-failure. The latest-24 toolchain entry alone runs `pnpm run check:static` plus
-the tooling-coverage and citations suites that need a Git checkout and history.
-The `test` job runs the full suite and Codex offline probe once on latest Node
-24.x. When adding checks that require the host checkout, ensure the latest-24
-toolchain entry covers them. Release acceptance still runs full containers at
-both native endpoints, and the installed npm executable is tested with Node
-24.0.0. These runtime selectors are separate from the Homebrew-managed local
-commands above.
+failure. The latest-24 toolchain entry alone runs `pnpm run check:static` and
+the full shared suite with package-minimum evidence. The independent `test` job
+runs only the Codex offline probe on latest Node 24.x. Release acceptance still
+runs the combined shared and Codex paths at both native endpoints, and the
+installed npm executable is tested with Node 24.0.0. These runtime selectors
+are separate from the Homebrew-managed local commands above.
 
 ## Repository layout
 

@@ -1,7 +1,7 @@
 // Non-test helper. Shared by tests/baseline/probe.test.js and, from Task 6,
 // by tests/baseline/cli-parity.test.js's PROBE-READONLY-01 rewrite.
 //
-// This is NOT a *.test.js file, deliberately: `tests/run-node-suites.ts:13::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`
+// This is NOT a *.test.js file, deliberately: `tests/run-node-suites.ts:14::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`
 // registers every top-level *.test.js under tests/{bin,unit,baseline}, so a
 // suite imported as a helper re-executes and re-registers its own tests
 // inside the importer. tests/baseline/support.js and

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 // The contract suite drives this runner against isolated fixture roots.
 // Production callers never set this.
@@ -11,6 +12,15 @@ const ROOT = process.env.SPW_RUNNER_ROOT
   : resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "tests", "suites.json");
 const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"];
+
+type SuiteGroup = "unit" | "integration" | "repository";
+
+interface SuiteEntry {
+  path: string;
+  group: SuiteGroup;
+}
+
+const groups = new Set<SuiteGroup>(["unit", "integration", "repository"]);
 
 // Emitted on EVERY exit path, including failure. Absence of this line means the
 // process was killed, which is the one thing a non-zero status cannot tell you.
@@ -33,6 +43,44 @@ function fail(message: string): never {
 }
 
 async function main() {
+  let selectedGroup: string;
+  let concurrency: string | undefined;
+  let requirePackageNode = false;
+  try {
+    const { values } = parseArgs({
+      args: process.argv.slice(2),
+      strict: true,
+      allowPositionals: false,
+      options: {
+        group: { type: "string", default: "all" },
+        concurrency: { type: "string" },
+        "require-package-node": { type: "boolean", default: false },
+      },
+    });
+    selectedGroup = values.group ?? "all";
+    concurrency = values.concurrency;
+    requirePackageNode = values["require-package-node"] ?? false;
+  } catch {
+    fail(
+      "usage: tests/run-node-suites.ts [--group unit|integration|repository|all] [--concurrency N] [--require-package-node]",
+    );
+  }
+  if (
+    concurrency !== undefined &&
+    (!/^[1-9][0-9]*$/.test(concurrency) ||
+      !Number.isSafeInteger(Number(concurrency)))
+  ) {
+    fail("test concurrency must be a positive safe integer");
+  }
+  const concurrencyArgs =
+    concurrency === undefined ? [] : ["--test-concurrency", concurrency];
+  if (selectedGroup !== "all" && !groups.has(selectedGroup as SuiteGroup)) {
+    fail("unknown suite group; expected unit, integration, repository, or all");
+  }
+  if (requirePackageNode && selectedGroup !== "all") {
+    fail("--require-package-node requires --group all");
+  }
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(MANIFEST, "utf8"));
@@ -48,10 +96,34 @@ async function main() {
     fail("tests/suites.json must be an object with a `suites` array");
   }
   const declared = (parsed as { suites: unknown[] }).suites;
-  if (!declared.every((entry) => typeof entry === "string")) {
-    fail("every tests/suites.json entry must be a string");
+  const entries: SuiteEntry[] = [];
+  for (const entry of declared) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      Array.isArray(entry) ||
+      Object.keys(entry).length !== 2 ||
+      !("path" in entry) ||
+      !("group" in entry)
+    ) {
+      fail(
+        "every tests/suites.json entry must be an object with exactly `path` and `group`",
+      );
+    }
+    if (typeof entry.path !== "string" || entry.path.length === 0) {
+      fail("every tests/suites.json entry path must be a nonempty string");
+    }
+    if (
+      typeof entry.group !== "string" ||
+      !groups.has(entry.group as SuiteGroup)
+    ) {
+      fail(
+        "every tests/suites.json entry group must be unit, integration, or repository",
+      );
+    }
+    entries.push(entry as SuiteEntry);
   }
-  const expected = declared as string[];
+  const expected = entries.map((entry) => entry.path);
 
   const seen = new Set();
   const repeated = [];
@@ -174,7 +246,11 @@ async function main() {
 
   if (expected.length === 0) fail("tests/suites.json declares no suites");
 
-  const ordered = [...expected].sort();
+  const ordered = entries
+    .filter((entry) => selectedGroup === "all" || entry.group === selectedGroup)
+    .map((entry) => entry.path)
+    .sort();
+  if (ordered.length === 0) fail("requested suite group declares no suites");
 
   // Resolved as a sibling of this file, never against ROOT: SPW_RUNNER_ROOT
   // redirects ROOT into a fixture's temp directory, where no gate exists.
@@ -195,6 +271,60 @@ async function main() {
     );
   }
 
+  if (requirePackageNode) {
+    if (!ordered.includes("tests/baseline/packaged-cli.test.ts")) {
+      fail(
+        "--require-package-node requires tests/baseline/packaged-cli.test.ts in the selected suites",
+      );
+    }
+
+    let resolver: typeof import("./lib/package-runtime.ts").resolvePackageNode;
+    try {
+      resolver = (await import("./lib/package-runtime.ts")).resolvePackageNode;
+    } catch {
+      fail("package runtime helper could not be loaded");
+    }
+
+    let rootManifest: unknown;
+    try {
+      rootManifest = JSON.parse(
+        readFileSync(join(ROOT, "package.json"), "utf8"),
+      );
+    } catch {
+      fail("package.json could not be read as valid JSON");
+    }
+    const packageEngine =
+      typeof rootManifest === "object" &&
+      rootManifest !== null &&
+      "engines" in rootManifest &&
+      typeof rootManifest.engines === "object" &&
+      rootManifest.engines !== null &&
+      "node" in rootManifest.engines &&
+      typeof rootManifest.engines.node === "string"
+        ? rootManifest.engines.node
+        : undefined;
+    if (packageEngine === undefined) {
+      fail("package.json engines.node is missing or invalid");
+    }
+
+    const resolverDiagnostics = new Set([
+      "SPW_PACKAGE_NODE and SPW_PACKAGE_NODE_VERSION are required together",
+      "SPW_PACKAGE_NODE must be an absolute executable path",
+      "package.json engines.node does not declare a supported package minimum",
+      "SPW_PACKAGE_NODE_VERSION must match the declared package minimum",
+      "SPW_PACKAGE_NODE could not be verified",
+      "SPW_PACKAGE_NODE does not report the declared package minimum",
+    ]);
+    try {
+      resolver(process.env, true, packageEngine);
+    } catch (error) {
+      if (error instanceof Error && resolverDiagnostics.has(error.message)) {
+        fail(error.message);
+      }
+      fail("package runtime validation failed");
+    }
+  }
+
   // A caller that itself runs under `node --test` (this runner is one such
   // caller, since it is registered in its own manifest) has NODE_TEST_CONTEXT
   // / NODE_TEST_WORKER_ID set in its process.env. Left in the child's env, the
@@ -207,7 +337,7 @@ async function main() {
   delete childEnv.NODE_TEST_WORKER_ID;
   const result = spawnSync(
     process.execPath,
-    ["--import", gateUrl.href, "--test", ...ordered],
+    ["--import", gateUrl.href, "--test", ...concurrencyArgs, ...ordered],
     {
       cwd: ROOT,
       stdio: "inherit",

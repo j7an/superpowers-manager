@@ -15,6 +15,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { resolvePackageNode } from "../lib/package-runtime.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -122,6 +123,18 @@ function packagedManifest(
 }
 
 void test("PACKAGE-CLI-01 offline installed tarball routes through dist and exposes help and version", () => {
+  const sourceManifest = JSON.parse(
+    readFileSync(join(ROOT, "package.json"), "utf8"),
+  );
+  const minimumNode = resolvePackageNode(
+    process.env,
+    process.env.SPW_CONTAINER === "1",
+    sourceManifest.engines.node,
+  );
+  const runtimes =
+    minimumNode === undefined
+      ? [process.execPath]
+      : [...new Set([process.execPath, minimumNode])];
   const root = realpathSync(mkdtempSync(join(tmpdir(), "spw-packaged-cli-")));
   try {
     const pack = join(root, "pack");
@@ -195,25 +208,6 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
     accessSync(executable, constants.X_OK);
     assert.match(readFileSync(executable, "utf8"), /^#!\/usr\/bin\/env node\n/);
 
-    const runtimes = [process.execPath];
-    const minimumNode = process.env.SPW_PACKAGE_NODE;
-    if (process.env.SPW_CONTAINER === "1") {
-      assert.equal(
-        typeof minimumNode,
-        "string",
-        "container must supply package minimum Node",
-      );
-      assert.equal(typeof process.env.SPW_PACKAGE_NODE_VERSION, "string");
-    }
-    if (minimumNode !== undefined) {
-      const observed = run(minimumNode, ["--version"]);
-      assertSucceeded(observed, "package minimum Node --version");
-      assert.equal(
-        observed.stdout.trim(),
-        `v${process.env.SPW_PACKAGE_NODE_VERSION}`,
-      );
-      runtimes.push(minimumNode);
-    }
     for (const [index, executableNode] of runtimes.entries()) {
       const runtimeBin = join(root, `runtime-bin-${index}`);
       mkdirSync(runtimeBin);

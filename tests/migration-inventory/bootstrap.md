@@ -220,3 +220,18 @@ assertion requires `node tests/tools/pack.ts --out-dir`. Current mapped counts a
 6 expected files + 2 absent files + 68 text rows + 14 release checks = 90, plus
 one unreadable-input guard. All 11 static cases and release-section fixtures
 remain.
+
+## Test-suite separation reconciliation (2026-09-06)
+
+The historical text rows above remain unchanged. In the live 68-row table, the
+obsolete AGENTS completion sentence now requires static validation followed by
+`pnpm run test:acceptance`, and the obsolete README combined-container command
+row now requires the explanation that package scripts are alternative iteration
+selectors. README and AGENTS document the shared selectors, both completion
+sentinels, controlled concurrency, explicit minimum-runtime evidence, the
+macOS verified-archive prerequisite, Linux CI provisioning, independent Codex
+integration, retained dual-endpoint combined release validation, and the
+optional native manual probe. The 68-row table and 11 static `test(` calls are
+unchanged. The focused workflow/container/bootstrap group passed 118/118 on
+2026-09-06. The inventory and digest change is submitted for independent
+reviewer authorization; this note does not authorize its own re-freeze.

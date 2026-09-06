@@ -551,15 +551,20 @@ Three deliberate narrowings, none with a shell counterpart to map onto.
    here rather than in an install- or uninstall-scoped file.
 
    `tests/unit/helpers/pipe-flush-child.ts` proves the idiom is load-bearing
-   on a pipe, not cosmetic: a 1 MiB write followed by `process.exit(0)`
-   truncates to the 64 KiB POSIX pipe buffer (65536 of 1048576 bytes
-   delivered), while the same write followed by `process.exitCode = 0`
-   delivers all 1048576 bytes — deterministically, because the writer's own
-   `process.exit()` discards its own queued write via a single
-   `uv_try_write` that fills the pipe to capacity. This is truncation
-   demonstrated by the writer's own exit call, with **no reader that closes
-   the pipe mid-write** — the earlier text in this entry claiming such a
-   reader was required was wrong, not merely stale.
+   on a pipe, not cosmetic. The child begins the counted payload with an
+   uncorked write, and the parent observes positive delivery before pausing its
+   reader. The child then writes uncorked chunks adaptively until actual write
+   callbacks remain unresolved with a positive pending-byte count across an
+   event-loop turn and the queued/finish/arm IPC handshake. If that state drains
+   at either boundary, the same bounded adaptive writer re-establishes it; the
+   final arm re-checks the evidence synchronously at the exit decision. With
+   the reader still paused, `process.exit(0)` delivers a positive count but
+   fewer bytes than were
+   attempted; `process.exitCode = 0` permits the parent to resume and receives
+   every attempted byte. This controlled-pending-write proof assumes neither a
+   fixed OS pipe capacity nor a scheduling order. The reader never closes the
+   pipe mid-write — the earlier text in this entry claiming such a reader was
+   required was wrong, not merely stale.
 
    **Accepted coverage gap:** no test exercises a converted line itself.
    Both new tests (the pipe-flush mutation proof and the oversized-listing

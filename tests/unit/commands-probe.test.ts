@@ -39,7 +39,7 @@ const FULL = {
 // Amended 2026-08-07 after adjudication finding 4. This list was previously
 // exported from THIS FILE for tests/baseline/probe.test.js to import — but
 // importing a *.test.js module re-executes and re-registers its tests inside
-// the importing suite (`tests/run-node-suites.ts:13::const SUITE_DIRS`,106-140 registers every
+// the importing suite (`tests/run-node-suites.ts:14::const SUITE_DIRS`,106-140 registers every
 // top-level *.test.js). The list now lives in production, derived from the one
 // ordered fields() table, and both suites import it from dist/. That is
 // strictly better than any test-side copy: the expectation cannot drift from

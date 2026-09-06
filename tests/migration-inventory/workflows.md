@@ -1312,3 +1312,54 @@ the old release build command; the updated focused workflow/container/bootstrap
 group then passed 108/108. The associated bootstrap case adds selector and
 separate-runtime documentation checks while preserving its existing table,
 section ordering, required approval evidence, and negative fixtures.
+
+## Test-suite separation reconciliation (2026-09-06)
+
+The live CI contract now assigns the independent `test` job exactly one
+`sh tests/container.sh codex-spike` invocation. The job stays unconditional,
+blocking, least-privileged, and independent of `toolchain`; it no longer repeats
+the shared suite. The two-entry toolchain matrix, focused 24.12.0 checks, frozen
+dependency installation, action pins, history checkout, permissions, triggers,
+and release workflow contracts remain unchanged.
+
+On the latest-24 toolchain entry, a first `actions/setup-node` role selects the
+minimum derived from `package.json` and captures its absolute executable and
+observed version before the existing matrix-native setup restores the main
+runtime. Static checking then precedes exactly one full
+`sh tests/run.sh --require-package-node` invocation. Both setup references must
+share one semantic pin; the main setup requests the latest matching runtime.
+The old standalone tooling/citation selection is retired because the full shared
+run owns those registered suites.
+
+The two existing CI cases now validate parsed step roles and conditions without
+assuming a fixed step count. Nested fixtures reject lost or late capture,
+missing latest-only conditions, narrowed or runtime-unverified shared commands,
+standalone tooling duplication, combined Codex execution, nonblocking jobs or
+steps, and removed native-floor coverage. This changes no static `test(` call
+population: `tests/bin/workflows.test.ts` remains 24 and
+`tests/bin/action-pins.test.ts` remains 8. RED on 2026-09-06 was 105/108, with
+the old combined job and one-setup toolchain rejected; after implementation the
+focused workflow/container/bootstrap group passed 118/118. The inventory and
+digest change is submitted for independent reviewer authorization; this note
+does not authorize its own re-freeze.
+
+### Review correction (2026-09-06)
+
+Review 4 found that the full-shared count recognized only a literal
+`sh tests/run.sh` line, so an added `pnpm test` or `pnpm run test` step could
+duplicate the shared suite without entering that count. The corrected parsed
+workflow check counts command lines that invoke the canonical shell runner or
+the repository's registered full-shared package aliases. Besides both `test`
+forms, it covers the current `check` and `test:acceptance` aggregate aliases,
+which transitively execute the shared suite. The recognizer is deliberately
+bounded to these repository commands rather than interpreting general shell
+syntax.
+
+Four nested mutants establish this boundary. Before the correction, the
+workflow run was RED at 33/38: the `pnpm test`, `pnpm run test`, and
+`pnpm run test:acceptance` mutants raised no exception, while `pnpm run check`
+reached only an unrelated later prohibition. After the invocation counter was
+added, the workflow run passed 38/38 and each mutant failed with the dedicated
+single-full-shared assertion. The 24 static `test(` calls remain unchanged.
+This addresses the Review 4 HOLD; the updated workflows inventory and digest
+remain pending independent reviewer authorization and do not self-authorize.
