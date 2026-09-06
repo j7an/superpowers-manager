@@ -34,7 +34,7 @@ import {
   SHORT,
 } from "./probe-fixture.ts";
 
-import { PROBE_PORCELAIN_KEYS } from "../../src/commands/probe.ts";
+import { PROBE_PORCELAIN_KEYS } from "../../src/codex-presentation.ts";
 
 import { writeSelectionState } from "../../src/selection-store.ts";
 
@@ -49,7 +49,7 @@ const EMPTY_PLUGINS = '{"installed":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than `tests/baseline/cli-parity.test.ts:231::function snapshotTree`'s mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.ts:236::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  */

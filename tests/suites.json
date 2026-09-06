@@ -55,6 +55,7 @@
     "tests/unit/domain.test.ts",
     "tests/unit/effective-selection.test.ts",
     "tests/unit/generated-plugin.test.ts",
+    "tests/unit/harness-boundary.test.ts",
     "tests/unit/hooks.test.ts",
     "tests/unit/lifecycle.test.ts",
     "tests/unit/manifest-overlay.test.ts",

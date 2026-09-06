@@ -23,7 +23,7 @@ type UnpinOutcome =
 
 // Runs every step that can throw or fail closed, returning the outcome as
 // data instead of writing it — see UnpinOutcome above for why.
-async function attemptUnpin(ctx: CommandContext): Promise<UnpinOutcome> {
+async function attemptUnpin<R>(ctx: CommandContext<R>): Promise<UnpinOutcome> {
   const statePath = selectionStatePath(ctx.env);
   // The packaged fallback ignores an active SUPERPOWERS_REF: `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:scripts/unpin:12::spw_config_ref`
   // cleared it deliberately so the reported value is the packaged one.
@@ -75,9 +75,9 @@ async function attemptUnpin(ctx: CommandContext): Promise<UnpinOutcome> {
   return { status: 0, removed, fallback };
 }
 
-export async function runUnpin(
+export async function runUnpin<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   if (argv.length !== 0) {
     ctx.stderr.write("error: usage: superpowers-manager unpin\n");

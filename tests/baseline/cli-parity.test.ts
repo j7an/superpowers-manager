@@ -47,6 +47,11 @@ import { shQuote } from "../lib/git-egress.ts";
 import { runProbe } from "../../src/commands/probe.ts";
 
 import { runAdapter } from "../../src/adapter.ts";
+import {
+  codexHarness,
+  normalizeCodexControl,
+} from "../../src/codex-harness.ts";
+import { successResult } from "../../src/adapter-result.ts";
 
 import { runUpdate } from "../../src/commands/update.ts";
 
@@ -1945,7 +1950,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
     // Real, not a double: this case's fake `codex` is on PATH via caseEnv,
     // and runProbe must reach it exactly as it did before ctx.adapter
     // existed.
-    adapter: runAdapter,
+    adapter: codexHarness,
   });
   assert.equal(status, 0, err.text());
   assert.match(out.text(), /^desired_commit=[0-9a-f]{40}$/m);
@@ -2054,32 +2059,21 @@ function lifecycleCodexCase(options: {
  * from `recordingAdapter` (tests/bin/command-context.js).
  */
 function updateControlAdapter(response: "unsupported" | "malformed") {
-  const calls: string[][] = [];
-
-  const adapter = async (
-    argv: readonly string[],
-    adapterCtx: import("../../src/adapter-result.ts").AdapterContext,
-  ): Promise<import("../../src/adapter-result.ts").AdapterResult> => {
-    calls.push([...argv]);
-    if (argv.join(" ") === "inspect --view update-control") {
-      return {
-        status: 0,
-        outcome: {
-          operation: "inspect",
-          ok: true,
-          messages: [],
-          result: {
+  return {
+    ...codexHarness,
+    async inspectUpdateControl() {
+      return normalizeCodexControl(
+        successResult(
+          "inspect",
+          {
             view: "update-control",
             update_control: response === "malformed" ? 42 : response,
           },
-          error: null,
-        },
-      };
-    }
-    return await runAdapter(argv, adapterCtx);
+          [],
+        ),
+      );
+    },
   };
-  adapter.calls = calls;
-  return adapter;
 }
 
 void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", async () => {
@@ -2611,7 +2605,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // either -- runAdapter merges `{ ...process.env, ...context.env }`
   // (`src/adapter.ts:979::const env`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:486::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:530::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
+  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:491::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:535::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2683,8 +2677,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1307::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1353::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1312::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1358::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

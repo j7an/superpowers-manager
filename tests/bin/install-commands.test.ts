@@ -262,9 +262,13 @@ async function prepareGeneratedTree(
   // build call and any unexpected extra call (e.g. an inspect --view
   // update-control this helper's whole point is to rule out).
   assert.deepEqual(
-    adapter.calls.map((call) => call[0]),
-    ["build"],
-    `fixture: prepare must call the adapter exactly once, for build, and ` +
+    adapter.calls.map((call) => call.operation),
+    [
+      "preparation-location",
+      "validate-preparation-before-fetch",
+      "prepare-candidate",
+    ],
+    `fixture: prepare must call the typed preparation operations and ` +
       `nothing else:\n${JSON.stringify(adapter.calls)}`,
   );
 }
@@ -449,7 +453,11 @@ function scenarioAdapter(
       const identity_state = resolve("identityState", "neither");
       return successResult(
         "inspect",
-        { view: "ownership", identity_state },
+        {
+          view: "ownership",
+          resources: { plugin: false, marketplace: false },
+          identity_state,
+        },
         [],
       );
     }
@@ -529,14 +537,15 @@ async function assertLegacyIdentityStops(
   // means the adapter's own unconditional `codex plugin add`
   // (runInstall's pluginAdded mutationCommand call) was structurally
   // impossible to reach either.
-  const calls = adapter.calls.map((call) => call.join(" "));
+  const calls = adapter.calls.map((call) => call.operation);
   assert.ok(
-    has(calls, "inspect --view ownership"),
+    has(calls, "inspect-ownership"),
     "adapter never inspected ownership, so 'no build or install' would pass vacuously",
   );
   assert.deepEqual(
     adapter.calls.filter(
-      (call) => call[0] === "build" || call[0] === "install",
+      (call) =>
+        call.operation === "prepare-candidate" || call.operation === "install",
     ),
     [],
     "legacy state must stop before build or install adapter mutation",
@@ -641,9 +650,13 @@ void describe("install commands", { concurrency: true }, () => {
     assert.equal(status, 0, stdout() + stderr());
     // Non-vacuous AND the negatives, in one structural claim.
     assert.deepEqual(
-      adapter.calls.map((call) => call[0]),
-      ["build"],
-      `prepare must call the adapter exactly once, for build, and nothing ` +
+      adapter.calls.map((call) => call.operation),
+      [
+        "preparation-location",
+        "validate-preparation-before-fetch",
+        "prepare-candidate",
+      ],
+      `prepare must call the typed preparation operations, and nothing ` +
         `else:\n${JSON.stringify(adapter.calls)}`,
     );
   });
@@ -695,7 +708,9 @@ void describe("install commands", { concurrency: true }, () => {
     // satisfying a substring check.
     assert.deepEqual(
       adapter.calls.filter(
-        (call) => call[0] === "install" || call[0] === "build",
+        (call) =>
+          call.operation === "install" ||
+          call.operation === "prepare-candidate",
       ),
       [],
       "an unsupported adapter must not reach any mutation call",
@@ -721,7 +736,9 @@ void describe("install commands", { concurrency: true }, () => {
     // :352, structural for the same reason as the case above.
     assert.deepEqual(
       adapter.calls.filter(
-        (call) => call[0] === "install" || call[0] === "build",
+        (call) =>
+          call.operation === "install" ||
+          call.operation === "prepare-candidate",
       ),
       [],
       "an unsupported adapter must not reach any mutation call",
@@ -755,7 +772,9 @@ void describe("install commands", { concurrency: true }, () => {
     // double.
     assert.deepEqual(
       adapter.calls.filter(
-        (call) => call[0] === "install" || call[0] === "build",
+        (call) =>
+          call.operation === "install" ||
+          call.operation === "prepare-candidate",
       ),
       [],
       "a failed update-control inspection must stop before any mutation",
@@ -792,14 +811,14 @@ void describe("install commands", { concurrency: true }, () => {
     // :388, structural: exactly two update-control inspections.
     assert.equal(
       adapter.calls.filter(
-        (call) => call.join(" ") === "inspect --view update-control",
+        (call) => call.operation === "inspect-update-control",
       ).length,
       2,
     );
     // :389-391, over the double's own call order rather than a log file.
-    const calls = adapter.calls.map((call) => call.join(" "));
-    const buildLine = firstIndex(calls, "build");
-    const secondControlLine = lastIndex(calls, "inspect --view update-control");
+    const calls = adapter.calls.map((call) => call.operation);
+    const buildLine = firstIndex(calls, "prepare-candidate");
+    const secondControlLine = lastIndex(calls, "inspect-update-control");
     assert.notEqual(buildLine, -1, JSON.stringify(calls));
     assert.ok(
       buildLine < secondControlLine,
@@ -807,7 +826,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :392, structural: install's own mutation call must never be reached.
     assert.ok(
-      !adapter.calls.some((call) => call[0] === "install"),
+      !adapter.calls.some((call) => call.operation === "install"),
       "capability drift after prepare must stop before adapter install",
     );
   });
@@ -839,15 +858,15 @@ void describe("install commands", { concurrency: true }, () => {
     // :399, structural: exactly two update-control inspections.
     assert.equal(
       adapter.calls.filter(
-        (call) => call.join(" ") === "inspect --view update-control",
+        (call) => call.operation === "inspect-update-control",
       ).length,
       2,
     );
     // :400-404, over the double's own call order.
-    const calls = adapter.calls.map((call) => call.join(" "));
-    const lastOwnership = lastIndex(calls, "inspect --view ownership");
-    const lastControl = lastIndex(calls, "inspect --view update-control");
-    const installLine = firstIndex(calls, `install --package-root ${c.pkg}`);
+    const calls = adapter.calls.map((call) => call.operation);
+    const lastOwnership = lastIndex(calls, "inspect-ownership");
+    const lastControl = lastIndex(calls, "inspect-update-control");
+    const installLine = calls.indexOf("install");
     assert.notEqual(installLine, -1, JSON.stringify(calls));
     assert.ok(
       lastOwnership < lastControl,
@@ -882,13 +901,13 @@ void describe("install commands", { concurrency: true }, () => {
     // :415, structural: exactly two update-control inspections.
     assert.equal(
       adapter.calls.filter(
-        (call) => call.join(" ") === "inspect --view update-control",
+        (call) => call.operation === "inspect-update-control",
       ).length,
       2,
     );
     // :416, structural: no call named "install" ever reached the double.
     assert.ok(
-      !adapter.calls.some((call) => call[0] === "install"),
+      !adapter.calls.some((call) => call.operation === "install"),
       "capability drift must stop before adapter install",
     );
   });
@@ -1208,14 +1227,16 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(hasLine(out, "Then run: npx superpowers-manager install"), out);
     // :615-619, now structural: ownership WAS inspected (non-vacuous hoist)
     // and no call named "build" or "install" ever reached the double.
-    const calls = adapter.calls.map((call) => call.join(" "));
+    const calls = adapter.calls.map((call) => call.operation);
     assert.ok(
-      has(calls, "inspect --view ownership"),
+      has(calls, "inspect-ownership"),
       "adapter never inspected ownership, so 'no build or install' would pass vacuously",
     );
     assert.deepEqual(
       adapter.calls.filter(
-        (call) => call[0] === "build" || call[0] === "install",
+        (call) =>
+          call.operation === "prepare-candidate" ||
+          call.operation === "install",
       ),
       [],
       "mixed legacy state must stop update before build or install",

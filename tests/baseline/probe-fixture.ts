@@ -160,7 +160,7 @@ export function seedGenerated(c: CaseEnv, body: string) {
 
 import { runProbe } from "../../src/commands/probe.ts";
 
-import { runAdapter } from "../../src/adapter.ts";
+import { codexHarness } from "../../src/codex-harness.ts";
 
 export type ProbeRun = { status: number; stdout: string; stderr: string };
 
@@ -179,7 +179,7 @@ async function invoke(
     // Real, not a double: this fixture's cases carry their own fake `codex`
     // on PATH (via `env`), and runProbe must reach it exactly as it did
     // before ctx.adapter existed.
-    adapter: runAdapter,
+    adapter: codexHarness,
   });
   return { status, stdout: out.text(), stderr: err.text() };
 }

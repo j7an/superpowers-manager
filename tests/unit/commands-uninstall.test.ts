@@ -3,7 +3,11 @@ import { chmodSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { capture, scriptedAdapter } from "../lib/command-doubles.ts";
+import {
+  capture,
+  operationNames,
+  scriptedAdapter,
+} from "../lib/command-doubles.ts";
 
 import { runUninstall } from "../../src/commands/uninstall.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
@@ -104,11 +108,15 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
     adapter,
   });
   assert.equal(status, 0);
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "ownership"],
-    ["uninstall", "--plugin-present", "true", "--marketplace-present", "false"],
-    ["inspect", "--view", "ownership"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-ownership",
+    "remove",
+    "inspect-ownership",
   ]);
+  assert.deepEqual(calls[1]?.input, {
+    pluginPresent: true,
+    marketplacePresent: false,
+  });
 });
 
 void test("a plugin resource still installed after removal is a distinct, named failure", async () => {
@@ -230,7 +238,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     "error: cannot inspect ownership\nhint: check codex is installed\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
+  assert.deepEqual(operationNames(calls), ["inspect-ownership"]);
 });
 
 void test("stage 1 malformed presence content is a DIFFERENT failure than stage 1's adapter failure", async () => {
@@ -259,7 +267,7 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
     "error: expected a Boolean adapter result at resources.plugin\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
+  assert.deepEqual(operationNames(calls), ["inspect-ownership"]);
 });
 
 void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-written message", async () => {
@@ -299,7 +307,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
     "error: adapter reported a failure status for inspect --view ownership\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [["inspect", "--view", "ownership"]]);
+  assert.deepEqual(operationNames(calls), ["inspect-ownership"]);
 });
 
 void test("stage 2 (uninstall) failure stops before the post-removal inspection", async () => {
@@ -332,10 +340,11 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot remove owned resources\n");
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "ownership"],
-    ["uninstall", "--plugin-present", "true", "--marketplace-present", "true"],
-  ]);
+  assert.deepEqual(operationNames(calls), ["inspect-ownership", "remove"]);
+  assert.deepEqual(calls[1]?.input, {
+    pluginPresent: true,
+    marketplacePresent: true,
+  });
 });
 
 void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the replayed diagnostic", async () => {
@@ -362,16 +371,10 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot inspect ownership after removal\n");
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "ownership"],
-    [
-      "uninstall",
-      "--plugin-present",
-      "false",
-      "--marketplace-present",
-      "false",
-    ],
-    ["inspect", "--view", "ownership"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-ownership",
+    "remove",
+    "inspect-ownership",
   ]);
 });
 
@@ -403,16 +406,10 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
     "error: expected a Boolean adapter result at resources.plugin\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(calls, [
-    ["inspect", "--view", "ownership"],
-    [
-      "uninstall",
-      "--plugin-present",
-      "false",
-      "--marketplace-present",
-      "false",
-    ],
-    ["inspect", "--view", "ownership"],
+  assert.deepEqual(operationNames(calls), [
+    "inspect-ownership",
+    "remove",
+    "inspect-ownership",
   ]);
 });
 
@@ -465,26 +462,22 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
       successResult("uninstall", {}, []),
       successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
     ];
-    let index = 0;
-
-    const calls: string[][] = [];
+    const { adapter: scripted, calls } = scriptedAdapter(responses);
     // No test double for the filesystem: the THIRD (and final) call chmods
     // the workspace's own PARENT directory read-only, after the first two
     // calls have already pushed their outcomes. By the time
     // withWorkspace's post-callback `rm(workspace, ...)` runs, the parent
     // cannot be written to, so the removal genuinely fails with EACCES/EPERM
     // -- a real filesystem failure, not a mocked one.
-    const adapter = async (argv: readonly string[]) => {
-      calls.push([...argv]);
-      const response = responses[index++];
-      assert.ok(
-        response !== undefined,
-        `adapter exhausted at call ${index}: ${argv.join(" ")}`,
-      );
-      if (index === responses.length) {
-        chmodSync(parent, 0o500);
-      }
-      return response;
+    const adapter = {
+      ...scripted,
+      async inspectOwnership(
+        adapterCtx: Parameters<typeof scripted.inspectOwnership>[0],
+      ) {
+        const result = await scripted.inspectOwnership(adapterCtx);
+        if (calls.length === 3) chmodSync(parent, 0o500);
+        return result;
+      },
     };
     const status = await runUninstall([], {
       root: "/nowhere",

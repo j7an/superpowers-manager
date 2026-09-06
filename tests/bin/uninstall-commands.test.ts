@@ -358,14 +358,14 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // the two Codex removes on the real adapter), then ownership again --
     // and nothing else, including "inspect --view update-control".
     assert.deepEqual(
-      adapter.calls.map((call) => call.join(" ")),
-      [
-        "inspect --view ownership",
-        "uninstall --plugin-present true --marketplace-present true",
-        "inspect --view ownership",
-      ],
+      adapter.calls.map((call) => call.operation),
+      ["inspect-ownership", "remove", "inspect-ownership"],
       "uninstall must not inspect update control -- structurally, it never issues that call at all",
     );
+    assert.deepEqual(adapter.calls[1]?.input, {
+      pluginPresent: true,
+      marketplacePresent: true,
+    });
     // :190
     assert.ok(out.includes("uninstall complete"), out);
   });
@@ -450,8 +450,8 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // :226, structural: ownership was inspected -- it is the only call the
     // double answers before exhaustion would fail the case on anything else.
     assert.deepEqual(
-      adapter.calls.map((call) => call.join(" ")),
-      ["inspect --view ownership"],
+      adapter.calls.map((call) => call.operation),
+      ["inspect-ownership"],
       "ownership must be the only call made before the missing-Codex failure stops uninstall",
     );
     // :227

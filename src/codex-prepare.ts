@@ -7,7 +7,7 @@ import {
   type AdapterContext,
   type AdapterResult,
 } from "./adapter-result.ts";
-import { codexBuild, type CodexBuildInput } from "./adapter.ts";
+import { codexBuild } from "./adapter.ts";
 import { commitMatches } from "./domain/fingerprint.ts";
 import type { EffectiveSelection } from "./effective-selection.ts";
 import type {
@@ -162,21 +162,6 @@ export async function prepareCodexCandidate(
   input: PrepareCandidateInput,
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedArtifact>> {
-  return prepareCodexCandidateWithBuild(input, ctx, codexBuild);
-}
-
-type CodexCandidateBuild = (
-  input: CodexBuildInput,
-  ctx: AdapterContext,
-) => Promise<AdapterResult>;
-
-// Temporary Task 2 compatibility bridge. The public prepare command keeps its
-// injected argv adapter until the shared-command cutover removes this export.
-export async function prepareCodexCandidateWithBuild(
-  input: PrepareCandidateInput,
-  ctx: AdapterContext,
-  build: CodexCandidateBuild,
-): Promise<AdapterResult<PreparedArtifact>> {
   for (const required of REQUIRED_UPSTREAM) {
     if (!(await pathExists(join(input.upstreamRoot, required.path)))) {
       return failureResult(
@@ -230,7 +215,7 @@ export async function prepareCodexCandidateWithBuild(
     resolvedRef: input.selection.resolvedRef,
     commit: input.selection.desiredCommit,
   });
-  const built = await build(
+  const built = await codexBuild(
     {
       upstreamRoot: input.upstreamRoot,
       candidateRoot: input.candidateRoot,

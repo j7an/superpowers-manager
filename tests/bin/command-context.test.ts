@@ -18,7 +18,7 @@ void test("caseContext rejects a pkg outside the scratch tree", () => {
 void test("an exhausted recordingAdapter fails rather than answering", async () => {
   const adapter = recordingAdapter(() => undefined);
   await assert.rejects(
-    () => adapter(["inspect", "--view", "ownership"], { root: "/dev/null" }),
+    () => adapter.inspectOwnership({ root: "/dev/null" }),
     /recordingAdapter exhausted at call 1/,
   );
 });

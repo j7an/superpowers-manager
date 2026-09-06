@@ -11,6 +11,16 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { SyntaxKind } from "typescript/unstable/ast";
+import {
+  isCallExpression,
+  isExportDeclaration,
+  isIdentifier,
+  isImportDeclaration,
+  isPropertyAssignment,
+  isStringLiteral,
+} from "typescript/unstable/ast/is";
+import { API } from "typescript/unstable/sync";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -43,18 +53,92 @@ function tsFiles(dir: string): string[] {
 //     statement.
 // All three are real imports of `runAdapter` into a command module and would
 // sail through this gate uncaught.
+function moduleSpecifiers(
+  parsed: import("typescript/unstable/ast").SourceFile,
+): string[] {
+  const specifiers: string[] = [];
+  const visit = (node: import("typescript/unstable/ast").Node): void => {
+    if (
+      (isImportDeclaration(node) || isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined &&
+      isStringLiteral(node.moduleSpecifier)
+    ) {
+      specifiers.push(node.moduleSpecifier.text);
+    }
+    if (
+      isCallExpression(node) &&
+      node.expression.kind === SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1 &&
+      isStringLiteral(node.arguments[0]!)
+    ) {
+      specifiers.push(node.arguments[0]!.text);
+    }
+    node.forEachChild(visit);
+  };
+  visit(parsed);
+  return specifiers;
+}
+
+function isConcreteCodexModule(specifier: string): boolean {
+  const name = specifier.split("/").at(-1) ?? "";
+  return name === "adapter.ts" || name.startsWith("codex-");
+}
+
 void test("no module under src/commands/ imports runAdapter", () => {
-  const offenders = tsFiles("src/commands").filter((relative) =>
-    /\bimport\b[^;]*\brunAdapter\b/s.test(
-      readFileSync(join(ROOT, relative), "utf8"),
-    ),
-  );
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const offenders = tsFiles("src/commands").filter((relative) => {
+    const source = project.program.getSourceFile(join(ROOT, relative));
+    assert.ok(source, `parser did not load ${relative}`);
+    return moduleSpecifiers(source).some(isConcreteCodexModule);
+  });
+  snapshot.dispose();
+  api.close();
   assert.deepEqual(
     offenders,
     [],
     "a command module importing runAdapter bypasses ctx.adapter, so an " +
       "injected double observes nothing — see spec §4.5",
   );
+});
+
+function concreteBindings(
+  parsed: import("typescript/unstable/ast").SourceFile,
+): number {
+  let count = 0;
+  const visit = (node: import("typescript/unstable/ast").Node): void => {
+    if (
+      isPropertyAssignment(node) &&
+      ((isIdentifier(node.name) && node.name.text === "adapter") ||
+        (isStringLiteral(node.name) && node.name.text === "adapter")) &&
+      isIdentifier(node.initializer) &&
+      node.initializer.text === "codexHarness"
+    ) {
+      count += 1;
+    }
+    node.forEachChild(visit);
+  };
+  visit(parsed);
+  return count;
+}
+
+void test("the CLI is the only production concrete harness binding", () => {
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const bindings = tsFiles("src").flatMap((relative) => {
+    const source = project.program.getSourceFile(join(ROOT, relative));
+    assert.ok(source, `parser did not load ${relative}`);
+    return Array.from({ length: concreteBindings(source) }, () => relative);
+  });
+  snapshot.dispose();
+  api.close();
+  assert.deepEqual(bindings, ["src/cli.ts"]);
 });
 
 // A BOUNDED HEURISTIC, and labelled as one. The repo has no parser dependency

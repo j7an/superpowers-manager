@@ -5,115 +5,59 @@
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
-import {
-  requireManagedUpdateControl,
-  requireNoLegacyState,
-  verifyInstalledFingerprint,
-} from "../lifecycle.ts";
-import {
-  generatedMetadataPath,
-  readStrictProvenanceField,
-} from "../provenance.ts";
+import type { EffectiveSelection } from "../effective-selection.ts";
+import type { Output, PreparedArtifact } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import {
-  formatPorcelain,
-  gatherProbe,
-  replayOutcome,
-  type ProbeFacts,
-} from "./probe.ts";
+import { gatherProbe, replayOutcome } from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
 
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:13::conflicting`, verbatim, and always first: the shell echoed it before
-// even invoking probe.
-const NOTE =
-  "Note: remove or disable conflicting Superpowers providers yourself before" +
-  " relying on manager skills.\n";
-
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`
-// via the same convention src/commands/probe.ts's inspect() and
-// src/commands/uninstall.ts's identity_state read both use: a JSON null or
-// missing key is the Python reader's own "" convention
-// (scripts/core/provenance.sh), but a present, non-null, NON-STRING value is a
-// distinct, fail-closed "malformed" case with its own text -- never silently
-// stringified. AGENTS.md's fail-closed rule wins over shell parity here.
-type FieldRead =
-  | { readonly kind: "ok"; readonly value: string }
-  | { readonly kind: "malformed"; readonly message: string };
-
-function readStringField(
-  result: AdapterResult,
-  key: string,
-  label: string,
-): FieldRead {
-  // Callers only reach this after invoke() has already proven
-  // `result.status === 0 && result.outcome.ok`; the guard below is for
-  // TypeScript's narrowing of `outcome.result`, not a live branch.
-  const outcome = result.outcome;
-  const parsed = outcome.ok
-    ? (outcome.result as Record<string, unknown> | null)
-    : null;
-  const raw = parsed?.[key];
-  if (raw === null || raw === undefined) return { kind: "ok", value: "" };
-  if (typeof raw === "string") return { kind: "ok", value: raw };
-  return {
-    kind: "malformed",
-    message: `adapter returned a non-string ${key} for ${label}`,
-  };
+function writeOutput(
+  output: Output,
+  ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
+): void {
+  for (const line of output.stdout) ctx.stdout.write(`${line}\n`);
+  for (const line of output.stderr) ctx.stderr.write(`${line}\n`);
 }
 
-// Every ctx.adapter call site obeys spec §4.2a's five clauses, in order --
-// identical to src/commands/uninstall.ts's invoke(), duplicated rather than
-// shared: the two modules' call sites differ in argv shape and neither is a
-// dependency of the other. See uninstall.ts's header comment for the full
-// five-clause rationale.
-// The failure variant carries the AdapterResult whenever one exists, which is
-// every failure except a ctx.adapter throw. Stage 4 needs it: the shell handed
-// its inspect result to spw_verify_installed_fingerprint unconditionally
-// (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and let that function's own :91 guard turn a failed
-// inspection into the post-install verification diagnostic. Every other stage
-// ignores the field and short-circuits on `ok` alone.
-type StageResult =
-  | { readonly ok: true; readonly result: AdapterResult }
+type StageResult<T> =
+  | {
+      readonly ok: true;
+      readonly result: {
+        readonly status: 0;
+        readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
+      };
+    }
   | {
       readonly ok: false;
       readonly message: string | null;
-      readonly result: AdapterResult | null;
+      readonly result: AdapterResult<T> | null;
     };
 
-async function invoke(
-  ctx: CommandContext,
-  env: NodeJS.ProcessEnv,
-  argv: readonly string[],
-  outcomes: AdapterOutcome[],
-): Promise<StageResult> {
-  let result: AdapterResult;
+async function invoke<T>(
+  call: () => Promise<AdapterResult<T>>,
+  failure: { readonly unexpected: string; readonly invalidStatus: string },
+  outcomes: AdapterOutcome<unknown>[],
+): Promise<StageResult<T>> {
+  let result: AdapterResult<T>;
   try {
-    result = await ctx.adapter(argv, { root: ctx.root, env });
+    result = await call();
   } catch {
-    return {
-      ok: false,
-      message: `cannot invoke Codex adapter for ${argv.join(" ")}`,
-      result: null,
-    };
+    return { ok: false, message: failure.unexpected, result: null };
   }
-  // Clause 1: replay every outcome, on both the success and the failure
-  // path, before any decision -- collected here and replayed by runInstall
-  // once gatherInstallStages's try/catch has resolved, for the same EPIPE
-  // reason gatherProbe carries its outcomes out rather than writing in place
-  // (src/commands/probe.ts).
   outcomes.push(result.outcome);
   const outcome = result.outcome;
   if (result.status !== 0 || !outcome.ok) {
     return {
       ok: false,
-      message: outcome.ok
-        ? `adapter reported a failure status for ${argv.join(" ")}`
-        : null,
+      message: outcome.ok ? failure.invalidStatus : null,
       result,
     };
   }
-  return { ok: true, result };
+  return {
+    ok: true,
+    result: { status: result.status, outcome },
+  };
 }
 
 // withWorkspace can throw AFTER its callback has already returned a fully
@@ -128,9 +72,9 @@ async function invoke(
 // invoke() is: no shared dependency between the two modules.
 class GatherFailure extends Error {
   readonly inner: unknown;
-  readonly outcomes: readonly AdapterOutcome[];
+  readonly outcomes: readonly AdapterOutcome<unknown>[];
 
-  constructor(inner: unknown, outcomes: readonly AdapterOutcome[]) {
+  constructor(inner: unknown, outcomes: readonly AdapterOutcome<unknown>[]) {
     super("install gather failed");
     this.inner = inner;
     this.outcomes = outcomes;
@@ -140,19 +84,19 @@ class GatherFailure extends Error {
 type StageOutcome =
   | {
       readonly kind: "blocked";
-      readonly outcomes: readonly AdapterOutcome[];
-      readonly lines: readonly string[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
+      readonly output: Output;
     }
   | {
       readonly kind: "failed";
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       // null means replayOutcome already emitted the adapter's own error:
       // and hint: lines for the failing outcome.
       readonly message: string | null;
     }
   | {
       readonly kind: "verified";
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly status: 0 | 1;
       readonly stdout: readonly string[];
       readonly stderr: readonly string[];
@@ -182,14 +126,15 @@ interface StageRun {
 // created via spw_make_workspace + spw_install_workspace_trap. Performs no
 // writes of its own -- same EPIPE-avoidance shape as gatherProbe and
 // src/commands/uninstall.ts's gatherUninstall.
-async function gatherInstallStages(
-  ctx: CommandContext,
-  desiredCommit: string,
+async function gatherInstallStages<R>(
+  ctx: CommandContext<R>,
+  selection: EffectiveSelection,
+  artifact: PreparedArtifact,
 ): Promise<StageRun> {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:38::tmp_parent=` -- ${TMPDIR:-/tmp}. Matches
   // src/commands/uninstall.ts's gatherUninstall.
   const parent = ctx.env.TMPDIR ?? tmpdir();
-  const outcomes: AdapterOutcome[] = [];
+  const outcomes: AdapterOutcome<unknown>[] = [];
   let cleanupWarning: string | null = null;
   try {
     const outcome = await withWorkspace(
@@ -202,52 +147,61 @@ async function gatherInstallStages(
           outcomes,
           message,
         });
+        const adapterContext = { root: ctx.root, env };
 
         // Stage 1: inspect ownership, re-checked even though gatherProbe just
         // reported it. Mutation authority requires CURRENT, VALIDATED
         // evidence -- a probe's answer is neither by the time this runs.
+        const ownershipFailure = ctx.adapter.presentation.callFailure(
+          "install-ownership",
+          adapterContext,
+        );
         const ownership = await invoke(
-          ctx,
-          env,
-          ["inspect", "--view", "ownership"],
+          () => ctx.adapter.inspectOwnership(adapterContext),
+          ownershipFailure,
           outcomes,
         );
         if (!ownership.ok) return failed(ownership.message);
-        const identity = readStringField(
-          ownership.result,
-          "identity_state",
-          "inspect --view ownership",
-        );
-        if (identity.kind === "malformed") return failed(identity.message);
-        const legacy = requireNoLegacyState(identity.value);
-        if (legacy.kind === "blocked") {
-          return { kind: "blocked", outcomes, lines: legacy.lines };
+        const ownershipDecision =
+          ownership.result.outcome.result.installEligibility;
+        if (ownershipDecision.kind === "blocked") {
+          return {
+            kind: "blocked",
+            outcomes,
+            output: ownershipDecision.output,
+          };
         }
-        if (legacy.kind === "unknown") return failed(legacy.message);
 
         // Stage 2: inspect update-control, re-checked for the same reason.
-        const updateControl = await invoke(
-          ctx,
-          env,
-          ["inspect", "--view", "update-control"],
+        const controlFailure = ctx.adapter.presentation.callFailure(
+          "install-control",
+          adapterContext,
+        );
+        const control = await invoke(
+          () => ctx.adapter.inspectUpdateControl(adapterContext),
+          controlFailure,
           outcomes,
         );
-        if (!updateControl.ok) return failed(updateControl.message);
-        const control = readStringField(
-          updateControl.result,
-          "update_control",
-          "inspect --view update-control",
-        );
-        if (control.kind === "malformed") return failed(control.message);
-        const managed = requireManagedUpdateControl(control.value);
-        if (!managed.ok) return failed(managed.message);
+        if (!control.ok) return failed(control.message);
+        const mutationDecision =
+          control.result.outcome.result.mutationEligibility;
+        if (mutationDecision.kind === "blocked") {
+          return {
+            kind: "blocked",
+            outcomes,
+            output: mutationDecision.output,
+          };
+        }
 
         // Stage 3: the mutation itself. Nothing above may have issued this --
         // that is the whole point of stages 1 and 2 running first.
+        const installFailure = ctx.adapter.presentation.callFailure(
+          "install",
+          adapterContext,
+        );
         const install = await invoke(
-          ctx,
-          env,
-          ["install", "--package-root", ctx.root],
+          () => ctx.adapter.install(artifact, adapterContext),
+          installFailure,
           outcomes,
         );
         if (!install.ok) return failed(install.message);
@@ -270,31 +224,35 @@ async function gatherInstallStages(
         // so "the install could not be verified" is the contract, not "an
         // adapter call failed". A ctx.adapter THROW is the one case with no
         // result to verify against, and keeps the short-circuit.
+        const inspectionFailure = ctx.adapter.presentation.callFailure(
+          "post-install",
+          adapterContext,
+        );
         const inspected = await invoke(
-          ctx,
-          env,
-          ["inspect", "--view", "fingerprint"],
+          () => ctx.adapter.inspectInstalled(selection, adapterContext),
+          inspectionFailure,
           outcomes,
         );
-        let inspectResult: AdapterResult;
-        if (inspected.ok) {
-          inspectResult = inspected.result;
-        } else {
-          if (inspected.result === null) return failed(inspected.message);
-          inspectResult = inspected.result;
+        if (!inspected.ok && inspected.result === null) {
+          return failed(inspected.message);
         }
-
-        const verdict = verifyInstalledFingerprint(
-          desiredCommit,
+        const inspection = inspected.result;
+        if (inspection === null) return failed(null);
+        const output = ctx.adapter.presentation.renderInstallVerification(
+          selection.desiredCommit,
           install.result,
-          inspectResult,
+          inspection,
         );
+        const verified =
+          inspection.status === 0 &&
+          inspection.outcome.ok &&
+          inspection.outcome.result.kind === "current";
         return {
           kind: "verified",
           outcomes,
-          status: verdict.ok ? 0 : 1,
-          stdout: verdict.stdout,
-          stderr: verdict.stderr,
+          status: verified ? 0 : 1,
+          stdout: output.stdout,
+          stderr: output.stderr,
         };
       },
       {
@@ -316,53 +274,16 @@ async function gatherInstallStages(
   }
 }
 
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:29-32::printf` kept its shell `case ... *)` wildcard even though the
-// three inputs the shell's own probe could ever emit were bounded by the same
-// three-way status.sh logic this port's statusForCommits (src/status.ts) now
-// owns exactly. statusForCommits can only ever return "needs prepare",
-// "needs install" or "current" -- so this branch is NOT reachable through
-// runInstall's own call to gatherProbe today. It stays anyway, because
-// ProbeFacts.status is typed `string`, not that three-literal union, and a
-// future caller that builds facts by hand (as this module's own unit test
-// does, directly) must still see it fail closed rather than silently
-// proceed.
-//
-// Exported specifically so a direct test can reach it. That is ONE STEP
-// FURTHER than
-// `src/commands/probe.ts:367-372::This guard is NOT the production path.`'s own
-// precedent: that comment licenses RETAINING an unreachable branch inside an
-// already-public function (runProbe was public before that comment existed),
-// not EXPORTING a new one. This module does the latter, deliberately, because
-// runInstall
-// itself has no way to construct the unreachable input. Not part of the
-// interface Task 5 or Task 8 consume.
-//
-// A test against this export proves the two writes below are correct for a
-// given `facts`. It does NOT prove that runInstall's own `else if` branch
-// actually reaches and calls this function, or that runInstall returns 1
-// afterward -- those are properties of the call site, not of this function,
-// and need their own coverage there.
-export function renderUnknownProbeStatus(
-  facts: ProbeFacts,
-  ctx: CommandContext,
-): void {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:30-31::printf` -- the porcelain reaches the terminal ONLY here.
-  // Every other path swallows it, matching `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:18::porcelain`'s
-  // probe_output=$(...) capture.
-  ctx.stdout.write(formatPorcelain(facts));
-  ctx.stderr.write(`error: unknown probe status: ${facts.status}\n`);
-}
-
-export async function runInstall(
+export async function runInstall<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   // scripts/install never reads "$@", so extra arguments are silently
   // ignored -- the same asymmetry runPrepare and runUninstall document.
   void argv;
-  ctx.stdout.write(NOTE);
+  ctx.stdout.write(`${ctx.adapter.presentation.installNotice}\n`);
 
-  let probe: Awaited<ReturnType<typeof gatherProbe>>;
+  let probe: Awaited<ReturnType<typeof gatherProbe<R>>>;
   try {
     probe = await gatherProbe(ctx);
   } catch (cause) {
@@ -404,76 +325,46 @@ export async function runInstall(
   }
   const facts = probe.facts;
 
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:19-20::identity_state=$(spw_probe_field`. Guards the PROBE-derived value only -- the
-  // re-inspection at :198 reads through readStringField, which already has
-  // its own "malformed" arm for a non-string value, and an empty string
-  // there is legitimately absent (the JSON-null convention), not an error.
-  // This check exists because a probe that reports no identity state at all
-  // is a different failure than one that reports an unrecognised one:
-  // requireNoLegacyState("") would otherwise reach its "unknown" arm and
-  // print "unknown adapter identity state: " (empty-suffixed), which names a
-  // symptom rather than the actual cause. Do NOT add a second copy of this
-  // check at :198 -- it guards a different value with a different failure
-  // mode.
-  if (facts.identityState.length === 0) {
-    ctx.stderr.write("error: probe did not report adapter identity state\n");
+  if (facts.ownership.installEligibility.kind === "blocked") {
+    writeOutput(facts.ownership.installEligibility.output, ctx);
     return 1;
   }
 
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:20-21::report`, run BEFORE the workspace is ever created and before
-  // any further adapter call -- a legacy identity is fatal on sight, not
-  // something worth spending a mutation attempt on.
-  const legacy = requireNoLegacyState(facts.identityState);
-  if (legacy.kind === "blocked") {
-    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`
-    // is a single printf writing three bare lines to stderr, no `error: `
-    // prefix; :54 is the `return 1` that follows it, reached without spw_die.
-    for (const line of legacy.lines) ctx.stderr.write(`${line}\n`);
-    return 1;
-  }
-  if (legacy.kind === "unknown") {
-    ctx.stderr.write(`error: ${legacy.message}\n`);
-    return 1;
+  switch (facts.status) {
+    case "needs prepare": {
+      const prepareStatus = await runPrepare([], ctx);
+      if (prepareStatus !== 0) return prepareStatus;
+      break;
+    }
+    case "needs install":
+      break;
+    case "current":
+      break;
   }
 
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:22-33::status=`.
-  if (facts.status === "needs prepare") {
-    // Called as a FUNCTION: a failure propagates as a status, never through
-    // `set -eu`. runPrepare has already replayed its own outcomes and
-    // written its own diagnostics by the time it returns, so nothing further
-    // is written here on that path.
-    const prepareStatus = await runPrepare([], ctx);
-    if (prepareStatus !== 0) return prepareStatus;
-  } else if (facts.status !== "needs install" && facts.status !== "current") {
-    renderUnknownProbeStatus(facts, ctx);
-    return 1;
-  }
-
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:35-36::spw_metadata_commit_or_empty`. The STRICT reader, never the lenient
-  // generatedCommitOrEmpty gatherProbe already used for facts.generatedCommit:
-  // a throw, an absent key, or a non-string value are all treated as absent
-  // here, matching spw_metadata_commit_or_empty's `|| true` plus the
-  // following `[ -n ]` check.
-  let desiredCommit = "";
+  let prepared: AdapterResult<PreparedArtifact>;
   try {
-    const value = await readStrictProvenanceField(
-      generatedMetadataPath(ctx.root),
-      "commit",
-    );
-    if (typeof value === "string") desiredCommit = value;
+    prepared = await ctx.adapter.readPrepared({ root: ctx.root, env: ctx.env });
   } catch {
-    // Absent, same as an undefined or non-string read.
+    ctx.stderr.write("error: cannot read prepared harness state\n");
+    return 1;
   }
-  if (desiredCommit.length === 0) {
+  replayOutcome(prepared.outcome, ctx);
+  if (!prepared.outcome.ok) return 1;
+  if (prepared.status !== 0) {
     ctx.stderr.write(
-      "error: generated metadata missing desired commit after prepare\n",
+      "error: adapter reported a failure status for prepared harness inspection\n",
     );
     return 1;
   }
 
   let stage: StageRun;
   try {
-    stage = await gatherInstallStages(ctx, desiredCommit);
+    stage = await gatherInstallStages(
+      ctx,
+      facts.selection,
+      prepared.outcome.result,
+    );
   } catch (cause) {
     const outcomes =
       cause instanceof GatherFailure ? cause.outcomes : ([] as const);
@@ -487,7 +378,7 @@ export async function runInstall(
 
   let status: number;
   if (outcome.kind === "blocked") {
-    for (const line of outcome.lines) ctx.stderr.write(`${line}\n`);
+    writeOutput(outcome.output, ctx);
     status = 1;
   } else if (outcome.kind === "failed") {
     if (outcome.message !== null) {

@@ -24,9 +24,9 @@ interface PinResult {
 // the point of this shape (mirrors src/commands/unpin.ts's attemptUnpin) —
 // runPin's try (below) can therefore never itself raise EPIPE, since nothing
 // left inside it writes to a stream.
-async function attemptPin(
+async function attemptPin<R>(
   requested: string,
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<PinResult> {
   // Read first. This is a deliberate redundant boundary check, not the
   // enforcing guard: writeSelectionState below already refuses to overwrite
@@ -67,9 +67,9 @@ async function attemptPin(
   return { resolvedRef, commit };
 }
 
-export async function runPin(
+export async function runPin<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   // Arity and ref syntax are already decided in src/cli.ts's parseArgs (the
   // TAG_RE / COMMIT_INPUT_RE check ahead of dispatch) and must not be

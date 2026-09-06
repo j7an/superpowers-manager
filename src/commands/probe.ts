@@ -5,23 +5,8 @@ import {
 } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
-import { generatedCommitOrEmpty } from "../provenance.ts";
-import { displaySource } from "../selection.ts";
-import { statusForCommits } from "../status.ts";
-import {
-  formatHuman,
-  formatPorcelain,
-  type ProbeFacts,
-} from "../codex-presentation.ts";
+import type { FailureSite, ProbeSnapshot } from "../harness.ts";
 import type { CommandContext } from "./context.ts";
-
-export {
-  fields,
-  formatHuman,
-  formatPorcelain,
-  PROBE_PORCELAIN_KEYS,
-  type ProbeFacts,
-} from "../codex-presentation.ts";
 
 export const PROBE_USAGE =
   "error: usage: superpowers-manager probe [--porcelain]\n";
@@ -43,8 +28,8 @@ export const PROBE_USAGE =
 // This writes to ctx, so it MUST NOT be called from inside gatherProbe's try
 // -- see the ProbeOutcome note below.
 export function replayOutcome(
-  outcome: AdapterOutcome,
-  ctx: CommandContext,
+  outcome: AdapterOutcome<unknown>,
+  ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
 ): void {
   // Hoisted ABOVE the message loop, and that ordering is the point: a failure
   // whose code, message, or a hint carries a terminal control character must
@@ -61,18 +46,22 @@ export function replayOutcome(
   writeAdapterFailure(ctx, outcome);
 }
 
-type Inspection =
+type SuccessfulAdapterResult<T> = {
+  readonly status: 0;
+  readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
+};
+
+type Inspection<T> =
   | {
       readonly ok: true;
-      readonly value: string;
-      readonly outcome: AdapterOutcome;
+      readonly result: SuccessfulAdapterResult<T>;
     }
   | {
       readonly ok: false;
       // null when the outcome's own error already carries the diagnostic --
       // replayOutcome emits it, and adding a second line would duplicate it.
       readonly message: string | null;
-      readonly outcome: AdapterOutcome | null;
+      readonly result: AdapterResult<T> | null;
     };
 
 // `runAdapter` reports a CONTROLLED failure by RETURN VALUE, not by throwing
@@ -90,28 +79,16 @@ type Inspection =
 // adapter module: src/commands/prepare.ts and this module are the two the
 // injected double must observe, because install reaches the adapter through
 // gatherProbe and runPrepare. Spec §4.5.
-async function inspect(
-  view: string,
-  key: string,
-  ctx: CommandContext,
-): Promise<Inspection> {
-  let result: AdapterResult;
+async function inspect<T>(
+  call: () => Promise<AdapterResult<T>>,
+  unexpected: string,
+  invalidStatus: string,
+): Promise<Inspection<T>> {
+  let result: AdapterResult<T>;
   try {
-    result = await ctx.adapter(["inspect", "--view", view], {
-      root: ctx.root,
-      env: ctx.env,
-    });
+    result = await call();
   } catch {
-    // Deliberately does NOT interpolate the cause. A rethrown non-
-    // AdapterFailure is by construction the one failure src/adapter.ts chose
-    // not to own: free-form text of unknown provenance, which AGENTS.md bars
-    // from this stream. `view` is a bounded token -- one of three literals
-    // this function is ever called with -- so naming the input is safe.
-    return {
-      ok: false,
-      outcome: null,
-      message: `cannot inspect Codex adapter state for view ${view}`,
-    };
+    return { ok: false, result: null, message: unexpected };
   }
   const outcome = result.outcome;
   if (result.status !== 0 || !outcome.ok) {
@@ -120,39 +97,23 @@ async function inspect(
     // rather than falling through to a replay that would print nothing.
     return {
       ok: false,
-      outcome,
-      message: outcome.ok
-        ? `adapter reported a failure status for inspect --view ${view}`
-        : null,
+      result,
+      message: outcome.ok ? invalidStatus : null,
     };
   }
-  const value = (outcome.result as Record<string, unknown> | null)?.[key];
-  // The Python reader printed the empty string for a JSON null
-  // (scripts/core/provenance.sh's spw_json_get), and `fingerprint` is null
-  // whenever no plugin version is active (`src/adapter.ts:821::fingerprint: null`).
-  if (value === null || value === undefined) {
-    return { ok: true, value: "", outcome };
-  }
-  if (typeof value !== "string") {
-    return {
-      ok: false,
-      outcome,
-      message: `adapter returned a non-string ${key} for inspect --view ${view}`,
-    };
-  }
-  return { ok: true, value, outcome };
+  return { ok: true, result: { status: result.status, outcome } };
 }
 
-type ProbeOutcome =
+type ProbeOutcome<R> =
   | {
       readonly status: 1;
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly message: string | null;
     }
   | {
       readonly status: 0;
-      readonly outcomes: readonly AdapterOutcome[];
-      readonly facts: ProbeFacts;
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
+      readonly facts: ProbeSnapshot<R>;
     };
 
 // Runs every step that can throw or fail closed, returning the outcome as
@@ -170,67 +131,85 @@ type ProbeOutcome =
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:39-41::spw_probe_field`
 // implementation awk-parsed the porcelain back into fields; that round trip is
 // gone.
-export async function gatherProbe(ctx: CommandContext): Promise<ProbeOutcome> {
+export async function gatherProbe<R>(
+  ctx: CommandContext<R>,
+): Promise<ProbeOutcome<R>> {
   // Order mirrors `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:24-40::spw_compute_effective_selection` exactly.
   const selection = await computeEffectiveSelection(ctx.root, ctx.env);
-  const generatedCommit = await generatedCommitOrEmpty(ctx.root);
-
-  const outcomes: AdapterOutcome[] = [];
-  const collect = async (view: string, key: string): Promise<Inspection> => {
-    const result = await inspect(view, key, ctx);
-    if (result.outcome !== null) outcomes.push(result.outcome);
+  const outcomes: AdapterOutcome<unknown>[] = [];
+  const adapterContext = { root: ctx.root, env: ctx.env };
+  const collect = async <T>(
+    call: () => Promise<AdapterResult<T>>,
+    unexpected: string,
+    invalidStatus: string,
+  ): Promise<Inspection<T>> => {
+    const result = await inspect(call, unexpected, invalidStatus);
+    if (result.result !== null) outcomes.push(result.result.outcome);
     return result;
   };
 
-  const fingerprint = await collect("fingerprint", "fingerprint");
-  if (!fingerprint.ok) {
-    return { status: 1, outcomes, message: fingerprint.message };
+  const prepared = await collect(
+    () => ctx.adapter.inspectPrepared(selection, adapterContext),
+    "cannot inspect prepared harness state",
+    "adapter reported a failure status for prepared harness inspection",
+  );
+  if (!prepared.ok) {
+    return { status: 1, outcomes, message: prepared.message };
   }
-  const ownership = await collect("ownership", "identity_state");
+  const failure = (site: FailureSite) =>
+    ctx.adapter.presentation.callFailure(site, adapterContext);
+  const installedFailure = failure("probe-installed");
+  const installed = await collect(
+    () => ctx.adapter.inspectInstalled(selection, adapterContext),
+    installedFailure.unexpected,
+    installedFailure.invalidStatus,
+  );
+  if (!installed.ok) {
+    return { status: 1, outcomes, message: installed.message };
+  }
+  const ownershipFailure = failure("probe-ownership");
+  const ownership = await collect(
+    () => ctx.adapter.inspectOwnership(adapterContext),
+    ownershipFailure.unexpected,
+    ownershipFailure.invalidStatus,
+  );
   if (!ownership.ok) {
     return { status: 1, outcomes, message: ownership.message };
   }
-  const updateControl = await collect("update-control", "update_control");
-  if (!updateControl.ok) {
-    return { status: 1, outcomes, message: updateControl.message };
+  const controlFailure = failure("probe-control");
+  const control = await collect(
+    () => ctx.adapter.inspectUpdateControl(adapterContext),
+    controlFailure.unexpected,
+    controlFailure.invalidStatus,
+  );
+  if (!control.ok) {
+    return { status: 1, outcomes, message: control.message };
   }
 
-  const saved = selection.saved;
+  const preparedState = prepared.result.outcome.result;
+  const installedState = installed.result.outcome.result;
   return {
     status: 0,
     outcomes,
     facts: {
-      requestedRef: selection.requestedRef,
-      resolvedRef: selection.resolvedRef,
-      desiredCommit: selection.desiredCommit,
-      generatedCommit,
-      installedCommit: fingerprint.value,
-      identityState: ownership.value,
-      status: statusForCommits(
-        selection.desiredCommit,
-        generatedCommit,
-        fingerprint.value,
-      ),
-      selectionOrigin: selection.selectionOrigin,
-      selectionMode: selection.selectionMode,
-      upstreamSourceOrigin: selection.upstreamSourceOrigin,
-      effectiveSource: displaySource(selection.effectiveSource),
-      savedMode: saved.saved_mode,
-      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:26-30::if [ -`: an absent saved source stays empty rather than
-      // being run through displaySource, which would render <redacted-source>.
-      savedSource:
-        saved.saved_source.length > 0 ? displaySource(saved.saved_source) : "",
-      savedRequestedRef: saved.saved_requested_ref,
-      savedResolvedRef: saved.saved_resolved_ref,
-      savedCommit: saved.saved_commit,
-      updateControl: updateControl.value,
+      selection,
+      prepared: preparedState,
+      installed: installedState,
+      ownership: ownership.result.outcome.result,
+      control: control.result.outcome.result,
+      status:
+        preparedState.kind !== "current"
+          ? "needs prepare"
+          : installedState.kind !== "current"
+            ? "needs install"
+            : "current",
     },
   };
 }
 
-export async function runProbe(
+export async function runProbe<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:42::porcelain` tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
   // flag silently produced human output. Rejecting it is a deliberate
@@ -248,7 +227,7 @@ export async function runProbe(
     ctx.stderr.write(PROBE_USAGE);
     return 2;
   }
-  let outcome: ProbeOutcome;
+  let outcome: ProbeOutcome<R>;
   try {
     outcome = await gatherProbe(ctx);
   } catch (cause) {
@@ -346,8 +325,7 @@ export async function runProbe(
     }
     return 1;
   }
-  ctx.stdout.write(
-    porcelain ? formatPorcelain(outcome.facts) : formatHuman(outcome.facts),
-  );
+  const rendered = ctx.adapter.presentation.renderProbe(outcome.facts);
+  ctx.stdout.write(porcelain ? rendered.porcelain : rendered.human);
   return 0;
 }

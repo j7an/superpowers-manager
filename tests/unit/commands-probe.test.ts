@@ -7,8 +7,10 @@ import { capture, notCalledAdapter } from "./helpers/command-harness.ts";
 import {
   formatPorcelain,
   formatHuman,
-  replayOutcome,
   PROBE_PORCELAIN_KEYS,
+} from "../../src/codex-presentation.ts";
+import {
+  replayOutcome,
   PROBE_USAGE,
   runProbe,
 } from "../../src/commands/probe.ts";
@@ -201,11 +203,8 @@ void test("replay writes each message to its declared stream in array order", ()
       ],
     }),
     {
-      root: "/unused",
-      env: {},
       stdout: out.stream,
       stderr: err.stream,
-      adapter: notCalledAdapter,
     },
   );
   // Per-stream sequence, so a reversal inside one stream is caught. The
@@ -230,11 +229,8 @@ void test("replay emits the error line then one hint line per hint", () => {
       },
     }),
     {
-      root: "/unused",
-      env: {},
       stdout: out.stream,
       stderr: err.stream,
-      adapter: notCalledAdapter,
     },
   );
   assert.equal(out.text(), "");
@@ -275,11 +271,8 @@ void test("replay emits the error line then one hint line per hint", () => {
           },
         }),
         {
-          root: "/unused",
-          env: {},
           stdout: badOut.stream,
           stderr: badErr.stream,
-          adapter: notCalledAdapter,
         },
       ),
     (error) => {
@@ -296,11 +289,8 @@ void test("replay on a clean success outcome writes nothing", () => {
   const out = capture();
   const err = capture();
   replayOutcome(outcomeWith({}), {
-    root: "/unused",
-    env: {},
     stdout: out.stream,
     stderr: err.stream,
-    adapter: notCalledAdapter,
   });
   assert.equal(out.text(), "");
   assert.equal(err.text(), "");

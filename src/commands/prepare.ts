@@ -1,17 +1,12 @@
 import { mkdir, stat } from "node:fs/promises";
-import { dirname, join, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
-import { failureResult, type AdapterOutcome } from "../adapter-result.ts";
+import type { AdapterOutcome } from "../adapter-result.ts";
 import { atomicReplaceDir } from "../atomic.ts";
 import { oneLine } from "../cli-arguments.ts";
-import {
-  codexPreparationLocation,
-  prepareCodexCandidateWithBuild,
-  resolveFromCwd,
-  validateCodexPreparationBeforeFetch,
-} from "../codex-prepare.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
 import { runGit } from "../git.ts";
+import type { PreparationLocation } from "../harness.ts";
 import { SafetyError } from "../safety-error.ts";
 import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
 import {
@@ -27,8 +22,6 @@ import {
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
-
-export { readUpstreamManifestVersion } from "../codex-prepare.ts";
 
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
@@ -112,14 +105,14 @@ const NO_VALIDATOR_OUTPUT: ValidatorOutput = { stdout: "", stderr: "" };
 type PrepareOutcome =
   | {
       readonly kind: "ok";
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly validator: ValidatorOutput;
       readonly resolvedRef: string;
       readonly commit: string;
     }
   | {
       readonly kind: "failed";
-      readonly outcomes: readonly AdapterOutcome[];
+      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly validator: ValidatorOutput;
       // null when the replayed outcome already carries the diagnostic.
       readonly message: string | null;
@@ -149,20 +142,43 @@ interface PrepareRun {
   readonly cleanupWarning: string | null;
 }
 
-async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
+function validStagingLeaf(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value !== "." &&
+    value !== ".." &&
+    !value.includes("/") &&
+    !value.includes("\\")
+  );
+}
+
+async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   const env = ctx.env;
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:16::invocation_root=` — captured before the two case statements below.
   // getcwd(3) returns the physical path, so this matches `pwd -P` without a
   // realpath call.
   const cwd = process.cwd();
-  const cacheParent = resolveFromCwd(
-    env.SUPERPOWERS_CACHE_DIR || join(ctx.root, ".cache", "upstream"),
-    cwd,
-  );
-  const pluginRoot = codexPreparationLocation({
-    root: ctx.root,
-    env,
-  }).destinationRoot;
+  const configuredCache =
+    env.SUPERPOWERS_CACHE_DIR || join(ctx.root, ".cache", "upstream");
+  const cacheParent = isAbsolute(configuredCache)
+    ? configuredCache
+    : resolve(cwd, configuredCache);
+  const adapterContext = { root: ctx.root, env };
+  let location: PreparationLocation;
+  try {
+    location = ctx.adapter.preparationLocation(adapterContext);
+  } catch (cause) {
+    throw prepareError("cannot determine preparation location", cause);
+  }
+  if (!isAbsolute(location.destinationRoot)) {
+    throw prepareError(
+      "adapter returned a non-absolute preparation destination",
+    );
+  }
+  if (!validStagingLeaf(location.stagingLeaf)) {
+    throw prepareError("adapter returned an invalid preparation staging leaf");
+  }
+  const pluginRoot = location.destinationRoot;
   const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const cache = join(cacheParent, "superpowers");
@@ -176,25 +192,32 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
     tmpParent,
     ".superpowers.prepare.",
     async (workspace): Promise<PrepareOutcome> => {
-      const failed = (message: string): PrepareOutcome => ({
+      const outcomes: AdapterOutcome<unknown>[] = [];
+      const failed = (message: string | null): PrepareOutcome => ({
         kind: "failed",
-        outcomes: [],
+        outcomes,
         validator: NO_VALIDATOR_OUTPUT,
         message,
       });
-      const candidate = join(workspace, "superpowers");
+      const candidate = join(workspace, location.stagingLeaf);
       const selection = await computeEffectiveSelection(ctx.root, env);
-      const prefetch = await validateCodexPreparationBeforeFetch({
-        root: ctx.root,
-        env,
-      });
-      if (!prefetch.outcome.ok) {
-        return {
-          kind: "failed",
-          outcomes: [prefetch.outcome],
-          validator: NO_VALIDATOR_OUTPUT,
-          message: null,
-        };
+      let prefetch;
+      try {
+        prefetch =
+          await ctx.adapter.validatePreparationBeforeFetch(adapterContext);
+      } catch {
+        return failed(
+          ctx.adapter.presentation.callFailure("prepare", adapterContext)
+            .unexpected,
+        );
+      }
+      outcomes.push(prefetch.outcome);
+      if (!prefetch.outcome.ok) return failed(null);
+      if (prefetch.status !== 0) {
+        return failed(
+          ctx.adapter.presentation.callFailure("prepare", adapterContext)
+            .invalidStatus,
+        );
       }
       await owned(`cannot create directory: ${cacheParent}`, () =>
         mkdir(cacheParent, { recursive: true }),
@@ -251,66 +274,38 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
         );
       }
 
-      let rawBuildOutcome: AdapterOutcome | null = null;
-      const prepared = await prepareCodexCandidateWithBuild(
-        {
-          upstreamRoot: cache,
-          workspaceRoot: workspace,
-          candidateRoot: candidate,
-          selection,
-        },
-        { root: ctx.root, env },
-        async (input, adapterContext) => {
-          try {
-            const result = await ctx.adapter(
-              [
-                "build",
-                "--upstream-root",
-                input.upstreamRoot,
-                "--candidate-root",
-                input.candidateRoot,
-                "--requested-ref",
-                input.requestedRef,
-                "--resolved-ref",
-                input.resolvedRef,
-                "--commit",
-                input.commit,
-                "--manager-version",
-                input.managerVersion,
-                "--upstream-manifest-version",
-                input.upstreamManifestVersion,
-                "--fallback-manifest",
-                input.fallbackManifest,
-              ],
-              adapterContext,
-            );
-            rawBuildOutcome = result.outcome;
-            return result;
-          } catch {
-            return failureResult(
-              "build",
-              "invocation-failed",
-              "cannot build the generated plugin candidate",
-              [],
-              [],
-            );
-          }
-        },
-      );
-      const outcomes: readonly AdapterOutcome[] = prepared.outcome.ok
-        ? [rawBuildOutcome!]
-        : [prepared.outcome];
-      if (prepared.status !== 0 || !prepared.outcome.ok) {
-        return {
-          kind: "failed",
-          outcomes,
-          validator: NO_VALIDATOR_OUTPUT,
-          // The extracted result owns both controlled failures and the
-          // defensive success/status mismatch, so replay it exactly once.
-          message: null,
-        };
+      let prepared;
+      try {
+        prepared = await ctx.adapter.prepareCandidate(
+          {
+            upstreamRoot: cache,
+            workspaceRoot: workspace,
+            candidateRoot: candidate,
+            selection,
+          },
+          adapterContext,
+        );
+      } catch {
+        return failed(
+          ctx.adapter.presentation.callFailure("prepare", adapterContext)
+            .unexpected,
+        );
       }
-
+      outcomes.push(prepared.outcome);
+      if (prepared.status !== 0 || !prepared.outcome.ok) {
+        return failed(
+          prepared.outcome.ok
+            ? ctx.adapter.presentation.callFailure("prepare", adapterContext)
+                .invalidStatus
+            : null,
+        );
+      }
+      if (prepared.outcome.result.root !== candidate) {
+        return failed("adapter returned an unexpected preparation root");
+      }
+      if (prepared.outcome.result.commit !== selection.desiredCommit) {
+        return failed("adapter returned an unexpected preparation commit");
+      }
       let validator = NO_VALIDATOR_OUTPUT;
       if (additionalValidator.length > 0) {
         // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` — `[ -f ]`.
@@ -435,9 +430,9 @@ async function gatherPrepare(ctx: CommandContext): Promise<PrepareRun> {
   return { outcome, cleanupWarning };
 }
 
-export async function runPrepare(
+export async function runPrepare<R>(
   argv: readonly string[],
-  ctx: CommandContext,
+  ctx: CommandContext<R>,
 ): Promise<number> {
   // scripts/prepare never reads "$@", so extra arguments are ignored. This is a
   // deliberate asymmetry with probe, whose shell original rejected unknown
@@ -529,7 +524,7 @@ export async function runPrepare(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:503-510::if (cleanupWarning`.
+    // `src/commands/install.ts:395-403::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

@@ -1,23 +1,28 @@
-// The in-process half of D4. A case holding an injected recording adapter
-// calls the command function DIRECTLY, so its assertion is a structural claim
-// about which adapter operations were issued -- not a text search over a log
-// file that stops existing when the seam does.
-//
-// Classes 3 and 4 got STRONGER here. They used to assert the string
-// "update-control" was absent from adapter.log; with a double they assert no
-// `inspect --view update-control` call was made.
-
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
+
+import {
+  failureResult,
+  successResult,
+  type AdapterResult,
+} from "../../src/adapter-result.ts";
+import type { CodexRemovalInput } from "../../src/adapter.ts";
+import {
+  codexHarness,
+  normalizeCodexControl,
+  normalizeCodexInstallForContext,
+  normalizeCodexInstalled,
+  normalizeCodexOwnership,
+} from "../../src/codex-harness.ts";
+import type {
+  HarnessAdapter,
+  PrepareCandidateInput,
+  PreparedArtifact,
+} from "../../src/harness.ts";
+import type { HarnessCall } from "../lib/command-doubles.ts";
 import { SCRATCH, UPSTREAM } from "./lifecycle-fixture.ts";
 
-/**
- * The env allowlist runScript builds in tests/bin/lifecycle-fixture.js. It
- * used to be that list minus SPW_ADAPTER, because an in-process subject never
- * read it and leaving it in would have let a case look seam-wired when it was
- * not. The seam is retired, so no context carries it and there is nothing
- * left to subtract.
- */
 export function caseEnvVars(
   c: import("./lifecycle-fixture.ts").CaseEnv,
   extra: Record<string, string> = {},
@@ -36,60 +41,174 @@ export function caseEnvVars(
   };
 }
 
-/**
- * Records every argv and answers from `handler`. Exhaustion is a FAILURE:
- * a double that runs out and returns a benign value satisfies every absence
- * assertion while proving nothing.
- */
+function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
+  if (result.outcome.ok) {
+    throw new Error("cannot preserve a successful adapter result as failure");
+  }
+  return { status: result.status, outcome: result.outcome };
+}
+
 export function recordingAdapter(
   handler: (argv: readonly string[], call: number) => unknown,
 ) {
-  const calls: string[][] = [];
-
-  const adapter = async (
-    argv: readonly string[],
-    _ctx: import("../../src/adapter-result.ts").AdapterContext,
-  ): Promise<import("../../src/adapter-result.ts").AdapterResult> => {
-    const copy = [...argv];
-    calls.push(copy);
-    let answer;
+  const calls: HarnessCall[] = [];
+  let handlerCalls = 0;
+  const record = (operation: string, input?: unknown): void => {
+    calls.push(input === undefined ? { operation } : { operation, input });
+  };
+  const answer = (argv: readonly string[]): AdapterResult => {
+    handlerCalls += 1;
+    let value;
     try {
-      answer = handler(copy, calls.length);
+      value = handler(argv, handlerCalls);
     } catch (cause) {
       assert.fail(
-        `recordingAdapter: handler threw for call ${calls.length} ` +
-          `(${copy.join(" ")}): ${cause instanceof Error ? cause.message : String(cause)}`,
+        `recordingAdapter: handler threw for call ${handlerCalls} ` +
+          `(${argv.join(" ")}): ${cause instanceof Error ? cause.message : String(cause)}`,
       );
     }
-    // Exhaustion is a FAILURE, not an empty answer. A double that runs out
-    // and returns a benign value satisfies every absence assertion while
-    // proving nothing -- the vacuity mode this slice exists to avoid.
     assert.ok(
-      answer !== undefined,
-      `recordingAdapter exhausted at call ${calls.length}: ${copy.join(" ")}`,
+      value !== undefined,
+      `recordingAdapter exhausted at call ${handlerCalls}: ${argv.join(" ")}`,
     );
-    return answer as import("../../src/adapter-result.ts").AdapterResult;
+    return value as AdapterResult;
   };
-  adapter.calls = calls;
+  const adapter: HarnessAdapter<CodexRemovalInput> & {
+    calls: HarnessCall[];
+  } = {
+    preparationLocation(ctx) {
+      record("preparation-location");
+      return codexHarness.preparationLocation(ctx);
+    },
+    async validatePreparationBeforeFetch(ctx) {
+      record("validate-preparation-before-fetch");
+      return await codexHarness.validatePreparationBeforeFetch(ctx);
+    },
+    async prepareCandidate(input: PrepareCandidateInput, ctx) {
+      record("prepare-candidate", input);
+      const fallbackManifest =
+        ctx.env?.SUPERPOWERS_MANIFEST_TEMPLATE ||
+        join(
+          ctx.root,
+          "plugins",
+          "superpowers",
+          ".codex-plugin",
+          "plugin.template.json",
+        );
+      const result = answer([
+        "build",
+        "--candidate-root",
+        input.candidateRoot,
+        "--fallback-manifest",
+        fallbackManifest,
+      ]);
+      if (!result.outcome.ok) return preserveFailure(result);
+      if (result.status !== 0) {
+        return failureResult(
+          result.outcome.operation,
+          "invalid-status",
+          "adapter reported failure without an error outcome",
+          [],
+          result.outcome.messages,
+        );
+      }
+      mkdirSync(input.candidateRoot, { recursive: true });
+      writeFileSync(
+        join(input.candidateRoot, ".superpowers-upstream.json"),
+        JSON.stringify({ commit: input.selection.desiredCommit }),
+        "utf8",
+      );
+      const artifact: PreparedArtifact = {
+        root: input.candidateRoot,
+        commit: input.selection.desiredCommit,
+      };
+      return successResult(
+        result.outcome.operation,
+        artifact,
+        result.outcome.messages,
+      );
+    },
+    async inspectPrepared(selection, ctx) {
+      record("inspect-prepared", selection);
+      return await codexHarness.inspectPrepared(selection, ctx);
+    },
+    async readPrepared(ctx) {
+      record("read-prepared");
+      return await codexHarness.readPrepared(ctx);
+    },
+    async inspectOwnership() {
+      record("inspect-ownership");
+      return normalizeCodexOwnership(
+        answer(["inspect", "--view", "ownership"]),
+      );
+    },
+    async inspectUpdateControl() {
+      record("inspect-update-control");
+      return normalizeCodexControl(
+        answer(["inspect", "--view", "update-control"]),
+      );
+    },
+    async inspectInstalled(selection) {
+      record("inspect-installed", selection);
+      return normalizeCodexInstalled(
+        answer(["inspect", "--view", "fingerprint"]),
+        selection.desiredCommit,
+      );
+    },
+    async install(artifact, ctx) {
+      record("install", artifact);
+      return normalizeCodexInstallForContext(
+        answer(["install", "--package-root", ctx.root]),
+        ctx,
+      );
+    },
+    async remove(removalInput, ctx) {
+      record("remove", removalInput);
+      const result = answer([
+        "uninstall",
+        "--plugin-present",
+        String(removalInput.pluginPresent),
+        "--marketplace-present",
+        String(removalInput.marketplacePresent),
+      ]);
+      if (!result.outcome.ok) return preserveFailure(result);
+      if (result.status !== 0) {
+        return failureResult(
+          result.outcome.operation,
+          "invalid-status",
+          codexHarness.presentation.callFailure("remove", ctx, removalInput)
+            .invalidStatus,
+          [],
+          result.outcome.messages,
+        );
+      }
+      return successResult(
+        result.outcome.operation,
+        null,
+        result.outcome.messages,
+      );
+    },
+    requirements(command, env) {
+      record("requirements", command);
+      return codexHarness.requirements(command, env);
+    },
+    presentation: codexHarness.presentation,
+    calls,
+  };
   return adapter;
 }
 
 export function caseContext(
   c: import("./lifecycle-fixture.ts").CaseEnv,
   options: {
-    adapter: ReturnType<typeof recordingAdapter>;
+    adapter: HarnessAdapter<CodexRemovalInput>;
     env?: Record<string, string>;
   },
 ): {
-  ctx: import("../../src/commands/context.ts").CommandContext;
+  ctx: import("../../src/commands/context.ts").CommandContext<CodexRemovalInput>;
   stdout: () => string;
   stderr: () => string;
 } {
-  // Resolved, segment-aware containment, copied from runScript
-  // (`tests/bin/lifecycle-fixture.ts:453-461::const resolvedPkg`): a lexical startsWith() also
-  // accepts a sibling whose name merely extends the scratch path, so it would
-  // not actually prevent an in-process command from mutating the real
-  // checkout.
   const resolvedPkg = resolve(c.pkg);
   const resolvedScratch = resolve(SCRATCH);
   if (
@@ -120,6 +239,6 @@ export function caseContext(
     stdout,
     stderr,
     adapter: options.adapter,
-  } as import("../../src/commands/context.ts").CommandContext;
+  };
   return { ctx, stdout: () => stdoutBuf, stderr: () => stderrBuf };
 }
