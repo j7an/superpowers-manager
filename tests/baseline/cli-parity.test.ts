@@ -40,7 +40,10 @@ import {
 // module re-executes and re-registers its tests inside this suite
 // (`tests/run-node-suites.ts:14::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]`).
 import { caseEnv, seedCodex } from "./probe-fixture.ts";
-import { capture } from "../unit/helpers/command-harness.ts";
+import {
+  capture,
+  observingCoordinator,
+} from "../unit/helpers/command-harness.ts";
 import { caseContext } from "../bin/command-context.ts";
 import { shQuote } from "../lib/git-egress.ts";
 
@@ -1948,6 +1951,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     // Real, not a double: this case's fake `codex` is on PATH via caseEnv,
     // and runProbe must reach it exactly as it did before ctx.adapter
     // existed.
@@ -2530,7 +2534,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // a CLI run fails at preflight with "required command not found" before
   // `src/adapter.ts:277::for (const directory of env.PATH.split(delimiter))` is reached at all. The product CLI binds
   // `codexHarness`, whose installed-state inspection reaches the same native
-  // engine (`src/codex-harness.ts:407-412::inspectInstalled: async (selection, ctx) =>`).
+  // engine (`src/codex-harness.ts:428-433::inspectInstalled: async (selection, ctx) =>`).
   //
   // Be precise about what that buys, because the next reader auditing whether
   // `src/adapter.ts:276::if (env.PATH === undefined) return false;` is reachable needs the true answer: the preflight
@@ -2607,7 +2611,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // either -- runAdapter merges `{ ...process.env, ...context.env }`
   // (`src/adapter.ts:981::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:491::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:535::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
+  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:494::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:538::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2679,8 +2683,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1312::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1358::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1315::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1361::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

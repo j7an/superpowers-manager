@@ -17,7 +17,7 @@ import type {
   PreparedState,
   UpdateControlInspection,
 } from "../../src/harness.ts";
-import { capture } from "./command-doubles.ts";
+import { capture, observingCoordinator } from "./command-doubles.ts";
 
 export interface TestRemovalInput {
   readonly receipt: string;
@@ -221,6 +221,10 @@ export async function createHarnessFixture(t: TestContext) {
       calls.push("location");
       return { destinationRoot, stagingLeaf: "candidate" };
     },
+    async mutationRoots() {
+      calls.push("mutation-roots");
+      return [join(scratch, "native-state")];
+    },
     async validatePreparationBeforeFetch() {
       calls.push("prefetch");
       return successResult("prefetch", null, []);
@@ -277,6 +281,7 @@ export async function createHarnessFixture(t: TestContext) {
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "pi" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   };
   return {

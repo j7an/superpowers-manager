@@ -4,6 +4,7 @@ import * as path from "node:path";
 import type { CodexRemovalInput } from "./adapter.ts";
 import { oneLine } from "./cli-arguments.ts";
 import { codexHarness } from "./codex-harness.ts";
+import { createResourceCoordinator } from "./resource-lock.ts";
 import type { CommandContext } from "./commands/context.ts";
 import { runInstall } from "./commands/install.ts";
 import { runPin } from "./commands/pin.ts";
@@ -362,6 +363,7 @@ async function main(): Promise<never> {
     stdout: process.stdout,
     stderr: process.stderr,
     options: { harness: "codex", allowExperimental: false },
+    coordination: createResourceCoordinator(),
     // The ONLY production binding of a concrete harness implementation.
     adapter: codexHarness,
   };

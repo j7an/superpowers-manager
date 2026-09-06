@@ -1,5 +1,7 @@
 import type { HarnessAdapter } from "../harness.ts";
 import type { InvocationOptions } from "../harness-compatibility.ts";
+import type { EffectiveSelection } from "../effective-selection.ts";
+import type { ResourceCoordinator } from "../resource-lock.ts";
 
 export interface CommandContext<R> {
   readonly root: string;
@@ -7,6 +9,8 @@ export interface CommandContext<R> {
   readonly stdout: NodeJS.WritableStream;
   readonly stderr: NodeJS.WritableStream;
   readonly options: InvocationOptions;
+  readonly coordination: ResourceCoordinator;
+  readonly selection?: EffectiveSelection;
   // REQUIRED, not optional-with-default. An optional field would let a
   // command module silently fall back to the real adapter in a test that
   // meant to inject one — the failure mode is a green case observing

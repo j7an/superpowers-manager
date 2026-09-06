@@ -21,6 +21,7 @@ import type {
   PrepareCandidateInput,
   PreparedArtifact,
 } from "../../src/harness.ts";
+import type { ResourceCoordinator } from "../../src/resource-lock.ts";
 
 export interface HarnessCall {
   readonly operation: string;
@@ -34,6 +35,9 @@ const notCalled = (operation: string): never => {
 export const notCalledAdapter: HarnessAdapter<CodexRemovalInput> = {
   preparationLocation() {
     return notCalled("preparation-location");
+  },
+  async mutationRoots() {
+    return notCalled("mutation-roots");
   },
   async validatePreparationBeforeFetch() {
     return notCalled("validate-preparation-before-fetch");
@@ -84,6 +88,17 @@ export function capture(): {
   };
 }
 
+export function observingCoordinator(
+  observations: string[][] = [],
+): ResourceCoordinator {
+  return {
+    async withResources(paths, action) {
+      observations.push([...paths]);
+      return await action();
+    },
+  };
+}
+
 export function successfulNonzeroResult<T>(
   operation: string,
   result: T,
@@ -123,6 +138,10 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
     preparationLocation(ctx) {
       record("preparation-location");
       return codexHarness.preparationLocation(ctx);
+    },
+    async mutationRoots(ctx) {
+      record("mutation-roots");
+      return await codexHarness.mutationRoots(ctx);
     },
     async validatePreparationBeforeFetch(ctx) {
       record("validate-preparation-before-fetch");

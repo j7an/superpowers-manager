@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import {
   capture,
+  observingCoordinator,
   operationNames,
   scriptedAdapter,
   successfulNonzeroResult,
@@ -92,6 +93,7 @@ function makeCtx(
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   };
 }

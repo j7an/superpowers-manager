@@ -132,6 +132,7 @@ export interface HarnessPresentation<R> {
 
 export interface HarnessAdapter<R> {
   preparationLocation(ctx: AdapterContext): PreparationLocation;
+  mutationRoots(ctx: AdapterContext): Promise<readonly string[]>;
   validatePreparationBeforeFetch(
     ctx: AdapterContext,
   ): Promise<AdapterResult<null>>;

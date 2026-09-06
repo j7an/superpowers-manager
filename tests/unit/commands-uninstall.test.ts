@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   capture,
+  observingCoordinator,
   operationNames,
   scriptedAdapter,
   successfulNonzeroResult,
@@ -36,6 +37,7 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 0);
@@ -75,6 +77,7 @@ void test("the two closing lines port verbatim except for the prepare invocation
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 0);
@@ -109,6 +112,7 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 0);
@@ -144,6 +148,7 @@ void test("a plugin resource still installed after removal is a distinct, named 
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -169,6 +174,7 @@ void test("an unrecognised identity state after removal is a distinct, named fai
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -197,6 +203,7 @@ void test("a non-string identity_state after removal fails closed with its own d
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -236,6 +243,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -268,6 +276,7 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -309,6 +318,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -346,6 +356,7 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -378,6 +389,7 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -411,6 +423,7 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 1);
@@ -440,6 +453,7 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   });
   assert.equal(status, 0);
@@ -499,6 +513,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
       stdout: out.stream,
       stderr: err.stream,
       options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter,
     });
     assert.equal(status, 1);

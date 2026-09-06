@@ -1,3 +1,5 @@
+import { join, resolve } from "node:path";
+
 import {
   failureResult,
   hasTerminalControl,
@@ -39,6 +41,7 @@ import {
   requireNoLegacyState,
   verifyUninstalledResources,
 } from "./lifecycle.ts";
+import { SafetyError } from "./safety-error.ts";
 import { commitMatches } from "./status.ts";
 
 function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
@@ -395,8 +398,25 @@ function requirements(
   ];
 }
 
+async function mutationRoots(ctx: AdapterContext): Promise<readonly string[]> {
+  const env = ctx.env ?? {};
+  const configured = env.CODEX_HOME;
+  if (configured !== undefined && configured.length > 0) {
+    return [resolve(configured)];
+  }
+  const home = env.HOME;
+  if (home === undefined || home.length === 0) {
+    throw new SafetyError(
+      "codex-harness",
+      "cannot determine Codex state root without HOME",
+    );
+  }
+  return [join(resolve(home), ".codex")];
+}
+
 export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
   preparationLocation: codexPreparationLocation,
+  mutationRoots,
   validatePreparationBeforeFetch: validateCodexPreparationBeforeFetch,
   prepareCandidate: prepareCodexCandidate,
   inspectPrepared: inspectCodexPrepared,

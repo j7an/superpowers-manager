@@ -12,7 +12,10 @@
 // fetchExactCommit.
 
 import { runPin } from "../../src/commands/pin.ts";
-import { notCalledAdapter } from "../lib/command-doubles.ts";
+import {
+  notCalledAdapter,
+  observingCoordinator,
+} from "../lib/command-doubles.ts";
 
 const [root, ref] = process.argv.slice(2);
 if (root === undefined || ref === undefined) {
@@ -29,6 +32,7 @@ const status = await runPin([ref], {
   stdout: process.stdout,
   stderr: process.stderr,
   options: { harness: "codex", allowExperimental: false },
+  coordination: observingCoordinator(),
   adapter: notCalledAdapter,
 });
 process.exit(status);

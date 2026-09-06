@@ -11,7 +11,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { capture } from "../unit/helpers/command-harness.ts";
+import {
+  capture,
+  observingCoordinator,
+} from "../unit/helpers/command-harness.ts";
 import { UPSTREAM } from "../bin/lifecycle-fixture.ts";
 
 /**
@@ -177,6 +180,7 @@ async function invoke(
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     // Real, not a double: this fixture's cases carry their own fake `codex`
     // on PATH (via `env`), and runProbe must reach it exactly as it did
     // before ctx.adapter existed.

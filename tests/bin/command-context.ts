@@ -20,7 +20,10 @@ import type {
   PrepareCandidateInput,
   PreparedArtifact,
 } from "../../src/harness.ts";
-import type { HarnessCall } from "../lib/command-doubles.ts";
+import {
+  observingCoordinator,
+  type HarnessCall,
+} from "../lib/command-doubles.ts";
 import { SCRATCH, UPSTREAM } from "./lifecycle-fixture.ts";
 
 export function caseEnvVars(
@@ -79,6 +82,10 @@ export function recordingAdapter(
     preparationLocation(ctx) {
       record("preparation-location");
       return codexHarness.preparationLocation(ctx);
+    },
+    async mutationRoots(ctx) {
+      record("mutation-roots");
+      return await codexHarness.mutationRoots(ctx);
     },
     async validatePreparationBeforeFetch(ctx) {
       record("validate-preparation-before-fetch");
@@ -244,6 +251,7 @@ export function caseContext(
     stdout,
     stderr,
     options: { harness: "codex" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter: options.adapter,
   };
   return { ctx, stdout: () => stdoutBuf, stderr: () => stderrBuf };

@@ -1,5 +1,5 @@
 import { mkdir, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, sep } from "node:path";
 
 import type { AdapterOutcome } from "../adapter-result.ts";
 import { atomicReplaceDir } from "../atomic.ts";
@@ -9,6 +9,7 @@ import { runGit } from "../git.ts";
 import type { PreparationLocation } from "../harness.ts";
 import { SafetyError } from "../safety-error.ts";
 import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
+import { upstreamCacheRoot } from "../upstream-workspace.ts";
 import {
   BOUNDED_EXECUTABLE,
   UNBOUNDED_LEGACY,
@@ -158,11 +159,8 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   // getcwd(3) returns the physical path, so this matches `pwd -P` without a
   // realpath call.
   const cwd = process.cwd();
-  const configuredCache =
-    env.SUPERPOWERS_CACHE_DIR || join(ctx.root, ".cache", "upstream");
-  const cacheParent = isAbsolute(configuredCache)
-    ? configuredCache
-    : resolve(cwd, configuredCache);
+  const cache = upstreamCacheRoot(ctx.root, env, cwd);
+  const cacheParent = dirname(cache);
   const adapterContext = { root: ctx.root, env };
   let location: PreparationLocation;
   try {
@@ -181,7 +179,6 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   const pluginRoot = location.destinationRoot;
   const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
-  const cache = join(cacheParent, "superpowers");
   const tmpParent = dirname(pluginRoot);
   await owned(`cannot create directory: ${tmpParent}`, () =>
     mkdir(tmpParent, { recursive: true }),
@@ -200,7 +197,8 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         message,
       });
       const candidate = join(workspace, location.stagingLeaf);
-      const selection = await computeEffectiveSelection(ctx.root, env);
+      const selection =
+        ctx.selection ?? (await computeEffectiveSelection(ctx.root, env));
       let prefetch;
       try {
         prefetch =

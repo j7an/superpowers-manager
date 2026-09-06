@@ -2,7 +2,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { capture, notCalledAdapter } from "./helpers/command-harness.ts";
+import {
+  capture,
+  notCalledAdapter,
+  observingCoordinator,
+} from "./helpers/command-harness.ts";
 
 import {
   formatPorcelain,
@@ -141,6 +145,7 @@ void test("an unrecognised argument is a usage error on stderr", async () => {
       stdout: out.stream,
       stderr: err.stream,
       options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 2);
@@ -160,6 +165,7 @@ void test("a thrown selection failure is an operational failure", async () => {
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter: notCalledAdapter,
   });
   assert.equal(status, 1);

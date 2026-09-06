@@ -135,7 +135,8 @@ export async function gatherProbe<R>(
   ctx: CommandContext<R>,
 ): Promise<ProbeOutcome<R>> {
   // Order mirrors `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:24-40::spw_compute_effective_selection` exactly.
-  const selection = await computeEffectiveSelection(ctx.root, ctx.env);
+  const selection =
+    ctx.selection ?? (await computeEffectiveSelection(ctx.root, ctx.env));
   const outcomes: AdapterOutcome<unknown>[] = [];
   const adapterContext = { root: ctx.root, env: ctx.env };
   const collect = async <T>(
