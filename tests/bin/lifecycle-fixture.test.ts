@@ -36,6 +36,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import {
   existsSync,
   mkdirSync,
@@ -725,26 +726,108 @@ void test("the process.exitCode idiom is what delivers a large pipe payload", as
   // are asserted: dropping the truncating arm would leave a test that passes
   // under either idiom, which is the vacuous shape this slice exists to close.
   //
-  // If the truncating arm ever stops truncating on a supported platform, do
-  // NOT weaken this to a one-sided check — re-derive the payload size or the
-  // channel and escalate, because a passing negative control is the only
-  // evidence that the positive one means anything.
   const child = fileURLToPath(
     new URL("../unit/helpers/pipe-flush-child.ts", import.meta.url),
   );
-  const BYTES = 1024 * 1024;
 
-  const complete = await execFileAsync(process.execPath, [child, "exitCode"], {
-    maxBuffer: BYTES * 4,
-  });
-  assert.equal(complete.stdout.length, BYTES);
+  async function run(mode: "exit" | "exitCode") {
+    const proc = spawn(process.execPath, [child, mode], {
+      stdio: ["ignore", "pipe", "inherit", "ipc"],
+    });
+    const stdout = proc.stdout;
+    if (stdout === null) throw new Error("pipe child stdout was not piped");
+    let deliveredBytes = 0;
+    stdout.on("data", (chunk: Buffer) => {
+      deliveredBytes += chunk.length;
+    });
+    // Arm backpressure before telling the child to write. The child reports
+    // the stream's actual queued byte count, so this test does not assume a
+    // platform-specific pipe capacity or depend on parent/child scheduling.
+    stdout.pause();
 
-  const truncated = await execFileAsync(process.execPath, [child, "exit"], {
-    maxBuffer: BYTES * 4,
-  });
+    const exited = new Promise<{
+      code: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolveExit, rejectExit) => {
+      proc.once("error", rejectExit);
+      proc.once("exit", (code, signal) => resolveExit({ code, signal }));
+    });
+    const closed = new Promise<void>((resolveClose) => {
+      proc.once("close", () => resolveClose());
+    });
+    try {
+      async function readState(expectedPhase: "queued" | "finishing") {
+        const [message] = await withBound(
+          once(proc, "message"),
+          `pipe child did not report ${expectedPhase} stdout before the bound elapsed`,
+        );
+        if (
+          typeof message !== "object" ||
+          message === null ||
+          !("phase" in message) ||
+          message.phase !== expectedPhase ||
+          !("attemptedBytes" in message) ||
+          typeof message.attemptedBytes !== "number" ||
+          !("queuedBytes" in message) ||
+          typeof message.queuedBytes !== "number"
+        ) {
+          throw new Error("pipe child reported malformed state");
+        }
+        return {
+          attemptedBytes: message.attemptedBytes,
+          queuedBytes: message.queuedBytes,
+        };
+      }
+
+      const queuedPromise = readState("queued");
+      proc.send("write");
+      const queued = await queuedPromise;
+      assert.ok(queued.attemptedBytes > 0, "pipe child attempted no output");
+      assert.ok(queued.queuedBytes > 0, "pipe child queued no output");
+
+      const finishingPromise = readState("finishing");
+      proc.send("finish");
+      const finishing = await finishingPromise;
+      assert.equal(finishing.attemptedBytes, queued.attemptedBytes);
+      assert.ok(
+        finishing.queuedBytes > 0,
+        "pipe child had no queued output at the exit decision",
+      );
+      if (mode === "exit") {
+        await withBound(
+          exited,
+          "pipe child did not force exit before the bound elapsed",
+        );
+      }
+      stdout.resume();
+      const outcome = await withBound(
+        exited,
+        "pipe child did not exit after stdout drainage before the bound elapsed",
+      );
+      await withBound(
+        closed,
+        "pipe child stdio did not close after exit before the bound elapsed",
+      );
+      assert.deepEqual(outcome, { code: 0, signal: null });
+      return { ...finishing, deliveredBytes };
+    } finally {
+      stdout.resume();
+      proc.kill("SIGKILL");
+      await withBound(
+        closed,
+        "pipe child cleanup did not close stdio before the bound elapsed",
+      );
+    }
+  }
+
+  const complete = await run("exitCode");
+  assert.equal(complete.deliveredBytes, complete.attemptedBytes);
+
+  const truncated = await run("exit");
   assert.ok(
-    truncated.stdout.length < BYTES,
-    `process.exit() delivered ${truncated.stdout.length} of ${BYTES} bytes; ` +
+    truncated.deliveredBytes < truncated.attemptedBytes,
+    `process.exit() delivered ${truncated.deliveredBytes} of ` +
+      `${truncated.attemptedBytes} attempted bytes; ` +
       "the negative control no longer demonstrates truncation",
   );
 });
