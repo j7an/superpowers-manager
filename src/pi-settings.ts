@@ -25,10 +25,17 @@ const SETTINGS_PROFILE: StrictJsonProfile = {
   maxDepth: 256,
 };
 
-// Pi 0.85.1 classifies package sources by these prefixes. In particular, its
-// bare scp-like spelling remains local; widening this list would change which
+// Pi 0.85.1 uses exact, case-sensitive prefix checks. Bare scp-like, uppercase,
+// and git+ spellings remain local; widening this list would change which
 // settings identities compare as paths.
-const REMOTE_SOURCE = /^(?:git(?:\+[^:]+)?|github|https?|npm|ssh):/i;
+const REMOTE_SOURCE_PREFIXES = [
+  "npm:",
+  "git:",
+  "github:",
+  "http:",
+  "https:",
+  "ssh:",
+] as const;
 
 function invalid(path: string, detail: string, cause?: unknown): never {
   throw new SafetyError(
@@ -133,7 +140,10 @@ export function resolvePiLocalSource(
   homeDir?: string,
 ): string | null {
   let normalized = source.trim();
-  if (normalized.length === 0 || REMOTE_SOURCE.test(normalized)) {
+  if (
+    normalized.length === 0 ||
+    REMOTE_SOURCE_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  ) {
     return null;
   }
   if (normalized === "~" || normalized.startsWith("~/")) {
@@ -145,11 +155,15 @@ export function resolvePiLocalSource(
     }
     normalized =
       normalized === "~" ? homeDir : join(homeDir, normalized.slice(2));
-  } else if (/^file:\/\//i.test(normalized)) {
+  } else if (normalized.startsWith("file://")) {
     try {
       normalized = fileURLToPath(normalized);
-    } catch {
-      return null;
+    } catch (cause) {
+      throw new SafetyError(
+        "pi-settings",
+        "cannot resolve Pi local source from invalid file URL",
+        { cause },
+      );
     }
   }
   return resolve(agentDir, normalized);

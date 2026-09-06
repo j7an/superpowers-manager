@@ -206,6 +206,20 @@ void test("Pi local source resolution matches native identities", () => {
     resolvePiLocalSource("git@github.com:obra/superpowers.git", agentDir),
     "/tmp/pi-user/git@github.com:obra/superpowers.git",
   );
+  for (const [source, expected] of [
+    ["NPM:x", "/tmp/pi-user/NPM:x"],
+    ["git+https:x", "/tmp/pi-user/git+https:x"],
+    ["FILE:///native-case", "/tmp/pi-user/FILE:/native-case"],
+  ]) {
+    assert.equal(resolvePiLocalSource(source, agentDir), expected, source);
+  }
+  assert.throws(
+    () => resolvePiLocalSource("file://%", agentDir),
+    exactError(
+      SafetyError,
+      "cannot resolve Pi local source from invalid file URL",
+    ),
+  );
 
   for (const source of [
     "npm:@scope/package@1.0.0",
