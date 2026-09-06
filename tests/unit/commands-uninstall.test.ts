@@ -7,6 +7,7 @@ import {
   capture,
   operationNames,
   scriptedAdapter,
+  successfulNonzeroResult,
 } from "../lib/command-doubles.ts";
 
 import { runUninstall } from "../../src/commands/uninstall.ts";
@@ -280,20 +281,20 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
   const out = capture();
   const err = capture();
 
-  const responses: readonly import("../../src/adapter-result.ts").AdapterResult[] =
-    [
-      {
-        status: 1,
-        outcome: {
-          operation: "inspect",
-          ok: true,
-          messages: [],
-          result: null,
-          error: null,
-        },
-      },
-    ];
-  const { adapter, calls } = scriptedAdapter(responses);
+  const { adapter: scripted, calls } = scriptedAdapter([]);
+  const adapter = {
+    ...scripted,
+    async inspectOwnership() {
+      calls.push({ operation: "inspect-ownership" });
+      return successfulNonzeroResult("inspect", {
+        installEligibility: { kind: "allowed" as const },
+        removalInput: { pluginPresent: false, marketplacePresent: false },
+        removalVerification: { kind: "allowed" as const },
+        postRemovalOutput: { stdout: [], stderr: [] },
+        presentationValue: "manager",
+      });
+    },
+  };
   const status = await runUninstall([], {
     root: "/nowhere",
     env: {},

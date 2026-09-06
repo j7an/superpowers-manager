@@ -14,6 +14,7 @@ import {
   capture,
   operationNames,
   scriptedAdapter,
+  successfulNonzeroResult,
 } from "../lib/command-doubles.ts";
 
 import { runInstall } from "../../src/commands/install.ts";
@@ -278,21 +279,19 @@ void test("an unparseable generated commit is never treated as success", async (
 void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
   const out = capture();
   const err = capture();
-
-  const responses: readonly import("../../src/adapter-result.ts").AdapterResult[] =
-    [
-      {
-        status: 1,
-        outcome: {
-          operation: "inspect",
-          ok: true,
-          messages: [],
-          result: null,
-          error: null,
-        },
-      },
-    ];
-  const { adapter, calls } = scriptedAdapter(responses);
+  const { adapter: scripted, calls } = scriptedAdapter([]);
+  const adapter = {
+    ...scripted,
+    async inspectInstalled(
+      selection: Parameters<typeof scripted.inspectInstalled>[0],
+    ) {
+      calls.push({ operation: "inspect-installed", input: selection });
+      return successfulNonzeroResult("inspect", {
+        kind: "absent" as const,
+        observedIdentity: "" as const,
+      });
+    },
+  };
   const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
@@ -527,21 +526,27 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
   const out = capture();
   const err = capture();
 
-  const responses: readonly import("../../src/adapter-result.ts").AdapterResult[] =
-    [
-      ...PROBE_OK,
-      {
-        status: 1,
-        outcome: {
-          operation: "inspect",
-          ok: true,
-          messages: [],
-          result: null,
-          error: null,
-        },
-      },
-    ];
-  const { adapter, calls } = scriptedAdapter(responses);
+  const { adapter: scripted, calls } = scriptedAdapter(PROBE_OK);
+  let ownershipCalls = 0;
+  const adapter = {
+    ...scripted,
+    async inspectOwnership(
+      adapterContext: Parameters<typeof scripted.inspectOwnership>[0],
+    ) {
+      ownershipCalls += 1;
+      if (ownershipCalls === 1) {
+        return await scripted.inspectOwnership(adapterContext);
+      }
+      calls.push({ operation: "inspect-ownership" });
+      return successfulNonzeroResult("inspect", {
+        installEligibility: { kind: "allowed" as const },
+        removalInput: { pluginPresent: false, marketplacePresent: false },
+        removalVerification: { kind: "allowed" as const },
+        postRemovalOutput: { stdout: [], stderr: [] },
+        presentationValue: "manager",
+      });
+    },
+  };
   const ctx = makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,

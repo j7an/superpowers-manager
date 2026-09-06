@@ -8,6 +8,7 @@ import {
   capture,
   operationNames,
   scriptedAdapter,
+  successfulNonzeroResult,
 } from "../lib/command-doubles.ts";
 
 import { codexPresentation } from "../../src/codex-presentation.ts";
@@ -699,21 +700,19 @@ void test("needs prepare: an empty update control refuses before prepare, not in
 void test("gatherProbe's own clause-3 failure stops immediately, with its hand-written message", async () => {
   const out = capture();
   const err = capture();
-
-  const responses: readonly import("../../src/adapter-result.ts").AdapterResult[] =
-    [
-      {
-        status: 1,
-        outcome: {
-          operation: "inspect",
-          ok: true,
-          messages: [],
-          result: null,
-          error: null,
-        },
-      },
-    ];
-  const { adapter, calls } = scriptedAdapter(responses);
+  const { adapter: scripted, calls } = scriptedAdapter([]);
+  const adapter = {
+    ...scripted,
+    async inspectInstalled(
+      selection: Parameters<typeof scripted.inspectInstalled>[0],
+    ) {
+      calls.push({ operation: "inspect-installed", input: selection });
+      return successfulNonzeroResult("inspect", {
+        kind: "absent" as const,
+        observedIdentity: "" as const,
+      });
+    },
+  };
   const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);

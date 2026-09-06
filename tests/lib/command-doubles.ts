@@ -84,6 +84,22 @@ export function capture(): {
   };
 }
 
+export function successfulNonzeroResult<T>(
+  operation: string,
+  result: T,
+): AdapterResult<T> {
+  return {
+    status: 1,
+    outcome: {
+      operation,
+      ok: true,
+      messages: [],
+      result,
+      error: null,
+    },
+  };
+}
+
 function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
   assert.equal(result.outcome.ok, false);
   return { status: result.status, outcome: result.outcome };
