@@ -161,6 +161,21 @@ void test("preparation hides a location resolver's thrown diagnostic", async (t)
   );
 });
 
+void test("preparation hides a candidate builder's thrown diagnostic", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const adapter = {
+    ...fixture.adapter,
+    async prepareCandidate(): Promise<never> {
+      fixture.calls.push("prepare");
+      throw new Error("hostile candidate builder details");
+    },
+  };
+
+  assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
+  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.equal(fixture.err.text(), "error: unexpected test adapter call\n");
+});
+
 void test("preparation rejects artifact evidence for another root", async (t) => {
   const fixture = await createHarnessFixture(t);
   mkdirSync(fixture.destinationRoot, { recursive: true });

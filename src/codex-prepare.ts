@@ -54,6 +54,15 @@ function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
 }
 
+function isControlledPreparationError(cause: unknown): cause is SafetyError {
+  return (
+    cause instanceof SafetyError &&
+    (cause.module === "prepare" ||
+      cause.module === "hooks" ||
+      cause.module === "provenance")
+  );
+}
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await stat(path);
@@ -162,59 +171,72 @@ export async function prepareCodexCandidate(
   input: PrepareCandidateInput,
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedArtifact>> {
-  for (const required of REQUIRED_UPSTREAM) {
-    if (!(await pathExists(join(input.upstreamRoot, required.path)))) {
-      return failureResult(
-        "prepare",
-        "missing-upstream-path",
-        `required upstream path missing: ${required.label}`,
-        [],
-        [],
+  let upstreamManifestVersion = "";
+  let managerVersion = "";
+  try {
+    for (const required of REQUIRED_UPSTREAM) {
+      if (!(await pathExists(join(input.upstreamRoot, required.path)))) {
+        return failureResult(
+          "prepare",
+          "missing-upstream-path",
+          `required upstream path missing: ${required.label}`,
+          [],
+          [],
+        );
+      }
+    }
+
+    await owned(`cannot clear candidate root: ${input.candidateRoot}`, () =>
+      rm(input.candidateRoot, { recursive: true, force: true }),
+    );
+    await owned(`cannot create candidate root: ${input.candidateRoot}`, () =>
+      mkdir(join(input.candidateRoot, ".codex-plugin"), { recursive: true }),
+    );
+    for (const name of COPY_PATHS) {
+      await copyPathIfPresent(
+        join(input.upstreamRoot, name),
+        join(input.candidateRoot, name),
       );
     }
-  }
 
-  await owned(`cannot clear candidate root: ${input.candidateRoot}`, () =>
-    rm(input.candidateRoot, { recursive: true, force: true }),
-  );
-  await owned(`cannot create candidate root: ${input.candidateRoot}`, () =>
-    mkdir(join(input.candidateRoot, ".codex-plugin"), { recursive: true }),
-  );
-  for (const name of COPY_PATHS) {
-    await copyPathIfPresent(
-      join(input.upstreamRoot, name),
-      join(input.candidateRoot, name),
+    const upstreamManifest = join(
+      input.upstreamRoot,
+      ".codex-plugin",
+      "plugin.json",
     );
-  }
+    if (await regularFileExists(upstreamManifest)) {
+      upstreamManifestVersion =
+        await readUpstreamManifestVersion(upstreamManifest);
+    }
 
-  const upstreamManifest = join(
-    input.upstreamRoot,
-    ".codex-plugin",
-    "plugin.json",
-  );
-  let upstreamManifestVersion = "";
-  if (await regularFileExists(upstreamManifest)) {
-    upstreamManifestVersion =
-      await readUpstreamManifestVersion(upstreamManifest);
-  }
+    await writeProvenance(
+      join(input.candidateRoot, ".superpowers-upstream.json"),
+      {
+        source: input.selection.effectiveSource,
+        requested_ref: input.selection.requestedRef,
+        resolved_ref: input.selection.resolvedRef,
+        commit: input.selection.desiredCommit,
+        upstream_manifest_version: upstreamManifestVersion,
+      },
+    );
 
-  await writeProvenance(
-    join(input.candidateRoot, ".superpowers-upstream.json"),
-    {
-      source: input.selection.effectiveSource,
-      requested_ref: input.selection.requestedRef,
-      resolved_ref: input.selection.resolvedRef,
+    managerVersion = manifestVersionForRef({
+      requestedRef: input.selection.requestedRef,
+      resolutionKind: asResolutionKind(input.selection.resolutionKind),
+      resolvedRef: input.selection.resolvedRef,
       commit: input.selection.desiredCommit,
-      upstream_manifest_version: upstreamManifestVersion,
-    },
-  );
+    });
+  } catch (cause) {
+    // owned()/asResolutionKind(), readManifest(), and writeProvenance replace
+    // every subordinate failure with controlled preparation, hook, or
+    // provenance text. Re-emitting those owned diagnostics is therefore safe.
+    // codexBuild stays below this catch because it deliberately rethrows
+    // exceptions its native operation does not own; the shared command must
+    // hide those.
+    if (!isControlledPreparationError(cause)) throw cause;
+    return failureResult("prepare", "prepare-failed", cause.message, [], []);
+  }
 
-  const managerVersion = manifestVersionForRef({
-    requestedRef: input.selection.requestedRef,
-    resolutionKind: asResolutionKind(input.selection.resolutionKind),
-    resolvedRef: input.selection.resolvedRef,
-    commit: input.selection.desiredCommit,
-  });
   const built = await codexBuild(
     {
       upstreamRoot: input.upstreamRoot,
