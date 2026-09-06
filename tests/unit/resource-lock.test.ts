@@ -9,6 +9,7 @@ import {
   readdir,
   rm,
   symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -156,6 +157,27 @@ async function release(owner: ReturnType<typeof startChild>) {
   });
 }
 
+async function currentLock(parent: string): Promise<{
+  readonly lockPath: string;
+  readonly metadataPath: string;
+  readonly metadata: Record<string, unknown>;
+}> {
+  const entries = await readdir(parent);
+  const lock = entries.find((entry) => entry.endsWith(".resource-lock"));
+  assert.notEqual(lock, undefined);
+  const lockPath = join(parent, lock!);
+  const metadataPath = join(lockPath, "owner.json");
+  const parsed: unknown = JSON.parse(await readFile(metadataPath, "utf8"));
+  assert.equal(typeof parsed, "object");
+  assert.notEqual(parsed, null);
+  assert.equal(Array.isArray(parsed), false);
+  return {
+    lockPath,
+    metadataPath,
+    metadata: parsed as Record<string, unknown>,
+  };
+}
+
 void test("competing processes treat existing symlink aliases from different package roots as one resource", async (t) => {
   const root = await sandbox(t);
   const target = join(root, "actual", "generated");
@@ -275,7 +297,7 @@ void test("reentrant ownership survives nested resource additions and action fai
   const added = join(root, "cache-added-by-nested-prepare");
   const coordinator = createResourceCoordinator();
   const calls: string[] = [];
-  await coordinator.withResources([resource], async () => {
+  const result = await coordinator.withResources([resource], async () => {
     calls.push("outer-before");
     await coordinator.withResources([resource, added], async () => {
       calls.push("nested-first");
@@ -287,7 +309,9 @@ void test("reentrant ownership survives nested resource additions and action fai
       calls.push("nested-second");
     });
     calls.push("outer-after");
+    return 42;
   });
+  assert.equal(result, 42);
   assert.deepEqual(calls, [
     "outer-before",
     "nested-first",
@@ -357,51 +381,134 @@ void test("an interrupted owner is never reclaimed automatically", async (t) => 
 
 void test("release preserves mismatched and unreadable ownership metadata", async (t) => {
   const root = await sandbox(t);
-  for (const replacement of [
-    '{"token":"somebody-else","resource":"wrong"}',
-    "not-json",
+  for (const ownerCase of [
+    {
+      name: "mismatched",
+      change: async (metadataPath: string) =>
+        writeFile(
+          metadataPath,
+          '{"token":"somebody-else","resource":"wrong"}',
+          "utf8",
+        ),
+    },
+    {
+      name: "malformed",
+      change: async (metadataPath: string) =>
+        writeFile(metadataPath, "not-json", "utf8"),
+    },
+    {
+      name: "missing",
+      change: async (metadataPath: string) => unlink(metadataPath),
+    },
   ]) {
-    await t.test(
-      replacement.startsWith("{") ? "mismatched" : "unreadable",
+    await t.test(ownerCase.name, async () => {
+      const parent = join(root, `${ownerCase.name}-case`);
+      await mkdir(parent);
+      const resource = join(parent, "resource");
+      const canonicalResource = join(await realpath(parent), "resource");
+      await assert.rejects(
+        createResourceCoordinator().withResources([resource], async () => {
+          const { metadataPath, metadata } = await currentLock(parent);
+          assert.equal(typeof metadata.token, "string");
+          assert.notEqual(metadata.token, "");
+          assert.equal(metadata.pid, process.pid);
+          assert.equal(metadata.resource, canonicalResource);
+          await ownerCase.change(metadataPath);
+        }),
+        (error) => {
+          assert.ok(error instanceof SafetyError);
+          assert.equal(
+            error.message,
+            `cannot release resource lock: ${canonicalResource}`,
+          );
+          return true;
+        },
+      );
+      await assert.rejects(
+        createResourceCoordinator().withResources([resource], async () => {}),
+        (error) => {
+          assert.ok(error instanceof SafetyError);
+          assert.equal(error.message, `resource is busy: ${canonicalResource}`);
+          return true;
+        },
+      );
+    });
+  }
+});
+
+void test("a real directory-removal failure is reported after a successful action and preserves the lock", async (t) => {
+  const root = await sandbox(t);
+  const otherParent = join(root, "a-other-resource");
+  const parent = join(root, "z-release-failure");
+  await mkdir(otherParent);
+  await mkdir(parent);
+  const otherResource = join(otherParent, "resource");
+  const resource = join(parent, "resource");
+  const canonicalResource = join(await realpath(parent), "resource");
+  let lockPath = "";
+
+  await assert.rejects(
+    createResourceCoordinator().withResources(
+      [resource, otherResource],
       async () => {
-        const parent = join(
-          root,
-          replacement.startsWith("{") ? "first-case" : "second-case",
-        );
-        await mkdir(parent);
-        const resource = join(parent, "resource");
-        const canonicalResource = join(await realpath(parent), "resource");
-        await createResourceCoordinator().withResources(
-          [resource],
-          async () => {
-            const entries = await readdir(parent);
-            const lock = entries.find((entry) =>
-              entry.endsWith(".resource-lock"),
-            );
-            assert.notEqual(lock, undefined);
-            const metadataPath = join(parent, lock!, "owner.json");
-            const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
-            assert.equal(typeof metadata.token, "string");
-            assert.notEqual(metadata.token, "");
-            assert.equal(metadata.pid, process.pid);
-            assert.equal(metadata.resource, canonicalResource);
-            await writeFile(metadataPath, replacement, "utf8");
-          },
-        );
-        await assert.rejects(
-          createResourceCoordinator().withResources([resource], async () => {}),
-          (error) => {
-            assert.ok(error instanceof SafetyError);
-            assert.equal(
-              error.message,
-              `resource is busy: ${canonicalResource}`,
-            );
-            return true;
-          },
+        ({ lockPath } = await currentLock(parent));
+        await writeFile(
+          join(lockPath, "unexpected-entry"),
+          "preserve\n",
+          "utf8",
         );
       },
-    );
-  }
+    ),
+    (error) => {
+      assert.ok(error instanceof SafetyError);
+      assert.equal(
+        error.message,
+        `cannot release resource lock: ${canonicalResource}`,
+      );
+      return true;
+    },
+  );
+  assert.equal(
+    await readFile(join(lockPath, "unexpected-entry"), "utf8"),
+    "preserve\n",
+  );
+  await assert.doesNotReject(
+    createResourceCoordinator().withResources([otherResource], async () => {}),
+  );
+  await assert.rejects(
+    createResourceCoordinator().withResources([resource], async () => {}),
+    (error) => {
+      assert.ok(error instanceof SafetyError);
+      assert.equal(error.message, `resource is busy: ${canonicalResource}`);
+      return true;
+    },
+  );
+});
+
+void test("an action exception remains primary when releasing its lock also fails", async (t) => {
+  const root = await sandbox(t);
+  const parent = join(root, "double-failure");
+  await mkdir(parent);
+  const resource = join(parent, "resource");
+  const canonicalResource = join(await realpath(parent), "resource");
+  const actionFailure = new Error("primary action failure");
+
+  await assert.rejects(
+    createResourceCoordinator().withResources([resource], async () => {
+      const { metadataPath } = await currentLock(parent);
+      await writeFile(metadataPath, "not-json", "utf8");
+      throw actionFailure;
+    }),
+    (error) => error === actionFailure,
+  );
+  await assert.rejects(
+    createResourceCoordinator().withResources([resource], async () => {}),
+    (error) => {
+      assert.ok(error instanceof SafetyError);
+      assert.equal(error.message, `resource is busy: ${canonicalResource}`);
+      return true;
+    },
+  );
 });
 
 void test("upstreamCacheRoot preserves explicit, invocation-relative, and package defaults", () => {

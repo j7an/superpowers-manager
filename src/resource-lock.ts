@@ -31,6 +31,11 @@ interface AcquiredResource {
   readonly held: HeldResource;
 }
 
+interface ReleaseOutcome {
+  readonly keepHeld: boolean;
+  readonly failure: SafetyError | null;
+}
+
 function errnoIs(cause: unknown, code: string): boolean {
   return (
     cause instanceof Error &&
@@ -112,33 +117,51 @@ function ownerRecord(
   return { token: value.token, resource: value.resource };
 }
 
-async function releaseOwned(held: HeldResource): Promise<boolean> {
+function releaseFailure(resource: string, cause?: unknown): SafetyError {
+  return new SafetyError(
+    "resource-lock",
+    `cannot release resource lock: ${resource}`,
+    { cause },
+  );
+}
+
+async function releaseOwned(held: HeldResource): Promise<ReleaseOutcome> {
   if (held.count > 1) {
     held.count -= 1;
-    return true;
+    return { keepHeld: true, failure: null };
   }
   const metadataPath = join(held.lockPath, "owner.json");
   let owner: ReturnType<typeof ownerRecord>;
   try {
     owner = ownerRecord(JSON.parse(await readFile(metadataPath, "utf8")));
-  } catch {
-    return false;
+  } catch (cause) {
+    return {
+      keepHeld: false,
+      failure: releaseFailure(held.resource, cause),
+    };
   }
   if (
     owner === undefined ||
     owner.token !== held.token ||
     owner.resource !== held.resource
   ) {
-    return false;
+    return {
+      keepHeld: false,
+      failure: releaseFailure(held.resource),
+    };
   }
   try {
     await unlink(metadataPath);
     await rmdir(held.lockPath);
-  } catch {
+  } catch (cause) {
     // A lock whose contents changed or cannot be inspected is not ours to
     // clear. Leaving it busy is safer than guessing at stale ownership.
+    return {
+      keepHeld: false,
+      failure: releaseFailure(held.resource, cause),
+    };
   }
-  return false;
+  return { keepHeld: false, failure: null };
 }
 
 class FilesystemResourceCoordinator implements ResourceCoordinator {
@@ -159,6 +182,9 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
           : 0,
     );
     const acquired: AcquiredResource[] = [];
+    let completion:
+      | { readonly kind: "returned"; readonly value: T }
+      | { readonly kind: "threw"; readonly cause: unknown };
     try {
       for (const lock of locks) {
         const existing = this.#held.get(lock.lockPath);
@@ -206,14 +232,22 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
         this.#held.set(lock.lockPath, held);
         acquired.push({ held });
       }
-      return await action();
-    } finally {
-      for (const entry of acquired.reverse()) {
-        if (!(await releaseOwned(entry.held))) {
-          this.#held.delete(entry.held.lockPath);
-        }
-      }
+      completion = { kind: "returned", value: await action() };
+    } catch (cause) {
+      completion = { kind: "threw", cause };
     }
+
+    let firstReleaseFailure: SafetyError | null = null;
+    for (const entry of acquired.reverse()) {
+      const released = await releaseOwned(entry.held);
+      if (!released.keepHeld) {
+        this.#held.delete(entry.held.lockPath);
+      }
+      firstReleaseFailure ??= released.failure;
+    }
+    if (completion.kind === "threw") throw completion.cause;
+    if (firstReleaseFailure !== null) throw firstReleaseFailure;
+    return completion.value;
   }
 }
 
