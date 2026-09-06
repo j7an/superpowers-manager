@@ -1947,6 +1947,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
     }),
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     // Real, not a double: this case's fake `codex` is on PATH via caseEnv,
     // and runProbe must reach it exactly as it did before ctx.adapter
     // existed.

@@ -176,6 +176,7 @@ async function invoke(
     env,
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     // Real, not a double: this fixture's cases carry their own fake `codex`
     // on PATH (via `env`), and runProbe must reach it exactly as it did
     // before ctx.adapter existed.

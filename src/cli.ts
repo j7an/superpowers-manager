@@ -361,6 +361,7 @@ async function main(): Promise<never> {
     env: process.env,
     stdout: process.stdout,
     stderr: process.stderr,
+    options: { harness: "codex", allowExperimental: false },
     // The ONLY production binding of a concrete harness implementation.
     adapter: codexHarness,
   };

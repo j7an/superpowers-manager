@@ -121,6 +121,11 @@ export function recordingAdapter(
       const artifact: PreparedArtifact = {
         root: input.candidateRoot,
         commit: input.selection.desiredCommit,
+        compatibility: {
+          kind: "unknown",
+          reason: "legacy Codex-shaped scripted result",
+        },
+        identity: input.selection.desiredCommit,
       };
       return successResult(
         result.outcome.operation,
@@ -238,6 +243,7 @@ export function caseContext(
     env: caseEnvVars(c, options.env),
     stdout,
     stderr,
+    options: { harness: "codex" as const, allowExperimental: false },
     adapter: options.adapter,
   };
   return { ctx, stdout: () => stdoutBuf, stderr: () => stderrBuf };

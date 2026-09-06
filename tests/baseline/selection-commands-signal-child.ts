@@ -28,6 +28,7 @@ const status = await runPin([ref], {
   env: process.env,
   stdout: process.stdout,
   stderr: process.stderr,
+  options: { harness: "codex", allowExperimental: false },
   adapter: notCalledAdapter,
 });
 process.exit(status);

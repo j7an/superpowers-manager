@@ -135,11 +135,18 @@ export async function createHarnessFixture(t: TestContext) {
   const preparedArtifact: PreparedArtifact = {
     root: destinationRoot,
     commit: selection.desiredCommit,
+    compatibility: {
+      kind: "supported",
+      generation: "fixture-v1",
+      reason: "fixture mechanics are complete",
+    },
+    identity: selection.desiredCommit,
   };
   const prepared: PreparedState = {
     kind: "current",
     artifact: preparedArtifact,
     observedIdentity: selection.desiredCommit,
+    compatibility: preparedArtifact.compatibility,
   };
   const installed: InstalledState = {
     kind: "current",
@@ -229,6 +236,8 @@ export async function createHarnessFixture(t: TestContext) {
       const artifact: PreparedArtifact = {
         root: input.candidateRoot,
         commit: input.selection.desiredCommit,
+        compatibility: preparedArtifact.compatibility,
+        identity: input.selection.desiredCommit,
       };
       return successResult("prepare", artifact, []);
     },
@@ -267,6 +276,7 @@ export async function createHarnessFixture(t: TestContext) {
     env,
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "pi" as const, allowExperimental: false },
     adapter,
   };
   return {

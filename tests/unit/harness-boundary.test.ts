@@ -20,7 +20,7 @@ import {
 } from "../../src/adapter-result.ts";
 import { runInstall } from "../../src/commands/install.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
-import { runProbe } from "../../src/commands/probe.ts";
+import { gatherProbe, runProbe } from "../../src/commands/probe.ts";
 import { runUninstall } from "../../src/commands/uninstall.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import type {
@@ -197,8 +197,8 @@ void test("preparation rejects artifact evidence for another root", async (t) =>
       return successResult(
         result.outcome.operation,
         {
+          ...result.outcome.result,
           root: `${input.candidateRoot}-other`,
-          commit: input.selection.desiredCommit,
         },
         result.outcome.messages,
       );
@@ -231,7 +231,7 @@ void test("preparation rejects artifact evidence for another commit", async (t) 
       assert.equal(result.outcome.ok, true);
       return successResult(
         result.outcome.operation,
-        { root: input.candidateRoot, commit: "0".repeat(40) },
+        { ...result.outcome.result, commit: "0".repeat(40) },
         result.outcome.messages,
       );
     },
@@ -286,6 +286,54 @@ void test("probe performs only the four read-only inspections", async (t) => {
   ]);
   assert.equal(fixture.out.text(), "fixture status current\n");
   assert.equal(fixture.err.text(), "");
+
+  await t.test(
+    "unsupported prepared content does not suppress installed inspection",
+    async (subtest) => {
+      const unsupportedFixture = await createHarnessFixture(subtest);
+      const compatibility = {
+        kind: "unsupported" as const,
+        reason: "missing bootstrap",
+      };
+      const unsupportedAdapter = {
+        ...unsupportedFixture.adapter,
+        async inspectPrepared(
+          inputSelection: typeof unsupportedFixture.selection,
+        ) {
+          unsupportedFixture.calls.push("inspect-prepared");
+          assert.deepEqual(inputSelection, unsupportedFixture.selection);
+          return successResult(
+            "inspect-prepared",
+            {
+              kind: "needs-prepare" as const,
+              observedIdentity: "",
+              compatibility,
+            },
+            [],
+          );
+        },
+        inspectInstalled: unsupportedFixture.methods.inspectInstalled,
+        inspectOwnership: unsupportedFixture.methods.inspectOwnership,
+        inspectUpdateControl: unsupportedFixture.methods.inspectUpdateControl,
+      };
+
+      const outcome = await gatherProbe({
+        ...unsupportedFixture.ctx,
+        adapter: unsupportedAdapter,
+      });
+
+      assert.equal(outcome.status, 0);
+      assert.deepEqual(unsupportedFixture.calls, [
+        "inspect-prepared",
+        "inspect-installed",
+        "inspect-ownership",
+        "inspect-control",
+      ]);
+      if (outcome.status === 0) {
+        assert.deepEqual(outcome.facts.compatibility, compatibility);
+      }
+    },
+  );
 });
 
 void test("update composes probe, preparation, and installation through a non-Codex adapter", async (t) => {
@@ -311,6 +359,7 @@ void test("update composes probe, preparation, and installation through a non-Co
         {
           kind: "needs-prepare",
           observedIdentity: fixture.selection.desiredCommit,
+          compatibility: result.outcome.result.compatibility,
         },
         result.outcome.messages,
       );

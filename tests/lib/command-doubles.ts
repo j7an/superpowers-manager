@@ -144,6 +144,11 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
       const artifact: PreparedArtifact = {
         root: input.candidateRoot,
         commit: input.selection.desiredCommit,
+        compatibility: {
+          kind: "unknown",
+          reason: "legacy Codex-shaped scripted result",
+        },
+        identity: input.selection.desiredCommit,
       };
       mkdirSync(input.candidateRoot, { recursive: true });
       writeFileSync(

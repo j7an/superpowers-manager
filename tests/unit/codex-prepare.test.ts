@@ -117,6 +117,10 @@ void test("status inspection treats malformed generated provenance as needing pr
   assert.deepEqual(result.outcome.result, {
     kind: "needs-prepare",
     observedIdentity: "",
+    compatibility: {
+      kind: "unknown",
+      reason: "Codex compatibility assessment is not available",
+    },
   });
 });
 

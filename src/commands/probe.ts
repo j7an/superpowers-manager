@@ -197,6 +197,7 @@ export async function gatherProbe<R>(
       installed: installedState,
       ownership: ownership.result.outcome.result,
       control: control.result.outcome.result,
+      compatibility: preparedState.compatibility,
       status:
         preparedState.kind !== "current"
           ? "needs prepare"

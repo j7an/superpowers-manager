@@ -87,6 +87,7 @@
     { "path": "tests/unit/effective-selection.test.ts", "group": "unit" },
     { "path": "tests/unit/generated-plugin.test.ts", "group": "integration" },
     { "path": "tests/unit/harness-boundary.test.ts", "group": "integration" },
+    { "path": "tests/unit/harness-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/hooks.test.ts", "group": "unit" },
     { "path": "tests/unit/lifecycle.test.ts", "group": "unit" },
     { "path": "tests/unit/manifest-overlay.test.ts", "group": "unit" },

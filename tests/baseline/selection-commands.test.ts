@@ -366,6 +366,7 @@ function freshContext(
     env: { SUPERPOWERS_CONFIG_DIR: configDir, ...envOverrides },
     stdout: stdout.stream,
     stderr: stderr.stream,
+    options: { harness: "codex" as const, allowExperimental: false },
     adapter: notCalledAdapter,
   };
   return { configDir, statePath, ctx, stdout, stderr };

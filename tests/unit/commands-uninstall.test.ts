@@ -35,6 +35,7 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 0);
@@ -73,6 +74,7 @@ void test("the two closing lines port verbatim except for the prepare invocation
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 0);
@@ -106,6 +108,7 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 0);
@@ -140,6 +143,7 @@ void test("a plugin resource still installed after removal is a distinct, named 
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -164,6 +168,7 @@ void test("an unrecognised identity state after removal is a distinct, named fai
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -191,6 +196,7 @@ void test("a non-string identity_state after removal fails closed with its own d
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -229,6 +235,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -260,6 +267,7 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -300,6 +308,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -336,6 +345,7 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -367,6 +377,7 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -399,6 +410,7 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 1);
@@ -427,6 +439,7 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter,
   });
   assert.equal(status, 0);
@@ -485,6 +498,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
       env: { TMPDIR: parent },
       stdout: out.stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
       adapter,
     });
     assert.equal(status, 1);

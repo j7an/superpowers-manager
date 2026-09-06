@@ -1,5 +1,6 @@
 import type { AdapterContext, AdapterResult } from "./adapter-result.ts";
 import type { EffectiveSelection } from "./effective-selection.ts";
+import type { Compatibility } from "./harness-compatibility.ts";
 
 export type HarnessCommand =
   | "pin"
@@ -35,14 +36,21 @@ export interface PrepareCandidateInput {
 export interface PreparedArtifact {
   readonly root: string;
   readonly commit: string;
+  readonly compatibility: Compatibility;
+  readonly identity: string;
 }
 
 export type PreparedState =
-  | { readonly kind: "needs-prepare"; readonly observedIdentity: string }
+  | {
+      readonly kind: "needs-prepare";
+      readonly observedIdentity: string;
+      readonly compatibility: Compatibility;
+    }
   | {
       readonly kind: "current";
       readonly artifact: PreparedArtifact;
       readonly observedIdentity: string;
+      readonly compatibility: Compatibility;
     };
 
 export type InstalledState =
@@ -64,9 +72,15 @@ export interface UpdateControlInspection {
   readonly presentationValue: string;
 }
 
+export interface InstallTransaction {
+  finalize(): Promise<AdapterResult<null>>;
+  rollback(): Promise<AdapterResult<null>>;
+}
+
 export interface InstallReceipt {
   readonly missingVerificationOutput: Output;
   readonly mismatchVerificationOutput: Output;
+  readonly transaction?: InstallTransaction;
 }
 
 export interface ProbeSnapshot<R> {
@@ -75,6 +89,7 @@ export interface ProbeSnapshot<R> {
   readonly installed: InstalledState;
   readonly ownership: OwnershipInspection<R>;
   readonly control: UpdateControlInspection;
+  readonly compatibility: Compatibility;
   readonly status: "needs prepare" | "needs install" | "current";
 }
 

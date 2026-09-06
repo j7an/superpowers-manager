@@ -497,8 +497,22 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
     selection: selection(),
     prepared: {
       kind: "current",
-      artifact: { root: "/plugin", commit: DESIRED },
+      artifact: {
+        root: "/plugin",
+        commit: DESIRED,
+        compatibility: {
+          kind: "supported",
+          generation: "codex-native",
+          reason: "fixture compatibility",
+        },
+        identity: DESIRED,
+      },
       observedIdentity: DESIRED,
+      compatibility: {
+        kind: "supported",
+        generation: "codex-native",
+        reason: "fixture compatibility",
+      },
     },
     installed: { kind: "current", observedIdentity: DESIRED.slice(0, 7) },
     ownership: unwrap(
@@ -509,6 +523,11 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
         successResult("inspect", { update_control: "managed" }, []),
       ),
     ),
+    compatibility: {
+      kind: "supported",
+      generation: "codex-native",
+      reason: "fixture compatibility",
+    },
     status: "current",
   };
 }
@@ -827,7 +846,16 @@ void test("Codex harness install retains the current package-root authority", as
   const sandbox = await codexSandbox(t);
   const ctx = { root: PACKAGE_ROOT, env: sandbox.env };
   const installed = await codexHarness.install(
-    { root: "/evidence-only", commit: DESIRED },
+    {
+      root: "/evidence-only",
+      commit: DESIRED,
+      compatibility: {
+        kind: "supported",
+        generation: "codex-native",
+        reason: "fixture compatibility",
+      },
+      identity: DESIRED,
+    },
     ctx,
   );
   assert.equal(installed.status, 0);

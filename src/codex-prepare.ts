@@ -8,8 +8,8 @@ import {
   type AdapterResult,
 } from "./adapter-result.ts";
 import { codexBuild } from "./adapter.ts";
-import { commitMatches } from "./domain/fingerprint.ts";
 import type { EffectiveSelection } from "./effective-selection.ts";
+import type { Compatibility } from "./harness-compatibility.ts";
 import type {
   PreparationLocation,
   PrepareCandidateInput,
@@ -49,6 +49,13 @@ const RESOLUTION_KINDS: readonly ResolutionKind[] = [
   "ref",
   "raw-commit",
 ];
+
+function unassessedCompatibility(): Compatibility {
+  return {
+    kind: "unknown",
+    reason: "Codex compatibility assessment is not available",
+  };
+}
 
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
@@ -264,32 +271,31 @@ export async function prepareCodexCandidate(
   }
   return successResult(
     built.outcome.operation,
-    { root: input.candidateRoot, commit: input.selection.desiredCommit },
+    {
+      root: input.candidateRoot,
+      commit: input.selection.desiredCommit,
+      compatibility: unassessedCompatibility(),
+      identity: input.selection.desiredCommit,
+    },
     built.outcome.messages,
   );
 }
 
 export async function inspectCodexPrepared(
-  selection: EffectiveSelection,
+  _selection: EffectiveSelection,
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedState>> {
   const observedIdentity = await generatedCommitOrEmpty(ctx.root);
-  if (!commitMatches(selection.desiredCommit, observedIdentity)) {
-    return successResult(
-      "inspect-prepared",
-      { kind: "needs-prepare", observedIdentity },
-      [],
-    );
-  }
+  const compatibility = unassessedCompatibility();
+  // Until the qualified assessment record is introduced, legacy provenance
+  // proves only identity. Neither a matching artifact nor an artifact for a
+  // different desired commit can establish the desired compatibility.
   return successResult(
     "inspect-prepared",
     {
-      kind: "current",
-      artifact: {
-        root: join(ctx.root, "plugins", "superpowers"),
-        commit: observedIdentity,
-      },
+      kind: "needs-prepare",
       observedIdentity,
+      compatibility,
     },
     [],
   );
@@ -319,7 +325,12 @@ export async function readCodexPrepared(
   }
   return successResult(
     "read-prepared",
-    { root: join(ctx.root, "plugins", "superpowers"), commit },
+    {
+      root: join(ctx.root, "plugins", "superpowers"),
+      commit,
+      compatibility: unassessedCompatibility(),
+      identity: commit,
+    },
     [],
   );
 }

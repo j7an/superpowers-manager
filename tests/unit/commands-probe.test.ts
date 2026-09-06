@@ -140,6 +140,7 @@ void test("an unrecognised argument is a usage error on stderr", async () => {
       env: {},
       stdout: out.stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
       adapter: notCalledAdapter,
     });
     assert.equal(status, 2);
@@ -158,6 +159,7 @@ void test("a thrown selection failure is an operational failure", async () => {
     env: {},
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
     adapter: notCalledAdapter,
   });
   assert.equal(status, 1);

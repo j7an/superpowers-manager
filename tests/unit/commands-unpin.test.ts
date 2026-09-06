@@ -22,6 +22,7 @@ void test("unpin removes an existing selection and names the packaged fallback",
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: out.stream,
       stderr: capture().stream,
+      options: { harness: "codex", allowExperimental: false },
       adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
@@ -41,6 +42,7 @@ void test("unpin reports the fallback when no selection was saved", async () => 
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: out.stream,
       stderr: capture().stream,
+      options: { harness: "codex", allowExperimental: false },
       adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
@@ -63,6 +65,7 @@ void test("unpin refuses a symlinked state path instead of following it", async 
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: capture().stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
       adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
@@ -84,6 +87,7 @@ void test("unpin reports active overrides after removal", async () => {
       },
       stdout: out.stream,
       stderr: capture().stream,
+      options: { harness: "codex", allowExperimental: false },
       adapter: notCalledAdapter,
     });
     // The fallback is the packaged ref, not the override.
@@ -111,6 +115,7 @@ void test("unpin fails closed when the state path cannot be inspected", async ()
         env: { SUPERPOWERS_CONFIG_DIR: dir },
         stdout: capture().stream,
         stderr: err.stream,
+        options: { harness: "codex", allowExperimental: false },
         adapter: notCalledAdapter,
       });
       // Not "no saved upstream selection" and not exit 0: unverifiable state is

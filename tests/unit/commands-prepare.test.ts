@@ -135,6 +135,7 @@ function unitContext(dir: string, extra: Record<string, string> = {}) {
       },
       stdout: out.stream,
       stderr: err.stream,
+      options: { harness: "codex" as const, allowExperimental: false },
       adapter: codexHarness,
     },
   };
