@@ -63,6 +63,7 @@ function ownershipResult(
   identityState: string | number | null | undefined,
   pluginPresent: boolean | string = false,
   marketplacePresent: boolean | string = false,
+  conflicts?: unknown,
 ): AdapterResult {
   const payload: Record<string, JsonValue> = {
     resources: {
@@ -71,6 +72,7 @@ function ownershipResult(
     },
   };
   if (identityState !== undefined) payload.identity_state = identityState;
+  if (conflicts !== undefined) payload.conflicts = conflicts as JsonValue;
   return successResult("inspect", payload, []);
 }
 
@@ -138,7 +140,7 @@ void test("ownership normalization preserves every Codex removal flag combinatio
   }
 });
 
-void test("ownership normalization reuses legacy install and removal policy", () => {
+void test("ownership normalization reuses legacy install and removal policy", async (t) => {
   const legacy = unwrap(
     normalizeCodexOwnership(ownershipResult("legacy", false, false)),
   );
@@ -179,6 +181,54 @@ void test("ownership normalization reuses legacy install and removal policy", ()
       stderr: ["error: unknown adapter identity state: unexpected"],
     },
   });
+
+  await t.test("blocks unmanaged conflicts with manual guidance", () => {
+    const normalized = unwrap(
+      normalizeCodexOwnership(
+        ownershipResult("manager", false, false, [
+          "active Codex plugin superpowers@another-provider",
+          "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
+        ]),
+      ),
+    );
+    assert.deepEqual(normalized.installEligibility, {
+      kind: "blocked",
+      output: {
+        stdout: [],
+        stderr: [
+          "Conflicting unmanaged Superpowers Codex resources require manual resolution:",
+          "- active Codex plugin superpowers@another-provider",
+          "- native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
+          "Remove or disable each resource manually, then retry.",
+        ],
+      },
+    });
+    assert.deepEqual(normalized.presentationConflicts, [
+      "active Codex plugin superpowers@another-provider",
+      "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
+    ]);
+    assert.deepEqual(normalized.removalInput, {
+      pluginPresent: false,
+      marketplacePresent: false,
+    });
+  });
+
+  await t.test(
+    "legacy diagnostics remain authoritative when conflicts coexist",
+    () => {
+      const normalized = unwrap(
+        normalizeCodexOwnership(
+          ownershipResult("legacy", false, false, [
+            "active Codex plugin superpowers@another-provider",
+          ]),
+        ),
+      );
+      assert.deepEqual(
+        normalized.installEligibility,
+        legacy.installEligibility,
+      );
+    },
+  );
 });
 
 void test("missing, null, and empty ownership identity use the probe diagnostic", () => {
@@ -220,6 +270,20 @@ void test("ownership normalization rejects malformed native fields at the reader
     malformedIdentity.outcome.error.message,
     "adapter returned a non-string identity_state for inspect --view ownership",
   );
+
+  for (const conflicts of ["conflict", ["valid", 7], ["unsafe\ntext"]]) {
+    const malformedConflicts = normalizeCodexOwnership(
+      ownershipResult("manager", false, false, conflicts),
+    );
+    assert.equal(malformedConflicts.outcome.ok, false);
+    if (malformedConflicts.outcome.ok) {
+      assert.fail("expected malformed conflicts rejection");
+    }
+    assert.equal(
+      malformedConflicts.outcome.error.message,
+      "expected an array of strings at conflicts",
+    );
+  }
 });
 
 void test("normalizers preserve controlled native failure outcomes unchanged", () => {
@@ -532,7 +596,7 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
   };
 }
 
-void test("Codex probe presentation retains the exact existing formatters", () => {
+void test("Codex probe presentation retains the exact existing formatters", async (t) => {
   const rendered = codexPresentation.renderProbe(snapshot());
   assert.equal(
     rendered.human,
@@ -578,6 +642,28 @@ void test("Codex probe presentation retains the exact existing formatters", () =
       updateControl: "managed",
     }),
   );
+
+  await t.test("appends conflicts without changing clean probe output", () => {
+    const base = snapshot();
+    const conflicted = {
+      ...base,
+      ownership: {
+        ...base.ownership,
+        presentationConflicts: [
+          "active Codex plugin superpowers@another-provider",
+        ],
+      },
+    };
+    const conflictOutput = codexPresentation.renderProbe(conflicted);
+    assert.equal(
+      conflictOutput.human,
+      `${rendered.human}ownership conflict: active Codex plugin superpowers@another-provider\n`,
+    );
+    assert.equal(
+      conflictOutput.porcelain,
+      `${rendered.porcelain}ownership_conflict=active Codex plugin superpowers@another-provider\n`,
+    );
+  });
 });
 
 void test("verification presentation keeps desired and observed identity separate from success", () => {

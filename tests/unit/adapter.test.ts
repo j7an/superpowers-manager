@@ -810,6 +810,7 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
                 marketplace: legacyMarketplace,
               },
               identity_state: identity,
+              conflicts: [],
             },
             label,
           );
@@ -817,6 +818,40 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
       }
     }
   }
+
+  await t.test(
+    "reuses one native plugin listing for unmanaged conflicts",
+    async () => {
+      const sandbox = await codexSandbox(t);
+      const result = await runAdapter(["inspect", "--view", "ownership"], {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({
+          FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
+            installed: [
+              {
+                pluginId: "superpowers@another-provider",
+                installed: true,
+                enabled: true,
+              },
+            ],
+          }),
+          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({ marketplaces: [] }),
+        }),
+      });
+      assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+      assert.deepEqual(result.outcome.result, {
+        view: "ownership",
+        resources: { plugin: false, marketplace: false },
+        legacy_resources: { plugin: false, marketplace: false },
+        identity_state: "neither",
+        conflicts: ["active Codex plugin superpowers@another-provider"],
+      });
+      assert.deepEqual(await sandbox.commands(), [
+        "plugin list --json",
+        "plugin marketplace list --json",
+      ]);
+    },
+  );
 });
 
 // ADAPTER-INSTALL-RESULT-01, ADAPTER-CONTROLLED-FAILURE-01 and

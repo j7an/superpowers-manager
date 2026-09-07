@@ -64,6 +64,7 @@ export interface OwnershipInspection<R> {
   readonly removalVerification: Decision;
   readonly postRemovalOutput: Output;
   readonly presentationValue: string;
+  readonly presentationConflicts?: readonly string[];
 }
 
 export interface UpdateControlInspection {

@@ -117,7 +117,84 @@ const PROBE_OK = [
 
 // --- The four fail-closed rules (milestone spec §7 / spec §4.3) ---
 
-void test("install re-inspects ownership and update control itself", async () => {
+void test("install re-inspects ownership and update control itself", async (t) => {
+  await t.test(
+    "a conflict introduced after probe blocks the fresh pre-mutation inspection",
+    async () => {
+      const out = capture();
+      const err = capture();
+      const { adapter: scripted, calls } = scriptedAdapter([
+        successResult("inspect", { fingerprint: null }, []),
+        successResult("inspect", ownership("manager"), []),
+        successResult("inspect", { update_control: "managed" }, []),
+        successResult(
+          "inspect",
+          {
+            ...ownership("manager"),
+            conflicts: ["active Codex plugin superpowers@another-provider"],
+          },
+          [],
+        ),
+      ]);
+      const compatibility = {
+        kind: "supported" as const,
+        generation: "codex-native",
+        reason: "fixture compatibility",
+      };
+      const artifact = {
+        root: "/prepared-plugin",
+        commit: X,
+        compatibility,
+        identity: X,
+      };
+      const adapter = {
+        ...scripted,
+        async inspectPrepared() {
+          calls.push({ operation: "inspect-prepared" });
+          return successResult(
+            "inspect-prepared",
+            {
+              kind: "current" as const,
+              artifact,
+              observedIdentity: X,
+              compatibility,
+            },
+            [],
+          );
+        },
+        async readPrepared() {
+          calls.push({ operation: "read-prepared" });
+          return successResult("read-prepared", artifact, []);
+        },
+      };
+      const ctx = makeCtx(
+        { desiredCommit: X, generatedCommit: X },
+        out,
+        err,
+        adapter,
+      );
+
+      const status = await runInstall([], ctx);
+
+      assert.equal(status, 1);
+      assert.deepEqual(operationNames(calls), [
+        "inspect-prepared",
+        "inspect-installed",
+        "inspect-ownership",
+        "inspect-update-control",
+        "read-prepared",
+        "inspect-ownership",
+      ]);
+      assert.equal(
+        err.text(),
+        "Conflicting unmanaged Superpowers Codex resources require manual resolution:\n" +
+          "- active Codex plugin superpowers@another-provider\n" +
+          "Remove or disable each resource manually, then retry.\n",
+      );
+      assert.equal(out.text(), NOTE);
+    },
+  );
+
   // Rule 1. gatherProbe just reported both, and install asks AGAIN. Mutation
   // authority requires CURRENT, VALIDATED evidence -- a probe's answer is
   // neither by the time the mutation runs. AGENTS.md, milestone spec §7.

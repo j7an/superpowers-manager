@@ -300,7 +300,19 @@ export const codexPresentation: HarnessPresentation<CodexRemovalInput> = {
   currentNotice: "manager is current",
   renderProbe(snapshot) {
     const facts = probeFacts(snapshot);
-    return { human: formatHuman(facts), porcelain: formatPorcelain(facts) };
+    const conflicts = snapshot.ownership.presentationConflicts ?? [];
+    return {
+      human:
+        formatHuman(facts) +
+        conflicts
+          .map((conflict) => `ownership conflict: ${conflict}\n`)
+          .join(""),
+      porcelain:
+        formatPorcelain(facts) +
+        conflicts
+          .map((conflict) => `ownership_conflict=${conflict}\n`)
+          .join(""),
+    };
   },
   renderInstallVerification(desiredCommit, receipt, inspection) {
     if (inspection.status !== 0 || !inspection.outcome.ok) {

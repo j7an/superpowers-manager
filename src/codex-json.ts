@@ -16,6 +16,12 @@ const REJECT_CONSTANTS: StrictJsonProfile = {
 
 type JsonObject = { [key: string]: JsonValue };
 
+export interface CodexInstalledPlugin {
+  readonly pluginId: string;
+  readonly installed: boolean | null;
+  readonly enabled: boolean | null;
+}
+
 function fail(message: string, cause?: unknown): never {
   throw new SafetyError("codex-json", message, { cause });
 }
@@ -84,6 +90,18 @@ export function installedListingHas(
 ): boolean {
   return checkedItems(raw, ACCEPT_CONSTANTS, arrayKey, field).some(
     (item) => item[field] === value,
+  );
+}
+
+export function codexInstalledPluginsFromJson(
+  raw: string | Uint8Array,
+): readonly CodexInstalledPlugin[] {
+  return checkedItems(raw, ACCEPT_CONSTANTS, "installed", "pluginId").map(
+    (item) => ({
+      pluginId: item.pluginId as string,
+      installed: typeof item.installed === "boolean" ? item.installed : null,
+      enabled: typeof item.enabled === "boolean" ? item.enabled : null,
+    }),
   );
 }
 

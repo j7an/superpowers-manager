@@ -109,6 +109,26 @@ function resourceFlag(
   return typeof value === "boolean" ? value : null;
 }
 
+function conflictDescriptions(
+  result: Record<string, unknown>,
+): readonly string[] | null {
+  const raw = result.conflicts;
+  if (raw === null || raw === undefined) return [];
+  if (!Array.isArray(raw)) return null;
+  const descriptions: string[] = [];
+  for (const item of raw) {
+    if (
+      typeof item !== "string" ||
+      item.length === 0 ||
+      hasTerminalControl(item)
+    ) {
+      return null;
+    }
+    descriptions.push(item);
+  }
+  return descriptions;
+}
+
 function installDecision(legacy: LegacyVerdict): Decision {
   switch (legacy.kind) {
     case "ok":
@@ -175,7 +195,11 @@ export function normalizeCodexOwnership(
     );
   }
   const identityState = identity.value;
-  const installEligibility: Decision =
+  const conflicts = conflictDescriptions(record);
+  if (conflicts === null) {
+    return malformed(result, "expected an array of strings at conflicts");
+  }
+  const legacyEligibility: Decision =
     identityState.length === 0
       ? {
           kind: "blocked",
@@ -185,6 +209,20 @@ export function normalizeCodexOwnership(
           },
         }
       : installDecision(requireNoLegacyState(identityState));
+  const installEligibility: Decision =
+    legacyEligibility.kind === "blocked" || conflicts.length === 0
+      ? legacyEligibility
+      : {
+          kind: "blocked",
+          output: {
+            stdout: [],
+            stderr: [
+              "Conflicting unmanaged Superpowers Codex resources require manual resolution:",
+              ...conflicts.map((conflict) => `- ${conflict}`),
+              "Remove or disable each resource manually, then retry.",
+            ],
+          },
+        };
 
   const verification = verifyUninstalledResources(result);
   const legacyReport = reportLegacyState(identityState);
@@ -224,6 +262,7 @@ export function normalizeCodexOwnership(
       removalVerification,
       postRemovalOutput,
       presentationValue: identityState,
+      presentationConflicts: conflicts,
     },
     result.outcome.messages,
   );
