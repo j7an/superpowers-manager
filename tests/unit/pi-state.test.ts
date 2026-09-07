@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
@@ -428,7 +429,7 @@ void test("recognizable unmanaged Pi package and native resources block activati
   });
   settings(state.paths, [
     "superpowers-manager/installed",
-    { source: "git:github.com/obra/superpowers", autoload: false },
+    { source: "git:github.com/obra/superpowers@v6.3.0", autoload: false },
   ]);
   const disabled = unwrapOwnership(await inspectPiOwnership(state.ctx));
   assert.equal(disabled.installEligibility.kind, "allowed");
@@ -444,9 +445,15 @@ void test("recognizable unmanaged Pi package and native resources block activati
 void test("only evidenced official Pi source spellings are recognized as upstream conflicts", async (t) => {
   for (const source of [
     "git:github.com/obra/superpowers",
+    "git:github.com/obra/superpowers@v6.3.0",
+    "git:github.com/obra/superpowers.git@refs/heads/main",
+    "git:git@github.com:obra/superpowers",
+    "git:git@github.com:obra/superpowers@v6.3.0",
     "https://github.com/obra/superpowers",
     "https://github.com/obra/superpowers.git",
+    "https://github.com/obra/superpowers@v6.3.0",
     "ssh://git@github.com/obra/superpowers.git",
+    "ssh://git@github.com/obra/superpowers.git@v6.3.0",
   ])
     await t.test(source, async (t) => {
       const state = sandbox(t);
@@ -461,7 +468,10 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
 
   for (const source of [
     "git:github.com/Obra/superpowers",
+    "git:git@github.com:Obra/superpowers@v6.3.0",
     "git:github.com/obra/superpowers-fork",
+    "git:github.com/obra/superpowers-fork@v6.3.0",
+    "git:github.com/obra/superpowers@",
   ])
     await t.test(`unrecognized ${source}`, async (t) => {
       const state = sandbox(t);
@@ -470,6 +480,65 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
       const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
       assert.equal(ownership.installEligibility.kind, "allowed");
       assert.deepEqual(ownership.presentationConflicts, []);
+    });
+});
+
+void test("local package conflicts fail closed only when present metadata is uninspectable", async (t) => {
+  for (const kind of [
+    "missing source",
+    "missing metadata",
+    "unrelated metadata",
+    "single extension",
+  ] as const)
+    await t.test(kind, async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const local = join(state.root, kind.replaceAll(" ", "-"));
+      if (kind === "missing metadata") mkdirSync(local);
+      if (kind === "unrelated metadata") {
+        mkdirSync(local);
+        writeFileSync(join(local, "package.json"), '{"name":"other"}');
+      }
+      if (kind === "single extension") writeFileSync(local, "export {};");
+      settings(state.paths, ["superpowers-manager/installed", local]);
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    });
+
+  for (const kind of ["malformed", "unreadable"] as const)
+    await t.test(kind, async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const local = join(state.root, kind);
+      const metadata = join(local, "package.json");
+      mkdirSync(local);
+      writeFileSync(
+        metadata,
+        kind === "malformed" ? "{" : '{"name":"superpowers"}',
+      );
+      if (kind === "unreadable") {
+        chmodSync(metadata, 0o000);
+      }
+      settings(state.paths, ["superpowers-manager/installed", local]);
+      try {
+        const ownership = await inspectPiOwnership(state.ctx);
+        assert.equal(ownership.outcome.ok, false);
+        if (ownership.outcome.ok) assert.fail("expected ownership failure");
+        assert.equal(
+          ownership.outcome.error.message,
+          `cannot inspect Pi ownership at ${state.paths.installedRoot}`,
+        );
+        const control = await inspectPiControl(state.ctx);
+        assert.equal(control.outcome.ok, false);
+        if (control.outcome.ok) assert.fail("expected control failure");
+        assert.equal(
+          control.outcome.error.message,
+          `cannot inspect Pi update control at ${state.paths.settingsFile}`,
+        );
+      } finally {
+        if (kind === "unreadable") chmodSync(metadata, 0o600);
+      }
     });
 });
 

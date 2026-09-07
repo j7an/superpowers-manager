@@ -50,12 +50,16 @@ interface SettingsObservation {
   readonly registration: PiPackageEntry | null;
 }
 
-const KNOWN_UPSTREAM_PI_SOURCES = new Set([
+const KNOWN_UPSTREAM_PI_SOURCE_BASES = [
   "git:github.com/obra/superpowers",
+  "git:github.com/obra/superpowers.git",
+  "git:git@github.com:obra/superpowers",
+  "git:git@github.com:obra/superpowers.git",
   "https://github.com/obra/superpowers",
   "https://github.com/obra/superpowers.git",
+  "ssh://git@github.com/obra/superpowers",
   "ssh://git@github.com/obra/superpowers.git",
-]);
+] as const;
 
 function blocked(...stderr: string[]): Decision {
   return { kind: "blocked", output: { stdout: [], stderr } };
@@ -63,6 +67,21 @@ function blocked(...stderr: string[]): Decision {
 
 function pathsFor(ctx: AdapterContext): PiPaths {
   return piPaths(ctx.env ?? {}, process.cwd());
+}
+
+function isKnownUpstreamPiSource(raw: string): boolean {
+  const source = raw.trim();
+  return KNOWN_UPSTREAM_PI_SOURCE_BASES.some((base) => {
+    if (source === base) return true;
+    if (!source.startsWith(`${base}@`)) return false;
+    const ref = source.slice(base.length + 1);
+    if (ref.length === 0) return false;
+    for (const character of ref) {
+      const code = character.codePointAt(0)!;
+      if (code <= 0x20 || code === 0x7f) return false;
+    }
+    return true;
+  });
 }
 
 async function observeSettings(paths: PiPaths): Promise<SettingsObservation> {
@@ -104,12 +123,18 @@ async function isNamedLocalSuperpowers(
     paths.homeDir,
   );
   if (root === null || root === paths.installedRoot) return false;
-  try {
-    const pkg = await readArtifactObject(root, join(root, "package.json"));
-    return pkg.name === "superpowers";
-  } catch {
-    return false;
+  const rootKind = await classifyPathNoFollow(root);
+  if (rootKind !== "directory" && rootKind !== "symlink") return false;
+  const metadata = join(root, "package.json");
+  const metadataKind = await classifyPathNoFollow(metadata);
+  if (metadataKind === "missing") return false;
+  if (metadataKind !== "regular-file") {
+    throw new Error(
+      "registered local Pi package metadata is not a regular file",
+    );
   }
+  const pkg = await readArtifactObject(root, metadata);
+  return pkg.name === "superpowers";
 }
 
 async function unmanagedConflicts(
@@ -119,7 +144,7 @@ async function unmanagedConflicts(
   const conflicts = new Set<string>();
   for (const entry of settings.packages) {
     if (entry.resourceState === "disabled") continue;
-    if (KNOWN_UPSTREAM_PI_SOURCES.has(entry.source.trim())) {
+    if (isKnownUpstreamPiSource(entry.source)) {
       conflicts.add("registered Pi package for obra/superpowers");
     } else if (await isNamedLocalSuperpowers(entry, paths)) {
       conflicts.add("registered local Pi package named superpowers");
