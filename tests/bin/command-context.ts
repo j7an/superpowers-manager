@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
 import {
@@ -18,8 +17,8 @@ import {
 import type {
   HarnessAdapter,
   PrepareCandidateInput,
-  PreparedArtifact,
 } from "../../src/harness.ts";
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
 import {
   observingCoordinator,
   type HarnessCall,
@@ -119,21 +118,11 @@ export function recordingAdapter(
           result.outcome.messages,
         );
       }
-      mkdirSync(input.candidateRoot, { recursive: true });
-      writeFileSync(
-        join(input.candidateRoot, ".superpowers-upstream.json"),
-        JSON.stringify({ commit: input.selection.desiredCommit }),
-        "utf8",
+      const artifact = await writeQualifiedCodexFixture(
+        input.candidateRoot,
+        input.selection.desiredCommit,
+        input.selection.effectiveSource,
       );
-      const artifact: PreparedArtifact = {
-        root: input.candidateRoot,
-        commit: input.selection.desiredCommit,
-        compatibility: {
-          kind: "unknown",
-          reason: "legacy Codex-shaped scripted result",
-        },
-        identity: input.selection.desiredCommit,
-      };
       return successResult(
         result.outcome.operation,
         artifact,

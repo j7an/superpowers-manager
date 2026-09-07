@@ -16,6 +16,7 @@ import {
   observingCoordinator,
 } from "../unit/helpers/command-harness.ts";
 import { UPSTREAM } from "../bin/lifecycle-fixture.ts";
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
 
 /**
  * `createCase`'s return type, referenced as a type only. Naming the typedef
@@ -58,7 +59,7 @@ export function caseEnv(
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
     // (`tests/bin/lifecycle-fakes.ts:213::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
-    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:470::const env = {`).
+    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:477::const env = {`).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
     // (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with
@@ -159,6 +160,22 @@ export function seedGenerated(c: CaseEnv, body: string) {
   const dir = join(c.pkg, "plugins", "superpowers");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, ".superpowers-upstream.json"), body, "utf8");
+}
+
+/**
+ * Writes a supported, receipt-bearing generated tree for status preconditions.
+ * Raw provenance-only seeding remains separate for missing/malformed evidence.
+ */
+export async function seedQualifiedGenerated(
+  c: CaseEnv,
+  commit = DESIRED,
+  source = UPSTREAM,
+): Promise<void> {
+  await writeQualifiedCodexFixture(
+    join(c.pkg, "plugins", "superpowers"),
+    commit,
+    source,
+  );
 }
 
 import { runProbe } from "../../src/commands/probe.ts";

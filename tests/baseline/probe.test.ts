@@ -31,6 +31,7 @@ import {
   REQUIRED_ENV,
   seedCodex,
   seedGenerated,
+  seedQualifiedGenerated,
   SHORT,
 } from "./probe-fixture.ts";
 
@@ -106,7 +107,7 @@ void test("the case environment pins every name runProbe's dependencies read", (
 
 void test("malformed installed metadata falls back to the manifest short SHA", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     // Two listings, one per invocation. The FIRST answers
     // `inspect --view fingerprint` and carries the active manager version, so
@@ -170,7 +171,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     resolved_ref: "v1.0.0",
     commit: DESIRED,
   });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -213,7 +214,7 @@ void test("an environment ref overrides only the ref side and the saved fields s
     resolved_ref: "v1.0.0",
     commit: DESIRED,
   });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c, DESIRED, source);
   // FOUR listings: this case runs probe twice (porcelain, then human) and each
   // run issues `plugin list --json` twice. The on-disk counter in
   // tests/bin/lifecycle-fakes.js is per case, not per run.
@@ -277,7 +278,7 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
     mode: "track-latest",
     source,
   });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -335,7 +336,7 @@ void test("probe reports every validated identity state without mutating anythin
     },
   ]) {
     const c = createCase({ fakes: "probe" });
-    seedGenerated(c, `{"commit":"${DESIRED}"}`);
+    await seedQualifiedGenerated(c);
     // The fingerprint listing stays the ACTIVE manager version in all four so
     // installed_commit resolves and status can be `current` even for the
     // `legacy` and `neither` rows -- impossible with one shared listing
@@ -366,7 +367,7 @@ void test("probe reports every validated identity state without mutating anythin
 
 void test("semantically invalid installed provenance falls through to the manifest", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -381,7 +382,7 @@ void test("semantically invalid installed provenance falls through to the manife
 
 void test("no active plugin yields a null fingerprint and needs install", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -414,7 +415,7 @@ void test("no active plugin yields a null fingerprint and needs install", async 
 
 void test("an absent installed manifest also yields a null fingerprint", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS],
     manifestVersion: null,
@@ -428,7 +429,7 @@ void test("an absent installed manifest also yields a null fingerprint", async (
 
 void test("stale generated provenance outranks a null installed fingerprint", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${"0".repeat(40)}"}`);
+  await seedQualifiedGenerated(c, "0".repeat(40));
   seedCodex(c, { pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS] });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);

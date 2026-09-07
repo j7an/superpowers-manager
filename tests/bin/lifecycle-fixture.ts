@@ -92,6 +92,13 @@ const IDENTITY = [
  */
 function buildUpstream(): string {
   const upstream = join(SCRATCH, "upstream");
+  mkdirSync(join(upstream, "skills", "using-superpowers"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(upstream, "skills", "using-superpowers", "SKILL.md"),
+    "---\nname: using-superpowers\ndescription: Native bootstrap fixture\n---\n# Using Superpowers\n",
+  );
   mkdirSync(join(upstream, "skills", "brainstorming"), { recursive: true });
   writeFileSync(
     join(upstream, "skills", "brainstorming", "SKILL.md"),

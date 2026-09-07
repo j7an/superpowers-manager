@@ -23,6 +23,7 @@ import {
   readdirSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -1489,6 +1490,9 @@ void describe("install commands", { concurrency: true }, () => {
       join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
       "{\n",
     );
+    // The shell-era tree predates qualified assessment receipts. Removing only
+    // the receipt preserves this case's legacy malformed-tree remediation path.
+    unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -1523,6 +1527,9 @@ void describe("install commands", { concurrency: true }, () => {
       join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
       "{\n",
     );
+    // As above, keep this a receipt-less legacy tree so update must remediate
+    // the malformed provenance rather than accept invalid modern evidence.
+    unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
     const result = await runScript(c, "update");
     // :777
     assert.equal(result.status, 0, result.stdout + result.stderr);

@@ -85,7 +85,7 @@ function assertNoLeakedInternals(stderr: string) {
 /**
  * `path\tkind[\tdigest]` lines for everything under `root`, so "the prior
  * generated tree survived byte-identical" is a real byte comparison rather than
- * an existence check. Same shape as `tests/baseline/probe.test.ts:56::function snapshotTree(root: string)`.
+ * an existence check. Same shape as `tests/baseline/probe.test.ts:57::function snapshotTree(root: string)`.
  */
 function snapshotTree(root: string): string[] {
   if (!existsSync(root)) return [];
