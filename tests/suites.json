@@ -67,6 +67,7 @@
     { "path": "tests/unit/adapter-result.test.ts", "group": "integration" },
     { "path": "tests/unit/adapter.test.ts", "group": "integration" },
     { "path": "tests/unit/atomic.test.ts", "group": "unit" },
+    { "path": "tests/unit/retained-publication.test.ts", "group": "unit" },
     { "path": "tests/unit/codex-json.test.ts", "group": "unit" },
     { "path": "tests/unit/codex-conflicts.test.ts", "group": "unit" },
     { "path": "tests/unit/codex-harness.test.ts", "group": "integration" },

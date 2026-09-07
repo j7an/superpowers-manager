@@ -394,11 +394,12 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       // The swap must run inside the workspace callback: withWorkspace removes
       // the workspace on return, and the candidate lives in it.
       //
-      // atomicReplaceDir's outer catch (`src/atomic.ts:208-215::if (cause`) wraps every
-      // non-SafetyError into a SafetyError, so the callee owns every failure on
-      // this path and re-emitting its own diagnostic is the sanctioned form of
-      // interpolation. The hand-written prefix carries the live root, which the
-      // callee's message does not.
+      // atomicReplaceDir delegates to beginDirectoryPublication, whose outer
+      // catch (`src/atomic.ts:315-322::if (cause`) wraps every non-SafetyError
+      // into a SafetyError, so the callee owns every failure on this path and
+      // re-emitting its own diagnostic is the sanctioned form of interpolation.
+      // The hand-written prefix carries the live root, which the callee's message
+      // does not.
       try {
         await atomicReplaceDir(candidate, pluginRoot);
       } catch (cause) {
