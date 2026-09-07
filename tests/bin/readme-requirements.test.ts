@@ -122,3 +122,26 @@ function parseRegion(): Record<string, string>[] {
 void test("README requirements table matches production preflight", () => {
   assert.deepEqual(parseRegion(), derive());
 });
+
+void test("README separates runtime qualification from admission", () => {
+  const text = readFileSync(join(ROOT, "README.md"), "utf8").replace(
+    /\s+/g,
+    " ",
+  );
+  assert.match(
+    text,
+    /For both Codex and Pi, native test versions are qualification evidence, not runtime allowlists\./,
+  );
+  assert.match(
+    text,
+    /Untested runtime versions are not automatically certified as compatible\./,
+  );
+  assert.doesNotMatch(
+    text,
+    /Every other Pi version is unsupported until separately qualified/,
+  );
+  assert.doesNotMatch(
+    text,
+    /the flag cannot admit it or an unqualified Pi runtime/,
+  );
+});

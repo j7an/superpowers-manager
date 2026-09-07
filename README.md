@@ -69,12 +69,20 @@ change, in the same pull request.
 See `docs/baseline/behavioral-inventory.md`'s `CLI-PREFLIGHT-01` for the
 behaviour this table describes.
 
-Pi support is qualified against exactly `pi-coding-agent` 0.85.1. Every other Pi
-version is unsupported until separately qualified, including newer versions;
-`--allow-experimental` does not bypass this runtime boundary. Set
-`SUPERPOWERS_PI` to select a non-default Pi executable. Activation preflight
-checks bounded `pi --version` output; product code does not import or execute the
-Pi extension to classify a candidate.
+Native container qualification uses `@openai/codex` 0.144.6 and
+`pi-coding-agent` 0.85.1. For both Codex and Pi, native test versions are
+qualification evidence, not runtime allowlists. Manager does not reject a
+runtime solely because its version differs from the native test pin. Operations
+still require inspectable state, required integration behavior, and validated
+postconditions. Untested runtime versions are not automatically certified as
+compatible.
+
+Pi runtime inspection requires a successful, bounded `pi --version` response in
+the expected version format. Manager uses your installed Pi executable; it does
+not install, upgrade, or downgrade Pi. No runtime version argument is required
+for `install` or `update`. Set `SUPERPOWERS_PI` to select a non-default Pi
+executable. Product code does not import or execute the Pi extension to classify
+a candidate.
 
 Integration generations describe runtime mechanisms, not each upstream release.
 Pi receipts record the compatibility generation alongside the selected source
@@ -323,12 +331,13 @@ npx superpowers-manager update --harness pi --allow-experimental
 npx superpowers-manager uninstall --harness pi
 ```
 
-At the qualified Pi runtime, the exact package profile from the official
+For Pi artifacts, the exact package profile from the official
 `obra/superpowers` source is `supported`. The same known-complete profile from a
 custom source is `experimental` and requires `--allow-experimental` immediately
-before install or update activation. A missing, changed, or unknown
-bootstrap/profile is `unsupported`; the flag cannot admit it or an unqualified
-Pi runtime.
+before install or update activation. The flag applies only to eligible
+experimental Superpowers artifacts; it never bypasses ownership, update control,
+validation, or postconditions. A missing, changed, or unknown bootstrap/profile
+is `unsupported`; the flag cannot admit it.
 
 Pi activation copies a validated frozen snapshot to
 `$PI_CODING_AGENT_DIR/superpowers-manager/installed` (defaulting under
