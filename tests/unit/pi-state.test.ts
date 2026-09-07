@@ -893,6 +893,102 @@ void test("Pi detects shared user-wide Superpowers skills without crossing into 
   );
 
   await t.test(
+    "external file aliases keep lexical filters before canonical deduplication",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const target = sharedSkill(state, "using-superpowers");
+      const alias = join(state.paths.homeDir, "shared-using-superpowers.md");
+      writeSkill(target, "using-superpowers");
+      symlinkSync(target, alias);
+
+      for (const targetControl of [
+        "-skills/superpowers/using-superpowers",
+        `-${target}`,
+      ]) {
+        settingsWithSkills(state.paths, packages, [alias, targetControl]);
+        const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+        assert.equal(ownership.installEligibility.kind, "blocked");
+        assert.deepEqual(ownership.presentationConflicts, [
+          "native Pi skills route ~/.agents/skills/superpowers",
+        ]);
+      }
+
+      settingsWithSkills(state.paths, packages, [alias, `-${alias}`]);
+      const disabled = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(disabled.installEligibility.kind, "allowed");
+      assert.deepEqual(disabled.presentationConflicts, []);
+    },
+  );
+
+  await t.test(
+    "the first explicit alias owns activity for one canonical skill",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const target = sharedSkill(state, "using-superpowers");
+      const first = join(state.paths.homeDir, "shared-first.md");
+      const second = join(state.paths.homeDir, "shared-second.md");
+      writeSkill(target, "using-superpowers");
+      symlinkSync(target, first);
+      symlinkSync(target, second);
+
+      settingsWithSkills(state.paths, packages, [first, second, `-${first}`]);
+      let ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+
+      settingsWithSkills(state.paths, packages, [second, first, `-${first}`]);
+      ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers",
+      ]);
+    },
+  );
+
+  await t.test(
+    "unrelated file aliases remain unrelated and related directory aliases are indeterminate",
+    async (t) => {
+      const unrelatedState = sandbox(t);
+      await preparedAndInstalled(t, unrelatedState);
+      const known = sharedSkill(unrelatedState, "using-superpowers");
+      const unrelatedTarget = join(unrelatedState.root, "unrelated/SKILL.md");
+      const unrelatedAlias = join(unrelatedState.paths.homeDir, "unrelated.md");
+      writeSkill(known, "using-superpowers");
+      writeSkill(unrelatedTarget, "unrelated");
+      symlinkSync(unrelatedTarget, unrelatedAlias);
+      settingsWithSkills(unrelatedState.paths, packages, [
+        unrelatedAlias,
+        "-skills/superpowers/using-superpowers",
+      ]);
+      let ownership = unwrapOwnership(
+        await inspectPiOwnership(unrelatedState.ctx),
+      );
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+
+      const relatedState = sandbox(t);
+      await preparedAndInstalled(t, relatedState);
+      const relatedTarget = dirname(
+        sharedSkill(relatedState, "using-superpowers"),
+      );
+      const relatedAlias = join(relatedState.paths.homeDir, "shared-skill");
+      writeSkill(join(relatedTarget, "SKILL.md"), "using-superpowers");
+      symlinkSync(relatedTarget, relatedAlias, "dir");
+      settingsWithSkills(relatedState.paths, packages, [
+        relatedAlias,
+        "-skills/superpowers/using-superpowers",
+      ]);
+      ownership = unwrapOwnership(await inspectPiOwnership(relatedState.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ]);
+    },
+  );
+
+  await t.test(
     "explicit known file sources use native trim tilde and file URL resolution",
     async (t) => {
       const state = sandbox(t);

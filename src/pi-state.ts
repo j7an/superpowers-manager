@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, readlink, realpath } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -369,13 +369,10 @@ function containedBy(root: string, candidate: string): boolean {
 
 async function hasSafeSharedSkillAncestors(
   path: string,
-  paths: PiPaths,
+  sharedRoot: string,
 ): Promise<boolean> {
-  const agentsRoot = join(paths.homeDir, ".agents");
-  const skillsRoot = join(agentsRoot, "skills");
-  const sharedRoot = join(skillsRoot, "superpowers");
   const suffix = relative(sharedRoot, dirname(path));
-  const directories = [agentsRoot, skillsRoot, sharedRoot];
+  const directories = [sharedRoot];
   let cursor = sharedRoot;
   for (const segment of suffix.split(sep)) {
     if (segment.length === 0) continue;
@@ -446,6 +443,12 @@ async function explicitSharedSkillActivities(
 }> {
   const activities = new Map<string, SharedSkillActivity>();
   const sharedRoot = join(paths.homeDir, ".agents", "skills", "superpowers");
+  let canonicalSharedRoot = sharedRoot;
+  try {
+    canonicalSharedRoot = await realpath(sharedRoot);
+  } catch {
+    // A missing or unresolvable root cannot contain a resolved explicit file.
+  }
   let indeterminate = false;
   for (const source of settings.skills ?? []) {
     if (isTopLevelSkillPattern(source)) continue;
@@ -458,28 +461,58 @@ async function explicitSharedSkillActivities(
       }
       continue;
     }
-    const related =
-      containedBy(sharedRoot, path) || containedBy(path, sharedRoot);
-    if (!related) continue;
-    let kind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
+    let lexicalKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
     try {
-      kind = await classifyPathNoFollow(path);
+      lexicalKind = await classifyPathNoFollow(path);
+    } catch {
+      if (containedBy(sharedRoot, path) || containedBy(path, sharedRoot)) {
+        indeterminate = true;
+      }
+      continue;
+    }
+    if (lexicalKind === "missing") continue;
+    let canonicalPath: string;
+    try {
+      canonicalPath = await realpath(path);
+    } catch {
+      let related =
+        containedBy(sharedRoot, path) || containedBy(path, sharedRoot);
+      if (!related && lexicalKind === "symlink") {
+        try {
+          const target = resolve(dirname(path), await readlink(path));
+          related =
+            containedBy(sharedRoot, target) || containedBy(target, sharedRoot);
+        } catch {
+          // Without a relationship to the known route, preserve unrelated state.
+        }
+      }
+      if (related) indeterminate = true;
+      continue;
+    }
+    const related =
+      containedBy(sharedRoot, path) ||
+      containedBy(path, sharedRoot) ||
+      containedBy(canonicalSharedRoot, canonicalPath) ||
+      containedBy(canonicalPath, canonicalSharedRoot);
+    if (!related) continue;
+    let canonicalKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
+    try {
+      canonicalKind = await classifyPathNoFollow(canonicalPath);
     } catch {
       indeterminate = true;
       continue;
     }
-    if (kind === "missing") continue;
     if (
-      kind !== "regular-file" ||
+      canonicalKind !== "regular-file" ||
       !path.endsWith(".md") ||
-      !(await hasSafeSharedSkillAncestors(path, paths))
+      !(await hasSafeSharedSkillAncestors(canonicalPath, canonicalSharedRoot))
     ) {
       indeterminate = true;
       continue;
     }
-    if (!activities.has(path)) {
+    if (!activities.has(canonicalPath)) {
       activities.set(
-        path,
+        canonicalPath,
         explicitSharedSkillActivity(path, paths, settings.skills ?? []),
       );
     }
@@ -503,7 +536,14 @@ async function sharedPiSkillsActivity(
   }
   if (collection.kind === "candidates") {
     for (const path of collection.paths) {
-      if (explicit.activities.has(path)) continue;
+      let canonicalPath: string;
+      try {
+        canonicalPath = await realpath(path);
+      } catch {
+        indeterminate = true;
+        continue;
+      }
+      if (explicit.activities.has(canonicalPath)) continue;
       const activity = sharedSkillActivity(
         path,
         agentsRoot,
