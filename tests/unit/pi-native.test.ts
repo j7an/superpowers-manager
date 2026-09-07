@@ -12,7 +12,6 @@ import test, { type TestContext } from "node:test";
 
 import {
   SUPPORTED_PI_RUNTIME_VERSION,
-  readPiRuntimeVersion,
   normalizePiRuntimeVersion,
   runPi,
 } from "../../src/pi-native.ts";
@@ -115,7 +114,7 @@ void test("runPi invokes one bounded argv in an isolated native environment", as
   );
 });
 
-void test("readPiRuntimeVersion admits only the supported released runtime", async (t) => {
+void test("Pi runtime normalization admits only the supported released runtime", async (t) => {
   await t.test(
     "a successful payload with nonzero status cannot admit runtime",
     () => {
@@ -166,10 +165,8 @@ void test("readPiRuntimeVersion admits only the supported released runtime", asy
 
   for (const [name, run, accepted] of cases)
     await t.test(name, async () => {
-      const result = await readPiRuntimeVersion(
-        paths,
-        { root },
-        async () => run,
+      const result = normalizePiRuntimeVersion(
+        await runPi(["--version"], paths, { root }, async () => run),
       );
       assert.equal(result.outcome.ok, accepted);
       if (accepted) {

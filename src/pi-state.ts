@@ -67,6 +67,8 @@ const KNOWN_UPSTREAM_PI_SOURCE_BASES = [
   "git:github.com/obra/superpowers.git",
   "git:git@github.com:obra/superpowers",
   "git:git@github.com:obra/superpowers.git",
+  "http://github.com/obra/superpowers",
+  "http://github.com/obra/superpowers.git",
   "https://github.com/obra/superpowers",
   "https://github.com/obra/superpowers.git",
   "ssh://git@github.com/obra/superpowers",

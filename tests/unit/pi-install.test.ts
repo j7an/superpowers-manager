@@ -1077,6 +1077,58 @@ void test("Pi uninstall distinguishes deregistration from unverifiable snapshot 
     ["npm:unrelated"],
   );
   assert.equal(existsSync(f.paths.recoveryRoot), true);
+
+  const unregistered = await fixture(t);
+  value(
+    await transaction(
+      await installPi(
+        unregistered.artifact,
+        unregistered.ctx,
+        unregistered.deps,
+      ),
+    ).finalize(),
+  );
+  writeFileSync(
+    unregistered.paths.settingsFile,
+    JSON.stringify({ packages: ["npm:unrelated"] }),
+  );
+  const unregisteredInput = value(
+    await inspectPiOwnership(unregistered.ctx),
+  ).removalInput;
+  const realRm = fs.promises.rm;
+  const failSnapshotRemoval: typeof fs.promises.rm = async (path, options) => {
+    if (String(path) === unregistered.paths.installedRoot)
+      throw new Error("injected snapshot cleanup failure");
+    return realRm(path, options);
+  };
+  const mockedRm = t.mock.method(fs.promises, "rm", failSnapshotRemoval);
+  syncBuiltinESMExports();
+  let unregisteredResult: AdapterResult<null>;
+  try {
+    unregisteredResult = await removePi(
+      unregisteredInput,
+      unregistered.ctx,
+      unregistered.deps,
+    );
+  } finally {
+    mockedRm.mock.restore();
+    syncBuiltinESMExports();
+  }
+  assert.equal(unregisteredResult!.outcome.ok, false);
+  if (!unregisteredResult!.outcome.ok) {
+    assert.match(
+      unregisteredResult!.outcome.error.message,
+      /cannot verify Pi removal/,
+    );
+    assert.equal(
+      unregisteredResult!.outcome.error.message.includes(
+        "registration was removed",
+      ),
+      false,
+    );
+  }
+  assert.equal(existsSync(unregistered.paths.installedRoot), true);
+  assert.equal(existsSync(unregistered.paths.recoveryRoot), true);
 });
 
 void test("Pi interruption leaves a pre-publication journal that identifies the retained backup", async (t) => {

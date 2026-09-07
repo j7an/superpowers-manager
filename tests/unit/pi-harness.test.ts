@@ -67,9 +67,11 @@ void test("Pi adapter reports recovery without blocking its low-level transactio
   assert.ok(result.outcome.ok);
   assert.equal(result.outcome.result.probeEligibility.kind, "blocked");
   assert.equal(result.outcome.result.mutationEligibility.kind, "blocked");
+  assert.equal(result.outcome.result.recoveryState, "required");
   assert.match(result.outcome.result.presentationValue, /recovery/);
   const lowLevel = await inspectPiControl(ctx);
   assert.ok(lowLevel.outcome.ok);
+  assert.equal(lowLevel.outcome.result.recoveryState, undefined);
   assert.equal(lowLevel.outcome.result.mutationEligibility.kind, "allowed");
   const { readFile } = await import("node:fs/promises");
   assert.equal(await readFile(marker, "utf8"), "preserve recovery bytes");

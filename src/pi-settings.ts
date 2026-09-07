@@ -27,13 +27,14 @@ const SETTINGS_PROFILE: StrictJsonProfile = {
   maxDepth: 256,
 };
 
-// Pi 0.85.1 uses exact, case-sensitive prefix checks. Bare scp-like, uppercase,
-// and git+ spellings remain local; widening this list would change which
-// settings identities compare as paths.
+// Pi 0.85.1's preliminary isLocalPath check excludes github:, but parseGitUrl
+// does not recognize that shorthand and parseSource falls back to local. Keep
+// that verified case locally inspectable; the remaining exact, case-sensitive
+// prefix policy stays bounded because widening it changes which settings
+// identities compare as paths.
 const REMOTE_SOURCE_PREFIXES = [
   "npm:",
   "git:",
-  "github:",
   "http:",
   "https:",
   "ssh:",

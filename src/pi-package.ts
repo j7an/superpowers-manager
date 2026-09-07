@@ -217,18 +217,6 @@ export async function readPiReceipt(root: string): Promise<PiReceipt> {
   }
 }
 
-export async function validatePiPackage(root: string): Promise<void> {
-  const { compatibility } = await readPiPackageAssessment(root);
-  if (
-    compatibility.kind !== "supported" &&
-    compatibility.kind !== "experimental"
-  )
-    throw new SafetyError(
-      "pi-package",
-      `Pi package no longer matches the qualified profile: ${root}`,
-    );
-}
-
 export async function readPiPackageAssessment(root: string): Promise<{
   readonly receipt: PiReceipt;
   readonly compatibility: Compatibility;

@@ -62,7 +62,7 @@ function unmanagedPluginConflict(plugin: CodexInstalledPlugin): string {
 
 async function nativeRouteConflict(ctx: AdapterContext): Promise<string> {
   const home = ctx.env?.HOME;
-  if (home === undefined || home.length === 0) return "";
+  if (home === undefined || home.length === 0) return NATIVE_ROUTE_CONFLICT;
   const route = join(home, ".agents", "skills", "superpowers");
   const asset = join(route, "using-superpowers", "SKILL.md");
   let routeIsSymlink: boolean;

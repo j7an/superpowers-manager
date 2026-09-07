@@ -266,6 +266,7 @@ void test("Pi local source resolution matches native identities", () => {
     "/tmp/pi-user/git@github.com:obra/superpowers.git",
   );
   for (const [source, expected] of [
+    ["github:obra/superpowers", "/tmp/pi-user/github:obra/superpowers"],
     ["NPM:x", "/tmp/pi-user/NPM:x"],
     ["git+https:x", "/tmp/pi-user/git+https:x"],
     ["FILE:///native-case", "/tmp/pi-user/FILE:/native-case"],
@@ -283,7 +284,7 @@ void test("Pi local source resolution matches native identities", () => {
   for (const source of [
     "npm:@scope/package@1.0.0",
     "git:https://github.com/obra/superpowers.git",
-    "github:obra/superpowers",
+    "http://github.com/obra/superpowers.git",
     "https://github.com/obra/superpowers.git",
     "ssh://git@github.com/obra/superpowers.git",
   ]) {

@@ -148,16 +148,6 @@ export async function runPi(
   }
 }
 
-export async function readPiRuntimeVersion(
-  paths: PiPaths,
-  ctx: AdapterContext,
-  execute: typeof runBoundedCommand = runBoundedCommand,
-): Promise<AdapterResult<string>> {
-  return normalizePiRuntimeVersion(
-    await runPi(["--version"], paths, ctx, execute),
-  );
-}
-
 export function normalizePiRuntimeVersion(
   result: AdapterResult<PiCommandOutput>,
 ): AdapterResult<string> {

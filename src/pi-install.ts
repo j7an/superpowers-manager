@@ -706,7 +706,6 @@ export async function removePi(
         );
       }
     }
-    deregistered = true;
     await phase(pending, "deregistered");
     await requireIdentity(paths.installedRoot, installedIdentity);
     await requireSnapshot(paths.installedRoot, previous);

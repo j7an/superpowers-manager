@@ -47,6 +47,7 @@ export const piHarness: HarnessAdapter<PiRemovalInput> = {
             probeEligibility: decision,
             mutationEligibility: decision,
             presentationValue: `recovery required at ${paths.recoveryRoot}`,
+            recoveryState: "required",
           },
           [],
         );

@@ -21,6 +21,7 @@ import {
 
 /** Every field populated, so ordering and labelling are the only variables. */
 const FULL = {
+  harness: "codex" as const,
   requestedRef: "v1.2.3",
   resolvedRef: "v1.2.3",
   desiredCommit: "a".repeat(40),
@@ -49,6 +50,7 @@ const FULL = {
 // strictly better than any test-side copy: the expectation cannot drift from
 // the implementation because it IS the implementation.
 const EXPECTED_KEYS = [
+  "harness",
   "requested_ref",
   "resolved_ref",
   "desired_commit",
@@ -73,13 +75,14 @@ const EXPECTED_KEYS = [
 // PROBE_PORCELAIN_KEYS, which is derived from the same fields() table
 // formatPorcelain walks and so could not catch the two moving together. Do not
 // "simplify" either assertion to reuse PROBE_PORCELAIN_KEYS: this one is what
-// pins the contract to the 17 names `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:43-59::printf 'requested_ref` emits, and the
-// ordering one is what pins formatPorcelain's output to the same list.
-void test("the exported key list is the frozen seventeen", () => {
+// pins the retained 17 names to `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:43-59::printf 'requested_ref`
+// after the selected harness field, and the ordering one is what pins
+// formatPorcelain's output to the same list.
+void test("the exported key list starts with harness and preserves the frozen fields", () => {
   assert.deepEqual([...PROBE_PORCELAIN_KEYS], EXPECTED_KEYS);
 });
 
-void test("porcelain emits exactly seventeen keys in the frozen order", () => {
+void test("porcelain emits harness then the seventeen frozen keys", () => {
   // Whole-list equality, not per-key membership: a `includes` check passes
   // while the order drifts, and `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:413::$expected_keys` asserted the order.
   const lines = formatPorcelain(FULL).split("\n").slice(0, -1);
@@ -87,11 +90,12 @@ void test("porcelain emits exactly seventeen keys in the frozen order", () => {
     lines.map((line) => line.slice(0, line.indexOf("="))),
     EXPECTED_KEYS,
   );
-  assert.equal(lines.length, 17);
+  assert.equal(lines.length, 18);
 });
 
 void test("porcelain emits each value verbatim after its key", () => {
   const text = formatPorcelain(FULL);
+  assert.match(text, /^harness=codex$/m);
   assert.match(text, /^desired_commit=a{40}$/m);
   assert.match(text, /^saved_mode=pinned$/m);
   assert.match(text, /^update_control=managed$/m);
@@ -118,6 +122,7 @@ void test("human mode substitutes the two absence labels", () => {
     installedCommit: "",
     savedSource: "",
   });
+  assert.match(text, /^harness: codex$/m);
   assert.match(text, /^generated plugin commit: not present$/m);
   assert.match(
     text,

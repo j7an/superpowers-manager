@@ -72,6 +72,7 @@ export interface UpdateControlInspection {
   readonly probeEligibility: Decision;
   readonly mutationEligibility: Decision;
   readonly presentationValue: string;
+  readonly recoveryState?: "required";
 }
 
 export interface InstallTransaction {

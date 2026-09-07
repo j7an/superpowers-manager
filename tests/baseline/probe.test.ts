@@ -121,6 +121,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^harness=codex$/m);
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, new RegExp(`^generated_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, new RegExp(`^installed_commit=${SHORT}$`, "m"));
@@ -136,7 +137,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/codex-presentation.ts:223::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/codex-presentation.ts:227::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);

@@ -15,6 +15,7 @@ import type { AdapterContext } from "./adapter-result.ts";
 import type { CodexRemovalInput } from "./adapter.ts";
 
 export interface ProbeFacts {
+  readonly harness: "codex";
   readonly requestedRef: string;
   readonly resolvedRef: string;
   readonly desiredCommit: string;
@@ -45,6 +46,7 @@ interface Field {
 // porcelain field order exposed through the harness presentation.
 export function fields(f: ProbeFacts): readonly Field[] {
   return [
+    { key: "harness", label: "harness", value: f.harness },
     { key: "requested_ref", label: "requested ref", value: f.requestedRef },
     { key: "resolved_ref", label: "resolved ref", value: f.resolvedRef },
     { key: "desired_commit", label: "desired commit", value: f.desiredCommit },
@@ -100,6 +102,7 @@ export function fields(f: ProbeFacts): readonly Field[] {
 }
 
 const NO_FACTS: ProbeFacts = {
+  harness: "codex",
   requestedRef: "",
   resolvedRef: "",
   desiredCommit: "",
@@ -207,6 +210,7 @@ function probeFacts(facts: ProbeSnapshot<CodexRemovalInput>): ProbeFacts {
   const selection = facts.selection;
   const saved = selection.saved;
   return {
+    harness: "codex",
     requestedRef: selection.requestedRef,
     resolvedRef: selection.resolvedRef,
     desiredCommit: selection.desiredCommit,

@@ -12,7 +12,6 @@ import {
 import { piHarness } from "../../src/pi-harness.ts";
 import {
   digestPiTree,
-  validatePiPackage,
   readPiReceipt,
   piReceiptBinding,
 } from "../../src/pi-package.ts";
@@ -206,8 +205,13 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
   assert.equal(probed.facts.control.presentationValue, "control-collected");
   assert.equal(probed.facts.status, "needs prepare");
 
-  assert.equal((await readPiPrepared(ctx)).outcome.ok, false);
-  await assert.rejects(validatePiPackage(prepared), /Pi (artifact|package)/);
+  const unreadablePrepared = await readPiPrepared(ctx);
+  assert.equal(unreadablePrepared.outcome.ok, false);
+  if (!unreadablePrepared.outcome.ok)
+    assert.match(
+      unreadablePrepared.outcome.error.message,
+      /cannot read Pi prepared artifact/,
+    );
 });
 
 void test("validates every receipt identity field independently and preserves raw custom source classification", async (t) => {

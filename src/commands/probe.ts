@@ -176,7 +176,11 @@ function validControl(value: UpdateControlInspection): boolean {
     candidate !== null &&
     validDecision(candidate.probeEligibility as Decision) &&
     validDecision(candidate.mutationEligibility as Decision) &&
-    typeof candidate.presentationValue === "string"
+    typeof candidate.presentationValue === "string" &&
+    (candidate.recoveryState === undefined ||
+      (candidate.recoveryState === "required" &&
+        (candidate.probeEligibility as Decision).kind === "blocked" &&
+        (candidate.mutationEligibility as Decision).kind === "blocked"))
   );
 }
 
@@ -289,9 +293,11 @@ export async function gatherProbe<R>(
     unexpected: string,
     invalidStatus: string,
     valid: (value: T) => boolean,
+    replaySuccess = true,
   ): Promise<Inspection<T>> => {
     const result = await inspect(call, unexpected, invalidStatus, valid);
-    if (result.result !== null) outcomes.push(result.result.outcome);
+    if (result.result !== null && (replaySuccess || !result.result.outcome.ok))
+      outcomes.push(result.result.outcome);
     return result;
   };
 
@@ -348,6 +354,7 @@ export async function gatherProbe<R>(
     "cannot inspect prepared harness state",
     "adapter reported a failure status for prepared harness inspection",
     validPrepared,
+    false,
   );
   if (!preparedAfter.ok)
     return { status: 1, outcomes, message: preparedAfter.message };
@@ -356,6 +363,7 @@ export async function gatherProbe<R>(
     installedFailure.unexpected,
     installedFailure.invalidStatus,
     validInstalled,
+    false,
   );
   if (!installedAfter.ok)
     return { status: 1, outcomes, message: installedAfter.message };
@@ -364,6 +372,7 @@ export async function gatherProbe<R>(
     controlFailure.unexpected,
     controlFailure.invalidStatus,
     validControl,
+    false,
   );
   if (!controlAfter.ok)
     return { status: 1, outcomes, message: controlAfter.message };
@@ -409,8 +418,7 @@ export async function gatherProbe<R>(
       compatibility: preparedState.compatibility,
       resources: after,
       resourceState:
-        control.result.outcome.result.probeEligibility.kind === "blocked" &&
-        ctx.options.harness === "pi"
+        control.result.outcome.result.recoveryState === "required"
           ? "recovery-required"
           : after.some((observation) => observation.state === "owned")
             ? "owned"

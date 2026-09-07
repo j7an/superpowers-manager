@@ -76,6 +76,14 @@ version is unsupported until separately qualified, including newer versions;
 checks bounded `pi --version` output; product code does not import or execute the
 Pi extension to classify a candidate.
 
+Integration generations describe runtime mechanisms, not each upstream release.
+Pi receipts record the compatibility generation alongside the selected source
+and exact commit. A generation retired by the current adapter cannot be
+activated. `--allow-experimental` permits only a verifiable candidate
+within implemented experimental mechanics; it cannot admit unsupported or
+unverified mechanics, and it never updates or removes an existing snapshot on
+its own.
+
 macOS and Linux are tested. WSL2 is supported for the established Codex path.
 Pi integration is tested on macOS and in an isolated Linux container. Running Pi
 inside WSL2 has not been separately tested. Native Windows is untested.

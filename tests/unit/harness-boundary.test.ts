@@ -880,6 +880,220 @@ void test("probe performs only the four read-only inspections", async (t) => {
       }
     },
   );
+
+  await t.test(
+    "successful closing inspections do not replay messages a second time",
+    async (subtest) => {
+      const messageFixture = await createHarnessFixture(subtest);
+      const messages = [
+        { channel: "stdout" as const, text: "shared inspection diagnostic" },
+      ];
+      const withMessages = async <T>(result: Promise<AdapterResult<T>>) => {
+        const resolved = await result;
+        assert.ok(resolved.outcome.ok);
+        return successResult(
+          resolved.outcome.operation,
+          resolved.outcome.result,
+          messages,
+        );
+      };
+      const messageAdapter = {
+        ...messageFixture.adapter,
+        inspectPrepared: (
+          ...args: Parameters<typeof messageFixture.methods.inspectPrepared>
+        ) => withMessages(messageFixture.methods.inspectPrepared(...args)),
+        inspectInstalled: (
+          ...args: Parameters<typeof messageFixture.methods.inspectInstalled>
+        ) => withMessages(messageFixture.methods.inspectInstalled(...args)),
+        inspectOwnership: (
+          ...args: Parameters<typeof messageFixture.methods.inspectOwnership>
+        ) => withMessages(messageFixture.methods.inspectOwnership(...args)),
+        inspectUpdateControl: (
+          ...args: Parameters<
+            typeof messageFixture.methods.inspectUpdateControl
+          >
+        ) => withMessages(messageFixture.methods.inspectUpdateControl(...args)),
+      };
+
+      assert.equal(
+        await runProbe([], { ...messageFixture.ctx, adapter: messageAdapter }),
+        0,
+      );
+      assert.equal(
+        messageFixture.out.text(),
+        "shared inspection diagnostic\n".repeat(4) + "fixture status current\n",
+      );
+      assert.equal(messageFixture.err.text(), "");
+    },
+  );
+
+  await t.test(
+    "a controlled closing failure and its messages are replayed exactly once",
+    async (subtest) => {
+      const failureFixture = await createHarnessFixture(subtest);
+      let controlReads = 0;
+      const failureAdapter = {
+        ...failureFixture.adapter,
+        ...failureFixture.methods,
+        async inspectUpdateControl(
+          adapterContext: Parameters<
+            typeof failureFixture.methods.inspectUpdateControl
+          >[0],
+        ): Promise<AdapterResult<UpdateControlInspection>> {
+          controlReads += 1;
+          if (controlReads === 2) {
+            failureFixture.calls.push("inspect-control");
+            return failureResult(
+              "inspect-control",
+              "closing-failure",
+              "closing control failed",
+              ["preserve closing evidence"],
+              [{ channel: "stderr", text: "closing failure context" }],
+            );
+          }
+          return await failureFixture.methods.inspectUpdateControl(
+            adapterContext,
+          );
+        },
+      };
+
+      assert.equal(
+        await runProbe([], { ...failureFixture.ctx, adapter: failureAdapter }),
+        1,
+      );
+      assert.equal(failureFixture.out.text(), "");
+      assert.equal(
+        failureFixture.err.text(),
+        "closing failure context\n" +
+          "error: closing control failed\n" +
+          "hint: preserve closing evidence\n",
+      );
+    },
+  );
+
+  for (const state of ["busy", "uninspectable"] as const) {
+    await t.test(
+      `${state} resource evidence exits one without mutation`,
+      async (subtest) => {
+        const stateFixture = await createHarnessFixture(subtest);
+        let mutationCalls = 0;
+        let observedResource = "";
+        const coordination = {
+          async observeResources(paths: readonly string[]) {
+            observedResource = paths[0]!;
+            return paths.map((resource) => ({
+              resource,
+              state,
+              markerIdentity: "fixture-marker",
+            }));
+          },
+          async withResources<T>(
+            _paths: readonly string[],
+            action: () => Promise<T>,
+          ): Promise<T> {
+            mutationCalls += 1;
+            return await action();
+          },
+        };
+
+        assert.equal(
+          await runProbe([], {
+            ...stateFixture.ctx,
+            adapter: { ...stateFixture.adapter, ...stateFixture.methods },
+            coordination,
+          }),
+          1,
+        );
+        assert.equal(stateFixture.out.text(), "");
+        assert.equal(
+          stateFixture.err.text(),
+          `error: harness resource is ${state}: ${observedResource}\n`,
+        );
+        assert.equal(mutationCalls, 0);
+        assert.equal(stateFixture.calls.includes("install"), false);
+        assert.equal(stateFixture.calls.includes("remove"), false);
+      },
+    );
+  }
+
+  await t.test(
+    "adapter-owned recovery evidence exits one with rendered state and no mutation",
+    async (subtest) => {
+      const recoveryFixture = await createHarnessFixture(subtest);
+      let mutationCalls = 0;
+      const recoveryAdapter = {
+        ...recoveryFixture.adapter,
+        ...recoveryFixture.methods,
+        async inspectUpdateControl(
+          adapterContext: Parameters<
+            typeof recoveryFixture.methods.inspectUpdateControl
+          >[0],
+        ): Promise<AdapterResult<UpdateControlInspection>> {
+          const result =
+            await recoveryFixture.methods.inspectUpdateControl(adapterContext);
+          assert.ok(result.outcome.ok);
+          const blocked = {
+            kind: "blocked" as const,
+            output: {
+              stdout: [],
+              stderr: ["error: fixture recovery required"],
+            },
+          };
+          return successResult(
+            result.outcome.operation,
+            {
+              ...result.outcome.result,
+              probeEligibility: blocked,
+              mutationEligibility: blocked,
+              recoveryState: "required",
+            } as UpdateControlInspection,
+            result.outcome.messages,
+          );
+        },
+        presentation: {
+          ...recoveryFixture.adapter.presentation,
+          renderProbe(
+            facts: Parameters<
+              typeof recoveryFixture.adapter.presentation.renderProbe
+            >[0],
+          ) {
+            return {
+              human: `resource state: ${facts.resourceState}\n`,
+              porcelain: `resource_state=${facts.resourceState}\n`,
+            };
+          },
+        },
+      };
+      const coordination = {
+        ...recoveryFixture.ctx.coordination,
+        async withResources<T>(
+          _paths: readonly string[],
+          action: () => Promise<T>,
+        ): Promise<T> {
+          mutationCalls += 1;
+          return await action();
+        },
+      };
+
+      assert.equal(
+        await runProbe([], {
+          ...recoveryFixture.ctx,
+          options: { harness: "codex", allowExperimental: false },
+          adapter: recoveryAdapter,
+          coordination,
+        }),
+        1,
+      );
+      assert.equal(
+        recoveryFixture.out.text(),
+        "resource state: recovery-required\n",
+      );
+      assert.equal(recoveryFixture.err.text(), "");
+      assert.equal(mutationCalls, 0);
+      assert.equal(recoveryFixture.calls.includes("install"), false);
+      assert.equal(recoveryFixture.calls.includes("remove"), false);
+    },
+  );
 });
 
 void test("probe rejects malformed successful payloads at every existing observation boundary", async (t) => {
@@ -1001,7 +1215,10 @@ void test("probe rejects malformed successful payloads at every existing observa
         1,
         `${stage}/${phase}`,
       );
-      assert.equal(fixture.out.text(), `fixture ${stage} diagnostic\n`);
+      assert.equal(
+        fixture.out.text(),
+        phase === "initial" ? `fixture ${stage} diagnostic\n` : "",
+      );
       assert.equal(
         fixture.err.text(),
         stage === "prepared"
@@ -1013,6 +1230,45 @@ void test("probe rejects malformed successful payloads at every existing observa
         /private .* payload failure|Cannot read properties/,
       );
     });
+  }
+
+  for (const recoveryState of [null, "other", true] as const) {
+    await t.test(
+      `control/recovery-state-${String(recoveryState)}`,
+      async (t) => {
+        const fixture = await createHarnessFixture(t);
+        const adapter = {
+          ...fixture.adapter,
+          ...fixture.methods,
+          async inspectUpdateControl(
+            adapterContext: Parameters<
+              typeof fixture.methods.inspectUpdateControl
+            >[0],
+          ): Promise<AdapterResult<UpdateControlInspection>> {
+            const result =
+              await fixture.methods.inspectUpdateControl(adapterContext);
+            assert.ok(result.outcome.ok);
+            return successResult(
+              result.outcome.operation,
+              {
+                ...result.outcome.result,
+                recoveryState,
+              } as unknown as UpdateControlInspection,
+              result.outcome.messages,
+            );
+          },
+        };
+
+        assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
+        assert.equal(fixture.out.text(), "");
+        assert.equal(
+          fixture.err.text(),
+          "error: invalid test adapter status\n",
+        );
+        assert.equal(fixture.calls.includes("install"), false);
+        assert.equal(fixture.calls.includes("remove"), false);
+      },
+    );
   }
 });
 

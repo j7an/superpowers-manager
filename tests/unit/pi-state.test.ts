@@ -495,7 +495,7 @@ void test("recognizable unmanaged Pi package and native resources block activati
   });
   settings(state.paths, [
     "superpowers-manager/installed",
-    { source: "git:github.com/obra/superpowers@v6.3.0", autoload: false },
+    { source: "http://github.com/obra/superpowers", autoload: false },
   ]);
   const disabled = unwrapOwnership(await inspectPiOwnership(state.ctx));
   assert.equal(disabled.installEligibility.kind, "allowed");
@@ -506,6 +506,59 @@ void test("recognizable unmanaged Pi package and native resources block activati
       disabledControl.outcome.result.mutationEligibility.kind,
     "allowed",
   );
+
+  const githubLocal = join(state.paths.agentDir, "github:obra", "superpowers");
+  cpSync(nativeFixture(t), githubLocal, { recursive: true });
+  settings(state.paths, [
+    "superpowers-manager/installed",
+    "github:obra/superpowers",
+  ]);
+  const localGithub = unwrapOwnership(await inspectPiOwnership(state.ctx));
+  assert.equal(localGithub.installEligibility.kind, "blocked");
+  assert.deepEqual(localGithub.presentationConflicts, [
+    "registered local Pi package named superpowers",
+  ]);
+
+  settings(state.paths, [
+    "superpowers-manager/installed",
+    { source: "github:obra/superpowers", autoload: false },
+  ]);
+  const disabledLocalGithub = unwrapOwnership(
+    await inspectPiOwnership(state.ctx),
+  );
+  assert.equal(disabledLocalGithub.installEligibility.kind, "allowed");
+  assert.deepEqual(disabledLocalGithub.presentationConflicts, []);
+
+  const aliasState = sandbox(t);
+  const { selection: aliasSelection } = await preparedAndInstalled(
+    t,
+    aliasState,
+  );
+  const githubAlias = join(
+    aliasState.paths.agentDir,
+    "github:obra",
+    "superpowers",
+  );
+  mkdirSync(dirname(githubAlias), { recursive: true });
+  symlinkSync(aliasState.paths.installedRoot, githubAlias, "dir");
+  settings(aliasState.paths, ["github:obra/superpowers"]);
+  const aliasInstalled = await inspectPiInstalled(
+    aliasSelection,
+    aliasState.ctx,
+  );
+  assert.equal(
+    aliasInstalled.outcome.ok && aliasInstalled.outcome.result.kind,
+    "current",
+  );
+  const aliasOwnership = unwrapOwnership(
+    await inspectPiOwnership(aliasState.ctx),
+  );
+  assert.equal(aliasOwnership.installEligibility.kind, "allowed");
+  assert.equal(
+    aliasOwnership.removalInput.registrationIdentity,
+    "github:obra/superpowers",
+  );
+  assert.deepEqual(aliasOwnership.presentationConflicts, []);
 });
 
 void test("only evidenced official Pi source spellings are recognized as upstream conflicts", async (t) => {
@@ -515,6 +568,9 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
     "git:github.com/obra/superpowers.git@refs/heads/main",
     "git:git@github.com:obra/superpowers",
     "git:git@github.com:obra/superpowers@v6.3.0",
+    "http://github.com/obra/superpowers",
+    "http://github.com/obra/superpowers.git",
+    "http://github.com/obra/superpowers@v6.3.0",
     "https://github.com/obra/superpowers",
     "https://github.com/obra/superpowers.git",
     "https://github.com/obra/superpowers@v6.3.0",

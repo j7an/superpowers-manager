@@ -137,6 +137,7 @@ for (const field of [
 const bootstrapPath = join(snapshot, ".pi/extensions/superpowers.ts");
 assert.equal(lstatSync(bootstrapPath).mode & 0o111, 0);
 const bootstrap = readFileSync(bootstrapPath);
+// pi-native-bootstrap-v1 deliberately fixes these bootstrap bytes by length and digest.
 assert.equal(bootstrap.length, 4283);
 assert.equal(
   createHash("sha256").update(bootstrap).digest("hex"),

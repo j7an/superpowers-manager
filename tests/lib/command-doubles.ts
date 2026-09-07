@@ -129,7 +129,9 @@ function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
 export function scriptedAdapter(responses: readonly AdapterResult[]) {
   // A fingerprint/ownership/control triple describes one stable probe. Supply
   // its independent closing observations explicitly, without consuming the
-  // subsequent mutation-stage responses. Closing reads carry no extra messages.
+  // subsequent mutation-stage responses. Preserve their complete adapter
+  // responses; gatherProbe decides which successful observation messages are
+  // operator-facing.
   const expanded: AdapterResult[] = [];
   for (let offset = 0; offset < responses.length; offset += 1) {
     const first = responses[offset]!;
@@ -145,13 +147,7 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
       field(ownership, "identity_state") &&
       field(control, "update_control")
     ) {
-      expanded.push(
-        first,
-        ownership!,
-        control!,
-        { ...first, outcome: { ...first.outcome, messages: [] } },
-        { ...control!, outcome: { ...control!.outcome, messages: [] } },
-      );
+      expanded.push(first, ownership!, control!, first, control!);
       offset += 2;
     } else expanded.push(first);
   }

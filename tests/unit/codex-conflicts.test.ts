@@ -21,10 +21,21 @@ function listing(items: readonly Record<string, unknown>[]): string {
 }
 
 void test("Codex unmanaged plugin conflicts follow qualified native state", async (t) => {
+  const emptyHome = await mkdtemp(join(tmpdir(), "spw-codex-conflicts-empty-"));
+  t.after(() => rm(emptyHome, { recursive: true, force: true }));
+  for (const env of [{}, { HOME: "" }]) {
+    assert.deepEqual(
+      await inspectCodexConflicts({ root: "/unused", env }, listing([])),
+      [
+        "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ],
+    );
+  }
+
   await t.test("reports an active installed Superpowers provider", async () => {
     assert.deepEqual(
       await inspectCodexConflicts(
-        { root: "/unused", env: {} },
+        { root: "/unused", env: { HOME: emptyHome } },
         listing([
           {
             pluginId: "superpowers@another-provider",
@@ -42,7 +53,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
     async () => {
       assert.deepEqual(
         await inspectCodexConflicts(
-          { root: "/unused", env: {} },
+          { root: "/unused", env: { HOME: emptyHome } },
           listing([
             {
               pluginId: "superpowers@disabled-provider",
@@ -66,7 +77,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
     async () => {
       assert.deepEqual(
         await inspectCodexConflicts(
-          { root: "/unused", env: {} },
+          { root: "/unused", env: { HOME: emptyHome } },
           listing([
             { pluginId: "superpowers@missing-state" },
             {
@@ -95,7 +106,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
     async () => {
       assert.deepEqual(
         await inspectCodexConflicts(
-          { root: "/unused", env: {} },
+          { root: "/unused", env: { HOME: emptyHome } },
           listing([
             {
               pluginId: "superpowers@superpowers-manager",
@@ -129,7 +140,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
     async () => {
       assert.deepEqual(
         await inspectCodexConflicts(
-          { root: "/unused", env: {} },
+          { root: "/unused", env: { HOME: emptyHome } },
           listing([
             {
               pluginId: "superpowers@unsafe\n",

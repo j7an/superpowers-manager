@@ -598,9 +598,12 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
 
 void test("Codex probe presentation preserves legacy fields and appends independent state", async (t) => {
   const rendered = codexPresentation.renderProbe(snapshot());
+  assert.match(rendered.human, /^harness: codex\n/);
+  assert.match(rendered.porcelain, /^harness=codex\n/);
   assert.equal(
     rendered.human,
     formatHuman({
+      harness: "codex",
       requestedRef: "latest-release",
       resolvedRef: "v6.1.1",
       desiredCommit: DESIRED,
@@ -624,6 +627,7 @@ void test("Codex probe presentation preserves legacy fields and appends independ
   assert.equal(
     rendered.porcelain,
     formatPorcelain({
+      harness: "codex",
       requestedRef: "latest-release",
       resolvedRef: "v6.1.1",
       desiredCommit: DESIRED,
