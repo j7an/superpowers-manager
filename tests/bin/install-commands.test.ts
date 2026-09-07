@@ -2047,5 +2047,4 @@ void describe("install commands", { concurrency: true }, () => {
       "c.adapterLog is not the path this case's fake adapter records to, so the emptiness assertion above proves nothing",
     );
   });
-
 });
