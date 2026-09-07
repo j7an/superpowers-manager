@@ -170,7 +170,7 @@ function createReleaseRepo(sandbox: Sandbox, name: string = "upstream") {
 
 /**
  * A `codex` that answers the two listing commands the in-process probe's
- * adapter views issue (`src/adapter.ts:795-800::const listing`, `src/adapter.ts:870::const plugins = await listingCommand`, `src/adapter.ts:882::const marketplaces = await listingCommand` — the argument
+ * adapter views issue (`src/adapter.ts:802-807::const listing`, `src/adapter.ts:876::const plugins = await listingCommand`, `src/adapter.ts:888::const marketplaces = await listingCommand` — the argument
  * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
  * `tests/migration-inventory/probe.md` cite them) with empty inventories, and
  * rejects anything else. `writeNoopTool`'s `exit 0` stub is
@@ -1182,7 +1182,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
     //
     // "Wholesale" is true of the manager's own process but NOT of this witness:
     // runAdapter's runCommand deletes NODE_OPTIONS and NODE_PATH from the child
-    // environment before execFile (`src/adapter.ts:139::delete childEnv.NODE_OPTIONS`), landed by this
+    // environment before execFile (`src/adapter.ts:144::delete childEnv.NODE_OPTIONS`), landed by this
     // slice's Task 1). The dump below therefore covers those two names as well
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
@@ -1969,7 +1969,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
 // the shapes tests/bin/uninstall-commands.test.js already exercises against
 // the real adapter's ownership parser (installedListingHas), plus a
 // "version" field on the manager entry: unlike uninstall, `install`'s own
-// fingerprint inspect calls activePluginVersionFromJson (`src/codex-json.ts:103::activePluginVersionFromJson`),
+// fingerprint inspect calls activePluginVersionFromJson (`src/codex-json.ts:121::activePluginVersionFromJson`),
 // which fails closed ("active plugin version is invalid") without one.
 const FIXTURE_PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}';
 const FIXTURE_MARKETPLACE_ABSENT = '{"marketplaces":[]}';
@@ -2521,7 +2521,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
 
   // Half three pins the loop body of
   // `for (const directory of env.PATH.split(delimiter))`
-  // (`src/adapter.ts:277::for (const directory of env.PATH.split(delimiter))`): an EMPTY component is KEPT, so `join("", command)`
+  // (`src/adapter.ts:282::for (const directory of env.PATH.split(delimiter))`): an EMPTY component is KEPT, so `join("", command)`
   // yields a bare relative path and the lookup resolves from the current
   // directory, the way execvp-style PATH search does. Neither half above can
   // catch a regression here: both run with PATH === sandbox.bin, a single
@@ -2532,18 +2532,18 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // src/cli.ts's preflight resolves the same command name with its own
   // `findTool`, which DROPS empty components via its `.filter(Boolean)`, so
   // a CLI run fails at preflight with "required command not found" before
-  // `src/adapter.ts:277::for (const directory of env.PATH.split(delimiter))` is reached at all. The product CLI binds
+  // `src/adapter.ts:282::for (const directory of env.PATH.split(delimiter))` is reached at all. The product CLI binds
   // `codexHarness`, whose installed-state inspection reaches the same native
-  // engine (`src/codex-harness.ts:428-433::inspectInstalled: async (selection, ctx) =>`).
+  // engine (`src/codex-harness.ts:467-471::inspectInstalled: async (selection, ctx) =>`).
   //
   // Be precise about what that buys, because the next reader auditing whether
-  // `src/adapter.ts:276::if (env.PATH === undefined) return false;` is reachable needs the true answer: the preflight
+  // `src/adapter.ts:281::if (env.PATH === undefined) return false;` is reachable needs the true answer: the preflight
   // makes both branch outcomes unobservable on EVERY product path, not merely
   // the common one. src/cli.ts is the sole site that binds the concrete Codex
   // harness to a context, and it runs the preflight first. The one entry point
   // that called runAdapter with a bare process.env
   // and no preflight was src/adapter-cli.ts, and PR 11.5 slice 5 deleted it, so
-  // nothing shipped reaches `src/adapter.ts:276::if (env.PATH === undefined) return false;` unguarded. So this half and
+  // nothing shipped reaches `src/adapter.ts:281::if (env.PATH === undefined) return false;` unguarded. So this half and
   // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
   // production code, pinned at the layer where the rule actually lives -- not
   // proof that a user-reachable invocation exercises it.
@@ -2583,14 +2583,14 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   }
 
   // Half four pins `if (env.PATH === undefined) return false;`
-  // (`src/adapter.ts:276::if (env.PATH === undefined) return false;`): an absent PATH does not synthesize a
+  // (`src/adapter.ts:281::if (env.PATH === undefined) return false;`): an absent PATH does not synthesize a
   // current-directory search component. No populated-PATH case can catch
   // this -- the branch is only reached when PATH is absent, and every other
   // case in this file defines it.
   //
   // The overridden name is `true`, and that choice is what makes the case
   // discriminating rather than decorative. A launch ENOENT maps to the SAME
-  // `command-not-found` code the precheck raises (`src/adapter.ts:197::if (code === "ENOENT" || code === "EACCES") {`), so
+  // `command-not-found` code the precheck raises (`src/adapter.ts:202::if (code === "ENOENT" || code === "EACCES") {`), so
   // a name that resolves nowhere would report `command-not-found` whether the
   // precheck failed closed or wrongly passed and the spawn then failed. `true`
   // resolves from execvp's built-in default path even with PATH unset, so a
@@ -2607,9 +2607,9 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   //
   // In-process for the same reason as half three: src/cli.ts's preflight
   // rejects an absent PATH first, so a CLI run never reaches
-  // `src/adapter.ts:276::if (env.PATH === undefined) return false;`. Deleting PATH from the CONTEXT env is not enough
+  // `src/adapter.ts:281::if (env.PATH === undefined) return false;`. Deleting PATH from the CONTEXT env is not enough
   // either -- runAdapter merges `{ ...process.env, ...context.env }`
-  // (`src/adapter.ts:981::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
+  // (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
   // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:494::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:538::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
@@ -2669,7 +2669,7 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
     const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
     // The MUTATING call specifically. Listing calls alone would satisfy
     // CLI-ENV-CODEX-LISTING-01 and say nothing about this row, whose contract
-    // names the mutation path (`src/adapter.ts:573::async function runInstall`).
+    // names the mutation path (`src/adapter.ts:578::async function runInstall`).
     assert.ok(
       calls.some((line) => line.startsWith("plugin marketplace add ")),
       calls.join(" | "),
@@ -2707,7 +2707,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     seedInstalledCache(join(sandbox.home, ".codex"), version, CACHE_COMMIT);
     // Deliberately NOT seeded at sandbox.codex, the harness default: a run
     // that read the harness value would find no cache and fail closed at
-    // `src/adapter.ts:839-843::cannot inspect active Codex plugin fingerprint under` rather than reporting CACHE_COMMIT.
+    // `src/adapter.ts:849-853::cannot inspect active Codex plugin fingerprint under` rather than reporting CACHE_COMMIT.
     const upstream = createReleaseRepo(sandbox);
     const result = runCliWithoutEnvironment(
       sandbox,
@@ -2726,7 +2726,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // Half two: the empty string reaches the same default. This is not a
   // restatement of half one -- it asserts that two specific lines agree.
   // validateEnvironment skips path checking when `value === ""`, so the
-  // empty value survives to the manager; `src/adapter.ts:824::if (!searchRoot)` tests
+  // empty value survives to the manager; `src/adapter.ts:830::if (!searchRoot)` tests
   // `if (!searchRoot)`, which is true for absent and empty alike. Step 5's
   // second mutation makes that equality an asserted property rather than a
   // reading of the source.
@@ -2758,7 +2758,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   //
   // Not a restatement of halves one and two: those pin which VARIABLE supplies
   // the root when both defaults hold. This one pins the `|| "/"` composition in
-  // `join(env.HOME || "/", ".codex")` (`src/adapter.ts:831::searchRoot = join`) -- the arm reached
+  // `join(env.HOME || "/", ".codex")` (`src/adapter.ts:837::searchRoot = join`) -- the arm reached
   // only once HOME is present but empty, where shell expansion of `$HOME/.codex`
   // yielded `/.codex` and this port must agree.
   //
@@ -2817,7 +2817,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     // Exact, because the resolved root inside this text IS the contract: it is
     // the only observable that separates `/.codex` from the decoy. probe
     // replays the adapter outcome's own failure (the `replayOutcome` loop),
-    // so the adapter's fail() text (`src/adapter.ts:839-843::cannot inspect active Codex plugin fingerprint under`) arrives verbatim.
+    // so the adapter's fail() text (`src/adapter.ts:849-853::cannot inspect active Codex plugin fingerprint under`) arrives verbatim.
     // Whole-stream equality also carries the retiring case's second guard --
     // that this is a CONTROLLED failure -- since a protocol violation would
     // have added an `error: invalid adapter response:` line here.
@@ -2841,7 +2841,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // diagnostic. Replaces `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:563-579::cd "$unset_home_cwd"`.
   //
   // A separate code path from half three, and the two must not be merged into
-  // one "no usable HOME" case: `src/adapter.ts:824-828::env.HOME === undefined` tests
+  // one "no usable HOME" case: `src/adapter.ts:831-835::env.HOME === undefined` tests
   // `env.HOME === undefined` and returns early, so an absent HOME never reaches
   // the `|| "/"` fallback half three pins. The messages differ, and asserting
   // each exactly is what keeps either branch from being deleted in favour of
@@ -2863,7 +2863,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     // BOTH names deleted. Unsetting only HOME would leave
     // SUPERPOWERS_INSTALLED_SEARCH_ROOT -- which baseEnvironment always sets
     // (its `SUPERPOWERS_INSTALLED_SEARCH_ROOT: sandbox.codex` entry) --
-    // winning at `src/adapter.ts:823::SUPERPOWERS_INSTALLED_SEARCH_ROOT`, and the HOME branch would never be
+    // winning at `src/adapter.ts:829::SUPERPOWERS_INSTALLED_SEARCH_ROOT`, and the HOME branch would never be
     // reached at all.
     const result = runCliWithoutEnvironment(
       sandbox,
@@ -2921,7 +2921,7 @@ void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin
 
 void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation", () => {
   // Half one: a third value is refused, and the refusal happens BEFORE the
-  // mutation. `src/adapter.ts:590::unsupported SUPERPOWERS_INSTALL_REFRESH_MODE` validates the enumeration three
+  // mutation. `src/adapter.ts:595::unsupported SUPERPOWERS_INSTALL_REFRESH_MODE` validates the enumeration three
   // statements after requireCodex and before the marketplace lookup.
   withSandbox((sandbox) => {
     writeListingCodex(sandbox);
@@ -2988,10 +2988,10 @@ void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-on
   //
   // This half needs a fixture the other two do not. writeListingCodex exits
   // 99 on `plugin marketplace add`, so the run fails closed at
-  // `src/adapter.ts:635::codex marketplace add failed` and never reaches the refresh-mode branch at :672.
+  // `src/adapter.ts:640::codex marketplace add failed` and never reaches the refresh-mode branch at :672.
   // writeVersionCodex accepts the marketplace add, so the run gets as far as
   // the plugin mutations. `plugin remove` is deliberately NOT accepted by it
-  // and does not need to be: `src/adapter.ts:672::if (refreshMode === "remove-add") {` issues that command
+  // and does not need to be: `src/adapter.ts:677::if (refreshMode === "remove-add") {` issues that command
   // without checking its status, so the run continues to `plugin add`
   // regardless -- and the stub records every invocation before dispatching on
   // it, so the attempt is observable either way.

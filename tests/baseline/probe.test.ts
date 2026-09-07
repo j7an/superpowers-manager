@@ -509,7 +509,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // runInspect's real inspect-failed path (`src/adapter.ts:810::activeVersion = activePluginVersionFromJson`).
+  // runInspect's real inspect-failed path (`src/adapter.ts:816::activeVersion = activePluginVersionFromJson`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the fingerprint inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -524,7 +524,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
 // (`src/adapter.ts:973-999::async function runCodexOperation(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/adapter.ts:289::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/adapter.ts:294::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:

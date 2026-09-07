@@ -187,7 +187,7 @@ void test("verifyInstalledFingerprint reports an undetectable fingerprint and it
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
   // the production normalizer's behaviour for JSON null
-  // (`src/codex-harness.ts:92::if (raw === null || raw === undefined) return`).
+  // (`src/codex-harness.ts:92::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
   const verdict = verifyInstalledFingerprint(
     "f".repeat(40),
     ok({ verification_hints: { missing: "codex reported nothing" } }),

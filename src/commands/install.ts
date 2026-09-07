@@ -216,7 +216,7 @@ async function gatherInstallStages<R>(
         // is what turns a failed inspection into "error: installed manager
         // fingerprint inspection failed after install."
         // renderInstallVerification's failed-inspection arm
-        // (`src/codex-presentation.ts:306::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
+        // (`src/codex-presentation.ts:318::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
         // exists for this result-bearing path; the lifecycle compatibility
         // export delegates through the same arm. Returning
         // failed() instead reported the adapter's own generic diagnostic and

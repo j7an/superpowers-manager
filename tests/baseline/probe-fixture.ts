@@ -27,7 +27,7 @@ export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 /**
  * Every environment name runProbe's dependencies read. Declared, never
  * derived: a predicate would also accept an env that lost a name.
- * runAdapter merges process.env (`src/adapter.ts:981::const env = { ...process.env, ...context.env };`) and runGit spreads it
+ * runAdapter merges process.env (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`) and runGit spreads it
  * (`src/git.ts:32::env: { ...process.env`), so an unset name here leaks the developer's shell into a
  * supposedly hermetic case.
  */
@@ -60,7 +60,7 @@ export function caseEnv(
     // (`tests/bin/lifecycle-fakes.ts:213::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
     // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:470::const env = {`).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
-    // (`src/adapter.ts:981::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
+    // (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with
     // `fixture: SPW_FIXTURE_STATE is unset` -- which is why the declared
     // hermeticity guard does not need to cover it.
@@ -93,7 +93,7 @@ export const SHORT = DESIRED.slice(0, 7);
  * `pluginListings` is an ARRAY, one entry per `codex plugin list --json`
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
  * Probe issues that command twice per run and the two calls need different
- * answers -- `inspect --view fingerprint` (`src/adapter.ts:795-800::const listing`) then
+ * answers -- `inspect --view fingerprint` (`src/adapter.ts:802-807::const listing`) then
  * `inspect --view ownership` (:871). With a single listing, a manager version
  * present for `installed_commit` also forces `identity_state=manager`, so
  * scenario 1 and the four-state identity matrix could not be written at all.

@@ -143,7 +143,7 @@ function assertNoRemoves(log: string[]) {
  * How many ownership inspections reached Codex.
  *
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
- * then one `codex plugin marketplace list --json` (`src/adapter.ts:869-872::const plugins`, :883).
+ * then one `codex plugin marketplace list --json` (`src/adapter.ts:876-879::const plugins`, :883).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
  * --json` does not contain it as a substring, and nothing else in
  * `src/commands/uninstall.ts`'s ownership-inspect / adapter-uninstall /
@@ -172,7 +172,7 @@ function ownershipInspections(codex: string[]): number {
  *
  * WHAT IT DOES NOT CATCH: an adapter uninstall that was invoked and then failed
  * before issuing any Codex command — `requireCodex` or the workspace creation
- * failing inside `runUninstall` (`src/adapter.ts:726::superpowers-manager.adapter-uninstall.`). That leaves one
+ * failing inside `runUninstall` (`src/adapter.ts:731::superpowers-manager.adapter-uninstall.`). That leaves one
  * inspection and no removes, and passes here where the shell's
  * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
  * theoretical, and it is accepted only because in all six call sites the abort
@@ -206,7 +206,7 @@ function assertNoAdapterUninstall(codex: string[], message: string) {
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
- * (`src/adapter.ts:744::plugin not installed; skipping`, :761).
+ * (`src/adapter.ts:749::plugin not installed; skipping`, :761).
  *
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
@@ -482,7 +482,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
-    // of each (`src/adapter.ts:744::plugin not installed; skipping`, :761) — so together they pin both the call
+    // of each (`src/adapter.ts:749::plugin not installed; skipping`, :761) — so together they pin both the call
     // and the both-false pair. The completion check is kept beneath them as the
     // ordering witness it actually is.
     assert.ok(
@@ -556,7 +556,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
-    // `plugin list --json` (`src/adapter.ts:869-872::const plugins`) and one
+    // `plugin list --json` (`src/adapter.ts:876-879::const plugins`) and one
     // `plugin marketplace list --json` (:883); `ownershipInspections` (below)
     // already counts the former. The adapter uninstall op itself issues no
     // listing, only the two removes asserted at :277-281 further down, so
