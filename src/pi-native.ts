@@ -153,9 +153,25 @@ export async function readPiRuntimeVersion(
   ctx: AdapterContext,
   execute: typeof runBoundedCommand = runBoundedCommand,
 ): Promise<AdapterResult<string>> {
-  const result = await runPi(["--version"], paths, ctx, execute);
+  return normalizePiRuntimeVersion(
+    await runPi(["--version"], paths, ctx, execute),
+  );
+}
+
+export function normalizePiRuntimeVersion(
+  result: AdapterResult<PiCommandOutput>,
+): AdapterResult<string> {
   if (!result.outcome.ok) {
     return { status: result.status, outcome: result.outcome };
+  }
+  if (result.status !== 0) {
+    return failureResult(
+      "pi-runtime",
+      "invalid-status",
+      "Pi runtime inspection returned a nonzero status",
+      [],
+      result.outcome.messages,
+    );
   }
   const version = result.outcome.result.stdout.trim();
   if (!SEMVER_RE.test(version) || version !== SUPPORTED_PI_RUNTIME_VERSION) {

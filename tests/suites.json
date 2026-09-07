@@ -94,6 +94,8 @@
     { "path": "tests/unit/lifecycle.test.ts", "group": "unit" },
     { "path": "tests/unit/manifest-overlay.test.ts", "group": "unit" },
     { "path": "tests/unit/package-runtime.test.ts", "group": "unit" },
+    { "path": "tests/unit/pi-install.test.ts", "group": "integration" },
+    { "path": "tests/unit/pi-harness.test.ts", "group": "integration" },
     { "path": "tests/unit/pi-native.test.ts", "group": "unit" },
     { "path": "tests/unit/pi-paths.test.ts", "group": "unit" },
     { "path": "tests/unit/pi-package.test.ts", "group": "integration" },
