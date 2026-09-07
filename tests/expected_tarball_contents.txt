@@ -39,10 +39,12 @@ dist/hooks.js
 dist/lifecycle.js
 dist/manifest-overlay.js
 dist/pi-compatibility.js
+dist/pi-native.js
 dist/pi-package.js
 dist/pi-paths.js
 dist/pi-prepare.js
 dist/pi-settings.js
+dist/pi-state.js
 dist/provenance.js
 dist/python-json-format.js
 dist/python-json.js

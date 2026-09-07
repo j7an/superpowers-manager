@@ -1237,7 +1237,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       SUPERPOWERS_PLUGIN_ROOT: join(sandbox.root, "custom plugin"),
       SUPERPOWERS_MANIFEST_TEMPLATE: join(sandbox.root, "custom template.json"),
       // Empty, and deliberately so. `update` is a VALIDATOR_COMMAND, and
-      // `src/validator.ts:385::configurationErrors` rejects the run before any
+      // `src/validator.ts:387::configurationErrors` rejects the run before any
       // adapter call when both validator names are non-empty -- so a distinctive
       // path here would abort preflight and the codex child would never run.
       // `src/validator.ts:370-377::export function bothConfigured` reads "" as unset without trimming, which is
