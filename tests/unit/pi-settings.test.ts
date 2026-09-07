@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -151,6 +158,35 @@ void test("Pi settings reader reports the bounded registration state", async (t)
         exactError(
           SafetyError,
           `invalid Pi settings ${settingsFile}: duplicate Manager package registrations`,
+        ),
+      );
+    },
+  );
+
+  await t.test(
+    "rejects duplicate Manager registrations through a symlinked agent directory",
+    async () => {
+      const physicalRoot = join(agentDir, "physical-root");
+      const linkedRoot = join(agentDir, "linked-root");
+      const physicalAgent = join(physicalRoot, "agent");
+      const linkedAgent = join(linkedRoot, "agent");
+      await mkdir(physicalAgent, { recursive: true });
+      await symlink(physicalRoot, linkedRoot, "dir");
+      const linkedSettings = join(linkedAgent, "settings.json");
+      await writeFile(
+        linkedSettings,
+        JSON.stringify({
+          packages: [
+            "superpowers-manager/installed",
+            join(physicalAgent, "superpowers-manager", "installed"),
+          ],
+        }),
+      );
+      await assert.rejects(
+        readPiSettings(linkedSettings, agentDir),
+        exactError(
+          SafetyError,
+          `invalid Pi settings ${linkedSettings}: duplicate Manager package registrations`,
         ),
       );
     },

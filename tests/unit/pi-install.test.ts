@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import {
+import fs, {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -45,10 +48,21 @@ function value<T>(result: AdapterResult<T>): T {
   return result.outcome.result;
 }
 
-async function fixture(t: TestContext) {
+async function fixture(
+  t: TestContext,
+  options: { readonly symlinkedAgent?: boolean } = {},
+) {
   const root = mkdtempSync(join(tmpdir(), "spw-pi-install-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const env = { HOME: root, PI_CODING_AGENT_DIR: join(root, "agent") };
+  let agentDir = join(root, "agent");
+  if (options.symlinkedAgent) {
+    const physicalRoot = join(root, "physical-root");
+    const linkedRoot = join(root, "linked-root");
+    mkdirSync(join(physicalRoot, "agent"), { recursive: true });
+    symlinkSync(physicalRoot, linkedRoot, "dir");
+    agentDir = join(linkedRoot, "agent");
+  }
+  const env = { HOME: root, PI_CODING_AGENT_DIR: agentDir };
   const ctx: AdapterContext = { root, env };
   const paths = piPaths(env, root);
   mkdirSync(paths.agentDir, { recursive: true });
@@ -127,6 +141,54 @@ async function fixture(t: TestContext) {
   return { root, ctx, paths, artifact, prepare, deps, calls };
 }
 
+void test("Pi lifecycle uses one canonical native target through a symlinked agent directory", async (t) => {
+  const f = await fixture(t, { symlinkedAgent: true });
+  const canonicalRoot = join(
+    realpathSync(f.paths.agentDir),
+    "superpowers-manager",
+    "installed",
+  );
+  const savedSource = relative(f.paths.agentDir, canonicalRoot);
+
+  const installation = await installPi(f.artifact, f.ctx, f.deps);
+  assert.equal(
+    installation.outcome.ok,
+    true,
+    JSON.stringify({ installation, calls: f.calls }),
+  );
+  value(await transaction(installation).finalize());
+  assert.deepEqual(
+    f.calls.find((args) => args[0] === "install"),
+    ["install", canonicalRoot, "--no-approve"],
+  );
+  const ownership = value(await inspectPiOwnership(f.ctx));
+  assert.equal(ownership.removalInput.registrationIdentity, savedSource);
+
+  writeFileSync(
+    f.paths.settingsFile,
+    JSON.stringify({ packages: ["npm:unrelated", canonicalRoot] }),
+  );
+  assert.equal(
+    (await removePi(ownership.removalInput, f.ctx, f.deps)).outcome.ok,
+    false,
+  );
+  assert.equal(
+    f.calls.some((args) => args[0] === "remove"),
+    false,
+  );
+  const currentOwnership = value(await inspectPiOwnership(f.ctx));
+  assert.equal(
+    currentOwnership.removalInput.registrationIdentity,
+    canonicalRoot,
+  );
+  value(await removePi(currentOwnership.removalInput, f.ctx, f.deps));
+  assert.deepEqual(
+    f.calls.find((args) => args[0] === "remove"),
+    ["remove", canonicalRoot, "--no-approve"],
+  );
+  assert.equal(existsSync(f.paths.installedRoot), false);
+});
+
 function transaction(result: AdapterResult<InstallReceipt>) {
   const receipt = value(result);
   assert.ok(receipt.transaction);
@@ -169,10 +231,14 @@ void test("Pi update retains the old snapshot and rollback restores only its pub
     readFileSync(join(f.paths.managerRoot, backups[0]!, "extra.txt"), "utf8"),
     "original",
   );
+  const savedRegistration = (
+    await readPiSettings(f.paths.settingsFile, f.paths.homeDir)
+  ).packages.find((entry) => entry.source !== "npm:unrelated");
+  assert.ok(savedRegistration);
   writeFileSync(
     f.paths.settingsFile,
     JSON.stringify({
-      packages: ["superpowers-manager/installed", "npm:added"],
+      packages: [savedRegistration.source, "npm:added"],
       theme: "changed",
     }),
   );
@@ -336,8 +402,12 @@ void test("Pi uninstall verifies native deregistration before deleting owned byt
   value(
     await transaction(await installPi(f.artifact, f.ctx, f.deps)).finalize(),
   );
+  const canonicalRoot = join(realpathSync(f.paths.managerRoot), "installed");
   const input = value(await inspectPiOwnership(f.ctx)).removalInput;
-  assert.equal(input.registrationIdentity, "superpowers-manager/installed");
+  assert.equal(
+    input.registrationIdentity,
+    relative(f.paths.agentDir, canonicalRoot),
+  );
   const failed = await removePi(input, f.ctx, {
     ...f.deps,
     run: async (args, paths, ctx) =>
@@ -350,7 +420,7 @@ void test("Pi uninstall verifies native deregistration before deleting owned byt
   value(await removePi(input, f.ctx, f.deps));
   assert.deepEqual(
     f.calls.find((args) => args[0] === "remove"),
-    ["remove", f.paths.installedRoot, "--no-approve"],
+    ["remove", canonicalRoot, "--no-approve"],
   );
   assert.equal(existsSync(f.paths.installedRoot), false);
   assert.equal(existsSync(f.paths.preparedRoot), true);
@@ -402,6 +472,56 @@ void test("Pi rechecks ownership after native preflight and refuses a new unmana
       "utf8",
     ),
     "foreign",
+  );
+});
+
+void test("Pi preserves a first-install registration introduced immediately before native activation", async (t) => {
+  const f = await fixture(t);
+  const canonicalRoot = join(realpathSync(f.paths.managerRoot), "installed");
+  const externalSource = relative(f.paths.agentDir, canonicalRoot);
+  const result = await installPi(f.artifact, f.ctx, {
+    ...f.deps,
+    beginPublication: async (...args) => {
+      const publication = await f.deps.beginPublication(...args);
+      writeFileSync(
+        f.paths.settingsFile,
+        JSON.stringify({
+          packages: ["npm:unrelated", externalSource],
+          theme: "light",
+        }),
+      );
+      return publication;
+    },
+  });
+
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "recovery-required");
+    assert.equal(
+      result.outcome.error.message,
+      `Pi mutation requires manual recovery; preserve material at ${f.paths.recoveryRoot} and any installed snapshot or sibling backup`,
+    );
+  }
+  assert.equal(
+    f.calls.some((args) => args[0] === "install" || args[0] === "remove"),
+    false,
+  );
+  assert.deepEqual(
+    (await readPiSettings(f.paths.settingsFile)).packages.map(
+      (entry) => entry.source,
+    ),
+    ["npm:unrelated", externalSource],
+  );
+  assert.equal(
+    readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+    "original",
+  );
+  assert.equal(existsSync(f.paths.recoveryRoot), true);
+  assert.equal(
+    JSON.parse(
+      readFileSync(join(f.paths.recoveryRoot, "transaction.json"), "utf8"),
+    ).phase,
+    "registering",
   );
 });
 
@@ -490,6 +610,65 @@ void test("Pi failed journal phase or unreadable native read-back retains recove
     });
 });
 
+void test("Pi strict registered-phase flush failure preserves the created registration and recovery evidence", async (t) => {
+  const f = await fixture(t);
+  const realOpen = fs.promises.open;
+  const failRegisteredPhaseSync: typeof fs.promises.open = async (
+    path,
+    flags,
+    mode,
+  ) => {
+    const handle = await realOpen(path, flags, mode);
+    if (String(path) === f.paths.recoveryRoot && flags === "r") {
+      const realSync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        const journal = JSON.parse(
+          readFileSync(join(f.paths.recoveryRoot, "transaction.json"), "utf8"),
+        );
+        if (journal.phase === "registered" || journal.phase === "ready")
+          throw new Error("injected recovery directory sync failure");
+        await realSync();
+      };
+    }
+    return handle;
+  };
+  const mockedOpen = t.mock.method(
+    fs.promises,
+    "open",
+    failRegisteredPhaseSync,
+  );
+  syncBuiltinESMExports();
+  let result: AdapterResult<InstallReceipt>;
+  try {
+    result = await installPi(f.artifact, f.ctx, f.deps);
+  } finally {
+    mockedOpen.mock.restore();
+    syncBuiltinESMExports();
+  }
+
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "recovery-required");
+    assert.equal(
+      result.outcome.error.message,
+      `Pi mutation requires manual recovery; preserve material at ${f.paths.recoveryRoot} and any installed snapshot or sibling backup`,
+    );
+  }
+  assert.equal(
+    JSON.parse(
+      readFileSync(join(f.paths.recoveryRoot, "transaction.json"), "utf8"),
+    ).phase,
+    "registered",
+  );
+  assert.equal(
+    readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+    "original",
+  );
+  assert.equal(f.calls.filter((args) => args[0] === "install").length, 1);
+  assert.equal(f.calls.filter((args) => args[0] === "remove").length, 0);
+  assert.equal((await readPiSettings(f.paths.settingsFile)).packages.length, 2);
+});
+
 void test("Pi native success without registration never becomes a receipt", async (t) => {
   const f = await fixture(t);
   const result = await installPi(f.artifact, f.ctx, {
@@ -556,6 +735,60 @@ void test("Pi failed settlement preserves the journal and refuses another token"
         journal,
       );
     });
+});
+
+void test("Pi journal retirement failure after backup cleanup reports the retained live state", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(await installPi(f.artifact, f.ctx, f.deps)).finalize(),
+  );
+  const next = await f.prepare("2".repeat(40), "updated");
+  const tx = transaction(await installPi(next, f.ctx, f.deps));
+  const backup = readdirSync(f.paths.managerRoot).find((name) =>
+    name.startsWith(".installed.bak."),
+  );
+  assert.ok(backup);
+
+  const journalPath = join(f.paths.recoveryRoot, "transaction.json");
+  const realUnlink = fs.promises.unlink;
+  const failJournalRetirement: typeof fs.promises.unlink = async (path) => {
+    if (String(path) === journalPath)
+      throw new Error("injected journal retirement failure");
+    return realUnlink(path);
+  };
+  const mockedUnlink = t.mock.method(
+    fs.promises,
+    "unlink",
+    failJournalRetirement,
+  );
+  syncBuiltinESMExports();
+  let result: AdapterResult<null>;
+  try {
+    result = await tx.finalize();
+  } finally {
+    mockedUnlink.mock.restore();
+    syncBuiltinESMExports();
+  }
+
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "recovery-required");
+    assert.equal(
+      result.outcome.error.message,
+      `Pi activation was verified and backup cleanup completed, but journal retirement failed; preserve recovery material at ${f.paths.recoveryRoot} and verify the installed snapshot at ${f.paths.installedRoot} before removing the stale journal manually`,
+    );
+  }
+  assert.equal(
+    readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+    "updated",
+  );
+  assert.equal(existsSync(join(f.paths.managerRoot, backup)), false);
+  assert.equal(existsSync(journalPath), true);
+  assert.equal(
+    JSON.parse(readFileSync(journalPath, "utf8")).phase,
+    "finalizing",
+  );
+  assert.equal((await installPi(next, f.ctx, f.deps)).outcome.ok, false);
 });
 
 void test("Pi first-install rollback preserves a registration whose filters changed", async (t) => {

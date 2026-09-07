@@ -24,6 +24,7 @@ import {
 import { piPaths, type PiPaths } from "./pi-paths.ts";
 import {
   readPiSettings,
+  resolveCanonicalPiLocalSource,
   resolvePiLocalSource,
   type PiPackageEntry,
   type PiSettings,
@@ -86,11 +87,19 @@ function isKnownUpstreamPiSource(raw: string): boolean {
 
 async function observeSettings(paths: PiPaths): Promise<SettingsObservation> {
   const settings = await readPiSettings(paths.settingsFile, paths.homeDir);
+  const installedRoot = await resolveCanonicalPiLocalSource(
+    paths.installedRoot,
+    paths.agentDir,
+    paths.homeDir,
+  );
   let registration: PiPackageEntry | null = null;
   for (const entry of settings.packages) {
     if (
-      resolvePiLocalSource(entry.source, paths.agentDir, paths.homeDir) ===
-      paths.installedRoot
+      (await resolveCanonicalPiLocalSource(
+        entry.source,
+        paths.agentDir,
+        paths.homeDir,
+      )) === installedRoot
     ) {
       registration = entry;
     }
@@ -116,13 +125,22 @@ async function observeSnapshot(paths: PiPaths): Promise<SnapshotObservation> {
 async function isNamedLocalSuperpowers(
   entry: PiPackageEntry,
   paths: PiPaths,
+  canonicalInstalledRoot: string,
 ): Promise<boolean> {
   const root = resolvePiLocalSource(
     entry.source,
     paths.agentDir,
     paths.homeDir,
   );
-  if (root === null || root === paths.installedRoot) return false;
+  if (
+    root === null ||
+    (await resolveCanonicalPiLocalSource(
+      entry.source,
+      paths.agentDir,
+      paths.homeDir,
+    )) === canonicalInstalledRoot
+  )
+    return false;
   const rootKind = await classifyPathNoFollow(root);
   if (rootKind !== "directory" && rootKind !== "symlink") return false;
   const metadata = join(root, "package.json");
@@ -142,11 +160,20 @@ async function unmanagedConflicts(
   paths: PiPaths,
 ): Promise<readonly string[]> {
   const conflicts = new Set<string>();
+  const canonicalInstalledRoot = await resolveCanonicalPiLocalSource(
+    paths.installedRoot,
+    paths.agentDir,
+    paths.homeDir,
+  );
+  if (canonicalInstalledRoot === null)
+    throw new Error("Pi installed root is not local");
   for (const entry of settings.packages) {
     if (entry.resourceState === "disabled") continue;
     if (isKnownUpstreamPiSource(entry.source)) {
       conflicts.add("registered Pi package for obra/superpowers");
-    } else if (await isNamedLocalSuperpowers(entry, paths)) {
+    } else if (
+      await isNamedLocalSuperpowers(entry, paths, canonicalInstalledRoot)
+    ) {
       conflicts.add("registered local Pi package named superpowers");
     }
   }

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { canonicalizeProspectivePath } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 import {
   parseStrictJson,
@@ -169,6 +170,15 @@ export function resolvePiLocalSource(
   return resolve(agentDir, normalized);
 }
 
+export async function resolveCanonicalPiLocalSource(
+  source: string,
+  agentDir: string,
+  homeDir?: string,
+): Promise<string | null> {
+  const resolved = resolvePiLocalSource(source, agentDir, homeDir);
+  return resolved === null ? null : canonicalizeProspectivePath(resolved);
+}
+
 export async function readPiSettings(
   path: string,
   homeDir?: string,
@@ -203,15 +213,18 @@ export async function readPiSettings(
     parsePackage(entry, index, path),
   );
   const agentDir = dirname(resolve(path));
-  const managerInstallation = resolve(
-    agentDir,
-    join("superpowers-manager", "installed"),
+  const managerInstallation = await canonicalizeProspectivePath(
+    resolve(agentDir, join("superpowers-manager", "installed")),
   );
-  const managerRegistrations = packages.filter(
-    (entry) =>
-      resolvePiLocalSource(entry.source, agentDir, homeDir) ===
-      managerInstallation,
-  );
+  const managerRegistrations: PiPackageEntry[] = [];
+  for (const entry of packages) {
+    if (
+      (await resolveCanonicalPiLocalSource(entry.source, agentDir, homeDir)) ===
+      managerInstallation
+    ) {
+      managerRegistrations.push(entry);
+    }
+  }
   if (managerRegistrations.length > 1) {
     invalid(path, "duplicate Manager package registrations");
   }

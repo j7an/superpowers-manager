@@ -5,7 +5,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -122,6 +124,40 @@ void test("current Pi state requires registration, resources, owned bytes, and i
     control.outcome.ok && control.outcome.result.mutationEligibility.kind,
     "allowed",
   );
+});
+
+void test("Pi state recognizes the canonical Manager registration through a symlinked agent directory", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "spw-pi-state-linked-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const physicalRoot = join(root, "physical-root");
+  const linkedRoot = join(root, "linked-root");
+  const physicalAgent = join(physicalRoot, "agent");
+  const linkedAgent = join(linkedRoot, "agent");
+  mkdirSync(physicalAgent, { recursive: true });
+  symlinkSync(physicalRoot, linkedRoot, "dir");
+  const env = { HOME: root, PI_CODING_AGENT_DIR: linkedAgent };
+  const state: StateSandbox = {
+    root,
+    ctx: { root, env },
+    paths: piPaths(env, root),
+  };
+  const { selection, digest } = await preparedAndInstalled(t, state);
+  const savedSource = join(
+    realpathSync(state.paths.agentDir),
+    "superpowers-manager",
+    "installed",
+  );
+  settings(state.paths, [savedSource]);
+
+  const installed = await inspectPiInstalled(selection, state.ctx);
+  assert.deepEqual(installed.outcome.ok && installed.outcome.result, {
+    kind: "current",
+    observedIdentity: digest,
+  });
+  const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+  assert.equal(ownership.installEligibility.kind, "allowed");
+  assert.equal(ownership.removalInput.registrationIdentity, savedSource);
+  assert.deepEqual(ownership.presentationConflicts, []);
 });
 
 void test("Pi inspection keeps registration, filesystem, and configuration evidence independent", async (t) => {
