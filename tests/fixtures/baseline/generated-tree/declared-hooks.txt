@@ -1,6 +1,7 @@
 .codex-plugin/
 .codex-plugin/plugin.json
 .codex-plugin/plugin.template.json
+.superpowers-manager.json
 .superpowers-upstream.json
 CODE_OF_CONDUCT.md
 LICENSE
@@ -20,3 +21,5 @@ skills/
 skills/brainstorming/
 skills/brainstorming/SKILL.md
 skills/brainstorming/branch.txt
+skills/using-superpowers/
+skills/using-superpowers/SKILL.md

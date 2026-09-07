@@ -1,3 +1,4 @@
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
 import assert from "node:assert/strict";
 import {
   chmodSync,
@@ -46,7 +47,7 @@ function writeJsonFile(path: string, value: unknown) {
  * generated provenance are separate contracts").
  *
  */
-function makeCtx(
+async function makeCtx(
   opts: {
     desiredCommit: string;
     generatedCommit?: string;
@@ -75,9 +76,10 @@ function makeCtx(
     });
   }
   if (opts.generatedCommit !== undefined) {
-    writeJsonFile(
-      join(dir, "plugins", "superpowers", ".superpowers-upstream.json"),
-      { commit: opts.generatedCommit },
+    await writeQualifiedCodexFixture(
+      join(dir, "plugins", "superpowers"),
+      opts.generatedCommit,
+      opts.env?.SUPERPOWERS_UPSTREAM_URL ?? "https://example.invalid/upstream",
     );
   }
   return {
@@ -167,7 +169,7 @@ void test("install re-inspects ownership and update control itself", async (t) =
           return successResult("read-prepared", artifact, []);
         },
       };
-      const ctx = makeCtx(
+      const ctx = await makeCtx(
         { desiredCommit: X, generatedCommit: X },
         out,
         err,
@@ -207,7 +209,7 @@ void test("install re-inspects ownership and update control itself", async (t) =
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -242,7 +244,7 @@ void test("a successful install prints the fingerprint verification lines and no
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -274,7 +276,7 @@ void test("desiredCommit comes from generated provenance, never from selection",
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X, savedCommit: Z },
     out,
     err,
@@ -301,7 +303,7 @@ void test("saved selection is validated before any adapter access", async () => 
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   writeFileSync(
     join(ctx.env.SUPERPOWERS_CONFIG_DIR, "selection.json"),
     '{"schema_version":1,"mode":"bogus"}',
@@ -325,7 +327,7 @@ void test("an unparseable generated commit is never treated as success", async (
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([...PROBE_OK]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(calls.length, 6);
@@ -372,7 +374,7 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
       });
     },
   };
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -401,7 +403,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
       [],
     ),
   ]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   // No second, command-authored line: replayOutcome already wrote the
@@ -435,7 +437,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     successResult("inspect", ownership(null), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -459,7 +461,7 @@ void test("a legacy identity state stops before the workspace is created", async
     successResult("inspect", ownership("legacy"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -482,7 +484,7 @@ void test("a legacy identity state stops before the workspace is created", async
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case and this one exercise distinct concrete normalization
-  // decisions (`src/codex-harness.ts:175-184::const installEligibility`),
+  // decisions (`src/codex-harness.ts::const installEligibility`),
   // both enforced by the same shared guard
   // (`src/commands/install.ts:329::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
@@ -494,7 +496,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
     successResult("inspect", ownership("chaos"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -518,7 +520,7 @@ void test("an unsupported update-control capability refuses before any install m
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "unsupported" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -561,7 +563,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
       [],
     ),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -583,7 +585,7 @@ void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1'
     ...PROBE_OK,
     successResult("inspect", ownership(42), []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -627,7 +629,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
       });
     },
   };
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -658,7 +660,7 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
     ...PROBE_OK,
     successResult("inspect", ownership("legacy"), []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -695,7 +697,7 @@ void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested
     ...PROBE_OK,
     successResult("inspect", ownership("chaos"), []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -725,7 +727,7 @@ void test("stage 2 (inspect update-control) failure stops before the install mut
       [],
     ),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -745,7 +747,7 @@ void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2'
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: 7 }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -769,7 +771,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
     successResult("inspect", { update_control: "managed" }, []),
     failureResult("install", "E_ADAPTER", "cannot install plugin", [], []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -785,7 +787,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
 // rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
 // reached renderInstallVerification, leaving its failed-inspection arm
-// (`src/codex-presentation.ts:306::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
+// (`src/codex-presentation.ts::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
 // spw_verify_installed_fingerprint unconditionally (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and
 // printed BOTH lines — the adapter's own error and
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`'s. The flip surfaced it: the shell-parity case
@@ -811,7 +813,7 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
       [],
     ),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -859,7 +861,7 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
       return await adapter.inspectInstalled(selection, adapterCtx);
     },
   };
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -897,7 +899,7 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: Y }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -925,10 +927,9 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
 // (unbounded depth) -- the two would read back the identical string. The one
 // place they can disagree is depth: a document nested past 256 containers
 // parses fine under the lenient profile and fails closed under the strict
-// one. The fixture below adds such nesting under an UNUSED sibling key, so
-// gatherProbe's own (lenient) generatedCommit still resolves to X -- keeping
-// facts.status at "needs install", never "needs prepare" -- while install's
-// own (strict) re-read of the SAME file throws and desiredCommit stays "".
+// one. The fixture starts with a fully qualified native prepared tree, then
+// introduces that nesting after prepared inspection. This models provenance
+// changing between the read-only probe and install's required strict re-read.
 // If a change relaxed the strict call back to the lenient one, this fixture
 // would read a commit and sail into the workspace stage instead of stopping
 // here with zero further adapter calls.
@@ -937,17 +938,29 @@ void test("the STRICT provenance reader, not the lenient one, feeds desiredCommi
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([...PROBE_OK]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
 
   let junk: unknown[] = [];
   for (let depth = 0; depth < 300; depth += 1) junk = [junk];
   const generatedDir = join(ctx.root, "plugins", "superpowers");
   mkdirSync(generatedDir, { recursive: true });
-  writeFileSync(
-    join(generatedDir, ".superpowers-upstream.json"),
-    JSON.stringify({ commit: X, junk }),
-    "utf8",
-  );
+  ctx.adapter = {
+    ...adapter,
+    async inspectPrepared(selection, context) {
+      const result = await adapter.inspectPrepared(selection, context);
+      writeFileSync(
+        join(generatedDir, ".superpowers-upstream.json"),
+        JSON.stringify({ commit: X, junk }),
+        "utf8",
+      );
+      return result;
+    },
+  };
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -969,7 +982,7 @@ void test("argv is ignored by src/commands/install.ts", async () => {
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -1023,7 +1036,7 @@ void test("a post-success workspace cleanup failure still reports the domain out
         return result;
       },
     };
-    const ctx = makeCtx(
+    const ctx = await makeCtx(
       { desiredCommit: X, generatedCommit: X, env: { TMPDIR: parent } },
       out,
       err,

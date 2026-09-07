@@ -1,8 +1,9 @@
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import {
   capture,
@@ -30,7 +31,7 @@ const INSTALL_NOTE =
  * matching tests/unit/commands-install.test.js's own makeCtx.
  *
  */
-function makeCtx(
+async function makeCtx(
   opts: {
     desiredCommit: string;
     generatedCommit?: string;
@@ -48,17 +49,11 @@ function makeCtx(
   const configDir = join(dir, "config-dir");
   mkdirSync(configDir, { recursive: true });
   if (opts.generatedCommit !== undefined) {
-    const metadataPath = join(
-      dir,
-      "plugins",
-      "superpowers",
-      ".superpowers-upstream.json",
-    );
-    mkdirSync(dirname(metadataPath), { recursive: true });
-    writeFileSync(
-      metadataPath,
-      JSON.stringify({ commit: opts.generatedCommit }),
-      "utf8",
+    await writeQualifiedCodexFixture(
+      join(dir, "plugins", "superpowers"),
+      opts.generatedCommit,
+      opts.extraEnv?.SUPERPOWERS_UPSTREAM_URL ??
+        "https://example.invalid/upstream",
     );
   }
   return {
@@ -188,14 +183,14 @@ const UPSTREAM = makeUpstreamRepo();
  * adapter build call then shows up in `calls`.
  *
  */
-function makePreparableCtx(
+async function makePreparableCtx(
   out: ReturnType<typeof capture>,
   err: ReturnType<typeof capture>,
   adapter: import("../../src/commands/context.ts").CommandContext<
     import("../../src/adapter.ts").CodexRemovalInput
   >["adapter"],
 ) {
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     {
       desiredCommit: UPSTREAM.commit,
       extraEnv: { SUPERPOWERS_UPSTREAM_URL: UPSTREAM.path },
@@ -221,7 +216,7 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   const probeOnly = capture();
   const probeErr = capture();
   const { adapter: probeAdapter } = scriptedAdapter(probeCurrent());
-  const probeCtx = makeCtx(
+  const probeCtx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     probeOnly,
     probeErr,
@@ -234,7 +229,7 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter(probeCurrent());
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -269,7 +264,7 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "unsupported" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -296,7 +291,7 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "wat" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -322,7 +317,7 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter(probeCurrent());
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   const template = join(
@@ -372,7 +367,7 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: UPSTREAM.commit }, []),
   ]);
-  const ctx = makePreparableCtx(out, err, adapter);
+  const ctx = await makePreparableCtx(out, err, adapter);
 
   const status = await runUpdate([], ctx);
   assert.equal(status, 0);
@@ -425,7 +420,7 @@ void test("needs install: delegates to runInstall alone, and a success propagate
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -466,7 +461,7 @@ void test("needs install: a non-zero runInstall return propagates as update's st
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "unsupported" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -498,7 +493,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     successResult("inspect", ownership(null), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -522,7 +517,7 @@ void test("a legacy identity state stops before the update-control guard even ru
     successResult("inspect", ownership("both"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -555,7 +550,7 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
     successResult("inspect", ownership("chaos"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -584,7 +579,7 @@ void test("an empty probe-reported update-control capability fails closed, and r
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: null }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -626,7 +621,7 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
     successResult("inspect", ownership(null), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makePreparableCtx(out, err, adapter);
+  const ctx = await makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -650,7 +645,7 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
     successResult("inspect", ownership("both"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makePreparableCtx(out, err, adapter);
+  const ctx = await makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -676,7 +671,7 @@ void test("needs prepare: an empty update control refuses before prepare, not in
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: null }, []),
   ]);
-  const ctx = makePreparableCtx(out, err, adapter);
+  const ctx = await makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -716,7 +711,7 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
       });
     },
   };
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -742,7 +737,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
       [],
     ),
   ]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runUpdate([], ctx);
   assert.equal(status, 1);
   // No second, command-authored line: replayOutcome already wrote the
@@ -762,7 +757,7 @@ void test("argv is ignored by src/commands/update.ts", async () => {
   const out = capture();
   const err = capture();
   const { adapter } = scriptedAdapter(probeCurrent());
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,

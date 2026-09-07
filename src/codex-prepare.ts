@@ -8,6 +8,11 @@ import {
   type AdapterResult,
 } from "./adapter-result.ts";
 import { codexBuild } from "./adapter.ts";
+import {
+  assessCodexCompatibility,
+  readCodexAssessment,
+  writeCodexAssessment,
+} from "./codex-compatibility.ts";
 import type { EffectiveSelection } from "./effective-selection.ts";
 import type { Compatibility } from "./harness-compatibility.ts";
 import type {
@@ -18,8 +23,7 @@ import type {
 } from "./harness.ts";
 import { readManifest } from "./hooks.ts";
 import {
-  generatedCommitOrEmpty,
-  generatedMetadataPath,
+  readGeneratedCommitLenient,
   readStrictProvenanceField,
   writeProvenance,
 } from "./provenance.ts";
@@ -269,12 +273,37 @@ export async function prepareCodexCandidate(
       built.outcome.messages,
     );
   }
+  const compatibility = await assessCodexCompatibility(
+    input.upstreamRoot,
+    input.selection,
+  );
+  if (compatibility.kind === "supported") {
+    try {
+      await writeCodexAssessment(
+        input.candidateRoot,
+        input.selection,
+        (await regularFileExists(
+          join(input.upstreamRoot, ".codex-plugin/plugin.json"),
+        ))
+          ? "upstream"
+          : "fallback",
+      );
+    } catch {
+      return failureResult(
+        "prepare",
+        "assessment-failed",
+        `cannot record Codex compatibility assessment: ${input.candidateRoot}`,
+        [],
+        built.outcome.messages,
+      );
+    }
+  }
   return successResult(
     built.outcome.operation,
     {
       root: input.candidateRoot,
       commit: input.selection.desiredCommit,
-      compatibility: unassessedCompatibility(),
+      compatibility,
       identity: input.selection.desiredCommit,
     },
     built.outcome.messages,
@@ -282,14 +311,41 @@ export async function prepareCodexCandidate(
 }
 
 export async function inspectCodexPrepared(
-  _selection: EffectiveSelection,
+  selection: EffectiveSelection,
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedState>> {
-  const observedIdentity = await generatedCommitOrEmpty(ctx.root);
+  const observedIdentity = await readGeneratedCommitLenient(
+    join(
+      codexPreparationLocation(ctx).destinationRoot,
+      ".superpowers-upstream.json",
+    ),
+  );
   const compatibility = unassessedCompatibility();
-  // Until the qualified assessment record is introduced, legacy provenance
-  // proves only identity. Neither a matching artifact nor an artifact for a
-  // different desired commit can establish the desired compatibility.
+  try {
+    const artifact = await readCodexAssessment(
+      codexPreparationLocation(ctx).destinationRoot,
+    );
+    const source = await readStrictProvenanceField(
+      join(artifact.root, ".superpowers-upstream.json"),
+      "source",
+    );
+    if (
+      artifact.commit === selection.desiredCommit &&
+      source === selection.effectiveSource
+    )
+      return successResult(
+        "inspect-prepared",
+        {
+          kind: "current",
+          artifact,
+          observedIdentity,
+          compatibility: artifact.compatibility,
+        },
+        [],
+      );
+  } catch {
+    /* Missing or invalid evidence requires a fresh preparation. */
+  }
   return successResult(
     "inspect-prepared",
     {
@@ -307,7 +363,10 @@ export async function readCodexPrepared(
   let commit = "";
   try {
     const value = await readStrictProvenanceField(
-      generatedMetadataPath(ctx.root),
+      join(
+        codexPreparationLocation(ctx).destinationRoot,
+        ".superpowers-upstream.json",
+      ),
       "commit",
     );
     if (typeof value === "string") commit = value;
@@ -323,14 +382,19 @@ export async function readCodexPrepared(
       [],
     );
   }
-  return successResult(
-    "read-prepared",
-    {
-      root: join(ctx.root, "plugins", "superpowers"),
-      commit,
-      compatibility: unassessedCompatibility(),
-      identity: commit,
-    },
-    [],
-  );
+  try {
+    return successResult(
+      "read-prepared",
+      await readCodexAssessment(codexPreparationLocation(ctx).destinationRoot),
+      [],
+    );
+  } catch {
+    return failureResult(
+      "read-prepared",
+      "invalid-assessment",
+      "generated Codex compatibility assessment is missing or invalid",
+      [],
+      [],
+    );
+  }
 }

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { writeQualifiedCodexFixture } from "./codex-prepared-fixture.ts";
 
 import {
   failureResult,
@@ -160,20 +159,10 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
           result.outcome.messages,
         );
       }
-      const artifact: PreparedArtifact = {
-        root: input.candidateRoot,
-        commit: input.selection.desiredCommit,
-        compatibility: {
-          kind: "unknown",
-          reason: "legacy Codex-shaped scripted result",
-        },
-        identity: input.selection.desiredCommit,
-      };
-      mkdirSync(input.candidateRoot, { recursive: true });
-      writeFileSync(
-        join(input.candidateRoot, ".superpowers-upstream.json"),
-        JSON.stringify({ commit: input.selection.desiredCommit }),
-        "utf8",
+      const artifact: PreparedArtifact = await writeQualifiedCodexFixture(
+        input.candidateRoot,
+        input.selection.desiredCommit,
+        input.selection.effectiveSource,
       );
       return successResult(
         result.outcome.operation,
