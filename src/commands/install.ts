@@ -6,11 +6,19 @@ import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import type { EffectiveSelection } from "../effective-selection.ts";
-import type { Output, PreparedArtifact } from "../harness.ts";
+import type {
+  Output,
+  PreparedArtifact,
+  InstalledState,
+  InstallReceipt,
+  InstallTransaction,
+} from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { gatherProbe, replayOutcome } from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
+import { withMutation } from "./mutation.ts";
+import { activationBlock } from "../harness-compatibility.ts";
 
 function writeOutput(
   output: Output,
@@ -38,10 +46,34 @@ async function invoke<T>(
   call: () => Promise<AdapterResult<T>>,
   failure: { readonly unexpected: string; readonly invalidStatus: string },
   outcomes: AdapterOutcome<unknown>[],
+  valid: (value: T) => boolean = () => true,
 ): Promise<StageResult<T>> {
   let result: AdapterResult<T>;
   try {
     result = await call();
+    if (
+      !result ||
+      !Number.isInteger(result.status) ||
+      !result.outcome ||
+      typeof result.outcome.ok !== "boolean" ||
+      typeof result.outcome.operation !== "string" ||
+      !Array.isArray(result.outcome.messages) ||
+      !result.outcome.messages.every(
+        (message) =>
+          message &&
+          (message.channel === "stdout" || message.channel === "stderr") &&
+          typeof message.text === "string",
+      ) ||
+      (result.outcome.ok
+        ? result.outcome.error !== null || !valid(result.outcome.result)
+        : !result.outcome.error ||
+          typeof result.outcome.error.code !== "string" ||
+          typeof result.outcome.error.message !== "string" ||
+          !Array.isArray(result.outcome.error.hints) ||
+          !result.outcome.error.hints.every((hint) => typeof hint === "string"))
+    ) {
+      return { ok: false, message: failure.invalidStatus, result: null };
+    }
   } catch {
     return { ok: false, message: failure.unexpected, result: null };
   }
@@ -58,6 +90,38 @@ async function invoke<T>(
     ok: true,
     result: { status: result.status, outcome },
   };
+}
+
+function validInstalled(value: InstalledState): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value.kind === "current" ||
+      value.kind === "mismatch" ||
+      value.kind === "absent") &&
+    typeof value.observedIdentity === "string" &&
+    (value.kind !== "absent" || value.observedIdentity === "")
+  );
+}
+
+function validOutput(value: Output): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray(value.stdout) &&
+    value.stdout.every((line) => typeof line === "string") &&
+    Array.isArray(value.stderr) &&
+    value.stderr.every((line) => typeof line === "string")
+  );
+}
+
+function validReceipt(value: InstallReceipt): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    validOutput(value.missingVerificationOutput) &&
+    validOutput(value.mismatchVerificationOutput)
+  );
 }
 
 // withWorkspace can throw AFTER its callback has already returned a fully
@@ -195,6 +259,11 @@ async function gatherInstallStages<R>(
 
         // Stage 3: the mutation itself. Nothing above may have issued this --
         // that is the whole point of stages 1 and 2 running first.
+        const activationFailure = activationBlock(
+          artifact.compatibility,
+          ctx.options.allowExperimental,
+        );
+        if (activationFailure !== null) return failed(activationFailure);
         const installFailure = ctx.adapter.presentation.callFailure(
           "install",
           adapterContext,
@@ -203,8 +272,29 @@ async function gatherInstallStages<R>(
           () => ctx.adapter.install(artifact, adapterContext),
           installFailure,
           outcomes,
+          validReceipt,
         );
         if (!install.ok) return failed(install.message);
+        let transaction: InstallTransaction | undefined;
+        try {
+          const candidate = install.result.outcome.result.transaction;
+          if (candidate !== undefined) {
+            if (candidate === null || typeof candidate !== "object")
+              throw new Error("invalid transaction");
+            const finalize = candidate.finalize.bind(candidate);
+            const rollback = candidate.rollback.bind(candidate);
+            if (
+              typeof finalize !== "function" ||
+              typeof rollback !== "function"
+            )
+              throw new Error("invalid transaction");
+            transaction = { finalize, rollback };
+          }
+        } catch {
+          return failed(
+            "invalid installation transaction receipt; preserve recovery material for manual resolution",
+          );
+        }
 
         // Stage 4: inspect fingerprint, to verify the mutation actually took.
         //
@@ -216,15 +306,15 @@ async function gatherInstallStages<R>(
         // is what turns a failed inspection into "error: installed manager
         // fingerprint inspection failed after install."
         // renderInstallVerification's failed-inspection arm
-        // (`src/codex-presentation.ts:318::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
+        // (`src/codex-presentation.ts:328::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
         // exists for this result-bearing path; the lifecycle compatibility
         // export delegates through the same arm. Returning
         // failed() instead reported the adapter's own generic diagnostic and
         // dropped the post-install verification claim -- a mutation had
         // already been issued at stage 3,
         // so "the install could not be verified" is the contract, not "an
-        // adapter call failed". A ctx.adapter THROW is the one case with no
-        // result to verify against, and keeps the short-circuit.
+        // adapter call failed". A ctx.adapter THROW has no result to render.
+        // A pending transaction still rolls back before reporting that failure.
         const inspectionFailure = ctx.adapter.presentation.callFailure(
           "post-install",
           adapterContext,
@@ -233,21 +323,82 @@ async function gatherInstallStages<R>(
           () => ctx.adapter.inspectInstalled(selection, adapterContext),
           inspectionFailure,
           outcomes,
+          validInstalled,
         );
-        if (!inspected.ok && inspected.result === null) {
-          return failed(inspected.message);
-        }
         const inspection = inspected.result;
-        if (inspection === null) return failed(null);
+        const verified =
+          inspection !== null &&
+          inspection.status === 0 &&
+          inspection.outcome.ok &&
+          inspection.outcome.result.kind === "current";
+        if (transaction !== undefined) {
+          const operation = verified ? "finalize" : "rollback";
+          const settlement = await invoke(
+            () => (verified ? transaction.finalize() : transaction.rollback()),
+            {
+              unexpected: `installation ${operation} did not complete; preserve recovery material for manual resolution`,
+              invalidStatus: `installation ${operation} returned an invalid result; preserve recovery material for manual resolution`,
+            },
+            outcomes,
+            (value) => value === null,
+          );
+          if (!verified) {
+            const restored = await invoke(
+              () => ctx.adapter.inspectInstalled(selection, adapterContext),
+              inspectionFailure,
+              outcomes,
+              validInstalled,
+            );
+            const restoration = restored.ok
+              ? `installed state after rollback: ${restored.result.outcome.result.kind}; identity=${restored.result.outcome.result.observedIdentity}`
+              : "installed state after rollback could not be inspected";
+            const message = !settlement.ok
+              ? settlement.message
+              : !inspected.ok
+                ? inspected.message
+                : "installation could not be verified";
+            return {
+              kind: "verified",
+              outcomes,
+              status: 1,
+              stdout: [],
+              stderr: [
+                ...(message === null ? [] : [`error: ${message}`]),
+                restoration,
+              ],
+            };
+          }
+          if (!settlement.ok) {
+            const actual = await invoke(
+              () => ctx.adapter.inspectInstalled(selection, adapterContext),
+              inspectionFailure,
+              outcomes,
+              validInstalled,
+            );
+            return {
+              kind: "verified",
+              outcomes,
+              status: 1,
+              stdout: [],
+              stderr: [
+                "error: installation was verified, but transaction cleanup did not complete; preserve recovery material for manual resolution",
+                actual.ok
+                  ? `installed state after failed finalization: ${actual.result.outcome.result.kind}; identity=${actual.result.outcome.result.observedIdentity}`
+                  : "installed state after failed finalization could not be inspected",
+                ...(settlement.message === null
+                  ? []
+                  : [`error: ${settlement.message}`]),
+              ],
+            };
+          }
+        }
+        if (inspection === null)
+          return failed(inspected.ok ? null : inspected.message);
         const output = ctx.adapter.presentation.renderInstallVerification(
           selection.desiredCommit,
           install.result,
           inspection,
         );
-        const verified =
-          inspection.status === 0 &&
-          inspection.outcome.ok &&
-          inspection.outcome.result.kind === "current";
         return {
           kind: "verified",
           outcomes,
@@ -279,10 +430,32 @@ export async function runInstall<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
+  if (ctx.adapter.presentation.installNotice !== "")
+    ctx.stdout.write(`${ctx.adapter.presentation.installNotice}\n`);
+  let actionThrew = false;
+  try {
+    return await withMutation("install", ctx, async (scoped) => {
+      try {
+        return await performInstall(argv, scoped);
+      } catch (cause) {
+        actionThrew = true;
+        throw cause;
+      }
+    });
+  } catch (cause) {
+    if (actionThrew) throw cause;
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
+    return 1;
+  }
+}
+
+async function performInstall<R>(
+  argv: readonly string[],
+  ctx: CommandContext<R>,
+): Promise<number> {
   // scripts/install never reads "$@", so extra arguments are silently
   // ignored -- the same asymmetry runPrepare and runUninstall document.
   void argv;
-  ctx.stdout.write(`${ctx.adapter.presentation.installNotice}\n`);
 
   let probe: Awaited<ReturnType<typeof gatherProbe<R>>>;
   try {
@@ -294,7 +467,7 @@ export async function runInstall<R>(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:251-309::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:337-395::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
     // stream too, including the three foreign-text exceptions at :251-296:
@@ -328,6 +501,13 @@ export async function runInstall<R>(
 
   if (facts.ownership.installEligibility.kind === "blocked") {
     writeOutput(facts.ownership.installEligibility.output, ctx);
+    return 1;
+  }
+  if (
+    facts.resourceState === "recovery-required" &&
+    facts.control.probeEligibility.kind === "blocked"
+  ) {
+    writeOutput(facts.control.probeEligibility.output, ctx);
     return 1;
   }
 

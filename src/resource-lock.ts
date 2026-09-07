@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   realpath,
   rmdir,
@@ -14,10 +16,19 @@ import { canonicalizeProspectivePath } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 
 export interface ResourceCoordinator {
+  observeResources(
+    paths: readonly string[],
+  ): Promise<readonly ResourceObservation[]>;
   withResources<T>(
     paths: readonly string[],
     action: () => Promise<T>,
   ): Promise<T>;
+}
+
+export interface ResourceObservation {
+  readonly resource: string;
+  readonly state: "idle" | "owned" | "busy" | "uninspectable";
+  readonly markerIdentity: string;
 }
 
 interface HeldResource {
@@ -166,6 +177,76 @@ async function releaseOwned(held: HeldResource): Promise<ReleaseOutcome> {
 
 class FilesystemResourceCoordinator implements ResourceCoordinator {
   readonly #held = new Map<string, HeldResource>();
+
+  async observeResources(
+    paths: readonly string[],
+  ): Promise<readonly ResourceObservation[]> {
+    return await Promise.all(
+      paths.map(async (path): Promise<ResourceObservation> => {
+        const lock = await resourceLock(path);
+        const observation = (
+          state: ResourceObservation["state"],
+          markerIdentity = "",
+        ): ResourceObservation => ({
+          resource: lock.resource,
+          state,
+          markerIdentity,
+        });
+        try {
+          const before = await lstat(lock.lockPath);
+          if (!before.isDirectory()) return observation("uninspectable");
+          const metadataPath = join(lock.lockPath, "owner.json");
+          const file = await open(
+            metadataPath,
+            constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+          );
+          try {
+            const metadata = await file.stat();
+            if (!metadata.isFile() || metadata.size > 8192)
+              return observation("uninspectable");
+            const owner = ownerRecord(JSON.parse(await file.readFile("utf8")));
+            const after = await lstat(lock.lockPath);
+            const metadataAfter = await lstat(metadataPath);
+            if (
+              !owner ||
+              !owner.token ||
+              owner.resource !== lock.resource ||
+              before.dev !== after.dev ||
+              before.ino !== after.ino ||
+              !after.isDirectory() ||
+              !metadataAfter.isFile() ||
+              metadata.dev !== metadataAfter.dev ||
+              metadata.ino !== metadataAfter.ino ||
+              metadata.mtimeMs !== metadataAfter.mtimeMs ||
+              metadata.size !== metadataAfter.size
+            )
+              return observation("uninspectable");
+            const held = this.#held.get(lock.lockPath);
+            const owned =
+              held?.token === owner.token && held.resource === owner.resource;
+            return observation(
+              owned ? "owned" : "busy",
+              `${before.dev}:${before.ino}:${metadata.dev}:${metadata.ino}:${owner.token}`,
+            );
+          } finally {
+            await file.close();
+          }
+        } catch (cause) {
+          if (errnoIs(cause, "ENOENT")) {
+            try {
+              await lstat(lock.lockPath);
+            } catch (again) {
+              if (errnoIs(again, "ENOENT"))
+                return observation(
+                  this.#held.has(lock.lockPath) ? "uninspectable" : "idle",
+                );
+            }
+          }
+          return observation("uninspectable");
+        }
+      }),
+    );
+  }
 
   async withResources<T>(
     paths: readonly string[],

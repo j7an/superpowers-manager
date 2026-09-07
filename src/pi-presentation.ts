@@ -2,8 +2,7 @@ import type { HarnessPresentation } from "./harness.ts";
 import type { PiRemovalInput } from "./pi-state.ts";
 
 export const piPresentation: HarnessPresentation<PiRemovalInput> = {
-  installNotice:
-    "Installed the frozen Superpowers Pi snapshot. Restart Pi to load it.",
+  installNotice: "",
   currentNotice: "The Superpowers Pi snapshot is current.",
   renderProbe(facts) {
     const fields = [
@@ -12,6 +11,7 @@ export const piPresentation: HarnessPresentation<PiRemovalInput> = {
       ["prepared_identity", facts.prepared.observedIdentity],
       ["installed_identity", facts.installed.observedIdentity],
       ["installation_state", facts.installed.kind],
+      ["resource_state", facts.resourceState ?? "idle"],
       ["ownership", facts.ownership.presentationValue],
       ["conflicts", (facts.ownership.presentationConflicts ?? []).join("; ")],
       ["update_control", facts.control.presentationValue],
@@ -40,7 +40,12 @@ export const piPresentation: HarnessPresentation<PiRemovalInput> = {
     if (inspection.status !== 0 || !inspection.outcome.ok)
       return receipt.outcome.result.missingVerificationOutput;
     if (inspection.outcome.result.kind === "current")
-      return { stdout: [], stderr: [] };
+      return {
+        stdout: [
+          "Installed the frozen Superpowers Pi snapshot. Restart Pi to load it.",
+        ],
+        stderr: [],
+      };
     return inspection.outcome.result.kind === "absent"
       ? receipt.outcome.result.missingVerificationOutput
       : receipt.outcome.result.mismatchVerificationOutput;

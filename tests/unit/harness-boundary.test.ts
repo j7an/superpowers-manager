@@ -31,6 +31,429 @@ import type {
 } from "../../src/harness.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
 import { createHarnessFixture } from "../lib/test-harness.ts";
+import { parseArgs } from "../../src/cli.ts";
+import { createResourceCoordinator } from "../../src/resource-lock.ts";
+import { SafetyError } from "../../src/safety-error.ts";
+
+void test("command-first harness options are removed before command arity checks", () => {
+  for (const target of [["--harness", "pi"], ["--harness=pi"]]) {
+    assert.deepEqual(parseArgs(["probe", ...target, "--porcelain"]), {
+      kind: "run",
+      cmd: "probe",
+      args: ["--porcelain"],
+      options: { harness: "pi", allowExperimental: false },
+    });
+  }
+  assert.deepEqual(
+    parseArgs(["install", "--allow-experimental", "--harness=pi"]),
+    {
+      kind: "run",
+      cmd: "install",
+      args: [],
+      options: { harness: "pi", allowExperimental: true },
+    },
+  );
+  for (const args of [
+    ["pin", "--harness=pi", "v1.0.0"],
+    ["prepare", "--allow-experimental"],
+    ["install", "--harness=unknown"],
+    ["install", "--harness"],
+    ["install", "--harness="],
+    ["install", "--harness=pi", "--harness", "codex"],
+    ["install", "--allow-experimental", "--allow-experimental"],
+    ["--harness=pi", "probe"],
+  ])
+    assert.equal(parseArgs(args).kind, "usage-error", args.join(" "));
+  assert.deepEqual(parseArgs([]), {
+    kind: "run",
+    cmd: "update",
+    args: [],
+    options: { harness: "codex", allowExperimental: false },
+  });
+});
+
+void test("shared install settles every transaction exit while retaining mutation ownership", async (t) => {
+  for (const inspection of [
+    "current",
+    "mismatch",
+    "absent",
+    "throw",
+    "failed",
+    "nonzero",
+    "malformed",
+  ] as const) {
+    for (const settlement of [
+      "ok",
+      "throw",
+      "failed",
+      "nonzero",
+      "malformed",
+    ] as const) {
+      await t.test(`${inspection}/${settlement}`, async (t) => {
+        const fixture = await createHarnessFixture(t);
+        const statePath = join(fixture.ctx.root, "installed-state");
+        writeFileSync(statePath, "previous");
+        const coordinator = createResourceCoordinator();
+        let activated = false;
+        let settled = false;
+        const settlements: string[] = [];
+        let recoveryReads = 0;
+        const settle = async (
+          kind: "finalize" | "rollback",
+        ): Promise<AdapterResult<null>> => {
+          settlements.push(kind);
+          const resources = await coordinator.observeResources([
+            fixture.destinationRoot,
+          ]);
+          assert.equal(resources[0]?.state, "owned");
+          assert.doesNotMatch(fixture.out.text(), /fixture installed/);
+          if (settlement === "throw")
+            throw new Error("private settlement failure");
+          if (settlement === "malformed")
+            return null as unknown as AdapterResult<null>;
+          if (settlement === "failed")
+            return failureResult(kind, "failed", "settlement failed", [], []);
+          if (settlement === "nonzero")
+            return { ...successResult(kind, null, []), status: 1 };
+          settled = true;
+          if (kind === "rollback") writeFileSync(statePath, "previous");
+          return successResult(kind, null, []);
+        };
+        const adapter = {
+          ...fixture.adapter,
+          ...fixture.methods,
+          async install() {
+            activated = true;
+            writeFileSync(statePath, "candidate");
+            return successResult(
+              "install",
+              {
+                ...fixture.installReceipt,
+                transaction: {
+                  finalize: () => settle("finalize"),
+                  rollback: () => settle("rollback"),
+                },
+              },
+              [],
+            );
+          },
+          async inspectInstalled(): Promise<AdapterResult<InstalledState>> {
+            if (!activated)
+              return successResult("inspect", fixture.installed, []);
+            if (settlements.length > 0) {
+              recoveryReads += 1;
+              return successResult(
+                "inspect",
+                {
+                  kind: "mismatch",
+                  observedIdentity: readFileSync(statePath, "utf8"),
+                },
+                [],
+              );
+            }
+            if (inspection === "throw")
+              throw new Error("private inspection failure");
+            if (inspection === "malformed")
+              return successResult(
+                "inspect",
+                null as unknown as InstalledState,
+                [],
+              );
+            if (inspection === "failed")
+              return failureResult(
+                "inspect",
+                "failed",
+                "inspection failed",
+                [],
+                [],
+              );
+            if (inspection === "nonzero")
+              return {
+                ...successResult("inspect", fixture.installed, []),
+                status: 1,
+              };
+            return successResult(
+              "inspect",
+              inspection === "absent"
+                ? { kind: "absent", observedIdentity: "" }
+                : { kind: inspection, observedIdentity: "candidate" },
+              [],
+            );
+          },
+        };
+        const result = await runInstall([], {
+          ...fixture.ctx,
+          adapter,
+          coordination: coordinator,
+        });
+        assert.equal(
+          result,
+          inspection === "current" && settlement === "ok" ? 0 : 1,
+          fixture.err.text(),
+        );
+        assert.deepEqual(settlements, [
+          inspection === "current" ? "finalize" : "rollback",
+        ]);
+        assert.equal(settled, settlement === "ok");
+        assert.equal(
+          readFileSync(statePath, "utf8"),
+          inspection !== "current" && settlement === "ok"
+            ? "previous"
+            : "candidate",
+        );
+        if (inspection !== "current" || settlement !== "ok")
+          assert.equal(recoveryReads, 1);
+        if (result !== 0)
+          assert.doesNotMatch(fixture.out.text(), /fixture installed/);
+        assert.doesNotMatch(
+          fixture.err.text(),
+          /private (inspection|settlement) failure/,
+        );
+      });
+    }
+  }
+});
+
+void test("shared install rejects malformed transaction capabilities without claiming activation success", async (t) => {
+  for (const transaction of [
+    null,
+    {},
+    { finalize: async () => successResult("finalize", null, []) },
+    {
+      get finalize() {
+        throw new Error("private getter failure");
+      },
+      rollback: async () => successResult("rollback", null, []),
+    },
+  ]) {
+    await t.test(
+      transaction === null ? "null" : String(Object.keys(transaction)),
+      async (t) => {
+        const fixture = await createHarnessFixture(t);
+        const adapter = {
+          ...fixture.adapter,
+          ...fixture.methods,
+          async install() {
+            return successResult(
+              "install",
+              { ...fixture.installReceipt, transaction },
+              [],
+            ) as unknown as AdapterResult<
+              import("../../src/harness.ts").InstallReceipt
+            >;
+          },
+        };
+        assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
+        assert.match(fixture.err.text(), /transaction|receipt/);
+        assert.doesNotMatch(fixture.err.text(), /private getter failure/);
+        assert.doesNotMatch(fixture.out.text(), /fixture installed/);
+      },
+    );
+  }
+});
+
+void test("public mutators refuse a competing resource owner before adapter probing", async (t) => {
+  for (const run of [runPrepare, runInstall, runUpdate, runUninstall]) {
+    await t.test(run.name, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      const owner = createResourceCoordinator();
+      await owner.withResources([fixture.destinationRoot], async () => {
+        assert.equal(
+          await run([], {
+            ...fixture.ctx,
+            coordination: createResourceCoordinator(),
+          }),
+          1,
+        );
+        assert.deepEqual(fixture.calls, ["location", "mutation-roots"]);
+        assert.match(fixture.err.text(), /resource is busy/);
+        assert.equal(existsSync(fixture.destinationRoot), false);
+      });
+    });
+  }
+});
+
+void test("mutation resource wrappers preserve output failures without relabelling them", async (t) => {
+  for (const run of [runPrepare, runInstall, runUpdate, runUninstall]) {
+    await t.test(run.name, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      const failure = new Error("private output failure");
+      const stdout = {
+        write(text: string) {
+          if (text === "test install notice\n") return true;
+          throw failure;
+        },
+      } as unknown as NodeJS.WritableStream;
+      await assert.rejects(
+        run([], {
+          ...fixture.ctx,
+          adapter: { ...fixture.adapter, ...fixture.methods },
+          stdout,
+        }),
+        (cause) => cause === failure,
+      );
+      assert.equal(fixture.err.text(), "");
+    });
+  }
+});
+
+void test("mutation wrappers report resource release failure after a completed action", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const coordination = {
+    ...fixture.ctx.coordination,
+    async withResources<T>(
+      _paths: readonly string[],
+      action: () => Promise<T>,
+    ): Promise<T> {
+      await action();
+      throw new SafetyError(
+        "resource-lock",
+        "cannot release fixture resource lock",
+      );
+    },
+  };
+  assert.equal(
+    await runUninstall([], {
+      ...fixture.ctx,
+      adapter: { ...fixture.adapter, ...fixture.methods },
+      coordination,
+    }),
+    1,
+  );
+  assert.match(fixture.out.text(), /fixture uninstall complete/);
+  assert.equal(
+    fixture.err.text(),
+    "error: cannot release fixture resource lock\n",
+  );
+});
+
+void test("experimental no-op update is allowed but activation requires invocation permission", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const artifact = {
+    ...fixture.preparedArtifact,
+    compatibility: {
+      kind: "experimental" as const,
+      generation: "fixture",
+      reason: "unqualified",
+    },
+  };
+  const adapter = {
+    ...fixture.adapter,
+    ...fixture.methods,
+    async inspectPrepared() {
+      return successResult(
+        "inspect",
+        {
+          kind: "current" as const,
+          artifact,
+          observedIdentity: artifact.identity,
+          compatibility: artifact.compatibility,
+        },
+        [],
+      );
+    },
+    async readPrepared() {
+      return successResult("read", artifact, []);
+    },
+    async install() {
+      fixture.calls.push("activated");
+      return successResult("install", fixture.installReceipt, []);
+    },
+  };
+  assert.equal(await runUpdate([], { ...fixture.ctx, adapter }), 0);
+  assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
+  assert.equal(fixture.calls.includes("activated"), false);
+  assert.match(fixture.err.text(), /--allow-experimental/);
+  assert.equal(
+    await runInstall([], {
+      ...fixture.ctx,
+      adapter,
+      options: { harness: "pi", allowExperimental: true },
+    }),
+    0,
+  );
+  assert.equal(fixture.calls.includes("activated"), true);
+});
+
+void test("probe rejects mixed publication observations even when all resource markers are idle", async (t) => {
+  for (const changed of ["prepared", "installed", "control"] as const) {
+    await t.test(changed, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      let preparedReads = 0;
+      let installedReads = 0;
+      let controlReads = 0;
+      const adapter = {
+        ...fixture.adapter,
+        ...fixture.methods,
+        async inspectPrepared() {
+          preparedReads += 1;
+          return successResult(
+            "prepared",
+            {
+              kind: "current" as const,
+              artifact: fixture.preparedArtifact,
+              compatibility: fixture.preparedArtifact.compatibility,
+              observedIdentity:
+                changed === "prepared" && preparedReads > 1 ? "new" : "old",
+            },
+            [],
+          );
+        },
+        async inspectInstalled() {
+          installedReads += 1;
+          return successResult(
+            "installed",
+            {
+              kind: "current" as const,
+              observedIdentity:
+                changed === "installed" && installedReads > 1 ? "new" : "old",
+            },
+            [],
+          );
+        },
+        async inspectUpdateControl() {
+          controlReads += 1;
+          return successResult(
+            "control",
+            {
+              ...fixture.control,
+              presentationValue:
+                changed === "control" && controlReads > 1
+                  ? "recovery required"
+                  : "normal",
+            },
+            [],
+          );
+        },
+      };
+      assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
+      assert.doesNotMatch(fixture.out.text(), /status current/);
+      assert.match(fixture.err.text(), /changed|coherent/);
+    });
+  }
+});
+
+void test("probe cannot succeed when readable adapter facts lack observable resource roots", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const adapter = {
+    ...fixture.adapter,
+    ...fixture.methods,
+    async mutationRoots(): Promise<readonly string[]> {
+      throw new Error("private roots failure");
+    },
+  };
+  assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "inspect-prepared",
+    "inspect-installed",
+  ]);
+  assert.equal(fixture.out.text(), "");
+  assert.equal(
+    fixture.err.text(),
+    "error: cannot determine harness observation resources\n",
+  );
+});
 
 void test("preparation does not require a Codex template or manifest", async (t) => {
   const fixture = await createHarnessFixture(t);
@@ -44,7 +467,13 @@ void test("preparation does not require a Codex template or manifest", async (t)
     existsSync(join(fixture.destinationRoot, ".codex-plugin")),
     false,
   );
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
 });
 
 void test("a rejected candidate preserves the previous payload before validation or replacement", async (t) => {
@@ -93,7 +522,13 @@ void test("a rejected candidate preserves the previous payload before validation
     readFileSync(join(fixture.destinationRoot, "payload.txt"), "utf8"),
     "previous\n",
   );
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(fixture.err.text(), "error: fixture candidate rejected\n");
   assert.ok(workspaceRoot);
   assert.equal(existsSync(workspaceRoot), false);
@@ -170,6 +605,8 @@ void test("a rejected candidate preserves the previous payload before validation
       );
       assert.equal(existsSync(validatorSentinel), false);
       assert.deepEqual(unsupportedFixture.calls, [
+        "location",
+        "mutation-roots",
         "location",
         "prefetch",
         "prepare",
@@ -253,7 +690,13 @@ void test("preparation hides a candidate builder's thrown diagnostic", async (t)
   };
 
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(fixture.err.text(), "error: unexpected test adapter call\n");
 });
 
@@ -287,7 +730,13 @@ void test("preparation rejects artifact evidence for another root", async (t) =>
   };
 
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(
     fixture.err.text(),
     "error: adapter returned an unexpected preparation root\n",
@@ -319,7 +768,13 @@ void test("preparation rejects artifact evidence for another commit", async (t) 
   };
 
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(
     fixture.err.text(),
     "error: adapter returned an unexpected preparation commit\n",
@@ -360,9 +815,14 @@ void test("probe performs only the four read-only inspections", async (t) => {
 
   assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 0);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
   ]);
   assert.equal(fixture.out.text(), "fixture status current\n");
@@ -405,9 +865,14 @@ void test("probe performs only the four read-only inspections", async (t) => {
 
       assert.equal(outcome.status, 0);
       assert.deepEqual(unsupportedFixture.calls, [
+        "location",
+        "mutation-roots",
         "inspect-prepared",
         "inspect-installed",
         "inspect-ownership",
+        "inspect-control",
+        "inspect-prepared",
+        "inspect-installed",
         "inspect-control",
       ]);
       if (outcome.status === 0) {
@@ -434,7 +899,7 @@ void test("update composes probe, preparation, and installation through a non-Co
         adapterCtx,
       );
       preparedReads += 1;
-      if (preparedReads !== 1 || !result.outcome.ok) return result;
+      if (preparedReads > 2 || !result.outcome.ok) return result;
       return successResult(
         "inspect-prepared",
         {
@@ -454,16 +919,32 @@ void test("update composes probe, preparation, and installation through a non-Co
 
   assert.equal(await runUpdate([], { ...fixture.ctx, adapter }), 0);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
     "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-control",
+    "location",
+    "mutation-roots",
     "location",
     "prefetch",
     "prepare",
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -513,9 +994,16 @@ void test("install obeys a fresh ownership denial after an allowed probe", async
 
   assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -538,7 +1026,7 @@ void test("install stops when fresh update control fails", async (t) => {
       readonly env?: NodeJS.ProcessEnv;
     }): Promise<AdapterResult<UpdateControlInspection>> {
       controlReads += 1;
-      if (controlReads === 2) {
+      if (controlReads === 3) {
         fixture.calls.push("inspect-control");
         return failureResult(
           "inspect-control",
@@ -554,9 +1042,16 @@ void test("install stops when fresh update control fails", async (t) => {
 
   assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -581,7 +1076,7 @@ void test("install stops when fresh update control blocks mutation", async (t) =
     }): Promise<AdapterResult<UpdateControlInspection>> {
       const result = await fixture.methods.inspectUpdateControl(adapterCtx);
       controlReads += 1;
-      if (controlReads !== 2 || !result.outcome.ok) return result;
+      if (controlReads !== 3 || !result.outcome.ok) return result;
       return successResult(
         "inspect-control",
         {
@@ -601,9 +1096,16 @@ void test("install stops when fresh update control blocks mutation", async (t) =
 
   assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -674,7 +1176,7 @@ void test("post-install failure, absence, and mismatch cannot report success", a
           },
         ): Promise<AdapterResult<InstalledState>> {
           installedReads += 1;
-          if (installedReads === 2) {
+          if (installedReads === 3) {
             fixture.calls.push("inspect-installed");
             assert.deepEqual(inputSelection, fixture.selection);
             return each.response();
@@ -688,9 +1190,16 @@ void test("post-install failure, absence, and mismatch cannot report success", a
 
       assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
       assert.deepEqual(fixture.calls, [
+        "location",
+        "mutation-roots",
+        "location",
+        "mutation-roots",
         "inspect-prepared",
         "inspect-installed",
         "inspect-ownership",
+        "inspect-control",
+        "inspect-prepared",
+        "inspect-installed",
         "inspect-control",
         "read-prepared",
         "inspect-ownership",
@@ -714,6 +1223,8 @@ void test("removal passes private input unchanged and reinspects ownership", asy
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 0);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -758,6 +1269,8 @@ void test("residual owned resources fail after a successful remove", async (t) =
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -795,6 +1308,8 @@ void test("a failed post-remove ownership inspection suppresses completion", asy
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -836,6 +1351,8 @@ void test("retained legacy state is reported without changing the private remova
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 0);
   assert.strictEqual(fixture.removalInputs[0], fixture.removalInput);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -876,6 +1393,8 @@ void test("cleanup failure preserves the completed result and unrelated sibling"
 
     assert.equal(status, 1);
     assert.deepEqual(fixture.calls, [
+      "location",
+      "mutation-roots",
       "inspect-ownership",
       "remove",
       "inspect-ownership",

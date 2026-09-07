@@ -74,6 +74,14 @@ Apply and lifecycle commands:
   update     probe, then prepare/install only if needed (default when no subcommand)
   uninstall  remove the manager plugin and marketplace from Codex
 
+Target one invocation (default: codex; selection commands are shared):
+  probe --harness pi [--porcelain]
+  prepare --harness pi
+  install --harness pi [--allow-experimental]
+  update --harness pi [--allow-experimental]
+  uninstall --harness pi
+  --harness=codex and --harness=pi are also accepted after the command.
+
 Environment overrides (used by in-process commands): SUPERPOWERS_REF,
 SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,
 SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,
@@ -656,9 +664,11 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
       "plugin list --json", // update's own probe: fingerprint
       "plugin list --json", // update's own probe: ownership
       "plugin marketplace list --json", // update's own probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's own probe: fingerprint
       "plugin list --json", // install's own probe: ownership
       "plugin marketplace list --json", // install's own probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // adapter install's marketplace lookup
@@ -797,6 +807,7 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
       "plugin list --json", // probe: fingerprint
       "plugin list --json", // probe: ownership
       "plugin marketplace list --json", // probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // adapter install's marketplace lookup
@@ -806,9 +817,11 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
       "plugin list --json", // update's own probe: fingerprint
       "plugin list --json", // update's own probe: ownership
       "plugin marketplace list --json", // update's own probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's own probe: fingerprint
       "plugin list --json", // install's own probe: ownership
       "plugin marketplace list --json", // install's own probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // adapter install's marketplace lookup
@@ -2100,6 +2113,7 @@ void test("INSTALL-ORDER-01 install prepares and validates before adapter mutati
       "plugin list --json",
       "plugin list --json",
       "plugin marketplace list --json",
+      "plugin list --json", // closing fingerprint observation
     ]);
   }
 
@@ -2127,6 +2141,7 @@ void test("INSTALL-ORDER-01 install prepares and validates before adapter mutati
       "plugin list --json", // fingerprint (initial probe)
       "plugin list --json", // ownership (initial probe)
       "plugin marketplace list --json", // ownership (initial probe)
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // ownership (install's fresh gate, before mutation)
       "plugin marketplace list --json", // ownership (install's fresh gate, before mutation)
       "plugin marketplace list --json", // adapter install's own marketplace lookup
@@ -2190,9 +2205,11 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
       "plugin list --json", // update's own probe: fingerprint
       "plugin list --json", // update's own probe: ownership
       "plugin marketplace list --json", // update's own probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's own probe: fingerprint
       "plugin list --json", // install's own probe: ownership
       "plugin marketplace list --json", // install's own probe: ownership
+      "plugin list --json", // closing fingerprint observation
       "plugin list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // install's fresh gate: ownership
       "plugin marketplace list --json", // adapter install's own marketplace lookup
@@ -2391,6 +2408,7 @@ void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", 
     "plugin list --json",
     "plugin list --json",
     "plugin marketplace list --json",
+    "plugin list --json", // closing fingerprint observation
   ]);
 });
 
@@ -2611,7 +2629,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // either -- runAdapter merges `{ ...process.env, ...context.env }`
   // (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:494::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:538::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
+  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:502::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:546::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2683,8 +2701,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1315::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1361::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1328::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1374::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

@@ -7,6 +7,7 @@ import { oneLine } from "../cli-arguments.ts";
 import type { Output } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
+import { withMutation } from "./mutation.ts";
 import { replayOutcome } from "./probe.ts";
 
 type StageResult<T> =
@@ -103,7 +104,7 @@ interface GatherRun {
 
 // Every step that can throw or fail closed, returning the outcome as data and
 // performing NO writes. Same shape as gatherProbe
-// (`src/commands/probe.ts:114-117::readonly facts: ProbeSnapshot<R>;`) and for the same
+// (`src/commands/probe.ts::readonly facts: ProbeSnapshot<R>;`) and for the same
 // reason: a write inside this try could raise EPIPE, be caught here, and be
 // relabelled as a domain failure.
 async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
@@ -212,6 +213,27 @@ async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
 }
 
 export async function runUninstall<R>(
+  argv: readonly string[],
+  ctx: CommandContext<R>,
+): Promise<number> {
+  let actionThrew = false;
+  try {
+    return await withMutation("uninstall", ctx, async (scoped) => {
+      try {
+        return await performUninstall(argv, scoped);
+      } catch (cause) {
+        actionThrew = true;
+        throw cause;
+      }
+    });
+  } catch (cause) {
+    if (actionThrew) throw cause;
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
+    return 1;
+  }
+}
+
+async function performUninstall<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {

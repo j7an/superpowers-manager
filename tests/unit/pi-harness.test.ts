@@ -4,6 +4,76 @@ import { piHarness } from "../../src/pi-harness.ts";
 import type { ProbeSnapshot } from "../../src/harness.ts";
 import type { PiRemovalInput } from "../../src/pi-state.ts";
 import { nativeSelection } from "../lib/pi-package-fixture.ts";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  rm,
+  symlink,
+  readdir,
+} from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { piPaths } from "../../src/pi-paths.ts";
+import { inspectPiControl } from "../../src/pi-state.ts";
+import { codexPresentation } from "../../src/codex-presentation.ts";
+
+void test("the public Pi probe dispatch needs neither native harness executable nor resource writes", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "spw-pi-dispatch-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const tools = join(root, "tools");
+  await mkdir(tools);
+  await symlink(process.execPath, join(tools, "git"));
+  const env = {
+    HOME: root,
+    PATH: tools,
+    PI_CODING_AGENT_DIR: join(root, "agent"),
+    SUPERPOWERS_REF: "1".repeat(40),
+    SUPERPOWERS_UPSTREAM_URL: "https://example.invalid/upstream",
+    SUPERPOWERS_CONFIG_DIR: join(root, "config"),
+  };
+  for (const args of [["--harness", "pi"], ["--harness=pi"]]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        new URL("../../src/cli.ts", import.meta.url).pathname,
+        "probe",
+        ...args,
+        "--porcelain",
+      ],
+      { env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /^harness=pi\n/);
+    assert.match(result.stdout, /installation_state=absent\n/);
+    assert.match(result.stdout, /resource_state=idle\n/);
+    assert.equal(result.stderr, "");
+    assert.deepEqual(await readdir(root), ["tools"]);
+  }
+});
+
+void test("Pi adapter reports recovery without blocking its low-level transaction control", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "spw-pi-recovery-probe-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { HOME: root, PI_CODING_AGENT_DIR: join(root, "agent") };
+  const paths = piPaths(env, root);
+  const ctx = { root, env };
+  await mkdir(paths.recoveryRoot, { recursive: true });
+  const marker = join(paths.recoveryRoot, "transaction.json");
+  await writeFile(marker, "preserve recovery bytes");
+  const result = await piHarness.inspectUpdateControl(ctx);
+  assert.equal(result.status, 0);
+  assert.ok(result.outcome.ok);
+  assert.equal(result.outcome.result.probeEligibility.kind, "blocked");
+  assert.equal(result.outcome.result.mutationEligibility.kind, "blocked");
+  assert.match(result.outcome.result.presentationValue, /recovery/);
+  const lowLevel = await inspectPiControl(ctx);
+  assert.ok(lowLevel.outcome.ok);
+  assert.equal(lowLevel.outcome.result.mutationEligibility.kind, "allowed");
+  const { readFile } = await import("node:fs/promises");
+  assert.equal(await readFile(marker, "utf8"), "preserve recovery bytes");
+});
 
 void test("Pi local inspection requires no executable and mutations honor the override", () => {
   for (const command of [
@@ -22,7 +92,7 @@ void test("Pi local inspection requires no executable and mutations honor the ov
       "./selected-pi",
     );
   }
-  assert.match(piHarness.presentation.installNotice, /restart Pi/i);
+  assert.equal(piHarness.presentation.installNotice, "");
   assert.doesNotMatch(piHarness.presentation.currentNotice, /restart/i);
 });
 
@@ -62,6 +132,16 @@ void test("Pi presentation separates installed facts from unsupported desired co
   const rendered = piHarness.presentation.renderProbe(facts);
   assert.match(rendered.porcelain, /installed_identity=old-digest\n/);
   assert.match(rendered.porcelain, /compatibility=unsupported\n/);
+  const codex = codexPresentation.renderProbe({
+    ...facts,
+    ownership: {
+      ...ownership,
+      removalInput: { pluginPresent: false, marketplacePresent: false },
+    },
+  });
+  assert.match(codex.porcelain, /installation_state=mismatch\n/);
+  assert.match(codex.porcelain, /resource_state=idle\n/);
+  assert.match(codex.porcelain, /compatibility=unsupported\n/);
   assert.match(rendered.human, /native Pi extension superpowers.ts/);
   assert.doesNotMatch(rendered.human, /restart/i);
   assert.match(
@@ -133,6 +213,11 @@ void test("Pi verification output follows inspection failures rather than a clai
       receipt,
       result("current"),
     ),
-    { stdout: [], stderr: [] },
+    {
+      stdout: [
+        "Installed the frozen Superpowers Pi snapshot. Restart Pi to load it.",
+      ],
+      stderr: [],
+    },
   );
 });

@@ -266,6 +266,8 @@ async function prepareGeneratedTree(
     adapter.calls.map((call) => call.operation),
     [
       "preparation-location",
+      "mutation-roots",
+      "preparation-location",
       "validate-preparation-before-fetch",
       "prepare-candidate",
     ],
@@ -654,6 +656,8 @@ void describe("install commands", { concurrency: true }, () => {
       adapter.calls.map((call) => call.operation),
       [
         "preparation-location",
+        "mutation-roots",
+        "preparation-location",
         "validate-preparation-before-fetch",
         "prepare-candidate",
       ],
@@ -796,7 +800,7 @@ void describe("install commands", { concurrency: true }, () => {
       // managed-then-unsupported: the initial probe sees "managed"; only the
       // SECOND, fresh inspection (inside gatherInstallStages, after prepare
       // runs) sees "unsupported" -- the drift this case exists to catch.
-      updateControl: (call) => (call === 1 ? "managed" : "unsupported"),
+      updateControl: (call) => (call <= 2 ? "managed" : "unsupported"),
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
@@ -809,12 +813,12 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :387
     assert.ok(out.includes("prepared v1.0.0"), out);
-    // :388, structural: exactly two update-control inspections.
+    // The probe reads control twice; the fresh mutation gate reads it again.
     assert.equal(
       adapter.calls.filter(
         (call) => call.operation === "inspect-update-control",
       ).length,
-      2,
+      3,
     );
     // :389-391, over the double's own call order rather than a log file.
     const calls = adapter.calls.map((call) => call.operation);
@@ -847,7 +851,7 @@ void describe("install commands", { concurrency: true }, () => {
         // installed yet, the needs-install precondition). Second is
         // gatherInstallStages' post-install verification: the commit adapter
         // install "took".
-        return fingerprintCalls === 1 ? null : commit;
+        return fingerprintCalls <= 2 ? null : commit;
       },
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
@@ -856,12 +860,12 @@ void describe("install commands", { concurrency: true }, () => {
     assert.equal(status, 0, stdout() + stderr());
     // Precondition: this is the needs-install path the case is named for.
     assertNoPrepareRan(stdout());
-    // :399, structural: exactly two update-control inspections.
+    // The probe reads control twice; the fresh mutation gate reads it again.
     assert.equal(
       adapter.calls.filter(
         (call) => call.operation === "inspect-update-control",
       ).length,
-      2,
+      3,
     );
     // :400-404, over the double's own call order.
     const calls = adapter.calls.map((call) => call.operation);

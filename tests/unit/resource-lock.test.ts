@@ -178,6 +178,47 @@ async function currentLock(parent: string): Promise<{
   };
 }
 
+void test("resource observation is read-only and validates live ownership metadata", async (t) => {
+  const root = await sandbox(t);
+  const resource = join(root, "future", "resource");
+  const coordinator = createResourceCoordinator();
+  const other = createResourceCoordinator();
+  const before = await readdir(root);
+  assert.equal(
+    (await coordinator.observeResources([resource]))[0]?.state,
+    "idle",
+  );
+  assert.deepEqual(await readdir(root), before);
+  await coordinator.withResources([resource], async () => {
+    const owned = (await coordinator.observeResources([resource]))[0]!;
+    const busy = (await other.observeResources([resource]))[0]!;
+    assert.equal(owned.state, "owned");
+    assert.equal(busy.state, "busy");
+    assert.equal(owned.markerIdentity, busy.markerIdentity);
+    assert.notEqual(owned.markerIdentity, "");
+    const { metadataPath, metadata } = await currentLock(root);
+    await writeFile(
+      metadataPath,
+      JSON.stringify({ ...metadata, token: "different-owner" }),
+    );
+    assert.equal(
+      (await coordinator.observeResources([resource]))[0]?.state,
+      "busy",
+    );
+    await writeFile(metadataPath, "malformed");
+    assert.equal(
+      (await coordinator.observeResources([resource]))[0]?.state,
+      "uninspectable",
+    );
+    await writeFile(metadataPath, JSON.stringify(metadata));
+  });
+  assert.equal(
+    (await coordinator.observeResources([resource]))[0]?.state,
+    "idle",
+  );
+  assert.deepEqual(await readdir(root), before);
+});
+
 void test("competing processes treat existing symlink aliases from different package roots as one resource", async (t) => {
   const root = await sandbox(t);
   const target = join(root, "actual", "generated");
@@ -563,6 +604,13 @@ function pinned(commit: string, source = "https://example.invalid/upstream") {
 
 function observingCoordinator(observations: string[][]): ResourceCoordinator {
   return {
+    async observeResources(paths) {
+      return paths.map((resource) => ({
+        resource,
+        state: "idle" as const,
+        markerIdentity: "",
+      }));
+    },
     async withResources(paths, action) {
       observations.push([...paths]);
       return await action();

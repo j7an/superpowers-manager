@@ -1,6 +1,7 @@
 import type { AdapterContext, AdapterResult } from "./adapter-result.ts";
 import type { EffectiveSelection } from "./effective-selection.ts";
 import type { Compatibility } from "./harness-compatibility.ts";
+import type { ResourceObservation } from "./resource-lock.ts";
 
 export type HarnessCommand =
   | "pin"
@@ -91,6 +92,9 @@ export interface ProbeSnapshot<R> {
   readonly ownership: OwnershipInspection<R>;
   readonly control: UpdateControlInspection;
   readonly compatibility: Compatibility;
+  readonly resources?: readonly ResourceObservation[];
+  readonly resourceState?:
+    "idle" | "owned" | "busy" | "uninspectable" | "recovery-required";
   readonly status: "needs prepare" | "needs install" | "current";
 }
 

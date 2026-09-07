@@ -112,10 +112,14 @@ export function seedCodex(
     installedProvenance?: string | null;
   } = {},
 ) {
-  const listings = state.pluginListings ?? [
+  const initialListings = state.pluginListings ?? [
     '{"installed":[]}',
     '{"installed":[]}',
   ];
+  const listings =
+    initialListings.length === 2
+      ? [...initialListings, initialListings[0]!]
+      : initialListings;
   listings.forEach((body, index) => {
     writeFileSync(join(c.state, `plugin_list.${index}.json`), body, "utf8");
   });

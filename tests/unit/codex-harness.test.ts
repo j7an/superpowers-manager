@@ -596,7 +596,7 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
   };
 }
 
-void test("Codex probe presentation retains the exact existing formatters", async (t) => {
+void test("Codex probe presentation preserves legacy fields and appends independent state", async (t) => {
   const rendered = codexPresentation.renderProbe(snapshot());
   assert.equal(
     rendered.human,
@@ -618,7 +618,8 @@ void test("Codex probe presentation retains the exact existing formatters", asyn
       savedResolvedRef: "",
       savedCommit: "",
       updateControl: "managed",
-    }),
+    }) +
+      "installation state: current\nresource state: idle\ncompatibility: supported\ncompatibility reason: fixture compatibility\n",
   );
   assert.equal(
     rendered.porcelain,
@@ -640,7 +641,8 @@ void test("Codex probe presentation retains the exact existing formatters", asyn
       savedResolvedRef: "",
       savedCommit: "",
       updateControl: "managed",
-    }),
+    }) +
+      "installation_state=current\nresource_state=idle\ncompatibility=supported\ncompatibility_reason=fixture compatibility\n",
   );
 
   await t.test("appends conflicts without changing clean probe output", () => {

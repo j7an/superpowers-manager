@@ -50,7 +50,7 @@ const EMPTY_PLUGINS = '{"installed":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than `tests/baseline/cli-parity.test.ts:239::function snapshotTree`'s mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.ts:247::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  */
@@ -149,7 +149,13 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
       .split("\n")
       .slice(0, -1)
       .map((line) => line.slice(0, line.indexOf("="))),
-    [...PROBE_PORCELAIN_KEYS],
+    [
+      ...PROBE_PORCELAIN_KEYS,
+      "installation_state",
+      "resource_state",
+      "compatibility",
+      "compatibility_reason",
+    ],
   );
 });
 
@@ -219,7 +225,14 @@ void test("an environment ref overrides only the ref side and the saved fields s
   // run issues `plugin list --json` twice. The on-disk counter in
   // tests/bin/lifecycle-fakes.js is per case, not per run.
   seedCodex(c, {
-    pluginListings: [ACTIVE, EMPTY_PLUGINS, ACTIVE, EMPTY_PLUGINS],
+    pluginListings: [
+      ACTIVE,
+      EMPTY_PLUGINS,
+      ACTIVE,
+      ACTIVE,
+      EMPTY_PLUGINS,
+      ACTIVE,
+    ],
     manifestVersion: ACTIVE_VERSION,
   });
   // Renamed away for both runs, exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:434-477::mv "$upstream" "$offline_source"` leaves

@@ -180,9 +180,16 @@ void test("install re-inspects ownership and update control itself", async (t) =
 
       assert.equal(status, 1);
       assert.deepEqual(operationNames(calls), [
+        "preparation-location",
+        "mutation-roots",
+        "preparation-location",
+        "mutation-roots",
         "inspect-prepared",
         "inspect-installed",
         "inspect-ownership",
+        "inspect-update-control",
+        "inspect-prepared",
+        "inspect-installed",
         "inspect-update-control",
         "read-prepared",
         "inspect-ownership",
@@ -220,9 +227,16 @@ void test("install re-inspects ownership and update control itself", async (t) =
   // Asserted structurally over the recorded argv, not over a log: the point
   // is that the calls HAPPENED, in order, after the probe's own three.
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
     "read-prepared",
     "inspect-ownership",
@@ -292,7 +306,7 @@ void test("desiredCommit comes from generated provenance, never from selection",
     !out.text().includes(Z),
     `the SAVED commit must never appear:\n${out.text()}`,
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 void test("saved selection is validated before any adapter access", async () => {
@@ -330,7 +344,7 @@ void test("an unparseable generated commit is never treated as success", async (
   const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 15);
   const template = join(
     ctx.root,
     "plugins",
@@ -386,6 +400,10 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
   // call, before the ownership or update-control inspects run at all --
   // never mind runPrepare or the workspace stage's four.
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
   ]);
@@ -414,6 +432,10 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   );
   assert.equal(out.text(), NOTE);
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
   ]);
@@ -450,7 +472,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     "error: probe did not report adapter identity state\n",
   );
   assert.equal(out.text(), NOTE);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("a legacy identity state stops before the workspace is created", async () => {
@@ -479,14 +501,14 @@ void test("a legacy identity state stops before the workspace is created", async
       "Then run: npx superpowers-manager install\n",
   );
   assert.equal(out.text(), NOTE);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/codex-harness.ts::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:329::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:502::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
@@ -509,7 +531,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
   assert.equal(out.text(), NOTE);
   // Stops before the workspace: only gatherProbe's own three calls.
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("an unsupported update-control capability refuses before any install mutation", async () => {
@@ -533,9 +555,16 @@ void test("an unsupported update-control capability refuses before any install m
     "error: adapter cannot guarantee manager-controlled updates\n",
   );
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
     "read-prepared",
     "inspect-ownership",
@@ -575,7 +604,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     err.text(),
     "error: cannot inspect ownership\nhint: check codex is installed\n",
   );
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1's adapter failure", async () => {
@@ -597,7 +626,7 @@ void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1'
     err.text(),
     "error: adapter returned a non-string identity_state for inspect --view ownership\n",
   );
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-written message", async () => {
@@ -641,7 +670,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
     err.text(),
     "error: adapter reported a failure status for inspect --view ownership\n",
   );
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested", async () => {
@@ -677,7 +706,7 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
   assert.equal(out.text(), NOTE);
   // Stops at the re-inspection: no update-control inspect, no install, no
   // fingerprint inspect.
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested", async () => {
@@ -710,7 +739,7 @@ void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested
   assert.equal(out.text(), NOTE);
   // Stops at the re-inspection: no update-control inspect, no install, no
   // fingerprint inspect.
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 2 (inspect update-control) failure stops before the install mutation", async () => {
@@ -736,7 +765,7 @@ void test("stage 2 (inspect update-control) failure stops before the install mut
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot inspect update control\n");
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 14);
 });
 
 void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2's adapter failure", async () => {
@@ -759,7 +788,7 @@ void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2'
     err.text(),
     "error: adapter returned a non-string update_control for inspect --view update-control\n",
   );
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 14);
 });
 
 void test("stage 3 (install) failure stops before the post-install fingerprint inspection", async () => {
@@ -780,7 +809,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot install plugin\n");
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 15);
 });
 
 // Rewritten at PR 11.5 slice 4b, Task 8. This case previously asserted the
@@ -826,7 +855,7 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
     "error: cannot inspect fingerprint after install\n" +
       "error: installed manager fingerprint inspection failed after install.\n",
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 // The OTHER arm of the same guard, added with it (PR 11.5 slice 4b, Task 8).
@@ -854,7 +883,7 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
       selection: Parameters<typeof adapter.inspectInstalled>[0],
       adapterCtx: Parameters<typeof adapter.inspectInstalled>[1],
     ) {
-      if (calls.length >= 8) {
+      if (calls.length >= 15) {
         calls.push({ operation: "inspect-installed", input: selection });
         throw new Error("synthetic adapter transport failure");
       }
@@ -873,7 +902,7 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
     err.text(),
     "error: cannot invoke Codex adapter for inspect --view fingerprint\n",
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 // --- A fingerprint MISMATCH, not just an inspection failure (:244-255) ---
@@ -881,7 +910,7 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
 // Every stage-4 case above tests the INSPECT CALL failing. None of them ever
 // let renderInstallVerification actually RUN with a mismatch -- so nothing
 // pinned that it (a) still returns status 1, not 0 through the command's
-// current-kind check (`src/commands/install.ts:245-252::const verified =`), and
+// current-kind check (`src/commands/install.ts::const verified =`), and
 // (b) still writes BOTH `desired_commit=` and
 // `installed_commit=` to stdout, not just on the success path. (b) is
 // spec §4.3's own explicit prohibition ("the port must not move them into
@@ -915,7 +944,7 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
     err.text(),
     "error: installed manager fingerprint does not match the prepared plugin after install.\n",
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 // --- The STRICT reader, not the LENIENT one, and the empty-desiredCommit
@@ -949,10 +978,13 @@ void test("the STRICT provenance reader, not the lenient one, feeds desiredCommi
   for (let depth = 0; depth < 300; depth += 1) junk = [junk];
   const generatedDir = join(ctx.root, "plugins", "superpowers");
   mkdirSync(generatedDir, { recursive: true });
+  let preparedReads = 0;
   ctx.adapter = {
     ...adapter,
     async inspectPrepared(selection, context) {
       const result = await adapter.inspectPrepared(selection, context);
+      preparedReads += 1;
+      if (preparedReads < 2) return result;
       writeFileSync(
         join(generatedDir, ".superpowers-upstream.json"),
         JSON.stringify({ commit: X, junk }),
@@ -969,7 +1001,7 @@ void test("the STRICT provenance reader, not the lenient one, feeds desiredCommi
   );
   assert.equal(out.text(), NOTE);
   // Zero calls past the probe's own three: the workspace stage never runs.
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 12);
 });
 
 void test("argv is ignored by src/commands/install.ts", async () => {
@@ -1032,7 +1064,7 @@ void test("a post-success workspace cleanup failure still reports the domain out
         adapterCtx: Parameters<typeof scripted.inspectInstalled>[1],
       ) {
         const result = await scripted.inspectInstalled(selection, adapterCtx);
-        if (calls.length === 9) chmodSync(parent, 0o500);
+        if (calls.length === 16) chmodSync(parent, 0o500);
         return result;
       },
     };
@@ -1044,7 +1076,7 @@ void test("a post-success workspace cleanup failure still reports the domain out
     );
     const status = await runInstall([], ctx);
     assert.equal(status, 1);
-    assert.equal(calls.length, 9);
+    assert.equal(calls.length, 16);
     // The domain outcome is preserved -- "manager updated" -- even though the
     // workspace could not be removed afterward: the fingerprint verify that
     // produced it already completed against the adapter before cleanup ran.

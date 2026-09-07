@@ -91,6 +91,13 @@ export function observingCoordinator(
   observations: string[][] = [],
 ): ResourceCoordinator {
   return {
+    async observeResources(paths) {
+      return paths.map((resource) => ({
+        resource,
+        state: "idle" as const,
+        markerIdentity: "",
+      }));
+    },
     async withResources(paths, action) {
       observations.push([...paths]);
       return await action();
@@ -120,13 +127,41 @@ function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
 }
 
 export function scriptedAdapter(responses: readonly AdapterResult[]) {
+  // A fingerprint/ownership/control triple describes one stable probe. Supply
+  // its independent closing observations explicitly, without consuming the
+  // subsequent mutation-stage responses. Closing reads carry no extra messages.
+  const expanded: AdapterResult[] = [];
+  for (let offset = 0; offset < responses.length; offset += 1) {
+    const first = responses[offset]!;
+    const ownership = responses[offset + 1];
+    const control = responses[offset + 2];
+    const field = (response: AdapterResult | undefined, name: string) =>
+      response?.outcome.ok &&
+      response.outcome.result !== null &&
+      typeof response.outcome.result === "object" &&
+      name in response.outcome.result;
+    if (
+      field(first, "fingerprint") &&
+      field(ownership, "identity_state") &&
+      field(control, "update_control")
+    ) {
+      expanded.push(
+        first,
+        ownership!,
+        control!,
+        { ...first, outcome: { ...first.outcome, messages: [] } },
+        { ...control!, outcome: { ...control!.outcome, messages: [] } },
+      );
+      offset += 2;
+    } else expanded.push(first);
+  }
   const calls: HarnessCall[] = [];
   let index = 0;
   const record = (operation: string, input?: unknown): void => {
     calls.push(input === undefined ? { operation } : { operation, input });
   };
   const next = (operation: string): AdapterResult => {
-    const response = responses[index++];
+    const response = expanded[index++];
     assert.ok(
       response !== undefined,
       `scriptedAdapter exhausted at response ${index} for ${operation}`,
@@ -140,7 +175,10 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
     },
     async mutationRoots(ctx) {
       record("mutation-roots");
-      return await codexHarness.mutationRoots(ctx);
+      return await codexHarness.mutationRoots({
+        ...ctx,
+        env: { HOME: ctx.root, ...ctx.env },
+      });
     },
     async validatePreparationBeforeFetch(ctx) {
       record("validate-preparation-before-fetch");

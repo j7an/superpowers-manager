@@ -60,7 +60,7 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
     false,
     "the report must NOT reach stderr",
   );
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 5);
 });
 
 void test("the two closing lines port verbatim except for the prepare invocation", async () => {
@@ -117,11 +117,13 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
   });
   assert.equal(status, 0);
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
   ]);
-  assert.deepEqual(calls[1]?.input, {
+  assert.deepEqual(calls[3]?.input, {
     pluginPresent: true,
     marketplacePresent: false,
   });
@@ -157,7 +159,7 @@ void test("a plugin resource still installed after removal is a distinct, named 
     "error: owned plugin resource is still installed after removal\n",
   );
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 5);
 });
 
 void test("an unrecognised identity state after removal is a distinct, named failure", async () => {
@@ -180,7 +182,7 @@ void test("an unrecognised identity state after removal is a distinct, named fai
   assert.equal(status, 1);
   assert.equal(err.text(), "error: unknown adapter identity state: wat\n");
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 5);
 });
 
 void test("a non-string identity_state after removal fails closed with its own diagnostic", async () => {
@@ -212,7 +214,7 @@ void test("a non-string identity_state after removal fails closed with its own d
     "error: adapter returned a non-string identity_state for inspect --view ownership\n",
   );
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 5);
 });
 
 // Spec §4.2a's closing requirement: every lifecycle adapter stage gets a
@@ -254,7 +256,11 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     "error: cannot inspect ownership\nhint: check codex is installed\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), ["inspect-ownership"]);
+  assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "inspect-ownership",
+  ]);
 });
 
 void test("stage 1 malformed presence content is a DIFFERENT failure than stage 1's adapter failure", async () => {
@@ -285,7 +291,11 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
     "error: expected a Boolean adapter result at resources.plugin\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), ["inspect-ownership"]);
+  assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "inspect-ownership",
+  ]);
 });
 
 void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-written message", async () => {
@@ -327,7 +337,11 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
     "error: adapter reported a failure status for inspect --view ownership\n",
   );
   assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), ["inspect-ownership"]);
+  assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "inspect-ownership",
+  ]);
 });
 
 void test("stage 2 (uninstall) failure stops before the post-removal inspection", async () => {
@@ -362,8 +376,13 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot remove owned resources\n");
   assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), ["inspect-ownership", "remove"]);
-  assert.deepEqual(calls[1]?.input, {
+  assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "inspect-ownership",
+    "remove",
+  ]);
+  assert.deepEqual(calls[3]?.input, {
     pluginPresent: true,
     marketplacePresent: true,
   });
@@ -396,6 +415,8 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
   assert.equal(err.text(), "error: cannot inspect ownership after removal\n");
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -433,6 +454,8 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -503,7 +526,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
         adapterCtx: Parameters<typeof scripted.inspectOwnership>[0],
       ) {
         const result = await scripted.inspectOwnership(adapterCtx);
-        if (calls.length === 3) chmodSync(parent, 0o500);
+        if (calls.length === 5) chmodSync(parent, 0o500);
         return result;
       },
     };
@@ -517,7 +540,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
       adapter,
     });
     assert.equal(status, 1);
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 5);
     // The outcome collected from the FIRST call -- well before the cleanup
     // failure -- still reaches stdout, AND the domain outcome survives it,
     // exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:34-35::complete` behaved. Dropping either half is a

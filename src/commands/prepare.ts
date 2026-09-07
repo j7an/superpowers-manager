@@ -23,6 +23,7 @@ import {
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
+import { withMutation } from "./mutation.ts";
 
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
@@ -436,6 +437,27 @@ export async function runPrepare<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
+  let actionThrew = false;
+  try {
+    return await withMutation("prepare", ctx, async (scoped) => {
+      try {
+        return await performPrepare(argv, scoped);
+      } catch (cause) {
+        actionThrew = true;
+        throw cause;
+      }
+    });
+  } catch (cause) {
+    if (actionThrew) throw cause;
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
+    return 1;
+  }
+}
+
+async function performPrepare<R>(
+  argv: readonly string[],
+  ctx: CommandContext<R>,
+): Promise<number> {
   // scripts/prepare never reads "$@", so extra arguments are ignored. This is a
   // deliberate asymmetry with probe, whose shell original rejected unknown
   // arguments and whose arity therefore moved into parseArgs in slice 2.
@@ -526,7 +548,7 @@ export async function runPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:395-403::if (cleanupWarning`.
+    // `src/commands/install.ts:577-585::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

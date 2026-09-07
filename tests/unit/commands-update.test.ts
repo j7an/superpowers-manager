@@ -245,9 +245,16 @@ void test('current: replays outcomes, prints the exact porcelain, then "manager 
   // The current arm issues no adapter call of its own: only gatherProbe's
   // three.
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
   ]);
 });
@@ -277,7 +284,7 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
     err.text(),
     "error: adapter cannot guarantee manager-controlled updates\n",
   );
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test('current: an UNRECOGNISED update control capability is its own diagnostic, distinct from "unsupported"', async () => {
@@ -304,7 +311,7 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
     err.text(),
     "error: unknown adapter update-control capability: wat\n",
   );
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("needs prepare: a failing prepare's status propagates verbatim, and install never runs", async () => {
@@ -333,7 +340,7 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
   );
   // Only gatherProbe's own three calls: prepare fails before issuing any
   // adapter call of its own, and install is never reached.
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 15);
 });
 
 void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall, not by a bare success", async () => {
@@ -381,18 +388,34 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
       `${INSTALL_NOTE}desired_commit=${UPSTREAM.commit}\n` +
       `installed_commit=${UPSTREAM.commit}\nmanager updated\n`,
   );
-  assert.equal(calls.length, 16);
+  assert.equal(calls.length, 32);
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
     "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-update-control",
+    "preparation-location",
+    "mutation-roots",
     "preparation-location",
     "validate-preparation-before-fetch",
     "prepare-candidate",
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
     "read-prepared",
     "inspect-ownership",
@@ -436,13 +459,27 @@ void test("needs install: delegates to runInstall alone, and a success propagate
   );
   assert.equal(err.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
     "inspect-update-control",
     "inspect-prepared",
     "inspect-installed",
+    "inspect-update-control",
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
     "read-prepared",
     "inspect-ownership",
@@ -477,7 +514,7 @@ void test("needs install: a non-zero runInstall return propagates as update's st
   // runInstall's own NOTE line reaches stdout, unaltered; update writes
   // nothing of its own on this arm, success or failure alike.
   assert.equal(out.text(), INSTALL_NOTE);
-  assert.equal(calls.length, 11);
+  assert.equal(calls.length, 25);
 });
 
 // --- The two emptiness checks that run BEFORE the switch (§4.4's first
@@ -506,7 +543,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     "error: probe did not report adapter identity state\n",
   );
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("a legacy identity state stops before the update-control guard even runs", async () => {
@@ -535,7 +572,7 @@ void test("a legacy identity state stops before the update-control guard even ru
       "Then run: npx superpowers-manager install\n",
   );
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("an UNKNOWN probe identity state is a distinct diagnostic from the legacy-blocked one", async () => {
@@ -562,7 +599,7 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
   // prefix `error: ` -- unlike the bare three lines the "blocked" arm writes.
   assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
   assert.equal(out.text(), "");
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("an empty probe-reported update-control capability fails closed, and runInstall never runs", async () => {
@@ -593,9 +630,16 @@ void test("an empty probe-reported update-control capability fails closed, and r
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
   ]);
 });
@@ -630,9 +674,16 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
   ]);
 });
@@ -656,9 +707,16 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
   ]);
 });
@@ -680,9 +738,16 @@ void test("needs prepare: an empty update control refuses before prepare, not in
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
   ]);
 });
@@ -720,6 +785,10 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
   ]);
@@ -748,6 +817,10 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
   ]);

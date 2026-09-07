@@ -301,14 +301,24 @@ export const codexPresentation: HarnessPresentation<CodexRemovalInput> = {
   renderProbe(snapshot) {
     const facts = probeFacts(snapshot);
     const conflicts = snapshot.ownership.presentationConflicts ?? [];
+    const additional = [
+      ["installation_state", snapshot.installed.kind],
+      ["resource_state", snapshot.resourceState ?? "idle"],
+      ["compatibility", snapshot.compatibility.kind],
+      ["compatibility_reason", snapshot.compatibility.reason],
+    ] as const;
     return {
       human:
         formatHuman(facts) +
+        additional
+          .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}\n`)
+          .join("") +
         conflicts
           .map((conflict) => `ownership conflict: ${conflict}\n`)
           .join(""),
       porcelain:
         formatPorcelain(facts) +
+        additional.map(([key, value]) => `${key}=${value}\n`).join("") +
         conflicts
           .map((conflict) => `ownership_conflict=${conflict}\n`)
           .join(""),

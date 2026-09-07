@@ -1,4 +1,5 @@
-import { successResult } from "./adapter-result.ts";
+import { failureResult, successResult } from "./adapter-result.ts";
+import { classifyPathNoFollow } from "./safe-path.ts";
 import type { HarnessAdapter } from "./harness.ts";
 import { installPi, removePi } from "./pi-install.ts";
 import { piPaths } from "./pi-paths.ts";
@@ -27,7 +28,40 @@ export const piHarness: HarnessAdapter<PiRemovalInput> = {
   inspectPrepared: inspectPiPrepared,
   readPrepared: readPiPrepared,
   inspectOwnership: inspectPiOwnership,
-  inspectUpdateControl: inspectPiControl,
+  async inspectUpdateControl(ctx) {
+    const paths = piPaths(ctx.env ?? {}, process.cwd());
+    try {
+      if ((await classifyPathNoFollow(paths.recoveryRoot)) !== "missing") {
+        const decision = {
+          kind: "blocked" as const,
+          output: {
+            stdout: [],
+            stderr: [
+              `error: Pi recovery required; preserve material at ${paths.recoveryRoot} for manual resolution`,
+            ],
+          },
+        };
+        return successResult(
+          "inspect-pi-control",
+          {
+            probeEligibility: decision,
+            mutationEligibility: decision,
+            presentationValue: `recovery required at ${paths.recoveryRoot}`,
+          },
+          [],
+        );
+      }
+    } catch {
+      return failureResult(
+        "inspect-pi-control",
+        "invalid-state",
+        `cannot inspect Pi recovery state at ${paths.recoveryRoot}`,
+        [],
+        [],
+      );
+    }
+    return await inspectPiControl(ctx);
+  },
   inspectInstalled: inspectPiInstalled,
   install: installPi,
   remove: removePi,

@@ -87,6 +87,14 @@ async function inspect<T>(
   let result: AdapterResult<T>;
   try {
     result = await call();
+    if (
+      !result ||
+      !Number.isInteger(result.status) ||
+      !result.outcome ||
+      typeof result.outcome.ok !== "boolean" ||
+      !Array.isArray(result.outcome.messages)
+    )
+      return { ok: false, result: null, message: invalidStatus };
   } catch {
     return { ok: false, result: null, message: unexpected };
   }
@@ -139,6 +147,19 @@ export async function gatherProbe<R>(
     ctx.selection ?? (await computeEffectiveSelection(ctx.root, ctx.env));
   const outcomes: AdapterOutcome<unknown>[] = [];
   const adapterContext = { root: ctx.root, env: ctx.env };
+  let resources: readonly string[] | null;
+  try {
+    resources = [
+      ctx.adapter.preparationLocation(adapterContext).destinationRoot,
+      ...(await ctx.adapter.mutationRoots(adapterContext)),
+    ];
+  } catch {
+    resources = null;
+  }
+  const before =
+    resources === null
+      ? []
+      : await ctx.coordination.observeResources(resources);
   const collect = async <T>(
     call: () => Promise<AdapterResult<T>>,
     unexpected: string,
@@ -168,6 +189,12 @@ export async function gatherProbe<R>(
   if (!installed.ok) {
     return { status: 1, outcomes, message: installed.message };
   }
+  if (resources === null)
+    return {
+      status: 1,
+      outcomes,
+      message: "cannot determine harness observation resources",
+    };
   const ownershipFailure = failure("probe-ownership");
   const ownership = await collect(
     () => ctx.adapter.inspectOwnership(adapterContext),
@@ -187,6 +214,55 @@ export async function gatherProbe<R>(
     return { status: 1, outcomes, message: control.message };
   }
 
+  const preparedAfter = await collect(
+    () => ctx.adapter.inspectPrepared(selection, adapterContext),
+    "cannot inspect prepared harness state",
+    "adapter reported a failure status for prepared harness inspection",
+  );
+  if (!preparedAfter.ok)
+    return { status: 1, outcomes, message: preparedAfter.message };
+  const installedAfter = await collect(
+    () => ctx.adapter.inspectInstalled(selection, adapterContext),
+    installedFailure.unexpected,
+    installedFailure.invalidStatus,
+  );
+  if (!installedAfter.ok)
+    return { status: 1, outcomes, message: installedAfter.message };
+  const controlAfter = await collect(
+    () => ctx.adapter.inspectUpdateControl(adapterContext),
+    controlFailure.unexpected,
+    controlFailure.invalidStatus,
+  );
+  if (!controlAfter.ok)
+    return { status: 1, outcomes, message: controlAfter.message };
+  const after = await ctx.coordination.observeResources(resources);
+  if (
+    JSON.stringify(before) !== JSON.stringify(after) ||
+    JSON.stringify(prepared.result.outcome.result) !==
+      JSON.stringify(preparedAfter.result.outcome.result) ||
+    JSON.stringify(installed.result.outcome.result) !==
+      JSON.stringify(installedAfter.result.outcome.result) ||
+    JSON.stringify(control.result.outcome.result) !==
+      JSON.stringify(controlAfter.result.outcome.result)
+  ) {
+    return {
+      status: 1,
+      outcomes,
+      message:
+        "harness state changed during observation; retry for a coherent probe",
+    };
+  }
+  const unavailable = after.find(
+    (observation) =>
+      observation.state === "busy" || observation.state === "uninspectable",
+  );
+  if (unavailable)
+    return {
+      status: 1,
+      outcomes,
+      message: `harness resource is ${unavailable.state}: ${unavailable.resource}`,
+    };
+
   const preparedState = prepared.result.outcome.result;
   const installedState = installed.result.outcome.result;
   return {
@@ -199,6 +275,14 @@ export async function gatherProbe<R>(
       ownership: ownership.result.outcome.result,
       control: control.result.outcome.result,
       compatibility: preparedState.compatibility,
+      resources: after,
+      resourceState:
+        control.result.outcome.result.probeEligibility.kind === "blocked" &&
+        ctx.options.harness === "pi"
+          ? "recovery-required"
+          : after.some((observation) => observation.state === "owned")
+            ? "owned"
+            : "idle",
       status:
         preparedState.kind !== "current"
           ? "needs prepare"
@@ -329,5 +413,5 @@ export async function runProbe<R>(
   }
   const rendered = ctx.adapter.presentation.renderProbe(outcome.facts);
   ctx.stdout.write(porcelain ? rendered.porcelain : rendered.human);
-  return 0;
+  return outcome.facts.resourceState === "recovery-required" ? 1 : 0;
 }
