@@ -30,6 +30,28 @@ void test("Pi settings reader reports the bounded registration state", async (t)
     assert.deepEqual(await readPiSettings(settingsFile), { packages: [] });
   });
 
+  await t.test(
+    "retains top-level skill controls even when packages are absent",
+    async () => {
+      await writeFile(
+        settingsFile,
+        JSON.stringify({
+          skills: ["!SKILL.md", "+skills/superpowers/using-superpowers"],
+        }),
+      );
+      assert.deepEqual(await readPiSettings(settingsFile), {
+        packages: [],
+        skills: ["!SKILL.md", "+skills/superpowers/using-superpowers"],
+      });
+
+      await writeFile(settingsFile, JSON.stringify({ skills: [] }));
+      assert.deepEqual(await readPiSettings(settingsFile), {
+        packages: [],
+        skills: [],
+      });
+    },
+  );
+
   await t.test("accepts native string and object source forms", async () => {
     await writeFile(
       settingsFile,
@@ -112,6 +134,7 @@ void test("Pi settings reader reports the bounded registration state", async (t)
     const invalid: readonly (readonly [string, string])[] = [
       ["[]", "settings must be an object"],
       ['{"packages":{}}', "packages must be an array"],
+      ['{"skills":"all"}', "skills must be an array of strings"],
       ['{"packages":[7]}', "package 0 must be a string or object"],
       ['{"packages":[{}]}', "package 0 source must be a nonempty string"],
       [

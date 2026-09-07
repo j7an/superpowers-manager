@@ -16,6 +16,7 @@ export interface PiPackageEntry {
 
 export interface PiSettings {
   readonly packages: readonly PiPackageEntry[];
+  readonly skills?: readonly string[];
 }
 
 type JsonObject = { [key: string]: JsonValue };
@@ -204,12 +205,14 @@ export async function readPiSettings(
 
   const settings = object(parsed);
   if (settings === undefined) invalid(path, "settings must be an object");
-  if (settings.packages === undefined) return { packages: [] };
-  if (!Array.isArray(settings.packages)) {
+  if (settings.skills !== undefined && !stringArray(settings.skills)) {
+    invalid(path, "skills must be an array of strings");
+  }
+  if (settings.packages !== undefined && !Array.isArray(settings.packages)) {
     invalid(path, "packages must be an array");
   }
 
-  const packages = settings.packages.map((entry, index) =>
+  const packages = (settings.packages ?? []).map((entry, index) =>
     parsePackage(entry, index, path),
   );
   const agentDir = dirname(resolve(path));
@@ -229,5 +232,8 @@ export async function readPiSettings(
     invalid(path, "duplicate Manager package registrations");
   }
 
-  return { packages };
+  return {
+    packages,
+    ...(settings.skills === undefined ? {} : { skills: settings.skills }),
+  };
 }

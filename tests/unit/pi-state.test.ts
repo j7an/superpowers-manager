@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import test, { type TestContext } from "node:test";
 
 import type {
@@ -49,6 +50,35 @@ function sandbox(t: TestContext): StateSandbox {
 function settings(paths: PiPaths, packages: unknown): void {
   mkdirSync(dirname(paths.settingsFile), { recursive: true });
   writeFileSync(paths.settingsFile, JSON.stringify({ packages }));
+}
+
+function settingsWithSkills(
+  paths: PiPaths,
+  packages: unknown,
+  skills: readonly string[],
+): void {
+  mkdirSync(dirname(paths.settingsFile), { recursive: true });
+  writeFileSync(paths.settingsFile, JSON.stringify({ packages, skills }));
+}
+
+function writeSkill(path: string, name: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    `---\nname: ${name}\ndescription: fixture ${name}\n---\n# Fixture\n`,
+  );
+}
+
+function sharedSkillRoot(state: StateSandbox): string {
+  return join(state.paths.homeDir, ".agents/skills/superpowers");
+}
+
+function sharedSkill(
+  state: StateSandbox,
+  name: string,
+  filename = "SKILL.md",
+): string {
+  return join(sharedSkillRoot(state), name, filename);
 }
 
 async function preparedAndInstalled(
@@ -601,18 +631,401 @@ void test("an absent Manager registration and snapshot permit idempotent uninsta
   assert.deepEqual(withConflict.removalInput, ownership.removalInput);
 });
 
-void test("Codex user resources do not conflict with Pi ownership", async (t) => {
-  const state = sandbox(t);
-  await preparedAndInstalled(t, state);
-  settings(state.paths, ["superpowers-manager/installed"]);
-  const codexSkill = join(
-    state.paths.homeDir,
-    ".agents/skills/superpowers/using-superpowers/SKILL.md",
-  );
-  mkdirSync(dirname(codexSkill), { recursive: true });
-  writeFileSync(codexSkill, "Codex only");
+void test("Pi detects shared user-wide Superpowers skills without crossing into Codex-only state", async (t) => {
+  const packages = ["superpowers-manager/installed"];
 
-  const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
-  assert.equal(ownership.installEligibility.kind, "allowed");
-  assert.deepEqual(ownership.presentationConflicts, []);
+  await t.test(
+    "default and empty controls leave shared skills active",
+    async (t) => {
+      for (const skills of [undefined, [], ["unrelated-skill.md"]] as const) {
+        const state = sandbox(t);
+        const { selection } = await preparedAndInstalled(t, state);
+        writeSkill(
+          sharedSkill(state, "using-superpowers"),
+          "using-superpowers",
+        );
+        if (skills === undefined) settings(state.paths, packages);
+        else settingsWithSkills(state.paths, packages, skills);
+
+        const installed = await inspectPiInstalled(selection, state.ctx);
+        assert.equal(
+          installed.outcome.ok && installed.outcome.result.kind,
+          "current",
+        );
+        const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+        assert.equal(ownership.installEligibility.kind, "blocked");
+        assert.equal(ownership.removalVerification.kind, "blocked");
+        assert.deepEqual(ownership.presentationConflicts, [
+          "native Pi skills route ~/.agents/skills/superpowers",
+        ]);
+        const control = await inspectPiControl(state.ctx);
+        assert.equal(
+          control.outcome.ok && control.outcome.result.mutationEligibility.kind,
+          "blocked",
+        );
+      }
+    },
+  );
+
+  await t.test("exact controls follow native class priority", async (t) => {
+    const state = sandbox(t);
+    await preparedAndInstalled(t, state);
+    writeSkill(sharedSkill(state, "using-superpowers"), "using-superpowers");
+
+    settingsWithSkills(state.paths, packages, [
+      "!using-superpowers",
+      "+skills/superpowers/using-superpowers",
+    ]);
+    let ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "blocked");
+
+    settingsWithSkills(state.paths, packages, [
+      "-skills/superpowers/using-superpowers",
+      "+skills/superpowers/using-superpowers",
+      "!using-superpowers",
+    ]);
+    ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "allowed");
+    assert.deepEqual(ownership.presentationConflicts, []);
+
+    settingsWithSkills(state.paths, packages, [
+      "-skills/superpowers/using-superpowers ",
+    ]);
+    ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "blocked");
+
+    settingsWithSkills(state.paths, packages, [
+      `-${dirname(sharedSkill(state, "using-superpowers"))}`,
+    ]);
+    ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "allowed");
+  });
+
+  await t.test("every discovered sibling must be disabled", async (t) => {
+    const state = sandbox(t);
+    await preparedAndInstalled(t, state);
+    writeSkill(sharedSkill(state, "using-superpowers"), "using-superpowers");
+    writeSkill(
+      sharedSkill(state, "test-driven-development"),
+      "test-driven-development",
+    );
+
+    settingsWithSkills(state.paths, packages, [
+      "-skills/superpowers/using-superpowers",
+    ]);
+    let ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "blocked");
+
+    settingsWithSkills(state.paths, packages, [
+      "-skills/superpowers/using-superpowers",
+      "-./skills/superpowers/test-driven-development/SKILL.md",
+    ]);
+    ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "allowed");
+    assert.deepEqual(ownership.presentationConflicts, []);
+  });
+
+  await t.test("a root SKILL stops its subtree", async (t) => {
+    const state = sandbox(t);
+    await preparedAndInstalled(t, state);
+    writeSkill(join(sharedSkillRoot(state), "SKILL.md"), "superpowers-root");
+    writeSkill(sharedSkill(state, "using-superpowers"), "using-superpowers");
+    settingsWithSkills(state.paths, packages, ["-skills/superpowers"]);
+
+    const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "allowed");
+    assert.deepEqual(ownership.presentationConflicts, []);
+  });
+
+  await t.test(
+    "a global discovery-root SKILL suppresses the known subtree",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      writeSkill(
+        join(state.paths.homeDir, ".agents/skills/SKILL.md"),
+        "global-root",
+      );
+      const external = join(state.root, "suppressed-superpowers");
+      writeSkill(
+        join(external, "using-superpowers/SKILL.md"),
+        "using-superpowers",
+      );
+      symlinkSync(external, sharedSkillRoot(state), "dir");
+      settings(state.paths, packages);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    },
+  );
+
+  await t.test(
+    "nested plain markdown is a shared skill candidate",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      writeSkill(join(sharedSkillRoot(state), "workflow.md"), "workflow");
+      settings(state.paths, packages);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+    },
+  );
+
+  await t.test(
+    "hidden and node_modules subtrees are not discovered",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      writeSkill(
+        join(sharedSkillRoot(state), ".hidden/skill/SKILL.md"),
+        "hidden-skill",
+      );
+      writeSkill(
+        join(sharedSkillRoot(state), "node_modules/skill/SKILL.md"),
+        "dependency-skill",
+      );
+      settings(state.paths, packages);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    },
+  );
+
+  await t.test("unsupported glob controls fail closed", async (t) => {
+    const state = sandbox(t);
+    await preparedAndInstalled(t, state);
+    writeSkill(sharedSkill(state, "using-superpowers"), "using-superpowers");
+    writeSkill(
+      sharedSkill(state, "test-driven-development"),
+      "test-driven-development",
+    );
+    settingsWithSkills(state.paths, packages, [
+      "!skills/superpowers/**",
+      "+skills/superpowers/using-superpowers",
+    ]);
+
+    const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "blocked");
+    assert.deepEqual(ownership.presentationConflicts, [
+      "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+    ]);
+  });
+
+  await t.test(
+    "minimatch comment controls do not prove a candidate disabled",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      writeSkill(join(sharedSkillRoot(state), "#skill.md"), "hash-skill");
+      settingsWithSkills(state.paths, packages, ["!#skill.md"]);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ]);
+    },
+  );
+
+  await t.test("ignore controls fail closed", async (t) => {
+    const state = sandbox(t);
+    await preparedAndInstalled(t, state);
+    writeSkill(sharedSkill(state, "using-superpowers"), "using-superpowers");
+    writeFileSync(
+      join(state.paths.homeDir, ".agents/skills/.ignore"),
+      "superpowers/\n",
+    );
+    settings(state.paths, packages);
+
+    const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+    assert.equal(ownership.installEligibility.kind, "blocked");
+    assert.deepEqual(ownership.presentationConflicts, [
+      "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+    ]);
+  });
+
+  await t.test(
+    "ancestor ignores do not conflict with an absent route",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      mkdirSync(join(state.paths.homeDir, ".agents/skills"), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(state.paths.homeDir, ".agents/skills/.gitignore"),
+        "superpowers/\n",
+      );
+      settings(state.paths, packages);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    },
+  );
+
+  await t.test(
+    "an explicit known file uses agent-directory filter identities",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const skill = sharedSkill(state, "using-superpowers");
+      writeSkill(skill, "using-superpowers");
+
+      settingsWithSkills(state.paths, packages, [
+        skill,
+        "-skills/superpowers/using-superpowers",
+      ]);
+      let ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers",
+      ]);
+
+      settingsWithSkills(state.paths, packages, [skill, `-${skill}`]);
+      ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    },
+  );
+
+  await t.test(
+    "explicit known file sources use native trim tilde and file URL resolution",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const skill = sharedSkill(state, "using-superpowers");
+      writeSkill(skill, "using-superpowers");
+      const relativeToHome = skill.slice(state.paths.homeDir.length + 1);
+
+      for (const source of [
+        `  ~/${relativeToHome}  `,
+        `  ${pathToFileURL(skill).href}  `,
+      ]) {
+        settingsWithSkills(state.paths, packages, [
+          source,
+          "-skills/superpowers/using-superpowers",
+        ]);
+        const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+        assert.equal(ownership.installEligibility.kind, "blocked", source);
+      }
+    },
+  );
+
+  await t.test(
+    "explicit files remain active when a global root SKILL suppresses auto discovery",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      writeSkill(
+        join(state.paths.homeDir, ".agents/skills/SKILL.md"),
+        "global-root",
+      );
+      const skill = sharedSkill(state, "using-superpowers");
+      writeSkill(skill, "using-superpowers");
+      settingsWithSkills(state.paths, packages, [skill]);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers",
+      ]);
+    },
+  );
+
+  await t.test(
+    "unrelated explicit files do not invalidate disabled known skills",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const skill = sharedSkill(state, "using-superpowers");
+      writeSkill(skill, "using-superpowers");
+      const unrelated = join(state.root, "unrelated/SKILL.md");
+      writeSkill(unrelated, "unrelated");
+      settingsWithSkills(state.paths, packages, [
+        unrelated,
+        "-skills/superpowers/using-superpowers",
+      ]);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    },
+  );
+
+  await t.test(
+    "overlapping explicit directories remain indeterminate",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const skill = sharedSkill(state, "using-superpowers");
+      writeSkill(skill, "using-superpowers");
+      settingsWithSkills(state.paths, packages, [
+        dirname(skill),
+        "-skills/superpowers/using-superpowers",
+      ]);
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ]);
+    },
+  );
+
+  await t.test("symlinked and unreadable routes fail closed", async (t) => {
+    const linked = sandbox(t);
+    await preparedAndInstalled(t, linked);
+    const external = join(linked.root, "external-skill");
+    writeSkill(join(external, "SKILL.md"), "linked-skill");
+    mkdirSync(sharedSkillRoot(linked), { recursive: true });
+    symlinkSync(external, join(sharedSkillRoot(linked), "linked"), "dir");
+    settings(linked.paths, packages);
+    let ownership = unwrapOwnership(await inspectPiOwnership(linked.ctx));
+    assert.equal(ownership.installEligibility.kind, "blocked");
+    assert.deepEqual(ownership.presentationConflicts, [
+      "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+    ]);
+
+    const unreadable = sandbox(t);
+    await preparedAndInstalled(t, unreadable);
+    writeSkill(
+      sharedSkill(unreadable, "using-superpowers"),
+      "using-superpowers",
+    );
+    settings(unreadable.paths, packages);
+    chmodSync(sharedSkillRoot(unreadable), 0o000);
+    try {
+      ownership = unwrapOwnership(await inspectPiOwnership(unreadable.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.deepEqual(ownership.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ]);
+    } finally {
+      chmodSync(sharedSkillRoot(unreadable), 0o700);
+    }
+  });
+
+  await t.test(
+    "default Codex skills remain outside Pi discovery",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      settings(state.paths, packages);
+      writeSkill(
+        join(
+          state.paths.homeDir,
+          ".codex/skills/superpowers/using-superpowers/SKILL.md",
+        ),
+        "using-superpowers",
+      );
+
+      const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.equal(ownership.installEligibility.kind, "allowed");
+      assert.deepEqual(ownership.presentationConflicts, []);
+    },
+  );
 });

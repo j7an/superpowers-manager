@@ -69,26 +69,39 @@ async function nearestExistingDirectory(path: string): Promise<string> {
   }
 }
 
-async function resourceLock(resource: string): Promise<{
+interface ResourceLock {
   readonly resource: string;
   readonly lockPath: string;
-}> {
-  const canonical = await canonicalizeProspectivePath(resource);
+}
+
+async function resourceLockPaths(resource: string): Promise<readonly string[]> {
   let lockParent: string;
   try {
-    lockParent = await nearestExistingDirectory(dirname(canonical));
+    lockParent = await nearestExistingDirectory(dirname(resource));
   } catch (cause) {
     throw new SafetyError(
       "resource-lock",
-      `cannot locate resource lock parent: ${canonical}`,
+      `cannot locate resource lock parent: ${resource}`,
       { cause },
     );
   }
-  const digest = createHash("sha256").update(canonical).digest("hex");
+  const digest = createHash("sha256").update(resource).digest("hex");
   const lockName = `.superpowers-manager.${digest}.resource-lock`;
+  const paths: string[] = [];
   let cursor = lockParent;
   for (;;) {
-    const candidate = join(cursor, lockName);
+    paths.push(join(cursor, lockName));
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  return paths;
+}
+
+async function resourceLock(resource: string): Promise<ResourceLock> {
+  const canonical = await canonicalizeProspectivePath(resource);
+  const paths = await resourceLockPaths(canonical);
+  for (const candidate of paths) {
     try {
       await lstat(candidate);
       return { resource: canonical, lockPath: candidate };
@@ -101,14 +114,34 @@ async function resourceLock(resource: string): Promise<{
         );
       }
     }
-    const parent = dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
   }
   return {
     resource: canonical,
-    lockPath: join(lockParent, lockName),
+    lockPath: paths[0]!,
   };
+}
+
+async function assertNoCompetingResourceLock(
+  lock: ResourceLock,
+  held: ReadonlyMap<string, HeldResource>,
+): Promise<void> {
+  for (const candidate of await resourceLockPaths(lock.resource)) {
+    try {
+      await lstat(candidate);
+    } catch (cause) {
+      if (errnoIs(cause, "ENOENT")) continue;
+      throw new SafetyError(
+        "resource-lock",
+        `cannot inspect resource lock: ${lock.resource}`,
+        { cause },
+      );
+    }
+    if (held.get(candidate)?.resource === lock.resource) continue;
+    throw new SafetyError(
+      "resource-lock",
+      `resource is busy: ${lock.resource}`,
+    );
+  }
 }
 
 function ownerRecord(
@@ -312,6 +345,13 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
         }
         this.#held.set(lock.lockPath, held);
         acquired.push({ held });
+      }
+      // A missing ancestor can appear between placement discovery and mkdir,
+      // leaving concurrently acquired markers at different depths. Checking
+      // every placement also prevents our descendant marker from hiding a
+      // competing ancestor marker.
+      for (const lock of locks) {
+        await assertNoCompetingResourceLock(lock, this.#held);
       }
       completion = { kind: "returned", value: await action() };
     } catch (cause) {

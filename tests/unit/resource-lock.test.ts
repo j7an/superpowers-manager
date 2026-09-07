@@ -41,14 +41,18 @@ const A = "a".repeat(40);
 const B = "b".repeat(40);
 
 type ChildMessage =
-  | { readonly kind: "ready" | "complete" }
+  | { readonly kind: "before-lock" | "ready" | "complete" }
   | { readonly kind: "error"; readonly name: string; readonly message: string };
 
 function parseChildMessage(value: unknown): ChildMessage {
   if (typeof value !== "object" || value === null || !("kind" in value)) {
     throw new Error("resource-lock child sent a malformed message");
   }
-  if (value.kind === "ready" || value.kind === "complete") {
+  if (
+    value.kind === "before-lock" ||
+    value.kind === "ready" ||
+    value.kind === "complete"
+  ) {
     return { kind: value.kind };
   }
   if (
@@ -78,7 +82,8 @@ async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
 }
 
 function startChild(
-  mode: "hold" | "hold-create" | "write",
+  mode:
+    "hold" | "hold-before-lock" | "hold-create" | "write" | "write-before-lock",
   resource: string,
   marker?: string,
 ): {
@@ -144,6 +149,21 @@ async function holdAndCreate(resource: string) {
   return process;
 }
 
+async function pauseBeforeLock(
+  mode: "hold-before-lock" | "write-before-lock",
+  resource: string,
+  marker?: string,
+) {
+  const process = startChild(mode, resource, marker);
+  const first = await nextMessage(process.child, "lock mkdir barrier");
+  assert.deepEqual(first, { kind: "before-lock" }, process.stderr());
+  return process;
+}
+
+function resumeLock(process: ReturnType<typeof startChild>) {
+  process.child.send?.("acquire");
+}
+
 async function release(owner: ReturnType<typeof startChild>) {
   owner.child.send?.("release");
   assert.deepEqual(
@@ -176,6 +196,12 @@ async function currentLock(parent: string): Promise<{
     metadataPath,
     metadata: parsed as Record<string, unknown>,
   };
+}
+
+async function resourceLockEntries(parent: string): Promise<readonly string[]> {
+  return (await readdir(parent)).filter((entry) =>
+    entry.endsWith(".resource-lock"),
+  );
 }
 
 void test("resource observation is read-only and validates live ownership metadata", async (t) => {
@@ -310,6 +336,94 @@ void test("a prospective lock remains authoritative after its owner creates the 
   });
   await assert.rejects(readFile(marker, "utf8"), { code: "ENOENT" });
   await release(owner);
+});
+
+void test("a late stale ancestor acquisition cannot overlap a descendant owner", async (t) => {
+  const root = await sandbox(t);
+  const resource = join(root, "future", "generated");
+  const marker = join(root, "stale-ancestor-action");
+
+  const staleAncestor = await pauseBeforeLock(
+    "write-before-lock",
+    resource,
+    marker,
+  );
+  t.after(() => staleAncestor.child.kill("SIGKILL"));
+  const creator = await holdAndCreate(resource);
+  t.after(() => creator.child.kill("SIGKILL"));
+  await release(creator);
+  const descendantOwner = await hold(resource);
+  t.after(() => descendantOwner.child.kill("SIGKILL"));
+
+  resumeLock(staleAncestor);
+  const message = await nextMessage(
+    staleAncestor.child,
+    "late stale ancestor refusal",
+  );
+  assert.equal(message.kind, "error", staleAncestor.stderr());
+  if (message.kind === "error") {
+    assert.equal(message.name, "SafetyError");
+    assert.equal(
+      message.message,
+      `resource is busy: ${join(await realpath(root), "future", "generated")}`,
+    );
+  }
+  assert.deepEqual(await childExit(staleAncestor, "busy error"), {
+    code: 0,
+    signal: null,
+  });
+  await assert.rejects(readFile(marker, "utf8"), { code: "ENOENT" });
+  assert.deepEqual(await resourceLockEntries(root), []);
+  assert.equal((await resourceLockEntries(join(root, "future"))).length, 1);
+  await release(descendantOwner);
+  assert.deepEqual(await resourceLockEntries(join(root, "future")), []);
+});
+
+void test("a late stale descendant acquisition cannot hide an ancestor owner", async (t) => {
+  const root = await sandbox(t);
+  const resource = join(root, "future", "generated");
+  const marker = join(root, "stale-descendant-action");
+
+  const ancestorOwner = await pauseBeforeLock("hold-before-lock", resource);
+  t.after(() => ancestorOwner.child.kill("SIGKILL"));
+  const creator = await holdAndCreate(resource);
+  t.after(() => creator.child.kill("SIGKILL"));
+  await release(creator);
+  const staleDescendant = await pauseBeforeLock(
+    "write-before-lock",
+    resource,
+    marker,
+  );
+  t.after(() => staleDescendant.child.kill("SIGKILL"));
+
+  resumeLock(ancestorOwner);
+  assert.deepEqual(
+    await nextMessage(ancestorOwner.child, "ancestor ownership"),
+    { kind: "ready" },
+    ancestorOwner.stderr(),
+  );
+  resumeLock(staleDescendant);
+  const message = await nextMessage(
+    staleDescendant.child,
+    "late stale descendant refusal",
+  );
+  assert.equal(message.kind, "error", staleDescendant.stderr());
+  if (message.kind === "error") {
+    assert.equal(message.name, "SafetyError");
+    assert.equal(
+      message.message,
+      `resource is busy: ${join(await realpath(root), "future", "generated")}`,
+    );
+  }
+  assert.deepEqual(await childExit(staleDescendant, "busy error"), {
+    code: 0,
+    signal: null,
+  });
+  await assert.rejects(readFile(marker, "utf8"), { code: "ENOENT" });
+  assert.equal((await resourceLockEntries(root)).length, 1);
+  assert.deepEqual(await resourceLockEntries(join(root, "future")), []);
+  await release(ancestorOwner);
+  assert.deepEqual(await resourceLockEntries(root), []);
 });
 
 void test("a held resource does not block a disjoint process resource", async (t) => {
