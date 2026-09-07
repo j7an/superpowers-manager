@@ -21,6 +21,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  renameSync,
   readFileSync,
   readlinkSync,
   readdirSync,
@@ -113,6 +114,7 @@ function crossHarnessUpstream(t: Parameters<typeof nativeFixture>[0]): string {
 
 function writePiExecutable(
   c: import("./lifecycle-fixture.ts").CaseEnv,
+  runtimeVersion = "99.2.3",
 ): string {
   const module = join(c.dir, "fake-pi.mjs");
   const executable = join(c.dir, "pi");
@@ -123,7 +125,7 @@ function writePiExecutable(
       `const args = process.argv.slice(2);\n` +
       `writeFileSync(process.env.SPW_PI_LOG, args.join(" ") + "\\n", { flag: "a" });\n` +
       `if (args.length === 1 && args[0] === "--version") {\n` +
-      `  process.stdout.write("0.85.1\\n");\n` +
+      `  process.stdout.write(${JSON.stringify(runtimeVersion + "\n")});\n` +
       `} else if (args.length === 3 && (args[0] === "install" || args[0] === "remove") && args[2] === "--no-approve") {\n` +
       `  const settingsFile = join(process.env.PI_CODING_AGENT_DIR, "settings.json");\n` +
       `  const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, "utf8")) : {};\n` +
@@ -1976,5 +1978,70 @@ void describe("install commands", { concurrency: true }, () => {
       ["inspect --view ownership"],
       "c.adapterLog is not the path this case's fake adapter records to, so the emptiness assertion above proves nothing",
     );
+  });
+
+  void test("Pi install and update admit a differing runtime without experimental opt-in", async (t) => {
+    const c = installCase();
+    const upstream = nativeFixture(t);
+    const commitA = commitFixture(upstream);
+    const selectionA = nativeSelection(commitA);
+    const piLog = join(c.state, "pi.log");
+    const initial = caseContext(c, {
+      adapter: codexHarness,
+      env: { SUPERPOWERS_PI: writePiExecutable(c), SPW_PI_LOG: piLog },
+    });
+    const ctxA = {
+      ...initial.ctx,
+      adapter: piHarness,
+      selection: selectionA,
+      options: { harness: "pi" as const, allowExperimental: false },
+    };
+    const paths = piPaths(ctxA.env, process.cwd());
+    const preparedA = await preparePiCandidate(
+      {
+        upstreamRoot: upstream,
+        workspaceRoot: c.tmp,
+        candidateRoot: paths.preparedRoot,
+        selection: selectionA,
+      },
+      ctxA,
+    );
+    assert.ok(preparedA.outcome.ok);
+    assert.equal(preparedA.outcome.result.compatibility.kind, "supported");
+    assert.equal(
+      await runInstall([], ctxA),
+      0,
+      initial.stdout() + initial.stderr(),
+    );
+    const receiptA = await readPiReceipt(paths.installedRoot);
+    assert.equal(receiptA.commit, commitA);
+    assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
+
+    const commitB = commitPhaseB(upstream);
+    const selectionB = nativeSelection(commitB);
+    const ctxB = { ...ctxA, selection: selectionB };
+    const retiredPreparation = join(c.dir, "retired-pi-preparation");
+    renameSync(paths.preparedRoot, retiredPreparation);
+    const preparedB = await preparePiCandidate(
+      {
+        upstreamRoot: upstream,
+        workspaceRoot: c.tmp,
+        candidateRoot: paths.preparedRoot,
+        selection: selectionB,
+      },
+      ctxB,
+    );
+    assert.ok(preparedB.outcome.ok);
+    writeFileSync(piLog, "");
+    assert.equal(
+      await runUpdate([], ctxB),
+      0,
+      initial.stdout() + initial.stderr(),
+    );
+    const receiptB = await readPiReceipt(paths.installedRoot);
+    assert.equal(receiptB.commit, commitB);
+    assert.notEqual(receiptB.digest, receiptA.digest);
+    assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
+    assert.ok(readLog(piLog).includes("--version"));
   });
 });
