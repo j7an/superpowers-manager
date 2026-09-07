@@ -218,12 +218,7 @@ export async function readPiReceipt(root: string): Promise<PiReceipt> {
 }
 
 export async function validatePiPackage(root: string): Promise<void> {
-  const receipt = await readPiReceipt(root);
-  if ((await digestPiTree(root)) !== receipt.digest)
-    throw new SafetyError("pi-package", `Pi artifact digest mismatch: ${root}`);
-  const compatibility = await assessPiCompatibility(root, {
-    effectiveSource: receipt.source,
-  });
+  const { compatibility } = await readPiPackageAssessment(root);
   if (
     compatibility.kind !== "supported" &&
     compatibility.kind !== "experimental"
@@ -232,4 +227,17 @@ export async function validatePiPackage(root: string): Promise<void> {
       "pi-package",
       `Pi package no longer matches the qualified profile: ${root}`,
     );
+}
+
+export async function readPiPackageAssessment(root: string): Promise<{
+  readonly receipt: PiReceipt;
+  readonly compatibility: Compatibility;
+}> {
+  const receipt = await readPiReceipt(root);
+  if ((await digestPiTree(root)) !== receipt.digest)
+    throw new SafetyError("pi-package", `Pi artifact digest mismatch: ${root}`);
+  const compatibility = await assessPiCompatibility(root, {
+    effectiveSource: receipt.source,
+  });
+  return { receipt, compatibility };
 }

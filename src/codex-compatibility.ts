@@ -110,7 +110,6 @@ export async function readCodexAssessment(
       },
     };
     const compatibility = await assessCodexCompatibility(root, selection);
-    if (compatibility.kind !== "supported") throw new Error("current profile");
     return {
       root,
       commit: receipt.commit,

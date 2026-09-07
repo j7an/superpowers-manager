@@ -8,6 +8,7 @@ import {
   type AdapterResult,
 } from "./adapter-result.ts";
 import { codexBuild } from "./adapter.ts";
+import { ARTIFACT_RECEIPT } from "./artifact-tree.ts";
 import {
   assessCodexCompatibility,
   readCodexAssessment,
@@ -27,6 +28,7 @@ import {
   readStrictProvenanceField,
   writeProvenance,
 } from "./provenance.ts";
+import { classifyPathNoFollow } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 import type { ResolutionKind } from "./upstream-version.ts";
 import { manifestVersionForRef } from "./upstream-version.ts";
@@ -314,17 +316,25 @@ export async function inspectCodexPrepared(
   selection: EffectiveSelection,
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedState>> {
+  const root = codexPreparationLocation(ctx).destinationRoot;
   const observedIdentity = await readGeneratedCommitLenient(
-    join(
-      codexPreparationLocation(ctx).destinationRoot,
-      ".superpowers-upstream.json",
-    ),
+    join(root, ".superpowers-upstream.json"),
   );
   const compatibility = unassessedCompatibility();
   try {
-    const artifact = await readCodexAssessment(
-      codexPreparationLocation(ctx).destinationRoot,
-    );
+    if (
+      (await classifyPathNoFollow(join(root, ARTIFACT_RECEIPT))) === "missing"
+    )
+      return successResult(
+        "inspect-prepared",
+        {
+          kind: "needs-prepare",
+          observedIdentity,
+          compatibility,
+        },
+        [],
+      );
+    const artifact = await readCodexAssessment(root);
     const source = await readStrictProvenanceField(
       join(artifact.root, ".superpowers-upstream.json"),
       "source",
@@ -332,19 +342,36 @@ export async function inspectCodexPrepared(
     if (
       artifact.commit === selection.desiredCommit &&
       source === selection.effectiveSource
-    )
+    ) {
+      if (artifact.compatibility.kind === "supported")
+        return successResult(
+          "inspect-prepared",
+          {
+            kind: "current",
+            artifact,
+            observedIdentity,
+            compatibility: artifact.compatibility,
+          },
+          [],
+        );
       return successResult(
         "inspect-prepared",
         {
-          kind: "current",
-          artifact,
+          kind: "needs-prepare",
           observedIdentity,
           compatibility: artifact.compatibility,
         },
         [],
       );
+    }
   } catch {
-    /* Missing or invalid evidence requires a fresh preparation. */
+    return failureResult(
+      "inspect-prepared",
+      "invalid-assessment",
+      `cannot inspect Codex prepared artifact: ${root}`,
+      [],
+      [],
+    );
   }
   return successResult(
     "inspect-prepared",
@@ -383,11 +410,12 @@ export async function readCodexPrepared(
     );
   }
   try {
-    return successResult(
-      "read-prepared",
-      await readCodexAssessment(codexPreparationLocation(ctx).destinationRoot),
-      [],
+    const artifact = await readCodexAssessment(
+      codexPreparationLocation(ctx).destinationRoot,
     );
+    if (artifact.compatibility.kind !== "supported")
+      throw new Error("unsupported profile");
+    return successResult("read-prepared", artifact, []);
   } catch {
     return failureResult(
       "read-prepared",

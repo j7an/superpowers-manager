@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { successResult } from "../../src/adapter-result.ts";
+import { gatherProbe } from "../../src/commands/probe.ts";
 import {
   inspectPiPrepared,
   preparePiCandidate,
@@ -18,6 +20,11 @@ import {
   nativeFixture,
   nativeSelection,
 } from "../lib/pi-package-fixture.ts";
+import {
+  capture,
+  notCalledAdapter,
+  observingCoordinator,
+} from "../lib/command-doubles.ts";
 
 void test("prepared Pi identity survives fetch removal and frozen copies survive replacement", async (t) => {
   const root = nativeFixture(t),
@@ -115,6 +122,83 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
       },
     }),
   );
+  const unsupported = await inspectPiPrepared(nativeSelection(commit), ctx);
+  assert.equal(unsupported.status, 0);
+  assert.equal(unsupported.outcome.ok, true);
+  if (!unsupported.outcome.ok) assert.fail("expected unsupported inspection");
+  assert.deepEqual(unsupported.outcome.result, {
+    kind: "needs-prepare",
+    observedIdentity: rewritten.digest,
+    compatibility: {
+      kind: "unsupported",
+      reason: `Pi package does not match the qualified native bootstrap profile: ${prepared}`,
+    },
+  });
+
+  for (const selection of [
+    nativeSelection("3".repeat(40)),
+    nativeSelection(commit, "https://other.invalid/superpowers"),
+  ]) {
+    const mismatch = await inspectPiPrepared(selection, ctx);
+    assert.equal(mismatch.outcome.ok, true);
+    if (!mismatch.outcome.ok) assert.fail("expected mismatched inspection");
+    assert.equal(mismatch.outcome.result.kind, "needs-prepare");
+    assert.equal(mismatch.outcome.result.compatibility.kind, "unknown");
+  }
+
+  const adapter: typeof notCalledAdapter = {
+    ...notCalledAdapter,
+    inspectPrepared: inspectPiPrepared,
+    async inspectInstalled() {
+      return successResult(
+        "inspect",
+        { kind: "absent", observedIdentity: "" },
+        [],
+      );
+    },
+    async inspectOwnership() {
+      return successResult(
+        "inspect",
+        {
+          installEligibility: { kind: "allowed" },
+          removalInput: { pluginPresent: false, marketplacePresent: false },
+          removalVerification: { kind: "allowed" },
+          postRemovalOutput: { stdout: [], stderr: [] },
+          presentationValue: "ownership-collected",
+        },
+        [],
+      );
+    },
+    async inspectUpdateControl() {
+      return successResult(
+        "inspect",
+        {
+          probeEligibility: { kind: "allowed" },
+          mutationEligibility: { kind: "allowed" },
+          presentationValue: "control-collected",
+        },
+        [],
+      );
+    },
+  };
+  const probed = await gatherProbe({
+    root,
+    env: ctx.env,
+    stdout: capture().stream,
+    stderr: capture().stream,
+    options: { harness: "pi", allowExperimental: false },
+    coordination: observingCoordinator(),
+    selection: nativeSelection(commit),
+    adapter,
+  });
+  assert.equal(probed.status, 0);
+  if (probed.status !== 0) assert.fail("expected complete probe collection");
+  assert.equal(probed.facts.compatibility.kind, "unsupported");
+  assert.equal(probed.facts.installed.kind, "absent");
+  assert.equal(probed.facts.ownership.presentationValue, "ownership-collected");
+  assert.equal(probed.facts.control.presentationValue, "control-collected");
+  assert.equal(probed.facts.status, "needs prepare");
+
   assert.equal((await readPiPrepared(ctx)).outcome.ok, false);
   await assert.rejects(validatePiPackage(prepared), /Pi (artifact|package)/);
 });

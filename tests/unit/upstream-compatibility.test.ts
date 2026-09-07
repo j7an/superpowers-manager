@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { digestArtifactTree } from "../../src/artifact-tree.ts";
 import { assessPiCompatibility } from "../../src/pi-compatibility.ts";
 import { assessCodexCompatibility } from "../../src/codex-compatibility.ts";
 import { activationBlock } from "../../src/harness-compatibility.ts";
@@ -260,6 +261,15 @@ void test("Codex prepared qualification binds provenance, resources and current 
     JSON.stringify({ ...JSON.parse(receipt), generation: "invented" }),
   );
   assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
+  const invalidReceipt = await inspectCodexPrepared(selection, { root });
+  assert.equal(invalidReceipt.outcome.ok, false);
+  if (invalidReceipt.outcome.ok)
+    assert.fail("expected invalid receipt failure");
+  assert.deepEqual(invalidReceipt.outcome.error, {
+    code: "invalid-assessment",
+    message: `cannot inspect Codex prepared artifact: ${candidateRoot}`,
+    hints: [],
+  });
   writeFileSync(receiptPath, receipt);
   const metadataPath = join(candidateRoot, ".superpowers-upstream.json"),
     metadata = readFileSync(metadataPath, "utf8");
@@ -272,11 +282,52 @@ void test("Codex prepared qualification binds provenance, resources and current 
       }),
     );
     assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
+    assert.equal(
+      (await inspectCodexPrepared(selection, { root })).outcome.ok,
+      false,
+    );
   }
   writeFileSync(metadataPath, metadata);
-  writeFileSync(
-    join(candidateRoot, "skills/using-superpowers/SKILL.md"),
-    "invalid",
+  const skillPath = join(candidateRoot, "skills/using-superpowers/SKILL.md"),
+    skill = readFileSync(skillPath);
+  writeFileSync(skillPath, "invalid");
+  assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
+  assert.equal(
+    (await inspectCodexPrepared(selection, { root })).outcome.ok,
+    false,
   );
+
+  writeFileSync(skillPath, skill);
+  mkdirSync(join(candidateRoot, ".codex"));
+  writeFileSync(join(candidateRoot, ".codex/superpowers-codex"), "legacy");
+  const unsupportedReceipt = {
+    ...JSON.parse(receipt),
+    digest: await digestArtifactTree(candidateRoot),
+  };
+  writeFileSync(receiptPath, JSON.stringify(unsupportedReceipt));
+  const unsupported = await inspectCodexPrepared(selection, { root });
+  assert.equal(unsupported.status, 0);
+  assert.equal(unsupported.outcome.ok, true);
+  if (!unsupported.outcome.ok) assert.fail("expected unsupported inspection");
+  assert.deepEqual(unsupported.outcome.result, {
+    kind: "needs-prepare",
+    observedIdentity: selection.desiredCommit,
+    compatibility: {
+      kind: "unsupported",
+      reason: `Codex package does not provide compatible native skill discovery: ${candidateRoot}`,
+    },
+  });
+  const mismatch = await inspectCodexPrepared(
+    {
+      ...selection,
+      effectiveSource: "https://other.invalid/superpowers",
+      desiredCommit: "3".repeat(40),
+    },
+    { root },
+  );
+  assert.equal(mismatch.outcome.ok, true);
+  if (!mismatch.outcome.ok) assert.fail("expected mismatched inspection");
+  assert.equal(mismatch.outcome.result.kind, "needs-prepare");
+  assert.equal(mismatch.outcome.result.compatibility.kind, "unknown");
   assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
 });

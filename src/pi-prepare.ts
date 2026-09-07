@@ -19,9 +19,8 @@ import { assessPiCompatibility, samePiSource } from "./pi-compatibility.ts";
 import {
   digestPiTree,
   materializePiTree,
-  readPiReceipt,
+  readPiPackageAssessment,
   piReceiptBinding,
-  validatePiPackage,
   type PiReceipt,
 } from "./pi-package.ts";
 import { classifyPathNoFollow } from "./safe-path.ts";
@@ -100,38 +99,31 @@ export async function preparePiCandidate(
   }
 }
 
-async function readArtifact(root: string): Promise<PreparedArtifact> {
-  await validatePiPackage(root);
-  const receipt = await readPiReceipt(root);
-  const selection: EffectiveSelection = {
-    effectiveSource: receipt.source,
-    desiredCommit: receipt.commit,
-    requestedRef: "",
-    resolvedRef: "",
-    resolutionKind: "raw-commit",
-    selectionOrigin: "package-default",
-    selectionMode: "default",
-    upstreamSourceOrigin: "package-default",
-    saved: {
-      saved_mode: "none",
-      saved_source: "",
-      saved_requested_ref: "",
-      saved_resolved_ref: "",
-      saved_commit: "",
+async function readArtifactAssessment(root: string): Promise<{
+  readonly artifact: PreparedArtifact;
+  readonly receipt: PiReceipt;
+}> {
+  const { receipt, compatibility } = await readPiPackageAssessment(root);
+  return {
+    receipt,
+    artifact: {
+      root,
+      commit: receipt.commit,
+      identity: receipt.digest,
+      compatibility,
     },
   };
-  const compatibility = await assessPiCompatibility(root, selection);
+}
+
+async function readArtifact(root: string): Promise<PreparedArtifact> {
+  const { artifact } = await readArtifactAssessment(root);
+  const { compatibility } = artifact;
   if (
     compatibility.kind !== "supported" &&
     compatibility.kind !== "experimental"
   )
     throw new Error("unsupported profile");
-  return {
-    root,
-    commit: receipt.commit,
-    identity: receipt.digest,
-    compatibility,
-  };
+  return artifact;
 }
 
 export async function inspectPiPrepared(
@@ -152,8 +144,7 @@ export async function inspectPiPrepared(
         { kind: "needs-prepare", observedIdentity: "", compatibility: unknown },
         [],
       );
-    const artifact = await readArtifact(root),
-      receipt = await readPiReceipt(root);
+    const { artifact, receipt } = await readArtifactAssessment(root);
     if (
       artifact.commit !== selection.desiredCommit ||
       !samePiSource(receipt.source, selection.effectiveSource)
@@ -164,6 +155,19 @@ export async function inspectPiPrepared(
           kind: "needs-prepare",
           observedIdentity: artifact.identity,
           compatibility: unknown,
+        },
+        [],
+      );
+    if (
+      artifact.compatibility.kind !== "supported" &&
+      artifact.compatibility.kind !== "experimental"
+    )
+      return successResult(
+        "inspect-prepared",
+        {
+          kind: "needs-prepare",
+          observedIdentity: artifact.identity,
+          compatibility: artifact.compatibility,
         },
         [],
       );
