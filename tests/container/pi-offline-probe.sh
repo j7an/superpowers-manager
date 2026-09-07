@@ -113,6 +113,27 @@ run_manager update --harness pi --allow-experimental
 digest_b=$(observe installed "$installed" "$commit_b" B)
 test "$digest_a" != "$digest_b"
 observe events "$installed" "$commit_b" B
-run_manager uninstall --harness pi
+actual_uninstall_stdout="$root/actual-uninstall.stdout"
+actual_uninstall_stderr="$root/actual-uninstall.stderr"
+run_manager uninstall --harness pi >"$actual_uninstall_stdout" 2>"$actual_uninstall_stderr"
+cat "$actual_uninstall_stdout"
+cat "$actual_uninstall_stderr" >&2
+grep -Fxq \
+  "Removed the managed Superpowers Pi installation. Restart Pi to load the resulting state." \
+  "$actual_uninstall_stdout"
+test ! -s "$actual_uninstall_stderr"
+observe absent "$installed" none none
+noop_uninstall_stdout="$root/noop-uninstall.stdout"
+noop_uninstall_stderr="$root/noop-uninstall.stderr"
+run_manager uninstall --harness pi >"$noop_uninstall_stdout" 2>"$noop_uninstall_stderr"
+cat "$noop_uninstall_stdout"
+cat "$noop_uninstall_stderr" >&2
+grep -Fxq "No managed Superpowers Pi installation is present." \
+  "$noop_uninstall_stdout"
+if grep -Fqi "restart" "$noop_uninstall_stdout"; then
+  echo "error: idempotent Pi uninstall must not request a restart" >&2
+  exit 1
+fi
+test ! -s "$noop_uninstall_stderr"
 observe absent "$installed" none none
 echo "pi harness integration: complete status=0"

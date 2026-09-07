@@ -50,9 +50,9 @@ export const piPresentation: HarnessPresentation<PiRemovalInput> = {
       ? receipt.outcome.result.missingVerificationOutput
       : receipt.outcome.result.mismatchVerificationOutput;
   },
-  renderRemovalCompletion(ownership) {
-    return ownership.removalInput.receiptDigest === null &&
-      ownership.removalInput.registrationIdentity === null
+  renderRemovalCompletion(_ownership, removalInput) {
+    return removalInput.receiptDigest === null &&
+      removalInput.registrationIdentity === null
       ? {
           stdout: ["No managed Superpowers Pi installation is present."],
           stderr: [],

@@ -127,7 +127,10 @@ export interface HarnessPresentation<R> {
     receipt: AdapterResult<InstallReceipt>,
     inspection: AdapterResult<InstalledState>,
   ): Output;
-  renderRemovalCompletion(ownership: OwnershipInspection<R>): Output;
+  renderRemovalCompletion(
+    ownership: OwnershipInspection<R>,
+    removalInput: R,
+  ): Output;
   callFailure(
     site: FailureSite,
     ctx: AdapterContext,

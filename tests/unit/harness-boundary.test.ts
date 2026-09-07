@@ -1377,10 +1377,47 @@ void test("post-install failure, absence, and mismatch cannot report success", a
 
 void test("removal passes private input unchanged and reinspects ownership", async (t) => {
   const fixture = await createHarnessFixture(t);
+  const postRemovalInput = { receipt: "post-removal" };
+  const postRemovalOwnership = {
+    ...fixture.ownership,
+    removalInput: postRemovalInput,
+    presentationValue: "fixture post-removal",
+  };
+  let ownershipReads = 0;
+  let renderedOwnership:
+    OwnershipInspection<{ readonly receipt: string }> | undefined;
+  let renderedRemovalInput: { readonly receipt: string } | undefined;
   const adapter = {
     ...fixture.adapter,
-    inspectOwnership: fixture.methods.inspectOwnership,
+    async inspectOwnership(adapterCtx: {
+      readonly root: string;
+      readonly env?: NodeJS.ProcessEnv;
+    }) {
+      const result = await fixture.methods.inspectOwnership(adapterCtx);
+      ownershipReads += 1;
+      return ownershipReads === 2
+        ? successResult(
+            "inspect-ownership",
+            postRemovalOwnership,
+            result.outcome.messages,
+          )
+        : result;
+    },
     remove: fixture.methods.remove,
+    presentation: {
+      ...fixture.adapter.presentation,
+      renderRemovalCompletion(
+        ownership: OwnershipInspection<{ readonly receipt: string }>,
+        removalInput?: { readonly receipt: string },
+      ) {
+        renderedOwnership = ownership;
+        renderedRemovalInput = removalInput;
+        return fixture.adapter.presentation.renderRemovalCompletion(
+          ownership,
+          removalInput ?? ownership.removalInput,
+        );
+      },
+    },
   };
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 0);
@@ -1393,6 +1430,8 @@ void test("removal passes private input unchanged and reinspects ownership", asy
   ]);
   assert.equal(fixture.removalInputs.length, 1);
   assert.strictEqual(fixture.removalInputs[0], fixture.removalInput);
+  assert.strictEqual(renderedOwnership, postRemovalOwnership);
+  assert.strictEqual(renderedRemovalInput, fixture.removalInput);
   assert.equal(fixture.out.text(), "fixture uninstall complete\n");
   assert.equal(fixture.err.text(), "");
 });
@@ -1400,9 +1439,20 @@ void test("removal passes private input unchanged and reinspects ownership", asy
 void test("residual owned resources fail after a successful remove", async (t) => {
   const fixture = await createHarnessFixture(t);
   let ownershipReads = 0;
+  let completionCalls = 0;
   const adapter = {
     ...fixture.adapter,
     remove: fixture.methods.remove,
+    presentation: {
+      ...fixture.adapter.presentation,
+      renderRemovalCompletion() {
+        completionCalls += 1;
+        return {
+          stdout: ["fixture uninstall complete", "Restart fixture"],
+          stderr: [],
+        };
+      },
+    },
     async inspectOwnership(adapterCtx: {
       readonly root: string;
       readonly env?: NodeJS.ProcessEnv;
@@ -1437,16 +1487,29 @@ void test("residual owned resources fail after a successful remove", async (t) =
     "remove",
     "inspect-ownership",
   ]);
+  assert.equal(completionCalls, 0);
   assert.equal(fixture.out.text().includes("uninstall complete"), false);
+  assert.equal(fixture.out.text().includes("Restart fixture"), false);
   assert.equal(fixture.err.text(), "error: fixture resources remain\n");
 });
 
 void test("a failed post-remove ownership inspection suppresses completion", async (t) => {
   const fixture = await createHarnessFixture(t);
   let ownershipReads = 0;
+  let completionCalls = 0;
   const adapter = {
     ...fixture.adapter,
     remove: fixture.methods.remove,
+    presentation: {
+      ...fixture.adapter.presentation,
+      renderRemovalCompletion() {
+        completionCalls += 1;
+        return {
+          stdout: ["fixture uninstall complete", "Restart fixture"],
+          stderr: [],
+        };
+      },
+    },
     async inspectOwnership(adapterCtx: {
       readonly root: string;
       readonly env?: NodeJS.ProcessEnv;
@@ -1476,6 +1539,7 @@ void test("a failed post-remove ownership inspection suppresses completion", asy
     "remove",
     "inspect-ownership",
   ]);
+  assert.equal(completionCalls, 0);
   assert.equal(fixture.out.text(), "");
   assert.equal(
     fixture.err.text(),

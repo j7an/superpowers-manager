@@ -773,15 +773,21 @@ void test("removal completion appends the frozen completion text after a legacy 
   const ownership = unwrap(
     normalizeCodexOwnership(ownershipResult("legacy", false, false)),
   );
-  assert.deepEqual(codexPresentation.renderRemovalCompletion(ownership), {
-    stdout: [
-      "Legacy superpowers-wrapper Codex state remains installed.",
-      "Run: npx superpowers-wrapper@0.1.1 uninstall",
-      "uninstall complete",
-      "note: local generated artifacts under plugins/superpowers/ and .cache/upstream/ were left in place; remove them manually or regenerate with npx superpowers-manager prepare.",
-    ],
-    stderr: [],
-  });
+  assert.deepEqual(
+    codexPresentation.renderRemovalCompletion(
+      ownership,
+      ownership.removalInput,
+    ),
+    {
+      stdout: [
+        "Legacy superpowers-wrapper Codex state remains installed.",
+        "Run: npx superpowers-wrapper@0.1.1 uninstall",
+        "uninstall complete",
+        "note: local generated artifacts under plugins/superpowers/ and .cache/upstream/ were left in place; remove them manually or regenerate with npx superpowers-manager prepare.",
+      ],
+      stderr: [],
+    },
+  );
 });
 
 void test("call-failure presentation uses fixed text and Codex removal flags", () => {

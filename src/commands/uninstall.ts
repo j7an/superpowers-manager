@@ -185,7 +185,10 @@ async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
         return {
           status: 0,
           outcomes,
-          output: ctx.adapter.presentation.renderRemovalCompletion(ownership),
+          output: ctx.adapter.presentation.renderRemovalCompletion(
+            ownership,
+            removalInput,
+          ),
         };
       },
       {

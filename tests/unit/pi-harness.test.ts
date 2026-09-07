@@ -144,22 +144,48 @@ void test("Pi presentation separates installed facts from unsupported desired co
   assert.match(codex.porcelain, /compatibility=unsupported\n/);
   assert.match(rendered.human, /native Pi extension superpowers.ts/);
   assert.doesNotMatch(rendered.human, /restart/i);
-  assert.match(
-    piHarness.presentation.renderRemovalCompletion(ownership).stdout.join("\n"),
-    /restart Pi/i,
+});
+
+void test("Pi removal completion distinguishes verified removal from prior absence", () => {
+  const absentInput: PiRemovalInput = {
+    installedRoot: "/isolated/installed",
+    receiptDigest: null,
+    registrationIdentity: null,
+  };
+  const postRemovalOwnership = {
+    installEligibility: { kind: "allowed" },
+    removalInput: absentInput,
+    removalVerification: { kind: "allowed" },
+    postRemovalOutput: { stdout: [], stderr: [] },
+    presentationValue: "absent",
+  } as const;
+  const installedInput: PiRemovalInput = {
+    ...absentInput,
+    receiptDigest: "removed-digest",
+    registrationIdentity: "/isolated/installed",
+  };
+
+  assert.deepEqual(
+    piHarness.presentation.renderRemovalCompletion(
+      postRemovalOwnership,
+      installedInput,
+    ),
+    {
+      stdout: [
+        "Removed the managed Superpowers Pi installation. Restart Pi to load the resulting state.",
+      ],
+      stderr: [],
+    },
   );
-  assert.doesNotMatch(
-    piHarness.presentation
-      .renderRemovalCompletion({
-        ...ownership,
-        removalInput: {
-          ...ownership.removalInput,
-          receiptDigest: null,
-          registrationIdentity: null,
-        },
-      })
-      .stdout.join("\n"),
-    /restart/i,
+  assert.deepEqual(
+    piHarness.presentation.renderRemovalCompletion(
+      postRemovalOwnership,
+      absentInput,
+    ),
+    {
+      stdout: ["No managed Superpowers Pi installation is present."],
+      stderr: [],
+    },
   );
 });
 
