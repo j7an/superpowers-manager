@@ -62,6 +62,8 @@ interface SettingsObservation {
   readonly registration: PiPackageEntry | null;
 }
 
+// Verified remote spellings only: Pi 0.85.1 accepts http:// as Git, while github:
+// falls back to local inspection (native source citations are in pi-settings.ts).
 const KNOWN_UPSTREAM_PI_SOURCE_BASES = [
   "git:github.com/obra/superpowers",
   "git:github.com/obra/superpowers.git",

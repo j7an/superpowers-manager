@@ -78,8 +78,14 @@ Pi extension to classify a candidate.
 
 Integration generations describe runtime mechanisms, not each upstream release.
 Pi receipts record the compatibility generation alongside the selected source
-and exact commit. A generation retired by the current adapter cannot be
-activated. `--allow-experimental` permits only a verifiable candidate
+and exact commit. The currently qualified Pi generation is
+`pi-native-bootstrap-v1`; artifact-generation checks and the runtime-version
+check above are independent requirements. Pi re-assesses package metadata and
+bootstrap bytes rather than trusting the recorded generation label.
+A no-longer-supported generation cannot be activated, but its existing
+Manager-owned installation remains inspectable and removable, subject to normal
+ownership, integrity, applicable runtime, and recovery checks.
+`--allow-experimental` permits only a verifiable candidate
 within implemented experimental mechanics; it cannot admit unsupported or
 unverified mechanics, and it never updates or removes an existing snapshot on
 its own.

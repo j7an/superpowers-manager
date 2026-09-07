@@ -32,6 +32,10 @@ const SETTINGS_PROFILE: StrictJsonProfile = {
 // that verified case locally inspectable; the remaining exact, case-sensitive
 // prefix policy stays bounded because widening it changes which settings
 // identities compare as paths.
+// Pi 0.85.1 source (isLocalPath, parseGitUrl, then parseSource's local fallback):
+// https://github.com/earendil-works/pi/blob/d981de1229ef899957bbe968bc8dcda02a21f477/packages/coding-agent/src/utils/paths.ts#L50-L64
+// https://github.com/earendil-works/pi/blob/d981de1229ef899957bbe968bc8dcda02a21f477/packages/coding-agent/src/utils/git.ts#L172-L179
+// https://github.com/earendil-works/pi/blob/d981de1229ef899957bbe968bc8dcda02a21f477/packages/coding-agent/src/core/package-manager.ts#L1460-L1470
 const REMOTE_SOURCE_PREFIXES = [
   "npm:",
   "git:",
