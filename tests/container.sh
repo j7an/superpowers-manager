@@ -35,6 +35,7 @@ if [ "${1:-}" = "--inside" ]; then
       ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
+  exit 0
 fi
 
 mode="${1:-suite}"

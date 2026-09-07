@@ -21,7 +21,19 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -523,7 +535,7 @@ function validateProbe(probe: string) {
     // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
     // single-quoted strings `\"` is not an escape sequence, so the
     // required text carries literal backslashes and guards the JSON
-    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:588::sh \`.
+    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:596::sh \`.
     'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
@@ -1199,6 +1211,79 @@ void test("container-contract", async (t) => {
         runner.includes("container acceptance suite must run as UID 10001"),
       );
     });
+    await t.test(
+      "runner's --inside modes stop after their ordered child commands and propagate failures",
+      (t) => {
+        const scratch = mkdtempSync(join(tmpdir(), "spw-container-runner-"));
+        t.after(() => rmSync(scratch, { recursive: true, force: true }));
+        const bin = join(scratch, "bin");
+        const container = join(scratch, "tests", "container");
+        mkdirSync(bin, { recursive: true });
+        mkdirSync(container, { recursive: true });
+        copyFileSync(RUNNER_PATH, join(scratch, "tests", "container.sh"));
+        writeFileSync(
+          join(bin, "id"),
+          '#!/bin/sh\n[ "${1:-}" = "-u" ] || exit 99\nprintf "%s\\n" 10001\n',
+        );
+        writeFileSync(
+          join(bin, "docker"),
+          '#!/bin/sh\nprintf "%s\\n" docker >> "$SPW_RUNNER_LOG"\nexit 99\n',
+        );
+        const childStub =
+          '#!/bin/sh\nname=${0##*/}\nprintf "%s\\n" "$name" >> "$SPW_RUNNER_LOG"\n[ "${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n';
+        writeFileSync(join(scratch, "tests", "run.sh"), childStub);
+        writeFileSync(join(container, "codex-offline-probe.sh"), childStub);
+        writeFileSync(join(container, "pi-offline-probe.sh"), childStub);
+        for (const executable of [
+          join(bin, "id"),
+          join(bin, "docker"),
+          join(scratch, "tests", "run.sh"),
+          join(container, "codex-offline-probe.sh"),
+          join(container, "pi-offline-probe.sh"),
+        ]) {
+          chmodSync(executable, 0o755);
+        }
+
+        const runnerPath = join(scratch, "tests", "container.sh");
+        const log = join(scratch, "runner.log");
+        const runInside = (mode: string, failChild?: string) => {
+          writeFileSync(log, "");
+          return spawnSync("/bin/sh", [runnerPath, "--inside", mode], {
+            cwd: scratch,
+            encoding: "utf8",
+            env: {
+              PATH: `${bin}:/usr/bin:/bin`,
+              SPW_FAIL_CHILD: failChild ?? "",
+              SPW_RUNNER_LOG: log,
+            },
+          });
+        };
+
+        for (const [mode, expectedLog] of [
+          ["suite", "run.sh\ncodex-offline-probe.sh\npi-offline-probe.sh\n"],
+          ["harness-codex", "codex-offline-probe.sh\n"],
+          ["harness-pi", "pi-offline-probe.sh\n"],
+        ] as const) {
+          const result = runInside(mode);
+          assert.equal(result.status, 0, `${mode}: ${result.stderr}`);
+          assert.equal(result.stderr, "");
+          assert.doesNotMatch(result.stdout, /usage:/);
+          assert.equal(readFileSync(log, "utf8"), expectedLog);
+        }
+
+        const failed = runInside("suite", "codex-offline-probe.sh");
+        assert.equal(failed.status, 17);
+        assert.equal(failed.stderr, "");
+        assert.equal(
+          readFileSync(log, "utf8"),
+          "run.sh\ncodex-offline-probe.sh\n",
+        );
+        assert.doesNotMatch(
+          failed.stdout,
+          /Codex harness integration: complete|Pi harness integration:/,
+        );
+      },
+    );
 
     // --- inventory items 38-40: runner --inside structural check ---------
 

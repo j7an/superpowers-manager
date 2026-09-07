@@ -17,7 +17,8 @@ requirements="$HOME/.codex/requirements.toml"
 
 cp -R /workspace "$package"
 chmod +x "$package/src/cli.ts"
-mkdir -p "$upstream/skills/probe" "$upstream/.codex-plugin" \
+mkdir -p "$upstream/skills/probe" "$upstream/skills/using-superpowers" \
+  "$upstream/.codex-plugin" \
   "$upstream/hooks/support" "$state" "$HOME/.codex" \
   "$survivor/.agents/plugins" "$survivor/plugins/unrelated/skills/probe" \
   "$survivor/plugins/unrelated/.codex-plugin"
@@ -464,6 +465,13 @@ name: probe
 description: Offline manager A/B probe
 ---
 # Probe A
+EOF
+cat > "$upstream/skills/using-superpowers/SKILL.md" <<'EOF'
+---
+name: using-superpowers
+description: Offline native bootstrap skill
+---
+# Using Superpowers
 EOF
 printf '%s\n' 'license' > "$upstream/LICENSE"
 printf '%s\n' 'readme' > "$upstream/README.md"
