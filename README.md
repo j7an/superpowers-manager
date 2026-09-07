@@ -76,9 +76,10 @@ version is unsupported until separately qualified, including newer versions;
 checks bounded `pi --version` output; product code does not import or execute the
 Pi extension to classify a candidate.
 
-macOS and Linux are tested. WSL2 is supported for the established Codex path;
-Pi is qualified on macOS and in the Linux acceptance container. Native Windows
-and Pi-on-WSL2 are untested. The launcher no longer looks for Git Bash at all —
+macOS and Linux are tested. WSL2 is supported for the established Codex path.
+Pi integration is tested on macOS and in an isolated Linux container. Running Pi
+inside WSL2 has not been separately tested. Native Windows is untested.
+The launcher no longer looks for Git Bash at all —
 every command runs in-process, so no POSIX shell is discovered or required — but
 path handling between MSYS and Codex remains a known risk area.
 
