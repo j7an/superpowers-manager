@@ -69,12 +69,16 @@ const KNOWN_UPSTREAM_PI_SOURCE_BASES = [
   "git:github.com/obra/superpowers.git",
   "git:git@github.com:obra/superpowers",
   "git:git@github.com:obra/superpowers.git",
+  "git:github:obra/superpowers",
+  "git:obra/superpowers",
   "http://github.com/obra/superpowers",
   "http://github.com/obra/superpowers.git",
   "https://github.com/obra/superpowers",
   "https://github.com/obra/superpowers.git",
   "ssh://git@github.com/obra/superpowers",
   "ssh://git@github.com/obra/superpowers.git",
+  "git://github.com/obra/superpowers",
+  "git://github.com/obra/superpowers.git",
 ] as const;
 
 const SHARED_PI_SKILLS_CONFLICT =
@@ -99,17 +103,27 @@ function pathsFor(ctx: AdapterContext): PiPaths {
 
 function isKnownUpstreamPiSource(raw: string): boolean {
   const source = raw.trim();
-  return KNOWN_UPSTREAM_PI_SOURCE_BASES.some((base) => {
-    if (source === base) return true;
-    if (!source.startsWith(`${base}@`)) return false;
-    const ref = source.slice(base.length + 1);
-    if (ref.length === 0) return false;
-    for (const character of ref) {
-      const code = character.codePointAt(0)!;
-      if (code <= 0x20 || code === 0x7f) return false;
-    }
-    return true;
-  });
+  const candidates = source.startsWith("git:")
+    ? [source, source.slice(4).trim()]
+    : [source];
+  return candidates.some((candidate) =>
+    KNOWN_UPSTREAM_PI_SOURCE_BASES.some((base) => {
+      if (candidate === base) return true;
+      const separator = candidate.at(base.length);
+      if (
+        !candidate.startsWith(base) ||
+        (separator !== "@" && separator !== "#")
+      )
+        return false;
+      const ref = candidate.slice(base.length + 1);
+      if (ref.length === 0) return false;
+      for (const character of ref) {
+        const code = character.codePointAt(0)!;
+        if (code <= 0x20 || code === 0x7f) return false;
+      }
+      return true;
+    }),
+  );
 }
 
 function toPosixPath(path: string): string {
