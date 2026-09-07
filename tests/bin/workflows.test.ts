@@ -276,51 +276,80 @@ void test("ci.yml declares the expected top-level contract", () => {
   });
   assert.deepEqual(ci.permissions, {});
   const jobs = requireMapping(ci.jobs, "jobs");
-  assert.deepEqual(Object.keys(jobs), ["test", "toolchain"]);
+  assert.deepEqual(Object.keys(jobs), [
+    "harness-codex",
+    "harness-pi",
+    "toolchain",
+  ]);
 });
 
-function validateCiTestJob(document: unknown): void {
+type HarnessJobContract = {
+  readonly key: "harness-codex" | "harness-pi";
+  readonly name: string;
+  readonly selector: string;
+};
+
+const HARNESS_JOBS: readonly HarnessJobContract[] = [
+  {
+    key: "harness-codex",
+    name: "Codex harness integration",
+    selector: "harness-codex",
+  },
+  {
+    key: "harness-pi",
+    name: "Pi harness integration",
+    selector: "harness-pi",
+  },
+];
+
+function validateCiHarnessJob(
+  document: unknown,
+  contract: HarnessJobContract,
+): void {
   const ci = requireMapping(document, "ci");
   const jobs = requireMapping(ci.jobs, "jobs");
-  const testJob = requireMapping(jobs.test, "jobs.test");
+  const path = `jobs.${contract.key}`;
+  const harnessJob = requireMapping(jobs[contract.key], path);
 
   assert.ok(
-    !Object.hasOwn(testJob, "continue-on-error"),
-    "jobs.test must not use continue-on-error",
+    !Object.hasOwn(harnessJob, "continue-on-error"),
+    `${path} must not use continue-on-error`,
   );
   assert.ok(
-    !Object.hasOwn(testJob, "if"),
-    "jobs.test must run unconditionally",
+    !Object.hasOwn(harnessJob, "if"),
+    `${path} must run unconditionally`,
   );
   assert.ok(
-    !Object.hasOwn(testJob, "needs"),
-    "jobs.test must remain independent of jobs.toolchain",
+    !Object.hasOwn(harnessJob, "needs"),
+    `${path} must remain independent of jobs.toolchain and the other harness`,
   );
-  assertNoNativeSelectorEnv(testJob, "jobs.test");
-  assert.equal(testJob["runs-on"], "ubuntu-latest");
+  assertNoNativeSelectorEnv(harnessJob, path);
+  assert.equal(harnessJob.name, contract.name);
+  assert.equal(harnessJob["runs-on"], "ubuntu-latest");
   assert.equal(
-    requireMapping(testJob.permissions, "jobs.test.permissions").contents,
+    requireMapping(harnessJob.permissions, `${path}.permissions`).contents,
     "read",
   );
 
   assert.ok(
-    !Object.hasOwn(testJob, "strategy"),
-    "the Codex integration runs once at its latest-24 default",
+    !Object.hasOwn(harnessJob, "strategy"),
+    `${contract.name} must run once at the container's latest-24 default`,
   );
 
-  const steps = testJob.steps;
-  assert.ok(Array.isArray(steps), "expected jobs.test.steps to be an array");
+  const steps = harnessJob.steps;
+  assert.ok(Array.isArray(steps), `expected ${path}.steps to be an array`);
+  const expectedCommand = `sh tests/container.sh ${contract.selector}`;
   assert.deepEqual(
-    runCommandInventory(steps, "jobs.test.steps"),
-    ["sh tests/container.sh codex-spike"],
-    "jobs.test must contain only the integration-only Codex run command",
+    runCommandInventory(steps, `${path}.steps`),
+    [expectedCommand],
+    `${path} must contain only its integration-only harness command`,
   );
   steps.forEach((candidate, index) => {
-    const step = requireMapping(candidate, `jobs.test.steps[${index}]`);
-    assertNoNativeSelectorEnv(step, `jobs.test.steps[${index}]`);
+    const step = requireMapping(candidate, `${path}.steps[${index}]`);
+    assertNoNativeSelectorEnv(step, `${path}.steps[${index}]`);
     assert.ok(
       !Object.hasOwn(step, "continue-on-error"),
-      `jobs.test.steps[${index}] must remain blocking`,
+      `${path}.steps[${index}] must remain blocking`,
     );
   });
 
@@ -350,12 +379,12 @@ function validateCiTestJob(document: unknown): void {
   const acceptance = containerInvocations[0];
   assert.equal(
     acceptance.command,
-    "sh tests/container.sh codex-spike",
-    "jobs.test must run only the offline Codex integration probe",
+    expectedCommand,
+    `${path} must run only its isolated harness integration`,
   );
   assert.ok(
     hardenIndex < checkoutIndex && checkoutIndex < acceptance.index,
-    "expected harden runner, checkout, and Codex integration in that order",
+    `expected harden runner, checkout, and ${contract.name} in that order`,
   );
 
   const harden = requireMapping(steps[hardenIndex], "harden runner step");
@@ -381,53 +410,80 @@ function validateCiTestJob(document: unknown): void {
   );
   assert.ok(
     !Object.hasOwn(acceptanceStep, "env"),
-    "Codex integration must use tests/container.sh's latest-24 default",
+    `${contract.name} must use tests/container.sh's latest-24 default`,
   );
   assert.ok(
     !Object.hasOwn(acceptanceStep, "if"),
-    "Codex integration must run in the PR job",
+    `${contract.name} must run in the PR job`,
   );
   assert.ok(
     !Object.hasOwn(acceptanceStep, "continue-on-error"),
-    "Codex integration step must not use continue-on-error",
+    `${contract.name} step must not use continue-on-error`,
   );
 }
 
-void test("ci.yml `test` job runs one independent Codex integration in order", async (t) => {
+void test("ci.yml native harness jobs run one independent integration each", async (t) => {
   const ci = loadWorkflow(join(WORKFLOW_DIR, "ci.yml"));
-  assert.doesNotThrow(() => validateCiTestJob(ci));
+  for (const contract of HARNESS_JOBS) {
+    await t.test(`${contract.name} has its isolated selector`, () => {
+      assert.doesNotThrow(() => validateCiHarnessJob(ci, contract));
+    });
 
-  await t.test("rejects the combined shared-plus-Codex suite", () => {
-    const mutant = structuredClone(ci);
-    const steps = requireMapping(
-      requireMapping(requireMapping(mutant, "ci").jobs, "jobs").test,
-      "jobs.test",
-    ).steps as unknown[];
-    const integration = steps.find(
-      (step) =>
-        typeof step === "object" &&
-        step !== null &&
-        typeof (step as Record<string, unknown>).run === "string",
-    ) as Record<string, unknown>;
-    integration.run = "sh tests/container.sh";
-    assert.throws(
-      () => validateCiTestJob(mutant),
-      /integration-only Codex run command/,
+    await t.test(
+      `${contract.name} rejects the combined container suite`,
+      () => {
+        const mutant = structuredClone(ci);
+        const steps = requireMapping(
+          requireMapping(requireMapping(mutant, "ci").jobs, "jobs")[
+            contract.key
+          ],
+          `jobs.${contract.key}`,
+        ).steps as unknown[];
+        const integration = steps.find(
+          (step) =>
+            typeof step === "object" &&
+            step !== null &&
+            typeof (step as Record<string, unknown>).run === "string",
+        ) as Record<string, unknown>;
+        integration.run = "sh tests/container.sh";
+        assert.throws(
+          () => validateCiHarnessJob(mutant, contract),
+          /integration-only harness command/,
+        );
+      },
     );
-  });
 
-  await t.test("rejects nonblocking Codex integration", () => {
-    const mutant = structuredClone(ci);
-    const testJob = requireMapping(
-      requireMapping(requireMapping(mutant, "ci").jobs, "jobs").test,
-      "jobs.test",
-    );
-    testJob["continue-on-error"] = true;
-    assert.throws(
-      () => validateCiTestJob(mutant),
-      /jobs\.test must not use continue-on-error/,
-    );
-  });
+    await t.test(`${contract.name} rejects a duplicate shared suite`, () => {
+      const mutant = structuredClone(ci);
+      const harnessJob = requireMapping(
+        requireMapping(requireMapping(mutant, "ci").jobs, "jobs")[contract.key],
+        `jobs.${contract.key}`,
+      );
+      (harnessJob.steps as unknown[]).push({ run: "pnpm test" });
+      assert.throws(
+        () => validateCiHarnessJob(mutant, contract),
+        /integration-only harness command/,
+      );
+    });
+
+    await t.test(`${contract.name} rejects nonblocking execution`, () => {
+      const mutant = structuredClone(ci);
+      const harnessJob = requireMapping(
+        requireMapping(requireMapping(mutant, "ci").jobs, "jobs")[contract.key],
+        `jobs.${contract.key}`,
+      );
+      harnessJob["continue-on-error"] = true;
+      assert.throws(
+        () => validateCiHarnessJob(mutant, contract),
+        new RegExp(
+          `jobs\\.${contract.key} must not use continue-on-error`.replaceAll(
+            "-",
+            "\\-",
+          ),
+        ),
+      );
+    });
+  }
 });
 
 function validateCiToolchain(document: unknown): void {
@@ -445,7 +501,7 @@ function validateCiToolchain(document: unknown): void {
   );
   assert.ok(
     !Object.hasOwn(toolchain, "needs"),
-    "jobs.toolchain must remain independent of jobs.test",
+    "jobs.toolchain must remain independent of native harness jobs",
   );
   assertNoNativeSelectorEnv(toolchain, "jobs.toolchain");
   assert.equal(toolchain["runs-on"], "ubuntu-latest");
@@ -1213,11 +1269,52 @@ void test(".version-bump.json declares the package.json version field", () => {
   });
 });
 
-void test("package.json carries the manager name and a stable semver version", () => {
+void test("package.json carries stable manager and harness discovery metadata", () => {
   const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   assert.equal(manifest.name, "superpowers-manager");
   // Shape only. The literal version is the release workflow's to move.
   parseStableSemver(manifest.version, "package.json version");
+  assert.match(manifest.description, /\bCodex\b/);
+  assert.match(manifest.description, /\bPi\b/);
+
+  const keywords = manifest.keywords;
+  assert.ok(Array.isArray(keywords), "package.json keywords must be an array");
+  assert.equal(
+    new Set(keywords).size,
+    keywords.length,
+    "keywords must be unique",
+  );
+  for (const keyword of [
+    "superpowers",
+    "obra-superpowers",
+    "agent-skills",
+    "ai-coding-agent",
+    "coding-agent",
+    "agent-harness",
+    "codex",
+    "codex-plugin",
+    "plugin-manager",
+    "cli",
+    "installer",
+    "updater",
+    "pi",
+    "pi-coding-agent",
+  ]) {
+    assert.ok(
+      keywords.includes(keyword),
+      `missing discovery keyword: ${keyword}`,
+    );
+  }
+
+  assert.equal(
+    manifest.scripts["test:harness:codex"],
+    "sh tests/container.sh harness-codex",
+  );
+  assert.equal(
+    manifest.scripts["test:harness:pi"],
+    "sh tests/container.sh harness-pi",
+  );
+  assert.equal(manifest.scripts["test:acceptance"], "sh tests/acceptance.sh");
 });
 
 void test("the stable-semver check rejects a prerelease", () => {

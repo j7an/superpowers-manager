@@ -13,17 +13,32 @@ if [ "${1:-}" = "--inside" ]; then
   mode="${2:-suite}"
   case "$mode" in
     suite)
+      echo "container suite: shared checks: start"
       sh tests/run.sh
-      exec sh tests/container/codex-offline-probe.sh
+      echo "container suite: shared checks: complete status=0"
+      echo "container suite: Codex harness integration: start"
+      sh tests/container/codex-offline-probe.sh
+      echo "container suite: Codex harness integration: complete status=0"
+      echo "container suite: Pi harness integration: start"
+      sh tests/container/pi-offline-probe.sh
+      echo "container suite: Pi harness integration: complete status=0"
       ;;
-    codex-spike) exec sh tests/container/codex-offline-probe.sh ;;
-    harness-pi) exec sh tests/container/pi-offline-probe.sh ;;
+    harness-codex)
+      echo "container: Codex harness integration: start"
+      sh tests/container/codex-offline-probe.sh
+      echo "container: Codex harness integration: complete status=0"
+      ;;
+    harness-pi)
+      echo "container: Pi harness integration: start"
+      sh tests/container/pi-offline-probe.sh
+      echo "container: Pi harness integration: complete status=0"
+      ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
 fi
 
 mode="${1:-suite}"
-case "$mode" in suite|codex-spike|harness-pi) ;; *) echo "usage: tests/container.sh [suite|codex-spike|harness-pi]" >&2; exit 2 ;; esac
+case "$mode" in suite|harness-codex|harness-pi) ;; *) echo "usage: tests/container.sh [suite|harness-codex|harness-pi]" >&2; exit 2 ;; esac
 
 native_node=${SPW_NATIVE_NODE_VERSION:-24}
 case "$native_node" in

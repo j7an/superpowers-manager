@@ -31,6 +31,14 @@ function recorder(record: string, label: string, exitStatus = 0): string {
   return `#!/bin/sh\nprintf '%s:%s\\n' ${shQuote(label)} "$*" >> ${shQuote(record)}\nexit ${exitStatus}\n`;
 }
 
+function harnessRecorder(
+  record: string,
+  codexStatus: number,
+  piStatus: number,
+): string {
+  return `#!/bin/sh\nprintf '%s:%s\\n' container "$*" >> ${shQuote(record)}\ncase "\${1:-}" in\n  harness-codex) exit ${codexStatus} ;;\n  harness-pi) exit ${piStatus} ;;\n  *) exit 97 ;;\nesac\n`;
+}
+
 function run(script: string) {
   return spawnSync("sh", [script, "--concurrency", "2"], {
     encoding: "utf8",
@@ -38,7 +46,7 @@ function run(script: string) {
   });
 }
 
-void test("local acceptance runs shared suites before the Codex harness", (t) => {
+void test("local acceptance runs shared suites before both native harnesses", (t) => {
   const f = fixture(t);
   writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
     mode: 0o755,
@@ -55,7 +63,18 @@ void test("local acceptance runs shared suites before the Codex harness", (t) =>
   assert.equal(result.status, 0, result.stderr);
   assert.equal(
     readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\ncontainer:codex-spike\n",
+    "shared:--require-package-node --concurrency 2\n" +
+      "container:harness-codex\n" +
+      "container:harness-pi\n",
+  );
+  assert.equal(
+    result.stdout,
+    "acceptance: shared checks: start\n" +
+      "acceptance: shared checks: complete status=0\n" +
+      "acceptance: Codex harness integration: start\n" +
+      "acceptance: Codex harness integration: complete status=0\n" +
+      "acceptance: Pi harness integration: start\n" +
+      "acceptance: Pi harness integration: complete status=0\n",
   );
 });
 
@@ -78,9 +97,10 @@ void test("local acceptance stops when the shared suite fails", (t) => {
     readFileSync(f.record, "utf8"),
     "shared:--require-package-node --concurrency 2\n",
   );
+  assert.equal(result.stdout, "acceptance: shared checks: start\n");
 });
 
-void test("local acceptance propagates a harness failure after shared suites", (t) => {
+void test("local acceptance stops when the Codex harness fails", (t) => {
   const f = fixture(t);
   writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
     mode: 0o755,
@@ -97,7 +117,44 @@ void test("local acceptance propagates a harness failure after shared suites", (
   assert.equal(result.status, 9);
   assert.equal(
     readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\ncontainer:codex-spike\n",
+    "shared:--require-package-node --concurrency 2\ncontainer:harness-codex\n",
+  );
+  assert.equal(
+    result.stdout,
+    "acceptance: shared checks: start\n" +
+      "acceptance: shared checks: complete status=0\n" +
+      "acceptance: Codex harness integration: start\n",
+  );
+});
+
+void test("local acceptance propagates a Pi harness failure last", (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
+    mode: 0o755,
+  });
+  writeFileSync(
+    join(f.tests, "container.sh"),
+    harnessRecorder(f.record, 0, 11),
+    { mode: 0o755 },
+  );
+
+  const result = run(f.script);
+
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 11);
+  assert.equal(
+    readFileSync(f.record, "utf8"),
+    "shared:--require-package-node --concurrency 2\n" +
+      "container:harness-codex\n" +
+      "container:harness-pi\n",
+  );
+  assert.equal(
+    result.stdout,
+    "acceptance: shared checks: start\n" +
+      "acceptance: shared checks: complete status=0\n" +
+      "acceptance: Codex harness integration: start\n" +
+      "acceptance: Codex harness integration: complete status=0\n" +
+      "acceptance: Pi harness integration: start\n",
   );
 });
 
@@ -122,4 +179,5 @@ void test("local acceptance stops after a signalled shared child", (t) => {
     readFileSync(f.record, "utf8"),
     "shared:--require-package-node --concurrency 2\n",
   );
+  assert.equal(result.stdout, "acceptance: shared checks: start\n");
 });

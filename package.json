@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.4.0",
-  "description": "Install and update the latest stable obra/superpowers release directly from upstream, without waiting for agent marketplaces to catch up. Codex supported today.",
+  "description": "Install and update the latest stable obra/superpowers release directly from upstream for Codex and Pi (pi-coding-agent), without waiting for agent marketplaces to catch up.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -14,7 +14,9 @@
     "plugin-manager",
     "cli",
     "installer",
-    "updater"
+    "updater",
+    "pi",
+    "pi-coding-agent"
   ],
   "license": "MIT",
   "type": "module",
@@ -27,7 +29,8 @@
     "test": "node tests/run-node-suites.ts",
     "test:unit": "node tests/run-node-suites.ts --group unit",
     "test:integration": "node tests/run-node-suites.ts --group integration",
-    "test:harness:codex": "sh tests/container.sh codex-spike",
+    "test:harness:codex": "sh tests/container.sh harness-codex",
+    "test:harness:pi": "sh tests/container.sh harness-pi",
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "check": "pnpm run check:static && pnpm run test",

@@ -3,19 +3,19 @@
 // claiming `probe` needs Python 3 and a POSIX sh, a regression that shipped
 // and survived four slices because nothing checked it (carried row 12).
 //
-// CLI-PREFLIGHT-01 already derives its own map from the same single
-// `commandRequirements` export, so this adds no new source of truth -- it
-// stops one document from restating one.
+// CLI-PREFLIGHT-01 already derives its own map from the same production
+// requirement accessors, so this adds no new source of truth -- it stops one
+// document from restating one.
 //
 // This file is RETAINED (slice 6, D2). Its earlier note said it "dies in slice
 // 6 with the table it guards"; that was wrong on its own terms. Three of its
-// four columns — git, Python 3, Codex CLI — derive from commandRequirements()
-// and never touched DISPATCH. Only the POSIX `sh` column did, and only that
-// column is gone. The regression this file was built for was slice 2 flipping
-// `probe` in-process and leaving README claiming `probe` needs Python 3, which
-// is a commandRequirements fact, not a dispatch fact — and commandRequirements
-// changes without any flip. PR 11.6 retargets SUPERPOWERS_VALIDATOR_EXECUTABLE,
-// which moves the exact `prepare` cell this table carries.
+// maintained columns derive from commandRequirements() or
+// commandRequirementsFor() and never touched DISPATCH. The retired POSIX `sh`
+// column was the exception. The regression this file was built for was slice 2
+// flipping `probe` in-process and leaving README claiming `probe` needs Python
+// 3, which is a requirement fact, not a dispatch fact. PR 11.6 retargets
+// SUPERPOWERS_VALIDATOR_EXECUTABLE, which moves the exact `prepare` cell this
+// table carries.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,33 +25,52 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 import * as cli from "../../src/cli.ts";
+import { piHarness } from "../../src/pi-harness.ts";
 
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
-// Column heading -> the COMMAND_REQUIREMENTS token it reports on.
+type HarnessName = "codex" | "pi";
+type Subcommand = keyof ReturnType<typeof cli.commandRequirements>;
+
+// Column heading -> selected harness and production requirement token.
 const TOOL_COLUMNS = [
-  ["git", "git"],
-  ["Python 3", "python3"],
-  ["Codex CLI", "codex"],
-];
-const COLUMNS = ["git", "Python 3", "Codex CLI"];
+  ["git", "codex", "git"],
+  ["Python 3", "codex", "python3"],
+  ["Codex CLI (default)", "codex", "codex"],
+  ["Pi CLI (`--harness pi`)", "pi", "pi"],
+] as const satisfies readonly (readonly [string, HarnessName, string])[];
+const COLUMNS = TOOL_COLUMNS.map(([column]) => column);
+
+function requirements(
+  env: NodeJS.ProcessEnv,
+): Record<HarnessName, Record<Subcommand, string[]>> {
+  const pi = Object.fromEntries(
+    Object.entries(cli.commandRequirementsFor(env, piHarness)).map(
+      ([command, tools]) => [
+        command,
+        tools.map((requirement) => requirement.name),
+      ],
+    ),
+  ) as Record<Subcommand, string[]>;
+  return { codex: cli.commandRequirements(env), pi };
+}
 
 function derive(): Record<string, string>[] {
-  const unset = cli.commandRequirements({});
-  const withValidator = cli.commandRequirements({
+  const unset = requirements({});
+  const withValidator = requirements({
     SUPERPOWERS_VALIDATOR: "/validator.py",
   });
-  return Object.keys(unset).map((command) => {
-    const key = command as keyof typeof unset;
+  return Object.keys(unset.codex).map((command) => {
+    const key = command as Subcommand;
 
     const row: Record<string, string> = { Command: command };
-    for (const [column, tool] of TOOL_COLUMNS) {
+    for (const [column, harness, tool] of TOOL_COLUMNS) {
       // Required with no validator configured -> plainly required. Required
       // only once one is -> conditional. The README must say which; a boolean
       // cell would be a lie in one direction or the other.
-      row[column] = unset[key].includes(tool)
+      row[column] = unset[harness][key].includes(tool)
         ? "yes"
-        : withValidator[key].includes(tool)
+        : withValidator[harness][key].includes(tool)
           ? "only with SUPERPOWERS_VALIDATOR"
           : "no";
     }

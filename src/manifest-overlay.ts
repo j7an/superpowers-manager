@@ -96,7 +96,7 @@ function setMember(
 
 /**
  * Map strict-json's diagnostics onto the CPython wording the callers assert.
- * Repository policy at `AGENTS.md:91::most diagnostics are asserted as`
+ * Repository policy at `AGENTS.md:92::most diagnostics are asserted as`
  * freezes most of these diagnostics as complete-string contracts.
  */
 function translate(cause: unknown, source: string, path: string): SafetyError {

@@ -2,9 +2,10 @@
 
 ## Repository Purpose
 
-This repository is a stateless npm/npx manager that turns upstream Superpowers
-releases into a locally installable Codex plugin marketplace. References to
-Codex below describe the product integration, not a required agent harness.
+This repository is an npm/npx manager that turns upstream Superpowers releases
+into a locally installable Codex plugin marketplace or a persistent Pi package
+snapshot. References to Codex or Pi below describe product integrations, not a
+required agent harness.
 
 ## Source and Generated-File Boundaries
 
@@ -145,6 +146,7 @@ Codex below describe the product integration, not a required agent harness.
   pnpm run test:unit
   pnpm run test:integration
   pnpm run test:harness:codex
+  pnpm run test:harness:pi
   pnpm run test:acceptance
   ```
 
@@ -204,18 +206,22 @@ Codex below describe the product integration, not a required agent harness.
   `set -eu` prevent absent, ambiguous, wrong-archive, or failed checksums from
   reaching extraction. Linux CI uses `actions/setup-node`; test cases never
   download runtimes.
+
 - Release validation is the deliberate combined-path exception: validate both
   native endpoints sequentially with
   `SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh` and
   `SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh`. The default is `24` and
-  all other selectors are rejected. Each image also runs the installed package
-  on Node 24.0.0 through its verified `SPW_PACKAGE_NODE` binary, declared by
+  all other selectors are rejected. Each combined image runs shared checks,
+  then Codex, then Pi. It also runs the installed package on Node 24.0.0 through
+  its verified `SPW_PACKAGE_NODE` binary, declared by
   `SPW_PACKAGE_NODE_VERSION`. The minimum binary never runs TypeScript tooling.
-- Keep Layers 1-3 hermetic: no network access and no mutation of the developer's or runner's real Codex state.
-- Layer 4 lives behind `pnpm run test:harness:codex` and is blocking: it
-  exercises the real Codex CLI only inside an isolated container home with
-  networking disabled, so it may mutate that throwaway container state but
-  never the developer's or runner's real Codex state.
+- Keep Layers 1-3 hermetic: no network access and no mutation of the developer's
+  or runner's real Codex or Pi state.
+- Layer 4 lives behind the blocking `pnpm run test:harness:codex` and
+  `pnpm run test:harness:pi` scripts. Each exercises only its named real CLI
+  inside an isolated container home with networking disabled, so it may mutate
+  throwaway container state but never the developer's or runner's real harness
+  state. `pnpm run test:acceptance` runs shared checks once, then both harnesses.
 - Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the

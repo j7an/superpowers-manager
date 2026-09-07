@@ -12,7 +12,8 @@ concurrency:
 permissions: {}
 
 jobs:
-  test:
+  harness-codex:
+    name: Codex harness integration
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,8 +32,31 @@ jobs:
           # every one of them unresolvable.
           fetch-depth: 0
 
-      - name: Run offline Codex integration
-        run: sh tests/container.sh codex-spike
+      - name: Run Codex harness integration
+        run: sh tests/container.sh harness-codex
+
+  harness-pi:
+    name: Pi harness integration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: the citation gate resolves `git show <sha>:path`
+          # citations into commits that predate HEAD. A depth-1 checkout makes
+          # every one of them unresolvable.
+          fetch-depth: 0
+
+      - name: Run Pi harness integration
+        run: sh tests/container.sh harness-pi
 
   toolchain:
     runs-on: ubuntu-latest

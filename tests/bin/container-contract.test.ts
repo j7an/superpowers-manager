@@ -854,11 +854,29 @@ function validateRunnerInsideBranch(runner: string) {
       "--inside must reject UIDs other than 10001 before selecting or dispatching the acceptance mode",
     );
   }
-  const suiteRe =
-    /suite\)\s+sh tests\/run\.sh\s+exec sh tests\/container\/codex-offline-probe\.sh\s+;;/;
-  if (!suiteRe.test(runner)) {
+  const suiteMatch = /^\s*suite\)\n([\s\S]*?)^\s*;;/m.exec(runner);
+  if (!suiteMatch) {
+    throw new ContractViolation("runner must define suite mode");
+  }
+  const suite = suiteMatch[1];
+  requireOrderedSource(
+    suite,
+    [
+      'echo "container suite: shared checks: start"',
+      "sh tests/run.sh",
+      'echo "container suite: shared checks: complete status=0"',
+      'echo "container suite: Codex harness integration: start"',
+      "sh tests/container/codex-offline-probe.sh",
+      'echo "container suite: Codex harness integration: complete status=0"',
+      'echo "container suite: Pi harness integration: start"',
+      "sh tests/container/pi-offline-probe.sh",
+      'echo "container suite: Pi harness integration: complete status=0"',
+    ],
+    "suite mode must run shared checks, Codex, and Pi in order",
+  );
+  if (/\bexec\b/.test(suite)) {
     throw new ContractViolation(
-      "suite mode must run the inner suite and then the offline Codex probe",
+      "suite mode must not exec before every harness has completed",
     );
   }
 }
@@ -883,9 +901,9 @@ void test("container-contract", async (t) => {
       const runner = readFileSync(RUNNER_PATH, "utf8");
       assert.match(
         runner,
-        /harness-pi\) exec sh tests\/container\/pi-offline-probe\.sh ;;/,
+        /harness-pi\)\s+echo "container: Pi harness integration: start"\s+sh tests\/container\/pi-offline-probe\.sh\s+echo "container: Pi harness integration: complete status=0"\s+;;/,
       );
-      assert.match(runner, /suite\|codex-spike\|harness-pi/);
+      assert.match(runner, /suite\|harness-codex\|harness-pi/);
       const probe = readFileSync(
         join(ROOT, "tests/container/pi-offline-probe.sh"),
         "utf8",
@@ -1167,13 +1185,10 @@ void test("container-contract", async (t) => {
         ),
       );
     });
-    await t.test("runner defines the codex-spike mode", () => {
-      const branch = /^\s*codex-spike\)(.*)$/m.exec(runner);
-      assert.ok(branch, "runner must define codex-spike mode");
-      assert.equal(
-        branch[1].trim(),
-        "exec sh tests/container/codex-offline-probe.sh ;;",
-        "codex-spike must execute only the offline Codex probe",
+    await t.test("runner defines the named Codex harness mode", () => {
+      assert.match(
+        runner,
+        /harness-codex\)\s+echo "container: Codex harness integration: start"\s+sh tests\/container\/codex-offline-probe\.sh\s+echo "container: Codex harness integration: complete status=0"\s+;;/,
       );
     });
     await t.test("runner reads the actual container uid", () => {
@@ -1188,7 +1203,7 @@ void test("container-contract", async (t) => {
     // --- inventory items 38-40: runner --inside structural check ---------
 
     await t.test(
-      "runner's --inside branch gates UID 10001 before mode selection and dispatch, then routes suite mode through run.sh and the offline probe",
+      "runner's --inside branch gates UID 10001, then runs shared checks and both harnesses in order",
       () => {
         assert.doesNotThrow(() => validateRunnerInsideBranch(runner));
       },
