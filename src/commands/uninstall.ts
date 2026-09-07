@@ -7,7 +7,7 @@ import { oneLine } from "../cli-arguments.ts";
 import type { Output } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import { withMutation } from "./mutation.ts";
+import { runWithMutation } from "./mutation.ts";
 import { replayOutcome } from "./probe.ts";
 
 type StageResult<T> =
@@ -216,21 +216,9 @@ export async function runUninstall<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
-  let actionThrew = false;
-  try {
-    return await withMutation("uninstall", ctx, async (scoped) => {
-      try {
-        return await performUninstall(argv, scoped);
-      } catch (cause) {
-        actionThrew = true;
-        throw cause;
-      }
-    });
-  } catch (cause) {
-    if (actionThrew) throw cause;
-    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
-    return 1;
-  }
+  return await runWithMutation("uninstall", ctx, async (scoped) =>
+    performUninstall(argv, scoped),
+  );
 }
 
 async function performUninstall<R>(

@@ -23,7 +23,7 @@ import {
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
-import { withMutation } from "./mutation.ts";
+import { runWithMutation } from "./mutation.ts";
 
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
@@ -437,21 +437,9 @@ export async function runPrepare<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
-  let actionThrew = false;
-  try {
-    return await withMutation("prepare", ctx, async (scoped) => {
-      try {
-        return await performPrepare(argv, scoped);
-      } catch (cause) {
-        actionThrew = true;
-        throw cause;
-      }
-    });
-  } catch (cause) {
-    if (actionThrew) throw cause;
-    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
-    return 1;
-  }
+  return await runWithMutation("prepare", ctx, async (scoped) =>
+    performPrepare(argv, scoped),
+  );
 }
 
 async function performPrepare<R>(
@@ -548,7 +536,7 @@ async function performPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:577-585::if (cleanupWarning`.
+    // `src/commands/install.ts:546-554::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

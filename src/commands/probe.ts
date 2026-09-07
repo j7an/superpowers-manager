@@ -5,7 +5,18 @@ import {
 } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
-import type { FailureSite, ProbeSnapshot } from "../harness.ts";
+import type { Compatibility } from "../harness-compatibility.ts";
+import type {
+  Decision,
+  FailureSite,
+  InstalledState,
+  Output,
+  OwnershipInspection,
+  PreparedArtifact,
+  PreparedState,
+  ProbeSnapshot,
+  UpdateControlInspection,
+} from "../harness.ts";
 import type { CommandContext } from "./context.ts";
 
 export const PROBE_USAGE =
@@ -64,6 +75,111 @@ type Inspection<T> =
       readonly result: AdapterResult<T> | null;
     };
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export function validOutput(value: Output): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    Array.isArray(candidate.stdout) &&
+    candidate.stdout.every((line) => typeof line === "string") &&
+    Array.isArray(candidate.stderr) &&
+    candidate.stderr.every((line) => typeof line === "string")
+  );
+}
+
+function validDecision(value: Decision): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    (candidate.kind === "allowed" ||
+      (candidate.kind === "blocked" && validOutput(candidate.output as Output)))
+  );
+}
+
+function validCompatibility(value: Compatibility): boolean {
+  const candidate = record(value);
+  if (
+    candidate === null ||
+    typeof candidate.reason !== "string" ||
+    (candidate.kind !== "unknown" &&
+      candidate.kind !== "supported" &&
+      candidate.kind !== "experimental" &&
+      candidate.kind !== "unsupported")
+  )
+    return false;
+  return (
+    (candidate.kind !== "supported" && candidate.kind !== "experimental") ||
+    typeof candidate.generation === "string"
+  );
+}
+
+function validPreparedArtifact(value: PreparedArtifact): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    typeof candidate.root === "string" &&
+    typeof candidate.commit === "string" &&
+    typeof candidate.identity === "string" &&
+    validCompatibility(candidate.compatibility as Compatibility)
+  );
+}
+
+function validPrepared(value: PreparedState): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    typeof candidate.observedIdentity === "string" &&
+    validCompatibility(candidate.compatibility as Compatibility) &&
+    (candidate.kind === "needs-prepare" ||
+      (candidate.kind === "current" &&
+        validPreparedArtifact(candidate.artifact as PreparedArtifact)))
+  );
+}
+
+export function validInstalled(value: InstalledState): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    (candidate.kind === "current" ||
+      candidate.kind === "mismatch" ||
+      candidate.kind === "absent") &&
+    typeof candidate.observedIdentity === "string" &&
+    (candidate.kind !== "absent" || candidate.observedIdentity === "")
+  );
+}
+
+function validOwnership<R>(value: OwnershipInspection<R>): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    validDecision(candidate.installEligibility as Decision) &&
+    Object.prototype.hasOwnProperty.call(candidate, "removalInput") &&
+    validDecision(candidate.removalVerification as Decision) &&
+    validOutput(candidate.postRemovalOutput as Output) &&
+    typeof candidate.presentationValue === "string" &&
+    (candidate.presentationConflicts === undefined ||
+      (Array.isArray(candidate.presentationConflicts) &&
+        candidate.presentationConflicts.every(
+          (conflict) => typeof conflict === "string",
+        )))
+  );
+}
+
+function validControl(value: UpdateControlInspection): boolean {
+  const candidate = record(value);
+  return (
+    candidate !== null &&
+    validDecision(candidate.probeEligibility as Decision) &&
+    validDecision(candidate.mutationEligibility as Decision) &&
+    typeof candidate.presentationValue === "string"
+  );
+}
+
 // `runAdapter` reports a CONTROLLED failure by RETURN VALUE, not by throwing
 // (`src/adapter-result.ts:32-35::export interface AdapterResult`). The shell got
 // fail-closed behaviour for free: spw_invoke_adapter returned 1 and
@@ -83,6 +199,7 @@ async function inspect<T>(
   call: () => Promise<AdapterResult<T>>,
   unexpected: string,
   invalidStatus: string,
+  valid: (value: T) => boolean,
 ): Promise<Inspection<T>> {
   let result: AdapterResult<T>;
   try {
@@ -108,6 +225,13 @@ async function inspect<T>(
       result,
       message: outcome.ok ? invalidStatus : null,
     };
+  }
+  try {
+    if (!valid(outcome.result)) {
+      return { ok: false, result, message: invalidStatus };
+    }
+  } catch {
+    return { ok: false, result, message: invalidStatus };
   }
   return { ok: true, result: { status: result.status, outcome } };
 }
@@ -164,8 +288,9 @@ export async function gatherProbe<R>(
     call: () => Promise<AdapterResult<T>>,
     unexpected: string,
     invalidStatus: string,
+    valid: (value: T) => boolean,
   ): Promise<Inspection<T>> => {
-    const result = await inspect(call, unexpected, invalidStatus);
+    const result = await inspect(call, unexpected, invalidStatus, valid);
     if (result.result !== null) outcomes.push(result.result.outcome);
     return result;
   };
@@ -174,6 +299,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectPrepared(selection, adapterContext),
     "cannot inspect prepared harness state",
     "adapter reported a failure status for prepared harness inspection",
+    validPrepared,
   );
   if (!prepared.ok) {
     return { status: 1, outcomes, message: prepared.message };
@@ -185,6 +311,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectInstalled(selection, adapterContext),
     installedFailure.unexpected,
     installedFailure.invalidStatus,
+    validInstalled,
   );
   if (!installed.ok) {
     return { status: 1, outcomes, message: installed.message };
@@ -200,6 +327,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectOwnership(adapterContext),
     ownershipFailure.unexpected,
     ownershipFailure.invalidStatus,
+    validOwnership,
   );
   if (!ownership.ok) {
     return { status: 1, outcomes, message: ownership.message };
@@ -209,6 +337,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectUpdateControl(adapterContext),
     controlFailure.unexpected,
     controlFailure.invalidStatus,
+    validControl,
   );
   if (!control.ok) {
     return { status: 1, outcomes, message: control.message };
@@ -218,6 +347,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectPrepared(selection, adapterContext),
     "cannot inspect prepared harness state",
     "adapter reported a failure status for prepared harness inspection",
+    validPrepared,
   );
   if (!preparedAfter.ok)
     return { status: 1, outcomes, message: preparedAfter.message };
@@ -225,6 +355,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectInstalled(selection, adapterContext),
     installedFailure.unexpected,
     installedFailure.invalidStatus,
+    validInstalled,
   );
   if (!installedAfter.ok)
     return { status: 1, outcomes, message: installedAfter.message };
@@ -232,6 +363,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectUpdateControl(adapterContext),
     controlFailure.unexpected,
     controlFailure.invalidStatus,
+    validControl,
   );
   if (!controlAfter.ok)
     return { status: 1, outcomes, message: controlAfter.message };

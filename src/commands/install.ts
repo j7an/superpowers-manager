@@ -9,15 +9,19 @@ import type { EffectiveSelection } from "../effective-selection.ts";
 import type {
   Output,
   PreparedArtifact,
-  InstalledState,
   InstallReceipt,
   InstallTransaction,
 } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import { gatherProbe, replayOutcome } from "./probe.ts";
+import {
+  gatherProbe,
+  replayOutcome,
+  validInstalled,
+  validOutput,
+} from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
-import { withMutation } from "./mutation.ts";
+import { runWithMutation } from "./mutation.ts";
 import { activationBlock } from "../harness-compatibility.ts";
 
 function writeOutput(
@@ -90,29 +94,6 @@ async function invoke<T>(
     ok: true,
     result: { status: result.status, outcome },
   };
-}
-
-function validInstalled(value: InstalledState): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    (value.kind === "current" ||
-      value.kind === "mismatch" ||
-      value.kind === "absent") &&
-    typeof value.observedIdentity === "string" &&
-    (value.kind !== "absent" || value.observedIdentity === "")
-  );
-}
-
-function validOutput(value: Output): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value.stdout) &&
-    value.stdout.every((line) => typeof line === "string") &&
-    Array.isArray(value.stderr) &&
-    value.stderr.every((line) => typeof line === "string")
-  );
 }
 
 function validReceipt(value: InstallReceipt): boolean {
@@ -432,21 +413,9 @@ export async function runInstall<R>(
 ): Promise<number> {
   if (ctx.adapter.presentation.installNotice !== "")
     ctx.stdout.write(`${ctx.adapter.presentation.installNotice}\n`);
-  let actionThrew = false;
-  try {
-    return await withMutation("install", ctx, async (scoped) => {
-      try {
-        return await performInstall(argv, scoped);
-      } catch (cause) {
-        actionThrew = true;
-        throw cause;
-      }
-    });
-  } catch (cause) {
-    if (actionThrew) throw cause;
-    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
-    return 1;
-  }
+  return await runWithMutation("install", ctx, async (scoped) =>
+    performInstall(argv, scoped),
+  );
 }
 
 async function performInstall<R>(
@@ -467,7 +436,7 @@ async function performInstall<R>(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:337-395::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:469-527::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
     // stream too, including the three foreign-text exceptions at :251-296:

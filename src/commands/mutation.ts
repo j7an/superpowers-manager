@@ -3,6 +3,7 @@ import { upstreamCacheRoot } from "../upstream-workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { SafetyError } from "../safety-error.ts";
 import { isAbsolute } from "node:path";
+import { oneLine } from "../cli-arguments.ts";
 
 export type MutationCommand = "prepare" | "install" | "update" | "uninstall";
 
@@ -74,4 +75,26 @@ export async function withMutation<R>(
   return await ctx.coordination.withResources(resources, async () =>
     action(scoped),
   );
+}
+
+export async function runWithMutation<R>(
+  command: MutationCommand,
+  ctx: CommandContext<R>,
+  action: (scoped: CommandContext<R>) => Promise<number>,
+): Promise<number> {
+  let actionThrew = false;
+  try {
+    return await withMutation(command, ctx, async (scoped) => {
+      try {
+        return await action(scoped);
+      } catch (cause) {
+        actionThrew = true;
+        throw cause;
+      }
+    });
+  } catch (cause) {
+    if (actionThrew) throw cause;
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
+    return 1;
+  }
 }

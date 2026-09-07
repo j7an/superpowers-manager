@@ -882,6 +882,168 @@ void test("probe performs only the four read-only inspections", async (t) => {
   );
 });
 
+void test("probe rejects malformed successful payloads at every existing observation boundary", async (t) => {
+  const cases = [
+    ["prepared", "initial"],
+    ["prepared", "closing"],
+    ["installed", "initial"],
+    ["installed", "closing"],
+    ["ownership", "initial"],
+    ["control", "initial"],
+    ["control", "closing"],
+  ] as const;
+  for (const [stage, phase] of cases) {
+    await t.test(`${stage}/${phase}`, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      const reads = {
+        prepared: 0,
+        installed: 0,
+        ownership: 0,
+        control: 0,
+      };
+      const targetRead = phase === "initial" ? 1 : 2;
+      const privatePayloadFailure = new Error(
+        `private ${stage} payload failure`,
+      );
+      const malformed =
+        phase === "initial"
+          ? null
+          : new Proxy(
+              {},
+              {
+                get() {
+                  throw privatePayloadFailure;
+                },
+              },
+            );
+      const messages = [
+        {
+          channel: "stdout" as const,
+          text: `fixture ${stage} diagnostic`,
+        },
+      ];
+      const corrupt = <T>(operation: string, value: T): AdapterResult<T> =>
+        successResult(operation, value, messages);
+      const adapter = {
+        ...fixture.adapter,
+        ...fixture.methods,
+        presentation: {
+          ...fixture.adapter.presentation,
+          callFailure(
+            site: Parameters<
+              typeof fixture.adapter.presentation.callFailure
+            >[0],
+          ) {
+            return {
+              unexpected: `unexpected ${site} inspection failure`,
+              invalidStatus: `invalid ${site} inspection payload`,
+            };
+          },
+        },
+        async inspectPrepared(
+          selection: typeof fixture.selection,
+          adapterContext: Parameters<typeof fixture.methods.inspectPrepared>[1],
+        ): Promise<AdapterResult<PreparedState>> {
+          const result = await fixture.methods.inspectPrepared(
+            selection,
+            adapterContext,
+          );
+          reads.prepared += 1;
+          return stage === "prepared" && reads.prepared === targetRead
+            ? corrupt("inspect-prepared", malformed as PreparedState)
+            : result;
+        },
+        async inspectInstalled(
+          selection: typeof fixture.selection,
+          adapterContext: Parameters<
+            typeof fixture.methods.inspectInstalled
+          >[1],
+        ): Promise<AdapterResult<InstalledState>> {
+          const result = await fixture.methods.inspectInstalled(
+            selection,
+            adapterContext,
+          );
+          reads.installed += 1;
+          return stage === "installed" && reads.installed === targetRead
+            ? corrupt("inspect-installed", malformed as InstalledState)
+            : result;
+        },
+        async inspectOwnership(
+          adapterContext: Parameters<
+            typeof fixture.methods.inspectOwnership
+          >[0],
+        ): Promise<AdapterResult<OwnershipInspection<never>>> {
+          const result = await fixture.methods.inspectOwnership(adapterContext);
+          reads.ownership += 1;
+          return stage === "ownership" && reads.ownership === targetRead
+            ? corrupt(
+                "inspect-ownership",
+                malformed as OwnershipInspection<never>,
+              )
+            : (result as AdapterResult<OwnershipInspection<never>>);
+        },
+        async inspectUpdateControl(
+          adapterContext: Parameters<
+            typeof fixture.methods.inspectUpdateControl
+          >[0],
+        ): Promise<AdapterResult<UpdateControlInspection>> {
+          const result =
+            await fixture.methods.inspectUpdateControl(adapterContext);
+          reads.control += 1;
+          return stage === "control" && reads.control === targetRead
+            ? corrupt("inspect-control", malformed as UpdateControlInspection)
+            : result;
+        },
+      };
+
+      assert.equal(
+        await runProbe([], { ...fixture.ctx, adapter }),
+        1,
+        `${stage}/${phase}`,
+      );
+      assert.equal(fixture.out.text(), `fixture ${stage} diagnostic\n`);
+      assert.equal(
+        fixture.err.text(),
+        stage === "prepared"
+          ? "error: adapter reported a failure status for prepared harness inspection\n"
+          : `error: invalid probe-${stage} inspection payload\n`,
+      );
+      assert.doesNotMatch(
+        fixture.err.text(),
+        /private .* payload failure|Cannot read properties/,
+      );
+    });
+  }
+});
+
+void test("probe keeps the generic removal capability opaque", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const removalCapability = {
+    receipt: "opaque-removal-capability",
+    privateToken: Symbol("opaque-removal-capability"),
+  };
+  const adapter = {
+    ...fixture.adapter,
+    ...fixture.methods,
+    async inspectOwnership(
+      adapterContext: Parameters<typeof fixture.methods.inspectOwnership>[0],
+    ): Promise<AdapterResult<OwnershipInspection<typeof removalCapability>>> {
+      const result = await fixture.methods.inspectOwnership(adapterContext);
+      assert.equal(result.outcome.ok, true);
+      return successResult(
+        "inspect-ownership",
+        { ...result.outcome.result, removalInput: removalCapability },
+        result.outcome.messages,
+      );
+    },
+  };
+
+  const outcome = await gatherProbe({ ...fixture.ctx, adapter });
+  assert.equal(outcome.status, 0);
+  if (outcome.status === 0)
+    assert.equal(outcome.facts.ownership.removalInput, removalCapability);
+});
+
 void test("update composes probe, preparation, and installation through a non-Codex adapter", async (t) => {
   const fixture = await createHarnessFixture(t);
   let preparedReads = 0;
