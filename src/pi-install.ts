@@ -340,6 +340,24 @@ async function retireJournal(p: Pending): Promise<void> {
   await rmdir(p.paths.recoveryRoot);
 }
 
+async function journalRetirementGuidance(p: Pending): Promise<string> {
+  try {
+    const kind = await classifyPathNoFollow(p.paths.recoveryRoot);
+    if (kind === "missing")
+      return `recovery directory ${p.paths.recoveryRoot} is absent; verify the installed state because no recovery journal remains`;
+    if (kind !== "directory")
+      return `recovery path ${p.paths.recoveryRoot} is no longer a directory; preserve it unchanged and inspect it manually`;
+    const entries = await readdir(p.paths.recoveryRoot);
+    if (entries.some((name) => name !== "transaction.json"))
+      return `recovery directory ${p.paths.recoveryRoot} contains unexpected material; preserve it unchanged and inspect its contents manually`;
+    if (entries.includes("transaction.json"))
+      return `the Manager recovery journal remains at ${journalPath(p)} and no other recovery material was observed; verify the installed state and confirm the recovery directory still contains only that journal before retiring it`;
+    return `the recovery journal is absent and ${p.paths.recoveryRoot} was observed as an empty directory; verify the installed state and confirm the directory is still empty before removing it`;
+  } catch {
+    return `recovery state at ${p.paths.recoveryRoot} could not be inspected; preserve that path unchanged and inspect it manually`;
+  }
+}
+
 async function requirePublication(p: Pending): Promise<void> {
   await requireJournal(p);
   if (p.publishedIdentity === undefined)
@@ -390,7 +408,7 @@ async function finalizePiPublication(
     if (publicationCleanupCompleted)
       return fail(
         "recovery-required",
-        `Pi activation was verified and backup cleanup completed, but journal retirement failed; preserve recovery material at ${p.paths.recoveryRoot} and verify the installed snapshot at ${p.paths.installedRoot} before removing the stale journal manually`,
+        `Pi activation was verified and backup cleanup completed, but journal retirement failed; ${await journalRetirementGuidance(p)}`,
       );
     return fail(
       "recovery-required",
@@ -409,6 +427,7 @@ async function rollbackPiPublication(
       "Pi installation transaction has already been settled",
     );
   p.settled = true;
+  let retirementStarted = false;
   try {
     await requirePublication(p);
     const current = await registration(p.paths, p.deps);
@@ -443,9 +462,15 @@ async function rollbackPiPublication(
     )
       throw new Error("Pi registration restoration unverified");
     await phase(p, "restored");
+    retirementStarted = true;
     await retireJournal(p);
     return successResult("rollback-pi", null, []);
   } catch {
+    if (retirementStarted)
+      return fail(
+        "recovery-required",
+        `Pi restoration of the previous snapshot and registration was verified, but journal retirement failed; ${await journalRetirementGuidance(p)}`,
+      );
     return fail(
       "recovery-required",
       `Pi restoration could not be verified; preserve the installed snapshot and recovery material at ${p.paths.recoveryRoot} and ${p.backup} for manual resolution`,

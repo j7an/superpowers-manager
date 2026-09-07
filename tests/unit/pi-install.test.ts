@@ -775,7 +775,7 @@ void test("Pi journal retirement failure after backup cleanup reports the retain
     assert.equal(result.outcome.error.code, "recovery-required");
     assert.equal(
       result.outcome.error.message,
-      `Pi activation was verified and backup cleanup completed, but journal retirement failed; preserve recovery material at ${f.paths.recoveryRoot} and verify the installed snapshot at ${f.paths.installedRoot} before removing the stale journal manually`,
+      `Pi activation was verified and backup cleanup completed, but journal retirement failed; the Manager recovery journal remains at ${journalPath} and no other recovery material was observed; verify the installed state and confirm the recovery directory still contains only that journal before retiring it`,
     );
   }
   assert.equal(
@@ -789,6 +789,138 @@ void test("Pi journal retirement failure after backup cleanup reports the retain
     "finalizing",
   );
   assert.equal((await installPi(next, f.ctx, f.deps)).outcome.ok, false);
+});
+
+void test("Pi journal retirement preserves unexpected recovery material without advising its removal", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(await installPi(f.artifact, f.ctx, f.deps)).finalize(),
+  );
+  const next = await f.prepare("2".repeat(40), "updated");
+  const tx = transaction(await installPi(next, f.ctx, f.deps));
+  const backup = readdirSync(f.paths.managerRoot).find((name) =>
+    name.startsWith(".installed.bak."),
+  );
+  assert.ok(backup);
+  const journalPath = join(f.paths.recoveryRoot, "transaction.json");
+  const foreignPath = join(f.paths.recoveryRoot, "operator-note");
+  writeFileSync(foreignPath, "preserve");
+
+  const result = await tx.finalize();
+
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "recovery-required");
+    assert.equal(
+      result.outcome.error.message,
+      `Pi activation was verified and backup cleanup completed, but journal retirement failed; recovery directory ${f.paths.recoveryRoot} contains unexpected material; preserve it unchanged and inspect its contents manually`,
+    );
+  }
+  assert.equal(existsSync(join(f.paths.managerRoot, backup)), false);
+  assert.equal(existsSync(journalPath), true);
+  assert.equal(readFileSync(foreignPath, "utf8"), "preserve");
+  assert.equal(
+    readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+    "updated",
+  );
+});
+
+void test("Pi post-unlink retirement failure reports the absent journal and observed empty recovery directory", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(await installPi(f.artifact, f.ctx, f.deps)).finalize(),
+  );
+  const next = await f.prepare("2".repeat(40), "updated");
+  const tx = transaction(await installPi(next, f.ctx, f.deps));
+  const backup = readdirSync(f.paths.managerRoot).find((name) =>
+    name.startsWith(".installed.bak."),
+  );
+  assert.ok(backup);
+  const journalPath = join(f.paths.recoveryRoot, "transaction.json");
+  const realRmdir = fs.promises.rmdir;
+  const failRecoveryRemoval: typeof fs.promises.rmdir = async (
+    path,
+    options,
+  ) => {
+    if (String(path) === f.paths.recoveryRoot)
+      throw new Error("injected recovery directory removal failure");
+    return realRmdir(path, options);
+  };
+  const mockedRmdir = t.mock.method(fs.promises, "rmdir", failRecoveryRemoval);
+  syncBuiltinESMExports();
+  let result: AdapterResult<null>;
+  try {
+    result = await tx.finalize();
+  } finally {
+    mockedRmdir.mock.restore();
+    syncBuiltinESMExports();
+  }
+
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "recovery-required");
+    assert.equal(
+      result.outcome.error.message,
+      `Pi activation was verified and backup cleanup completed, but journal retirement failed; the recovery journal is absent and ${f.paths.recoveryRoot} was observed as an empty directory; verify the installed state and confirm the directory is still empty before removing it`,
+    );
+  }
+  assert.equal(existsSync(join(f.paths.managerRoot, backup)), false);
+  assert.equal(existsSync(journalPath), false);
+  assert.deepEqual(readdirSync(f.paths.recoveryRoot), []);
+  assert.equal(
+    readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+    "updated",
+  );
+});
+
+void test("Pi rollback retirement failure reports the verified restoration without naming the consumed backup", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(await installPi(f.artifact, f.ctx, f.deps)).finalize(),
+  );
+  const next = await f.prepare("2".repeat(40), "updated");
+  const tx = transaction(await installPi(next, f.ctx, f.deps));
+  const backup = readdirSync(f.paths.managerRoot).find((name) =>
+    name.startsWith(".installed.bak."),
+  );
+  assert.ok(backup);
+  const journalPath = join(f.paths.recoveryRoot, "transaction.json");
+  const realUnlink = fs.promises.unlink;
+  const failJournalRetirement: typeof fs.promises.unlink = async (path) => {
+    if (String(path) === journalPath)
+      throw new Error("injected rollback journal retirement failure");
+    return realUnlink(path);
+  };
+  const mockedUnlink = t.mock.method(
+    fs.promises,
+    "unlink",
+    failJournalRetirement,
+  );
+  syncBuiltinESMExports();
+  let result: AdapterResult<null>;
+  try {
+    result = await tx.rollback();
+  } finally {
+    mockedUnlink.mock.restore();
+    syncBuiltinESMExports();
+  }
+
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "recovery-required");
+    assert.equal(
+      result.outcome.error.message,
+      `Pi restoration of the previous snapshot and registration was verified, but journal retirement failed; the Manager recovery journal remains at ${journalPath} and no other recovery material was observed; verify the installed state and confirm the recovery directory still contains only that journal before retiring it`,
+    );
+    assert.equal(result.outcome.error.message.includes(backup), false);
+  }
+  assert.equal(
+    readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+    "original",
+  );
+  assert.equal(existsSync(join(f.paths.managerRoot, backup)), false);
+  assert.equal(existsSync(journalPath), true);
+  assert.equal(JSON.parse(readFileSync(journalPath, "utf8")).phase, "restored");
 });
 
 void test("Pi first-install rollback preserves a registration whose filters changed", async (t) => {
