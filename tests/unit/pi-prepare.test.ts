@@ -9,6 +9,7 @@ import {
   preparePiCandidate,
   readPiPrepared,
 } from "../../src/pi-prepare.ts";
+import { piHarness } from "../../src/pi-harness.ts";
 import {
   digestPiTree,
   validatePiPackage,
@@ -148,6 +149,12 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
 
   const adapter: typeof notCalledAdapter = {
     ...notCalledAdapter,
+    preparationLocation(adapterCtx) {
+      return piHarness.preparationLocation(adapterCtx);
+    },
+    async mutationRoots(adapterCtx) {
+      return await piHarness.mutationRoots(adapterCtx);
+    },
     inspectPrepared: inspectPiPrepared,
     async inspectInstalled() {
       return successResult(

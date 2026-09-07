@@ -108,7 +108,7 @@ const textContentCases: Array<[string, string, boolean]> = [
   ],
   [
     "AGENTS.md",
-    "no mutation of the developer's or runner's real Codex state",
+    "no mutation of the developer's\n  or runner's real Codex or Pi state",
     true,
   ],
   [
@@ -130,7 +130,11 @@ const textContentCases: Array<[string, string, boolean]> = [
   ["README.md", "pnpm install --frozen-lockfile", true],
   ["README.md", "node src/cli.ts", true],
   ["README.md", "toolchain", true],
-  ["README.md", "no public harness selector", true],
+  [
+    "README.md",
+    "Commands target Codex by default; use `--harness pi` for Pi.",
+    true,
+  ],
   ["README.md", "superpowers-manager pin v6.1.1", true],
   ["README.md", "superpowers-manager track-latest", true],
   ["README.md", "superpowers-manager unpin", true],

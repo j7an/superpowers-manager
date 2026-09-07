@@ -14,16 +14,19 @@ assert.deepStrictEqual(bin.parseArgs([]), {
   kind: "run",
   cmd: "update",
   args: [],
+  options: { harness: "codex", allowExperimental: false },
 });
 assert.deepStrictEqual(bin.parseArgs(["probe", "--porcelain"]), {
   kind: "run",
   cmd: "probe",
   args: ["--porcelain"],
+  options: { harness: "codex", allowExperimental: false },
 });
 assert.deepStrictEqual(bin.parseArgs(["pin", "v6.1.1"]), {
   kind: "run",
   cmd: "pin",
   args: ["v6.1.1"],
+  options: { harness: "codex", allowExperimental: false },
 });
 for (const ref of [
   "v0.0.0",
@@ -36,6 +39,7 @@ for (const ref of [
     kind: "run",
     cmd: "pin",
     args: [ref],
+    options: { harness: "codex", allowExperimental: false },
   });
 }
 for (const ref of [
@@ -61,8 +65,8 @@ for (const argv of [
   ["unpin", "x"],
   // PR 11.5 slice 2: probe's arity is CLI-owned, so a typo'd flag, a stray
   // positional, and a repeated flag are all usage errors here rather than
-  // reaching runProbe. `tests/bin/units.test.ts:88::const cmd of ["prepare", "probe"`'s loop below still asserts that bare `probe`
-  // parses as a run, and `tests/bin/units.test.ts:18::bin.parseArgs(["probe", "--porcelain"])` that `probe --porcelain` does.
+  // reaching runProbe. `tests/bin/units.test.ts:92::const cmd of ["prepare", "probe"`'s loop below still asserts that bare `probe`
+  // parses as a run, and `tests/bin/units.test.ts:19::bin.parseArgs(["probe", "--porcelain"])` that `probe --porcelain` does.
   ["probe", "--porcelaine"],
   ["probe", "extra"],
   ["probe", "--porcelain", "extra"],
