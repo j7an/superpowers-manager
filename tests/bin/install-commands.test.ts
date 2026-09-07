@@ -1914,6 +1914,74 @@ void describe("install commands", { concurrency: true }, () => {
         );
       },
     );
+
+    await t.test(
+      "Pi install and update admit a differing runtime without experimental opt-in",
+      async (t) => {
+        const c = installCase();
+        const upstream = nativeFixture(t);
+        const commitA = commitFixture(upstream);
+        const selectionA = nativeSelection(commitA);
+        const piLog = join(c.state, "pi.log");
+        const initial = caseContext(c, {
+          adapter: codexHarness,
+          env: { SUPERPOWERS_PI: writePiExecutable(c), SPW_PI_LOG: piLog },
+        });
+        const ctxA = {
+          ...initial.ctx,
+          adapter: piHarness,
+          selection: selectionA,
+          options: { harness: "pi" as const, allowExperimental: false },
+        };
+        const paths = piPaths(ctxA.env, process.cwd());
+        const preparedA = await preparePiCandidate(
+          {
+            upstreamRoot: upstream,
+            workspaceRoot: c.tmp,
+            candidateRoot: paths.preparedRoot,
+            selection: selectionA,
+          },
+          ctxA,
+        );
+        assert.ok(preparedA.outcome.ok);
+        assert.equal(preparedA.outcome.result.compatibility.kind, "supported");
+        assert.equal(
+          await runInstall([], ctxA),
+          0,
+          initial.stdout() + initial.stderr(),
+        );
+        const receiptA = await readPiReceipt(paths.installedRoot);
+        assert.equal(receiptA.commit, commitA);
+        assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
+
+        const commitB = commitPhaseB(upstream);
+        const selectionB = nativeSelection(commitB);
+        const ctxB = { ...ctxA, selection: selectionB };
+        const retiredPreparation = join(c.dir, "retired-pi-preparation");
+        renameSync(paths.preparedRoot, retiredPreparation);
+        const preparedB = await preparePiCandidate(
+          {
+            upstreamRoot: upstream,
+            workspaceRoot: c.tmp,
+            candidateRoot: paths.preparedRoot,
+            selection: selectionB,
+          },
+          ctxB,
+        );
+        assert.ok(preparedB.outcome.ok);
+        writeFileSync(piLog, "");
+        assert.equal(
+          await runUpdate([], ctxB),
+          0,
+          initial.stdout() + initial.stderr(),
+        );
+        const receiptB = await readPiReceipt(paths.installedRoot);
+        assert.equal(receiptB.commit, commitB);
+        assert.notEqual(receiptB.digest, receiptA.digest);
+        assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
+        assert.ok(readLog(piLog).includes("--version"));
+      },
+    );
   });
 
   // Port-only (no shell original): row 18's first genuine consumer. The shell
@@ -1980,68 +2048,4 @@ void describe("install commands", { concurrency: true }, () => {
     );
   });
 
-  void test("Pi install and update admit a differing runtime without experimental opt-in", async (t) => {
-    const c = installCase();
-    const upstream = nativeFixture(t);
-    const commitA = commitFixture(upstream);
-    const selectionA = nativeSelection(commitA);
-    const piLog = join(c.state, "pi.log");
-    const initial = caseContext(c, {
-      adapter: codexHarness,
-      env: { SUPERPOWERS_PI: writePiExecutable(c), SPW_PI_LOG: piLog },
-    });
-    const ctxA = {
-      ...initial.ctx,
-      adapter: piHarness,
-      selection: selectionA,
-      options: { harness: "pi" as const, allowExperimental: false },
-    };
-    const paths = piPaths(ctxA.env, process.cwd());
-    const preparedA = await preparePiCandidate(
-      {
-        upstreamRoot: upstream,
-        workspaceRoot: c.tmp,
-        candidateRoot: paths.preparedRoot,
-        selection: selectionA,
-      },
-      ctxA,
-    );
-    assert.ok(preparedA.outcome.ok);
-    assert.equal(preparedA.outcome.result.compatibility.kind, "supported");
-    assert.equal(
-      await runInstall([], ctxA),
-      0,
-      initial.stdout() + initial.stderr(),
-    );
-    const receiptA = await readPiReceipt(paths.installedRoot);
-    assert.equal(receiptA.commit, commitA);
-    assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
-
-    const commitB = commitPhaseB(upstream);
-    const selectionB = nativeSelection(commitB);
-    const ctxB = { ...ctxA, selection: selectionB };
-    const retiredPreparation = join(c.dir, "retired-pi-preparation");
-    renameSync(paths.preparedRoot, retiredPreparation);
-    const preparedB = await preparePiCandidate(
-      {
-        upstreamRoot: upstream,
-        workspaceRoot: c.tmp,
-        candidateRoot: paths.preparedRoot,
-        selection: selectionB,
-      },
-      ctxB,
-    );
-    assert.ok(preparedB.outcome.ok);
-    writeFileSync(piLog, "");
-    assert.equal(
-      await runUpdate([], ctxB),
-      0,
-      initial.stdout() + initial.stderr(),
-    );
-    const receiptB = await readPiReceipt(paths.installedRoot);
-    assert.equal(receiptB.commit, commitB);
-    assert.notEqual(receiptB.digest, receiptA.digest);
-    assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
-    assert.ok(readLog(piLog).includes("--version"));
-  });
 });
