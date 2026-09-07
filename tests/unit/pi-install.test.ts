@@ -873,6 +873,74 @@ void test("Pi post-unlink retirement failure reports the absent journal and obse
   );
 });
 
+void test("Pi retirement guidance refuses Manager cleanup advice for a replaced recovery directory", async (t) => {
+  for (const mode of ["empty", "foreign-journal"] as const)
+    await t.test(mode, async (t) => {
+      const f = await fixture(t);
+      value(
+        await transaction(
+          await installPi(f.artifact, f.ctx, f.deps),
+        ).finalize(),
+      );
+      const next = await f.prepare("2".repeat(40), "updated");
+      const tx = transaction(await installPi(next, f.ctx, f.deps));
+      const backup = readdirSync(f.paths.managerRoot).find((name) =>
+        name.startsWith(".installed.bak."),
+      );
+      assert.ok(backup);
+      const journalPath = join(f.paths.recoveryRoot, "transaction.json");
+      const originalRecovery = join(
+        f.paths.managerRoot,
+        `original-recovery-${mode}`,
+      );
+      const realUnlink = fs.promises.unlink;
+      const replaceRecoveryAfterUnlink: typeof fs.promises.unlink = async (
+        path,
+      ) => {
+        if (String(path) !== journalPath) return realUnlink(path);
+        await realUnlink(path);
+        renameSync(f.paths.recoveryRoot, originalRecovery);
+        mkdirSync(f.paths.recoveryRoot);
+        if (mode === "foreign-journal")
+          writeFileSync(journalPath, "foreign recovery journal");
+      };
+      const mockedUnlink = t.mock.method(
+        fs.promises,
+        "unlink",
+        replaceRecoveryAfterUnlink,
+      );
+      syncBuiltinESMExports();
+      let result: AdapterResult<null>;
+      try {
+        result = await tx.finalize();
+      } finally {
+        mockedUnlink.mock.restore();
+        syncBuiltinESMExports();
+      }
+
+      assert.equal(result.outcome.ok, false);
+      if (!result.outcome.ok) {
+        assert.equal(result.outcome.error.code, "recovery-required");
+        assert.equal(
+          result.outcome.error.message,
+          `Pi activation was verified and backup cleanup completed, but journal retirement failed; recovery directory identity at ${f.paths.recoveryRoot} changed or could not be verified; preserve it unchanged and inspect it manually`,
+        );
+      }
+      assert.equal(existsSync(join(f.paths.managerRoot, backup)), false);
+      assert.deepEqual(readdirSync(originalRecovery), []);
+      if (mode === "foreign-journal")
+        assert.equal(
+          readFileSync(journalPath, "utf8"),
+          "foreign recovery journal",
+        );
+      else assert.deepEqual(readdirSync(f.paths.recoveryRoot), []);
+      assert.equal(
+        readFileSync(join(f.paths.installedRoot, "extra.txt"), "utf8"),
+        "updated",
+      );
+    });
+});
+
 void test("Pi rollback retirement failure reports the verified restoration without naming the consumed backup", async (t) => {
   const f = await fixture(t);
   value(

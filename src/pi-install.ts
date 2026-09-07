@@ -347,7 +347,14 @@ async function journalRetirementGuidance(p: Pending): Promise<string> {
       return `recovery directory ${p.paths.recoveryRoot} is absent; verify the installed state because no recovery journal remains`;
     if (kind !== "directory")
       return `recovery path ${p.paths.recoveryRoot} is no longer a directory; preserve it unchanged and inspect it manually`;
-    const entries = await readdir(p.paths.recoveryRoot);
+    let entries: string[];
+    try {
+      await requireIdentity(p.paths.recoveryRoot, p.recoveryIdentity);
+      entries = await readdir(p.paths.recoveryRoot);
+      await requireIdentity(p.paths.recoveryRoot, p.recoveryIdentity);
+    } catch {
+      return `recovery directory identity at ${p.paths.recoveryRoot} changed or could not be verified; preserve it unchanged and inspect it manually`;
+    }
     if (entries.some((name) => name !== "transaction.json"))
       return `recovery directory ${p.paths.recoveryRoot} contains unexpected material; preserve it unchanged and inspect its contents manually`;
     if (entries.includes("transaction.json"))
