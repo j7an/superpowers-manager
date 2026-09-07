@@ -27,6 +27,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { exactError } from "../lib/error-assertions.ts";
+import { SUPPORTED_PI_RUNTIME_VERSION } from "../../src/pi-native.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -863,6 +864,51 @@ function validateRunnerInsideBranch(runner: string) {
 }
 
 void test("container-contract", async (t) => {
+  await t.test(
+    "Pi acceptance uses the supported runtime and isolated native resources",
+    () => {
+      const tools = JSON.parse(readFileSync(TOOLS_PACKAGE_PATH, "utf8"));
+      const lock = JSON.parse(readFileSync(LOCKFILE_PATH, "utf8"));
+      const name = "@earendil-works/pi-coding-agent";
+      assert.equal(tools.dependencies[name], SUPPORTED_PI_RUNTIME_VERSION);
+      assert.match(tools.dependencies[name], /^\d+\.\d+\.\d+$/);
+      assert.equal(
+        lock.packages[""].dependencies[name],
+        tools.dependencies[name],
+      );
+      assert.equal(
+        lock.packages[`node_modules/${name}`].version,
+        tools.dependencies[name],
+      );
+      const runner = readFileSync(RUNNER_PATH, "utf8");
+      assert.match(
+        runner,
+        /harness-pi\) exec sh tests\/container\/pi-offline-probe\.sh ;;/,
+      );
+      assert.match(runner, /suite\|codex-spike\|harness-pi/);
+      const probe = readFileSync(
+        join(ROOT, "tests/container/pi-offline-probe.sh"),
+        "utf8",
+      );
+      assert.match(probe, /env -i/);
+      assert.match(probe, /PI_OFFLINE=1/);
+      assert.match(probe, /PI_OFFLINE=0 pi update --extensions --no-approve/);
+      assert.equal((probe.match(/PI_OFFLINE=0/g) ?? []).length, 1);
+      assert.match(probe, /pi harness integration: complete status=0/);
+      assert.match(probe, /unrelated-provider/);
+      const observer = readFileSync(
+        join(ROOT, "tests/container/pi-resource-probe.ts"),
+        "utf8",
+      );
+      assert.match(observer, /await import\(pathToFileURL/);
+      assert.match(observer, /DefaultResourceLoader/);
+      assert.match(observer, /await loader\.reload\(\)/);
+      assert.match(observer, /runner\.emitContext\(/);
+      assert.match(observer, /session_compact/);
+      assert.match(observer, /assert\.deepEqual\(loaded\.errors, \[\]\)/);
+      assert.match(observer, /assert\.equal\(digest, receipt\.digest/);
+    },
+  );
   // --- inventory items 1-6: file-existence / executable-bit -----------
 
   await t.test("tests/container/Dockerfile exists", () => {
@@ -1020,7 +1066,7 @@ void test("container-contract", async (t) => {
   // --- inventory items 14-18: container tool package/lockfile ----------
 
   await t.test(
-    "tests/container/package.json declares exactly one dependency, @openai/codex, exact-pinned and lockfile-consistent",
+    "tests/container/package.json declares only approved harness dependencies, exact-pinned and lockfile-consistent",
     () => {
       const packageData = JSON.parse(readFileSync(TOOLS_PACKAGE_PATH, "utf8"));
       const lockData = JSON.parse(readFileSync(LOCKFILE_PATH, "utf8"));
@@ -1030,10 +1076,10 @@ void test("container-contract", async (t) => {
         dependencies && typeof dependencies === "object",
         "container tool package must declare dependencies",
       );
-      assert.equal(
-        Object.keys(dependencies).join("\n"),
-        "@openai/codex",
-        "container tool package must contain only @openai/codex",
+      assert.deepEqual(
+        Object.keys(dependencies).sort(),
+        ["@earendil-works/pi-coding-agent", "@openai/codex"],
+        "container tool package must contain only approved harnesses",
       );
 
       const declared = dependencies["@openai/codex"];

@@ -17,12 +17,13 @@ if [ "${1:-}" = "--inside" ]; then
       exec sh tests/container/codex-offline-probe.sh
       ;;
     codex-spike) exec sh tests/container/codex-offline-probe.sh ;;
+    harness-pi) exec sh tests/container/pi-offline-probe.sh ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
 fi
 
 mode="${1:-suite}"
-case "$mode" in suite|codex-spike) ;; *) echo "usage: tests/container.sh [suite|codex-spike]" >&2; exit 2 ;; esac
+case "$mode" in suite|codex-spike|harness-pi) ;; *) echo "usage: tests/container.sh [suite|codex-spike|harness-pi]" >&2; exit 2 ;; esac
 
 native_node=${SPW_NATIVE_NODE_VERSION:-24}
 case "$native_node" in
