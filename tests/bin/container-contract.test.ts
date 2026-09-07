@@ -39,7 +39,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { exactError } from "../lib/error-assertions.ts";
-import { SUPPORTED_PI_RUNTIME_VERSION } from "../../src/pi-native.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -895,12 +894,11 @@ function validateRunnerInsideBranch(runner: string) {
 
 void test("container-contract", async (t) => {
   await t.test(
-    "Pi acceptance uses the supported runtime and isolated native resources",
+    "Pi acceptance uses a pinned qualification runtime and isolated native resources",
     () => {
       const tools = JSON.parse(readFileSync(TOOLS_PACKAGE_PATH, "utf8"));
       const lock = JSON.parse(readFileSync(LOCKFILE_PATH, "utf8"));
       const name = "@earendil-works/pi-coding-agent";
-      assert.equal(tools.dependencies[name], SUPPORTED_PI_RUNTIME_VERSION);
       assert.match(tools.dependencies[name], /^\d+\.\d+\.\d+$/);
       assert.equal(
         lock.packages[""].dependencies[name],

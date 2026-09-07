@@ -31,7 +31,6 @@ import {
   removePi,
   type PiInstallDependencies,
 } from "../../src/pi-install.ts";
-import { SUPPORTED_PI_RUNTIME_VERSION } from "../../src/pi-native.ts";
 import {
   digestPiTree,
   piReceiptBinding,
@@ -41,6 +40,8 @@ import { piPaths } from "../../src/pi-paths.ts";
 import { readPiSettings } from "../../src/pi-settings.ts";
 import { inspectPiOwnership } from "../../src/pi-state.ts";
 import { nativeFixture, nativeSelection } from "../lib/pi-package-fixture.ts";
+
+const RUNTIME_RESPONSE = "99.2.3";
 
 function value<T>(result: AdapterResult<T>): T {
   assert.equal(result.status, 0, JSON.stringify(result));
@@ -117,11 +118,7 @@ async function fixture(
     run: async (args) => {
       calls.push([...args]);
       if (args[0] === "--version")
-        return successResult(
-          "pi-command",
-          { stdout: SUPPORTED_PI_RUNTIME_VERSION },
-          [],
-        );
+        return successResult("pi-command", { stdout: RUNTIME_RESPONSE }, []);
       assert.deepEqual(args.slice(2), ["--no-approve"]);
       const settings = JSON.parse(readFileSync(paths.settingsFile, "utf8")) as {
         packages: string[];
@@ -320,7 +317,7 @@ void test("Pi native failure after registration uses read-back and restores firs
   assert.equal(f.calls.filter((args) => args[0] === "remove").length, 1);
 });
 
-void test("Pi activation rejects altered candidate, foreign snapshot, and unsupported runtime", async (t) => {
+void test("Pi activation rejects altered candidate, foreign snapshot, and invalid runtime response", async (t) => {
   for (const mode of ["candidate", "foreign", "runtime"] as const)
     await t.test(mode, async (t) => {
       const f = await fixture(t);
@@ -1142,12 +1139,11 @@ void test("Pi interruption leaves a pre-publication journal that identifies the 
     import { beginDirectoryPublication } from './src/atomic.ts';
     import { readPiSettings } from './src/pi-settings.ts';
     import { successResult } from './src/adapter-result.ts';
-    import { SUPPORTED_PI_RUNTIME_VERSION } from './src/pi-native.ts';
     const artifact = JSON.parse(process.env.TEST_ARTIFACT);
     const ctx = { root: process.env.TEST_ROOT, env: { HOME: process.env.TEST_ROOT, PI_CODING_AGENT_DIR: process.env.TEST_AGENT } };
     await installPi(artifact, ctx, {
       readSettings: readPiSettings,
-      run: async (args) => { if(args[0] !== '--version') throw Error('unexpected native command'); return successResult('pi-command', {stdout: SUPPORTED_PI_RUNTIME_VERSION}, []); },
+      run: async (args) => { if(args[0] !== '--version') throw Error('unexpected native command'); return successResult('pi-command', {stdout: ${JSON.stringify(RUNTIME_RESPONSE)}}, []); },
       beginPublication: async (...args) => {
         await beginDirectoryPublication(...args);
         process.send('phase-ready');
