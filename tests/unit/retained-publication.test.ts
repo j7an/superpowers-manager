@@ -211,6 +211,56 @@ void test("finalize cleanup failure leaves the published and backup bytes", asyn
   assert.equal(await marker(backup), "before");
 });
 
+void test("finalize refuses a replacement at the retained backup path", async (t) => {
+  const parent = await sandbox(t);
+  const live = join(parent, "live");
+  const candidate = join(parent, "candidate");
+  const originalBackup = join(parent, "original-backup");
+  await tree(live, "before");
+  await tree(candidate, "after");
+  const publication = await beginDirectoryPublication(candidate, live);
+  const backup = publication.backup;
+  assert.ok(backup);
+  await rename(backup, originalBackup);
+  await tree(backup, "foreign");
+
+  const error = await safetyFailure(publication.finalize());
+
+  assert.equal(error.details?.phase, "post-replacement");
+  assert.equal(
+    error.message,
+    `directory finalization refused because backup changed unexpectedly at ${backup}`,
+  );
+  assert.equal(await marker(live), "after");
+  assert.equal(await marker(backup), "foreign");
+  assert.equal(await marker(originalBackup), "before");
+});
+
+void test("rollback refuses a replacement at the retained backup path before deleting live", async (t) => {
+  const parent = await sandbox(t);
+  const live = join(parent, "live");
+  const candidate = join(parent, "candidate");
+  const originalBackup = join(parent, "original-backup");
+  await tree(live, "before");
+  await tree(candidate, "after");
+  const publication = await beginDirectoryPublication(candidate, live);
+  const backup = publication.backup;
+  assert.ok(backup);
+  await rename(backup, originalBackup);
+  await tree(backup, "foreign");
+
+  const error = await safetyFailure(publication.rollback());
+
+  assert.equal(error.details?.phase, "post-replacement");
+  assert.equal(
+    error.message,
+    `directory rollback refused because backup changed unexpectedly at ${backup}`,
+  );
+  assert.equal(await marker(live), "after");
+  assert.equal(await marker(backup), "foreign");
+  assert.equal(await marker(originalBackup), "before");
+});
+
 void test("publication settlement is single-use", async (t) => {
   const parent = await sandbox(t);
   const live = join(parent, "live");

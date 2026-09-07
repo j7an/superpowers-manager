@@ -206,6 +206,7 @@ export async function beginDirectoryPublication(
   const renamePath = options.hooks?.rename ?? rename;
   const removePath = options.hooks?.rm ?? rm;
   let backupCreated = false;
+  let backupIdentity: DirectoryIdentity | null = null;
   let phase: AtomicErrorDetails["phase"] = "pre-replacement";
   try {
     const backup = options.backupPath ?? (await chooseBackup(live));
@@ -213,6 +214,7 @@ export async function beginDirectoryPublication(
       await validateRequestedBackup(backup, candidate, live);
     }
     if (await exists(live)) {
+      backupIdentity = await directoryIdentity(live);
       await renamePath(live, backup);
       backupCreated = true;
     }
@@ -254,6 +256,7 @@ export async function beginDirectoryPublication(
     }
 
     const retainedBackup = backupCreated ? backup : null;
+    const retainedBackupIdentity = backupCreated ? backupIdentity : null;
     let settled = false;
     const claimSettlement = () => {
       if (settled) {
@@ -264,6 +267,29 @@ export async function beginDirectoryPublication(
       }
       settled = true;
     };
+    const requireRetainedBackup = async (
+      action: "finalization" | "rollback",
+    ) => {
+      if (retainedBackup === null) return;
+      let currentIdentity: DirectoryIdentity;
+      try {
+        currentIdentity = await directoryIdentity(retainedBackup);
+      } catch (cause) {
+        throw publicationFailure(
+          `directory ${action} refused because backup changed unexpectedly at ${retainedBackup}`,
+          cause,
+        );
+      }
+      if (
+        retainedBackupIdentity === null ||
+        !sameIdentity(currentIdentity, retainedBackupIdentity)
+      ) {
+        throw publicationFailure(
+          `directory ${action} refused because backup changed unexpectedly at ${retainedBackup}`,
+          new Error("retained backup directory identity changed"),
+        );
+      }
+    };
 
     return {
       live,
@@ -271,6 +297,7 @@ export async function beginDirectoryPublication(
       async finalize() {
         claimSettlement();
         if (retainedBackup === null) return;
+        await requireRetainedBackup("finalization");
         try {
           await removePath(retainedBackup, { recursive: true, force: true });
         } catch (cause) {
@@ -282,6 +309,7 @@ export async function beginDirectoryPublication(
       },
       async rollback() {
         claimSettlement();
+        await requireRetainedBackup("rollback");
         let currentIdentity: DirectoryIdentity;
         try {
           currentIdentity = await directoryIdentity(live);
