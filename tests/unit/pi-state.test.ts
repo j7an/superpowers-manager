@@ -569,12 +569,14 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
     "git://github.com/obra/superpowers",
   ];
   const explicitTransportSources = explicitTransportBases.flatMap((base) =>
-    ["", ".git", "@refs/heads/main", ".git@refs/heads/main", "#main", ".git#main"].flatMap(
-      (suffix) => [
-        `${base}${suffix}`,
-        `git:${base}${suffix}`,
-      ],
-    ),
+    [
+      "",
+      ".git",
+      "@refs/heads/main",
+      ".git@refs/heads/main",
+      "#main",
+      ".git#main",
+    ].flatMap((suffix) => [`${base}${suffix}`, `git:${base}${suffix}`]),
   );
   const hostedShorthandSources = [
     "git:github.com/obra/superpowers",
