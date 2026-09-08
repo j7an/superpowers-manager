@@ -123,8 +123,8 @@ void test("README requirements table matches production preflight", () => {
   assert.deepEqual(parseRegion(), derive());
 });
 
-void test("README separates runtime qualification from admission", () => {
-  const text = readFileSync(join(ROOT, "README.md"), "utf8").replace(
+void test("Pi reference separates runtime qualification from admission", () => {
+  const text = readFileSync(join(ROOT, "docs/pi.md"), "utf8").replace(
     /\s+/g,
     " ",
   );

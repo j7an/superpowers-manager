@@ -1,11 +1,22 @@
 # Internal harness interface
 
-Codex is the only supported production integration. The interface is internal
-TypeScript, not a public plugin protocol or a promise of other harness support.
+Codex and Pi are supported production integrations behind the same internal
+TypeScript interface. It is not a public plugin protocol or a promise of support
+for additional harnesses.
 
-Implement HarnessAdapter<R> for a future integration and supply it at the CLI
-composition point. Shared commands must not import that concrete implementation.
-R belongs to the adapter: ownership inspection returns it and removal consumes
+The [CLI composition point](../src/cli.ts) selects one concrete adapter per
+invocation using `--harness codex` or `--harness pi`; omission defaults to Codex.
+Upstream selection is shared, while preparation and activation target the chosen
+harness independently.
+
+- The [Codex adapter](../src/codex-harness.ts) manages a generated Codex plugin
+  and its marketplace/plugin registration.
+- The [Pi adapter](../src/pi-harness.ts) manages a Pi package and its registration,
+  with a durable Manager-owned installed snapshot separate from prepared output.
+
+Implement `HarnessAdapter<R>` for an additional integration and supply it at
+the CLI composition point. Shared commands must not import concrete adapters.
+`R` belongs to the adapter: ownership inspection returns it and removal consumes
 it unchanged within the same invocation. It is not persisted authorization.
 
 Preparation receives resolved upstream identity and invocation-owned staging.
@@ -21,6 +32,5 @@ Use typed outcomes, existing diagnostic helpers, and hermetic tests. Native
 output and filesystem contents still require validation. Do not place raw
 validator streams through AdapterMessageLog.
 
-See the [internal interface](../src/harness.ts), the concrete
-[Codex adapter](../src/codex-harness.ts), and the
+See the [internal interface](../src/harness.ts) and the
 [boundary acceptance tests](../tests/unit/harness-boundary.test.ts).
