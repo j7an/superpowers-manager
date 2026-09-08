@@ -235,3 +235,20 @@ optional native manual probe. The 68-row table and 11 static `test(` calls are
 unchanged. The focused workflow/container/bootstrap group passed 118/118 on
 2026-09-06. The inventory and digest change is submitted for independent
 reviewer authorization; this note does not authorize its own re-freeze.
+
+## README reference relocation reconciliation (issue #120)
+
+The historical assertions at items 26-39 remain unchanged above. Their live
+ports preserve the same 68-row cardinality while following ownership after the
+README simplification: items 26-32 now read `CONTRIBUTING.md` (test execution,
+acceptance layers, package-manager, maintained CLI, and CI toolchain); items
+34-39 now read `docs/usage.md` (selection commands and invocation-only ref
+override). Item 33 remains in `README.md` but now asserts the equivalent
+default-target wording, `Omitting \`--harness\` selects Codex.` The negative
+item 85 now reads `CONTRIBUTING.md`, the owner of test-suite detail. Runtime
+qualification/admission coverage moves from README to `docs/pi.md` in
+`tests/bin/readme-requirements.test.ts`, outside this historical bootstrap map.
+No historical item, live text-row count, or bootstrap static-test count changes.
+
+This inventory and its bootstrap digest require independent reviewer
+re-freeze authorization; this reconciliation does not authorize itself.

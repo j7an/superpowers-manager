@@ -562,20 +562,65 @@ void test("recognizable unmanaged Pi package and native resources block activati
 });
 
 void test("only evidenced official Pi source spellings are recognized as upstream conflicts", async (t) => {
-  for (const source of [
-    "git:github.com/obra/superpowers",
-    "git:github.com/obra/superpowers@v6.3.0",
-    "git:github.com/obra/superpowers.git@refs/heads/main",
-    "git:git@github.com:obra/superpowers",
-    "git:git@github.com:obra/superpowers@v6.3.0",
+  const explicitTransportBases = [
     "http://github.com/obra/superpowers",
-    "http://github.com/obra/superpowers.git",
-    "http://github.com/obra/superpowers@v6.3.0",
+    "http://www.github.com/obra/superpowers",
     "https://github.com/obra/superpowers",
-    "https://github.com/obra/superpowers.git",
-    "https://github.com/obra/superpowers@v6.3.0",
-    "ssh://git@github.com/obra/superpowers.git",
-    "ssh://git@github.com/obra/superpowers.git@v6.3.0",
+    "ssh://git@github.com/obra/superpowers",
+    "git://github.com/obra/superpowers",
+    "git://user@github.com/obra/superpowers",
+  ];
+  const explicitTransportSources = explicitTransportBases.flatMap((base) =>
+    [
+      "",
+      ".git",
+      "@refs/heads/main",
+      ".git@refs/heads/main",
+      "#main",
+      ".git#main",
+    ].flatMap((suffix) => [`${base}${suffix}`, `git:${base}${suffix}`]),
+  );
+  const hostedShorthandSources = [
+    "git:github.com/obra/superpowers",
+    "git:github.com/obra/superpowers.git",
+    "git:github.com/obra/superpowers@refs/heads/main",
+    "git:github.com/obra/superpowers.git@refs/heads/main",
+    "git:github.com/obra/superpowers#main",
+    "git:github.com/obra/superpowers.git#main",
+    "git:git@github.com:obra/superpowers",
+    "git:git@github.com:obra/superpowers@refs/heads/main",
+    "git:git@github.com:obra/superpowers#main",
+    "git:github:obra/superpowers",
+    "git:github:obra/superpowers#main",
+    "git:obra/superpowers",
+    "git:obra/superpowers#main",
+  ];
+  const documentedAliasSources = [
+    "git:obra/superpowers.git",
+    "git:github:obra/superpowers.git",
+    "git:git+https://github.com/obra/superpowers",
+    "git:git+ssh://git@github.com/obra/superpowers",
+    "git:git@github.com/obra/superpowers",
+    "https://www.github.com/obra/superpowers",
+    "https://github.com/obra/superpowers/",
+    "https://user@github.com/obra/superpowers",
+    "ssh://github.com/obra/superpowers",
+    "https://other-user@github.com/obra/superpowers",
+  ];
+  const documentedAliasRefSources = [
+    "git:git+https://github.com/obra/superpowers.git@refs/heads/main",
+    "git:git+ssh://git@github.com/obra/superpowers#main",
+    "git:git@github.com/obra/superpowers.git/",
+    "https://www.github.com/obra/superpowers/@refs/heads/main",
+    "https://user@github.com/obra/superpowers.git#main",
+    "ssh://github.com/obra/superpowers.git/",
+  ];
+
+  for (const source of [
+    ...explicitTransportSources,
+    ...hostedShorthandSources,
+    ...documentedAliasSources,
+    ...documentedAliasRefSources,
   ])
     await t.test(source, async (t) => {
       const state = sandbox(t);
@@ -586,6 +631,27 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
       assert.deepEqual(ownership.presentationConflicts, [
         "registered Pi package for obra/superpowers",
       ]);
+      const control = await inspectPiControl(state.ctx);
+      assert.equal(
+        control.outcome.ok && control.outcome.result.mutationEligibility.kind,
+        "blocked",
+      );
+
+      settings(state.paths, [
+        "superpowers-manager/installed",
+        { source, autoload: false },
+      ]);
+      const disabledOwnership = unwrapOwnership(
+        await inspectPiOwnership(state.ctx),
+      );
+      assert.equal(disabledOwnership.installEligibility.kind, "allowed");
+      assert.deepEqual(disabledOwnership.presentationConflicts, []);
+      const disabledControl = await inspectPiControl(state.ctx);
+      assert.equal(
+        disabledControl.outcome.ok &&
+          disabledControl.outcome.result.mutationEligibility.kind,
+        "allowed",
+      );
     });
 
   for (const source of [
@@ -594,6 +660,29 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
     "git:github.com/obra/superpowers-fork",
     "git:github.com/obra/superpowers-fork@v6.3.0",
     "git:github.com/obra/superpowers@",
+    "git:https://github.com/obra/superpowers@",
+    "git:https://github.com/obra/superpowers#",
+    "git:github:obra/superpowers-fork",
+    "git:github:obra/superpowers#",
+    "git:obra/superpowers#",
+    "git:someone/superpowers",
+    "git+https://github.com/obra/superpowers",
+    "git+ssh://git@github.com/obra/superpowers",
+    "github:obra/superpowers",
+    "https://github.com.evil/obra/superpowers",
+    "https://user@github.com.evil/obra/superpowers",
+    "https://www.github.com.evil/obra/superpowers",
+    "https://github.com/Obra/superpowers",
+    "https://github.com/obra/Superpowers",
+    "https://github.com/obra/superpowers/extra",
+    "https://github.com/obra/superpowers//",
+    "https://other.example?user@github.com/obra/superpowers",
+    "https://other.example#user@github.com/obra/superpowers",
+    "https://u\u0000ser@github.com/obra/superpowers",
+    "git:git+https://github.com/obra/superpowers@",
+    "git:git+ssh://git@github.com/obra/superpowers#",
+    "git:git+https://github.com/obra/superpowers@refs/\u0000heads/main",
+    "https://user@github.com/obra/superpowers#main\u0001",
   ])
     await t.test(`unrecognized ${source}`, async (t) => {
       const state = sandbox(t);
@@ -602,6 +691,11 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
       const ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
       assert.equal(ownership.installEligibility.kind, "allowed");
       assert.deepEqual(ownership.presentationConflicts, []);
+      const control = await inspectPiControl(state.ctx);
+      assert.equal(
+        control.outcome.ok && control.outcome.result.mutationEligibility.kind,
+        "allowed",
+      );
     });
 });
 

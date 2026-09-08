@@ -10,11 +10,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import test, { type TestContext } from "node:test";
 
-import {
-  SUPPORTED_PI_RUNTIME_VERSION,
-  normalizePiRuntimeVersion,
-  runPi,
-} from "../../src/pi-native.ts";
+import { normalizePiRuntimeVersion, runPi } from "../../src/pi-native.ts";
 import { piPaths } from "../../src/pi-paths.ts";
 import { BOUNDED_EXECUTABLE, type ValidatorRun } from "../../src/validator.ts";
 
@@ -114,7 +110,7 @@ void test("runPi invokes one bounded argv in an isolated native environment", as
   );
 });
 
-void test("Pi runtime normalization admits only the supported released runtime", async (t) => {
+void test("Pi runtime normalization admits valid version responses", async (t) => {
   await t.test(
     "a successful payload with nonzero status cannot admit runtime",
     () => {
@@ -124,7 +120,7 @@ void test("Pi runtime normalization admits only the supported released runtime",
           outcome: {
             operation: "pi-command",
             ok: true,
-            result: { stdout: SUPPORTED_PI_RUNTIME_VERSION },
+            result: { stdout: "99.2.3" },
             error: null,
             messages: [],
           },
@@ -134,50 +130,91 @@ void test("Pi runtime normalization admits only the supported released runtime",
     },
   );
   const { root, paths } = sandbox(t);
-  const [major, minor, patch] =
-    SUPPORTED_PI_RUNTIME_VERSION.split(".").map(Number);
-  assert.equal([major, minor, patch].every(Number.isSafeInteger), true);
-  const older = `${major}.${minor}.${patch - 1}`;
-  const newer = `${major}.${minor}.${patch + 1}`;
-  const cases: readonly [string, ValidatorRun, boolean][] = [
-    ["exact", exited(`  ${SUPPORTED_PI_RUNTIME_VERSION}\n`), true],
-    ["older", exited(older), false],
-    ["newer", exited(newer), false],
-    ["malformed", exited("version unknown"), false],
-    ["multiline", exited(`${SUPPORTED_PI_RUNTIME_VERSION}\nextra`), false],
-    ["nonzero", exited("", { code: 2, stderr: "native failure\n" }), false],
-    [
-      "timeout",
-      {
+  const cases: readonly [string, boolean][] = [
+    ["  0.1.0\n", true],
+    ["99.2.3", true],
+    ["", false],
+    ["version unknown", false],
+    ["99.2.3\nextra", false],
+  ];
+
+  for (const [stdout, accepted] of cases)
+    await t.test(JSON.stringify(stdout), async () => {
+      const result = normalizePiRuntimeVersion(
+        await runPi(["--version"], paths, { root }, async () => exited(stdout)),
+      );
+      assert.equal(result.outcome.ok, accepted);
+      if (result.outcome.ok) assert.equal(result.outcome.result, stdout.trim());
+      else {
+        assert.equal(result.status, 1);
+        assert.equal(result.outcome.error.code, "invalid-version");
+        assert.equal(
+          result.outcome.error.message,
+          "Pi runtime inspection returned an invalid version response",
+        );
+      }
+    });
+
+  await t.test(
+    "a successful payload with nonzero status cannot admit runtime",
+    async () => {
+      const result = normalizePiRuntimeVersion(
+        await runPi(["--version"], paths, { root }, async () =>
+          exited("99.2.3", { code: 2, stderr: "native failure\n" }),
+        ),
+      );
+      assert.equal(result.status, 1);
+      assert.equal(result.outcome.ok, false);
+    },
+  );
+
+  for (const channel of ["stdout", "stderr"] as const)
+    await t.test(`valid version with truncated ${channel} fails`, async () => {
+      const run: ValidatorRun = {
+        kind: "exited",
+        code: 0,
+        stdout: {
+          text: "99.2.3\n",
+          droppedBytes: channel === "stdout" ? 1 : 0,
+        },
+        stderr: { text: "", droppedBytes: channel === "stderr" ? 1 : 0 },
+      };
+      const result = normalizePiRuntimeVersion(
+        await runPi(["--version"], paths, { root }, async () => run),
+      );
+      assert.equal(result.status, 1);
+      assert.ok(!result.outcome.ok);
+      if (!result.outcome.ok) {
+        assert.equal(result.outcome.error.code, "output-limit");
+        assert.equal(
+          result.outcome.error.message,
+          "Pi command output exceeded the capture limit",
+        );
+      }
+    });
+
+  await t.test("a timeout cannot admit runtime", async () => {
+    const result = normalizePiRuntimeVersion(
+      await runPi(["--version"], paths, { root }, async () => ({
         kind: "timedOut",
         afterMs: 30_000,
         stdout: { text: "", droppedBytes: 0 },
         stderr: { text: "late\n", droppedBytes: 0 },
-      },
-      false,
-    ],
-    [
-      "launch failure",
-      { kind: "launchFailed", errno: "ENOENT", cause: new Error("private") },
-      false,
-    ],
-  ];
+      })),
+    );
+    assert.equal(result.outcome.ok, false);
+  });
 
-  for (const [name, run, accepted] of cases)
-    await t.test(name, async () => {
-      const result = normalizePiRuntimeVersion(
-        await runPi(["--version"], paths, { root }, async () => run),
-      );
-      assert.equal(result.outcome.ok, accepted);
-      if (accepted) {
-        assert.equal(
-          result.outcome.ok && result.outcome.result,
-          SUPPORTED_PI_RUNTIME_VERSION,
-        );
-      } else {
-        assert.equal(result.status, 1);
-      }
-    });
+  await t.test("a launch failure cannot admit runtime", async () => {
+    const result = normalizePiRuntimeVersion(
+      await runPi(["--version"], paths, { root }, async () => ({
+        kind: "launchFailed",
+        errno: "ENOENT",
+        cause: new Error("private"),
+      })),
+    );
+    assert.equal(result.outcome.ok, false);
+  });
 });
 
 void test("runPi preserves bounded diagnostics without trusting subordinate text", async (t) => {

@@ -18,8 +18,6 @@ import {
 } from "./validator.ts";
 import { withWorkspace } from "./workspace.ts";
 
-export const SUPPORTED_PI_RUNTIME_VERSION = "0.85.1";
-
 export interface PiCommandOutput {
   readonly stdout: string;
 }
@@ -164,11 +162,11 @@ export function normalizePiRuntimeVersion(
     );
   }
   const version = result.outcome.result.stdout.trim();
-  if (!SEMVER_RE.test(version) || version !== SUPPORTED_PI_RUNTIME_VERSION) {
+  if (!SEMVER_RE.test(version)) {
     return failureResult(
       "pi-runtime",
-      "unsupported-runtime",
-      "configured Pi runtime is not the supported released version",
+      "invalid-version",
+      "Pi runtime inspection returned an invalid version response",
       [],
       result.outcome.messages,
     );

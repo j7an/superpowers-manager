@@ -47,6 +47,7 @@ dist/pi-paths.js
 dist/pi-prepare.js
 dist/pi-presentation.js
 dist/pi-settings.js
+dist/pi-shared-skills.js
 dist/pi-state.js
 dist/provenance.js
 dist/python-json-format.js
