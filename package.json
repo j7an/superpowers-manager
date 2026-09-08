@@ -18,7 +18,7 @@
   ],
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@11.25.0",
+  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "prepack": "node --input-type=module -e \"console.error('error: use node tests/tools/pack.ts --out-dir <directory> to package this checkout');process.exitCode=1\"",
     "lint": "oxlint src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/run-node-suites.ts tests/assert-matcher-gate.ts",
