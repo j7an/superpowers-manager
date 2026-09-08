@@ -11,6 +11,7 @@ import type { CommandContext } from "./context.ts";
 import { gatherProbe, replayOutcome } from "./probe.ts";
 import { runInstall } from "./install.ts";
 import { runPrepare } from "./prepare.ts";
+import { runWithMutation } from "./mutation.ts";
 
 function writeOutput(
   output: Output,
@@ -21,6 +22,15 @@ function writeOutput(
 }
 
 export async function runUpdate<R>(
+  argv: readonly string[],
+  ctx: CommandContext<R>,
+): Promise<number> {
+  return await runWithMutation("update", ctx, async (scoped) =>
+    performUpdate(argv, scoped),
+  );
+}
+
+async function performUpdate<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
@@ -38,7 +48,7 @@ export async function runUpdate<R>(
     // install's NOTE line.
     //
     // This is a THIRD consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:251-309::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:469-527::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first and src/commands/install.ts's runInstall catch
     // is the second. Because all three wrap the identical function, runProbe's
     // long comment there enumerates exactly what can reach this stream too; not

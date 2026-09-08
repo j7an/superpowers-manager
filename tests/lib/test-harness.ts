@@ -17,7 +17,7 @@ import type {
   PreparedState,
   UpdateControlInspection,
 } from "../../src/harness.ts";
-import { capture } from "./command-doubles.ts";
+import { capture, observingCoordinator } from "./command-doubles.ts";
 
 export interface TestRemovalInput {
   readonly receipt: string;
@@ -135,11 +135,18 @@ export async function createHarnessFixture(t: TestContext) {
   const preparedArtifact: PreparedArtifact = {
     root: destinationRoot,
     commit: selection.desiredCommit,
+    compatibility: {
+      kind: "supported",
+      generation: "fixture-v1",
+      reason: "fixture mechanics are complete",
+    },
+    identity: selection.desiredCommit,
   };
   const prepared: PreparedState = {
     kind: "current",
     artifact: preparedArtifact,
     observedIdentity: selection.desiredCommit,
+    compatibility: preparedArtifact.compatibility,
   };
   const installed: InstalledState = {
     kind: "current",
@@ -214,6 +221,10 @@ export async function createHarnessFixture(t: TestContext) {
       calls.push("location");
       return { destinationRoot, stagingLeaf: "candidate" };
     },
+    async mutationRoots() {
+      calls.push("mutation-roots");
+      return [join(scratch, "native-state")];
+    },
     async validatePreparationBeforeFetch() {
       calls.push("prefetch");
       return successResult("prefetch", null, []);
@@ -229,6 +240,8 @@ export async function createHarnessFixture(t: TestContext) {
       const artifact: PreparedArtifact = {
         root: input.candidateRoot,
         commit: input.selection.desiredCommit,
+        compatibility: preparedArtifact.compatibility,
+        identity: input.selection.desiredCommit,
       };
       return successResult("prepare", artifact, []);
     },
@@ -267,6 +280,8 @@ export async function createHarnessFixture(t: TestContext) {
     env,
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "pi" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   };
   return {

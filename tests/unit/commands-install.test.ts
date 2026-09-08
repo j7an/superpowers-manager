@@ -1,3 +1,4 @@
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
 import assert from "node:assert/strict";
 import {
   chmodSync,
@@ -12,6 +13,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import {
   capture,
+  observingCoordinator,
   operationNames,
   scriptedAdapter,
   successfulNonzeroResult,
@@ -45,7 +47,7 @@ function writeJsonFile(path: string, value: unknown) {
  * generated provenance are separate contracts").
  *
  */
-function makeCtx(
+async function makeCtx(
   opts: {
     desiredCommit: string;
     generatedCommit?: string;
@@ -74,9 +76,10 @@ function makeCtx(
     });
   }
   if (opts.generatedCommit !== undefined) {
-    writeJsonFile(
-      join(dir, "plugins", "superpowers", ".superpowers-upstream.json"),
-      { commit: opts.generatedCommit },
+    await writeQualifiedCodexFixture(
+      join(dir, "plugins", "superpowers"),
+      opts.generatedCommit,
+      opts.env?.SUPERPOWERS_UPSTREAM_URL ?? "https://example.invalid/upstream",
     );
   }
   return {
@@ -91,6 +94,8 @@ function makeCtx(
     },
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter,
   };
 }
@@ -114,7 +119,91 @@ const PROBE_OK = [
 
 // --- The four fail-closed rules (milestone spec §7 / spec §4.3) ---
 
-void test("install re-inspects ownership and update control itself", async () => {
+void test("install re-inspects ownership and update control itself", async (t) => {
+  await t.test(
+    "a conflict introduced after probe blocks the fresh pre-mutation inspection",
+    async () => {
+      const out = capture();
+      const err = capture();
+      const { adapter: scripted, calls } = scriptedAdapter([
+        successResult("inspect", { fingerprint: null }, []),
+        successResult("inspect", ownership("manager"), []),
+        successResult("inspect", { update_control: "managed" }, []),
+        successResult(
+          "inspect",
+          {
+            ...ownership("manager"),
+            conflicts: ["active Codex plugin superpowers@another-provider"],
+          },
+          [],
+        ),
+      ]);
+      const compatibility = {
+        kind: "supported" as const,
+        generation: "codex-native",
+        reason: "fixture compatibility",
+      };
+      const artifact = {
+        root: "/prepared-plugin",
+        commit: X,
+        compatibility,
+        identity: X,
+      };
+      const adapter = {
+        ...scripted,
+        async inspectPrepared() {
+          calls.push({ operation: "inspect-prepared" });
+          return successResult(
+            "inspect-prepared",
+            {
+              kind: "current" as const,
+              artifact,
+              observedIdentity: X,
+              compatibility,
+            },
+            [],
+          );
+        },
+        async readPrepared() {
+          calls.push({ operation: "read-prepared" });
+          return successResult("read-prepared", artifact, []);
+        },
+      };
+      const ctx = await makeCtx(
+        { desiredCommit: X, generatedCommit: X },
+        out,
+        err,
+        adapter,
+      );
+
+      const status = await runInstall([], ctx);
+
+      assert.equal(status, 1);
+      assert.deepEqual(operationNames(calls), [
+        "preparation-location",
+        "mutation-roots",
+        "preparation-location",
+        "mutation-roots",
+        "inspect-prepared",
+        "inspect-installed",
+        "inspect-ownership",
+        "inspect-update-control",
+        "inspect-prepared",
+        "inspect-installed",
+        "inspect-update-control",
+        "read-prepared",
+        "inspect-ownership",
+      ]);
+      assert.equal(
+        err.text(),
+        "Conflicting unmanaged Superpowers Codex resources require manual resolution:\n" +
+          "- active Codex plugin superpowers@another-provider\n" +
+          "Remove or disable each resource manually, then retry.\n",
+      );
+      assert.equal(out.text(), NOTE);
+    },
+  );
+
   // Rule 1. gatherProbe just reported both, and install asks AGAIN. Mutation
   // authority requires CURRENT, VALIDATED evidence -- a probe's answer is
   // neither by the time the mutation runs. AGENTS.md, milestone spec §7.
@@ -127,7 +216,7 @@ void test("install re-inspects ownership and update control itself", async () =>
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -138,9 +227,16 @@ void test("install re-inspects ownership and update control itself", async () =>
   // Asserted structurally over the recorded argv, not over a log: the point
   // is that the calls HAPPENED, in order, after the probe's own three.
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
     "read-prepared",
     "inspect-ownership",
@@ -162,7 +258,7 @@ void test("a successful install prints the fingerprint verification lines and no
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -194,7 +290,7 @@ void test("desiredCommit comes from generated provenance, never from selection",
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X, savedCommit: Z },
     out,
     err,
@@ -210,7 +306,7 @@ void test("desiredCommit comes from generated provenance, never from selection",
     !out.text().includes(Z),
     `the SAVED commit must never appear:\n${out.text()}`,
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 void test("saved selection is validated before any adapter access", async () => {
@@ -221,7 +317,7 @@ void test("saved selection is validated before any adapter access", async () => 
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   writeFileSync(
     join(ctx.env.SUPERPOWERS_CONFIG_DIR, "selection.json"),
     '{"schema_version":1,"mode":"bogus"}',
@@ -245,10 +341,10 @@ void test("an unparseable generated commit is never treated as success", async (
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([...PROBE_OK]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 15);
   const template = join(
     ctx.root,
     "plugins",
@@ -292,7 +388,7 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
       });
     },
   };
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -304,6 +400,10 @@ void test("gatherProbe's own clause-3 failure stops immediately, with its hand-w
   // call, before the ownership or update-control inspects run at all --
   // never mind runPrepare or the workspace stage's four.
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
   ]);
@@ -321,7 +421,7 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
       [],
     ),
   ]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   // No second, command-authored line: replayOutcome already wrote the
@@ -332,6 +432,10 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
   );
   assert.equal(out.text(), NOTE);
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
   ]);
@@ -355,7 +459,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     successResult("inspect", ownership(null), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -368,7 +472,7 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
     "error: probe did not report adapter identity state\n",
   );
   assert.equal(out.text(), NOTE);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("a legacy identity state stops before the workspace is created", async () => {
@@ -379,7 +483,7 @@ void test("a legacy identity state stops before the workspace is created", async
     successResult("inspect", ownership("legacy"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -397,14 +501,14 @@ void test("a legacy identity state stops before the workspace is created", async
       "Then run: npx superpowers-manager install\n",
   );
   assert.equal(out.text(), NOTE);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case and this one exercise distinct concrete normalization
-  // decisions (`src/codex-harness.ts:175-184::const installEligibility`),
+  // decisions (`src/codex-harness.ts::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:329::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:471::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
@@ -414,7 +518,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
     successResult("inspect", ownership("chaos"), []),
     successResult("inspect", { update_control: "managed" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -427,7 +531,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
   assert.equal(out.text(), NOTE);
   // Stops before the workspace: only gatherProbe's own three calls.
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 11);
 });
 
 void test("an unsupported update-control capability refuses before any install mutation", async () => {
@@ -438,7 +542,7 @@ void test("an unsupported update-control capability refuses before any install m
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: "unsupported" }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -451,9 +555,16 @@ void test("an unsupported update-control capability refuses before any install m
     "error: adapter cannot guarantee manager-controlled updates\n",
   );
   assert.deepEqual(operationNames(calls), [
+    "preparation-location",
+    "mutation-roots",
+    "preparation-location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-update-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-update-control",
     "read-prepared",
     "inspect-ownership",
@@ -481,7 +592,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
       [],
     ),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -493,7 +604,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
     err.text(),
     "error: cannot inspect ownership\nhint: check codex is installed\n",
   );
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1's adapter failure", async () => {
@@ -503,7 +614,7 @@ void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1'
     ...PROBE_OK,
     successResult("inspect", ownership(42), []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -515,7 +626,7 @@ void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1'
     err.text(),
     "error: adapter returned a non-string identity_state for inspect --view ownership\n",
   );
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-written message", async () => {
@@ -547,7 +658,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
       });
     },
   };
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -559,7 +670,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
     err.text(),
     "error: adapter reported a failure status for inspect --view ownership\n",
   );
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested", async () => {
@@ -578,7 +689,7 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
     ...PROBE_OK,
     successResult("inspect", ownership("legacy"), []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -595,7 +706,7 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
   assert.equal(out.text(), NOTE);
   // Stops at the re-inspection: no update-control inspect, no install, no
   // fingerprint inspect.
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested", async () => {
@@ -615,7 +726,7 @@ void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested
     ...PROBE_OK,
     successResult("inspect", ownership("chaos"), []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -628,7 +739,7 @@ void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested
   assert.equal(out.text(), NOTE);
   // Stops at the re-inspection: no update-control inspect, no install, no
   // fingerprint inspect.
-  assert.equal(calls.length, 6);
+  assert.equal(calls.length, 13);
 });
 
 void test("stage 2 (inspect update-control) failure stops before the install mutation", async () => {
@@ -645,7 +756,7 @@ void test("stage 2 (inspect update-control) failure stops before the install mut
       [],
     ),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -654,7 +765,7 @@ void test("stage 2 (inspect update-control) failure stops before the install mut
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot inspect update control\n");
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 14);
 });
 
 void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2's adapter failure", async () => {
@@ -665,7 +776,7 @@ void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2'
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", { update_control: 7 }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -677,7 +788,7 @@ void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2'
     err.text(),
     "error: adapter returned a non-string update_control for inspect --view update-control\n",
   );
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 14);
 });
 
 void test("stage 3 (install) failure stops before the post-install fingerprint inspection", async () => {
@@ -689,7 +800,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
     successResult("inspect", { update_control: "managed" }, []),
     failureResult("install", "E_ADAPTER", "cannot install plugin", [], []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -698,14 +809,14 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(err.text(), "error: cannot install plugin\n");
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 15);
 });
 
 // Rewritten at PR 11.5 slice 4b, Task 8. This case previously asserted the
 // stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
 // rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
 // reached renderInstallVerification, leaving its failed-inspection arm
-// (`src/codex-presentation.ts:306::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
+// (`src/codex-presentation.ts::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
 // spw_verify_installed_fingerprint unconditionally (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and
 // printed BOTH lines — the adapter's own error and
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`'s. The flip surfaced it: the shell-parity case
@@ -731,7 +842,7 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
       [],
     ),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -744,7 +855,7 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
     "error: cannot inspect fingerprint after install\n" +
       "error: installed manager fingerprint inspection failed after install.\n",
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 // The OTHER arm of the same guard, added with it (PR 11.5 slice 4b, Task 8).
@@ -772,14 +883,14 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
       selection: Parameters<typeof adapter.inspectInstalled>[0],
       adapterCtx: Parameters<typeof adapter.inspectInstalled>[1],
     ) {
-      if (calls.length >= 8) {
+      if (calls.length >= 15) {
         calls.push({ operation: "inspect-installed", input: selection });
         throw new Error("synthetic adapter transport failure");
       }
       return await adapter.inspectInstalled(selection, adapterCtx);
     },
   };
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -791,7 +902,7 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
     err.text(),
     "error: cannot invoke Codex adapter for inspect --view fingerprint\n",
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 // --- A fingerprint MISMATCH, not just an inspection failure (:244-255) ---
@@ -799,7 +910,7 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
 // Every stage-4 case above tests the INSPECT CALL failing. None of them ever
 // let renderInstallVerification actually RUN with a mismatch -- so nothing
 // pinned that it (a) still returns status 1, not 0 through the command's
-// current-kind check (`src/commands/install.ts:245-252::const verified =`), and
+// current-kind check (`src/commands/install.ts::const verified =`), and
 // (b) still writes BOTH `desired_commit=` and
 // `installed_commit=` to stdout, not just on the success path. (b) is
 // spec §4.3's own explicit prohibition ("the port must not move them into
@@ -817,7 +928,7 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: Y }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -833,7 +944,7 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
     err.text(),
     "error: installed manager fingerprint does not match the prepared plugin after install.\n",
   );
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 16);
 });
 
 // --- The STRICT reader, not the LENIENT one, and the empty-desiredCommit
@@ -845,10 +956,9 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
 // (unbounded depth) -- the two would read back the identical string. The one
 // place they can disagree is depth: a document nested past 256 containers
 // parses fine under the lenient profile and fails closed under the strict
-// one. The fixture below adds such nesting under an UNUSED sibling key, so
-// gatherProbe's own (lenient) generatedCommit still resolves to X -- keeping
-// facts.status at "needs install", never "needs prepare" -- while install's
-// own (strict) re-read of the SAME file throws and desiredCommit stays "".
+// one. The fixture starts with a fully qualified native prepared tree, then
+// introduces that nesting after prepared inspection. This models provenance
+// changing between the read-only probe and install's required strict re-read.
 // If a change relaxed the strict call back to the lenient one, this fixture
 // would read a commit and sail into the workspace stage instead of stopping
 // here with zero further adapter calls.
@@ -857,17 +967,32 @@ void test("the STRICT provenance reader, not the lenient one, feeds desiredCommi
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([...PROBE_OK]);
-  const ctx = makeCtx({ desiredCommit: X }, out, err, adapter);
+  const ctx = await makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
 
   let junk: unknown[] = [];
   for (let depth = 0; depth < 300; depth += 1) junk = [junk];
   const generatedDir = join(ctx.root, "plugins", "superpowers");
   mkdirSync(generatedDir, { recursive: true });
-  writeFileSync(
-    join(generatedDir, ".superpowers-upstream.json"),
-    JSON.stringify({ commit: X, junk }),
-    "utf8",
-  );
+  let preparedReads = 0;
+  ctx.adapter = {
+    ...adapter,
+    async inspectPrepared(selection, context) {
+      const result = await adapter.inspectPrepared(selection, context);
+      preparedReads += 1;
+      if (preparedReads < 2) return result;
+      writeFileSync(
+        join(generatedDir, ".superpowers-upstream.json"),
+        JSON.stringify({ commit: X, junk }),
+        "utf8",
+      );
+      return result;
+    },
+  };
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
   assert.equal(
@@ -876,7 +1001,7 @@ void test("the STRICT provenance reader, not the lenient one, feeds desiredCommi
   );
   assert.equal(out.text(), NOTE);
   // Zero calls past the probe's own three: the workspace stage never runs.
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 12);
 });
 
 void test("argv is ignored by src/commands/install.ts", async () => {
@@ -889,7 +1014,7 @@ void test("argv is ignored by src/commands/install.ts", async () => {
     successResult("install", {}, []),
     successResult("inspect", { fingerprint: X }, []),
   ]);
-  const ctx = makeCtx(
+  const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
     out,
     err,
@@ -939,11 +1064,11 @@ void test("a post-success workspace cleanup failure still reports the domain out
         adapterCtx: Parameters<typeof scripted.inspectInstalled>[1],
       ) {
         const result = await scripted.inspectInstalled(selection, adapterCtx);
-        if (calls.length === 9) chmodSync(parent, 0o500);
+        if (calls.length === 16) chmodSync(parent, 0o500);
         return result;
       },
     };
-    const ctx = makeCtx(
+    const ctx = await makeCtx(
       { desiredCommit: X, generatedCommit: X, env: { TMPDIR: parent } },
       out,
       err,
@@ -951,7 +1076,7 @@ void test("a post-success workspace cleanup failure still reports the domain out
     );
     const status = await runInstall([], ctx);
     assert.equal(status, 1);
-    assert.equal(calls.length, 9);
+    assert.equal(calls.length, 16);
     // The domain outcome is preserved -- "manager updated" -- even though the
     // workspace could not be removed afterward: the fingerprint verify that
     // produced it already completed against the adapter before cleanup ran.

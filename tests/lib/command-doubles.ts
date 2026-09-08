@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { writeQualifiedCodexFixture } from "./codex-prepared-fixture.ts";
 
 import {
   failureResult,
@@ -21,6 +20,7 @@ import type {
   PrepareCandidateInput,
   PreparedArtifact,
 } from "../../src/harness.ts";
+import type { ResourceCoordinator } from "../../src/resource-lock.ts";
 
 export interface HarnessCall {
   readonly operation: string;
@@ -34,6 +34,9 @@ const notCalled = (operation: string): never => {
 export const notCalledAdapter: HarnessAdapter<CodexRemovalInput> = {
   preparationLocation() {
     return notCalled("preparation-location");
+  },
+  async mutationRoots() {
+    return notCalled("mutation-roots");
   },
   async validatePreparationBeforeFetch() {
     return notCalled("validate-preparation-before-fetch");
@@ -84,6 +87,24 @@ export function capture(): {
   };
 }
 
+export function observingCoordinator(
+  observations: string[][] = [],
+): ResourceCoordinator {
+  return {
+    async observeResources(paths) {
+      return paths.map((resource) => ({
+        resource,
+        state: "idle" as const,
+        markerIdentity: "",
+      }));
+    },
+    async withResources(paths, action) {
+      observations.push([...paths]);
+      return await action();
+    },
+  };
+}
+
 export function successfulNonzeroResult<T>(
   operation: string,
   result: T,
@@ -106,13 +127,37 @@ function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
 }
 
 export function scriptedAdapter(responses: readonly AdapterResult[]) {
+  // A fingerprint/ownership/control triple describes one stable probe. Supply
+  // its independent closing observations explicitly, without consuming the
+  // subsequent mutation-stage responses. Preserve their complete adapter
+  // responses; gatherProbe decides which successful observation messages are
+  // operator-facing.
+  const expanded: AdapterResult[] = [];
+  for (let offset = 0; offset < responses.length; offset += 1) {
+    const first = responses[offset]!;
+    const ownership = responses[offset + 1];
+    const control = responses[offset + 2];
+    const field = (response: AdapterResult | undefined, name: string) =>
+      response?.outcome.ok &&
+      response.outcome.result !== null &&
+      typeof response.outcome.result === "object" &&
+      name in response.outcome.result;
+    if (
+      field(first, "fingerprint") &&
+      field(ownership, "identity_state") &&
+      field(control, "update_control")
+    ) {
+      expanded.push(first, ownership!, control!, first, control!);
+      offset += 2;
+    } else expanded.push(first);
+  }
   const calls: HarnessCall[] = [];
   let index = 0;
   const record = (operation: string, input?: unknown): void => {
     calls.push(input === undefined ? { operation } : { operation, input });
   };
   const next = (operation: string): AdapterResult => {
-    const response = responses[index++];
+    const response = expanded[index++];
     assert.ok(
       response !== undefined,
       `scriptedAdapter exhausted at response ${index} for ${operation}`,
@@ -123,6 +168,13 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
     preparationLocation(ctx) {
       record("preparation-location");
       return codexHarness.preparationLocation(ctx);
+    },
+    async mutationRoots(ctx) {
+      record("mutation-roots");
+      return await codexHarness.mutationRoots({
+        ...ctx,
+        env: { HOME: ctx.root, ...ctx.env },
+      });
     },
     async validatePreparationBeforeFetch(ctx) {
       record("validate-preparation-before-fetch");
@@ -141,15 +193,10 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
           result.outcome.messages,
         );
       }
-      const artifact: PreparedArtifact = {
-        root: input.candidateRoot,
-        commit: input.selection.desiredCommit,
-      };
-      mkdirSync(input.candidateRoot, { recursive: true });
-      writeFileSync(
-        join(input.candidateRoot, ".superpowers-upstream.json"),
-        JSON.stringify({ commit: input.selection.desiredCommit }),
-        "utf8",
+      const artifact: PreparedArtifact = await writeQualifiedCodexFixture(
+        input.candidateRoot,
+        input.selection.desiredCommit,
+        input.selection.effectiveSource,
       );
       return successResult(
         result.outcome.operation,

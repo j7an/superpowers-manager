@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { capture } from "./helpers/command-harness.ts";
+import { capture, observingCoordinator } from "./helpers/command-harness.ts";
 
 import { runPrepare } from "../../src/commands/prepare.ts";
 import { readUpstreamManifestVersion } from "../../src/codex-prepare.ts";
@@ -135,6 +135,8 @@ function unitContext(dir: string, extra: Record<string, string> = {}) {
       },
       stdout: out.stream,
       stderr: err.stream,
+      options: { harness: "codex" as const, allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: codexHarness,
     },
   };

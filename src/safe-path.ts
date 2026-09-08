@@ -114,9 +114,33 @@ export async function assertProspectiveContained(
   requireContained(lexicalRoot, lexicalCandidate);
   try {
     const resolvedRoot = await realpath(lexicalRoot);
+    const resolvedCandidate =
+      await canonicalizeProspectivePath(lexicalCandidate);
+    requireContained(resolvedRoot, resolvedCandidate);
+    return lexicalCandidate;
+  } catch (cause) {
+    if (cause instanceof SafetyError) throw cause;
+    throw new SafetyError(
+      "safe-path",
+      `cannot resolve prospective path: ${lexicalCandidate}`,
+      { cause },
+    );
+  }
+}
+
+// Resolve every existing component and retain a normalized suffix for
+// components that do not exist yet. Unlike assertProspectiveContained this is
+// not a containment assertion: resource coordination needs one canonical
+// identity even when two package roots reach the target through different
+// symlink aliases.
+export async function canonicalizeProspectivePath(
+  path: string,
+): Promise<string> {
+  const lexicalPath = resolve(path);
+  try {
     const missing: string[] = [];
     const visitedCursors = new Set<string>();
-    let cursor = lexicalCandidate;
+    let cursor = lexicalPath;
     let resolvedAncestor: string;
     for (;;) {
       if (visitedCursors.has(cursor)) {
@@ -149,14 +173,12 @@ export async function assertProspectiveContained(
         cursor = parent;
       }
     }
-    const resolvedCandidate = resolve(resolvedAncestor, ...missing);
-    requireContained(resolvedRoot, resolvedCandidate);
-    return lexicalCandidate;
+    return resolve(resolvedAncestor, ...missing);
   } catch (cause) {
     if (cause instanceof SafetyError) throw cause;
     throw new SafetyError(
       "safe-path",
-      `cannot resolve prospective path: ${lexicalCandidate}`,
+      `cannot resolve prospective path: ${lexicalPath}`,
       { cause },
     );
   }

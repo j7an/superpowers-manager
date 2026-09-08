@@ -515,7 +515,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
   // The route is constructible end to end with no product code bent to reach
   // it. SUPERPOWERS_CODEX may name any existing executable (preflight's
   // codexBin resolution accepts a path outright), a POSIX filename may carry
-  // any byte but NUL and slash, and `src/adapter.ts:801-805::commandFailed(listing)` interpolates that
+  // any byte but NUL and slash, and `src/adapter.ts:808-812::commandFailed(listing)` interpolates that
   // path into an adapter-authored failure message when `codex plugin list
   // --json` exits non-zero. probe replays the resulting outcome AFTER its
   // try/catch has resolved (the loop below runProbe's catch), so the throw from

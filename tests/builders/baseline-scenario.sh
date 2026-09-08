@@ -42,6 +42,7 @@ case "$command_name" in
     git -C "$destination" branch -M main
 
     mkdir -p "$destination/skills/brainstorming" \
+      "$destination/skills/using-superpowers" \
       "$destination/.codex-plugin"
     cat > "$destination/skills/brainstorming/SKILL.md" <<'EOF'
 ---
@@ -49,6 +50,13 @@ name: brainstorming
 description: Baseline upstream skill
 ---
 # Brainstorming
+EOF
+    cat > "$destination/skills/using-superpowers/SKILL.md" <<'EOF'
+---
+name: using-superpowers
+description: Native bootstrap fixture
+---
+# Using Superpowers
 EOF
     cat > "$destination/.codex-plugin/plugin.json" <<'EOF'
 {

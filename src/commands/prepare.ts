@@ -1,5 +1,5 @@
 import { mkdir, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, sep } from "node:path";
 
 import type { AdapterOutcome } from "../adapter-result.ts";
 import { atomicReplaceDir } from "../atomic.ts";
@@ -9,6 +9,7 @@ import { runGit } from "../git.ts";
 import type { PreparationLocation } from "../harness.ts";
 import { SafetyError } from "../safety-error.ts";
 import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
+import { upstreamCacheRoot } from "../upstream-workspace.ts";
 import {
   BOUNDED_EXECUTABLE,
   UNBOUNDED_LEGACY,
@@ -22,6 +23,7 @@ import {
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
+import { runWithMutation } from "./mutation.ts";
 
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
@@ -158,11 +160,8 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   // getcwd(3) returns the physical path, so this matches `pwd -P` without a
   // realpath call.
   const cwd = process.cwd();
-  const configuredCache =
-    env.SUPERPOWERS_CACHE_DIR || join(ctx.root, ".cache", "upstream");
-  const cacheParent = isAbsolute(configuredCache)
-    ? configuredCache
-    : resolve(cwd, configuredCache);
+  const cache = upstreamCacheRoot(ctx.root, env, cwd);
+  const cacheParent = dirname(cache);
   const adapterContext = { root: ctx.root, env };
   let location: PreparationLocation;
   try {
@@ -181,7 +180,6 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   const pluginRoot = location.destinationRoot;
   const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
-  const cache = join(cacheParent, "superpowers");
   const tmpParent = dirname(pluginRoot);
   await owned(`cannot create directory: ${tmpParent}`, () =>
     mkdir(tmpParent, { recursive: true }),
@@ -200,7 +198,8 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         message,
       });
       const candidate = join(workspace, location.stagingLeaf);
-      const selection = await computeEffectiveSelection(ctx.root, env);
+      const selection =
+        ctx.selection ?? (await computeEffectiveSelection(ctx.root, env));
       let prefetch;
       try {
         prefetch =
@@ -306,6 +305,9 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       if (prepared.outcome.result.commit !== selection.desiredCommit) {
         return failed("adapter returned an unexpected preparation commit");
       }
+      if (prepared.outcome.result.compatibility.kind === "unsupported") {
+        return failed(prepared.outcome.result.compatibility.reason);
+      }
       let validator = NO_VALIDATOR_OUTPUT;
       if (additionalValidator.length > 0) {
         // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` — `[ -f ]`.
@@ -393,11 +395,12 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       // The swap must run inside the workspace callback: withWorkspace removes
       // the workspace on return, and the candidate lives in it.
       //
-      // atomicReplaceDir's outer catch (`src/atomic.ts:208-215::if (cause`) wraps every
-      // non-SafetyError into a SafetyError, so the callee owns every failure on
-      // this path and re-emitting its own diagnostic is the sanctioned form of
-      // interpolation. The hand-written prefix carries the live root, which the
-      // callee's message does not.
+      // atomicReplaceDir delegates to beginDirectoryPublication, whose outer
+      // catch (`src/atomic.ts:341-348::if (cause`) wraps every non-SafetyError
+      // into a SafetyError, so the callee owns every failure on this path and
+      // re-emitting its own diagnostic is the sanctioned form of interpolation.
+      // The hand-written prefix carries the live root, which the callee's message
+      // does not.
       try {
         await atomicReplaceDir(candidate, pluginRoot);
       } catch (cause) {
@@ -431,6 +434,15 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
 }
 
 export async function runPrepare<R>(
+  argv: readonly string[],
+  ctx: CommandContext<R>,
+): Promise<number> {
+  return await runWithMutation("prepare", ctx, async (scoped) =>
+    performPrepare(argv, scoped),
+  );
+}
+
+async function performPrepare<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
@@ -524,7 +536,7 @@ export async function runPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:395-403::if (cleanupWarning`.
+    // `src/commands/install.ts:546-554::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

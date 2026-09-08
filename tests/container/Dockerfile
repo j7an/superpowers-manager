@@ -14,7 +14,8 @@ RUN apt-get update \
 WORKDIR /opt/spw-test-tools
 COPY tests/container/package.json tests/container/package-lock.json ./
 RUN npm ci --ignore-scripts \
-    && ./node_modules/.bin/codex --version >/dev/null
+    && ./node_modules/.bin/codex --version >/dev/null \
+    && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 ./node_modules/.bin/pi --version
 
 RUN useradd --create-home --uid 10001 spw
 WORKDIR /workspace

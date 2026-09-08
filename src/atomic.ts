@@ -8,7 +8,7 @@ import {
   rm,
   unlink,
 } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { SafetyError } from "./safety-error.ts";
 
 export interface AtomicErrorDetails {
@@ -116,6 +116,14 @@ export interface AtomicReplaceDirHooks {
 
 export interface AtomicReplaceDirOptions {
   readonly hooks?: AtomicReplaceDirHooks;
+  readonly backupPath?: string;
+}
+
+export interface DirectoryPublication {
+  readonly live: string;
+  readonly backup: string | null;
+  finalize(): Promise<void>;
+  rollback(): Promise<void>;
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -145,22 +153,74 @@ async function chooseBackup(live: string): Promise<string> {
   throw new SafetyError("atomic", "cannot choose unique backup path");
 }
 
-export async function atomicReplaceDir(
+async function validateRequestedBackup(
+  backup: string,
+  candidate: string,
+  live: string,
+): Promise<void> {
+  const resolvedBackup = resolve(backup);
+  const resolvedCandidate = resolve(candidate);
+  const resolvedLive = resolve(live);
+  const prefix = `.${basename(resolvedLive)}.bak.`;
+  if (
+    dirname(resolvedBackup) !== dirname(resolvedLive) ||
+    !basename(resolvedBackup).startsWith(prefix) ||
+    basename(resolvedBackup).length === prefix.length ||
+    resolvedBackup === resolvedCandidate ||
+    resolvedBackup === resolvedLive ||
+    (await exists(backup))
+  ) {
+    throw new Error("invalid directory backup path");
+  }
+}
+
+interface DirectoryIdentity {
+  readonly dev: number;
+  readonly ino: number;
+}
+
+async function directoryIdentity(path: string): Promise<DirectoryIdentity> {
+  const details = await lstat(path);
+  return { dev: details.dev, ino: details.ino };
+}
+
+function sameIdentity(left: DirectoryIdentity, right: DirectoryIdentity) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function publicationFailure(
+  message: string,
+  cause: unknown,
+): SafetyError<AtomicErrorDetails> {
+  return new SafetyError<AtomicErrorDetails>("atomic", message, {
+    cause,
+    details: { phase: "post-replacement" },
+  });
+}
+
+export async function beginDirectoryPublication(
   candidate: string,
   live: string,
   options: AtomicReplaceDirOptions = {},
-): Promise<void> {
+): Promise<DirectoryPublication> {
   const renamePath = options.hooks?.rename ?? rename;
   const removePath = options.hooks?.rm ?? rm;
   let backupCreated = false;
+  let backupIdentity: DirectoryIdentity | null = null;
   let phase: AtomicErrorDetails["phase"] = "pre-replacement";
   try {
-    const backup = await chooseBackup(live);
+    const backup = options.backupPath ?? (await chooseBackup(live));
+    if (options.backupPath !== undefined) {
+      await validateRequestedBackup(backup, candidate, live);
+    }
     if (await exists(live)) {
+      backupIdentity = await directoryIdentity(live);
       await renamePath(live, backup);
       backupCreated = true;
     }
+    let publishedIdentity: DirectoryIdentity;
     try {
+      publishedIdentity = await directoryIdentity(candidate);
       await renamePath(candidate, live);
       phase = "post-replacement";
     } catch (cause) {
@@ -194,17 +254,91 @@ export async function atomicReplaceDir(
         { cause, details: { phase: "pre-replacement" } },
       );
     }
-    if (backupCreated) {
-      try {
-        await removePath(backup, { recursive: true, force: true });
-      } catch (cause) {
-        throw new SafetyError<AtomicErrorDetails>(
-          "atomic",
-          `directory replacement succeeded but backup cleanup failed at ${backup}`,
-          { cause, details: { phase: "post-replacement" } },
+
+    const retainedBackup = backupCreated ? backup : null;
+    const retainedBackupIdentity = backupCreated ? backupIdentity : null;
+    let settled = false;
+    const claimSettlement = () => {
+      if (settled) {
+        throw publicationFailure(
+          "directory publication already settled",
+          new Error("publication already settled"),
         );
       }
-    }
+      settled = true;
+    };
+    const requireRetainedBackup = async (
+      action: "finalization" | "rollback",
+    ) => {
+      if (retainedBackup === null) return;
+      let currentIdentity: DirectoryIdentity;
+      try {
+        currentIdentity = await directoryIdentity(retainedBackup);
+      } catch (cause) {
+        throw publicationFailure(
+          `directory ${action} refused because backup changed unexpectedly at ${retainedBackup}`,
+          cause,
+        );
+      }
+      if (
+        retainedBackupIdentity === null ||
+        !sameIdentity(currentIdentity, retainedBackupIdentity)
+      ) {
+        throw publicationFailure(
+          `directory ${action} refused because backup changed unexpectedly at ${retainedBackup}`,
+          new Error("retained backup directory identity changed"),
+        );
+      }
+    };
+
+    return {
+      live,
+      backup: retainedBackup,
+      async finalize() {
+        claimSettlement();
+        if (retainedBackup === null) return;
+        await requireRetainedBackup("finalization");
+        try {
+          await removePath(retainedBackup, { recursive: true, force: true });
+        } catch (cause) {
+          throw publicationFailure(
+            `directory replacement succeeded but backup cleanup failed at ${retainedBackup}`,
+            cause,
+          );
+        }
+      },
+      async rollback() {
+        claimSettlement();
+        await requireRetainedBackup("rollback");
+        let currentIdentity: DirectoryIdentity;
+        try {
+          currentIdentity = await directoryIdentity(live);
+        } catch (cause) {
+          throw publicationFailure(
+            `directory rollback refused because live tree changed unexpectedly at ${live}`,
+            cause,
+          );
+        }
+        if (!sameIdentity(currentIdentity, publishedIdentity)) {
+          throw publicationFailure(
+            `directory rollback refused because live tree changed unexpectedly at ${live}`,
+            new Error("published directory identity changed"),
+          );
+        }
+        try {
+          await removePath(live, { recursive: true, force: true });
+          if (retainedBackup !== null) {
+            await renamePath(retainedBackup, live);
+          }
+        } catch (cause) {
+          const message =
+            retainedBackup === null
+              ? "directory rollback failed with no prior tree"
+              : `directory rollback failed; backup preserved at ${retainedBackup}`;
+          throw publicationFailure(message, cause);
+        }
+      },
+    };
   } catch (cause) {
     if (cause instanceof SafetyError) throw cause;
     throw new SafetyError<AtomicErrorDetails>(
@@ -213,4 +347,13 @@ export async function atomicReplaceDir(
       { cause, details: { phase } },
     );
   }
+}
+
+export async function atomicReplaceDir(
+  candidate: string,
+  live: string,
+  options: AtomicReplaceDirOptions = {},
+): Promise<void> {
+  const pending = await beginDirectoryPublication(candidate, live, options);
+  await pending.finalize();
 }

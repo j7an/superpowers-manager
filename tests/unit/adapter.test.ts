@@ -41,8 +41,8 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:371-374::manifestSource === "upstream" ?`,
-  // `src/adapter.ts:464::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/adapter.ts:376-379::manifestSource === "upstream" ?`,
+  // `src/adapter.ts:469::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -144,7 +144,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/adapter.ts:411-414::const rawManifestBytes`) must surface exactly `cannot read manifest JSON
+// call (`src/adapter.ts:416-419::const rawManifestBytes`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/hooks.ts) must keep succeeding, so this exercises the read at
@@ -739,7 +739,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
   }
 });
 
-// FOUR independent booleans, not two. `src/adapter.ts:935-936::const managerPresent` computes
+// FOUR independent booleans, not two. `src/adapter.ts:947-948::const managerPresent` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -810,6 +810,7 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
                 marketplace: legacyMarketplace,
               },
               identity_state: identity,
+              conflicts: [],
             },
             label,
           );
@@ -817,6 +818,40 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
       }
     }
   }
+
+  await t.test(
+    "reuses one native plugin listing for unmanaged conflicts",
+    async () => {
+      const sandbox = await codexSandbox(t);
+      const result = await runAdapter(["inspect", "--view", "ownership"], {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({
+          FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
+            installed: [
+              {
+                pluginId: "superpowers@another-provider",
+                installed: true,
+                enabled: true,
+              },
+            ],
+          }),
+          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({ marketplaces: [] }),
+        }),
+      });
+      assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+      assert.deepEqual(result.outcome.result, {
+        view: "ownership",
+        resources: { plugin: false, marketplace: false },
+        legacy_resources: { plugin: false, marketplace: false },
+        identity_state: "neither",
+        conflicts: ["active Codex plugin superpowers@another-provider"],
+      });
+      assert.deepEqual(await sandbox.commands(), [
+        "plugin list --json",
+        "plugin marketplace list --json",
+      ]);
+    },
+  );
 });
 
 // ADAPTER-INSTALL-RESULT-01, ADAPTER-CONTROLLED-FAILURE-01 and
@@ -923,9 +958,9 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/adapter.ts:638-642::pathsEqual(packageRoot, registeredRoot)`, which is
+      // exercises is the marketplace branch at `src/adapter.ts:643-647::pathsEqual(packageRoot, registeredRoot)`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/adapter.ts:585::const refreshMode`) and so the value these witnesses
+      // the default (`src/adapter.ts:590::const refreshMode`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },

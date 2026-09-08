@@ -4,6 +4,7 @@ import { exactError } from "../lib/error-assertions.ts";
 
 import {
   activePluginVersionFromJson,
+  codexInstalledPluginsFromJson,
   installedListingHas,
   marketplaceRootFromJson,
 } from "../../src/codex-json.ts";
@@ -38,7 +39,7 @@ void test("marketplace reader rejects invalid UTF-8 bytes", () => {
   );
 });
 
-void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => {
+void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", async (t) => {
   assert.equal(
     installedListingHas(
       '{"padding":NaN,"installed":[{"pluginId":"target@provider"}]}',
@@ -111,6 +112,61 @@ void test("CODEX-JSON-ARRAY-01 installed listing reader complete matrix", () => 
       raw,
     );
   }
+
+  await t.test("projects the qualified native plugin state fields", () => {
+    assert.deepEqual(
+      codexInstalledPluginsFromJson(
+        JSON.stringify({
+          installed: [
+            {
+              pluginId: "superpowers@another-provider",
+              name: "superpowers",
+              marketplaceName: "another-provider",
+              version: "0.0.0-qualification",
+              installed: true,
+              enabled: false,
+            },
+          ],
+        }),
+      ),
+      [
+        {
+          pluginId: "superpowers@another-provider",
+          installed: true,
+          enabled: false,
+        },
+      ],
+    );
+  });
+
+  await t.test("preserves missing and malformed state as indeterminate", () => {
+    assert.deepEqual(
+      codexInstalledPluginsFromJson(
+        JSON.stringify({
+          installed: [
+            { pluginId: "superpowers@missing" },
+            {
+              pluginId: "superpowers@malformed",
+              installed: "yes",
+              enabled: 1,
+            },
+          ],
+        }),
+      ),
+      [
+        {
+          pluginId: "superpowers@missing",
+          installed: null,
+          enabled: null,
+        },
+        {
+          pluginId: "superpowers@malformed",
+          installed: null,
+          enabled: null,
+        },
+      ],
+    );
+  });
 });
 
 void test("an empty installed array reports absent", () => {

@@ -26,6 +26,7 @@ import type {} from "../../src/adapter.ts";
 import type {} from "../../src/codex-harness.ts";
 import type {} from "../../src/hooks.ts";
 import type {} from "../../src/lifecycle.ts";
+import type {} from "../../src/pi-harness.ts";
 import type {} from "../../src/provenance.ts";
 import type {} from "../../src/status.ts";
 import type {} from "../../src/upstream-version.ts";
@@ -87,11 +88,12 @@ function moduleSpecifiers(
   return specifiers;
 }
 
-function isConcreteCodexModule(specifier: string): boolean {
+function isConcreteHarnessModule(specifier: string): boolean {
   const name = specifier.split("/").at(-1) ?? "";
   return (
     name === "adapter.ts" ||
     name.startsWith("codex-") ||
+    name.startsWith("pi-") ||
     [
       "hooks.ts",
       "lifecycle.ts",
@@ -102,7 +104,7 @@ function isConcreteCodexModule(specifier: string): boolean {
   );
 }
 
-void test("no module under src/commands/ imports runAdapter", () => {
+void test("no module under src/commands/ imports a concrete harness module", () => {
   const api = new API({ cwd: ROOT });
   const snapshot = api.updateSnapshot({
     openProjects: [join(ROOT, "tsconfig.json")],
@@ -111,36 +113,54 @@ void test("no module under src/commands/ imports runAdapter", () => {
   const offenders = tsFiles("src/commands").filter((relative) => {
     const source = project.program.getSourceFile(join(ROOT, relative));
     assert.ok(source, `parser did not load ${relative}`);
-    return moduleSpecifiers(source).some(isConcreteCodexModule);
+    return moduleSpecifiers(source).some(isConcreteHarnessModule);
   });
   snapshot.dispose();
   api.close();
   assert.deepEqual(
     offenders,
     [],
-    "a command module importing a concrete Codex module bypasses ctx.adapter, so an " +
+    "a command module importing a concrete harness module bypasses ctx.adapter, so an " +
       "injected double observes nothing — see spec §4.5",
   );
 });
 
+type ConcreteHarnessBinding = "codexHarness" | "piHarness";
+
+function concreteHarnessBinding(
+  node: import("typescript/unstable/ast").Node | undefined,
+): ConcreteHarnessBinding | undefined {
+  if (node === undefined || !isIdentifier(node)) return undefined;
+  if (node.text === "codexHarness") return "codexHarness";
+  if (node.text === "piHarness") return "piHarness";
+  return undefined;
+}
+
 function concreteBindings(
   parsed: import("typescript/unstable/ast").SourceFile,
-): number {
-  let count = 0;
+): ConcreteHarnessBinding[] {
+  const bindings: ConcreteHarnessBinding[] = [];
   const visit = (node: import("typescript/unstable/ast").Node): void => {
     if (
       isPropertyAssignment(node) &&
       ((isIdentifier(node.name) && node.name.text === "adapter") ||
-        (isStringLiteral(node.name) && node.name.text === "adapter")) &&
-      isIdentifier(node.initializer) &&
-      node.initializer.text === "codexHarness"
+        (isStringLiteral(node.name) && node.name.text === "adapter"))
     ) {
-      count += 1;
+      const binding = concreteHarnessBinding(node.initializer);
+      if (binding !== undefined) bindings.push(binding);
+    }
+    if (
+      isCallExpression(node) &&
+      isIdentifier(node.expression) &&
+      node.expression.text === "dispatch"
+    ) {
+      const binding = concreteHarnessBinding(node.arguments[0]);
+      if (binding !== undefined) bindings.push(binding);
     }
     node.forEachChild(visit);
   };
   visit(parsed);
-  return count;
+  return bindings;
 }
 
 void test("the CLI is the only production concrete harness binding", () => {
@@ -152,11 +172,14 @@ void test("the CLI is the only production concrete harness binding", () => {
   const bindings = tsFiles("src").flatMap((relative) => {
     const source = project.program.getSourceFile(join(ROOT, relative));
     assert.ok(source, `parser did not load ${relative}`);
-    return Array.from({ length: concreteBindings(source) }, () => relative);
+    return concreteBindings(source).map((binding) => `${relative}:${binding}`);
   });
   snapshot.dispose();
   api.close();
-  assert.deepEqual(bindings, ["src/cli.ts"]);
+  assert.deepEqual(bindings, [
+    "src/cli.ts:piHarness",
+    "src/cli.ts:codexHarness",
+  ]);
 });
 
 // A BOUNDED HEURISTIC, and labelled as one. The repo has no parser dependency
@@ -231,12 +254,13 @@ void test("both gates reject every evasion form they claim to cover", () => {
     "../../src/codex-harness.ts",
     "../../src/hooks.ts",
     "../../src/lifecycle.ts",
+    "../../src/pi-harness.ts",
     "../../src/provenance.ts",
     "../../src/status.ts",
     "../../src/upstream-version.ts",
   ]) {
     assert.ok(
-      imported.includes(specifier) && isConcreteCodexModule(specifier),
+      imported.includes(specifier) && isConcreteHarnessModule(specifier),
       `concrete import gate missed: ${specifier}`,
     );
   }

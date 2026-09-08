@@ -121,6 +121,7 @@ export function runValidator(
   policy: ValidatorPolicy,
   env: NodeJS.ProcessEnv,
   workspace: string,
+  cwd?: string,
 ): Promise<ValidatorRun> {
   return new Promise((resolveRun) => {
     const [command, ...args] = argv;
@@ -164,6 +165,7 @@ export function runValidator(
     try {
       child = spawn(command, args, {
         env: { ...process.env, ...env, TMPDIR: workspace },
+        cwd,
         stdio: ["ignore", "pipe", "pipe"],
         // D4: under the BOUNDED policy only, the child leads its own process group
         // so a timeout can signal the GROUP -- signalling the process alone leaves

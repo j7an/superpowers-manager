@@ -24,6 +24,11 @@ import {
   installedListingHas,
   marketplaceRootFromJson,
 } from "./codex-json.ts";
+import {
+  CODEX_LEGACY_PLUGIN_ID,
+  CODEX_MANAGER_PLUGIN_ID,
+  inspectCodexConflicts,
+} from "./codex-conflicts.ts";
 import { oneLine } from "./cli-arguments.ts";
 import {
   installedCommitFromRoot,
@@ -43,9 +48,9 @@ import type { JsonValue } from "./strict-json.ts";
 import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.ts";
 import { withWorkspace, workspaceRemovalFailure } from "./workspace.ts";
 
-const PLUGIN_ID = "superpowers@superpowers-manager";
+const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
 const MARKETPLACE_NAME = "superpowers-manager";
-const LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";
+const LEGACY_PLUGIN_ID = CODEX_LEGACY_PLUGIN_ID;
 const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
 
 // Re-exported so existing importers of AdapterContext from this module are
@@ -777,6 +782,7 @@ async function runUninstall(
 
 async function runInspect(
   view: "ownership" | "update-control" | "fingerprint",
+  context: AdapterContext,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<JsonValue> {
@@ -895,6 +901,7 @@ async function runInspect(
           let legacyPlugin: boolean;
           let managerMarketplace: boolean;
           let legacyMarketplace: boolean;
+          let conflicts: readonly string[];
           try {
             managerPlugin = installedListingHas(
               plugins.stdout,
@@ -907,6 +914,10 @@ async function runInspect(
               "installed",
               "pluginId",
               LEGACY_PLUGIN_ID,
+            );
+            conflicts = await inspectCodexConflicts(
+              { root: context.root, env },
+              plugins.stdout.toString("utf8"),
             );
           } catch {
             fail(
@@ -952,6 +963,7 @@ async function runInspect(
               : legacyPresent
                 ? "legacy"
                 : "neither",
+            conflicts: [...conflicts],
           };
         },
         { onCleanupFailure: reportOrphanedWorkspace(log) },
@@ -1030,7 +1042,7 @@ export function codexInspect(
   context: AdapterContext,
 ): Promise<AdapterResult> {
   return runCodexOperation("inspect", context, (env, log) =>
-    runInspect(view, env, log),
+    runInspect(view, context, env, log),
   );
 }
 

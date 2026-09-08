@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -197,6 +198,21 @@ void test("exit 0 is reported as exited with code 0", async (t) => {
   assert.equal(run.code, 0);
   assert.match(run.stdout.text, /out/);
   assert.match(run.stderr.text, /err/);
+
+  await t.test("an explicit cwd changes only that invocation", async () => {
+    const cwd = join(dir, "isolated-cwd");
+    mkdirSync(cwd);
+    const pwd = writeScript(dir, "pwd.sh", "pwd");
+    const observed = await runValidator([pwd], SUCCEEDS, {}, dir, cwd);
+    assert.equal(observed.kind, "exited");
+    assert.equal(observed.code, 0);
+    assert.equal(observed.stdout.text.trim(), realpathSync(cwd));
+
+    const inherited = await runValidator([pwd], SUCCEEDS, {}, dir);
+    assert.equal(inherited.kind, "exited");
+    assert.equal(inherited.code, 0);
+    assert.equal(inherited.stdout.text.trim(), realpathSync(process.cwd()));
+  });
 });
 
 void test("a nonzero exit is reported with its code", async (t) => {

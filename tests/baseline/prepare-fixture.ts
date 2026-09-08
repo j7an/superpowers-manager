@@ -122,6 +122,11 @@ export const DECLARED_HOOK_PATHS = [
  */
 function buildUpstream(): string {
   const upstream = join(SCRATCH, "prepare-upstream");
+  mkdirSync(join(upstream, "skills", "using-superpowers"), { recursive: true });
+  writeFileSync(
+    join(upstream, "skills", "using-superpowers", "SKILL.md"),
+    "---\nname: using-superpowers\ndescription: Native bootstrap fixture\n---\n",
+  );
   mkdirSync(join(upstream, "skills", "brainstorming"), { recursive: true });
   mkdirSync(join(upstream, "assets"), { recursive: true });
   mkdirSync(join(upstream, "hooks", "support"), { recursive: true });
@@ -255,7 +260,7 @@ function buildUpstream(): string {
     symlinkSync("../../outside", join(upstream, "hooks", "escape"));
   });
   // P1 — a `hooks` value no classification branch accepts, so the adapter's
-  // `hook classification failed:` wrapper (`src/adapter.ts:394::hook classification failed`) is the
+  // `hook classification failed:` wrapper (`src/adapter.ts::hook classification failed`) is the
   // diagnostic under test.
   //
   // The value is a NUMBER on purpose. classifyHooks accepts

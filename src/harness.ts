@@ -1,5 +1,7 @@
 import type { AdapterContext, AdapterResult } from "./adapter-result.ts";
 import type { EffectiveSelection } from "./effective-selection.ts";
+import type { Compatibility } from "./harness-compatibility.ts";
+import type { ResourceObservation } from "./resource-lock.ts";
 
 export type HarnessCommand =
   | "pin"
@@ -35,14 +37,21 @@ export interface PrepareCandidateInput {
 export interface PreparedArtifact {
   readonly root: string;
   readonly commit: string;
+  readonly compatibility: Compatibility;
+  readonly identity: string;
 }
 
 export type PreparedState =
-  | { readonly kind: "needs-prepare"; readonly observedIdentity: string }
+  | {
+      readonly kind: "needs-prepare";
+      readonly observedIdentity: string;
+      readonly compatibility: Compatibility;
+    }
   | {
       readonly kind: "current";
       readonly artifact: PreparedArtifact;
       readonly observedIdentity: string;
+      readonly compatibility: Compatibility;
     };
 
 export type InstalledState =
@@ -56,17 +65,25 @@ export interface OwnershipInspection<R> {
   readonly removalVerification: Decision;
   readonly postRemovalOutput: Output;
   readonly presentationValue: string;
+  readonly presentationConflicts?: readonly string[];
 }
 
 export interface UpdateControlInspection {
   readonly probeEligibility: Decision;
   readonly mutationEligibility: Decision;
   readonly presentationValue: string;
+  readonly recoveryState?: "required";
+}
+
+export interface InstallTransaction {
+  finalize(): Promise<AdapterResult<null>>;
+  rollback(): Promise<AdapterResult<null>>;
 }
 
 export interface InstallReceipt {
   readonly missingVerificationOutput: Output;
   readonly mismatchVerificationOutput: Output;
+  readonly transaction?: InstallTransaction;
 }
 
 export interface ProbeSnapshot<R> {
@@ -75,6 +92,10 @@ export interface ProbeSnapshot<R> {
   readonly installed: InstalledState;
   readonly ownership: OwnershipInspection<R>;
   readonly control: UpdateControlInspection;
+  readonly compatibility: Compatibility;
+  readonly resources?: readonly ResourceObservation[];
+  readonly resourceState?:
+    "idle" | "owned" | "busy" | "uninspectable" | "recovery-required";
   readonly status: "needs prepare" | "needs install" | "current";
 }
 
@@ -107,7 +128,10 @@ export interface HarnessPresentation<R> {
     receipt: AdapterResult<InstallReceipt>,
     inspection: AdapterResult<InstalledState>,
   ): Output;
-  renderRemovalCompletion(ownership: OwnershipInspection<R>): Output;
+  renderRemovalCompletion(
+    ownership: OwnershipInspection<R>,
+    removalInput: R,
+  ): Output;
   callFailure(
     site: FailureSite,
     ctx: AdapterContext,
@@ -117,6 +141,7 @@ export interface HarnessPresentation<R> {
 
 export interface HarnessAdapter<R> {
   preparationLocation(ctx: AdapterContext): PreparationLocation;
+  mutationRoots(ctx: AdapterContext): Promise<readonly string[]>;
   validatePreparationBeforeFetch(
     ctx: AdapterContext,
   ): Promise<AdapterResult<null>>;

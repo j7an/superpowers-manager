@@ -36,7 +36,7 @@ export const DEFAULT_FS_DEPS: GeneratedPluginFsDeps = {
 // The Python's own SEMVER_RE (:15-22). Deliberately not SEMVER_BASE_SOURCE
 // from src/domain/refs.ts, which omits the `+build` component; widening the
 // shared constant would change TAG_RE and is out of scope.
-const SEMVER_RE =
+export const SEMVER_RE =
   /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 const MANIFEST_JSON_PROFILE = {
@@ -582,7 +582,7 @@ const REQUIRED_FILES = [
 ] as const;
 
 /** Python `sorted()` orders by code point; JavaScript's default sort does not. */
-function compareByCodePoint(left: string, right: string): number {
+export function compareByCodePoint(left: string, right: string): number {
   // `Array.from` splits by code point, exactly as spreading would; oxlint's
   // `no-misused-spread` rejects the spread form, and grapheme segmentation is
   // the wrong unit here — Python compares code points.
@@ -597,7 +597,7 @@ function compareByCodePoint(left: string, right: string): number {
   return leftPoints.length - rightPoints.length;
 }
 
-async function validateSkillFrontmatter(
+export async function validateSkillFrontmatter(
   skillMd: string,
   skillName: string,
   errors: string[],

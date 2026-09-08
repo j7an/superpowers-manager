@@ -31,6 +31,7 @@ import {
   REQUIRED_ENV,
   seedCodex,
   seedGenerated,
+  seedQualifiedGenerated,
   SHORT,
 } from "./probe-fixture.ts";
 
@@ -49,7 +50,7 @@ const EMPTY_PLUGINS = '{"installed":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than `tests/baseline/cli-parity.test.ts:236::function snapshotTree`'s mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.ts:247::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  */
@@ -106,7 +107,7 @@ void test("the case environment pins every name runProbe's dependencies read", (
 
 void test("malformed installed metadata falls back to the manifest short SHA", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     // Two listings, one per invocation. The FIRST answers
     // `inspect --view fingerprint` and carries the active manager version, so
@@ -120,6 +121,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
+  assert.match(result.stdout, /^harness=codex$/m);
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, new RegExp(`^generated_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, new RegExp(`^installed_commit=${SHORT}$`, "m"));
@@ -135,7 +137,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/codex-presentation.ts:223::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/codex-presentation.ts:227::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
@@ -148,7 +150,13 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
       .split("\n")
       .slice(0, -1)
       .map((line) => line.slice(0, line.indexOf("="))),
-    [...PROBE_PORCELAIN_KEYS],
+    [
+      ...PROBE_PORCELAIN_KEYS,
+      "installation_state",
+      "resource_state",
+      "compatibility",
+      "compatibility_reason",
+    ],
   );
 });
 
@@ -170,7 +178,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     resolved_ref: "v1.0.0",
     commit: DESIRED,
   });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -213,12 +221,19 @@ void test("an environment ref overrides only the ref side and the saved fields s
     resolved_ref: "v1.0.0",
     commit: DESIRED,
   });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c, DESIRED, source);
   // FOUR listings: this case runs probe twice (porcelain, then human) and each
   // run issues `plugin list --json` twice. The on-disk counter in
   // tests/bin/lifecycle-fakes.js is per case, not per run.
   seedCodex(c, {
-    pluginListings: [ACTIVE, EMPTY_PLUGINS, ACTIVE, EMPTY_PLUGINS],
+    pluginListings: [
+      ACTIVE,
+      EMPTY_PLUGINS,
+      ACTIVE,
+      ACTIVE,
+      EMPTY_PLUGINS,
+      ACTIVE,
+    ],
     manifestVersion: ACTIVE_VERSION,
   });
   // Renamed away for both runs, exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:434-477::mv "$upstream" "$offline_source"` leaves
@@ -277,7 +292,7 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
     mode: "track-latest",
     source,
   });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -335,7 +350,7 @@ void test("probe reports every validated identity state without mutating anythin
     },
   ]) {
     const c = createCase({ fakes: "probe" });
-    seedGenerated(c, `{"commit":"${DESIRED}"}`);
+    await seedQualifiedGenerated(c);
     // The fingerprint listing stays the ACTIVE manager version in all four so
     // installed_commit resolves and status can be `current` even for the
     // `legacy` and `neither` rows -- impossible with one shared listing
@@ -366,7 +381,7 @@ void test("probe reports every validated identity state without mutating anythin
 
 void test("semantically invalid installed provenance falls through to the manifest", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -381,7 +396,7 @@ void test("semantically invalid installed provenance falls through to the manife
 
 void test("no active plugin yields a null fingerprint and needs install", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS],
     manifestVersion: ACTIVE_VERSION,
@@ -414,7 +429,7 @@ void test("no active plugin yields a null fingerprint and needs install", async 
 
 void test("an absent installed manifest also yields a null fingerprint", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${DESIRED}"}`);
+  await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS],
     manifestVersion: null,
@@ -428,7 +443,7 @@ void test("an absent installed manifest also yields a null fingerprint", async (
 
 void test("stale generated provenance outranks a null installed fingerprint", async () => {
   const c = createCase({ fakes: "probe" });
-  seedGenerated(c, `{"commit":"${"0".repeat(40)}"}`);
+  await seedQualifiedGenerated(c, "0".repeat(40));
   seedCodex(c, { pluginListings: [EMPTY_PLUGINS, EMPTY_PLUGINS] });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
@@ -509,7 +524,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // runInspect's real inspect-failed path (`src/adapter.ts:810::activeVersion = activePluginVersionFromJson`).
+  // runInspect's real inspect-failed path (`src/adapter.ts:816::activeVersion = activePluginVersionFromJson`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the fingerprint inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -524,7 +539,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
 // (`src/adapter.ts:973-999::async function runCodexOperation(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/adapter.ts:289::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/adapter.ts:294::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:

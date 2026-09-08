@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   capture,
   notCalledAdapter,
+  observingCoordinator,
   withGitUpstream,
 } from "./helpers/command-harness.ts";
 
@@ -23,6 +24,8 @@ void test("a tag pin writes the resolved record and prints the confirmation", as
       },
       stdout: out.stream,
       stderr: capture().stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
@@ -54,6 +57,8 @@ void test("a mixed-case 40-hex ref is lowercased in the written record", async (
       },
       stdout: capture().stream,
       stderr: capture().stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
@@ -78,6 +83,8 @@ void test("an invalid saved record rejects before any resolution", async () => {
       },
       stdout: capture().stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
@@ -104,6 +111,8 @@ void test("a source that cannot supply the commit fails and writes nothing", asy
       },
       stdout: capture().stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 1);

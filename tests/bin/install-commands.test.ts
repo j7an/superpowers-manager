@@ -16,13 +16,18 @@ import test from "node:test";
 import { describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  renameSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -39,8 +44,107 @@ import {
   spawnFakeAdapter,
 } from "./lifecycle-fixture.ts";
 import { caseContext, recordingAdapter } from "./command-context.ts";
+import { codexHarness } from "../../src/codex-harness.ts";
+import { piHarness } from "../../src/pi-harness.ts";
+import { piPaths } from "../../src/pi-paths.ts";
+import { preparePiCandidate } from "../../src/pi-prepare.ts";
+import { digestPiTree, readPiReceipt } from "../../src/pi-package.ts";
+import {
+  commitFixture,
+  fixtureGit,
+  nativeFixture,
+  nativeSelection,
+} from "../lib/pi-package-fixture.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
+type ByteSnapshotEntry =
+  | readonly [relative: string, kind: "directory"]
+  | readonly [relative: string, kind: "file", bytes: string]
+  | readonly [relative: string, kind: "symlink", target: string];
+
+function snapshotTree(root: string): readonly ByteSnapshotEntry[] {
+  assert.equal(
+    lstatSync(root).isDirectory(),
+    true,
+    `${root} is not a directory`,
+  );
+  const entries: ByteSnapshotEntry[] = [];
+  const visit = (directory: string, prefix: string): void => {
+    for (const name of readdirSync(directory).sort()) {
+      const path = join(directory, name);
+      const relative = prefix.length === 0 ? name : `${prefix}/${name}`;
+      const stat = lstatSync(path);
+      if (stat.isDirectory()) {
+        entries.push([relative, "directory"]);
+        visit(path, relative);
+      } else if (stat.isFile()) {
+        entries.push([relative, "file", readFileSync(path).toString("base64")]);
+      } else if (stat.isSymbolicLink()) {
+        entries.push([relative, "symlink", readlinkSync(path)]);
+      } else {
+        assert.fail(`unsupported fixture entry at ${path}`);
+      }
+    }
+  };
+  visit(root, "");
+  assert.ok(entries.length > 0, `${root} has no bytes to snapshot`);
+  return entries;
+}
+
+function commitPhaseB(upstream: string): string {
+  const skill = join(upstream, "skills/using-superpowers/SKILL.md");
+  writeFileSync(
+    skill,
+    `${readFileSync(skill, "utf8")}\nCross-harness phase B.\n`,
+  );
+  fixtureGit(upstream, "add", ".");
+  fixtureGit(upstream, "commit", "-qm", "fixture phase B");
+  return fixtureGit(upstream, "rev-parse", "HEAD");
+}
+
+function crossHarnessUpstream(t: Parameters<typeof nativeFixture>[0]): string {
+  const upstream = nativeFixture(t);
+  // The Pi fixture already carries the native package, skill, extension, and
+  // license. Codex preparation additionally requires these inert documents.
+  writeFileSync(join(upstream, "README.md"), "cross-harness fixture\n");
+  writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "fixture conduct\n");
+  return upstream;
+}
+
+function writePiExecutable(
+  c: import("./lifecycle-fixture.ts").CaseEnv,
+  runtimeVersion = "99.2.3",
+): string {
+  const module = join(c.dir, "fake-pi.mjs");
+  const executable = join(c.dir, "pi");
+  writeFileSync(
+    module,
+    `import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";\n` +
+      `import { dirname, join } from "node:path";\n` +
+      `const args = process.argv.slice(2);\n` +
+      `writeFileSync(process.env.SPW_PI_LOG, args.join(" ") + "\\n", { flag: "a" });\n` +
+      `if (args.length === 1 && args[0] === "--version") {\n` +
+      `  process.stdout.write(${JSON.stringify(runtimeVersion + "\n")});\n` +
+      `} else if (args.length === 3 && (args[0] === "install" || args[0] === "remove") && args[2] === "--no-approve") {\n` +
+      `  const settingsFile = join(process.env.PI_CODING_AGENT_DIR, "settings.json");\n` +
+      `  const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, "utf8")) : {};\n` +
+      `  const packages = Array.isArray(settings.packages) ? settings.packages.filter((entry) => entry !== args[1]) : [];\n` +
+      `  if (args[0] === "install") packages.push(args[1]);\n` +
+      `  mkdirSync(dirname(settingsFile), { recursive: true });\n` +
+      `  writeFileSync(settingsFile, JSON.stringify({ ...settings, packages }));\n` +
+      `} else {\n` +
+      `  process.stderr.write("unexpected fake Pi command: " + args.join(" ") + "\\n");\n` +
+      `  process.exitCode = 99;\n` +
+      `}\n`,
+  );
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nexec "${process.execPath}" "${module}" "$@"\n`,
+  );
+  chmodSync(executable, 0o755);
+  return executable;
+}
 
 // These cases execute the native production command functions directly with
 // an injected recording adapter, matching tests/unit/commands-install.test.ts.
@@ -182,7 +286,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/adapter.ts:459::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/adapter.ts:464::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -264,6 +368,8 @@ async function prepareGeneratedTree(
   assert.deepEqual(
     adapter.calls.map((call) => call.operation),
     [
+      "preparation-location",
+      "mutation-roots",
       "preparation-location",
       "validate-preparation-before-fetch",
       "prepare-candidate",
@@ -653,6 +759,8 @@ void describe("install commands", { concurrency: true }, () => {
       adapter.calls.map((call) => call.operation),
       [
         "preparation-location",
+        "mutation-roots",
+        "preparation-location",
         "validate-preparation-before-fetch",
         "prepare-candidate",
       ],
@@ -795,7 +903,7 @@ void describe("install commands", { concurrency: true }, () => {
       // managed-then-unsupported: the initial probe sees "managed"; only the
       // SECOND, fresh inspection (inside gatherInstallStages, after prepare
       // runs) sees "unsupported" -- the drift this case exists to catch.
-      updateControl: (call) => (call === 1 ? "managed" : "unsupported"),
+      updateControl: (call) => (call <= 2 ? "managed" : "unsupported"),
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
@@ -808,12 +916,12 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :387
     assert.ok(out.includes("prepared v1.0.0"), out);
-    // :388, structural: exactly two update-control inspections.
+    // The probe reads control twice; the fresh mutation gate reads it again.
     assert.equal(
       adapter.calls.filter(
         (call) => call.operation === "inspect-update-control",
       ).length,
-      2,
+      3,
     );
     // :389-391, over the double's own call order rather than a log file.
     const calls = adapter.calls.map((call) => call.operation);
@@ -846,7 +954,7 @@ void describe("install commands", { concurrency: true }, () => {
         // installed yet, the needs-install precondition). Second is
         // gatherInstallStages' post-install verification: the commit adapter
         // install "took".
-        return fingerprintCalls === 1 ? null : commit;
+        return fingerprintCalls <= 2 ? null : commit;
       },
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
@@ -855,12 +963,12 @@ void describe("install commands", { concurrency: true }, () => {
     assert.equal(status, 0, stdout() + stderr());
     // Precondition: this is the needs-install path the case is named for.
     assertNoPrepareRan(stdout());
-    // :399, structural: exactly two update-control inspections.
+    // The probe reads control twice; the fresh mutation gate reads it again.
     assert.equal(
       adapter.calls.filter(
         (call) => call.operation === "inspect-update-control",
       ).length,
-      2,
+      3,
     );
     // :400-404, over the double's own call order.
     const calls = adapter.calls.map((call) => call.operation);
@@ -1104,7 +1212,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/adapter.ts:638::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/adapter.ts:643::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1262,7 +1370,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/adapter.ts:664::adding`).
+    // the previous root it already removed (`src/adapter.ts:669::adding`).
     assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
     assert.ok(out.includes(otherRoot), out);
     // :632-634
@@ -1366,7 +1474,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — `src/adapter.ts:697::missing:`, replayed through the install result.
+    // :685 — `src/adapter.ts:702::missing:`, replayed through the install result.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
   });
 
@@ -1382,7 +1490,7 @@ void describe("install commands", { concurrency: true }, () => {
     // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
     // plugin as installed at 1.0.0 without materialising its cached tree, so
     // the REAL adapter's fingerprint handler resolves an active version
-    // (`src/adapter.ts:806-813::let activeVersion`), builds the installed root for it (:831-836),
+    // (`src/adapter.ts:814-821::let activeVersion`), builds the installed root for it (:831-836),
     // and finds nothing readable there — installedCommitFromRoot returns ""
     // (`src/codex-state.ts:67-84::installedCommitFromRoot`) — and fails with a controlled inspect-failed
     // outcome. The case therefore needs no interception and is not
@@ -1489,6 +1597,9 @@ void describe("install commands", { concurrency: true }, () => {
       join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
       "{\n",
     );
+    // The shell-era tree predates qualified assessment receipts. Removing only
+    // the receipt preserves this case's legacy malformed-tree remediation path.
+    unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -1514,7 +1625,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertGeneratedCommitIsSha(c);
   });
 
-  void test("update takes the same remediation path, not the current-state skip (:770-780)", async () => {
+  void test("update takes the same remediation path, not the current-state skip (:770-780)", async (t) => {
     const c = installCase();
     await prepareGeneratedTree(c);
     clearLogs(c);
@@ -1523,6 +1634,9 @@ void describe("install commands", { concurrency: true }, () => {
       join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
       "{\n",
     );
+    // As above, keep this a receipt-less legacy tree so update must remediate
+    // the malformed provenance rather than accept invalid modern evidence.
+    unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
     const result = await runScript(c, "update");
     // :777
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -1543,6 +1657,331 @@ void describe("install commands", { concurrency: true }, () => {
     // (:759-768). Update reaches the same remediation through
     // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:22-25::needs\ prepare`, so the same claim is asserted here.
     assertGeneratedCommitIsSha(c);
+
+    await t.test(
+      "Codex update changes Codex A to B without changing the installed Pi snapshot or registration",
+      async (t) => {
+        const c = installCase();
+        const upstream = crossHarnessUpstream(t);
+        const commitA = commitFixture(upstream);
+        const selectionA = nativeSelection(commitA, upstream);
+        const initial = caseContext(c, {
+          adapter: codexHarness,
+          env: { SUPERPOWERS_UPSTREAM_URL: upstream },
+        });
+        const ctxA = { ...initial.ctx, selection: selectionA };
+        assert.equal(
+          await runPrepare([], ctxA),
+          0,
+          initial.stdout() + initial.stderr(),
+        );
+        assert.equal(
+          await runInstall([], ctxA),
+          0,
+          initial.stdout() + initial.stderr(),
+        );
+        const installedA = await codexHarness.inspectInstalled(
+          selectionA,
+          ctxA,
+        );
+        assert.equal(
+          installedA.outcome.ok && installedA.outcome.result.kind,
+          "current",
+        );
+
+        const piUpstream = nativeFixture(t);
+        const piCommit = commitFixture(piUpstream);
+        const piSelection = nativeSelection(piCommit, piUpstream);
+        const paths = piPaths(ctxA.env, process.cwd());
+        const preparedPi = await preparePiCandidate(
+          {
+            upstreamRoot: piUpstream,
+            workspaceRoot: c.tmp,
+            candidateRoot: paths.preparedRoot,
+            selection: piSelection,
+          },
+          ctxA,
+        );
+        assert.equal(preparedPi.outcome.ok, true);
+        cpSync(paths.preparedRoot, paths.installedRoot, {
+          recursive: true,
+          verbatimSymlinks: true,
+        });
+        mkdirSync(paths.agentDir, { recursive: true });
+        writeFileSync(
+          paths.settingsFile,
+          JSON.stringify({
+            packages: [paths.installedRoot],
+            theme: "dark",
+            crossHarness: { preserved: true },
+          }),
+        );
+        const piInstalled = await piHarness.inspectInstalled(piSelection, ctxA);
+        assert.equal(
+          piInstalled.outcome.ok && piInstalled.outcome.result.kind,
+          "current",
+        );
+        const piBefore = {
+          installed: snapshotTree(paths.installedRoot),
+          settings: readFileSync(paths.settingsFile).toString("base64"),
+        };
+
+        const commitB = commitPhaseB(upstream);
+        assert.notEqual(commitB, commitA);
+        const selectionB = nativeSelection(commitB, upstream);
+        clearLogs(c);
+        const updated = caseContext(c, {
+          adapter: codexHarness,
+          env: { SUPERPOWERS_UPSTREAM_URL: upstream },
+        });
+        const ctxB = { ...updated.ctx, selection: selectionB };
+        assert.equal(
+          await runUpdate([], ctxB),
+          0,
+          updated.stdout() + updated.stderr(),
+        );
+        assert.equal(readGeneratedCommit(c), commitB);
+        const installedB = await codexHarness.inspectInstalled(
+          selectionB,
+          ctxB,
+        );
+        assert.equal(
+          installedB.outcome.ok && installedB.outcome.result.kind,
+          "current",
+        );
+        assert.ok(
+          has(
+            readLog(c.codexLog),
+            "plugin add superpowers@superpowers-manager",
+          ),
+          "Codex update never reached the concrete plugin installation",
+        );
+        const codexCacheReceipt = JSON.parse(
+          readFileSync(
+            join(
+              c.state,
+              "codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0/.superpowers-upstream.json",
+            ),
+            "utf8",
+          ),
+        ) as { commit?: unknown };
+        assert.equal(codexCacheReceipt.commit, commitB);
+        assert.deepEqual(
+          {
+            installed: snapshotTree(paths.installedRoot),
+            settings: readFileSync(paths.settingsFile).toString("base64"),
+          },
+          piBefore,
+        );
+      },
+    );
+
+    await t.test(
+      "Pi update changes Pi A to B without changing the installed Codex plugin or registration",
+      async (t) => {
+        const c = installCase();
+        const upstream = crossHarnessUpstream(t);
+        const commitA = commitFixture(upstream);
+        const selectionA = nativeSelection(commitA, upstream);
+        const codexInitial = caseContext(c, {
+          adapter: codexHarness,
+          env: { SUPERPOWERS_UPSTREAM_URL: upstream },
+        });
+        const codexCtx = { ...codexInitial.ctx, selection: selectionA };
+        assert.equal(
+          await runPrepare([], codexCtx),
+          0,
+          codexInitial.stdout() + codexInitial.stderr(),
+        );
+        assert.equal(
+          await runInstall([], codexCtx),
+          0,
+          codexInitial.stdout() + codexInitial.stderr(),
+        );
+        const codexInstalled = await codexHarness.inspectInstalled(
+          selectionA,
+          codexCtx,
+        );
+        assert.equal(
+          codexInstalled.outcome.ok && codexInstalled.outcome.result.kind,
+          "current",
+        );
+
+        const piLog = join(c.state, "pi.log");
+        const piExecutable = writePiExecutable(c);
+        const piInitial = caseContext(c, {
+          adapter: codexHarness,
+          env: {
+            SUPERPOWERS_UPSTREAM_URL: upstream,
+            SUPERPOWERS_PI: piExecutable,
+            SPW_PI_LOG: piLog,
+          },
+        });
+        const piCtxA = {
+          ...piInitial.ctx,
+          adapter: piHarness,
+          options: { harness: "pi" as const, allowExperimental: true },
+          selection: selectionA,
+        };
+        assert.equal(
+          await runPrepare([], piCtxA),
+          0,
+          piInitial.stdout() + piInitial.stderr(),
+        );
+        assert.equal(
+          await runInstall([], piCtxA),
+          0,
+          piInitial.stdout() + piInitial.stderr(),
+        );
+        const paths = piPaths(piCtxA.env, process.cwd());
+        const receiptA = await readPiReceipt(paths.installedRoot);
+        assert.equal(receiptA.commit, commitA);
+        assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
+
+        const codexCache = join(
+          c.state,
+          "codex-home/plugins/cache/superpowers-manager",
+        );
+        const pluginList = join(c.state, "plugin_list.json");
+        const marketplaceList = join(c.state, "marketplace_list.json");
+        const codexBefore = {
+          installed: snapshotTree(codexCache),
+          pluginRegistration: readFileSync(pluginList).toString("base64"),
+          marketplaceRegistration:
+            readFileSync(marketplaceList).toString("base64"),
+        };
+        assert.match(
+          readFileSync(pluginList, "utf8"),
+          /superpowers@superpowers-manager/,
+        );
+        assert.match(
+          readFileSync(marketplaceList, "utf8"),
+          /superpowers-manager/,
+        );
+
+        const commitB = commitPhaseB(upstream);
+        assert.notEqual(commitB, commitA);
+        const selectionB = nativeSelection(commitB, upstream);
+        writeFileSync(piLog, "");
+        const piUpdated = caseContext(c, {
+          adapter: codexHarness,
+          env: {
+            SUPERPOWERS_UPSTREAM_URL: upstream,
+            SUPERPOWERS_PI: piExecutable,
+            SPW_PI_LOG: piLog,
+          },
+        });
+        const piCtxB = {
+          ...piUpdated.ctx,
+          adapter: piHarness,
+          options: { harness: "pi" as const, allowExperimental: true },
+          selection: selectionB,
+        };
+        assert.equal(
+          await runUpdate([], piCtxB),
+          0,
+          piUpdated.stdout() + piUpdated.stderr(),
+        );
+        const receiptB = await readPiReceipt(paths.installedRoot);
+        assert.equal(receiptB.commit, commitB);
+        assert.notEqual(receiptB.digest, receiptA.digest);
+        assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
+        assert.match(
+          readFileSync(
+            join(paths.installedRoot, "skills/using-superpowers/SKILL.md"),
+            "utf8",
+          ),
+          /Cross-harness phase B\./,
+        );
+        assert.deepEqual(
+          JSON.parse(readFileSync(paths.settingsFile, "utf8")).packages,
+          [paths.installedRoot],
+        );
+        const piUpdateLog = readLog(piLog);
+        assert.deepEqual(
+          piUpdateLog,
+          ["--version"],
+          "an existing validated Pi registration must be retained while the Manager republishes the snapshot",
+        );
+        assert.deepEqual(
+          {
+            installed: snapshotTree(codexCache),
+            pluginRegistration: readFileSync(pluginList).toString("base64"),
+            marketplaceRegistration:
+              readFileSync(marketplaceList).toString("base64"),
+          },
+          codexBefore,
+        );
+      },
+    );
+
+    await t.test(
+      "Pi install and update admit a differing runtime without experimental opt-in",
+      async (t) => {
+        const c = installCase();
+        const upstream = nativeFixture(t);
+        const commitA = commitFixture(upstream);
+        const selectionA = nativeSelection(commitA);
+        const piLog = join(c.state, "pi.log");
+        const initial = caseContext(c, {
+          adapter: codexHarness,
+          env: { SUPERPOWERS_PI: writePiExecutable(c), SPW_PI_LOG: piLog },
+        });
+        const ctxA = {
+          ...initial.ctx,
+          adapter: piHarness,
+          selection: selectionA,
+          options: { harness: "pi" as const, allowExperimental: false },
+        };
+        const paths = piPaths(ctxA.env, process.cwd());
+        const preparedA = await preparePiCandidate(
+          {
+            upstreamRoot: upstream,
+            workspaceRoot: c.tmp,
+            candidateRoot: paths.preparedRoot,
+            selection: selectionA,
+          },
+          ctxA,
+        );
+        assert.ok(preparedA.outcome.ok);
+        assert.equal(preparedA.outcome.result.compatibility.kind, "supported");
+        assert.equal(
+          await runInstall([], ctxA),
+          0,
+          initial.stdout() + initial.stderr(),
+        );
+        const receiptA = await readPiReceipt(paths.installedRoot);
+        assert.equal(receiptA.commit, commitA);
+        assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
+
+        const commitB = commitPhaseB(upstream);
+        const selectionB = nativeSelection(commitB);
+        const ctxB = { ...ctxA, selection: selectionB };
+        const retiredPreparation = join(c.dir, "retired-pi-preparation");
+        renameSync(paths.preparedRoot, retiredPreparation);
+        const preparedB = await preparePiCandidate(
+          {
+            upstreamRoot: upstream,
+            workspaceRoot: c.tmp,
+            candidateRoot: paths.preparedRoot,
+            selection: selectionB,
+          },
+          ctxB,
+        );
+        assert.ok(preparedB.outcome.ok);
+        writeFileSync(piLog, "");
+        assert.equal(
+          await runUpdate([], ctxB),
+          0,
+          initial.stdout() + initial.stderr(),
+        );
+        const receiptB = await readPiReceipt(paths.installedRoot);
+        assert.equal(receiptB.commit, commitB);
+        assert.notEqual(receiptB.digest, receiptA.digest);
+        assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
+        assert.ok(readLog(piLog).includes("--version"));
+      },
+    );
   });
 
   // Port-only (no shell original): row 18's first genuine consumer. The shell

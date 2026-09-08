@@ -47,7 +47,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { capture, notCalledAdapter } from "../lib/command-doubles.ts";
+import {
+  capture,
+  notCalledAdapter,
+  observingCoordinator,
+} from "../lib/command-doubles.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SIGNAL_CHILD = fileURLToPath(
@@ -366,6 +370,8 @@ function freshContext(
     env: { SUPERPOWERS_CONFIG_DIR: configDir, ...envOverrides },
     stdout: stdout.stream,
     stderr: stderr.stream,
+    options: { harness: "codex" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter: notCalledAdapter,
   };
   return { configDir, statePath, ctx, stdout, stderr };

@@ -15,6 +15,7 @@
 import { runPrepare } from "../../src/commands/prepare.ts";
 
 import { codexHarness } from "../../src/codex-harness.ts";
+import { createResourceCoordinator } from "../../src/resource-lock.ts";
 
 const root = process.argv[2];
 if (root === undefined) {
@@ -27,6 +28,8 @@ process.exitCode = await runPrepare(process.argv.slice(3), {
   env: process.env,
   stdout: process.stdout,
   stderr: process.stderr,
+  options: { harness: "codex", allowExperimental: false },
+  coordination: createResourceCoordinator(),
   // Real, not a double: this is the end-to-end fixture, and gatherPrepare's
   // build call must reach the case's fake `codex` on PATH the same way it
   // did before ctx.adapter existed.

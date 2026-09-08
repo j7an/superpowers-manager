@@ -14,7 +14,11 @@ import {
   runScenario,
 } from "../../baseline/support.ts";
 
-export { capture, notCalledAdapter } from "../../lib/command-doubles.ts";
+export {
+  capture,
+  notCalledAdapter,
+  observingCoordinator,
+} from "../../lib/command-doubles.ts";
 
 // async + `return await` for the same reason as withConfigDir below: a bare
 // `return fn(root)` hands back a pending promise, and the `finally` block's

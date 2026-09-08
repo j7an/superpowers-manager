@@ -11,8 +11,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { capture } from "../unit/helpers/command-harness.ts";
+import {
+  capture,
+  observingCoordinator,
+} from "../unit/helpers/command-harness.ts";
 import { UPSTREAM } from "../bin/lifecycle-fixture.ts";
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
 
 /**
  * `createCase`'s return type, referenced as a type only. Naming the typedef
@@ -24,7 +28,7 @@ export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 /**
  * Every environment name runProbe's dependencies read. Declared, never
  * derived: a predicate would also accept an env that lost a name.
- * runAdapter merges process.env (`src/adapter.ts:981::const env = { ...process.env, ...context.env };`) and runGit spreads it
+ * runAdapter merges process.env (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`) and runGit spreads it
  * (`src/git.ts:32::env: { ...process.env`), so an unset name here leaks the developer's shell into a
  * supposedly hermetic case.
  */
@@ -55,9 +59,9 @@ export function caseEnv(
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
     // (`tests/bin/lifecycle-fakes.ts:213::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
-    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:470::const env = {`).
+    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:477::const env = {`).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
-    // (`src/adapter.ts:981::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
+    // (`src/adapter.ts:993::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with
     // `fixture: SPW_FIXTURE_STATE is unset` -- which is why the declared
     // hermeticity guard does not need to cover it.
@@ -90,7 +94,7 @@ export const SHORT = DESIRED.slice(0, 7);
  * `pluginListings` is an ARRAY, one entry per `codex plugin list --json`
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
  * Probe issues that command twice per run and the two calls need different
- * answers -- `inspect --view fingerprint` (`src/adapter.ts:795-800::const listing`) then
+ * answers -- `inspect --view fingerprint` (`src/adapter.ts:802-807::const listing`) then
  * `inspect --view ownership` (:871). With a single listing, a manager version
  * present for `installed_commit` also forces `identity_state=manager`, so
  * scenario 1 and the four-state identity matrix could not be written at all.
@@ -108,10 +112,14 @@ export function seedCodex(
     installedProvenance?: string | null;
   } = {},
 ) {
-  const listings = state.pluginListings ?? [
+  const initialListings = state.pluginListings ?? [
     '{"installed":[]}',
     '{"installed":[]}',
   ];
+  const listings =
+    initialListings.length === 2
+      ? [...initialListings, initialListings[0]!]
+      : initialListings;
   listings.forEach((body, index) => {
     writeFileSync(join(c.state, `plugin_list.${index}.json`), body, "utf8");
   });
@@ -158,6 +166,22 @@ export function seedGenerated(c: CaseEnv, body: string) {
   writeFileSync(join(dir, ".superpowers-upstream.json"), body, "utf8");
 }
 
+/**
+ * Writes a supported, receipt-bearing generated tree for status preconditions.
+ * Raw provenance-only seeding remains separate for missing/malformed evidence.
+ */
+export async function seedQualifiedGenerated(
+  c: CaseEnv,
+  commit = DESIRED,
+  source = UPSTREAM,
+): Promise<void> {
+  await writeQualifiedCodexFixture(
+    join(c.pkg, "plugins", "superpowers"),
+    commit,
+    source,
+  );
+}
+
 import { runProbe } from "../../src/commands/probe.ts";
 
 import { codexHarness } from "../../src/codex-harness.ts";
@@ -176,6 +200,8 @@ async function invoke(
     env,
     stdout: out.stream,
     stderr: err.stream,
+    options: { harness: "codex", allowExperimental: false },
+    coordination: observingCoordinator(),
     // Real, not a double: this fixture's cases carry their own fake `codex`
     // on PATH (via `env`), and runProbe must reach it exactly as it did
     // before ctx.adapter existed.

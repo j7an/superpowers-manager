@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   capture,
   notCalledAdapter,
+  observingCoordinator,
   withPackage,
 } from "./helpers/command-harness.ts";
 
@@ -23,6 +24,8 @@ void test("track-latest writes the record and prints one line", async () => {
       },
       stdout: out.stream,
       stderr: capture().stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 0);
@@ -53,6 +56,8 @@ void test("track-latest rejects a credential-bearing source before writing", asy
       },
       stdout: capture().stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
@@ -74,6 +79,8 @@ void test("track-latest refuses to overwrite a corrupt saved record", async () =
       },
       stdout: capture().stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 1);
@@ -97,6 +104,8 @@ void test("track-latest rejects extra arguments with exit 2", async () => {
       env: { SUPERPOWERS_CONFIG_DIR: join(root, "config") },
       stdout: capture().stream,
       stderr: err.stream,
+      options: { harness: "codex", allowExperimental: false },
+      coordination: observingCoordinator(),
       adapter: notCalledAdapter,
     });
     assert.equal(status, 2);

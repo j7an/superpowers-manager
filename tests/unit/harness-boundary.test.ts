@@ -20,7 +20,7 @@ import {
 } from "../../src/adapter-result.ts";
 import { runInstall } from "../../src/commands/install.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
-import { runProbe } from "../../src/commands/probe.ts";
+import { gatherProbe, runProbe } from "../../src/commands/probe.ts";
 import { runUninstall } from "../../src/commands/uninstall.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import type {
@@ -31,6 +31,429 @@ import type {
 } from "../../src/harness.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
 import { createHarnessFixture } from "../lib/test-harness.ts";
+import { parseArgs } from "../../src/cli.ts";
+import { createResourceCoordinator } from "../../src/resource-lock.ts";
+import { SafetyError } from "../../src/safety-error.ts";
+
+void test("command-first harness options are removed before command arity checks", () => {
+  for (const target of [["--harness", "pi"], ["--harness=pi"]]) {
+    assert.deepEqual(parseArgs(["probe", ...target, "--porcelain"]), {
+      kind: "run",
+      cmd: "probe",
+      args: ["--porcelain"],
+      options: { harness: "pi", allowExperimental: false },
+    });
+  }
+  assert.deepEqual(
+    parseArgs(["install", "--allow-experimental", "--harness=pi"]),
+    {
+      kind: "run",
+      cmd: "install",
+      args: [],
+      options: { harness: "pi", allowExperimental: true },
+    },
+  );
+  for (const args of [
+    ["pin", "--harness=pi", "v1.0.0"],
+    ["prepare", "--allow-experimental"],
+    ["install", "--harness=unknown"],
+    ["install", "--harness"],
+    ["install", "--harness="],
+    ["install", "--harness=pi", "--harness", "codex"],
+    ["install", "--allow-experimental", "--allow-experimental"],
+    ["--harness=pi", "probe"],
+  ])
+    assert.equal(parseArgs(args).kind, "usage-error", args.join(" "));
+  assert.deepEqual(parseArgs([]), {
+    kind: "run",
+    cmd: "update",
+    args: [],
+    options: { harness: "codex", allowExperimental: false },
+  });
+});
+
+void test("shared install settles every transaction exit while retaining mutation ownership", async (t) => {
+  for (const inspection of [
+    "current",
+    "mismatch",
+    "absent",
+    "throw",
+    "failed",
+    "nonzero",
+    "malformed",
+  ] as const) {
+    for (const settlement of [
+      "ok",
+      "throw",
+      "failed",
+      "nonzero",
+      "malformed",
+    ] as const) {
+      await t.test(`${inspection}/${settlement}`, async (t) => {
+        const fixture = await createHarnessFixture(t);
+        const statePath = join(fixture.ctx.root, "installed-state");
+        writeFileSync(statePath, "previous");
+        const coordinator = createResourceCoordinator();
+        let activated = false;
+        let settled = false;
+        const settlements: string[] = [];
+        let recoveryReads = 0;
+        const settle = async (
+          kind: "finalize" | "rollback",
+        ): Promise<AdapterResult<null>> => {
+          settlements.push(kind);
+          const resources = await coordinator.observeResources([
+            fixture.destinationRoot,
+          ]);
+          assert.equal(resources[0]?.state, "owned");
+          assert.doesNotMatch(fixture.out.text(), /fixture installed/);
+          if (settlement === "throw")
+            throw new Error("private settlement failure");
+          if (settlement === "malformed")
+            return null as unknown as AdapterResult<null>;
+          if (settlement === "failed")
+            return failureResult(kind, "failed", "settlement failed", [], []);
+          if (settlement === "nonzero")
+            return { ...successResult(kind, null, []), status: 1 };
+          settled = true;
+          if (kind === "rollback") writeFileSync(statePath, "previous");
+          return successResult(kind, null, []);
+        };
+        const adapter = {
+          ...fixture.adapter,
+          ...fixture.methods,
+          async install() {
+            activated = true;
+            writeFileSync(statePath, "candidate");
+            return successResult(
+              "install",
+              {
+                ...fixture.installReceipt,
+                transaction: {
+                  finalize: () => settle("finalize"),
+                  rollback: () => settle("rollback"),
+                },
+              },
+              [],
+            );
+          },
+          async inspectInstalled(): Promise<AdapterResult<InstalledState>> {
+            if (!activated)
+              return successResult("inspect", fixture.installed, []);
+            if (settlements.length > 0) {
+              recoveryReads += 1;
+              return successResult(
+                "inspect",
+                {
+                  kind: "mismatch",
+                  observedIdentity: readFileSync(statePath, "utf8"),
+                },
+                [],
+              );
+            }
+            if (inspection === "throw")
+              throw new Error("private inspection failure");
+            if (inspection === "malformed")
+              return successResult(
+                "inspect",
+                null as unknown as InstalledState,
+                [],
+              );
+            if (inspection === "failed")
+              return failureResult(
+                "inspect",
+                "failed",
+                "inspection failed",
+                [],
+                [],
+              );
+            if (inspection === "nonzero")
+              return {
+                ...successResult("inspect", fixture.installed, []),
+                status: 1,
+              };
+            return successResult(
+              "inspect",
+              inspection === "absent"
+                ? { kind: "absent", observedIdentity: "" }
+                : { kind: inspection, observedIdentity: "candidate" },
+              [],
+            );
+          },
+        };
+        const result = await runInstall([], {
+          ...fixture.ctx,
+          adapter,
+          coordination: coordinator,
+        });
+        assert.equal(
+          result,
+          inspection === "current" && settlement === "ok" ? 0 : 1,
+          fixture.err.text(),
+        );
+        assert.deepEqual(settlements, [
+          inspection === "current" ? "finalize" : "rollback",
+        ]);
+        assert.equal(settled, settlement === "ok");
+        assert.equal(
+          readFileSync(statePath, "utf8"),
+          inspection !== "current" && settlement === "ok"
+            ? "previous"
+            : "candidate",
+        );
+        if (inspection !== "current" || settlement !== "ok")
+          assert.equal(recoveryReads, 1);
+        if (result !== 0)
+          assert.doesNotMatch(fixture.out.text(), /fixture installed/);
+        assert.doesNotMatch(
+          fixture.err.text(),
+          /private (inspection|settlement) failure/,
+        );
+      });
+    }
+  }
+});
+
+void test("shared install rejects malformed transaction capabilities without claiming activation success", async (t) => {
+  for (const transaction of [
+    null,
+    {},
+    { finalize: async () => successResult("finalize", null, []) },
+    {
+      get finalize() {
+        throw new Error("private getter failure");
+      },
+      rollback: async () => successResult("rollback", null, []),
+    },
+  ]) {
+    await t.test(
+      transaction === null ? "null" : String(Object.keys(transaction)),
+      async (t) => {
+        const fixture = await createHarnessFixture(t);
+        const adapter = {
+          ...fixture.adapter,
+          ...fixture.methods,
+          async install() {
+            return successResult(
+              "install",
+              { ...fixture.installReceipt, transaction },
+              [],
+            ) as unknown as AdapterResult<
+              import("../../src/harness.ts").InstallReceipt
+            >;
+          },
+        };
+        assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
+        assert.match(fixture.err.text(), /transaction|receipt/);
+        assert.doesNotMatch(fixture.err.text(), /private getter failure/);
+        assert.doesNotMatch(fixture.out.text(), /fixture installed/);
+      },
+    );
+  }
+});
+
+void test("public mutators refuse a competing resource owner before adapter probing", async (t) => {
+  for (const run of [runPrepare, runInstall, runUpdate, runUninstall]) {
+    await t.test(run.name, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      const owner = createResourceCoordinator();
+      await owner.withResources([fixture.destinationRoot], async () => {
+        assert.equal(
+          await run([], {
+            ...fixture.ctx,
+            coordination: createResourceCoordinator(),
+          }),
+          1,
+        );
+        assert.deepEqual(fixture.calls, ["location", "mutation-roots"]);
+        assert.match(fixture.err.text(), /resource is busy/);
+        assert.equal(existsSync(fixture.destinationRoot), false);
+      });
+    });
+  }
+});
+
+void test("mutation resource wrappers preserve output failures without relabelling them", async (t) => {
+  for (const run of [runPrepare, runInstall, runUpdate, runUninstall]) {
+    await t.test(run.name, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      const failure = new Error("private output failure");
+      const stdout = {
+        write(text: string) {
+          if (text === "test install notice\n") return true;
+          throw failure;
+        },
+      } as unknown as NodeJS.WritableStream;
+      await assert.rejects(
+        run([], {
+          ...fixture.ctx,
+          adapter: { ...fixture.adapter, ...fixture.methods },
+          stdout,
+        }),
+        (cause) => cause === failure,
+      );
+      assert.equal(fixture.err.text(), "");
+    });
+  }
+});
+
+void test("mutation wrappers report resource release failure after a completed action", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const coordination = {
+    ...fixture.ctx.coordination,
+    async withResources<T>(
+      _paths: readonly string[],
+      action: () => Promise<T>,
+    ): Promise<T> {
+      await action();
+      throw new SafetyError(
+        "resource-lock",
+        "cannot release fixture resource lock",
+      );
+    },
+  };
+  assert.equal(
+    await runUninstall([], {
+      ...fixture.ctx,
+      adapter: { ...fixture.adapter, ...fixture.methods },
+      coordination,
+    }),
+    1,
+  );
+  assert.match(fixture.out.text(), /fixture uninstall complete/);
+  assert.equal(
+    fixture.err.text(),
+    "error: cannot release fixture resource lock\n",
+  );
+});
+
+void test("experimental no-op update is allowed but activation requires invocation permission", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const artifact = {
+    ...fixture.preparedArtifact,
+    compatibility: {
+      kind: "experimental" as const,
+      generation: "fixture",
+      reason: "unqualified",
+    },
+  };
+  const adapter = {
+    ...fixture.adapter,
+    ...fixture.methods,
+    async inspectPrepared() {
+      return successResult(
+        "inspect",
+        {
+          kind: "current" as const,
+          artifact,
+          observedIdentity: artifact.identity,
+          compatibility: artifact.compatibility,
+        },
+        [],
+      );
+    },
+    async readPrepared() {
+      return successResult("read", artifact, []);
+    },
+    async install() {
+      fixture.calls.push("activated");
+      return successResult("install", fixture.installReceipt, []);
+    },
+  };
+  assert.equal(await runUpdate([], { ...fixture.ctx, adapter }), 0);
+  assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
+  assert.equal(fixture.calls.includes("activated"), false);
+  assert.match(fixture.err.text(), /--allow-experimental/);
+  assert.equal(
+    await runInstall([], {
+      ...fixture.ctx,
+      adapter,
+      options: { harness: "pi", allowExperimental: true },
+    }),
+    0,
+  );
+  assert.equal(fixture.calls.includes("activated"), true);
+});
+
+void test("probe rejects mixed publication observations even when all resource markers are idle", async (t) => {
+  for (const changed of ["prepared", "installed", "control"] as const) {
+    await t.test(changed, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      let preparedReads = 0;
+      let installedReads = 0;
+      let controlReads = 0;
+      const adapter = {
+        ...fixture.adapter,
+        ...fixture.methods,
+        async inspectPrepared() {
+          preparedReads += 1;
+          return successResult(
+            "prepared",
+            {
+              kind: "current" as const,
+              artifact: fixture.preparedArtifact,
+              compatibility: fixture.preparedArtifact.compatibility,
+              observedIdentity:
+                changed === "prepared" && preparedReads > 1 ? "new" : "old",
+            },
+            [],
+          );
+        },
+        async inspectInstalled() {
+          installedReads += 1;
+          return successResult(
+            "installed",
+            {
+              kind: "current" as const,
+              observedIdentity:
+                changed === "installed" && installedReads > 1 ? "new" : "old",
+            },
+            [],
+          );
+        },
+        async inspectUpdateControl() {
+          controlReads += 1;
+          return successResult(
+            "control",
+            {
+              ...fixture.control,
+              presentationValue:
+                changed === "control" && controlReads > 1
+                  ? "recovery required"
+                  : "normal",
+            },
+            [],
+          );
+        },
+      };
+      assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
+      assert.doesNotMatch(fixture.out.text(), /status current/);
+      assert.match(fixture.err.text(), /changed|coherent/);
+    });
+  }
+});
+
+void test("probe cannot succeed when readable adapter facts lack observable resource roots", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const adapter = {
+    ...fixture.adapter,
+    ...fixture.methods,
+    async mutationRoots(): Promise<readonly string[]> {
+      throw new Error("private roots failure");
+    },
+  };
+  assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "inspect-prepared",
+    "inspect-installed",
+  ]);
+  assert.equal(fixture.out.text(), "");
+  assert.equal(
+    fixture.err.text(),
+    "error: cannot determine harness observation resources\n",
+  );
+});
 
 void test("preparation does not require a Codex template or manifest", async (t) => {
   const fixture = await createHarnessFixture(t);
@@ -44,7 +467,13 @@ void test("preparation does not require a Codex template or manifest", async (t)
     existsSync(join(fixture.destinationRoot, ".codex-plugin")),
     false,
   );
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
 });
 
 void test("a rejected candidate preserves the previous payload before validation or replacement", async (t) => {
@@ -93,10 +522,99 @@ void test("a rejected candidate preserves the previous payload before validation
     readFileSync(join(fixture.destinationRoot, "payload.txt"), "utf8"),
     "previous\n",
   );
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(fixture.err.text(), "error: fixture candidate rejected\n");
   assert.ok(workspaceRoot);
   assert.equal(existsSync(workspaceRoot), false);
+
+  await t.test(
+    "unsupported candidates do not reach validators or replacement",
+    async (subtest) => {
+      const unsupportedFixture = await createHarnessFixture(subtest);
+      mkdirSync(unsupportedFixture.destinationRoot, { recursive: true });
+      writeFileSync(
+        join(unsupportedFixture.destinationRoot, "payload.txt"),
+        "previous\n",
+        "utf8",
+      );
+      const validator = join(
+        unsupportedFixture.ctx.root,
+        "forbidden-validator",
+      );
+      const validatorSentinel = join(
+        unsupportedFixture.ctx.root,
+        "validator-ran",
+      );
+      writeFileSync(
+        validator,
+        '#!/bin/sh\n: > "$SPW_TEST_VALIDATOR_SENTINEL"\n',
+        "utf8",
+      );
+      chmodSync(validator, 0o755);
+      const unsupportedAdapter = {
+        ...unsupportedFixture.adapter,
+        async prepareCandidate(
+          input: Parameters<
+            typeof unsupportedFixture.adapter.prepareCandidate
+          >[0],
+        ) {
+          const prepared = await unsupportedFixture.adapter.prepareCandidate(
+            input,
+            {
+              root: unsupportedFixture.ctx.root,
+              env: unsupportedFixture.ctx.env,
+            },
+          );
+          if (!prepared.outcome.ok) return prepared;
+          return successResult(
+            prepared.outcome.operation,
+            {
+              ...prepared.outcome.result,
+              compatibility: {
+                kind: "unsupported" as const,
+                reason: "missing bootstrap",
+              },
+            },
+            prepared.outcome.messages,
+          );
+        },
+      };
+      const unsupportedContext = {
+        ...unsupportedFixture.ctx,
+        env: {
+          ...unsupportedFixture.ctx.env,
+          SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
+          SPW_TEST_VALIDATOR_SENTINEL: validatorSentinel,
+        },
+        adapter: unsupportedAdapter,
+      };
+
+      assert.equal(await runPrepare([], unsupportedContext), 1);
+      assert.equal(
+        readFileSync(
+          join(unsupportedFixture.destinationRoot, "payload.txt"),
+          "utf8",
+        ),
+        "previous\n",
+      );
+      assert.equal(existsSync(validatorSentinel), false);
+      assert.deepEqual(unsupportedFixture.calls, [
+        "location",
+        "mutation-roots",
+        "location",
+        "prefetch",
+        "prepare",
+      ]);
+      assert.equal(unsupportedFixture.out.text(), "");
+      assert.equal(unsupportedFixture.err.text(), "error: missing bootstrap\n");
+    },
+  );
 });
 
 void test("preparation rejects unsafe locations before allocating a workspace", async (t) => {
@@ -172,7 +690,13 @@ void test("preparation hides a candidate builder's thrown diagnostic", async (t)
   };
 
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(fixture.err.text(), "error: unexpected test adapter call\n");
 });
 
@@ -197,8 +721,8 @@ void test("preparation rejects artifact evidence for another root", async (t) =>
       return successResult(
         result.outcome.operation,
         {
+          ...result.outcome.result,
           root: `${input.candidateRoot}-other`,
-          commit: input.selection.desiredCommit,
         },
         result.outcome.messages,
       );
@@ -206,7 +730,13 @@ void test("preparation rejects artifact evidence for another root", async (t) =>
   };
 
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(
     fixture.err.text(),
     "error: adapter returned an unexpected preparation root\n",
@@ -231,14 +761,20 @@ void test("preparation rejects artifact evidence for another commit", async (t) 
       assert.equal(result.outcome.ok, true);
       return successResult(
         result.outcome.operation,
-        { root: input.candidateRoot, commit: "0".repeat(40) },
+        { ...result.outcome.result, commit: "0".repeat(40) },
         result.outcome.messages,
       );
     },
   };
 
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, ["location", "prefetch", "prepare"]);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+    "prepare",
+  ]);
   assert.equal(
     fixture.err.text(),
     "error: adapter returned an unexpected preparation commit\n",
@@ -279,13 +815,489 @@ void test("probe performs only the four read-only inspections", async (t) => {
 
   assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 0);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
     "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-control",
   ]);
   assert.equal(fixture.out.text(), "fixture status current\n");
   assert.equal(fixture.err.text(), "");
+
+  await t.test(
+    "unsupported prepared content does not suppress installed inspection",
+    async (subtest) => {
+      const unsupportedFixture = await createHarnessFixture(subtest);
+      const compatibility = {
+        kind: "unsupported" as const,
+        reason: "missing bootstrap",
+      };
+      const unsupportedAdapter = {
+        ...unsupportedFixture.adapter,
+        async inspectPrepared(
+          inputSelection: typeof unsupportedFixture.selection,
+        ) {
+          unsupportedFixture.calls.push("inspect-prepared");
+          assert.deepEqual(inputSelection, unsupportedFixture.selection);
+          return successResult(
+            "inspect-prepared",
+            {
+              kind: "needs-prepare" as const,
+              observedIdentity: "",
+              compatibility,
+            },
+            [],
+          );
+        },
+        inspectInstalled: unsupportedFixture.methods.inspectInstalled,
+        inspectOwnership: unsupportedFixture.methods.inspectOwnership,
+        inspectUpdateControl: unsupportedFixture.methods.inspectUpdateControl,
+      };
+
+      const outcome = await gatherProbe({
+        ...unsupportedFixture.ctx,
+        adapter: unsupportedAdapter,
+      });
+
+      assert.equal(outcome.status, 0);
+      assert.deepEqual(unsupportedFixture.calls, [
+        "location",
+        "mutation-roots",
+        "inspect-prepared",
+        "inspect-installed",
+        "inspect-ownership",
+        "inspect-control",
+        "inspect-prepared",
+        "inspect-installed",
+        "inspect-control",
+      ]);
+      if (outcome.status === 0) {
+        assert.deepEqual(outcome.facts.compatibility, compatibility);
+      }
+    },
+  );
+
+  await t.test(
+    "successful closing inspections do not replay messages a second time",
+    async (subtest) => {
+      const messageFixture = await createHarnessFixture(subtest);
+      const messages = [
+        { channel: "stdout" as const, text: "shared inspection diagnostic" },
+      ];
+      const withMessages = async <T>(result: Promise<AdapterResult<T>>) => {
+        const resolved = await result;
+        assert.ok(resolved.outcome.ok);
+        return successResult(
+          resolved.outcome.operation,
+          resolved.outcome.result,
+          messages,
+        );
+      };
+      const messageAdapter = {
+        ...messageFixture.adapter,
+        inspectPrepared: (
+          ...args: Parameters<typeof messageFixture.methods.inspectPrepared>
+        ) => withMessages(messageFixture.methods.inspectPrepared(...args)),
+        inspectInstalled: (
+          ...args: Parameters<typeof messageFixture.methods.inspectInstalled>
+        ) => withMessages(messageFixture.methods.inspectInstalled(...args)),
+        inspectOwnership: (
+          ...args: Parameters<typeof messageFixture.methods.inspectOwnership>
+        ) => withMessages(messageFixture.methods.inspectOwnership(...args)),
+        inspectUpdateControl: (
+          ...args: Parameters<
+            typeof messageFixture.methods.inspectUpdateControl
+          >
+        ) => withMessages(messageFixture.methods.inspectUpdateControl(...args)),
+      };
+
+      assert.equal(
+        await runProbe([], { ...messageFixture.ctx, adapter: messageAdapter }),
+        0,
+      );
+      assert.equal(
+        messageFixture.out.text(),
+        "shared inspection diagnostic\n".repeat(4) + "fixture status current\n",
+      );
+      assert.equal(messageFixture.err.text(), "");
+    },
+  );
+
+  await t.test(
+    "a controlled closing failure and its messages are replayed exactly once",
+    async (subtest) => {
+      const failureFixture = await createHarnessFixture(subtest);
+      let controlReads = 0;
+      const failureAdapter = {
+        ...failureFixture.adapter,
+        ...failureFixture.methods,
+        async inspectUpdateControl(
+          adapterContext: Parameters<
+            typeof failureFixture.methods.inspectUpdateControl
+          >[0],
+        ): Promise<AdapterResult<UpdateControlInspection>> {
+          controlReads += 1;
+          if (controlReads === 2) {
+            failureFixture.calls.push("inspect-control");
+            return failureResult(
+              "inspect-control",
+              "closing-failure",
+              "closing control failed",
+              ["preserve closing evidence"],
+              [{ channel: "stderr", text: "closing failure context" }],
+            );
+          }
+          return await failureFixture.methods.inspectUpdateControl(
+            adapterContext,
+          );
+        },
+      };
+
+      assert.equal(
+        await runProbe([], { ...failureFixture.ctx, adapter: failureAdapter }),
+        1,
+      );
+      assert.equal(failureFixture.out.text(), "");
+      assert.equal(
+        failureFixture.err.text(),
+        "closing failure context\n" +
+          "error: closing control failed\n" +
+          "hint: preserve closing evidence\n",
+      );
+    },
+  );
+
+  for (const state of ["busy", "uninspectable"] as const) {
+    await t.test(
+      `${state} resource evidence exits one without mutation`,
+      async (subtest) => {
+        const stateFixture = await createHarnessFixture(subtest);
+        let mutationCalls = 0;
+        let observedResource = "";
+        const coordination = {
+          async observeResources(paths: readonly string[]) {
+            observedResource = paths[0]!;
+            return paths.map((resource) => ({
+              resource,
+              state,
+              markerIdentity: "fixture-marker",
+            }));
+          },
+          async withResources<T>(
+            _paths: readonly string[],
+            action: () => Promise<T>,
+          ): Promise<T> {
+            mutationCalls += 1;
+            return await action();
+          },
+        };
+
+        assert.equal(
+          await runProbe([], {
+            ...stateFixture.ctx,
+            adapter: { ...stateFixture.adapter, ...stateFixture.methods },
+            coordination,
+          }),
+          1,
+        );
+        assert.equal(stateFixture.out.text(), "");
+        assert.equal(
+          stateFixture.err.text(),
+          `error: harness resource is ${state}: ${observedResource}\n`,
+        );
+        assert.equal(mutationCalls, 0);
+        assert.equal(stateFixture.calls.includes("install"), false);
+        assert.equal(stateFixture.calls.includes("remove"), false);
+      },
+    );
+  }
+
+  await t.test(
+    "adapter-owned recovery evidence exits one with rendered state and no mutation",
+    async (subtest) => {
+      const recoveryFixture = await createHarnessFixture(subtest);
+      let mutationCalls = 0;
+      const recoveryAdapter = {
+        ...recoveryFixture.adapter,
+        ...recoveryFixture.methods,
+        async inspectUpdateControl(
+          adapterContext: Parameters<
+            typeof recoveryFixture.methods.inspectUpdateControl
+          >[0],
+        ): Promise<AdapterResult<UpdateControlInspection>> {
+          const result =
+            await recoveryFixture.methods.inspectUpdateControl(adapterContext);
+          assert.ok(result.outcome.ok);
+          const blocked = {
+            kind: "blocked" as const,
+            output: {
+              stdout: [],
+              stderr: ["error: fixture recovery required"],
+            },
+          };
+          return successResult(
+            result.outcome.operation,
+            {
+              ...result.outcome.result,
+              probeEligibility: blocked,
+              mutationEligibility: blocked,
+              recoveryState: "required",
+            } as UpdateControlInspection,
+            result.outcome.messages,
+          );
+        },
+        presentation: {
+          ...recoveryFixture.adapter.presentation,
+          renderProbe(
+            facts: Parameters<
+              typeof recoveryFixture.adapter.presentation.renderProbe
+            >[0],
+          ) {
+            return {
+              human: `resource state: ${facts.resourceState}\n`,
+              porcelain: `resource_state=${facts.resourceState}\n`,
+            };
+          },
+        },
+      };
+      const coordination = {
+        ...recoveryFixture.ctx.coordination,
+        async withResources<T>(
+          _paths: readonly string[],
+          action: () => Promise<T>,
+        ): Promise<T> {
+          mutationCalls += 1;
+          return await action();
+        },
+      };
+
+      assert.equal(
+        await runProbe([], {
+          ...recoveryFixture.ctx,
+          options: { harness: "codex", allowExperimental: false },
+          adapter: recoveryAdapter,
+          coordination,
+        }),
+        1,
+      );
+      assert.equal(
+        recoveryFixture.out.text(),
+        "resource state: recovery-required\n",
+      );
+      assert.equal(recoveryFixture.err.text(), "");
+      assert.equal(mutationCalls, 0);
+      assert.equal(recoveryFixture.calls.includes("install"), false);
+      assert.equal(recoveryFixture.calls.includes("remove"), false);
+    },
+  );
+});
+
+void test("probe rejects malformed successful payloads at every existing observation boundary", async (t) => {
+  const cases = [
+    ["prepared", "initial"],
+    ["prepared", "closing"],
+    ["installed", "initial"],
+    ["installed", "closing"],
+    ["ownership", "initial"],
+    ["control", "initial"],
+    ["control", "closing"],
+  ] as const;
+  for (const [stage, phase] of cases) {
+    await t.test(`${stage}/${phase}`, async (t) => {
+      const fixture = await createHarnessFixture(t);
+      const reads = {
+        prepared: 0,
+        installed: 0,
+        ownership: 0,
+        control: 0,
+      };
+      const targetRead = phase === "initial" ? 1 : 2;
+      const privatePayloadFailure = new Error(
+        `private ${stage} payload failure`,
+      );
+      const malformed =
+        phase === "initial"
+          ? null
+          : new Proxy(
+              {},
+              {
+                get() {
+                  throw privatePayloadFailure;
+                },
+              },
+            );
+      const messages = [
+        {
+          channel: "stdout" as const,
+          text: `fixture ${stage} diagnostic`,
+        },
+      ];
+      const corrupt = <T>(operation: string, value: T): AdapterResult<T> =>
+        successResult(operation, value, messages);
+      const adapter = {
+        ...fixture.adapter,
+        ...fixture.methods,
+        presentation: {
+          ...fixture.adapter.presentation,
+          callFailure(
+            site: Parameters<
+              typeof fixture.adapter.presentation.callFailure
+            >[0],
+          ) {
+            return {
+              unexpected: `unexpected ${site} inspection failure`,
+              invalidStatus: `invalid ${site} inspection payload`,
+            };
+          },
+        },
+        async inspectPrepared(
+          selection: typeof fixture.selection,
+          adapterContext: Parameters<typeof fixture.methods.inspectPrepared>[1],
+        ): Promise<AdapterResult<PreparedState>> {
+          const result = await fixture.methods.inspectPrepared(
+            selection,
+            adapterContext,
+          );
+          reads.prepared += 1;
+          return stage === "prepared" && reads.prepared === targetRead
+            ? corrupt("inspect-prepared", malformed as PreparedState)
+            : result;
+        },
+        async inspectInstalled(
+          selection: typeof fixture.selection,
+          adapterContext: Parameters<
+            typeof fixture.methods.inspectInstalled
+          >[1],
+        ): Promise<AdapterResult<InstalledState>> {
+          const result = await fixture.methods.inspectInstalled(
+            selection,
+            adapterContext,
+          );
+          reads.installed += 1;
+          return stage === "installed" && reads.installed === targetRead
+            ? corrupt("inspect-installed", malformed as InstalledState)
+            : result;
+        },
+        async inspectOwnership(
+          adapterContext: Parameters<
+            typeof fixture.methods.inspectOwnership
+          >[0],
+        ): Promise<AdapterResult<OwnershipInspection<never>>> {
+          const result = await fixture.methods.inspectOwnership(adapterContext);
+          reads.ownership += 1;
+          return stage === "ownership" && reads.ownership === targetRead
+            ? corrupt(
+                "inspect-ownership",
+                malformed as OwnershipInspection<never>,
+              )
+            : (result as AdapterResult<OwnershipInspection<never>>);
+        },
+        async inspectUpdateControl(
+          adapterContext: Parameters<
+            typeof fixture.methods.inspectUpdateControl
+          >[0],
+        ): Promise<AdapterResult<UpdateControlInspection>> {
+          const result =
+            await fixture.methods.inspectUpdateControl(adapterContext);
+          reads.control += 1;
+          return stage === "control" && reads.control === targetRead
+            ? corrupt("inspect-control", malformed as UpdateControlInspection)
+            : result;
+        },
+      };
+
+      assert.equal(
+        await runProbe([], { ...fixture.ctx, adapter }),
+        1,
+        `${stage}/${phase}`,
+      );
+      assert.equal(
+        fixture.out.text(),
+        phase === "initial" ? `fixture ${stage} diagnostic\n` : "",
+      );
+      assert.equal(
+        fixture.err.text(),
+        stage === "prepared"
+          ? "error: adapter reported a failure status for prepared harness inspection\n"
+          : `error: invalid probe-${stage} inspection payload\n`,
+      );
+      assert.doesNotMatch(
+        fixture.err.text(),
+        /private .* payload failure|Cannot read properties/,
+      );
+    });
+  }
+
+  for (const recoveryState of [null, "other", true] as const) {
+    await t.test(
+      `control/recovery-state-${String(recoveryState)}`,
+      async (t) => {
+        const fixture = await createHarnessFixture(t);
+        const adapter = {
+          ...fixture.adapter,
+          ...fixture.methods,
+          async inspectUpdateControl(
+            adapterContext: Parameters<
+              typeof fixture.methods.inspectUpdateControl
+            >[0],
+          ): Promise<AdapterResult<UpdateControlInspection>> {
+            const result =
+              await fixture.methods.inspectUpdateControl(adapterContext);
+            assert.ok(result.outcome.ok);
+            return successResult(
+              result.outcome.operation,
+              {
+                ...result.outcome.result,
+                recoveryState,
+              } as unknown as UpdateControlInspection,
+              result.outcome.messages,
+            );
+          },
+        };
+
+        assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
+        assert.equal(fixture.out.text(), "");
+        assert.equal(
+          fixture.err.text(),
+          "error: invalid test adapter status\n",
+        );
+        assert.equal(fixture.calls.includes("install"), false);
+        assert.equal(fixture.calls.includes("remove"), false);
+      },
+    );
+  }
+});
+
+void test("probe keeps the generic removal capability opaque", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const removalCapability = {
+    receipt: "opaque-removal-capability",
+    privateToken: Symbol("opaque-removal-capability"),
+  };
+  const adapter = {
+    ...fixture.adapter,
+    ...fixture.methods,
+    async inspectOwnership(
+      adapterContext: Parameters<typeof fixture.methods.inspectOwnership>[0],
+    ): Promise<AdapterResult<OwnershipInspection<typeof removalCapability>>> {
+      const result = await fixture.methods.inspectOwnership(adapterContext);
+      assert.equal(result.outcome.ok, true);
+      return successResult(
+        "inspect-ownership",
+        { ...result.outcome.result, removalInput: removalCapability },
+        result.outcome.messages,
+      );
+    },
+  };
+
+  const outcome = await gatherProbe({ ...fixture.ctx, adapter });
+  assert.equal(outcome.status, 0);
+  if (outcome.status === 0)
+    assert.equal(outcome.facts.ownership.removalInput, removalCapability);
 });
 
 void test("update composes probe, preparation, and installation through a non-Codex adapter", async (t) => {
@@ -305,12 +1317,13 @@ void test("update composes probe, preparation, and installation through a non-Co
         adapterCtx,
       );
       preparedReads += 1;
-      if (preparedReads !== 1 || !result.outcome.ok) return result;
+      if (preparedReads > 2 || !result.outcome.ok) return result;
       return successResult(
         "inspect-prepared",
         {
           kind: "needs-prepare",
           observedIdentity: fixture.selection.desiredCommit,
+          compatibility: result.outcome.result.compatibility,
         },
         result.outcome.messages,
       );
@@ -324,16 +1337,32 @@ void test("update composes probe, preparation, and installation through a non-Co
 
   assert.equal(await runUpdate([], { ...fixture.ctx, adapter }), 0);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
     "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
+    "inspect-control",
+    "location",
+    "mutation-roots",
     "location",
     "prefetch",
     "prepare",
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -383,9 +1412,16 @@ void test("install obeys a fresh ownership denial after an allowed probe", async
 
   assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -408,7 +1444,7 @@ void test("install stops when fresh update control fails", async (t) => {
       readonly env?: NodeJS.ProcessEnv;
     }): Promise<AdapterResult<UpdateControlInspection>> {
       controlReads += 1;
-      if (controlReads === 2) {
+      if (controlReads === 3) {
         fixture.calls.push("inspect-control");
         return failureResult(
           "inspect-control",
@@ -424,9 +1460,16 @@ void test("install stops when fresh update control fails", async (t) => {
 
   assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -451,7 +1494,7 @@ void test("install stops when fresh update control blocks mutation", async (t) =
     }): Promise<AdapterResult<UpdateControlInspection>> {
       const result = await fixture.methods.inspectUpdateControl(adapterCtx);
       controlReads += 1;
-      if (controlReads !== 2 || !result.outcome.ok) return result;
+      if (controlReads !== 3 || !result.outcome.ok) return result;
       return successResult(
         "inspect-control",
         {
@@ -471,9 +1514,16 @@ void test("install stops when fresh update control blocks mutation", async (t) =
 
   assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "mutation-roots",
     "inspect-prepared",
     "inspect-installed",
     "inspect-ownership",
+    "inspect-control",
+    "inspect-prepared",
+    "inspect-installed",
     "inspect-control",
     "read-prepared",
     "inspect-ownership",
@@ -544,7 +1594,7 @@ void test("post-install failure, absence, and mismatch cannot report success", a
           },
         ): Promise<AdapterResult<InstalledState>> {
           installedReads += 1;
-          if (installedReads === 2) {
+          if (installedReads === 3) {
             fixture.calls.push("inspect-installed");
             assert.deepEqual(inputSelection, fixture.selection);
             return each.response();
@@ -558,9 +1608,16 @@ void test("post-install failure, absence, and mismatch cannot report success", a
 
       assert.equal(await runInstall([], { ...fixture.ctx, adapter }), 1);
       assert.deepEqual(fixture.calls, [
+        "location",
+        "mutation-roots",
+        "location",
+        "mutation-roots",
         "inspect-prepared",
         "inspect-installed",
         "inspect-ownership",
+        "inspect-control",
+        "inspect-prepared",
+        "inspect-installed",
         "inspect-control",
         "read-prepared",
         "inspect-ownership",
@@ -576,20 +1633,61 @@ void test("post-install failure, absence, and mismatch cannot report success", a
 
 void test("removal passes private input unchanged and reinspects ownership", async (t) => {
   const fixture = await createHarnessFixture(t);
+  const postRemovalInput = { receipt: "post-removal" };
+  const postRemovalOwnership = {
+    ...fixture.ownership,
+    removalInput: postRemovalInput,
+    presentationValue: "fixture post-removal",
+  };
+  let ownershipReads = 0;
+  let renderedOwnership:
+    OwnershipInspection<{ readonly receipt: string }> | undefined;
+  let renderedRemovalInput: { readonly receipt: string } | undefined;
   const adapter = {
     ...fixture.adapter,
-    inspectOwnership: fixture.methods.inspectOwnership,
+    async inspectOwnership(adapterCtx: {
+      readonly root: string;
+      readonly env?: NodeJS.ProcessEnv;
+    }) {
+      const result = await fixture.methods.inspectOwnership(adapterCtx);
+      ownershipReads += 1;
+      return ownershipReads === 2
+        ? successResult(
+            "inspect-ownership",
+            postRemovalOwnership,
+            result.outcome.messages,
+          )
+        : result;
+    },
     remove: fixture.methods.remove,
+    presentation: {
+      ...fixture.adapter.presentation,
+      renderRemovalCompletion(
+        ownership: OwnershipInspection<{ readonly receipt: string }>,
+        removalInput?: { readonly receipt: string },
+      ) {
+        renderedOwnership = ownership;
+        renderedRemovalInput = removalInput;
+        return fixture.adapter.presentation.renderRemovalCompletion(
+          ownership,
+          removalInput ?? ownership.removalInput,
+        );
+      },
+    },
   };
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 0);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
   ]);
   assert.equal(fixture.removalInputs.length, 1);
   assert.strictEqual(fixture.removalInputs[0], fixture.removalInput);
+  assert.strictEqual(renderedOwnership, postRemovalOwnership);
+  assert.strictEqual(renderedRemovalInput, fixture.removalInput);
   assert.equal(fixture.out.text(), "fixture uninstall complete\n");
   assert.equal(fixture.err.text(), "");
 });
@@ -597,9 +1695,20 @@ void test("removal passes private input unchanged and reinspects ownership", asy
 void test("residual owned resources fail after a successful remove", async (t) => {
   const fixture = await createHarnessFixture(t);
   let ownershipReads = 0;
+  let completionCalls = 0;
   const adapter = {
     ...fixture.adapter,
     remove: fixture.methods.remove,
+    presentation: {
+      ...fixture.adapter.presentation,
+      renderRemovalCompletion() {
+        completionCalls += 1;
+        return {
+          stdout: ["fixture uninstall complete", "Restart fixture"],
+          stderr: [],
+        };
+      },
+    },
     async inspectOwnership(adapterCtx: {
       readonly root: string;
       readonly env?: NodeJS.ProcessEnv;
@@ -628,20 +1737,35 @@ void test("residual owned resources fail after a successful remove", async (t) =
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
   ]);
+  assert.equal(completionCalls, 0);
   assert.equal(fixture.out.text().includes("uninstall complete"), false);
+  assert.equal(fixture.out.text().includes("Restart fixture"), false);
   assert.equal(fixture.err.text(), "error: fixture resources remain\n");
 });
 
 void test("a failed post-remove ownership inspection suppresses completion", async (t) => {
   const fixture = await createHarnessFixture(t);
   let ownershipReads = 0;
+  let completionCalls = 0;
   const adapter = {
     ...fixture.adapter,
     remove: fixture.methods.remove,
+    presentation: {
+      ...fixture.adapter.presentation,
+      renderRemovalCompletion() {
+        completionCalls += 1;
+        return {
+          stdout: ["fixture uninstall complete", "Restart fixture"],
+          stderr: [],
+        };
+      },
+    },
     async inspectOwnership(adapterCtx: {
       readonly root: string;
       readonly env?: NodeJS.ProcessEnv;
@@ -665,10 +1789,13 @@ void test("a failed post-remove ownership inspection suppresses completion", asy
 
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 1);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
   ]);
+  assert.equal(completionCalls, 0);
   assert.equal(fixture.out.text(), "");
   assert.equal(
     fixture.err.text(),
@@ -706,6 +1833,8 @@ void test("retained legacy state is reported without changing the private remova
   assert.equal(await runUninstall([], { ...fixture.ctx, adapter }), 0);
   assert.strictEqual(fixture.removalInputs[0], fixture.removalInput);
   assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
     "inspect-ownership",
     "remove",
     "inspect-ownership",
@@ -746,6 +1875,8 @@ void test("cleanup failure preserves the completed result and unrelated sibling"
 
     assert.equal(status, 1);
     assert.deepEqual(fixture.calls, [
+      "location",
+      "mutation-roots",
       "inspect-ownership",
       "remove",
       "inspect-ownership",

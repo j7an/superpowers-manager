@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CodexRemovalInput } from "./adapter.ts";
-import { oneLine } from "./cli-arguments.ts";
+import { extractHarnessOptions, oneLine, UsageError } from "./cli-arguments.ts";
 import { codexHarness } from "./codex-harness.ts";
+import { piHarness } from "./pi-harness.ts";
+import type { InvocationOptions } from "./harness-compatibility.ts";
+import { createResourceCoordinator } from "./resource-lock.ts";
 import type { CommandContext } from "./commands/context.ts";
 import { runInstall } from "./commands/install.ts";
 import { runPin } from "./commands/pin.ts";
@@ -35,6 +37,7 @@ type RunParseResult = {
   kind: "run";
   cmd: Subcommand;
   args: string[];
+  options: InvocationOptions;
 };
 type HelpParseResult = { kind: "help" };
 type VersionParseResult = { kind: "version" };
@@ -58,9 +61,9 @@ const SUBCOMMANDS: readonly Subcommand[] = [
   "uninstall",
 ];
 
-type InProcessHandler = (
+type InProcessHandler = <R>(
   argv: string[],
-  ctx: CommandContext<CodexRemovalInput>,
+  ctx: CommandContext<R>,
 ) => Promise<number>;
 
 // Keyed by Subcommand itself. Until slice 6 this was keyed by a mapped type
@@ -123,12 +126,26 @@ function isMain(moduleFilename: string, argvPath: string | undefined): boolean {
 
 function parseArgs(argv: string[]): ParseResult {
   const first = argv[0];
-  if (argv.length === 0) return { kind: "run", cmd: "update", args: [] };
+  if (argv.length === 0)
+    return {
+      kind: "run",
+      cmd: "update",
+      args: [],
+      options: { harness: "codex", allowExperimental: false },
+    };
   if (first === "--help" || first === "-h") return { kind: "help" };
   if (first === "--version") return { kind: "version" };
   if (first && SUBCOMMANDS.includes(first as Subcommand)) {
     const command = first as Subcommand;
-    const args = argv.slice(1);
+    let extracted: ReturnType<typeof extractHarnessOptions>;
+    try {
+      extracted = extractHarnessOptions(command, argv.slice(1));
+    } catch (cause) {
+      if (cause instanceof UsageError)
+        return { kind: "usage-error", message: cause.message };
+      throw cause;
+    }
+    const { args, options } = extracted;
     if (command === "pin" && args.length !== 1) {
       return {
         kind: "usage-error",
@@ -171,7 +188,7 @@ function parseArgs(argv: string[]): ParseResult {
         message: "usage: superpowers-manager probe [--porcelain]",
       };
     }
-    return { kind: "run", cmd: command, args };
+    return { kind: "run", cmd: command, args, options };
   }
   return { kind: "usage-error", message: `unknown subcommand: ${first}` };
 }
@@ -303,6 +320,14 @@ function usage(): string {
     "  update     probe, then prepare/install only if needed (default when no subcommand)",
     "  uninstall  remove the manager plugin and marketplace from Codex",
     "",
+    "Target one invocation (default: codex; selection commands are shared):",
+    "  probe --harness pi [--porcelain]",
+    "  prepare --harness pi",
+    "  install --harness pi [--allow-experimental]",
+    "  update --harness pi [--allow-experimental]",
+    "  uninstall --harness pi",
+    "  --harness=codex and --harness=pi are also accepted after the command.",
+    "",
     "Environment overrides (used by in-process commands): SUPERPOWERS_REF,",
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",
     "SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,",
@@ -338,10 +363,26 @@ async function main(): Promise<never> {
     console.error(usage());
     process.exit(2);
   }
-  const pf = preflight(parsed.cmd, process.env, process.platform);
+  const status =
+    parsed.options.harness === "pi"
+      ? await dispatch(piHarness, parsed)
+      : await dispatch(codexHarness, parsed);
+  process.exit(status);
+}
+
+async function dispatch<R>(
+  adapter: HarnessAdapter<R>,
+  parsed: RunParseResult,
+): Promise<number> {
+  const root = resolvePackageRoot(import.meta.filename);
+  if (!root) {
+    console.error("error: cannot resolve the superpowers-manager package root");
+    return 1;
+  }
+  const pf = preflightFor(parsed.cmd, process.env, process.platform, adapter);
   if (!pf.ok) {
     for (const e of pf.errors) console.error(`error: ${e}`);
-    process.exit(1);
+    return 1;
   }
   // Dispatch is no longer a branch: slice 4b flipped the last spawned command,
   // so every subcommand runs here, and slice 6 deleted the DISPATCH table whose
@@ -354,15 +395,17 @@ async function main(): Promise<never> {
   const handler: InProcessHandler | undefined = IN_PROCESS_HANDLERS[parsed.cmd];
   if (!handler) {
     console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
-    process.exit(1);
+    return 1;
   }
-  const ctx: CommandContext<CodexRemovalInput> = {
+  const ctx: CommandContext<R> = {
     root,
     env: process.env,
     stdout: process.stdout,
     stderr: process.stderr,
+    options: parsed.options,
+    coordination: createResourceCoordinator(),
     // The ONLY production binding of a concrete harness implementation.
-    adapter: codexHarness,
+    adapter,
   };
   let status: number;
   try {
@@ -372,9 +415,9 @@ async function main(): Promise<never> {
     // failures and returns a status code (see src/commands/unpin.ts). This
     // re-emits a subordinate module's own diagnostic if one somehow escapes.
     console.error(`error: ${oneLine(cause)}`);
-    process.exit(1);
+    return 1;
   }
-  process.exit(status);
+  return status;
 }
 
 export {
@@ -387,6 +430,7 @@ export {
   preflight,
   preflightFor,
   usage,
+  dispatch,
   main,
 };
 

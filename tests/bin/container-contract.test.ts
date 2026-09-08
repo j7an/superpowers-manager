@@ -21,7 +21,19 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, existsSync, readFileSync } from "node:fs";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -522,7 +534,7 @@ function validateProbe(probe: string) {
     // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
     // single-quoted strings `\"` is not an escape sequence, so the
     // required text carries literal backslashes and guards the JSON
-    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:588::sh \`.
+    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:596::sh \`.
     'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
@@ -853,16 +865,78 @@ function validateRunnerInsideBranch(runner: string) {
       "--inside must reject UIDs other than 10001 before selecting or dispatching the acceptance mode",
     );
   }
-  const suiteRe =
-    /suite\)\s+sh tests\/run\.sh\s+exec sh tests\/container\/codex-offline-probe\.sh\s+;;/;
-  if (!suiteRe.test(runner)) {
+  const suiteMatch = /^\s*suite\)\n([\s\S]*?)^\s*;;/m.exec(runner);
+  if (!suiteMatch) {
+    throw new ContractViolation("runner must define suite mode");
+  }
+  const suite = suiteMatch[1];
+  requireOrderedSource(
+    suite,
+    [
+      'echo "container suite: shared checks: start"',
+      "sh tests/run.sh",
+      'echo "container suite: shared checks: complete status=0"',
+      'echo "container suite: Codex harness integration: start"',
+      "sh tests/container/codex-offline-probe.sh",
+      'echo "container suite: Codex harness integration: complete status=0"',
+      'echo "container suite: Pi harness integration: start"',
+      "sh tests/container/pi-offline-probe.sh",
+      'echo "container suite: Pi harness integration: complete status=0"',
+    ],
+    "suite mode must run shared checks, Codex, and Pi in order",
+  );
+  if (/\bexec\b/.test(suite)) {
     throw new ContractViolation(
-      "suite mode must run the inner suite and then the offline Codex probe",
+      "suite mode must not exec before every harness has completed",
     );
   }
 }
 
 void test("container-contract", async (t) => {
+  await t.test(
+    "Pi acceptance uses a pinned qualification runtime and isolated native resources",
+    () => {
+      const tools = JSON.parse(readFileSync(TOOLS_PACKAGE_PATH, "utf8"));
+      const lock = JSON.parse(readFileSync(LOCKFILE_PATH, "utf8"));
+      const name = "@earendil-works/pi-coding-agent";
+      assert.match(tools.dependencies[name], /^\d+\.\d+\.\d+$/);
+      assert.equal(
+        lock.packages[""].dependencies[name],
+        tools.dependencies[name],
+      );
+      assert.equal(
+        lock.packages[`node_modules/${name}`].version,
+        tools.dependencies[name],
+      );
+      const runner = readFileSync(RUNNER_PATH, "utf8");
+      assert.match(
+        runner,
+        /harness-pi\)\s+echo "container: Pi harness integration: start"\s+sh tests\/container\/pi-offline-probe\.sh\s+echo "container: Pi harness integration: complete status=0"\s+;;/,
+      );
+      assert.match(runner, /suite\|harness-codex\|harness-pi/);
+      const probe = readFileSync(
+        join(ROOT, "tests/container/pi-offline-probe.sh"),
+        "utf8",
+      );
+      assert.match(probe, /env -i/);
+      assert.match(probe, /PI_OFFLINE=1/);
+      assert.match(probe, /PI_OFFLINE=0 pi update --extensions --no-approve/);
+      assert.equal((probe.match(/PI_OFFLINE=0/g) ?? []).length, 1);
+      assert.match(probe, /pi harness integration: complete status=0/);
+      assert.match(probe, /unrelated-provider/);
+      const observer = readFileSync(
+        join(ROOT, "tests/container/pi-resource-probe.ts"),
+        "utf8",
+      );
+      assert.match(observer, /await import\(pathToFileURL/);
+      assert.match(observer, /DefaultResourceLoader/);
+      assert.match(observer, /await loader\.reload\(\)/);
+      assert.match(observer, /runner\.emitContext\(/);
+      assert.match(observer, /session_compact/);
+      assert.match(observer, /assert\.deepEqual\(loaded\.errors, \[\]\)/);
+      assert.match(observer, /assert\.equal\(digest, receipt\.digest/);
+    },
+  );
   // --- inventory items 1-6: file-existence / executable-bit -----------
 
   await t.test("tests/container/Dockerfile exists", () => {
@@ -1020,7 +1094,7 @@ void test("container-contract", async (t) => {
   // --- inventory items 14-18: container tool package/lockfile ----------
 
   await t.test(
-    "tests/container/package.json declares exactly one dependency, @openai/codex, exact-pinned and lockfile-consistent",
+    "tests/container/package.json declares only approved harness dependencies, exact-pinned and lockfile-consistent",
     () => {
       const packageData = JSON.parse(readFileSync(TOOLS_PACKAGE_PATH, "utf8"));
       const lockData = JSON.parse(readFileSync(LOCKFILE_PATH, "utf8"));
@@ -1030,10 +1104,10 @@ void test("container-contract", async (t) => {
         dependencies && typeof dependencies === "object",
         "container tool package must declare dependencies",
       );
-      assert.equal(
-        Object.keys(dependencies).join("\n"),
-        "@openai/codex",
-        "container tool package must contain only @openai/codex",
+      assert.deepEqual(
+        Object.keys(dependencies).sort(),
+        ["@earendil-works/pi-coding-agent", "@openai/codex"],
+        "container tool package must contain only approved harnesses",
       );
 
       const declared = dependencies["@openai/codex"];
@@ -1121,13 +1195,10 @@ void test("container-contract", async (t) => {
         ),
       );
     });
-    await t.test("runner defines the codex-spike mode", () => {
-      const branch = /^\s*codex-spike\)(.*)$/m.exec(runner);
-      assert.ok(branch, "runner must define codex-spike mode");
-      assert.equal(
-        branch[1].trim(),
-        "exec sh tests/container/codex-offline-probe.sh ;;",
-        "codex-spike must execute only the offline Codex probe",
+    await t.test("runner defines the named Codex harness mode", () => {
+      assert.match(
+        runner,
+        /harness-codex\)\s+echo "container: Codex harness integration: start"\s+sh tests\/container\/codex-offline-probe\.sh\s+echo "container: Codex harness integration: complete status=0"\s+;;/,
       );
     });
     await t.test("runner reads the actual container uid", () => {
@@ -1138,11 +1209,84 @@ void test("container-contract", async (t) => {
         runner.includes("container acceptance suite must run as UID 10001"),
       );
     });
+    await t.test(
+      "runner's --inside modes stop after their ordered child commands and propagate failures",
+      (t) => {
+        const scratch = mkdtempSync(join(tmpdir(), "spw-container-runner-"));
+        t.after(() => rmSync(scratch, { recursive: true, force: true }));
+        const bin = join(scratch, "bin");
+        const container = join(scratch, "tests", "container");
+        mkdirSync(bin, { recursive: true });
+        mkdirSync(container, { recursive: true });
+        copyFileSync(RUNNER_PATH, join(scratch, "tests", "container.sh"));
+        writeFileSync(
+          join(bin, "id"),
+          '#!/bin/sh\n[ "${1:-}" = "-u" ] || exit 99\nprintf "%s\\n" 10001\n',
+        );
+        writeFileSync(
+          join(bin, "docker"),
+          '#!/bin/sh\nprintf "%s\\n" docker >> "$SPW_RUNNER_LOG"\nexit 99\n',
+        );
+        const childStub =
+          '#!/bin/sh\nname=${0##*/}\nprintf "%s\\n" "$name" >> "$SPW_RUNNER_LOG"\n[ "${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n';
+        writeFileSync(join(scratch, "tests", "run.sh"), childStub);
+        writeFileSync(join(container, "codex-offline-probe.sh"), childStub);
+        writeFileSync(join(container, "pi-offline-probe.sh"), childStub);
+        for (const executable of [
+          join(bin, "id"),
+          join(bin, "docker"),
+          join(scratch, "tests", "run.sh"),
+          join(container, "codex-offline-probe.sh"),
+          join(container, "pi-offline-probe.sh"),
+        ]) {
+          chmodSync(executable, 0o755);
+        }
+
+        const runnerPath = join(scratch, "tests", "container.sh");
+        const log = join(scratch, "runner.log");
+        const runInside = (mode: string, failChild?: string) => {
+          writeFileSync(log, "");
+          return spawnSync("/bin/sh", [runnerPath, "--inside", mode], {
+            cwd: scratch,
+            encoding: "utf8",
+            env: {
+              PATH: `${bin}:/usr/bin:/bin`,
+              SPW_FAIL_CHILD: failChild ?? "",
+              SPW_RUNNER_LOG: log,
+            },
+          });
+        };
+
+        for (const [mode, expectedLog] of [
+          ["suite", "run.sh\ncodex-offline-probe.sh\npi-offline-probe.sh\n"],
+          ["harness-codex", "codex-offline-probe.sh\n"],
+          ["harness-pi", "pi-offline-probe.sh\n"],
+        ] as const) {
+          const result = runInside(mode);
+          assert.equal(result.status, 0, `${mode}: ${result.stderr}`);
+          assert.equal(result.stderr, "");
+          assert.doesNotMatch(result.stdout, /usage:/);
+          assert.equal(readFileSync(log, "utf8"), expectedLog);
+        }
+
+        const failed = runInside("suite", "codex-offline-probe.sh");
+        assert.equal(failed.status, 17);
+        assert.equal(failed.stderr, "");
+        assert.equal(
+          readFileSync(log, "utf8"),
+          "run.sh\ncodex-offline-probe.sh\n",
+        );
+        assert.doesNotMatch(
+          failed.stdout,
+          /Codex harness integration: complete|Pi harness integration:/,
+        );
+      },
+    );
 
     // --- inventory items 38-40: runner --inside structural check ---------
 
     await t.test(
-      "runner's --inside branch gates UID 10001 before mode selection and dispatch, then routes suite mode through run.sh and the offline probe",
+      "runner's --inside branch gates UID 10001, then runs shared checks and both harnesses in order",
       () => {
         assert.doesNotThrow(() => validateRunnerInsideBranch(runner));
       },

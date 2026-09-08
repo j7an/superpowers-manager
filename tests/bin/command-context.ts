@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
 import {
@@ -18,9 +17,12 @@ import {
 import type {
   HarnessAdapter,
   PrepareCandidateInput,
-  PreparedArtifact,
 } from "../../src/harness.ts";
-import type { HarnessCall } from "../lib/command-doubles.ts";
+import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
+import {
+  observingCoordinator,
+  type HarnessCall,
+} from "../lib/command-doubles.ts";
 import { SCRATCH, UPSTREAM } from "./lifecycle-fixture.ts";
 
 export function caseEnvVars(
@@ -80,6 +82,10 @@ export function recordingAdapter(
       record("preparation-location");
       return codexHarness.preparationLocation(ctx);
     },
+    async mutationRoots(ctx) {
+      record("mutation-roots");
+      return await codexHarness.mutationRoots(ctx);
+    },
     async validatePreparationBeforeFetch(ctx) {
       record("validate-preparation-before-fetch");
       return await codexHarness.validatePreparationBeforeFetch(ctx);
@@ -112,16 +118,11 @@ export function recordingAdapter(
           result.outcome.messages,
         );
       }
-      mkdirSync(input.candidateRoot, { recursive: true });
-      writeFileSync(
-        join(input.candidateRoot, ".superpowers-upstream.json"),
-        JSON.stringify({ commit: input.selection.desiredCommit }),
-        "utf8",
+      const artifact = await writeQualifiedCodexFixture(
+        input.candidateRoot,
+        input.selection.desiredCommit,
+        input.selection.effectiveSource,
       );
-      const artifact: PreparedArtifact = {
-        root: input.candidateRoot,
-        commit: input.selection.desiredCommit,
-      };
       return successResult(
         result.outcome.operation,
         artifact,
@@ -238,6 +239,8 @@ export function caseContext(
     env: caseEnvVars(c, options.env),
     stdout,
     stderr,
+    options: { harness: "codex" as const, allowExperimental: false },
+    coordination: observingCoordinator(),
     adapter: options.adapter,
   };
   return { ctx, stdout: () => stdoutBuf, stderr: () => stderrBuf };
