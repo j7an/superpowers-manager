@@ -1,6 +1,6 @@
 {
   "name": "superpowers-manager",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Install and update the latest stable obra/superpowers release directly from upstream for Codex and Pi (pi-coding-agent), without waiting for agent marketplaces to catch up.",
   "keywords": [
     "superpowers",
