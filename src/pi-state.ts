@@ -62,19 +62,27 @@ interface SettingsObservation {
   readonly registration: PiPackageEntry | null;
 }
 
-// Verified remote spellings only: Pi 0.85.1 accepts http:// as Git, while github:
-// falls back to local inspection (native source citations are in pi-settings.ts).
+// Verified remote spellings only: Pi 0.85.1 accepts http:// as Git. Unprefixed
+// github: and git+ forms stay local; git:-wrapped aliases and explicit transports
+// normalize only an exact GitHub authority and repository path (native source
+// citations are in pi-settings.ts).
 const KNOWN_UPSTREAM_PI_SOURCE_BASES = [
   "git:github.com/obra/superpowers",
   "git:github.com/obra/superpowers.git",
   "git:git@github.com:obra/superpowers",
   "git:git@github.com:obra/superpowers.git",
+  "git:git@github.com/obra/superpowers",
+  "git:git@github.com/obra/superpowers.git",
   "git:github:obra/superpowers",
+  "git:github:obra/superpowers.git",
   "git:obra/superpowers",
+  "git:obra/superpowers.git",
   "http://github.com/obra/superpowers",
   "http://github.com/obra/superpowers.git",
   "https://github.com/obra/superpowers",
   "https://github.com/obra/superpowers.git",
+  "ssh://github.com/obra/superpowers",
+  "ssh://github.com/obra/superpowers.git",
   "ssh://git@github.com/obra/superpowers",
   "ssh://git@github.com/obra/superpowers.git",
   "git://github.com/obra/superpowers",
@@ -101,29 +109,62 @@ function pathsFor(ctx: AdapterContext): PiPaths {
   return piPaths(ctx.env ?? {}, process.cwd());
 }
 
+function isNonemptyControlFree(value: string): boolean {
+  if (value.length === 0) return false;
+  for (const character of value) {
+    const code = character.codePointAt(0)!;
+    if (code <= 0x20 || code === 0x7f) return false;
+  }
+  return true;
+}
+
+function normalizeVerifiedGithubSource(candidate: string): string {
+  const match =
+    /^(https?|ssh|git):\/\/([^/?#]+)(\/obra\/superpowers(?:\.git)?\/?(?:[@#].*)?)$/u.exec(
+      candidate,
+    );
+  if (match === null) return candidate;
+  const [, transport, authority, path] = match;
+  const at = authority.lastIndexOf("@");
+  const userinfo = at === -1 ? null : authority.slice(0, at);
+  if (
+    (userinfo !== null &&
+      (authority.indexOf("@") !== at || !isNonemptyControlFree(userinfo))) ||
+    authority.slice(at + 1) === ""
+  )
+    return candidate;
+  const host = authority.slice(at + 1);
+  const normalizedHost = host.startsWith("www.") ? host.slice(4) : host;
+  if (normalizedHost !== "github.com") return candidate;
+  return `${transport}://github.com${path}`;
+}
+
 function isKnownUpstreamPiSource(raw: string): boolean {
   const source = raw.trim();
-  const candidates = source.startsWith("git:")
-    ? [source, source.slice(4).trim()]
-    : [source];
-  return candidates.some((candidate) =>
-    KNOWN_UPSTREAM_PI_SOURCE_BASES.some((base) => {
-      if (candidate === base) return true;
-      const separator = candidate.at(base.length);
-      if (
-        !candidate.startsWith(base) ||
-        (separator !== "@" && separator !== "#")
-      )
-        return false;
-      const ref = candidate.slice(base.length + 1);
-      if (ref.length === 0) return false;
-      for (const character of ref) {
-        const code = character.codePointAt(0)!;
-        if (code <= 0x20 || code === 0x7f) return false;
-      }
-      return true;
-    }),
-  );
+  const outerBody = source.startsWith("git:") ? source.slice(4).trim() : null;
+  const candidates = [
+    source,
+    ...(outerBody === null
+      ? []
+      : [
+          outerBody.startsWith("git+https://") ||
+          outerBody.startsWith("git+ssh://")
+            ? outerBody.slice(4)
+            : outerBody,
+        ]),
+  ];
+  return candidates.some((candidate) => {
+    const normalized = normalizeVerifiedGithubSource(candidate);
+    return KNOWN_UPSTREAM_PI_SOURCE_BASES.some((base) => {
+      if (normalized === base) return true;
+      if (!normalized.startsWith(base)) return false;
+      let suffix = normalized.slice(base.length);
+      if (suffix.startsWith("/")) suffix = suffix.slice(1);
+      if (suffix === "") return true;
+      if (suffix.at(0) !== "@" && suffix.at(0) !== "#") return false;
+      return isNonemptyControlFree(suffix.slice(1));
+    });
+  });
 }
 
 function toPosixPath(path: string): string {

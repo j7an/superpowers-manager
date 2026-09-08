@@ -564,9 +564,11 @@ void test("recognizable unmanaged Pi package and native resources block activati
 void test("only evidenced official Pi source spellings are recognized as upstream conflicts", async (t) => {
   const explicitTransportBases = [
     "http://github.com/obra/superpowers",
+    "http://www.github.com/obra/superpowers",
     "https://github.com/obra/superpowers",
     "ssh://git@github.com/obra/superpowers",
     "git://github.com/obra/superpowers",
+    "git://user@github.com/obra/superpowers",
   ];
   const explicitTransportSources = explicitTransportBases.flatMap((base) =>
     [
@@ -593,8 +595,33 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
     "git:obra/superpowers",
     "git:obra/superpowers#main",
   ];
+  const documentedAliasSources = [
+    "git:obra/superpowers.git",
+    "git:github:obra/superpowers.git",
+    "git:git+https://github.com/obra/superpowers",
+    "git:git+ssh://git@github.com/obra/superpowers",
+    "git:git@github.com/obra/superpowers",
+    "https://www.github.com/obra/superpowers",
+    "https://github.com/obra/superpowers/",
+    "https://user@github.com/obra/superpowers",
+    "ssh://github.com/obra/superpowers",
+    "https://other-user@github.com/obra/superpowers",
+  ];
+  const documentedAliasRefSources = [
+    "git:git+https://github.com/obra/superpowers.git@refs/heads/main",
+    "git:git+ssh://git@github.com/obra/superpowers#main",
+    "git:git@github.com/obra/superpowers.git/",
+    "https://www.github.com/obra/superpowers/@refs/heads/main",
+    "https://user@github.com/obra/superpowers.git#main",
+    "ssh://github.com/obra/superpowers.git/",
+  ];
 
-  for (const source of [...explicitTransportSources, ...hostedShorthandSources])
+  for (const source of [
+    ...explicitTransportSources,
+    ...hostedShorthandSources,
+    ...documentedAliasSources,
+    ...documentedAliasRefSources,
+  ])
     await t.test(source, async (t) => {
       const state = sandbox(t);
       await preparedAndInstalled(t, state);
@@ -639,6 +666,23 @@ void test("only evidenced official Pi source spellings are recognized as upstrea
     "git:github:obra/superpowers#",
     "git:obra/superpowers#",
     "git:someone/superpowers",
+    "git+https://github.com/obra/superpowers",
+    "git+ssh://git@github.com/obra/superpowers",
+    "github:obra/superpowers",
+    "https://github.com.evil/obra/superpowers",
+    "https://user@github.com.evil/obra/superpowers",
+    "https://www.github.com.evil/obra/superpowers",
+    "https://github.com/Obra/superpowers",
+    "https://github.com/obra/Superpowers",
+    "https://github.com/obra/superpowers/extra",
+    "https://github.com/obra/superpowers//",
+    "https://other.example?user@github.com/obra/superpowers",
+    "https://other.example#user@github.com/obra/superpowers",
+    "https://u\u0000ser@github.com/obra/superpowers",
+    "git:git+https://github.com/obra/superpowers@",
+    "git:git+ssh://git@github.com/obra/superpowers#",
+    "git:git+https://github.com/obra/superpowers@refs/\u0000heads/main",
+    "https://user@github.com/obra/superpowers#main\u0001",
   ])
     await t.test(`unrecognized ${source}`, async (t) => {
       const state = sandbox(t);
