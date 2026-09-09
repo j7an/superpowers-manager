@@ -12,15 +12,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { exactError } from "../lib/error-assertions.ts";
+import { exactError } from "../../../lib/error-assertions.ts";
 
-import { SafetyError } from "../../src/safety-error.ts";
+import { SafetyError } from "../../../../src/safety-error.ts";
 
 import {
   classifyHooks,
   materializeHooks,
   readManifest,
-} from "../../src/harnesses/codex/hooks.ts";
+} from "../../../../src/harnesses/codex/hooks.ts";
 
 async function sandbox(t: import("node:test").TestContext): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "spw-hooks-"));

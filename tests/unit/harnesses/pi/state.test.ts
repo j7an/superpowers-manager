@@ -18,21 +18,24 @@ import test, { type TestContext } from "node:test";
 import type {
   AdapterContext,
   AdapterResult,
-} from "../../src/adapter-result.ts";
-import type { EffectiveSelection } from "../../src/effective-selection.ts";
-import type { OwnershipInspection } from "../../src/harness.ts";
+} from "../../../../src/adapter-result.ts";
+import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
+import type { OwnershipInspection } from "../../../../src/harness.ts";
 import {
   digestPiTree,
   piReceiptBinding,
-} from "../../src/harnesses/pi/package.ts";
-import { piPaths, type PiPaths } from "../../src/harnesses/pi/paths.ts";
+} from "../../../../src/harnesses/pi/package.ts";
+import { piPaths, type PiPaths } from "../../../../src/harnesses/pi/paths.ts";
 import {
   inspectPiControl,
   inspectPiInstalled,
   inspectPiOwnership,
   type PiRemovalInput,
-} from "../../src/harnesses/pi/state.ts";
-import { nativeFixture, nativeSelection } from "../lib/pi-package-fixture.ts";
+} from "../../../../src/harnesses/pi/state.ts";
+import {
+  nativeFixture,
+  nativeSelection,
+} from "../../../lib/harnesses/pi/package-fixture.ts";
 
 interface StateSandbox {
   readonly root: string;

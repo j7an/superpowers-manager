@@ -27,12 +27,12 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE_ROOT = resolve(
-  fileURLToPath(new URL("../../../", import.meta.url)),
+  fileURLToPath(new URL("../../../../../", import.meta.url)),
 );
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 
 await import(
-  new URL("../../../src/harnesses/codex/adapter.ts", import.meta.url).href
+  new URL("../../../../../src/harnesses/codex/adapter.ts", import.meta.url).href
 );
 
 void test("manifest TOCTOU child", async (t) => {
@@ -112,12 +112,13 @@ void test("manifest TOCTOU child", async (t) => {
 
   const {
     runAdapter,
-  }: typeof import("../../../src/harnesses/codex/adapter.ts") = await import(
-    new URL(
-      `../../../src/harnesses/codex/adapter.ts?manifest-toctou-child=${Date.now()}`,
-      import.meta.url,
-    ).href
-  );
+  }: typeof import("../../../../../src/harnesses/codex/adapter.ts") =
+    await import(
+      new URL(
+        `../../../../../src/harnesses/codex/adapter.ts?manifest-toctou-child=${Date.now()}`,
+        import.meta.url,
+      ).href
+    );
   const argv = [
     "build",
     "--upstream-root",

@@ -16,7 +16,7 @@ import {
   observingCoordinator,
 } from "../unit/helpers/command-harness.ts";
 import { UPSTREAM } from "../bin/lifecycle-fixture.ts";
-import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
+import { writeQualifiedCodexFixture } from "../lib/harnesses/codex/prepared-fixture.ts";
 
 /**
  * `createCase`'s return type, referenced as a type only. Naming the typedef

@@ -12,17 +12,17 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runAdapter } from "../../src/harnesses/codex/adapter.ts";
+import { runAdapter } from "../../../../src/harnesses/codex/adapter.ts";
 
 import {
   verifyInstalledFingerprint,
   verifyUninstalledResources,
-} from "../../src/harnesses/codex/lifecycle.ts";
+} from "../../../../src/harnesses/codex/lifecycle.ts";
 
-const ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const ROOT = resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
 const PACKAGE_ROOT = ROOT;
 const FAKE_CODEX = fileURLToPath(
-  new URL("../unit/helpers/fake-codex.sh", import.meta.url),
+  new URL("../../../unit/helpers/harnesses/codex/fake.sh", import.meta.url),
 );
 
 function ok(result: unknown): any {

@@ -10,8 +10,8 @@ import {
   failureResult,
   successResult,
   type AdapterResult,
-} from "../../src/adapter-result.ts";
-import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
+} from "../../../../src/adapter-result.ts";
+import type { CodexRemovalInput } from "../../../../src/harnesses/codex/adapter.ts";
 import {
   codexHarness,
   normalizeCodexControl,
@@ -19,25 +19,27 @@ import {
   normalizeCodexInstallForContext,
   normalizeCodexInstalled,
   normalizeCodexOwnership,
-} from "../../src/harnesses/codex/harness.ts";
+} from "../../../../src/harnesses/codex/harness.ts";
 import {
   codexPresentation,
   formatHuman,
   formatPorcelain,
-} from "../../src/harnesses/codex/presentation.ts";
-import type { EffectiveSelection } from "../../src/effective-selection.ts";
+} from "../../../../src/harnesses/codex/presentation.ts";
+import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 import type {
   HarnessAdapter,
   InstalledState,
   ProbeSnapshot,
-} from "../../src/harness.ts";
-import type { JsonValue } from "../../src/strict-json.ts";
+} from "../../../../src/harness.ts";
+import type { JsonValue } from "../../../../src/strict-json.ts";
 
 const DESIRED = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 const OTHER = "1".repeat(40);
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const PACKAGE_ROOT = resolve(
+  fileURLToPath(new URL("../../../../", import.meta.url)),
+);
 const FAKE_CODEX = fileURLToPath(
-  new URL("helpers/fake-codex.sh", import.meta.url),
+  new URL("../../helpers/harnesses/codex/fake.sh", import.meta.url),
 );
 
 const codex: HarnessAdapter<CodexRemovalInput> = codexHarness;

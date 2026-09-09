@@ -102,8 +102,8 @@ required agent harness.
     `EnumerationFailure` types are internal control flow, carrying a path and
     no operator-facing prose. The diagnostics it pushes onto its `errors`
     array are operator-facing, but coverage is partial and the pinning is
-    split across two suites: `tests/unit/generated-plugin.test.ts` and
-    `tests/baseline/generated-plugin-corpus.test.ts`, which drives the
+    split across two suites: `tests/unit/harnesses/codex/generated-plugin.test.ts` and
+    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`, which drives the
     validator CLI and pins some strings the unit suite does not. Search both
     for the specific string rather than assuming one suite will catch it.
 

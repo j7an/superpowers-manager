@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { piHarness } from "../../src/harnesses/pi/harness.ts";
-import type { ProbeSnapshot } from "../../src/harness.ts";
-import type { PiRemovalInput } from "../../src/harnesses/pi/state.ts";
-import { nativeSelection } from "../lib/pi-package-fixture.ts";
+import { piHarness } from "../../../../src/harnesses/pi/harness.ts";
+import type { ProbeSnapshot } from "../../../../src/harness.ts";
+import type { PiRemovalInput } from "../../../../src/harnesses/pi/state.ts";
+import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 import {
   mkdtemp,
   mkdir,
@@ -15,9 +15,9 @@ import {
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { piPaths } from "../../src/harnesses/pi/paths.ts";
-import { inspectPiControl } from "../../src/harnesses/pi/state.ts";
-import { codexPresentation } from "../../src/harnesses/codex/presentation.ts";
+import { piPaths } from "../../../../src/harnesses/pi/paths.ts";
+import { inspectPiControl } from "../../../../src/harnesses/pi/state.ts";
+import { codexPresentation } from "../../../../src/harnesses/codex/presentation.ts";
 
 void test("the public Pi probe dispatch needs neither native harness executable nor resource writes", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "spw-pi-dispatch-"));
@@ -37,7 +37,7 @@ void test("the public Pi probe dispatch needs neither native harness executable 
     const result = spawnSync(
       process.execPath,
       [
-        new URL("../../src/cli.ts", import.meta.url).pathname,
+        new URL("../../../../src/cli.ts", import.meta.url).pathname,
         "probe",
         ...args,
         "--porcelain",

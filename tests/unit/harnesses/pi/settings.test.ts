@@ -15,9 +15,9 @@ import test from "node:test";
 import {
   readPiSettings,
   resolvePiLocalSource,
-} from "../../src/harnesses/pi/settings.ts";
-import { SafetyError } from "../../src/safety-error.ts";
-import { exactError } from "../lib/error-assertions.ts";
+} from "../../../../src/harnesses/pi/settings.ts";
+import { SafetyError } from "../../../../src/safety-error.ts";
+import { exactError } from "../../../lib/error-assertions.ts";
 
 async function sandbox(t: import("node:test").TestContext): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "spw-pi-settings-"));

@@ -1136,7 +1136,7 @@ void test(
 // "Slice 3.5, read this before deleting the shell file").
 //
 // Every other root-symlink case in the repository asserts rejection:
-// `tests/baseline/generated-plugin-corpus.test.ts:772-840::the hook subtree rejects unsafe symlinks` is twelve cases of
+// `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:772-840::the hook subtree rejects unsafe symlinks` is twelve cases of
 // status === 1, and :907 puts contained symlinks inside a REAL hooks/
 // directory rather than symlinking the root. Without this case, acceptance is
 // exercised by nothing on either the materializing or the validating side.

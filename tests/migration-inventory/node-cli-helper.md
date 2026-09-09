@@ -5,7 +5,7 @@
 
 Source read in full (76 lines). Retired in Task 2 of slice 4c. The surviving
 property is the child-environment scrub and is covered by
-`tests/unit/adapter.test.ts`.
+`tests/unit/harnesses/codex/adapter.test.ts`.
 
 The shell-original anchor is the last commit in which the driver existed:
 `b3f926f3a5428d21e1fdfe35f9714a639d8209c5`. Before deletion,
@@ -37,7 +37,7 @@ b3f926f3a5428d21e1fdfe35f9714a639d8209c5 origin/main` confirmed reachability.
 4. The missing upstream helper emits its frozen diagnostic (`:25`). **Retired
    at the gap** for the same shell-helper retirement.
 5. The first child invocation receives neither `NODE_OPTIONS` nor `NODE_PATH`
-   (`:36-42`). Port: `tests/unit/adapter.test.ts`'s
+   (`:36-42`). Port: `tests/unit/harnesses/codex/adapter.test.ts`'s
    `runCommand strips NODE_OPTIONS and NODE_PATH from the child env`.
 6. The first child invocation does not execute the preload (`:43-46`). **Retired
    at the gap**: the port tests the child boundary directly, and the shell's
@@ -59,13 +59,13 @@ b3f926f3a5428d21e1fdfe35f9714a639d8209c5 origin/main` confirmed reachability.
 {
   "shellOriginal": 10,
   "portOnly": 0,
-  "ports": { "tests/unit/adapter.test.ts": 21 }
+  "ports": { "tests/unit/harnesses/codex/adapter.test.ts": 21 }
 }
 ```
 
 - Shell original: **10** assertions (four missing-helper branch assertions,
   six scrub/preload assertions across the first and two consecutive calls).
-- Port (`tests/unit/adapter.test.ts`): 21 static `node:test` cases are present
+- Port (`tests/unit/harnesses/codex/adapter.test.ts`): 21 static `node:test` cases are present
   in the shared adapter unit file; the case named `runCommand strips
   NODE_OPTIONS and NODE_PATH from the child env` carries the surviving
   child-environment contract and preservation of an unrelated variable.
@@ -76,7 +76,7 @@ b3f926f3a5428d21e1fdfe35f9714a639d8209c5 origin/main` confirmed reachability.
 
 ## Native TypeScript reconciliation (issue #113)
 
-Current ports: `tests/unit/adapter.test.ts` (21 static `test(` call sites).
+Current ports: `tests/unit/harnesses/codex/adapter.test.ts` (21 static `test(` call sites).
 The `.ts` paths identify the current native counterparts; the quoted shell
 assertions, original counts, historical dispositions, freeze header, and Git
 resolution anchors remain historical. Imports, child entry points, preloads, and

@@ -9,7 +9,7 @@ import {
   requireManagedUpdateControl,
   verifyInstalledFingerprint,
   verifyUninstalledResources,
-} from "../../src/harnesses/codex/lifecycle.ts";
+} from "../../../../src/harnesses/codex/lifecycle.ts";
 
 // Frozen operator text. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so

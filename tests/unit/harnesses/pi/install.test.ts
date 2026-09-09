@@ -23,23 +23,29 @@ import {
   failureResult,
   type AdapterContext,
   type AdapterResult,
-} from "../../src/adapter-result.ts";
-import { beginDirectoryPublication } from "../../src/atomic.ts";
-import type { InstallReceipt, PreparedArtifact } from "../../src/harness.ts";
+} from "../../../../src/adapter-result.ts";
+import { beginDirectoryPublication } from "../../../../src/atomic.ts";
+import type {
+  InstallReceipt,
+  PreparedArtifact,
+} from "../../../../src/harness.ts";
 import {
   installPi,
   removePi,
   type PiInstallDependencies,
-} from "../../src/harnesses/pi/install.ts";
+} from "../../../../src/harnesses/pi/install.ts";
 import {
   digestPiTree,
   piReceiptBinding,
   readPiPackageAssessment,
-} from "../../src/harnesses/pi/package.ts";
-import { piPaths } from "../../src/harnesses/pi/paths.ts";
-import { readPiSettings } from "../../src/harnesses/pi/settings.ts";
-import { inspectPiOwnership } from "../../src/harnesses/pi/state.ts";
-import { nativeFixture, nativeSelection } from "../lib/pi-package-fixture.ts";
+} from "../../../../src/harnesses/pi/package.ts";
+import { piPaths } from "../../../../src/harnesses/pi/paths.ts";
+import { readPiSettings } from "../../../../src/harnesses/pi/settings.ts";
+import { inspectPiOwnership } from "../../../../src/harnesses/pi/state.ts";
+import {
+  nativeFixture,
+  nativeSelection,
+} from "../../../lib/harnesses/pi/package-fixture.ts";
 
 const RUNTIME_RESPONSE = "99.2.3";
 

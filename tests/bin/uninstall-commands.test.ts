@@ -4,7 +4,7 @@
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup.
 
-// Two statements, not one. `tests/bin/migration-inventory.test.ts:64::const TEST_IMPORT` matches
+// Two statements, not one. `tests/bin/migration-inventory.test.ts:66::const TEST_IMPORT` matches
 // /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.ts:692-695::TEST_IMPORT.test(portSource)`, because the
 // static call-site counter recognises exactly one binding form and fails closed
 // rather than miscount. Both `import { describe, test } from "node:test";` and

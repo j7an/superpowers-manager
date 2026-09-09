@@ -13,9 +13,12 @@ import test, { type TestContext } from "node:test";
 import {
   normalizePiRuntimeVersion,
   runPi,
-} from "../../src/harnesses/pi/native.ts";
-import { piPaths } from "../../src/harnesses/pi/paths.ts";
-import { BOUNDED_EXECUTABLE, type ValidatorRun } from "../../src/validator.ts";
+} from "../../../../src/harnesses/pi/native.ts";
+import { piPaths } from "../../../../src/harnesses/pi/paths.ts";
+import {
+  BOUNDED_EXECUTABLE,
+  type ValidatorRun,
+} from "../../../../src/validator.ts";
 
 function sandbox(t: TestContext): {
   readonly root: string;

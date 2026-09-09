@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
-import type { EffectiveSelection } from "../../src/effective-selection.ts";
+import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 
 export function nativeFixture(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "spw-native-package-"));
@@ -23,7 +23,7 @@ export function nativeFixture(t: TestContext): string {
     const destination = join(root, target!);
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(
-      new URL(`../fixtures/pi-native/${fixture}`, import.meta.url),
+      new URL(`../../../fixtures/pi-native/${fixture}`, import.meta.url),
       destination,
     );
   }

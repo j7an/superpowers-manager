@@ -2,29 +2,29 @@ import assert from "node:assert/strict";
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { successResult } from "../../src/adapter-result.ts";
-import { gatherProbe } from "../../src/commands/probe.ts";
+import { successResult } from "../../../../src/adapter-result.ts";
+import { gatherProbe } from "../../../../src/commands/probe.ts";
 import {
   inspectPiPrepared,
   preparePiCandidate,
   readPiPrepared,
-} from "../../src/harnesses/pi/prepare.ts";
-import { piHarness } from "../../src/harnesses/pi/harness.ts";
+} from "../../../../src/harnesses/pi/prepare.ts";
+import { piHarness } from "../../../../src/harnesses/pi/harness.ts";
 import {
   digestPiTree,
   readPiReceipt,
   piReceiptBinding,
-} from "../../src/harnesses/pi/package.ts";
+} from "../../../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
   nativeFixture,
   nativeSelection,
-} from "../lib/pi-package-fixture.ts";
+} from "../../../lib/harnesses/pi/package-fixture.ts";
 import {
   capture,
   notCalledAdapter,
   observingCoordinator,
-} from "../lib/command-doubles.ts";
+} from "../../../lib/command-doubles.ts";
 
 void test("prepared Pi identity survives fetch removal and frozen copies survive replacement", async (t) => {
   const root = nativeFixture(t),

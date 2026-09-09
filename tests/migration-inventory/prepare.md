@@ -165,9 +165,9 @@ apart, so a bare string match would prove nothing about which branch ran:
 
 The pre-existing `escapes or is broken` matches remain what they were and none
 of them covers this string: `symlink escapes or is broken`
-(`tests/unit/hooks.test.ts:376`, `:393`), `materialized hook destination escapes
+(`tests/unit/harnesses/codex/hooks.test.ts:376`, `:393`), `materialized hook destination escapes
 or is broken` (`:460`, `:493`), and `generated hook symlink escapes or is
-broken` (the validator's own, `tests/unit/generated-plugin.test.ts:714`).
+broken` (the validator's own, `tests/unit/harnesses/codex/generated-plugin.test.ts:714`).
 
 *(b) `hook classification failed:` — the adapter's wrapper prefix.*
 `src/adapter.ts:380` emits it, and until slice 3.5 the eight shell lines items
@@ -197,10 +197,10 @@ because `src/commands/prepare.ts:29-35` copies exactly five paths into the
 candidate and `assets` is one of them.
 
 The surrounding rejection coverage is unchanged and still does not reach this
-path: `tests/unit/hooks.test.ts` covers only the rejecting root shapes (`:337`
+path: `tests/unit/harnesses/codex/hooks.test.ts` covers only the rejecting root shapes (`:337`
 absolute, `:351` not a directory); the only other place the hooks *root* is a
 symlink is the twelve-case matrix in
-`tests/baseline/generated-plugin-corpus.test.ts`'s "the hook subtree rejects
+`tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`'s "the hook subtree rejects
 unsafe symlinks for allowing policies" (`:812-880`), whose `location === "root"`
 arm symlinks `hooks` itself and whose every one of the twelve cases asserts
 `status === 1`. The two corpus cases items 83-85 used to lean on do **not**
@@ -470,10 +470,10 @@ two, not on a prepare-level counterpart.
     reproduces the shell derivation table" asserts this exact form as its first
     row, against `shortCommit` computed in the same test.
 40. The upstream `description` survives into the generated manifest (`:822`).
-    **Retired**: `tests/unit/manifest-overlay.test.ts`'s "sets version and
+    **Retired**: `tests/unit/harnesses/codex/manifest-overlay.test.ts`'s "sets version and
     skills, preserving unknown fields and key order" is the overlay's contract
     for every field it does not own, and
-    `tests/baseline/generated-plugin-corpus.test.ts`'s "the valid candidate and
+    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`'s "the valid candidate and
     an unknown manifest field pass" is the validator's end of it.
 41. The generated manifest `skills` is `./skills/` (`:824`). Port:
     `GENERATED-FALLBACK-01` asserts it on the fallback path.
@@ -528,7 +528,7 @@ two, not on a prepare-level counterpart.
 59. `config/hooks-first.json`'s copied bytes are the fixture's (`:868`).
     **Retired**: case 6's multi-path half asserts the file's *presence* through
     the `declared-hooks.txt` listing but not its bytes.
-    `tests/unit/hooks.test.ts`'s "materializeHooks copies a declared file"
+    `tests/unit/harnesses/codex/hooks.test.ts`'s "materializeHooks copies a declared file"
     asserts the copy's content directly, which is the property this line was
     about.
 60. `alternate/hooks-second.json`'s copied bytes are the fixture's (`:871`).
@@ -538,16 +538,16 @@ two, not on a prepare-level counterpart.
     fixture.
 62. An inline hooks object reaches the generated manifest (`:879`).
     **Retired**: no port case uses the inline form. Three citations, because
-    the line has three parts. `tests/unit/hooks.test.ts`'s "classifyHooks
+    the line has three parts. `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks
     treats an inline object as a subtree copy" pins the classification;
-    `tests/baseline/generated-plugin-corpus.test.ts`'s "upstream hook shapes
+    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`'s "upstream hook shapes
     are accepted" pins the validator's acceptance; and the part neither of
     those covers — that the overlay *carries the declared value through* into
-    the generated manifest — is `tests/unit/manifest-overlay.test.ts`'s "sets
+    the generated manifest — is `tests/unit/harnesses/codex/manifest-overlay.test.ts`'s "sets
     version and skills, preserving unknown fields and key order", the same
     citation items 40 and 70 rely on.
 63. The inline form still copies `hooks/hooks-codex.json` (`:882`).
-    **Retired**: `tests/unit/hooks.test.ts`'s "materializeHooks copies a
+    **Retired**: `tests/unit/harnesses/codex/hooks.test.ts`'s "materializeHooks copies a
     regular hook subtree" is the subtree-copy contract the inline
     classification selects.
 64. The inline form still copies `hooks/session-start-codex` (`:883`).
@@ -556,7 +556,7 @@ two, not on a prepare-level counterpart.
     **Retired**, same citation — it is the nested entry that case asserts by
     content.
 66. An inline hooks *array* reaches the generated manifest (`:887`).
-    **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks treats an object
+    **Retired**: `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks treats an object
     array as a subtree copy".
 67. The inline-array form copies `hooks/hooks-codex.json` (`:890`).
     **Retired**: "materializeHooks copies a regular hook subtree".
@@ -568,9 +568,9 @@ two, not on a prepare-level counterpart.
 ### Absent declaration with and without `hooks/hooks.json` (`:894-906`)
 
 70. An absent `hooks` key stays absent from the generated manifest (`:895`).
-    **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks default-discovers
+    **Retired**: `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks default-discovers
     when hooks is absent" pins the classification, and
-    `tests/unit/manifest-overlay.test.ts`'s "sets version and skills,
+    `tests/unit/harnesses/codex/manifest-overlay.test.ts`'s "sets version and skills,
     preserving unknown fields and key order" pins that the overlay adds no key
     it does not own.
 71. Default discovery copies `hooks/hooks.json` (`:896`). **Retired**:
@@ -583,7 +583,7 @@ two, not on a prepare-level counterpart.
 74. Default discovery copies `hooks/support/helper.txt` (`:899`).
     **Retired**, same citation.
 75. An absent declaration *without* `hooks/hooks.json` keeps the key absent
-    (`:902`). **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks default
+    (`:902`). **Retired**: `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks default
     discovery needs a regular hooks.json".
 76. …and copies no `hooks/` subtree (`:903-906`). **Retired**: same
     classification citation for the decision; the no-subtree consequence is
@@ -596,7 +596,7 @@ two, not on a prepare-level counterpart.
 77. A declared path under `config/` reaches the generated manifest (`:909`).
     Port: case 6's multi-path half declares two paths, both outside `hooks/`.
     The single-string spelling of the same shape is pinned by
-    `tests/unit/hooks.test.ts`'s "classifyHooks accepts a string declaration".
+    `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks accepts a string declaration".
 78. The declared file was copied to `config/` (`:912`). Port: case 6's
     `declared-hooks.txt` listing enumerates `config/hooks-first.json`.
 79. The `hooks/` subtree is copied *as well* (`:913`). Port: the same listing
@@ -608,7 +608,7 @@ two, not on a prepare-level counterpart.
 ### A contained hooks root that targets materialized content (`:917-932`)
 
 82. The inline declaration reaches the generated manifest (`:919`).
-    **Retired**: `tests/unit/hooks.test.ts`'s "classifyHooks treats an inline
+    **Retired**: `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks treats an inline
     object as a subtree copy" — the declaration shape is the same inline object
     item 62 covers.
 83. The hooks root remains a symlink in the candidate (`:921-924`). Port:
@@ -687,7 +687,7 @@ two, not on a prepare-level counterpart.
 98. The fallback manifest's `skills` is `./skills/` (`:961`). Port:
     `GENERATED-FALLBACK-01` asserts `manifest.skills === "./skills/"`.
 99. The fallback manifest has no `hooks` key (`:962`). **Retired**:
-    `tests/unit/hooks.test.ts`'s "classifyHooks allows a fallback manifest
+    `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks allows a fallback manifest
     without hooks" and "classifyHooks rejects hooks in a fallback manifest"
     are the policy's two halves.
 100. The fallback plugin has no `hooks/` directory (`:963-966`). Port:
@@ -710,7 +710,7 @@ required the diagnostic to carry a *location* — `invalid JSON in
 `error: invalid manifest JSON in <path>\n`, with no line or column: the
 diagnostics convention forbids interpolating the parser's own text into a
 prepare-owned message. The line/column property survives where it is still
-emitted, pinned by `tests/unit/manifest-overlay.test.ts`'s "a malformed
+emitted, pinned by `tests/unit/harnesses/codex/manifest-overlay.test.ts`'s "a malformed
 manifest reports line and column".
 
 103. A malformed upstream manifest fails closed with a JSON diagnostic, no
@@ -728,10 +728,10 @@ manifest reports line and column".
      arrays and cites the 256-container profile.
 106. A document nested exactly 256 deep is accepted and its ref-derived version
      computed (`:981`). **Retired**: acceptance at the boundary is
-     `tests/unit/manifest-overlay.test.ts`'s "nesting at exactly 256 is
+     `tests/unit/harnesses/codex/manifest-overlay.test.ts`'s "nesting at exactly 256 is
      accepted"; the version form is the derivation table's generic-ref row.
 107. …and its `upstream_manifest_version` is read out of it (`:984`).
-     **Retired**: `tests/unit/hooks.test.ts`'s "MANIFEST-READER-MATERIALIZE-01
+     **Retired**: `tests/unit/harnesses/codex/hooks.test.ts`'s "MANIFEST-READER-MATERIALIZE-01
      hook manifest reader complete matrix" pins the reader's profile at the
      boundary, and item 37's citation pins that an accepted manifest's
      `version` reaches the caller.
@@ -742,7 +742,7 @@ manifest reports line and column".
      survives.
 109. A manifest larger than 1 MiB is still read and its unknown field
      preserved (`:990`). **Retired**:
-     `tests/unit/manifest-overlay.test.ts`'s "trailing whitespace beyond 1 MiB
+     `tests/unit/harnesses/codex/manifest-overlay.test.ts`'s "trailing whitespace beyond 1 MiB
      is accepted" pins the size acceptance and "sets version and skills,
      preserving unknown fields and key order" pins the preservation.
 110. A manifest that cannot be read is rejected (`:994`). Port: "prepare
@@ -760,12 +760,12 @@ manifest reports line and column".
      emitter to assert against, so a port would have had to invent a behaviour
      rather than witness one. What remains unasserted is what an unpaired
      surrogate in `version` does downstream; the nearest witness is
-     `tests/unit/generated-plugin.test.ts`'s "an unpaired surrogate in a
+     `tests/unit/harnesses/codex/generated-plugin.test.ts`'s "an unpaired surrogate in a
      manifest path fails during resolution", a different field on a different
      reader. Recorded here so the gap survives the driver's deletion.
 112. A document nested 2000 deep is rejected (`:996`). Port: "prepare rejects
      an upstream manifest nested beyond the depth limit" — the same branch, one
-     step past the boundary rather than 2000 past it; `tests/baseline/generated-plugin-corpus.test.ts`'s
+     step past the boundary rather than 2000 past it; `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`'s
      "JSON rejects excessive nesting without a traceback" is the validator's
      end.
 
@@ -796,7 +796,7 @@ Items 121-128's `hook materialization failed:` twin never had this problem —
 it is asserted by `tests/baseline/prepare.test.ts:338`.
 
 113. A scalar `hooks` value is rejected (`:999`). Port: inner message,
-     `tests/unit/hooks.test.ts`'s "classifyHooks rejects scalar, mixed, and
+     `tests/unit/harnesses/codex/hooks.test.ts`'s "classifyHooks rejects scalar, mixed, and
      null declarations"; wrapper prefix, "a classification failure reaches
      stderr through the adapter wrapper", which drives this same
      `unsupported or mixed hooks declaration` cause end to end.
@@ -931,13 +931,13 @@ it is asserted by `tests/baseline/prepare.test.ts:338`.
 
 147. Invalid skill frontmatter is rejected (`:1130-1143`). **Retired**: the
      frontmatter rule is
-     `tests/baseline/generated-plugin-corpus.test.ts`'s "the required tree and
+     `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`'s "the required tree and
      skill structure fail closed" and "frontmatter uses the first closing fence
      and owned keys only"; the end-to-end shape of a built-in validation
      failure — exit 1, the validator's line replayed, prepare's trailer, the
      prior tree intact — is `GENERATED-WRONG-NAME-01`'s port.
 148. The diagnostic is `exactly one top-level \`description:\`` (`:1144`).
-     **Retired**: `tests/baseline/generated-plugin-corpus.test.ts`'s
+     **Retired**: `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`'s
      "frontmatter uses the first closing fence and owned keys only" asserts
      `exactly one top-level \`name:\`` at `:962` and `:965`. Both strings come
      from the one interpolated template at `src/generated-plugin.ts:632`, so
@@ -1027,7 +1027,7 @@ softened. `runCommand` (`src/adapter.ts:110-156`) copies the environment it is
 given and `delete`s `NODE_OPTIONS` and `NODE_PATH` before `execFile`
 (`:120-122`); the same grep now returns **three** hits, all in
 `src/adapter.ts` — the explanatory comment at `:116` and those two deletes. The
-change is covered by `tests/unit/adapter.test.ts:549`, *"runCommand strips
+change is covered by `tests/unit/harnesses/codex/adapter.test.ts:549`, *"runCommand strips
 NODE_OPTIONS and NODE_PATH from the child env"*, which drives the real
 `runCommand` through an exported test alias (`src/adapter.ts:158-160`) rather
 than restating the deletes.
@@ -1063,7 +1063,7 @@ beside this one — items 83-85, 113-120, and 125/127/128 — and narrowed item
      4b: the property has a successor at the child that does exist —
      `runCommand` deletes `NODE_OPTIONS` before spawning `codexBin`
      (`src/adapter.ts:120-122`, called at `:207`), pinned by
-     `tests/unit/adapter.test.ts:549`. The §11 citation still does *not* cover
+     `tests/unit/harnesses/codex/adapter.test.ts:549`. The §11 citation still does *not* cover
      this, because §11 declines the *dispatcher* boundary, not the child's;
      it no longer needs to. See the cluster note above.
 163. `NODE_PATH` was unset for that launch (`:1272`). **Retired**, same
@@ -1261,7 +1261,7 @@ half is asserted at `tests/baseline/prepare.test.ts:224`, inside the case
      false today: that `src/` scrubs neither variable anywhere, and that
      `runCommand` passes `env` through untouched. `src/adapter.ts:120-122`
      copies the environment and deletes both variables before `execFile`, with
-     `tests/unit/adapter.test.ts:549` as its witness. What closed is the
+     `tests/unit/harnesses/codex/adapter.test.ts:549` as its witness. What closed is the
      property, at the only child the in-process path spawns
      (`src/adapter.ts:207`). What is **not** resurrected is items 162-163
      themselves: the `adapter-cli.js` launch they observed does not occur

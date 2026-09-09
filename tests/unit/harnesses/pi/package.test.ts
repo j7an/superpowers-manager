@@ -14,12 +14,12 @@ import test from "node:test";
 import {
   digestPiTree,
   materializePiTree,
-} from "../../src/harnesses/pi/package.ts";
+} from "../../../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
   fixtureGit,
   nativeFixture,
-} from "../lib/pi-package-fixture.ts";
+} from "../../../lib/harnesses/pi/package-fixture.ts";
 
 void test("materializes committed binary, mode, hidden files and links without untracked poison", async (t) => {
   const root = nativeFixture(t);

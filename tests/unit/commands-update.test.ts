@@ -1,4 +1,4 @@
-import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
+import { writeQualifiedCodexFixture } from "../lib/harnesses/codex/prepared-fixture.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

@@ -14,15 +14,15 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { pythonStrip, pythonSplitlines } from "../../src/python-text.ts";
+import { pythonStrip, pythonSplitlines } from "../../../../src/python-text.ts";
 import {
   DEFAULT_FS_DEPS,
   type GeneratedPluginFsDeps,
-} from "../../src/skill-validation.ts";
+} from "../../../../src/skill-validation.ts";
 
-import * as generated from "../../src/harnesses/codex/generated-plugin.ts";
+import * as generated from "../../../../src/harnesses/codex/generated-plugin.ts";
 
-import { isAcceptedSplitValue } from "../../src/validate-generated-plugin-cli.ts";
+import { isAcceptedSplitValue } from "../../../../src/validate-generated-plugin-cli.ts";
 
 /** An `OSError`-shaped rejection whose errno is not absence-like. */
 function permissionDenied() {
@@ -931,7 +931,7 @@ void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", asy
 
 const execFileAsync = promisify(execFile);
 const CLI = fileURLToPath(
-  new URL("../../src/validate-generated-plugin-cli.ts", import.meta.url),
+  new URL("../../../../src/validate-generated-plugin-cli.ts", import.meta.url),
 );
 
 async function runCli(
@@ -1119,7 +1119,7 @@ const DASH_LEADING_PARITY = [
 
 /**
  * Unicode-decimal values the helper, the CLI and the adapter must all accept.
- * Kept in sync by hand with the inline list in tests/unit/adapter.test.js —
+ * Kept in sync by hand with the inline list in tests/unit/harnesses/codex/adapter.test.js —
  * adding a value in only one place makes it look covered at all three levels.
  */
 const UNICODE_ACCEPTED_VALUES = ["-١", "-१", "-١.٥"];

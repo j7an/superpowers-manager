@@ -10,8 +10,8 @@ import {
   prepareCodexCandidate,
   readCodexPrepared,
   validateCodexPreparationBeforeFetch,
-} from "../../src/harnesses/codex/prepare.ts";
-import type { EffectiveSelection } from "../../src/effective-selection.ts";
+} from "../../../../src/harnesses/codex/prepare.ts";
+import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 
 const COMMIT = "1".repeat(40);
 

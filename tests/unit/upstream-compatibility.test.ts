@@ -23,7 +23,7 @@ import {
   changePackage,
   nativeFixture,
   nativeSelection,
-} from "../lib/pi-package-fixture.ts";
+} from "../lib/harnesses/pi/package-fixture.ts";
 
 void test("qualified Pi bytes admit exactly the official aliases and require opt-in for custom sources", async (t) => {
   const root = nativeFixture(t);

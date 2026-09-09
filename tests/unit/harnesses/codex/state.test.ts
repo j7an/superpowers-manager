@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { exactError } from "../lib/error-assertions.ts";
+import { exactError } from "../../../lib/error-assertions.ts";
 
-import { SafetyError } from "../../src/safety-error.ts";
+import { SafetyError } from "../../../../src/safety-error.ts";
 
 import {
   codexMetadataCommit,
@@ -13,7 +13,7 @@ import {
   installedRootForVersion,
   manifestShortSha,
   pathsEqual,
-} from "../../src/harnesses/codex/state.ts";
+} from "../../../../src/harnesses/codex/state.ts";
 
 async function sandbox(t: import("node:test").TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "spw-codex-state-"));

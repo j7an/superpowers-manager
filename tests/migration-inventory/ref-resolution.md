@@ -233,7 +233,7 @@ Not a registered behavior ID: no `BASELINE CASE` marker covers this cluster.
 ### The upstream seam scrubs ambient Node preload state (`:209-240`)
 
 Not a registered behavior ID either. Slice 4c re-expresses the child-process
-scrub through `tests/unit/adapter.test.ts`'s `runCommand strips NODE_OPTIONS
+scrub through `tests/unit/harnesses/codex/adapter.test.ts`'s `runCommand strips NODE_OPTIONS
 and NODE_PATH from the child env`, over `src/adapter.ts:116-122`.
 
 **Divergence:** the git-child half has no TypeScript subject with the same
@@ -280,7 +280,7 @@ not carried forward as a false equivalence.
   `readConfigRef`'s value, the four behavior-ID cases
   (`REF-LATEST-STABLE-01`, `REF-GENERIC-FALLBACK-01`, `REF-SOURCE-PROOF-01`,
   `REF-CLEANUP-01`), and one ordinary case for the no-stable-tags cluster.
-  Items 34-35 move to `tests/unit/adapter.test.ts`; items 36-39 are recorded as
+  Items 34-35 move to `tests/unit/harnesses/codex/adapter.test.ts`; items 36-39 are recorded as
   the git-child divergence above. The other 29 mapped items remain here, with
   4 retired (items 3, 4, 6, and 7). No
   port-only assertions were added: every port assertion restates a shell

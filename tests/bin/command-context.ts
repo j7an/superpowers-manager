@@ -18,7 +18,7 @@ import type {
   HarnessAdapter,
   PrepareCandidateInput,
 } from "../../src/harness.ts";
-import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
+import { writeQualifiedCodexFixture } from "../lib/harnesses/codex/prepared-fixture.ts";
 import {
   observingCoordinator,
   type HarnessCall,

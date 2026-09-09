@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { writeQualifiedCodexFixture } from "./codex-prepared-fixture.ts";
+import { writeQualifiedCodexFixture } from "./harnesses/codex/prepared-fixture.ts";
 
 import {
   failureResult,

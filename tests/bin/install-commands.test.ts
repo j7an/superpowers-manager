@@ -7,7 +7,7 @@
 // has no counterpart here, and why each case must state the preconditions the
 // shell inherited from the scenario above it. See the inventory for those.
 
-// Two statements, not one. `tests/bin/migration-inventory.test.ts:64::const TEST_IMPORT` matches
+// Two statements, not one. `tests/bin/migration-inventory.test.ts:66::const TEST_IMPORT` matches
 // /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.ts:692-695::TEST_IMPORT.test(portSource)`, because the
 // static call-site counter recognises exactly one binding form and fails closed
 // rather than miscount. Both `import { describe, test } from "node:test";` and
@@ -54,7 +54,7 @@ import {
   fixtureGit,
   nativeFixture,
   nativeSelection,
-} from "../lib/pi-package-fixture.ts";
+} from "../lib/harnesses/pi/package-fixture.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 

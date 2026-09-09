@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { exactError } from "../lib/error-assertions.ts";
+import { exactError } from "../../../lib/error-assertions.ts";
 
 import {
   activePluginVersionFromJson,
   codexInstalledPluginsFromJson,
   installedListingHas,
   marketplaceRootFromJson,
-} from "../../src/harnesses/codex/json.ts";
+} from "../../../../src/harnesses/codex/json.ts";
 
-import { SafetyError } from "../../src/safety-error.ts";
+import { SafetyError } from "../../../../src/safety-error.ts";
 
 const nested = (depth: number) => "[".repeat(depth) + "0" + "]".repeat(depth);
 

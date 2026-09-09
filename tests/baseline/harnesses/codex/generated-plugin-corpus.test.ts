@@ -21,10 +21,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const VALIDATOR = fileURLToPath(
-  new URL("../../src/validate-generated-plugin-cli.ts", import.meta.url),
+  new URL("../../../../src/validate-generated-plugin-cli.ts", import.meta.url),
 );
 const FIXTURES = fileURLToPath(
-  new URL("../fixtures/baseline/", import.meta.url),
+  new URL("../../../fixtures/baseline/", import.meta.url),
 );
 const MANIFESTS = join(FIXTURES, "manifests");
 const PROVENANCE = join(FIXTURES, "provenance");

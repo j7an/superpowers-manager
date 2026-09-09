@@ -462,7 +462,7 @@ async function performPrepare<R>(
     // spawn error, which oneLine never reads -- it takes .message only);
     // readManifest's three hookError messages
     // (`src/harnesses/codex/hooks.ts:113-138::readManifest`), pinned by
-    // `tests/unit/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
+    // `tests/unit/harnesses/codex/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //

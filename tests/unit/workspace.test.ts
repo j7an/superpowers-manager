@@ -22,7 +22,7 @@ import { runAdapter } from "../../src/harnesses/codex/adapter.ts";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const FAKE_CODEX = fileURLToPath(
-  new URL("helpers/fake-codex.sh", import.meta.url),
+  new URL("helpers/harnesses/codex/fake.sh", import.meta.url),
 );
 
 async function sandbox(t: import("node:test").TestContext) {

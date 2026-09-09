@@ -14,16 +14,19 @@ import {
   runAdapter,
   mapCodexLaunchFailure,
   runCommandForTest,
-} from "../../src/harnesses/codex/adapter.ts";
+} from "../../../../src/harnesses/codex/adapter.ts";
 
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
+const PACKAGE_ROOT = resolve(
+  fileURLToPath(new URL("../../../../", import.meta.url)),
+);
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 const SOURCE = "https://example.invalid/superpowers.git";
 // Sibling of tests/assert-matcher-gate.js, from this file's own location —
 // never a repo-root constant. The nested `--test` spawns below get `--import`
 // on argv, not via NODE_OPTIONS, so it does not propagate from this parent
 // process and must be passed explicitly.
-const GATE_URL = new URL("../assert-matcher-gate.ts", import.meta.url).href;
+const GATE_URL = new URL("../../../assert-matcher-gate.ts", import.meta.url)
+  .href;
 
 /**
  * Build the upstream root, candidate root, and fallback manifest `build`
@@ -149,18 +152,21 @@ void test("the adapter replays a multi-error failure as one record per line", as
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/harnesses/codex/hooks.ts) must keep succeeding, so this exercises the read at
 // the overlay boundary specifically, not the sibling one that already
-// leaks `errno` by design (verified: `tests/unit/hooks.test.js`).
+// leaks `errno` by design (verified: `tests/unit/harnesses/codex/hooks.test.js`).
 //
 // Triggering that — succeed once, then fail on the *next* read of the same
 // path — needs Node's experimental module-mocking API, which requires
 // `--experimental-test-module-mocks` and is only reachable from a running
 // `node:test` TestContext. The shared suite runner does not set that flag
 // for the whole suite, so the mocked build runs in its own child process;
-// see `tests/unit/helpers/overlay-read-failure-child.ts` for why the
+// see `tests/unit/helpers/harnesses/codex/overlay-read-failure-child.ts` for why the
 // substitution is deterministic rather than a timing race.
 void test("a manifest overlay read failure surfaces the frozen message with no errno", () => {
   const child = fileURLToPath(
-    new URL("helpers/overlay-read-failure-child.ts", import.meta.url),
+    new URL(
+      "../../helpers/harnesses/codex/overlay-read-failure-child.ts",
+      import.meta.url,
+    ),
   );
   // This test itself runs under `node --test`, which sets
   // NODE_TEST_CONTEXT / NODE_TEST_WORKER_ID. Left in the child's env, its
@@ -210,7 +216,7 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
 // The real TOCTOU: `readManifest` (`src/harnesses/codex/hooks.ts:113::readManifest`) validates the candidate
 // manifest fatally for hook classification; the overlay's own read
 // (src/harnesses/codex/adapter.ts, ~:360) reads the same path again afterward. Between those
-// two reads, `tests/unit/helpers/manifest-toctou-child.ts` replaces the file
+// two reads, `tests/unit/helpers/harnesses/codex/manifest-toctou-child.ts` replaces the file
 // on disk with genuinely invalid UTF-8 bytes, so the second read observes
 // different bytes than the first one validated. Before the fix, the second
 // read decoded leniently (U+FFFD replacement) and the corrupted manifest was
@@ -219,7 +225,10 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
 // read-failure case above, for the same reason.
 void test("a manifest overlay read fails closed when the file changes between the two reads", () => {
   const child = fileURLToPath(
-    new URL("helpers/manifest-toctou-child.ts", import.meta.url),
+    new URL(
+      "../../helpers/harnesses/codex/manifest-toctou-child.ts",
+      import.meta.url,
+    ),
   );
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
@@ -280,7 +289,7 @@ void test("a manifest overlay read fails closed when the file changes between th
   );
   // Reconstructed independently of the child's fixture, matching its exact
   // construction (validText + single corrupted byte at the "zz" placeholder)
-  // \u2014 see tests/unit/helpers/manifest-toctou-child.ts.
+  // \u2014 see tests/unit/helpers/harnesses/codex/manifest-toctou-child.ts.
   const expectedValidText = `${JSON.stringify({
     name: "superpowers",
     description: "zz",
@@ -394,7 +403,7 @@ void test("split dash-leading exceptions still reach the validator", async (t) =
 });
 
 const FAKE_CODEX = fileURLToPath(
-  new URL("helpers/fake-codex.sh", import.meta.url),
+  new URL("../../helpers/harnesses/codex/fake.sh", import.meta.url),
 );
 
 /**
@@ -922,7 +931,7 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
  * exact "removed but re-adding failed" state.
  *
- * A custom stub rather than tests/unit/helpers/fake-codex.sh: that helper has
+ * A custom stub rather than tests/unit/helpers/harnesses/codex/fake.sh: that helper has
  * no failure-injection channel, and adding one would change a shared fixture
  * from inside a PR that is meant to be additive.
  */
