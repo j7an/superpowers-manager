@@ -167,7 +167,7 @@ new coverage is written for it here.
     **Retired**: the strict reader's rejection is pinned by item 16's
     citation, which constrains the error class rather than its wording; the
     exact phrase survives only where it is still emitted, and is pinned there
-    by `tests/unit/manifest-overlay.test.ts:111` and
+    by `tests/unit/harnesses/codex/manifest-overlay.test.ts:111` and
     `tests/baseline/selection-state.test.ts:338`.
 18. A document nested 255 deep is accepted and its field read (`:74-75`).
     **Retired**: `tests/unit/provenance.test.ts:71-74`.

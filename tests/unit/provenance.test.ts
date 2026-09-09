@@ -58,7 +58,7 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   // Bytes: the matrix says NO byte cap, and until PR-3 the only assertion of
   // that was `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:852-854::large` (a 1 MiB + 1 payload). Ported
   // here so the cell keeps a witness after the driver is deleted. Mirrors
-  // `tests/unit/codex-state.test.ts:41::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
+  // `tests/unit/harnesses/codex/state.test.ts:41::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
   await writeFile(
     file,
     `{"padding":"${"x".repeat(1_048_577)}","source":"https://example.invalid/repo"}`,

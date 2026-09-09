@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import type { CodexRemovalInput } from "../../src/adapter.ts";
+import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
 import type { CommandContext } from "../../src/commands/context.ts";
 import { runInstall } from "../../src/commands/install.ts";
 import { withMutation } from "../../src/commands/mutation.ts";
@@ -30,7 +30,7 @@ import {
 } from "../../src/resource-lock.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 import { upstreamCacheRoot } from "../../src/upstream-workspace.ts";
-import { codexHarness } from "../../src/codex-harness.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import { createHarnessFixture } from "../lib/test-harness.ts";
 import { capture } from "./helpers/command-harness.ts";
 

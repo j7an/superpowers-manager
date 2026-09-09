@@ -28,7 +28,7 @@ import { runWithMutation } from "./mutation.ts";
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
 // reads .message only. Same arrangement as hookError
-// (`src/hooks.ts:44::function hookError`).
+// (`src/harnesses/codex/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
 }
@@ -461,8 +461,8 @@ async function performPrepare<R>(
     // failure (its cause is the shared runner's (src/validator.ts) captured
     // spawn error, which oneLine never reads -- it takes .message only);
     // readManifest's three hookError messages
-    // (`src/hooks.ts:113-138::readManifest`), pinned by
-    // `tests/unit/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
+    // (`src/harnesses/codex/hooks.ts:113-138::readManifest`), pinned by
+    // `tests/unit/harnesses/codex/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //
@@ -502,7 +502,7 @@ async function performPrepare<R>(
     // only, so it bounds how much of that text lands, not what it may
     // contain.
     //
-    // runAdapter's closing `throw cause` (src/adapter.ts) does NOT arrive
+    // runAdapter's closing `throw cause` (src/harnesses/codex/adapter.ts) does NOT arrive
     // here -- the call site catches it and converts it to a hand-written
     // message per AGENTS.md's reader-diagnostics rule.
     //

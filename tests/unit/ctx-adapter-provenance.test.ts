@@ -9,7 +9,7 @@
 // clothes.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { SyntaxKind } from "typescript/unstable/ast";
@@ -22,11 +22,11 @@ import {
   isStringLiteral,
 } from "typescript/unstable/ast/is";
 import { API } from "typescript/unstable/sync";
-import type {} from "../../src/adapter.ts";
-import type {} from "../../src/codex-harness.ts";
-import type {} from "../../src/hooks.ts";
-import type {} from "../../src/lifecycle.ts";
-import type {} from "../../src/pi-harness.ts";
+import type {} from "../../src/harnesses/codex/adapter.ts";
+import type {} from "../../src/harnesses/codex/harness.ts";
+import type {} from "../../src/harnesses/codex/hooks.ts";
+import type {} from "../../src/harnesses/codex/lifecycle.ts";
+import type {} from "../../src/harnesses/pi/harness.ts";
 import type {} from "../../src/provenance.ts";
 import type {} from "../../src/status.ts";
 import type {} from "../../src/upstream-version.ts";
@@ -88,9 +88,20 @@ function moduleSpecifiers(
   return specifiers;
 }
 
-function isConcreteHarnessModule(specifier: string): boolean {
+function harnessOwner(path: string): string | undefined {
+  return /^src\/harnesses\/([^/]+)\//.exec(path)?.[1];
+}
+
+function localTarget(importer: string, specifier: string): string | undefined {
+  return specifier.startsWith(".")
+    ? posix.normalize(posix.join(posix.dirname(importer), specifier))
+    : undefined;
+}
+
+function isConcreteHarnessModule(importer: string, specifier: string): boolean {
   const name = specifier.split("/").at(-1) ?? "";
   return (
+    harnessOwner(localTarget(importer, specifier) ?? "") !== undefined ||
     name === "adapter.ts" ||
     name.startsWith("codex-") ||
     name.startsWith("pi-") ||
@@ -113,7 +124,9 @@ void test("no module under src/commands/ imports a concrete harness module", () 
   const offenders = tsFiles("src/commands").filter((relative) => {
     const source = project.program.getSourceFile(join(ROOT, relative));
     assert.ok(source, `parser did not load ${relative}`);
-    return moduleSpecifiers(source).some(isConcreteHarnessModule);
+    return moduleSpecifiers(source).some((specifier) =>
+      isConcreteHarnessModule(relative, specifier),
+    );
   });
   snapshot.dispose();
   api.close();
@@ -122,6 +135,50 @@ void test("no module under src/commands/ imports a concrete harness module", () 
     [],
     "a command module importing a concrete harness module bypasses ctx.adapter, so an " +
       "injected double observes nothing — see spec §4.5",
+  );
+});
+
+void test("shared utilities and harnesses respect concrete ownership", () => {
+  const api = new API({ cwd: ROOT });
+  const snapshot = api.updateSnapshot({
+    openProjects: [join(ROOT, "tsconfig.json")],
+  });
+  const project = snapshot.getProjects()[0]!;
+  const violations: string[] = [];
+  const entrypoints = new Set([
+    "src/cli.ts",
+    "src/validate-generated-plugin-cli.ts",
+  ]);
+  try {
+    for (const importer of tsFiles("src")) {
+      const source = project.program.getSourceFile(join(ROOT, importer));
+      assert.ok(source, `parser did not load ${importer}`);
+      for (const specifier of moduleSpecifiers(source)) {
+        const target = localTarget(importer, specifier);
+        const owner = target === undefined ? undefined : harnessOwner(target);
+        if (
+          owner !== undefined &&
+          owner !== harnessOwner(importer) &&
+          !entrypoints.has(importer)
+        ) {
+          violations.push(`${importer} -> ${target}`);
+        }
+      }
+    }
+  } finally {
+    snapshot.dispose();
+    api.close();
+  }
+  assert.deepEqual(violations, []);
+});
+
+void test("harness ownership resolves only directory-owned modules", () => {
+  assert.equal(harnessOwner("src/harnesses/codex/state.ts"), "codex");
+  assert.equal(harnessOwner("src/harnesses/pi/state.ts"), "pi");
+  assert.equal(harnessOwner("src/harness.ts"), undefined);
+  assert.equal(
+    localTarget("src/harnesses/pi/native.ts", "../codex/state.ts"),
+    "src/harnesses/codex/state.ts",
   );
 });
 
@@ -193,7 +250,7 @@ void test("the CLI is the only production concrete harness binding", () => {
 //
 //   BOUNDED TO ONE VALUE — the gap excludes `; , { }`, so a match cannot span
 //   from one property or statement into the next. Without that bound the
-//   pattern fires all over src/adapter.ts, where the word "adapter" appears in
+//   pattern fires all over src/harnesses/codex/adapter.ts, where the word "adapter" appears in
 //   prose on nearly every page and `env.` on most of them. `adapter` must be
 //   in an ASSIGNMENT or PROPERTY position (`adapter:` / `adapter =`), not
 //   merely mentioned.
@@ -202,7 +259,7 @@ void test("the CLI is the only production concrete harness binding", () => {
 // deriving expression is a BRACE-FREE assignment or property value on the
 // identifier `adapter` itself — the `[^;,{}]` gap is what makes it brace-free,
 // and that bound is deliberate (see BOUNDED TO ONE VALUE above): widening or
-// dropping it would false-positive throughout src/adapter.ts, where the word
+// dropping it would false-positive throughout src/harnesses/codex/adapter.ts, where the word
 // "adapter" appears in prose on nearly every page with `env.` nearby. It does
 // NOT catch one laundered through a helper (`adapter: pickAdapter(env)`), an
 // intermediate variable (`const chosen = env.X ? load(env.X) : runAdapter; …
@@ -250,17 +307,21 @@ void test("both gates reject every evasion form they claim to cover", () => {
   assert.ok(source, "parser did not load its boundary-gate self-check");
   const imported = moduleSpecifiers(source);
   for (const specifier of [
-    "../../src/adapter.ts",
-    "../../src/codex-harness.ts",
-    "../../src/hooks.ts",
-    "../../src/lifecycle.ts",
-    "../../src/pi-harness.ts",
+    "../../src/harnesses/codex/adapter.ts",
+    "../../src/harnesses/codex/harness.ts",
+    "../../src/harnesses/codex/hooks.ts",
+    "../../src/harnesses/codex/lifecycle.ts",
+    "../../src/harnesses/pi/harness.ts",
     "../../src/provenance.ts",
     "../../src/status.ts",
     "../../src/upstream-version.ts",
   ]) {
     assert.ok(
-      imported.includes(specifier) && isConcreteHarnessModule(specifier),
+      imported.includes(specifier) &&
+        isConcreteHarnessModule(
+          "tests/unit/ctx-adapter-provenance.test.ts",
+          specifier,
+        ),
       `concrete import gate missed: ${specifier}`,
     );
   }
@@ -283,7 +344,7 @@ void test("both gates reject every evasion form they claim to cover", () => {
   }
 
   // It must NOT fire on the legitimate spellings, or Task 1 cannot land and
-  // src/adapter.ts becomes unmaintainable. These three are the ones that
+  // src/harnesses/codex/adapter.ts becomes unmaintainable. These three are the ones that
   // nearly broke it.
   const ALLOWED = [
     // src/cli.ts's own construction site: `env: process.env` and
@@ -291,7 +352,7 @@ void test("both gates reject every evasion form they claim to cover", () => {
     // bound keeps the pattern from reading across the comma between them.
     "const ctx: CommandContext = {\n  root,\n  env: process.env,\n" +
       "  stdout: process.stdout,\n  adapter: runAdapter,\n};",
-    // src/adapter.ts's prose. "adapter" as a word, "env." nearby, no
+    // src/harnesses/codex/adapter.ts's prose. "adapter" as a word, "env." nearby, no
     // assignment position — the shape that made an unbounded pattern useless.
     "// The adapter replays its messages, then reads env.SUPERPOWERS_CODEX.",
     // The interface declaration itself, which is a TYPE not a derivation.

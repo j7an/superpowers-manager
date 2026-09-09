@@ -1,5 +1,5 @@
 // Ports scripts/update. The shell sourced common.sh and lifecycle.sh; the
-// predicates now live in src/lifecycle.ts. Unlike install and uninstall,
+// predicates now live in src/harnesses/codex/lifecycle.ts. Unlike install and uninstall,
 // update issues no ctx.adapter call of its own: every adapter interaction
 // this module needs already happens inside gatherProbe, runPrepare or
 // runInstall, each of which owns its own §4.2a-conformant invoke() gate. That

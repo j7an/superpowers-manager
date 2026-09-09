@@ -43,7 +43,7 @@ const EXPECTED_FILES = [
   "config/upstream-ref",
   ".agents/plugins/marketplace.json",
   "plugins/superpowers/.codex-plugin/plugin.template.json",
-  "src/generated-plugin.ts",
+  "src/harnesses/codex/generated-plugin.ts",
   "src/validate-generated-plugin-cli.ts",
 ];
 assert.equal(
@@ -144,18 +144,34 @@ const textContentCases: Array<[string, string, boolean]> = [
   ["tests/expected_tarball_contents.txt", "dist/selection-state-cli.js", true],
   ["tests/expected_tarball_contents.txt", "dist/adapter-cli.js", false],
   ["tests/expected_tarball_contents.txt", "dist/adapter-result.js", true],
-  ["tests/expected_tarball_contents.txt", "dist/adapter.js", true],
-  ["tests/expected_tarball_contents.txt", "dist/generated-plugin.js", true],
+  [
+    "tests/expected_tarball_contents.txt",
+    "dist/harnesses/codex/adapter.js",
+    true,
+  ],
+  [
+    "tests/expected_tarball_contents.txt",
+    "dist/harnesses/codex/generated-plugin.js",
+    true,
+  ],
   ["tests/expected_tarball_contents.txt", "dist/python-text.js", true],
   [
     "tests/expected_tarball_contents.txt",
     "dist/validate-generated-plugin-cli.js",
     true,
   ],
-  ["tests/expected_tarball_contents.txt", "dist/codex-json.js", true],
-  ["tests/expected_tarball_contents.txt", "dist/codex-state.js", true],
+  ["tests/expected_tarball_contents.txt", "dist/harnesses/codex/json.js", true],
+  [
+    "tests/expected_tarball_contents.txt",
+    "dist/harnesses/codex/state.js",
+    true,
+  ],
   ["tests/expected_tarball_contents.txt", "dist/hooks-cli.js", false],
-  ["tests/expected_tarball_contents.txt", "dist/hooks.js", true],
+  [
+    "tests/expected_tarball_contents.txt",
+    "dist/harnesses/codex/hooks.js",
+    true,
+  ],
   // These constructed strings are deliberate negative assertions over deleted
   // paths, excluded from the literal active-consumer audit. Active references
   // must remain literal and dispositioned; construction must not hide one.
@@ -214,7 +230,7 @@ const textContentCases: Array<[string, string, boolean]> = [
   ["RELEASING.md", "NPM_BOOTSTRAP_TOKEN", false],
   ["RELEASING.md", "j7an/superpowers-wrapper", false],
   [
-    "tests/manual/codex-behavior-probe.sh",
+    "tests/manual/codex/behavior-probe.sh",
     "Optional native-only Codex compatibility probe",
     true,
   ],

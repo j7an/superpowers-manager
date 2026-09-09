@@ -69,8 +69,8 @@ required agent harness.
   and that terminal, each covering one route; none is a blanket guard, and a
   diagnostic can reach the terminal past all three. (1) A reader's own text is
   escaped by `AdapterMessageLog` at store time (`src/adapter-result.ts`) when
-  it travels as an adapter message — `src/manifest-overlay.ts`'s thrown text
-  and `src/generated-plugin.ts`'s `errors` entries do on the command path — so
+  it travels as an adapter message — `src/harnesses/codex/manifest-overlay.ts`'s thrown text
+  and `src/harnesses/codex/generated-plugin.ts`'s `errors` entries do on the command path — so
   a control character arrives inert as text (tab, LF, and CR as named
   escapes, the rest as hex or unicode escapes) rather than acted on, and
   `appendBytes` splits records on LF before escaping; it is never refused.
@@ -85,11 +85,11 @@ required agent harness.
   path this rule is the whole defense. It is the whole defense again wherever
   a reader's diagnostics are written directly, reaching no escaper and no
   catch: `src/validate-generated-plugin-cli.ts` writes the same
-  `src/generated-plugin.ts` `errors` entries straight to stderr. Reader
+  `src/harnesses/codex/generated-plugin.ts` `errors` entries straight to stderr. Reader
   wrappers are frozen by tests, but by three different kinds of assertion —
   enumerate the pinning tests for the specific string before changing any of
   them:
-  - `src/manifest-overlay.ts` — most diagnostics are asserted as
+  - `src/harnesses/codex/manifest-overlay.ts` — most diagnostics are asserted as
     **complete messages** (`assert.equal(error.message, …)`), so those fail
     on any rewording; the malformed-JSON case is constrained by a predicate
     instead, and is **not** pinned that tightly.
@@ -98,12 +98,12 @@ required agent harness.
     into its own message. Its own suite pins the malformed-JSON message by
     exact equality and the read-failure message by **prefix only** — the
     prefix is frozen, the interpolated tail is deliberately free.
-  - `src/generated-plugin.ts` — its `ResolutionFailure`/`InspectionFailure`/
+  - `src/harnesses/codex/generated-plugin.ts` — its `ResolutionFailure`/`InspectionFailure`/
     `EnumerationFailure` types are internal control flow, carrying a path and
     no operator-facing prose. The diagnostics it pushes onto its `errors`
     array are operator-facing, but coverage is partial and the pinning is
-    split across two suites: `tests/unit/generated-plugin.test.ts` and
-    `tests/baseline/generated-plugin-corpus.test.ts`, which drives the
+    split across two suites: `tests/unit/harnesses/codex/generated-plugin.test.ts` and
+    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`, which drives the
     validator CLI and pins some strings the unit suite does not. Search both
     for the specific string rather than assuming one suite will catch it.
 
@@ -222,7 +222,7 @@ required agent harness.
   inside an isolated container home with networking disabled, so it may mutate
   throwaway container state but never the developer's or runner's real harness
   state. `pnpm run test:acceptance` runs shared checks once, then both harnesses.
-- Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
+- Use `tests/manual/codex/behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the
   error — a RegExp, an error class, an object matcher, or a validation

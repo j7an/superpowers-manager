@@ -17,6 +17,6 @@ This is an intentional widening of accepted input, not a parity gap, for the
 reason stated above: the port's `formatPythonNumber` never performs the
 integer conversion CPython's digit limit defends against, so the limit has
 nothing to reject. The parity test in
-`tests/baseline/manifest-overlay-parity.test.js` asserts only that the port
+`tests/baseline/harnesses/codex/manifest-overlay-parity.test.ts` asserts only that the port
 accepts this file — it does not compare the output against the oracle,
 because the oracle never produces one.

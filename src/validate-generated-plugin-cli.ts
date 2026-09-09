@@ -3,7 +3,7 @@ import { oneLine, parseFlags, UsageError } from "./cli-arguments.ts";
 import {
   validateGeneratedPlugin,
   type GeneratedPluginValidationOptions,
-} from "./generated-plugin.ts";
+} from "./harnesses/codex/generated-plugin.ts";
 
 const FLAGS = [
   "plugin-root",

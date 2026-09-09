@@ -29,11 +29,11 @@ witness and are ported here for the first time — `CLI-ENV-REFRESH-MODE-01`,
 `PROV-READER-CODEX-SOURCE-01`, ports to `tests/unit/provenance.test.ts` but is
 **not** a first-time port: PR-1 already witnessed that matrix row, and only
 its **Bytes** cell was unwitnessed, which PR-3.2 ported ahead of this deletion
-(see items 154-173 below). `tests/unit/adapter.test.ts` already carries
+(see items 154-173 below). `tests/unit/harnesses/codex/adapter.test.ts` already carries
 most of the remaining remapped IDs but is excluded from this inventory's
 `ports` map: `node-cli-helper.md` already claims it, and no port file is
 claimed by two inventories. Where this inventory's items duplicate coverage
-`tests/unit/adapter.test.ts` or another already-frozen inventory already
+`tests/unit/harnesses/codex/adapter.test.ts` or another already-frozen inventory already
 carries, they are marked **Retired at the gap** citing that existing coverage
 rather than claimed as a port of this record.
 
@@ -186,7 +186,7 @@ different languages sharing one record.
    `ADAPTER-OWNERSHIP-01`, and `ADAPTER-UPDATE-CONTROL-01`'s recognition
    half — all owned by the Python suite per
    `docs/baseline/protocol-disposition.md` and already remapped to
-   `tests/unit/adapter.test.ts`.
+   `tests/unit/harnesses/codex/adapter.test.ts`.
 
 ### A non-Codex-shaped adapter fails update-control inspection (`tests/test_adapter_protocol.sh:125-126`)
 
@@ -196,7 +196,7 @@ different languages sharing one record.
    **Duplicate witness** of `ADAPTER-UPDATE-CONTROL-01`'s recognition rule
    (the third-value/malformed rejection half), which remaps to
    `requireManagedUpdateControl` (`src/lifecycle.ts`), witnessed in
-   `tests/unit/lifecycle.test.ts` — already claimed by `codex-state-units.md`.
+   `tests/unit/harnesses/codex/lifecycle.test.ts` — already claimed by `codex-state-units.md`.
 
 ### `assert_identity_state` call sites (`tests/test_adapter_protocol.sh:169-181`)
 
@@ -207,7 +207,7 @@ different languages sharing one record.
    (`tests/test_adapter_protocol.sh:169`, `tests/test_adapter_protocol.sh:173`,
    `tests/test_adapter_protocol.sh:177`, `tests/test_adapter_protocol.sh:181`).
    **Duplicate witness** of `ADAPTER-OWNERSHIP-01`, remapped to
-   `tests/unit/adapter.test.ts`'s `identity_state` derivation coverage. The
+   `tests/unit/harnesses/codex/adapter.test.ts`'s `identity_state` derivation coverage. The
    helper's own body (lines 162 through 166) is not counted separately; see Divergences.
 
 ### Install verification hints, controlled failure, and malformed/noisy/crashed adapter responses (`tests/test_adapter_protocol.sh:187-220`)
@@ -215,14 +215,14 @@ different languages sharing one record.
 32-34. A successful install with both verification hints reports the exact
    `mismatch` and `missing` strings (`tests/test_adapter_protocol.sh:187`,
    `tests/test_adapter_protocol.sh:188`, `tests/test_adapter_protocol.sh:189`). **Duplicate witness** of `ADAPTER-INSTALL-RESULT-01`,
-   remapped to `tests/unit/adapter.test.ts`.
+   remapped to `tests/unit/harnesses/codex/adapter.test.ts`.
 
 35-42. A controlled install failure replays its pre-failure messages and
    stderr warning, then its error and both hints, and yields no result
    (`tests/test_adapter_protocol.sh:192`, `tests/test_adapter_protocol.sh:193`, `tests/test_adapter_protocol.sh:194`, `tests/test_adapter_protocol.sh:195`, `tests/test_adapter_protocol.sh:196`,
    `tests/test_adapter_protocol.sh:197`, `tests/test_adapter_protocol.sh:198`, `tests/test_adapter_protocol.sh:199`). **Duplicate witness** of
    `ADAPTER-CONTROLLED-FAILURE-01` and `DIAG-ADAPTER-01`'s stream/order
-   contract, both remapped to `tests/unit/adapter.test.ts`.
+   contract, both remapped to `tests/unit/harnesses/codex/adapter.test.ts`.
 
 43-45. A response whose `operation` does not match the invocation fails
    without a result file (`tests/test_adapter_protocol.sh:202`, `tests/test_adapter_protocol.sh:203`,
@@ -294,7 +294,7 @@ different languages sharing one record.
    test the other two cases use (`tests/test_adapter_protocol.sh:378`).
    **Duplicate witness** of
    `ADAPTER-TERMINAL-01` and `ADAPTER-SURROGATE-01`, both remapped to
-   `tests/unit/adapter-protocol.test.js` and `tests/unit/lifecycle.test.ts`.
+   `tests/unit/adapter-protocol.test.js` and `tests/unit/harnesses/codex/lifecycle.test.ts`.
 
 ### Zero-argument, empty-operation, and unknown-operation CLI boundary failures (`tests/test_adapter_protocol.sh:387-412`)
 
@@ -312,7 +312,7 @@ different languages sharing one record.
    in-process `adapter-cli` dispatches on a TypeScript-enumerated operation
    set rather than an untyped POSIX argv, so no equivalent unrecognized-string
    boundary exists to port; the surviving argument-parsing failure paths are
-   covered by `tests/unit/adapter.test.ts`'s split-dash-leading-ref cases.
+   covered by `tests/unit/harnesses/codex/adapter.test.ts`'s split-dash-leading-ref cases.
 
 ### An invalid inspect view is a controlled inspect failure (`tests/test_adapter_protocol.sh:430-436`)
 
@@ -436,18 +436,18 @@ different languages sharing one record.
    reversed**. PR 11.4 changed the synthesized launch failure from an empty
    stderr buffer to `cannot launch Codex command <bin>: <errno>`, because an
    empty buffer made `ENOEXEC`/`EMFILE`/`ENOMEM` indistinguishable from Codex
-   exiting non-zero; `tests/unit/adapter.test.ts:487-498` records that
-   rationale and `tests/unit/adapter.test.ts:499-526` is the surviving
+   exiting non-zero; `tests/unit/harnesses/codex/adapter.test.ts:487-498` records that
+   rationale and `tests/unit/harnesses/codex/adapter.test.ts:499-526` is the surviving
    witness, asserting
    `mapCodexLaunchFailure`'s stderr text directly. So this driver's assertion
    is superseded rather than ported: an in-process test asserting an empty
    stderr here would now fail. The remaining half — that the mapped text
    reaches the `inspect` envelope end-to-end — has **no** witness at all;
-   `tests/unit/adapter.test.ts:496-498` says so in as many words ("is not
+   `tests/unit/harnesses/codex/adapter.test.ts:496-498` says so in as many words ("is not
    covered end-to-end by any test"), because the errno path cannot be provoked
    hermetically. Recorded here as an open gap rather than as coverage. (An
    earlier revision of this record cited
-   `tests/unit/adapter.test.ts:431,453` as the in-process witness; those two
+   `tests/unit/harnesses/codex/adapter.test.ts:431,453` as the in-process witness; those two
    lines assert `inspect-failed` on a *listing-parse* failure — `cannot parse
    output of '<codex> plugin list --json'` — and neither spawns a broken
    executable, so neither witnesses a launch failure.) An earlier
@@ -463,7 +463,7 @@ different languages sharing one record.
    (`tests/test_adapter_protocol.sh:656`, `tests/test_adapter_protocol.sh:657`).
    **Duplicate witness** of `ADAPTER-FINGERPRINT-REJECT-01`-adjacent
    fail-closed handling of a malformed Codex plugin listing, already covered
-   by `tests/unit/adapter.test.ts`'s invalid-UTF-8/malformed-listing cases.
+   by `tests/unit/harnesses/codex/adapter.test.ts`'s invalid-UTF-8/malformed-listing cases.
 
 ### A missing Codex command fails install, fingerprint, ownership, and uninstall inspection (`tests/test_adapter_protocol.sh:670-726`)
 
@@ -479,7 +479,7 @@ different languages sharing one record.
    ownership/uninstall loop (`tests/test_adapter_protocol.sh:726`).
    **Retired at the gap**: this exact
    message and `command-not-found` code are already covered by
-   `tests/unit/adapter.test.ts:542`, `tests/bin/uninstall-commands.test.ts:465,488`
+   `tests/unit/harnesses/codex/adapter.test.ts:542`, `tests/bin/uninstall-commands.test.ts:465,488`
    (`uninstall-commands.md`), and `tests/baseline/probe.test.ts:553`
    (`probe.md`) — all pre-existing, none newly ported by this inventory.
 
@@ -535,7 +535,7 @@ different languages sharing one record.
    synthetic envelope, a 7-hex and a `null` fingerprint
    (`tests/test_adapter_protocol.py:236`, `tests/test_adapter_protocol.py:254`).
    **Duplicate witness** of `ADAPTER-FINGERPRINT-01`, remapped to
-   `tests/unit/adapter.test.ts`.
+   `tests/unit/harnesses/codex/adapter.test.ts`.
 
 ### `test_inspect_update_control_accepts_only_exact_allowed_values` (`tests/test_adapter_protocol.py:265`, `tests/test_adapter_protocol.py:273`, `tests/test_adapter_protocol.py:284`)
 
@@ -558,7 +558,7 @@ different languages sharing one record.
    loop over synthetic envelopes, `neither`/`legacy`/`both`
    (`tests/test_adapter_protocol.py:292`, `tests/test_adapter_protocol.py:322`).
    **Duplicate witness** of `ADAPTER-OWNERSHIP-01`, remapped to
-   `tests/unit/adapter.test.ts`.
+   `tests/unit/harnesses/codex/adapter.test.ts`.
 
 ### `test_inspect_ownership_rejects_old_malformed_and_inconsistent_results` (`tests/test_adapter_protocol.py:364`)
 
@@ -575,14 +575,14 @@ different languages sharing one record.
    empty and a both-hints result
    (`tests/test_adapter_protocol.py:372`, `tests/test_adapter_protocol.py:386`).
    **Duplicate witness** of `ADAPTER-INSTALL-RESULT-01`, remapped to
-   `tests/unit/adapter.test.ts`.
+   `tests/unit/harnesses/codex/adapter.test.ts`.
 
 ### `test_messages_replay_by_channel_in_order` (`tests/test_adapter_protocol.py:400`)
 
 185. Four interleaved stdout/stderr messages replay to their declared
    streams in array order (`tests/test_adapter_protocol.py:400`).
    **Duplicate witness** of `DIAG-ADAPTER-01`, remapped to
-   `tests/unit/adapter.test.ts`'s two message-replay-order tests.
+   `tests/unit/harnesses/codex/adapter.test.ts`'s two message-replay-order tests.
 
 ### `test_enforces_inclusive_response_size_boundary_before_replay` (`tests/test_adapter_protocol.py:409`, `tests/test_adapter_protocol.py:416`)
 
@@ -607,7 +607,7 @@ different languages sharing one record.
    yields no result, and leaks no traceback
    (`tests/test_adapter_protocol.py:461`, `tests/test_adapter_protocol.py:462`, `tests/test_adapter_protocol.py:463`, `tests/test_adapter_protocol.py:470`, `tests/test_adapter_protocol.py:471`).
    **Duplicate witness** of `ADAPTER-CONTROLLED-FAILURE-01`, remapped to
-   `tests/unit/adapter.test.ts`.
+   `tests/unit/harnesses/codex/adapter.test.ts`.
 
 ### `test_rejects_terminal_controls_in_terminal_facing_protocol_strings` (`tests/test_adapter_protocol.py:536`)
 
@@ -617,7 +617,7 @@ different languages sharing one record.
    with a fragment naming the offending field
    (`tests/test_adapter_protocol.py:536`). **Duplicate witness** of
    `ADAPTER-TERMINAL-01`, remapped to `tests/unit/adapter-protocol.test.js`
-   and `tests/unit/lifecycle.test.ts`.
+   and `tests/unit/harnesses/codex/lifecycle.test.ts`.
 
 ### `test_rejects_surrogate_escapes_in_terminal_facing_protocol_strings` (`tests/test_adapter_protocol.py:603`, `tests/test_adapter_protocol.py:604`, `tests/test_adapter_protocol.py:605`, `tests/test_adapter_protocol.py:606`)
 
@@ -625,7 +625,7 @@ different languages sharing one record.
    escape, are rejected with no leaked surrogate byte on either stream
    (`tests/test_adapter_protocol.py:603`, `tests/test_adapter_protocol.py:604`, `tests/test_adapter_protocol.py:605`, `tests/test_adapter_protocol.py:606`).
    **Duplicate witness** of `ADAPTER-SURROGATE-01`, remapped to
-   `tests/unit/adapter-protocol.test.js` and `tests/unit/lifecycle.test.ts`.
+   `tests/unit/adapter-protocol.test.js` and `tests/unit/harnesses/codex/lifecycle.test.ts`.
 
 ### `test_rejects_empty_malformed_non_object_and_extra_fields` (`tests/test_adapter_protocol.py:616`, `tests/test_adapter_protocol.py:617`, `tests/test_adapter_protocol.py:618`, `tests/test_adapter_protocol.py:620`, `tests/test_adapter_protocol.py:624`)
 
@@ -695,7 +695,7 @@ different languages sharing one record.
    — are each rejected with a fragment naming the violation
    (`tests/test_adapter_protocol.py:871`). **Split disposition**: the
    fingerprint case is a **duplicate witness** of
-   `ADAPTER-FINGERPRINT-REJECT-01` (remapped to `tests/unit/adapter.test.ts`);
+   `ADAPTER-FINGERPRINT-REJECT-01` (remapped to `tests/unit/harnesses/codex/adapter.test.ts`);
    the ownership-schema cases duplicate `ADAPTER-OWNERSHIP-REJECT-01`'s
    wire-residue clause; the verification-hint cases are
    `ADAPTER-INSTALL-REJECT-01`, retired — no in-process construct rejects an
@@ -851,7 +851,7 @@ intentionally no longer resolvable at `HEAD`; use `git show
   disposed of, per this file's own disposition vocabulary (see Counting
   rules). One retired clause leaves an acknowledged gap rather than a
   successor: items 125-132's launch-failure envelope property, unwitnessed
-  end-to-end by design (`tests/unit/adapter.test.ts:496-498`).
+  end-to-end by design (`tests/unit/harnesses/codex/adapter.test.ts:496-498`).
 
 ## Native TypeScript reconciliation (issue #113)
 

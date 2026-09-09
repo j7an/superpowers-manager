@@ -158,6 +158,26 @@ void test("group selection executes only members and all executes the union once
   }
 });
 
+void test("registered nested suites execute in their declared group", (t) => {
+  const selected = "tests/unit/harnesses/codex/nested.test.ts";
+  const excluded = "tests/unit/harnesses/pi/excluded.test.ts";
+  const root = fakeRoot(t, {
+    suites: [
+      { path: selected, group: "integration" },
+      { path: excluded, group: "unit" },
+    ],
+    files: {
+      [selected]: EXECUTED_SUITE,
+      [excluded]: FAILING_SUITE,
+    },
+  });
+  const result = runIn(root, {}, ["--group", "integration"]);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /EXECUTED:fixture/);
+  assert.match(result.stdout, /run-node-suites: complete status=0/);
+  assertNoRawFailure(result);
+});
+
 void test("run.sh forwards group selection to the Node suite runner", (t) => {
   const entries = [
     { path: "tests/unit/a.test.ts", group: "unit" },
@@ -792,14 +812,17 @@ void test("nested test file rejected", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
     files: {
-      "tests/unit/a.test.ts": PASSING_SUITE,
-      "tests/unit/nested/buried.test.ts": PASSING_SUITE,
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
+      "tests/unit/nested/buried.test.ts": EXECUTED_SUITE,
     },
   });
   const r = runIn(root);
-  assert.equal(r.status, 1);
+  assertRejectedWithoutExecution(
+    r,
+    /present on disk but absent from tests\/suites\.json/,
+  );
+  assert.match(r.stderr, /present on disk but absent from tests\/suites\.json/);
   assert.match(r.stderr, /tests\/unit\/nested\/buried\.test\.ts/);
-  assertNoRawFailure(r);
 });
 
 void test("nested non-test helper accepted", (t) => {
@@ -858,6 +881,27 @@ void test("a symlinked suite file is rejected", (t) => {
   assertNoRawFailure(r);
 });
 
+void test("a registered nested symlinked suite file is rejected", (t) => {
+  const path = "tests/unit/harnesses/codex/linked.test.ts";
+  const root = fakeRoot(t, {
+    suites: [path],
+    files: { "tests/unit/real.js": EXECUTED_SUITE },
+  });
+  mkdirSync(dirname(join(root, path)), { recursive: true });
+  symlinkSync(join(root, "tests/unit/real.js"), join(root, path));
+  assertRejectedWithoutExecution(
+    runIn(root),
+    /suite entries may not be symlinks: tests\/unit\/harnesses\/codex\/linked\.test\.ts/,
+  );
+});
+
+void test("a registered nested directory cannot masquerade as a suite", (t) => {
+  const path = "tests/unit/harnesses/codex/bad.test.ts";
+  const root = fakeRoot(t, { suites: [path], files: {} });
+  mkdirSync(join(root, path), { recursive: true });
+  assertRejectedWithoutExecution(runIn(root), /suite is not a regular file/);
+});
+
 void test("a symlinked suite directory is rejected rather than skipped", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
@@ -880,53 +924,43 @@ void test("a symlink nested inside a suite subdirectory is rejected even when it
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
     files: {
-      "tests/unit/a.test.ts": PASSING_SUITE,
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
       "tests/unit/helpers/keep.js": "module.exports = {};\n",
     },
   });
   const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
-  writeFileSync(
-    join(outside, "linked.js"),
-    "OUT-OF-TREE CODE EXECUTED\n",
-    "utf8",
-  );
+  writeFileSync(join(outside, "linked.js"), EXECUTED_SUITE, "utf8");
   symlinkSync(
     join(outside, "linked.js"),
     join(root, "tests/unit/helpers/linked.js"),
   );
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
+  assertRejectedWithoutExecution(
+    runIn(root),
     /suite entries may not be symlinks: tests\/unit\/helpers\/linked\.js/,
   );
-  assertNoRawFailure(r);
 });
 
 void test("a symlink nested inside a suite subdirectory pointing at a directory is rejected", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
     files: {
-      "tests/unit/a.test.ts": PASSING_SUITE,
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
       "tests/unit/helpers/keep.js": "module.exports = {};\n",
     },
   });
   const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   mkdirSync(join(outside, "sub"), { recursive: true });
-  writeFileSync(join(outside, "sub", "hidden.js"), "", "utf8");
+  writeFileSync(join(outside, "sub", "hidden.test.ts"), EXECUTED_SUITE, "utf8");
   symlinkSync(
     join(outside, "sub"),
     join(root, "tests/unit/helpers/linked-dir"),
   );
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
+  assertRejectedWithoutExecution(
+    runIn(root),
     /suite entries may not be symlinks: tests\/unit\/helpers\/linked-dir/,
   );
-  assertNoRawFailure(r);
 });
 
 void test("unreadable nested directory fails closed without leaking errno", (t) => {

@@ -23,7 +23,7 @@
 //     bindings; that hazard class does not exist in the port, so there is no
 //     runtime property left to assert. See inventory items 3-4.
 //   - The former shell seam's Node-environment scrub is re-expressed by
-//     tests/unit/adapter.test.js over src/adapter.ts's child process. The git
+//     tests/unit/harnesses/codex/adapter.test.ts over src/harnesses/codex/adapter.ts's child process. The git
 //     child diverges: src/git.ts pins LC_ALL and GIT_TERMINAL_PROMPT but does
 //     not scrub NODE_OPTIONS/NODE_PATH. The inventory records that difference.
 import assert from "node:assert/strict";

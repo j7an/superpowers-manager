@@ -356,7 +356,7 @@ function freshContext(
   configDir: string;
   statePath: string;
   ctx: import("../../src/commands/context.ts").CommandContext<
-    import("../../src/adapter.ts").CodexRemovalInput
+    import("../../src/harnesses/codex/adapter.ts").CodexRemovalInput
   >;
   stdout: { text: () => string };
   stderr: { text: () => string };

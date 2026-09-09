@@ -1,6 +1,6 @@
 // Ports scripts/install. The shell sourced common.sh, provenance.sh,
 // status.sh, lifecycle.sh and adapter.sh; the predicates now live in
-// src/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
+// src/harnesses/codex/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
 // and the adapter arrives through ctx.adapter.
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
@@ -287,7 +287,7 @@ async function gatherInstallStages<R>(
         // is what turns a failed inspection into "error: installed manager
         // fingerprint inspection failed after install."
         // renderInstallVerification's failed-inspection arm
-        // (`src/codex-presentation.ts:332::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
+        // (`src/harnesses/codex/presentation.ts:329::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
         // exists for this result-bearing path; the lifecycle compatibility
         // export delegates through the same arm. Returning
         // failed() instead reported the adapter's own generic diagnostic and

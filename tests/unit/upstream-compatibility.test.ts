@@ -11,19 +11,19 @@ import {
 import { join } from "node:path";
 import test from "node:test";
 import { digestArtifactTree } from "../../src/artifact-tree.ts";
-import { assessPiCompatibility } from "../../src/pi-compatibility.ts";
-import { assessCodexCompatibility } from "../../src/codex-compatibility.ts";
+import { assessPiCompatibility } from "../../src/harnesses/pi/compatibility.ts";
+import { assessCodexCompatibility } from "../../src/harnesses/codex/compatibility.ts";
 import { activationBlock } from "../../src/harness-compatibility.ts";
 import {
   prepareCodexCandidate,
   inspectCodexPrepared,
   readCodexPrepared,
-} from "../../src/codex-prepare.ts";
+} from "../../src/harnesses/codex/prepare.ts";
 import {
   changePackage,
   nativeFixture,
   nativeSelection,
-} from "../lib/pi-package-fixture.ts";
+} from "../lib/harnesses/pi/package-fixture.ts";
 
 void test("qualified Pi bytes admit exactly the official aliases and require opt-in for custom sources", async (t) => {
   const root = nativeFixture(t);

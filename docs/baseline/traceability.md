@@ -59,23 +59,23 @@ selectors or intentionally update the inventory, test, and this map together.
 | `SEL-READER-PATHS-01` | `tests/baseline/selection-state.test.ts::SEL-READER-PATHS-01 read rejects symlink, directory, and FIFO paths` | — |
 | `PROV-READER-STRICT-01` | `tests/unit/provenance.test.ts::PROV-READER-STRICT-01 reads fields under the strict provenance profile` | — |
 | `PROV-READER-LENIENT-01` | `tests/unit/provenance.test.ts::PROV-READER-LENIENT-01 returns only an acceptable generated commit` | — |
-| `PROV-READER-CANDIDATE-01` | `tests/baseline/generated-plugin-corpus.test.ts::PROV-READER-CANDIDATE-01 candidate provenance validator profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
+| `PROV-READER-CANDIDATE-01` | `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts::PROV-READER-CANDIDATE-01 candidate provenance validator profile` | `tests/fixtures/baseline/provenance/wrong-key-set.json` |
 | `PROV-READER-CODEX-SOURCE-01` | `tests/unit/provenance.test.ts::PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its accepting profile` | `tests/fixtures/baseline/provenance/non-standard-constant.json` |
-| `PROV-READER-CODEX-COMMIT-01` | `tests/unit/codex-state.test.ts::PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
-| `MANIFEST-READER-INSTALLED-01` | `tests/unit/codex-state.test.ts::MANIFEST-READER-INSTALLED-01 installed manifest complete matrix` | `tests/fixtures/baseline/manifests/installed-manager-version.json` |
+| `PROV-READER-CODEX-COMMIT-01` | `tests/unit/harnesses/codex/state.test.ts::PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix` | `tests/fixtures/baseline/provenance/commit-7-hex.json` |
+| `MANIFEST-READER-INSTALLED-01` | `tests/unit/harnesses/codex/state.test.ts::MANIFEST-READER-INSTALLED-01 installed manifest complete matrix` | `tests/fixtures/baseline/manifests/installed-manager-version.json` |
 | `MANIFEST-READER-UPSTREAM-01` | `tests/baseline/prepare.test.ts::MANIFEST-READER-UPSTREAM-01 upstream manifest version reaches provenance` | `tests/fixtures/baseline/manifests/upstream-no-hooks.json` |
-| `MANIFEST-READER-MATERIALIZE-01` | `tests/unit/hooks.test.ts::MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix` | `tests/fixtures/baseline/manifests/candidate-non-standard-constant.json` |
-| `MANIFEST-READER-OVERLAY-01` | `tests/baseline/manifest-overlay-parity.test.ts::BASELINE CASE: MANIFEST-READER-OVERLAY-01 byte parity with the Python oracle` | `tests/fixtures/baseline/overlay-parity/input/unknown-field.json` |
-| `MANIFEST-READER-VALIDATOR-01` | `tests/baseline/generated-plugin-corpus.test.ts::MANIFEST-READER-VALIDATOR-01 candidate validator profile` | `tests/fixtures/baseline/manifests/candidate-duplicate-key.json` |
-| `CODEX-JSON-ARRAY-01` | `tests/unit/codex-json.test.ts::CODEX-JSON-ARRAY-01 installed listing reader complete matrix` | — |
-| `CODEX-JSON-MARKETPLACE-01` | `tests/unit/codex-json.test.ts::CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix` | — |
-| `CODEX-JSON-VERSION-01` | `tests/unit/codex-json.test.ts::CODEX-JSON-VERSION-01 active version reader complete matrix` | — |
-| `ADAPTER-FINGERPRINT-01` | `tests/unit/adapter.test.ts::ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-hex commits in its exact result shape` | — |
-| `ADAPTER-FINGERPRINT-REJECT-01` | `tests/unit/adapter.test.ts::ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint` | — |
-| `ADAPTER-UPDATE-CONTROL-01` | `tests/unit/lifecycle.test.ts::ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value` | — |
-| `ADAPTER-OWNERSHIP-01` | `tests/unit/adapter.test.ts::ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans` | — |
-| `ADAPTER-INSTALL-RESULT-01` | `tests/unit/adapter.test.ts::ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode` | — |
-| `ADAPTER-CONTROLLED-FAILURE-01` | `tests/unit/adapter.test.ts::ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1` | — |
+| `MANIFEST-READER-MATERIALIZE-01` | `tests/unit/harnesses/codex/hooks.test.ts::MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix` | `tests/fixtures/baseline/manifests/candidate-non-standard-constant.json` |
+| `MANIFEST-READER-OVERLAY-01` | `tests/baseline/harnesses/codex/manifest-overlay-parity.test.ts::BASELINE CASE: MANIFEST-READER-OVERLAY-01 byte parity with the Python oracle` | `tests/fixtures/baseline/overlay-parity/input/unknown-field.json` |
+| `MANIFEST-READER-VALIDATOR-01` | `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts::MANIFEST-READER-VALIDATOR-01 candidate validator profile` | `tests/fixtures/baseline/manifests/candidate-duplicate-key.json` |
+| `CODEX-JSON-ARRAY-01` | `tests/unit/harnesses/codex/json.test.ts::CODEX-JSON-ARRAY-01 installed listing reader complete matrix` | — |
+| `CODEX-JSON-MARKETPLACE-01` | `tests/unit/harnesses/codex/json.test.ts::CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix` | — |
+| `CODEX-JSON-VERSION-01` | `tests/unit/harnesses/codex/json.test.ts::CODEX-JSON-VERSION-01 active version reader complete matrix` | — |
+| `ADAPTER-FINGERPRINT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-hex commits in its exact result shape` | — |
+| `ADAPTER-FINGERPRINT-REJECT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint` | — |
+| `ADAPTER-UPDATE-CONTROL-01` | `tests/unit/harnesses/codex/lifecycle.test.ts::ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value` | — |
+| `ADAPTER-OWNERSHIP-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans` | — |
+| `ADAPTER-INSTALL-RESULT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode` | — |
+| `ADAPTER-CONTROLLED-FAILURE-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1` | — |
 | `ADAPTER-TERMINAL-01` | `tests/unit/adapter-result.test.ts::ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused` | — |
 | `ADAPTER-SURROGATE-01` | `tests/unit/adapter-result.test.ts::ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback` | — |
 | `GENERATED-LAYOUT-01` | `tests/baseline/cli-parity.test.ts::PREPARE-TREE-01 prepare creates the canonical generated tree` | `tests/fixtures/baseline/generated-tree/no-hooks.txt` |
@@ -91,7 +91,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `FS-CLEANUP-01` | `tests/baseline/cli-parity.test.ts::FS-CLEANUP-01 interrupted state cleanup is invocation-scoped` | `tests/builders/baseline-scenario.sh` |
 | `FS-SYMLINK-01` | `tests/baseline/cli-parity.test.ts::FS-SYMLINK-01 escaping and broken symlinks fail closed` | `tests/builders/baseline-scenario.sh` |
 | `FS-HOOK-CONTAINMENT-01` | `tests/baseline/prepare.test.ts::FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed` | — |
-| `FS-GENERATED-RESOLVE-01` | `tests/unit/generated-plugin.test.ts::FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures` | — |
+| `FS-GENERATED-RESOLVE-01` | `tests/unit/harnesses/codex/generated-plugin.test.ts::FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures` | — |
 | `FS-SELECTION-ATOMIC-01` | `tests/unit/selection.test.ts::FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary` | — |
 | `FS-SELECTION-CONCURRENT-01` | `tests/baseline/selection-state.test.ts::FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete valid record` | — |
 | `FS-SELECTION-POST-REPLACE-01` | `tests/unit/selection.test.ts::FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode` | — |
@@ -104,18 +104,18 @@ selectors or intentionally update the inventory, test, and this map together.
 | `PROBE-FAIL-CLOSED-01` | `tests/baseline/probe.test.ts::PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail closed` | — |
 | `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.ts::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/bin/lifecycle-fixture.ts` |
 | `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.ts::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/bin/lifecycle-fixture.ts` |
-| `INSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.ts::INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
+| `INSTALL-VERIFY-01` | `tests/baseline/harnesses/codex/marketplace-reconcile.test.ts::INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
 | `UPDATE-CONTROL-01` | `tests/baseline/cli-parity.test.ts::UPDATE-CONTROL-01 update requires current managed control evidence` | — |
 | `UNINSTALL-OWNERSHIP-01` | `tests/baseline/cli-parity.test.ts::UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources` | — |
-| `UNINSTALL-TARGETS-01` | `tests/baseline/marketplace-reconcile.test.ts::UNINSTALL-TARGETS-01 adapter removes only manager resources` | — |
-| `UNINSTALL-VERIFY-01` | `tests/baseline/marketplace-reconcile.test.ts::UNINSTALL-VERIFY-01 both manager resources must be absent` | — |
+| `UNINSTALL-TARGETS-01` | `tests/baseline/harnesses/codex/marketplace-reconcile.test.ts::UNINSTALL-TARGETS-01 adapter removes only manager resources` | — |
+| `UNINSTALL-VERIFY-01` | `tests/baseline/harnesses/codex/marketplace-reconcile.test.ts::UNINSTALL-VERIFY-01 both manager resources must be absent` | — |
 | `DIAG-INTENTIONAL-01` | `tests/baseline/cli-parity.test.ts::CLI-USAGE-01 invalid command and stray flag fail with exit 2` | — |
 | `DIAG-PREFLIGHT-01` | `tests/baseline/cli-parity.test.ts::CLI-PREFLIGHT-01 missing tools fail before dispatch` | — |
 | `DIAG-SELECTION-PIN-01` | `tests/baseline/cli-parity.test.ts::SEL-BYTES-PINNED-01 pin writes canonical selection bytes` | — |
 | `DIAG-SELECTION-TRACK-01` | `tests/baseline/cli-parity.test.ts::SEL-BYTES-TRACK-01 track-latest writes canonical selection bytes` | — |
 | `DIAG-SELECTION-UNPIN-01` | `tests/baseline/cli-parity.test.ts::SEL-UNPIN-01 unpin removes saved intent without applying changes` | — |
 | `DIAG-PROBE-01` | `tests/baseline/cli-parity.test.ts::PROBE-READONLY-01 probe is read-only` | — |
-| `DIAG-ADAPTER-01` | `tests/unit/adapter.test.ts::DIAG-ADAPTER-01 adapter messages, errors, and hints retain their declared stream and array order` | — |
+| `DIAG-ADAPTER-01` | `tests/unit/harnesses/codex/adapter.test.ts::DIAG-ADAPTER-01 adapter messages, errors, and hints retain their declared stream and array order` | — |
 | `PACKAGE-REPO-01` | `tests/baseline/cli-parity.test.ts::CLI-MODE-VERSION-01 version mode routes through native source` | — |
 | `PACKAGE-TARBALL-01` | `tests/baseline/packaged-cli.test.ts::PACKAGE-CLI-01 offline installed tarball routes through dist and exposes help and version` | — |
 

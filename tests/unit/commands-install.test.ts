@@ -1,4 +1,4 @@
-import { writeQualifiedCodexFixture } from "../lib/codex-prepared-fixture.ts";
+import { writeQualifiedCodexFixture } from "../lib/harnesses/codex/prepared-fixture.ts";
 import assert from "node:assert/strict";
 import {
   chmodSync,
@@ -57,7 +57,7 @@ async function makeCtx(
   out: ReturnType<typeof capture>,
   err: ReturnType<typeof capture>,
   adapter: import("../../src/commands/context.ts").CommandContext<
-    import("../../src/adapter.ts").CodexRemovalInput
+    import("../../src/harnesses/codex/adapter.ts").CodexRemovalInput
   >["adapter"],
 ) {
   const dir = mkdtempSync(join(SCRATCH, "case-"));
@@ -506,7 +506,7 @@ void test("a legacy identity state stops before the workspace is created", async
 
 void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
   // The sibling case and this one exercise distinct concrete normalization
-  // decisions (`src/codex-harness.ts::const installEligibility`),
+  // decisions (`src/harnesses/codex/harness.ts::const installEligibility`),
   // both enforced by the same shared guard
   // (`src/commands/install.ts:471::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
@@ -816,7 +816,7 @@ void test("stage 3 (install) failure stops before the post-install fingerprint i
 // stderr was ONLY the replayed adapter diagnostic, which pinned a port defect
 // rather than a contract: stage 4 short-circuited on `!inspected.ok` and never
 // reached renderInstallVerification, leaving its failed-inspection arm
-// (`src/codex-presentation.ts::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
+// (`src/harnesses/codex/presentation.ts::if (inspection.status !== 0 || !inspection.outcome.ok) {`) dead and dropping the post-install verification claim entirely. The shell handed its inspect result to
 // spw_verify_installed_fingerprint unconditionally (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint`) and
 // printed BOTH lines — the adapter's own error and
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`'s. The flip surfaced it: the shell-parity case

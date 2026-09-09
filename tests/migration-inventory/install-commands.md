@@ -219,20 +219,20 @@ already-typed `AdapterResult` object; there is no serialization step between
 the command module and its adapter for a double to corrupt, so nothing can
 reproduce "the adapter emitted invalid JSON" through this seam. The covering
 cases for "an adapter response can be reported as a failure" now live at the
-production layer that still has a real transport — `tests/unit/adapter.test.ts`,
+production layer that still has a real transport — `tests/unit/harnesses/codex/adapter.test.ts`,
 which drives `runAdapter` (the REAL adapter, `src/adapter.ts`) against a
 genuinely unparseable Codex listing. Named explicitly, as Task 6's brief
 requires, rather than described:
 
 - **"the fingerprint view rejects an invalid-UTF-8 plugin listing"**
-  (`tests/unit/adapter.test.ts:421-437`) — asserts `envelope.ok === false`,
+  (`tests/unit/harnesses/codex/adapter.test.ts:421-437`) — asserts `envelope.ok === false`,
   `error.code === "inspect-failed"`, and the exact message
   `cannot parse output of '<codex> plugin list --json'`.
 - **"the ownership view rejects an invalid-UTF-8 plugin listing"**
-  (`tests/unit/adapter.test.ts:442-458`) — the same three claims for the
+  (`tests/unit/harnesses/codex/adapter.test.ts:442-458`) — the same three claims for the
   ownership view, whose fail-open would otherwise be silent.
 - **"install rejects an invalid-UTF-8 marketplace listing without mutating"**
-  (`tests/unit/adapter.test.ts:464-485`) — `error.code === "install-failed"`,
+  (`tests/unit/harnesses/codex/adapter.test.ts:464-485`) — `error.code === "install-failed"`,
   the parse diagnostic for `plugin marketplace list --json`, and
   `deepStrictEqual(await sandbox.commands(), ["plugin marketplace list
   --json"])`, i.e. no mutation followed the unparseable read.

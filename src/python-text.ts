@@ -72,3 +72,19 @@ export function pythonSplitlines(value: string): string[] {
   if (start < value.length) lines.push(value.slice(start));
   return lines;
 }
+
+/** Python `sorted()` orders by code point; JavaScript's default sort does not. */
+export function compareByCodePoint(left: string, right: string): number {
+  // `Array.from` splits by code point, exactly as spreading would; oxlint's
+  // `no-misused-spread` rejects the spread form, and grapheme segmentation is
+  // the wrong unit here — Python compares code points.
+  const leftPoints = Array.from(left);
+  const rightPoints = Array.from(right);
+  const shared = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < shared; index += 1) {
+    const a = leftPoints[index]!.codePointAt(0)!;
+    const b = rightPoints[index]!.codePointAt(0)!;
+    if (a !== b) return a - b;
+  }
+  return leftPoints.length - rightPoints.length;
+}

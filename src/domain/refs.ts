@@ -5,6 +5,11 @@ const SEMVER_BASE_SOURCE =
 
 export const SEMVER_BASE_RE = new RegExp(`^${SEMVER_BASE_SOURCE}$`);
 export const TAG_RE = new RegExp(`^v${SEMVER_BASE_SOURCE}$`);
+// The Python's own SEMVER_RE (:15-22). Deliberately not SEMVER_BASE_SOURCE
+// from this module, which omits the `+build` component; widening the shared
+// constant would change TAG_RE and is out of scope.
+export const SEMVER_RE =
+  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 export const COMMIT_RE = /^[0-9a-f]{40}$/;
 export const COMMIT_INPUT_RE = /^[0-9A-Fa-f]{40}$/;
 

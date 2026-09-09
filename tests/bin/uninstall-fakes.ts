@@ -33,7 +33,7 @@ function rendezvous() {
   const expect = Number(process.env.SPW_RENDEZVOUS_EXPECT);
   if (!dir || !Number.isInteger(expect) || expect < 1) return true;
   // ONCE PER PARTICIPANT, not once per codex call. A successful `uninstall`
-  // invokes the fake SIX times (`tests/bin/uninstall-commands.test.ts:411-418::assert.deepEqual(readLog`:
+  // invokes the fake SIX times (`tests/bin/uninstall-commands.test.ts:420-427::assert.deepEqual(readLog`:
   // plugin list, marketplace list, plugin remove, marketplace remove, then both
   // listings again). Each call is a separate process, so a module-level flag
   // cannot carry the fact -- the identity has to live on disk, keyed on the
@@ -184,7 +184,7 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
 function runAdapter(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("adapter.log", ctx.args.join(" "));
   // Post-flip, uninstall dispatches in-process: `ctx.adapter` is a direct
-  // call into src/adapter.ts's runAdapter, never a spawn of this executable,
+  // call into src/harnesses/codex/adapter.ts's runAdapter, never a spawn of this executable,
   // so reaching it is never legitimate. The tripwire refuses unconditionally,
   // matching probe-fakes.js's own adapter role.
   //

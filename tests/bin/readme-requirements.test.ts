@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 import * as cli from "../../src/cli.ts";
-import { piHarness } from "../../src/pi-harness.ts";
+import { piHarness } from "../../src/harnesses/pi/harness.ts";
 
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";

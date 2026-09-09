@@ -97,7 +97,7 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
       // Codex reports the plugin installed at 1.0.0, but no cached tree is
       // ever written for it. The real adapter's fingerprint handler then
       // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — `src/adapter.ts:831-844::const activeRoot` — so it returns a
+      // finds nothing to read there — `src/harnesses/codex/adapter.ts:831-844::const activeRoot` — so it returns a
       // controlled inspect-failed outcome. No adapter interception needed.
       ctx.writeJson("plugin_list.json", {
         installed: [
@@ -168,7 +168,7 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
 function runAdapter(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("adapter.log", ctx.args.join(" "));
   // Post-flip, install dispatches in-process: `ctx.adapter` is a direct call
-  // into src/adapter.ts's runAdapter, never a spawn of this executable, so
+  // into src/harnesses/codex/adapter.ts's runAdapter, never a spawn of this executable, so
   // reaching it is never legitimate. The tripwire refuses unconditionally,
   // matching probe-fakes.js's own adapter role.
   //

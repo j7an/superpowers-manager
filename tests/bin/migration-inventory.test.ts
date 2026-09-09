@@ -31,12 +31,14 @@ const DECLARED: Record<string, string[]> = {
   ],
   "bin-dispatch.md": ["tests/bin/bin-dispatch.test.ts"],
   "bootstrap.md": ["tests/bin/bootstrap.test.ts"],
-  "codex-state-units.md": ["tests/unit/lifecycle.test.ts"],
+  "codex-state-units.md": ["tests/unit/harnesses/codex/lifecycle.test.ts"],
   "container-contract.md": ["tests/bin/container-contract.test.ts"],
   "install-commands.md": ["tests/bin/install-commands.test.ts"],
-  "marketplace-reconcile.md": ["tests/baseline/marketplace-reconcile.test.ts"],
+  "marketplace-reconcile.md": [
+    "tests/baseline/harnesses/codex/marketplace-reconcile.test.ts",
+  ],
   "node-tooling.md": ["tests/bin/node-tooling.test.ts"],
-  "node-cli-helper.md": ["tests/unit/adapter.test.ts"],
+  "node-cli-helper.md": ["tests/unit/harnesses/codex/adapter.test.ts"],
   "npm-pack-contents.md": ["tests/bin/npm-pack-contents.test.ts"],
   "prepare.md": [
     "tests/baseline/prepare.test.ts",

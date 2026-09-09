@@ -227,7 +227,7 @@ longer proves PRODUCTION, that the real adapter emits that text for a missing
 binary. That half is covered independently, and was verified against the tree
 rather than assumed:
 
-- `tests/unit/adapter.test.ts:532-546` asserts that `mapCodexLaunchFailure`
+- `tests/unit/harnesses/codex/adapter.test.ts:532-546` asserts that `mapCodexLaunchFailure`
   throws a failure whose `message` equals
   `` `required Codex command not found: ${codexBin}` `` for both `ENOENT` and
   `EACCES`; that literal is at `:542`.

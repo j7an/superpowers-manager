@@ -153,9 +153,8 @@ async function main() {
         fail(`suite entries may not be symlinks: ${dir}/${entry.name}`);
       }
       if (entry.isDirectory()) {
-        // Nested test files typecheck but never run: the runners are
-        // single-level and traceability.test.js only accepts flat Node
-        // selectors. Nested non-test helpers are supported.
+        // Nested test files run when they are declared in tests/suites.json.
+        // Nested non-test helpers are also supported.
         const nestedRoot = join(absolute, entry.name);
 
         let nested: import("node:fs").Dirent[];
@@ -170,11 +169,8 @@ async function main() {
           // readdirSync above is wrapped to prevent.
           fail(`suite subdirectory could not be read: ${dir}/${entry.name}`);
         }
-        // Name-independent: a nested symlink is rejected regardless of what
-        // it is named, not only when it happens to end in .test.js. Node does
-        // not recurse *through* a symlinked directory when walking
-        // recursively, so the symlink itself always surfaces here as its own
-        // entry with isSymbolicLink() true.
+        // Name-independent: reject every symlink in the completed loop before
+        // collecting any nested candidate, regardless of what it is named.
         for (const nestedEntry of nested) {
           if (nestedEntry.isSymbolicLink()) {
             const fullPath = join(nestedEntry.parentPath, nestedEntry.name);
@@ -183,16 +179,12 @@ async function main() {
             );
           }
         }
-        const offenders = nested
-          .filter((nestedEntry) => nestedEntry.name.endsWith(".test.ts"))
-          .map((nestedEntry) =>
-            relative(ROOT, join(nestedEntry.parentPath, nestedEntry.name)),
-          )
-          .sort();
-        if (offenders.length > 0) {
-          fail(
-            `test files must be flat; move these up one level: ${offenders.join(", ")}`,
-          );
+        for (const nestedEntry of nested) {
+          if (nestedEntry.name.endsWith(".test.ts")) {
+            discovered.push(
+              relative(ROOT, join(nestedEntry.parentPath, nestedEntry.name)),
+            );
+          }
         }
         continue;
       }

@@ -9,15 +9,24 @@ invocation using `--harness codex` or `--harness pi`; omission defaults to Codex
 Upstream selection is shared, while preparation and activation target the chosen
 harness independently.
 
-- The [Codex adapter](../src/codex-harness.ts) manages a generated Codex plugin
+- The [Codex adapter](../src/harnesses/codex/harness.ts) manages a generated Codex plugin
   and its marketplace/plugin registration.
-- The [Pi adapter](../src/pi-harness.ts) manages a Pi package and its registration,
+- The [Pi adapter](../src/harnesses/pi/harness.ts) manages a Pi package and its registration,
   with a durable Manager-owned installed snapshot separate from prepared output.
 
 Implement `HarnessAdapter<R>` for an additional integration and supply it at
 the CLI composition point. Shared commands must not import concrete adapters.
 `R` belongs to the adapter: ownership inspection returns it and removal consumes
 it unchanged within the same invocation. It is not persisted authorization.
+
+## Directory convention
+
+Responsibility determines ownership. Contracts and shared utilities stay at the
+root, while concrete production integrations live under
+`src/harnesses/<name>`. Keep the test category outermost and preserve suite
+groups; shared tests may use concrete fixtures. Production harnesses do not
+import one another or use barrels, and existing mixed fixture corpora remain
+shared.
 
 Preparation receives resolved upstream identity and invocation-owned staging.
 Validate native artifacts before returning success. Shared orchestration runs
