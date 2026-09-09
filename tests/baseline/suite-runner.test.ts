@@ -885,7 +885,7 @@ void test("a registered nested symlinked suite file is rejected", (t) => {
   const path = "tests/unit/harnesses/codex/linked.test.ts";
   const root = fakeRoot(t, {
     suites: [path],
-    files: { "tests/unit/real.js": PASSING_SUITE },
+    files: { "tests/unit/real.js": EXECUTED_SUITE },
   });
   mkdirSync(dirname(join(root, path)), { recursive: true });
   symlinkSync(join(root, "tests/unit/real.js"), join(root, path));
@@ -930,22 +930,15 @@ void test("a symlink nested inside a suite subdirectory is rejected even when it
   });
   const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
-  writeFileSync(
-    join(outside, "linked.js"),
-    "OUT-OF-TREE CODE EXECUTED\n",
-    "utf8",
-  );
+  writeFileSync(join(outside, "linked.js"), EXECUTED_SUITE, "utf8");
   symlinkSync(
     join(outside, "linked.js"),
     join(root, "tests/unit/helpers/linked.js"),
   );
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
+  assertRejectedWithoutExecution(
+    runIn(root),
     /suite entries may not be symlinks: tests\/unit\/helpers\/linked\.js/,
   );
-  assertNoRawFailure(r);
 });
 
 void test("a symlink nested inside a suite subdirectory pointing at a directory is rejected", (t) => {
