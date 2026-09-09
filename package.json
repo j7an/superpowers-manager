@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.5.0",
-  "description": "Install and update the latest stable obra/superpowers release directly from upstream for Codex and Pi (pi-coding-agent), without waiting for agent marketplaces to catch up.",
+  "description": "Install obra/superpowers directly from upstream for Codex and Pi. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -16,7 +16,8 @@
     "installer",
     "updater",
     "pi",
-    "pi-coding-agent"
+    "pi-coding-agent",
+    "version-pinning"
   ],
   "license": "MIT",
   "type": "module",
