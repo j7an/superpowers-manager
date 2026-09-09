@@ -1,8 +1,8 @@
 // Child process for the TOCTOU case in ../adapter.test.js.
 //
-// This drives the real interleaving: `readManifest` (`src/hooks.ts:113::readManifest`) reads
+// This drives the real interleaving: `readManifest` (`src/harnesses/codex/hooks.ts:113::readManifest`) reads
 // the candidate manifest once, fatally, for hook classification; the
-// overlay's own read (src/adapter.ts, ~:360) reads the same path again
+// overlay's own read (src/harnesses/codex/adapter.ts, ~:360) reads the same path again
 // later. Between those two reads, this test replaces the file's bytes on
 // disk with a genuinely invalid UTF-8 sequence, so the second read observes
 // different — and corrupt — bytes than the first one validated.
@@ -31,7 +31,9 @@ const PACKAGE_ROOT = resolve(
 );
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 
-await import(new URL("../../../src/adapter.ts", import.meta.url).href);
+await import(
+  new URL("../../../src/harnesses/codex/adapter.ts", import.meta.url).href
+);
 
 void test("manifest TOCTOU child", async (t) => {
   const base = await mkdtemp(join(tmpdir(), "spw-manifest-toctou-"));
@@ -95,9 +97,9 @@ void test("manifest TOCTOU child", async (t) => {
           // `node:fs/promises` — exactly the module-graph-identity effect
           // documented in `overlay-read-failure-child.js`. So by the time
           // this mocked `readFile` is invoked at all for this path, hook
-          // classification's real read-1 (`src/hooks.ts:113::readManifest`) has already run
+          // classification's real read-1 (`src/harnesses/codex/hooks.ts:113::readManifest`) has already run
           // to completion against the still-valid bytes; this call is
-          // read-2, the overlay's own read (src/adapter.ts). Corrupt the
+          // read-2, the overlay's own read (src/harnesses/codex/adapter.ts). Corrupt the
           // *real* file on disk immediately before delegating to the real
           // `readFile`, so read-2 genuinely observes different bytes than
           // read-1 validated — not a mocked rejection.
@@ -108,9 +110,11 @@ void test("manifest TOCTOU child", async (t) => {
     },
   });
 
-  const { runAdapter }: typeof import("../../../src/adapter.ts") = await import(
+  const {
+    runAdapter,
+  }: typeof import("../../../src/harnesses/codex/adapter.ts") = await import(
     new URL(
-      `../../../src/adapter.ts?manifest-toctou-child=${Date.now()}`,
+      `../../../src/harnesses/codex/adapter.ts?manifest-toctou-child=${Date.now()}`,
       import.meta.url,
     ).href
   );
@@ -134,7 +138,7 @@ void test("manifest TOCTOU child", async (t) => {
     fallback,
   ];
   const result = await runAdapter(argv, { root: PACKAGE_ROOT });
-  // Only the overlay's own read (src/adapter.ts) is observable here; hook
+  // Only the overlay's own read (src/harnesses/codex/adapter.ts) is observable here; hook
   // classification's read bypasses this mock entirely (see the comment
   // above). Exactly one call confirms the corruption above landed on the
   // read this test targets, and not zero (a broken fixture) or more than

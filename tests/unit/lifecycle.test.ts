@@ -9,7 +9,7 @@ import {
   requireManagedUpdateControl,
   verifyInstalledFingerprint,
   verifyUninstalledResources,
-} from "../../src/lifecycle.ts";
+} from "../../src/harnesses/codex/lifecycle.ts";
 
 // Frozen operator text. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
@@ -187,7 +187,7 @@ void test("verifyInstalledFingerprint reports an undetectable fingerprint and it
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
   // the production normalizer's behaviour for JSON null
-  // (`src/codex-harness.ts:92::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
+  // (`src/harnesses/codex/harness.ts:89::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
   const verdict = verifyInstalledFingerprint(
     "f".repeat(40),
     ok({ verification_hints: { missing: "codex reported nothing" } }),
@@ -404,7 +404,7 @@ void test("a non-object resources falls through to the Boolean message", () => {
 // and a third is rejected -- survives in-process here.
 //
 // The reportability half -- that an inspection can emit `unsupported` --
-// retires with the transport. src/adapter.ts's update-control view returns
+// retires with the transport. src/harnesses/codex/adapter.ts's update-control view returns
 // the literal `managed`; the old witness at
 // `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:102-104::run_adapter update` ran a fixture SHELL adapter emitting
 // a canned outcome, and no shell adapters remain. tests/migration-inventory/

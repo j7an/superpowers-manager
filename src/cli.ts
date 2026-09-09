@@ -2,8 +2,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { extractHarnessOptions, oneLine, UsageError } from "./cli-arguments.ts";
-import { codexHarness } from "./codex-harness.ts";
-import { piHarness } from "./pi-harness.ts";
+import { codexHarness } from "./harnesses/codex/harness.ts";
+import { piHarness } from "./harnesses/pi/harness.ts";
 import type { InvocationOptions } from "./harness-compatibility.ts";
 import { createResourceCoordinator } from "./resource-lock.ts";
 import type { CommandContext } from "./commands/context.ts";

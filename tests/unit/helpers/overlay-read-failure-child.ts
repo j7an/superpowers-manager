@@ -35,7 +35,9 @@ const PACKAGE_ROOT = resolve(
 );
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 
-await import(new URL("../../../src/adapter.ts", import.meta.url).href);
+await import(
+  new URL("../../../src/harnesses/codex/adapter.ts", import.meta.url).href
+);
 
 void test("overlay read failure child", async (t) => {
   const base = await mkdtemp(join(tmpdir(), "spw-overlay-read-fail-"));
@@ -93,9 +95,11 @@ void test("overlay read failure child", async (t) => {
     },
   });
 
-  const { runAdapter }: typeof import("../../../src/adapter.ts") = await import(
+  const {
+    runAdapter,
+  }: typeof import("../../../src/harnesses/codex/adapter.ts") = await import(
     new URL(
-      `../../../src/adapter.ts?overlay-read-failure-child=${Date.now()}`,
+      `../../../src/harnesses/codex/adapter.ts?overlay-read-failure-child=${Date.now()}`,
       import.meta.url,
     ).href
   );

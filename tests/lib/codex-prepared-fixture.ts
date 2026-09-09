@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prepareCodexCandidate } from "../../src/codex-prepare.ts";
+import { prepareCodexCandidate } from "../../src/harnesses/codex/prepare.ts";
 import type { PreparedArtifact } from "../../src/harness.ts";
 import { nativeSelection } from "./pi-package-fixture.ts";
 

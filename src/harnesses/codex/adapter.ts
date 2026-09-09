@@ -18,23 +18,23 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
+} from "../../adapter-result.ts";
 import {
   activePluginVersionFromJson,
   installedListingHas,
   marketplaceRootFromJson,
-} from "./codex-json.ts";
+} from "./json.ts";
 import {
   CODEX_LEGACY_PLUGIN_ID,
   CODEX_MANAGER_PLUGIN_ID,
   inspectCodexConflicts,
-} from "./codex-conflicts.ts";
-import { oneLine } from "./cli-arguments.ts";
+} from "./conflicts.ts";
+import { oneLine } from "../../cli-arguments.ts";
 import {
   installedCommitFromRoot,
   installedRootForVersion,
   pathsEqual,
-} from "./codex-state.ts";
+} from "./state.ts";
 import { validateGeneratedPlugin } from "./generated-plugin.ts";
 import {
   classifyHooks,
@@ -43,10 +43,10 @@ import {
   type ManifestSource,
 } from "./hooks.ts";
 import { applyManifestOverlay } from "./manifest-overlay.ts";
-import { readCodexBuildSource } from "./provenance.ts";
-import type { JsonValue } from "./strict-json.ts";
-import { isAcceptedSplitValue } from "./validate-generated-plugin-cli.ts";
-import { withWorkspace, workspaceRemovalFailure } from "./workspace.ts";
+import { readCodexBuildSource } from "../../provenance.ts";
+import type { JsonValue } from "../../strict-json.ts";
+import { isAcceptedSplitValue } from "../../validate-generated-plugin-cli.ts";
+import { withWorkspace, workspaceRemovalFailure } from "../../workspace.ts";
 
 const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
 const MARKETPLACE_NAME = "superpowers-manager";
@@ -442,7 +442,7 @@ async function runBuild(
           // path — three are the frozen CPython wording, and the fourth (the
           // numeric-overflow diagnostic, which has no CPython oracle wording
           // to match) now carries the path via its own rewrap in
-          // src/manifest-overlay.ts. Emit as-is, with no added prefix — a
+          // src/harnesses/codex/manifest-overlay.ts. Emit as-is, with no added prefix — a
           // prefix here would double up the path these messages already
           // name.
           log.appendText("stderr", oneLine(cause));

@@ -24,7 +24,7 @@ the port unless a merge is called out.
 4. `plugins/superpowers/.codex-plugin/plugin.template.json` exists
 5. `scripts/adapters/codex/adapter` does **not** exist. The 4c deletion inverts
    the port into the shared absence set.
-6. `src/generated-plugin.ts` exists
+6. `src/harnesses/codex/generated-plugin.ts` exists
 7. `src/validate-generated-plugin-cli.ts` exists
 8. `scripts/adapters/codex/validate-generated-plugin.py` does **not** exist.
    **RETIRED at the gap (Task 3, 4c):** an absence assertion inside the
@@ -77,20 +77,20 @@ the port unless a merge is called out.
 43. `tests/expected_tarball_contents.txt` contains `dist/adapter-result.js`.
     Slice 5 renamed `src/adapter-protocol.ts` to `src/adapter-result.ts`; the
     artifact changed name, not membership.
-44. `tests/expected_tarball_contents.txt` contains `dist/adapter.js`
-45. `tests/expected_tarball_contents.txt` contains `dist/generated-plugin.js`
+44. `tests/expected_tarball_contents.txt` contains `dist/harnesses/codex/adapter.js`
+45. `tests/expected_tarball_contents.txt` contains `dist/harnesses/codex/generated-plugin.js`
 46. `tests/expected_tarball_contents.txt` contains `dist/python-text.js`
 47. `tests/expected_tarball_contents.txt` contains `dist/validate-generated-plugin-cli.js`
 48. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/validate-generated-plugin.py`.
     **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 41; no
     port counterpart.
-49. `tests/expected_tarball_contents.txt` contains `dist/codex-json.js`
-50. `tests/expected_tarball_contents.txt` contains `dist/codex-state.js`
+49. `tests/expected_tarball_contents.txt` contains `dist/harnesses/codex/json.js`
+50. `tests/expected_tarball_contents.txt` contains `dist/harnesses/codex/state.js`
 51. `tests/expected_tarball_contents.txt` does not contain `dist/hooks-cli.js`
 52. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/lib.sh`.
     **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 41; no
     port counterpart.
-53. `tests/expected_tarball_contents.txt` contains `dist/hooks.js`
+53. `tests/expected_tarball_contents.txt` contains `dist/harnesses/codex/hooks.js`
 54. `tests/expected_tarball_contents.txt` does not contain `scripts/adapters/codex/materialize-hooks.py`.
     **RETIRED at the gap (Task 3, 4c):** same vacuity class as item 41; no
     port counterpart.

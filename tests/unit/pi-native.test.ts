@@ -10,8 +10,11 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { normalizePiRuntimeVersion, runPi } from "../../src/pi-native.ts";
-import { piPaths } from "../../src/pi-paths.ts";
+import {
+  normalizePiRuntimeVersion,
+  runPi,
+} from "../../src/harnesses/pi/native.ts";
+import { piPaths } from "../../src/harnesses/pi/paths.ts";
 import { BOUNDED_EXECUTABLE, type ValidatorRun } from "../../src/validator.ts";
 
 function sandbox(t: TestContext): {

@@ -16,36 +16,36 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
+} from "../../adapter-result.ts";
 import {
   atomicWriteFile,
   beginDirectoryPublication,
   type DirectoryPublication,
-} from "./atomic.ts";
-import type { InstallReceipt, PreparedArtifact } from "./harness.ts";
-import { normalizePiRuntimeVersion, runPi } from "./pi-native.ts";
+} from "../../atomic.ts";
+import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
+import { normalizePiRuntimeVersion, runPi } from "./native.ts";
 import {
   digestPiTree,
   readPiPackageAssessment,
   readPiReceipt,
   type PiReceipt,
-} from "./pi-package.ts";
-import { piPaths, type PiPaths } from "./pi-paths.ts";
+} from "./package.ts";
+import { piPaths, type PiPaths } from "./paths.ts";
 import {
   readPiSettings,
   resolveCanonicalPiLocalSource,
   type PiPackageEntry,
-} from "./pi-settings.ts";
+} from "./settings.ts";
 import {
   inspectPiControl,
   inspectPiOwnership,
   type PiRemovalInput,
-} from "./pi-state.ts";
+} from "./state.ts";
 import {
   assertNoFollowType,
   canonicalizeProspectivePath,
   classifyPathNoFollow,
-} from "./safe-path.ts";
+} from "../../safe-path.ts";
 
 export interface PiInstallDependencies {
   readonly run: typeof runPi;

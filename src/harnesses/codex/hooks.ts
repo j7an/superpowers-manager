@@ -13,11 +13,11 @@ import {
   assertExistingContained,
   assertProspectiveContained,
   classifyPathNoFollow,
-} from "./safe-path.ts";
-import type { NoFollowPathType } from "./safe-path.ts";
-import { SafetyError } from "./safety-error.ts";
-import { parseStrictJson } from "./strict-json.ts";
-import type { JsonValue, StrictJsonProfile } from "./strict-json.ts";
+} from "../../safe-path.ts";
+import type { NoFollowPathType } from "../../safe-path.ts";
+import { SafetyError } from "../../safety-error.ts";
+import { parseStrictJson } from "../../strict-json.ts";
+import type { JsonValue, StrictJsonProfile } from "../../strict-json.ts";
 
 export type ManifestSource = "upstream" | "fallback";
 
@@ -119,11 +119,11 @@ export async function readManifest(
   } catch {
     // Deliberately drops the cause on both branches. `detail(cause)` on the
     // read branch surfaced a raw errno (`ENOENT: … open '<path>'`), which the
-    // `hook classification failed:` site in src/adapter.ts re-emits onto the
+    // `hook classification failed:` site in src/harnesses/codex/adapter.ts re-emits onto the
     // terminal these commands write to; the parse branch surfaced
-    // strict-json's own wording under a prefix src/manifest-overlay.ts also
+    // strict-json's own wording under a prefix src/harnesses/codex/manifest-overlay.ts also
     // uses with CPython wording.
-    // Same text as the `cannot read manifest JSON in` site in src/adapter.ts.
+    // Same text as the `cannot read manifest JSON in` site in src/harnesses/codex/adapter.ts.
     throw hookError(`cannot read manifest JSON in ${path}`);
   }
   let parsed: JsonValue;

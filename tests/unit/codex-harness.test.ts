@@ -11,7 +11,7 @@ import {
   successResult,
   type AdapterResult,
 } from "../../src/adapter-result.ts";
-import type { CodexRemovalInput } from "../../src/adapter.ts";
+import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
 import {
   codexHarness,
   normalizeCodexControl,
@@ -19,12 +19,12 @@ import {
   normalizeCodexInstallForContext,
   normalizeCodexInstalled,
   normalizeCodexOwnership,
-} from "../../src/codex-harness.ts";
+} from "../../src/harnesses/codex/harness.ts";
 import {
   codexPresentation,
   formatHuman,
   formatPorcelain,
-} from "../../src/codex-presentation.ts";
+} from "../../src/harnesses/codex/presentation.ts";
 import type { EffectiveSelection } from "../../src/effective-selection.ts";
 import type {
   HarnessAdapter,
@@ -78,10 +78,14 @@ function ownershipResult(
 
 void test("Codex verification modules are safe in every supported entry order", () => {
   const urls = {
-    harness: pathToFileURL(join(PACKAGE_ROOT, "src/codex-harness.ts")).href,
-    lifecycle: pathToFileURL(join(PACKAGE_ROOT, "src/lifecycle.ts")).href,
-    presentation: pathToFileURL(join(PACKAGE_ROOT, "src/codex-presentation.ts"))
+    harness: pathToFileURL(join(PACKAGE_ROOT, "src/harnesses/codex/harness.ts"))
       .href,
+    lifecycle: pathToFileURL(
+      join(PACKAGE_ROOT, "src/harnesses/codex/lifecycle.ts"),
+    ).href,
+    presentation: pathToFileURL(
+      join(PACKAGE_ROOT, "src/harnesses/codex/presentation.ts"),
+    ).href,
   };
   for (const order of [
     ["lifecycle", "presentation", "harness"],

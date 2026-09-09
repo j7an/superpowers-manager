@@ -44,11 +44,11 @@ import {
   spawnFakeAdapter,
 } from "./lifecycle-fixture.ts";
 import { caseContext, recordingAdapter } from "./command-context.ts";
-import { codexHarness } from "../../src/codex-harness.ts";
-import { piHarness } from "../../src/pi-harness.ts";
-import { piPaths } from "../../src/pi-paths.ts";
-import { preparePiCandidate } from "../../src/pi-prepare.ts";
-import { digestPiTree, readPiReceipt } from "../../src/pi-package.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+import { piHarness } from "../../src/harnesses/pi/harness.ts";
+import { piPaths } from "../../src/harnesses/pi/paths.ts";
+import { preparePiCandidate } from "../../src/harnesses/pi/prepare.ts";
+import { digestPiTree, readPiReceipt } from "../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
   fixtureGit,
@@ -286,7 +286,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/adapter.ts:464::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:464::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -393,7 +393,7 @@ async function prepareGeneratedTree(
  * while never entering the update fast path at all.
  *
  * ANCHORED, not a bare substring. `src/commands/prepare.ts` prints its banner
- * at the start of a line, but `src/lifecycle.ts` also carries the word
+ * at the start of a line, but `src/harnesses/codex/lifecycle.ts` also carries the word
  * mid-sentence — "does not match the prepared plugin after install." — on
  * stderr. No current call site can see it: the three that pass combined
  * output (:519, :546, :658) all stop at the update-control gate, before
@@ -717,7 +717,7 @@ void describe("install commands", { concurrency: true }, () => {
     // :79-81
     for (const relative of [
       "src/validate-generated-plugin-cli.ts",
-      "src/generated-plugin.ts",
+      "src/harnesses/codex/generated-plugin.ts",
       "src/python-text.ts",
     ]) {
       const path = join(c.pkg, relative);
@@ -773,7 +773,7 @@ void describe("install commands", { concurrency: true }, () => {
     // Converted (Task 6, D4): calls `runUpdate` in-process, with a double
     // answering `unsupported` where the shell fixture's `updateControl`
     // config used to. The double is reachable through the real production
-    // switch (src/lifecycle.ts's requireManagedUpdateControl), so the
+    // switch (src/harnesses/codex/lifecycle.ts's requireManagedUpdateControl), so the
     // contract survives the seam's removal unchanged.
     const c = installCase();
     // The generated tree, established in-process. Without it the package
@@ -1163,7 +1163,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (`src/adapter.ts:590-672::const marketplaceList`), and the second of them
+    // the three commands below (`src/harnesses/codex/adapter.ts:590-672::const marketplaceList`), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
@@ -1212,7 +1212,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/adapter.ts:643::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:643::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1370,7 +1370,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/adapter.ts:669::adding`).
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:669::adding`).
     assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
     assert.ok(out.includes(otherRoot), out);
     // :632-634
@@ -1474,7 +1474,7 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — `src/adapter.ts:702::missing:`, replayed through the install result.
+    // :685 — `src/harnesses/codex/adapter.ts:702::missing:`, replayed through the install result.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
   });
 
@@ -1490,9 +1490,9 @@ void describe("install commands", { concurrency: true }, () => {
     // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
     // plugin as installed at 1.0.0 without materialising its cached tree, so
     // the REAL adapter's fingerprint handler resolves an active version
-    // (`src/adapter.ts:814-821::let activeVersion`), builds the installed root for it (:831-836),
+    // (`src/harnesses/codex/adapter.ts:814-821::let activeVersion`), builds the installed root for it (:831-836),
     // and finds nothing readable there — installedCommitFromRoot returns ""
-    // (`src/codex-state.ts:67-84::installedCommitFromRoot`) — and fails with a controlled inspect-failed
+    // (`src/harnesses/codex/state.ts:67-84::installedCommitFromRoot`) — and fails with a controlled inspect-failed
     // outcome. The case therefore needs no interception and is not
     // seam-dependent.
     const c = installCase({
@@ -1610,7 +1610,7 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
-    // (`src/adapter.ts:590-672::const marketplaceList`): the marketplace add carries the same package
+    // (`src/harnesses/codex/adapter.ts:590-672::const marketplaceList`): the marketplace add carries the same package
     // root the original needle pinned, and the plugin add is unconditional.
     // clearLogs above means both lines can only have come from this run.
     assertOrder(

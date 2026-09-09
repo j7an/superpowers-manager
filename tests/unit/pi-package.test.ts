@@ -11,7 +11,10 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { digestPiTree, materializePiTree } from "../../src/pi-package.ts";
+import {
+  digestPiTree,
+  materializePiTree,
+} from "../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
   fixtureGit,

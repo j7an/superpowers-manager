@@ -1,14 +1,14 @@
 import type { Buffer } from "node:buffer";
 import { homedir } from "node:os";
 import { posix } from "node:path";
-import { COMMIT_RE, SEMVER_RE } from "./domain/refs.ts";
-import { compareByCodePoint, pythonStrip } from "./python-text.ts";
+import { COMMIT_RE, SEMVER_RE } from "../../domain/refs.ts";
+import { compareByCodePoint, pythonStrip } from "../../python-text.ts";
 import {
   DEFAULT_FS_DEPS,
   type GeneratedPluginFsDeps,
   validateSkillFrontmatter,
-} from "./skill-validation.ts";
-import { parseStrictJson, type JsonValue } from "./strict-json.ts";
+} from "../../skill-validation.ts";
+import { parseStrictJson, type JsonValue } from "../../strict-json.ts";
 
 export interface GeneratedPluginValidationOptions {
   readonly pluginRoot: string;
@@ -582,9 +582,9 @@ async function validateHookSubtree(
     try {
       isLink = (await inspectLink(path, deps)) === "symlink";
     } catch {
-      // The `src/generated-plugin.ts:583::isLink =` probe reaches the first catch bounded by `src/generated-plugin.ts:592::let rawTarget`; the `src/generated-plugin.ts:594::rawTarget = decodePathBytes` readlink reaches the same site text.
-      // The three probes sharing the *subtree* string are `src/generated-plugin.ts:627::resolvedDirectory =`, `src/generated-plugin.ts:637::children =`, and
-      // `src/generated-plugin.ts:646::deps, true)) === "directory"`, not this one.
+      // The `src/harnesses/codex/generated-plugin.ts:583::isLink =` probe reaches the first catch bounded by `src/harnesses/codex/generated-plugin.ts:592::let rawTarget`; the `src/harnesses/codex/generated-plugin.ts:594::rawTarget = decodePathBytes` readlink reaches the same site text.
+      // The three probes sharing the *subtree* string are `src/harnesses/codex/generated-plugin.ts:627::resolvedDirectory =`, `src/harnesses/codex/generated-plugin.ts:637::children =`, and
+      // `src/harnesses/codex/generated-plugin.ts:646::deps, true)) === "directory"`, not this one.
       errors.push(`generated hook symlink could not be inspected: ${path}`);
       return false;
     }

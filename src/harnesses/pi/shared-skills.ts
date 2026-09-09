@@ -10,9 +10,9 @@ import {
   sep,
 } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { PiPaths } from "./pi-paths.ts";
-import type { PiSettings } from "./pi-settings.ts";
-import { classifyPathNoFollow } from "./safe-path.ts";
+import type { PiPaths } from "./paths.ts";
+import type { PiSettings } from "./settings.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
 const PI_IGNORE_FILES = [".gitignore", ".ignore", ".fdignore"] as const;
 
 type SharedSkillCollection =

@@ -34,7 +34,7 @@ export interface AdapterResult<T = JsonValue> {
   readonly outcome: AdapterOutcome<T>;
 }
 
-// Lives here, not in src/adapter.ts, rather than having context.ts import it
+// Lives here, not in src/harnesses/codex/adapter.ts, rather than having context.ts import it
 // directly from adapter.ts. NOT a cycle avoidance: tsconfig.json's
 // verbatimModuleSyntax:true erases a type-only import
 // (`import type { AdapterContext } from "../adapter.js"`) at emit, so it

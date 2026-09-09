@@ -12,7 +12,7 @@ import {
   formatPorcelain,
   formatHuman,
   PROBE_PORCELAIN_KEYS,
-} from "../../src/codex-presentation.ts";
+} from "../../src/harnesses/codex/presentation.ts";
 import {
   replayOutcome,
   PROBE_USAGE,

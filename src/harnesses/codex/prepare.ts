@@ -6,32 +6,32 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
+} from "../../adapter-result.ts";
 import { codexBuild } from "./adapter.ts";
-import { ARTIFACT_RECEIPT } from "./artifact-tree.ts";
+import { ARTIFACT_RECEIPT } from "../../artifact-tree.ts";
 import {
   assessCodexCompatibility,
   readCodexAssessment,
   writeCodexAssessment,
-} from "./codex-compatibility.ts";
-import type { EffectiveSelection } from "./effective-selection.ts";
-import type { Compatibility } from "./harness-compatibility.ts";
+} from "./compatibility.ts";
+import type { EffectiveSelection } from "../../effective-selection.ts";
+import type { Compatibility } from "../../harness-compatibility.ts";
 import type {
   PreparationLocation,
   PrepareCandidateInput,
   PreparedArtifact,
   PreparedState,
-} from "./harness.ts";
+} from "../../harness.ts";
 import { readManifest } from "./hooks.ts";
 import {
   readGeneratedCommitLenient,
   readStrictProvenanceField,
   writeProvenance,
-} from "./provenance.ts";
-import { classifyPathNoFollow } from "./safe-path.ts";
-import { SafetyError } from "./safety-error.ts";
-import type { ResolutionKind } from "./upstream-version.ts";
-import { manifestVersionForRef } from "./upstream-version.ts";
+} from "../../provenance.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
+import { SafetyError } from "../../safety-error.ts";
+import type { ResolutionKind } from "../../upstream-version.ts";
+import { manifestVersionForRef } from "../../upstream-version.ts";
 
 // Order is inherited from the original prepare command; the first miss wins.
 const REQUIRED_UPSTREAM = [

@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { inspectCodexConflicts } from "../../src/codex-conflicts.ts";
+import { inspectCodexConflicts } from "../../src/harnesses/codex/conflicts.ts";
 
 function listing(items: readonly Record<string, unknown>[]): string {
   return JSON.stringify({ installed: items });

@@ -6,14 +6,14 @@ import {
   successResult,
   type AdapterResult,
 } from "../../src/adapter-result.ts";
-import type { CodexRemovalInput } from "../../src/adapter.ts";
+import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
 import {
   codexHarness,
   normalizeCodexControl,
   normalizeCodexInstallForContext,
   normalizeCodexInstalled,
   normalizeCodexOwnership,
-} from "../../src/codex-harness.ts";
+} from "../../src/harnesses/codex/harness.ts";
 import type {
   HarnessAdapter,
   PrepareCandidateInput,

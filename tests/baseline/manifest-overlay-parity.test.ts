@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { applyManifestOverlay } from "../../src/manifest-overlay.ts";
+import { applyManifestOverlay } from "../../src/harnesses/codex/manifest-overlay.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CORPUS = join(HERE, "../fixtures/baseline/overlay-parity");

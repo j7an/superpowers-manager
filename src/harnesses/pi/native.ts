@@ -8,15 +8,15 @@ import {
   type AdapterChannel,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
-import { SEMVER_RE } from "./domain/refs.ts";
-import type { PiPaths } from "./pi-paths.ts";
+} from "../../adapter-result.ts";
+import { SEMVER_RE } from "../../domain/refs.ts";
+import type { PiPaths } from "./paths.ts";
 import {
   BOUNDED_EXECUTABLE,
   runValidator as runBoundedCommand,
   type Captured,
-} from "./validator.ts";
-import { withWorkspace } from "./workspace.ts";
+} from "../../validator.ts";
+import { withWorkspace } from "../../workspace.ts";
 
 export interface PiCommandOutput {
   readonly stdout: string;

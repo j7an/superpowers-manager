@@ -1,11 +1,11 @@
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { AdapterContext } from "./adapter-result.ts";
+import type { AdapterContext } from "../../adapter-result.ts";
 import {
   codexInstalledPluginsFromJson,
   type CodexInstalledPlugin,
-} from "./codex-json.ts";
+} from "./json.ts";
 
 export const CODEX_MANAGER_PLUGIN_ID = "superpowers@superpowers-manager";
 export const CODEX_LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";

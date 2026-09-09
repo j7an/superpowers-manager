@@ -517,7 +517,7 @@ void test("full SemVer manager-version forms pass", (t) => {
 });
 
 // No behavior ID: guards the SemVer grammar's ASCII-digit boundary. SEMVER_RE in
-// src/generated-plugin.ts spells its digit classes `[0-9]`, so a Unicode
+// src/harnesses/codex/generated-plugin.ts spells its digit classes `[0-9]`, so a Unicode
 // category-Nd digit is not a SemVer digit and the version is REJECTED. This is
 // deliberately *not* the argparse split-value rule, which does accept Nd digits
 // because CPython's `re` `\d` matches them; two grammars, opposite answers.

@@ -1,17 +1,14 @@
-import type { AdapterResult } from "./adapter-result.ts";
-import {
-  normalizeCodexInstall,
-  normalizeCodexInstalled,
-} from "./codex-harness.ts";
-import { displaySource } from "./selection.ts";
+import type { AdapterResult } from "../../adapter-result.ts";
+import { normalizeCodexInstall, normalizeCodexInstalled } from "./harness.ts";
+import { displaySource } from "../../selection.ts";
 import type {
   FailureSite,
   HarnessPresentation,
   InstallReceipt,
   Output,
   ProbeSnapshot,
-} from "./harness.ts";
-import type { AdapterContext } from "./adapter-result.ts";
+} from "../../harness.ts";
+import type { AdapterContext } from "../../adapter-result.ts";
 import type { CodexRemovalInput } from "./adapter.ts";
 
 export interface ProbeFacts {
@@ -185,7 +182,7 @@ export function codexInstallReceipt(
   };
 }
 
-// Compatibility export target for src/lifecycle.ts. Delegate to the production
+// Compatibility export target for src/harnesses/codex/lifecycle.ts. Delegate to the production
 // normalizers and renderer so the retained verdict cannot drift from commands.
 export function verifyInstalledFingerprint(
   desiredCommit: string,

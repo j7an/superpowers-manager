@@ -35,7 +35,7 @@ import {
   SHORT,
 } from "./probe-fixture.ts";
 
-import { PROBE_PORCELAIN_KEYS } from "../../src/codex-presentation.ts";
+import { PROBE_PORCELAIN_KEYS } from "../../src/harnesses/codex/presentation.ts";
 
 import { writeSelectionState } from "../../src/selection-store.ts";
 
@@ -137,7 +137,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/codex-presentation.ts:227::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/harnesses/codex/presentation.ts:224::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
@@ -524,7 +524,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // runInspect's real inspect-failed path (`src/adapter.ts:816::activeVersion = activePluginVersionFromJson`).
+  // runInspect's real inspect-failed path (`src/harnesses/codex/adapter.ts:816::activeVersion = activePluginVersionFromJson`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the fingerprint inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -537,9 +537,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
-// (`src/adapter.ts:973-999::async function runCodexOperation(`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/harnesses/codex/adapter.ts:973-999::async function runCodexOperation(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/adapter.ts:294::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:294::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -558,7 +558,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
     `error: required Codex command not found: ${dud}\n`,
   );
   // The whole point of the hand-written form: no errno prose and no stack from
-  // an error src/adapter.ts declined to own.
+  // an error src/harnesses/codex/adapter.ts declined to own.
   assert.equal(/EACCES|denied|spawn|\bat \//i.test(result.stderr), false);
   assert.equal(
     existsSync(c.codexLog),
@@ -578,7 +578,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (`src/adapter.ts:251-259::async function listingCommand`), and the fake writes nothing there
+// child's stderr (`src/harnesses/codex/adapter.ts:251-259::async function listingCommand`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr. Recorded in tests/migration-inventory/probe.md.

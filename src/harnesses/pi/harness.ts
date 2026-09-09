@@ -1,21 +1,21 @@
-import { failureResult, successResult } from "./adapter-result.ts";
-import { classifyPathNoFollow } from "./safe-path.ts";
-import type { HarnessAdapter } from "./harness.ts";
-import { installPi, removePi } from "./pi-install.ts";
-import { piPaths } from "./pi-paths.ts";
+import { failureResult, successResult } from "../../adapter-result.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
+import type { HarnessAdapter } from "../../harness.ts";
+import { installPi, removePi } from "./install.ts";
+import { piPaths } from "./paths.ts";
 import {
   inspectPiPrepared,
   piPreparationLocation,
   preparePiCandidate,
   readPiPrepared,
-} from "./pi-prepare.ts";
-import { piPresentation } from "./pi-presentation.ts";
+} from "./prepare.ts";
+import { piPresentation } from "./presentation.ts";
 import {
   inspectPiControl,
   inspectPiInstalled,
   inspectPiOwnership,
   type PiRemovalInput,
-} from "./pi-state.ts";
+} from "./state.ts";
 
 export const piHarness: HarnessAdapter<PiRemovalInput> = {
   preparationLocation: piPreparationLocation,

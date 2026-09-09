@@ -1,5 +1,5 @@
-import type { HarnessPresentation } from "./harness.ts";
-import type { PiRemovalInput } from "./pi-state.ts";
+import type { HarnessPresentation } from "../../harness.ts";
+import type { PiRemovalInput } from "./state.ts";
 
 export const piPresentation: HarnessPresentation<PiRemovalInput> = {
   installNotice: "",

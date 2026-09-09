@@ -12,7 +12,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { readPiSettings, resolvePiLocalSource } from "../../src/pi-settings.ts";
+import {
+  readPiSettings,
+  resolvePiLocalSource,
+} from "../../src/harnesses/pi/settings.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 import { exactError } from "../lib/error-assertions.ts";
 

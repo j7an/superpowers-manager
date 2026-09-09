@@ -1,13 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalizeProspectivePath } from "./safe-path.ts";
-import { SafetyError } from "./safety-error.ts";
+import { canonicalizeProspectivePath } from "../../safe-path.ts";
+import { SafetyError } from "../../safety-error.ts";
 import {
   parseStrictJson,
   type JsonValue,
   type StrictJsonProfile,
-} from "./strict-json.ts";
+} from "../../strict-json.ts";
 
 export interface PiPackageEntry {
   readonly source: string;

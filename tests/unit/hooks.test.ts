@@ -20,7 +20,7 @@ import {
   classifyHooks,
   materializeHooks,
   readManifest,
-} from "../../src/hooks.ts";
+} from "../../src/harnesses/codex/hooks.ts";
 
 async function sandbox(t: import("node:test").TestContext): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "spw-hooks-"));

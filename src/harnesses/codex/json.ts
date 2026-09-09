@@ -1,9 +1,9 @@
-import { SafetyError } from "./safety-error.ts";
+import { SafetyError } from "../../safety-error.ts";
 import {
   parseStrictJson,
   type JsonValue,
   type StrictJsonProfile,
-} from "./strict-json.ts";
+} from "../../strict-json.ts";
 
 const ACCEPT_CONSTANTS: StrictJsonProfile = {
   duplicateKeys: "last-wins",

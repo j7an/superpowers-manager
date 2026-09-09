@@ -1,12 +1,15 @@
-import { escapeNonAscii, formatPythonNumber } from "./python-json-format.ts";
-import { SafetyError } from "./safety-error.ts";
+import {
+  escapeNonAscii,
+  formatPythonNumber,
+} from "../../python-json-format.ts";
+import { SafetyError } from "../../safety-error.ts";
 import {
   isRawNumber,
   isRawObject,
   parseStrictJsonPreservingNumbers,
   type RawJsonValue,
   type StrictJsonProfile,
-} from "./strict-json.ts";
+} from "../../strict-json.ts";
 
 const OVERLAY_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",

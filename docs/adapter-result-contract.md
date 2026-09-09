@@ -27,7 +27,7 @@ every install verification hint. Three constructs enforce it, one per
 population: `writeAdapterFailure` (`src/adapter-result.ts`) refuses the error
 `code`, `message`, and hints before the first write; `AdapterMessageLog`
 escapes message `text` on ingress; and `normalizeCodexInstall`
-(`src/codex-harness.ts`) omits an unsafe verification hint before presentation.
+(`src/harnesses/codex/harness.ts`) omits an unsafe verification hint before presentation.
 
 Messages are replayed in array order to their declared streams.
 
@@ -50,12 +50,12 @@ true. Those two derived presence values determine `identity_state`.
 
 For update control, `unsupported` is never emitted on this path. It survives as
 an input the consumer still recognizes: `requireManagedUpdateControl`
-(`src/lifecycle.ts`) rejects `unsupported` as a capability it cannot guarantee,
+(`src/harnesses/codex/lifecycle.ts`) rejects `unsupported` as a capability it cannot guarantee,
 and rejects any other non-`managed` value as unknown.
 
 ## Capture-time buffering
 
-On the product path, `src/adapter.ts` captures Codex child output in memory with
+On the product path, `src/harnesses/codex/adapter.ts` captures Codex child output in memory with
 an unbounded `execFile` `maxBuffer`. Mutation-command output is recorded as
 messages through `AdapterMessageLog` into `AdapterOutcome.messages`
 (`src/adapter-result.ts`), but listing stdout may instead be parsed directly

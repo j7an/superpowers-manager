@@ -331,13 +331,13 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P1 — the adapter's classification wrapper (`src/adapter.ts:399::hook classification failed`). Ported from
+// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:399::hook classification failed`). Ported from
 // `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:1001-1022::"hooks-mixed-array" "out-hooks-mixed-array"`, which held the only
 // witness of this prefix anywhere in the repository. The eight inner causes
 // those shell lines also asserted are already message-exact in
 // tests/unit/hooks.test.js and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
-// with this prefix intact. Its materialization twin (`src/adapter.ts:408::hook materialization failed`) is
+// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:408::hook materialization failed`) is
 // asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
 void test("a classification failure reaches stderr through the adapter wrapper", async () => {
   const c = createCase({ fakes: "probe" });
@@ -356,7 +356,7 @@ void test("a classification failure reaches stderr through the adapter wrapper",
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P2a — `src/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the SOURCE-side call at :358. Ports the
+// P2a — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the SOURCE-side call at :358. Ports the
 // retired driver's :1041 and :1044 cases (inventory items 127 and 128).
 //
 // The PATH is the assertion, not the message. Three different failures print
@@ -382,7 +382,7 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P2b — `src/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the CANDIDATE-side call at :367. Ports
+// P2b — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the CANDIDATE-side call at :367. Ports
 // the retired driver's :1035 case (inventory item 125), which is the only
 // root-specific witness that post-copy validation runs.
 //
@@ -693,7 +693,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
     assert.ok(existsSync(join(generated(c), ".superpowers-upstream.json")));
 
     // 2. stdout, in order: the REPLAYED ADAPTER OUTCOME (an adapter build
-    //    always emits this on the stdout channel, `src/adapter.ts:559::generated plugin validation passed` --
+    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:559::generated plugin validation passed` --
     //    outcome loss is the first thing this slice fixes, so it is asserted
     //    directly), then the validator's stdout, then the domain result.
     assertOrder(result.stdout, [
@@ -820,7 +820,7 @@ void test("prepare rejects an upstream manifest nested beyond the depth limit", 
   await assertManifestRejected(
     c,
     (path) => {
-      // The profile allows 256 containers (`src/hooks.ts:37::maxDepth`); 257 arrays inside
+      // The profile allows 256 containers (`src/harnesses/codex/hooks.ts:37::maxDepth`); 257 arrays inside
       // the top-level object is the first shape past it.
 
       let nested: unknown = 0;
@@ -1071,7 +1071,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   assert.deepEqual(snapshotTree(generated(pinned)), pinnedBefore);
 });
 
-// P3 — `src/hooks.ts:281::entries = await readdir`, the WALK branch, where readdir fails on a directory
+// P3 — `src/harnesses/codex/hooks.ts:281::entries = await readdir`, the WALK branch, where readdir fails on a directory
 // inside a subtree that has already passed the containment check at :303.
 //
 // This branch is unwitnessed on BOTH sides. The retired driver's three
@@ -1130,7 +1130,7 @@ void test(
   },
 );
 
-// P4 — `src/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the ACCEPTING side of the hooks-root symlink
+// P4 — `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the ACCEPTING side of the hooks-root symlink
 // policy, covering both halves the retired shell driver held alone (items
 // 83-85 in tests/migration-inventory/prepare.md, whose entry for item 83 ends
 // "Slice 3.5, read this before deleting the shell file").
@@ -1156,7 +1156,7 @@ void test("a contained relative hooks root is recreated as a symlink in the cand
   );
   assert.equal(readlinkSync(hooks), "assets/hook-root");
   // Validating side: the candidate passed validateSubtreeSymlinks at
-  // `src/hooks.ts:371::validateSubtreeSymlinks(candidateHooks` (status 0 above) AND the content behind the root is
+  // `src/harnesses/codex/hooks.ts:371::validateSubtreeSymlinks(candidateHooks` (status 0 above) AND the content behind the root is
   // actually reachable through it, which is what makes the acceptance real
   // rather than a dangling link nobody followed.
   assert.equal(

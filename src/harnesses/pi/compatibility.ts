@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import type { EffectiveSelection } from "./effective-selection.ts";
-import type { Compatibility } from "./harness-compatibility.ts";
+import type { EffectiveSelection } from "../../effective-selection.ts";
+import type { Compatibility } from "../../harness-compatibility.ts";
 import {
   readArtifactFile,
   readArtifactObject,
   validateNativeSkill,
-} from "./artifact-tree.ts";
-import { SEMVER_RE } from "./domain/refs.ts";
-import { validateSource } from "./selection.ts";
+} from "../../artifact-tree.ts";
+import { SEMVER_RE } from "../../domain/refs.ts";
+import { validateSource } from "../../selection.ts";
 
 const OFFICIAL_SOURCES = new Set([
   "https://github.com/obra/superpowers",

@@ -9,16 +9,16 @@ import {
   addArtifactHashField,
   digestArtifactTree,
   readArtifactObject,
-} from "./artifact-tree.ts";
-import { COMMIT_RE } from "./domain/refs.ts";
-import type { Compatibility } from "./harness-compatibility.ts";
+} from "../../artifact-tree.ts";
+import { COMMIT_RE } from "../../domain/refs.ts";
+import type { Compatibility } from "../../harness-compatibility.ts";
 import {
   assertNoFollowType,
   assertSymlinkTargetContained,
-} from "./safe-path.ts";
-import { SafetyError } from "./safety-error.ts";
-import { validateSource } from "./selection.ts";
-import { assessPiCompatibility } from "./pi-compatibility.ts";
+} from "../../safe-path.ts";
+import { SafetyError } from "../../safety-error.ts";
+import { validateSource } from "../../selection.ts";
+import { assessPiCompatibility } from "./compatibility.ts";
 
 const exec = promisify(execFile);
 const DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });

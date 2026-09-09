@@ -1,22 +1,25 @@
-import type { EffectiveSelection } from "./effective-selection.ts";
-import type { Compatibility } from "./harness-compatibility.ts";
+import type { EffectiveSelection } from "../../effective-selection.ts";
+import type { Compatibility } from "../../harness-compatibility.ts";
 import { join } from "node:path";
-import { validateNativeSkill } from "./artifact-tree.ts";
-import { classifyPathNoFollow, assertExistingContained } from "./safe-path.ts";
+import { validateNativeSkill } from "../../artifact-tree.ts";
+import {
+  classifyPathNoFollow,
+  assertExistingContained,
+} from "../../safe-path.ts";
 import { classifyHooks, readManifest } from "./hooks.ts";
-import { SEMVER_RE } from "./domain/refs.ts";
-import { validateSource } from "./selection.ts";
+import { SEMVER_RE } from "../../domain/refs.ts";
+import { validateSource } from "../../selection.ts";
 import { writeFile } from "node:fs/promises";
 import {
   ARTIFACT_DIGEST_RE,
   ARTIFACT_RECEIPT,
   digestArtifactTree,
   readArtifactObject,
-} from "./artifact-tree.ts";
-import { COMMIT_RE } from "./domain/refs.ts";
+} from "../../artifact-tree.ts";
+import { COMMIT_RE } from "../../domain/refs.ts";
 import { validateGeneratedPlugin } from "./generated-plugin.ts";
-import type { PreparedArtifact } from "./harness.ts";
-import { SafetyError } from "./safety-error.ts";
+import type { PreparedArtifact } from "../../harness.ts";
+import { SafetyError } from "../../safety-error.ts";
 
 export async function writeCodexAssessment(
   root: string,

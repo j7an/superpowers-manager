@@ -9,9 +9,9 @@ invocation using `--harness codex` or `--harness pi`; omission defaults to Codex
 Upstream selection is shared, while preparation and activation target the chosen
 harness independently.
 
-- The [Codex adapter](../src/codex-harness.ts) manages a generated Codex plugin
+- The [Codex adapter](../src/harnesses/codex/harness.ts) manages a generated Codex plugin
   and its marketplace/plugin registration.
-- The [Pi adapter](../src/pi-harness.ts) manages a Pi package and its registration,
+- The [Pi adapter](../src/harnesses/pi/harness.ts) manages a Pi package and its registration,
   with a durable Manager-owned installed snapshot separate from prepared output.
 
 Implement `HarnessAdapter<R>` for an additional integration and supply it at

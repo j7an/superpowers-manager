@@ -7,7 +7,7 @@ import {
   codexInstalledPluginsFromJson,
   installedListingHas,
   marketplaceRootFromJson,
-} from "../../src/codex-json.ts";
+} from "../../src/harnesses/codex/json.ts";
 
 import { SafetyError } from "../../src/safety-error.ts";
 

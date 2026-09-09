@@ -8,13 +8,13 @@ import {
   inspectPiPrepared,
   preparePiCandidate,
   readPiPrepared,
-} from "../../src/pi-prepare.ts";
-import { piHarness } from "../../src/pi-harness.ts";
+} from "../../src/harnesses/pi/prepare.ts";
+import { piHarness } from "../../src/harnesses/pi/harness.ts";
 import {
   digestPiTree,
   readPiReceipt,
   piReceiptBinding,
-} from "../../src/pi-package.ts";
+} from "../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
   nativeFixture,

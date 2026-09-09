@@ -1,5 +1,5 @@
 // Ports scripts/uninstall. The shell sourced common.sh, provenance.sh,
-// lifecycle.sh and adapter.sh; the predicates now live in src/lifecycle.ts
+// lifecycle.sh and adapter.sh; the predicates now live in src/harnesses/codex/lifecycle.ts
 // and the adapter arrives through ctx.adapter.
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
@@ -206,7 +206,7 @@ async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
     // Reachable only for mkdtemp failure, with nothing collected yet: this
     // callback never throws -- every ctx.adapter throw is already caught
     // inside invoke(), and presenceFlag/verifyUninstalledResources/
-    // reportLegacyState are pure (src/lifecycle.ts's header comment) -- so a
+    // reportLegacyState are pure (src/harnesses/codex/lifecycle.ts's header comment) -- so a
     // post-success cleanup failure is handled by onCleanupFailure above and
     // cannot reach here. Wrapping with `outcomes` anyway keeps the class
     // total over its declared contract rather than assuming the callback's
@@ -252,7 +252,7 @@ async function performUninstall<R>(
     // blindly.
     //
     // A cause outside ctx.adapter's AdapterFailure guard
-    // (`src/adapter.ts:973-999::async function runCodexOperation(`) does NOT
+    // (`src/harnesses/codex/adapter.ts:973-999::async function runCodexOperation(`) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.

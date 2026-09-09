@@ -5,7 +5,7 @@
 // runPrepare is called in a child process, not in the test process, because
 // ctx.env does not govern what its dependencies actually run under: runGit
 // (`src/git.ts:32::env: { ...process.env`) spreads process.env and never sees
-// ctx.env, and runBuild's `withWorkspace(tmpdir(), …)` in src/adapter.ts reads
+// ctx.env, and runBuild's `withWorkspace(tmpdir(), …)` in src/harnesses/codex/adapter.ts reads
 // process.env too. Spawning with the case's environment as the child's REAL
 // process.env is what makes PATH, TMPDIR, and git configuration hermetic.
 //
@@ -14,7 +14,7 @@
 
 import { runPrepare } from "../../src/commands/prepare.ts";
 
-import { codexHarness } from "../../src/codex-harness.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import { createResourceCoordinator } from "../../src/resource-lock.ts";
 
 const root = process.argv[2];

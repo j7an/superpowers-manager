@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import test from "node:test";
 
-import { piPaths } from "../../src/pi-paths.ts";
+import { piPaths } from "../../src/harnesses/pi/paths.ts";
 
 void test("Pi paths follow native agent-directory selection", async (t) => {
   await t.test("defaults to the Pi directory under HOME", () => {

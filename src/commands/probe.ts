@@ -31,7 +31,7 @@ export const PROBE_USAGE =
 // silent diagnostics regression, not a simplification.
 //
 // Interpolating error.message and each hint is the sanctioned form (AGENTS.md):
-// src/adapter.ts has 52 `fail()` sites and none interpolates a caught error's
+// src/harnesses/codex/adapter.ts has 52 `fail()` sites and none interpolates a caught error's
 // message, so the callee owns every failure reachable on this path. Those two
 // writes now live in writeAdapterFailure (src/adapter-result.ts), which
 // validates all three strings before the first of them reaches the stream.
@@ -192,7 +192,7 @@ function validControl(value: UpdateControlInspection): boolean {
 // evidence and report it as success.
 //
 // It does still THROW for a non-AdapterFailure cause (runAdapter's closing
-// `throw cause`, src/adapter.ts). That is caught here rather than in runProbe's
+// `throw cause`, src/harnesses/codex/adapter.ts). That is caught here rather than in runProbe's
 // outer catch, because the two need different diagnostics -- see spec §3.3a.
 //
 // Reached through ctx.adapter, not a direct module-level dependency on the
@@ -528,9 +528,9 @@ export async function runProbe<R>(
     // which catches every failure and returns "".
     //
     // A non-AdapterFailure re-thrown by runAdapter's closing `throw cause`
-    // (src/adapter.ts) does NOT reach here: inspect() catches it and converts
+    // (src/harnesses/codex/adapter.ts) does NOT reach here: inspect() catches it and converts
     // it to a hand-written message per AGENTS.md's reader-diagnostics rule -- a
-    // rethrown cause is exactly the failure src/adapter.ts declined to own, so
+    // rethrown cause is exactly the failure src/harnesses/codex/adapter.ts declined to own, so
     // its text must never reach this stream. See §3.3a.
     //
     // gatherProbe performs no writes of its own, so this catch cannot also be

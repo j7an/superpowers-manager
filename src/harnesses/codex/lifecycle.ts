@@ -75,12 +75,12 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
   return unknownState(identityState);
 }
 
-import type { AdapterResult } from "./adapter-result.ts";
+import type { AdapterResult } from "../../adapter-result.ts";
 
 export {
   verifyInstalledFingerprint,
   type FingerprintVerdict,
-} from "./codex-presentation.ts";
+} from "./presentation.ts";
 
 export interface Refusal {
   readonly ok: false;

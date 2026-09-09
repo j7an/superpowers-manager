@@ -1,36 +1,36 @@
 import { join } from "node:path";
-import { sharedPiSkillsActivity } from "./pi-shared-skills.ts";
+import { sharedPiSkillsActivity } from "./shared-skills.ts";
 
 import {
   failureResult,
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
-import { readArtifactObject } from "./artifact-tree.ts";
-import type { EffectiveSelection } from "./effective-selection.ts";
+} from "../../adapter-result.ts";
+import { readArtifactObject } from "../../artifact-tree.ts";
+import type { EffectiveSelection } from "../../effective-selection.ts";
 import type {
   Decision,
   InstalledState,
   OwnershipInspection,
   UpdateControlInspection,
-} from "./harness.ts";
-import { samePiSource } from "./pi-compatibility.ts";
+} from "../../harness.ts";
+import { samePiSource } from "./compatibility.ts";
 import {
   digestPiTree,
   readPiPackageAssessment,
   readPiReceipt,
   type PiReceipt,
-} from "./pi-package.ts";
-import { piPaths, type PiPaths } from "./pi-paths.ts";
+} from "./package.ts";
+import { piPaths, type PiPaths } from "./paths.ts";
 import {
   readPiSettings,
   resolveCanonicalPiLocalSource,
   resolvePiLocalSource,
   type PiPackageEntry,
   type PiSettings,
-} from "./pi-settings.ts";
-import { classifyPathNoFollow } from "./safe-path.ts";
+} from "./settings.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
 
 export interface PiRemovalInput {
   readonly installedRoot: string;

@@ -30,15 +30,15 @@ import {
   installPi,
   removePi,
   type PiInstallDependencies,
-} from "../../src/pi-install.ts";
+} from "../../src/harnesses/pi/install.ts";
 import {
   digestPiTree,
   piReceiptBinding,
   readPiPackageAssessment,
-} from "../../src/pi-package.ts";
-import { piPaths } from "../../src/pi-paths.ts";
-import { readPiSettings } from "../../src/pi-settings.ts";
-import { inspectPiOwnership } from "../../src/pi-state.ts";
+} from "../../src/harnesses/pi/package.ts";
+import { piPaths } from "../../src/harnesses/pi/paths.ts";
+import { readPiSettings } from "../../src/harnesses/pi/settings.ts";
+import { inspectPiOwnership } from "../../src/harnesses/pi/state.ts";
 import { nativeFixture, nativeSelection } from "../lib/pi-package-fixture.ts";
 
 const RUNTIME_RESPONSE = "99.2.3";
@@ -1135,9 +1135,9 @@ void test("Pi interruption leaves a pre-publication journal that identifies the 
   );
   const next = await f.prepare("2".repeat(40), "updated");
   const script = `
-    import { installPi } from './src/pi-install.ts';
+    import { installPi } from './src/harnesses/pi/install.ts';
     import { beginDirectoryPublication } from './src/atomic.ts';
-    import { readPiSettings } from './src/pi-settings.ts';
+    import { readPiSettings } from './src/harnesses/pi/settings.ts';
     import { successResult } from './src/adapter-result.ts';
     const artifact = JSON.parse(process.env.TEST_ARTIFACT);
     const ctx = { root: process.env.TEST_ROOT, env: { HOME: process.env.TEST_ROOT, PI_CODING_AGENT_DIR: process.env.TEST_AGENT } };

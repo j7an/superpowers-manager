@@ -13,7 +13,7 @@ import {
   installedRootForVersion,
   manifestShortSha,
   pathsEqual,
-} from "../../src/codex-state.ts";
+} from "../../src/harnesses/codex/state.ts";
 
 async function sandbox(t: import("node:test").TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "spw-codex-state-"));

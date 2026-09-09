@@ -5,25 +5,25 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
-import type { EffectiveSelection } from "./effective-selection.ts";
+} from "../../adapter-result.ts";
+import type { EffectiveSelection } from "../../effective-selection.ts";
 import type {
   PreparationLocation,
   PrepareCandidateInput,
   PreparedArtifact,
   PreparedState,
-} from "./harness.ts";
-import { ARTIFACT_RECEIPT } from "./artifact-tree.ts";
-import { piPaths } from "./pi-paths.ts";
-import { assessPiCompatibility, samePiSource } from "./pi-compatibility.ts";
+} from "../../harness.ts";
+import { ARTIFACT_RECEIPT } from "../../artifact-tree.ts";
+import { piPaths } from "./paths.ts";
+import { assessPiCompatibility, samePiSource } from "./compatibility.ts";
 import {
   digestPiTree,
   materializePiTree,
   readPiPackageAssessment,
   piReceiptBinding,
   type PiReceipt,
-} from "./pi-package.ts";
-import { classifyPathNoFollow } from "./safe-path.ts";
+} from "./package.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
 
 export function piPreparationLocation(
   ctx: AdapterContext,

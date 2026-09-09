@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applyManifestOverlay } from "../../src/manifest-overlay.ts";
+import { applyManifestOverlay } from "../../src/harnesses/codex/manifest-overlay.ts";
 
 const VERSION = "9.8.7+manager.0123456";
 const PATH = "/w/plugin.json";

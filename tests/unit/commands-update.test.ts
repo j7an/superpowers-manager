@@ -13,7 +13,7 @@ import {
   successfulNonzeroResult,
 } from "../lib/command-doubles.ts";
 
-import { codexPresentation } from "../../src/codex-presentation.ts";
+import { codexPresentation } from "../../src/harnesses/codex/presentation.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import { gatherProbe } from "../../src/commands/probe.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
@@ -40,7 +40,7 @@ async function makeCtx(
   out: ReturnType<typeof capture>,
   err: ReturnType<typeof capture>,
   adapter: import("../../src/commands/context.ts").CommandContext<
-    import("../../src/adapter.ts").CodexRemovalInput
+    import("../../src/harnesses/codex/adapter.ts").CodexRemovalInput
   >["adapter"],
 ) {
   const dir = mkdtempSync(join(SCRATCH, "case-"));
@@ -187,7 +187,7 @@ async function makePreparableCtx(
   out: ReturnType<typeof capture>,
   err: ReturnType<typeof capture>,
   adapter: import("../../src/commands/context.ts").CommandContext<
-    import("../../src/adapter.ts").CodexRemovalInput
+    import("../../src/harnesses/codex/adapter.ts").CodexRemovalInput
   >["adapter"],
 ) {
   const ctx = await makeCtx(
@@ -288,7 +288,7 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
 });
 
 void test('current: an UNRECOGNISED update control capability is its own diagnostic, distinct from "unsupported"', async () => {
-  // requireManagedUpdateControl (src/lifecycle.ts) has three arms: managed,
+  // requireManagedUpdateControl (src/harnesses/codex/lifecycle.ts) has three arms: managed,
   // unsupported, and a catch-all. A mutant collapsing the catch-all into the
   // "unsupported" arm would survive the case above alone.
   const out = capture();
@@ -577,7 +577,7 @@ void test("a legacy identity state stops before the update-control guard even ru
 
 void test("an UNKNOWN probe identity state is a distinct diagnostic from the legacy-blocked one", async () => {
   // The sibling case above drives requireNoLegacyState's "blocked" arm; this
-  // one drives its "unknown" arm (src/lifecycle.ts, reached for any
+  // one drives its "unknown" arm (src/harnesses/codex/lifecycle.ts, reached for any
   // identity_state outside the four known ones). Each arm needs its own
   // case: a mutant disabling both at once dies to the "blocked" case alone.
   const out = capture();

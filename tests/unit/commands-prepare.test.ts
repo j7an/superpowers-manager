@@ -14,8 +14,8 @@ import test from "node:test";
 import { capture, observingCoordinator } from "./helpers/command-harness.ts";
 
 import { runPrepare } from "../../src/commands/prepare.ts";
-import { readUpstreamManifestVersion } from "../../src/codex-prepare.ts";
-import { codexHarness } from "../../src/codex-harness.ts";
+import { readUpstreamManifestVersion } from "../../src/harnesses/codex/prepare.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-prepare-"));
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));

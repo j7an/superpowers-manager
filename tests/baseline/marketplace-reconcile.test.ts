@@ -12,12 +12,12 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runAdapter } from "../../src/adapter.ts";
+import { runAdapter } from "../../src/harnesses/codex/adapter.ts";
 
 import {
   verifyInstalledFingerprint,
   verifyUninstalledResources,
-} from "../../src/lifecycle.ts";
+} from "../../src/harnesses/codex/lifecycle.ts";
 
 const ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const PACKAGE_ROOT = ROOT;

@@ -6,7 +6,7 @@ import {
   successResult,
   type AdapterContext,
   type AdapterResult,
-} from "./adapter-result.ts";
+} from "../../adapter-result.ts";
 import {
   codexInspect,
   codexInstall,
@@ -19,11 +19,8 @@ import {
   prepareCodexCandidate,
   readCodexPrepared,
   validateCodexPreparationBeforeFetch,
-} from "./codex-prepare.ts";
-import {
-  codexInstallReceipt,
-  codexPresentation,
-} from "./codex-presentation.ts";
+} from "./prepare.ts";
+import { codexInstallReceipt, codexPresentation } from "./presentation.ts";
 import type {
   Decision,
   HarnessAdapter,
@@ -33,7 +30,7 @@ import type {
   OwnershipInspection,
   ToolRequirement,
   UpdateControlInspection,
-} from "./harness.ts";
+} from "../../harness.ts";
 import {
   type LegacyVerdict,
   reportLegacyState,
@@ -41,8 +38,8 @@ import {
   requireNoLegacyState,
   verifyUninstalledResources,
 } from "./lifecycle.ts";
-import { SafetyError } from "./safety-error.ts";
-import { commitMatches } from "./status.ts";
+import { SafetyError } from "../../safety-error.ts";
+import { commitMatches } from "../../status.ts";
 
 function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
   if (result.outcome.ok) {

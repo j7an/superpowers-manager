@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { withWorkspace, workspaceRemovalFailure } from "../../src/workspace.ts";
 
-import { runAdapter } from "../../src/adapter.ts";
+import { runAdapter } from "../../src/harnesses/codex/adapter.ts";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const FAKE_CODEX = fileURLToPath(
@@ -256,9 +256,9 @@ void test("withWorkspace preserves the callback error when a reported cleanup al
 });
 
 // The capability tests above prove `onCleanupFailure` works. This one proves
-// the adapter wires it: `src/adapter.ts` passes a reporter at every operation
+// the adapter wires it: `src/harnesses/codex/adapter.ts` passes a reporter at every operation
 // (five call sites;
-// `grep -n "onCleanupFailure: reportOrphanedWorkspace" src/adapter.ts`),
+// `grep -n "onCleanupFailure: reportOrphanedWorkspace" src/harnesses/codex/adapter.ts`),
 // because a workspace it never wrote to failing to be removed must not discard
 // an otherwise successful result — but must not vanish silently either. The
 // fake Codex makes the temporary directory's parent read-only while it runs, so
