@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { validateNativeSkill } from "./artifact-tree.ts";
 import { classifyPathNoFollow, assertExistingContained } from "./safe-path.ts";
 import { classifyHooks, readManifest } from "./hooks.ts";
-import { SEMVER_RE } from "./generated-plugin.ts";
+import { SEMVER_RE } from "./domain/refs.ts";
 import { validateSource } from "./selection.ts";
 import { writeFile } from "node:fs/promises";
 import {

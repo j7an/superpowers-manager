@@ -8,11 +8,11 @@ import {
 } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 import { parseStrictJson, type JsonValue } from "./strict-json.ts";
+import { compareByCodePoint } from "./python-text.ts";
 import {
-  compareByCodePoint,
   DEFAULT_FS_DEPS,
   validateSkillFrontmatter,
-} from "./generated-plugin.ts";
+} from "./skill-validation.ts";
 
 export const ARTIFACT_RECEIPT = ".superpowers-manager.json";
 export const ARTIFACT_DIGEST_RE = /^[a-f0-9]{64}$/;

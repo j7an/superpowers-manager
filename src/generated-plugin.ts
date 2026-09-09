@@ -1,9 +1,13 @@
 import type { Buffer } from "node:buffer";
-import { lstat, readdir, readFile, readlink, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { posix } from "node:path";
-import { COMMIT_RE } from "./domain/refs.ts";
-import { pythonSplitlines, pythonStrip } from "./python-text.ts";
+import { COMMIT_RE, SEMVER_RE } from "./domain/refs.ts";
+import { compareByCodePoint, pythonStrip } from "./python-text.ts";
+import {
+  DEFAULT_FS_DEPS,
+  type GeneratedPluginFsDeps,
+  validateSkillFrontmatter,
+} from "./skill-validation.ts";
 import { parseStrictJson, type JsonValue } from "./strict-json.ts";
 
 export interface GeneratedPluginValidationOptions {
@@ -16,28 +20,6 @@ export interface GeneratedPluginValidationOptions {
   readonly manifestSource: "upstream" | "fallback";
   readonly upstreamManifestVersion: string;
 }
-
-export interface GeneratedPluginFsDeps {
-  readonly lstat: typeof lstat;
-  readonly stat: typeof stat;
-  readonly readdir: typeof readdir;
-  readonly readlink: typeof readlink;
-  readonly readFile: typeof readFile;
-}
-
-export const DEFAULT_FS_DEPS: GeneratedPluginFsDeps = {
-  lstat,
-  stat,
-  readdir,
-  readlink,
-  readFile,
-};
-
-// The Python's own SEMVER_RE (:15-22). Deliberately not SEMVER_BASE_SOURCE
-// from src/domain/refs.ts, which omits the `+build` component; widening the
-// shared constant would change TAG_RE and is out of scope.
-export const SEMVER_RE =
-  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 const MANIFEST_JSON_PROFILE = {
   duplicateKeys: "last-wins",
@@ -581,72 +563,6 @@ const REQUIRED_FILES = [
   "CODE_OF_CONDUCT.md",
 ] as const;
 
-/** Python `sorted()` orders by code point; JavaScript's default sort does not. */
-export function compareByCodePoint(left: string, right: string): number {
-  // `Array.from` splits by code point, exactly as spreading would; oxlint's
-  // `no-misused-spread` rejects the spread form, and grapheme segmentation is
-  // the wrong unit here — Python compares code points.
-  const leftPoints = Array.from(left);
-  const rightPoints = Array.from(right);
-  const shared = Math.min(leftPoints.length, rightPoints.length);
-  for (let index = 0; index < shared; index += 1) {
-    const a = leftPoints[index]!.codePointAt(0)!;
-    const b = rightPoints[index]!.codePointAt(0)!;
-    if (a !== b) return a - b;
-  }
-  return leftPoints.length - rightPoints.length;
-}
-
-export async function validateSkillFrontmatter(
-  skillMd: string,
-  skillName: string,
-  errors: string[],
-  deps: GeneratedPluginFsDeps,
-): Promise<void> {
-  let contents: string;
-  try {
-    contents = STRICT_DECODER.decode(await deps.readFile(skillMd));
-  } catch {
-    errors.push(`skill \`${skillName}\` has unreadable UTF-8 \`SKILL.md\``);
-    return;
-  }
-  if (contents === "") {
-    errors.push(`skill \`${skillName}\` has empty \`SKILL.md\``);
-    return;
-  }
-  const lines = pythonSplitlines(contents);
-  if (lines.length === 0 || lines[0] !== "---") {
-    errors.push(`skill \`${skillName}\` must start with \`---\``);
-    return;
-  }
-  const closingIndex = lines.indexOf("---", 1);
-  if (closingIndex === -1) {
-    errors.push(`skill \`${skillName}\` frontmatter is not closed`);
-    return;
-  }
-  const frontmatter = lines.slice(1, closingIndex);
-  for (const key of ["name", "description"] as const) {
-    const matches = frontmatter.filter((line) => line.startsWith(`${key}:`));
-    if (matches.length !== 1) {
-      errors.push(
-        `skill \`${skillName}\` frontmatter must contain exactly one top-level \`${key}:\``,
-      );
-      continue;
-    }
-    const value = pythonStrip(matches[0]!.slice(matches[0]!.indexOf(":") + 1));
-    if (
-      value === "" ||
-      value === "''" ||
-      value === '""' ||
-      value.startsWith("#")
-    ) {
-      errors.push(
-        `skill \`${skillName}\` frontmatter field \`${key}\` must be non-empty`,
-      );
-    }
-  }
-}
-
 async function validateHookSubtree(
   pluginRoot: string,
   hooksRoot: string,
@@ -666,9 +582,9 @@ async function validateHookSubtree(
     try {
       isLink = (await inspectLink(path, deps)) === "symlink";
     } catch {
-      // The `src/generated-plugin.ts:667::isLink =` probe reaches the first catch bounded by `src/generated-plugin.ts:672-676::let rawTarget`; the `src/generated-plugin.ts:678::rawTarget = decodePathBytes` readlink reaches the same site text.
-      // The three probes sharing the *subtree* string are `src/generated-plugin.ts:711::resolvedDirectory =`, `src/generated-plugin.ts:721::children =`, and
-      // `src/generated-plugin.ts:730::deps, true)) === "directory"`, not this one.
+      // The `src/generated-plugin.ts:583::isLink =` probe reaches the first catch bounded by `src/generated-plugin.ts:592::let rawTarget`; the `src/generated-plugin.ts:594::rawTarget = decodePathBytes` readlink reaches the same site text.
+      // The three probes sharing the *subtree* string are `src/generated-plugin.ts:627::resolvedDirectory =`, `src/generated-plugin.ts:637::children =`, and
+      // `src/generated-plugin.ts:646::deps, true)) === "directory"`, not this one.
       errors.push(`generated hook symlink could not be inspected: ${path}`);
       return false;
     }

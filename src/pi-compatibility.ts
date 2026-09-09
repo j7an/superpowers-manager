@@ -8,7 +8,7 @@ import {
   readArtifactObject,
   validateNativeSkill,
 } from "./artifact-tree.ts";
-import { SEMVER_RE } from "./generated-plugin.ts";
+import { SEMVER_RE } from "./domain/refs.ts";
 import { validateSource } from "./selection.ts";
 
 const OFFICIAL_SOURCES = new Set([

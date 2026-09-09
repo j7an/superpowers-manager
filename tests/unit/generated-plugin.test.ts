@@ -15,6 +15,10 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { pythonStrip, pythonSplitlines } from "../../src/python-text.ts";
+import {
+  DEFAULT_FS_DEPS,
+  type GeneratedPluginFsDeps,
+} from "../../src/skill-validation.ts";
 
 import * as generated from "../../src/generated-plugin.ts";
 
@@ -45,14 +49,14 @@ function failingDeps(
   overrides: Record<string, (path: unknown, ...rest: unknown[]) => unknown>,
 ) {
   const deps: Record<string, Function> = {};
-  for (const [name, real] of Object.entries(generated.DEFAULT_FS_DEPS)) {
+  for (const [name, real] of Object.entries(DEFAULT_FS_DEPS)) {
     const override = overrides[name];
     deps[name] = override
       ? (...args: unknown[]) =>
           override(args[0], ...args.slice(1)) || real(...args)
       : real;
   }
-  return deps as unknown as import("../../src/generated-plugin.ts").GeneratedPluginFsDeps;
+  return deps as unknown as GeneratedPluginFsDeps;
 }
 
 const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
@@ -377,7 +381,7 @@ void test("FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, path
         options(root),
         deps,
       );
-      // `src/generated-plugin.ts:918-924::pluginRoot = await resolvePath(expandUser(options.pluginRoot), deps` returns early, so this is the whole list.
+      // `src/generated-plugin.ts:835::pluginRoot = await resolvePath(expandUser(options.pluginRoot), deps` returns early, so this is the whole list.
       assert.deepStrictEqual(errors, ["plugin root could not be resolved"]);
     },
   );
@@ -490,9 +494,9 @@ void test("a non-absence probe on the manifest itself fails closed", async (t) =
 });
 
 void test("a manifest path whose existence probe fails is reported", async (t) => {
-  // `src/generated-plugin.ts:223::await deps.stat(path)`/`src/generated-plugin.ts:224::info.isDirectory()`/`src/generated-plugin.ts:225::info.isFile()` — the exists/is_dir/is_file probes inside
+  // `src/generated-plugin.ts:205::await deps.stat(path)`/`src/generated-plugin.ts:206::info.isDirectory()`/`src/generated-plugin.ts:207::info.isFile()` — the exists/is_dir/is_file probes inside
   // validate_local_path. `lstat` still succeeds, so resolution completes and
-  // this is distinct from the `src/generated-plugin.ts:335::target = await resolvePath(` resolution failure above.
+  // this is distinct from the `src/generated-plugin.ts:317::target = await resolvePath(` resolution failure above.
   const { root } = await candidate(t);
   const deps = failingDeps({
     stat: (path) => String(path).endsWith("/skills") && permissionDenied(),
@@ -613,8 +617,8 @@ void test("the hooks.json probe fails closed with its frozen string", async (t) 
 });
 
 void test("each hook subtree site fails closed with its Python string", async (t) => {
-  // `src/generated-plugin.ts:667::isLink = (await inspectLink(path, deps)) === "symlink"` reaches `src/generated-plugin.ts:672-675::if (!isLink) return true;`, the path-bearing symlink text it shares with `src/generated-plugin.ts:679::await deps.readlink(path, { encoding: "buffer" })`.
-  // Only `src/generated-plugin.ts:711::resolvedDirectory = await resolvePath(directory, deps, { strict: true })`/`src/generated-plugin.ts:721::children = await listDirectory(directory, deps)`/`src/generated-plugin.ts:730::(await inspectPath(child, deps, true)) === "directory"` share the subtree string. Each site is asserted
+  // `src/generated-plugin.ts:583::isLink = (await inspectLink(path, deps)) === "symlink"` reaches `src/generated-plugin.ts:591::if (!isLink) return true;`, the path-bearing symlink text it shares with `src/generated-plugin.ts:595::await deps.readlink(path, { encoding: "buffer" })`.
+  // Only `src/generated-plugin.ts:627::resolvedDirectory = await resolvePath(directory, deps, { strict: true })`/`src/generated-plugin.ts:637::children = await listDirectory(directory, deps)`/`src/generated-plugin.ts:646::(await inspectPath(child, deps, true)) === "directory"` share the subtree string. Each site is asserted
   // separately so a site that stops reporting is still caught.
   /**
    */
@@ -668,7 +672,7 @@ void test("each hook subtree resolution context fails closed", async (t) => {
   await t.test("the strict plugin-root resolve (`:296`)", async (t) => {
     const { root } = await candidateWithHooks(t);
     // Strict resolution of the root happens only inside validate_hook_subtree;
-    // the non-strict resolve at `src/generated-plugin.ts:918-924::pluginRoot = await resolvePath(expandUser(options.pluginRoot), deps` has already succeeded by then, so an
+    // the non-strict resolve at `src/generated-plugin.ts:835::pluginRoot = await resolvePath(expandUser(options.pluginRoot), deps` has already succeeded by then, so an
     // absence-shaped failure is what separates the two. Matched by trailing
     // component rather than by equality with `root`: on macOS `tmpdir()` sits
     // under `/var`, a symlink to `/private/var`, so the resolved candidate root
@@ -741,7 +745,7 @@ void test("a SKILL.md read error maps to the unreadable-UTF-8 diagnostic", async
 
 void test("a skill entry type-probe failure fails closed", async (t) => {
   const { root } = await candidate(t);
-  // `src/generated-plugin.ts:824::await inspectPath(posix.join(skillsRoot, name), deps, true` — an entry that survives enumeration but cannot be type-probed.
+  // `src/generated-plugin.ts:740::await inspectPath(posix.join(skillsRoot, name), deps, true` — an entry that survives enumeration but cannot be type-probed.
   const deps = failingDeps({
     stat: (path) =>
       String(path).endsWith("/skills/brainstorming") && permissionDenied(),
@@ -894,7 +898,7 @@ void test("the full error list is ordered manifest, tree, provenance", async (t)
 });
 
 void test("the provenance probe fails closed with its frozen string", async (t) => {
-  // `src/generated-plugin.ts:879::provenance file` — distinct from the required-files probe of the same path, which
+  // `src/generated-plugin.ts:795::provenance file` — distinct from the required-files probe of the same path, which
   // reports `required file ... could not be inspected` from Task 3.
   const { root } = await candidate(t);
   const deps = failingDeps({

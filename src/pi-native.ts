@@ -9,7 +9,7 @@ import {
   type AdapterContext,
   type AdapterResult,
 } from "./adapter-result.ts";
-import { SEMVER_RE } from "./generated-plugin.ts";
+import { SEMVER_RE } from "./domain/refs.ts";
 import type { PiPaths } from "./pi-paths.ts";
 import {
   BOUNDED_EXECUTABLE,
