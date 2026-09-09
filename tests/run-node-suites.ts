@@ -153,9 +153,8 @@ async function main() {
         fail(`suite entries may not be symlinks: ${dir}/${entry.name}`);
       }
       if (entry.isDirectory()) {
-        // Nested test files typecheck but never run: the runners are
-        // single-level and traceability.test.js only accepts flat Node
-        // selectors. Nested non-test helpers are supported.
+        // Nested test files run when they are declared in tests/suites.json.
+        // Nested non-test helpers are also supported.
         const nestedRoot = join(absolute, entry.name);
 
         let nested: import("node:fs").Dirent[];
@@ -183,16 +182,12 @@ async function main() {
             );
           }
         }
-        const offenders = nested
-          .filter((nestedEntry) => nestedEntry.name.endsWith(".test.ts"))
-          .map((nestedEntry) =>
-            relative(ROOT, join(nestedEntry.parentPath, nestedEntry.name)),
-          )
-          .sort();
-        if (offenders.length > 0) {
-          fail(
-            `test files must be flat; move these up one level: ${offenders.join(", ")}`,
-          );
+        for (const nestedEntry of nested) {
+          if (nestedEntry.name.endsWith(".test.ts")) {
+            discovered.push(
+              relative(ROOT, join(nestedEntry.parentPath, nestedEntry.name)),
+            );
+          }
         }
         continue;
       }

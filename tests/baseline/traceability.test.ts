@@ -288,7 +288,9 @@ void test("TRACEABILITY-TESTS-01 every row names an exact running test case", ()
       `${id} test path is not a file: ${path}`,
     );
     const source = readFileSync(absolute, "utf8");
-    if (/^tests\/(?:baseline|unit)\/[^/]+\.test\.ts$/.test(path)) {
+    if (
+      /^tests\/(?:baseline|unit|bin)\/(?:[^/]+\/)*[^/]+\.test\.ts$/.test(path)
+    ) {
       assert.equal(
         source.includes(`test('${selector}'`) ||
           source.includes(`test("${selector}"`),

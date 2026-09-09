@@ -477,8 +477,8 @@ void test("PROTOCOL-DISPOSITION-VALUES-01 every row is well formed", () => {
     // TRACEABILITY-TESTS-01 rejects it there, far from the edit that caused it.
     assert.match(
       target,
-      /^tests\/(?:baseline|unit)\/[^/]+\.test\.ts$/,
-      `${id}: a remap target must be a runnable test file under tests/baseline/ or tests/unit/, found: ${target}`,
+      /^tests\/(?:baseline|unit|bin)\/(?:[^/]+\/)*[^/]+\.test\.ts$/,
+      `${id}: a remap target must be a runnable test file under tests/baseline/, tests/unit/, or tests/bin/, found: ${target}`,
     );
     const absolute = join(ROOT, target);
     assert.equal(
