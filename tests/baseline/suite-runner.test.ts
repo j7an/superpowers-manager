@@ -924,7 +924,7 @@ void test("a symlink nested inside a suite subdirectory is rejected even when it
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
     files: {
-      "tests/unit/a.test.ts": PASSING_SUITE,
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
       "tests/unit/helpers/keep.js": "module.exports = {};\n",
     },
   });
