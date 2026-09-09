@@ -1,8 +1,44 @@
 # Superpowers Manager
 
-Install and explicitly refresh the latest stable [`obra/superpowers`](https://github.com/obra/superpowers) release. Superpowers Manager supports Codex and the Pi coding agent without waiting for a marketplace copy to catch up.
+Install [`obra/superpowers`](https://github.com/obra/superpowers) directly from upstream for Codex and the Pi coding agent. Stay on a known-good release or commit, try a branch, and upgrade when you choose—without waiting for a marketplace copy to catch up.
 
 > Unofficial community integration. Not affiliated with the `obra/superpowers` maintainers.
+
+## Choose what you run
+
+Start with the latest stable release by default, or choose the upstream version that works for you. There is no background updater.
+
+| What you want | How to choose it |
+|---|---|
+| Stay on a known-good version | `pin` a release tag or full 40-character commit SHA |
+| Try an upstream fix before its release | Set `SUPERPOWERS_REF` to a branch or other resolvable ref for that invocation |
+| Return to the latest stable release | Save `track-latest`, then explicitly install or update |
+
+For example, save a release pin and install it for your agent:
+
+```sh
+npx superpowers-manager pin v6.1.1
+npx superpowers-manager install --harness codex
+```
+
+Use `--harness pi` for Pi. The pin is shared by both agents, but each installation changes only when you run its `install` or `update` command. A saved pin keeps subsequent installs and updates on that version unless you change or override the selection.
+
+To try a branch, replace `feature/foo` with an existing upstream branch:
+
+```sh
+SUPERPOWERS_REF=feature/foo npx superpowers-manager install --harness codex
+```
+
+This override applies only to that command and leaves your saved selection unchanged; the installed version remains until you explicitly change it. Branches can move. Persistent `pin` accepts exact version tags (including prereleases) and full commit SHAs.
+
+When you are ready to return to the latest stable release:
+
+```sh
+npx superpowers-manager track-latest
+npx superpowers-manager update --harness codex
+```
+
+See [version selection](https://github.com/j7an/superpowers-manager/blob/main/docs/usage.md#choosing-a-source) for source overrides, precedence, and `unpin`.
 
 ## Start with your agent
 
@@ -53,7 +89,7 @@ The manager never removes another Superpowers provider. See the [ownership guida
 
 ## Shared selection and lifecycle
 
-Use `pin`, `track-latest`, or `unpin` to save shared upstream intent. They do not activate Codex or Pi; run the selected harness's `install` or `update` to apply that choice. There is no background updater.
+The [selection commands above](#choose-what-you-run) save shared upstream intent. They do not activate Codex or Pi; run the selected harness's `install` or `update` to apply that choice. `unpin` restores the packaged fallback policy.
 
 | Command | Purpose |
 |---|---|
@@ -64,12 +100,6 @@ Use `pin`, `track-latest`, or `unpin` to save shared upstream intent. They do no
 | `uninstall` | Remove only Manager-owned state from the selected harness |
 
 Use `--harness codex` or `--harness pi` with each targeted lifecycle command.
-
-```sh
-npx superpowers-manager pin v6.1.1
-npx superpowers-manager track-latest
-npx superpowers-manager unpin
-```
 
 ```text
 shared selection -> prepare / inspect / activate Codex
