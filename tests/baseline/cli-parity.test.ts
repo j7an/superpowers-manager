@@ -1200,7 +1200,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
     // only place in the tree where that scrub is observable end to end at the
-    // CLI level — tests/unit/adapter.test.js pins it at the unit level, and
+    // CLI level — tests/unit/harnesses/codex/adapter.test.ts pins it at the unit level, and
     // no third pin exists anywhere in the tree.
     const dumped = join(sandbox.root, "codex-env.json");
     const customCodex = join(sandbox.bin, "custom-codex");

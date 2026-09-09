@@ -149,7 +149,7 @@ export function verifyUninstalledResources(
   // rather than getting its own message.
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`
   // emits "expected Boolean adapter result at resources.plugin" for input {} —
-  // the input tests/unit/lifecycle.test.js's "a non-object resources falls
+  // the input tests/unit/harnesses/codex/lifecycle.test.ts's "a non-object resources falls
   // through to the Boolean message" exercises — so a distinct "not an object"
   // message here would be a port-only divergence. Parity, not divergence. Spec
   // §6.2.3 item 3.

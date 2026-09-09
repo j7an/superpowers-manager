@@ -178,7 +178,7 @@ function runCommand(
   });
 }
 
-// Exported only so tests/unit/adapter.test.js can assert the env scrub
+// Exported only so tests/unit/harnesses/codex/adapter.test.ts can assert the env scrub
 // directly. No production caller uses this name.
 export { runCommand as runCommandForTest };
 

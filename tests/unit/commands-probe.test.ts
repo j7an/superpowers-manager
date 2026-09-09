@@ -186,7 +186,7 @@ void test("a thrown selection failure is an operational failure", async () => {
 // These four cases are supplementary command-boundary witnesses for
 // DIAG-ADAPTER-01: per-stream order, error/hint presence and order, no writes
 // before the terminal-safety guard, and a quiet clean success. The canonical
-// target remains tests/unit/adapter.test.js; these cases intentionally carry
+// target remains tests/unit/harnesses/codex/adapter.test.ts; these cases intentionally carry
 // no independent ID or traceability row. ADAPTER-REPLAY-01 remains retired
 // because it owned validation of a serialized response document, absent from
 // this in-process path.

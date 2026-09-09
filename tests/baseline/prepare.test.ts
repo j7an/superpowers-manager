@@ -335,7 +335,7 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
 // `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:1001-1022::"hooks-mixed-array" "out-hooks-mixed-array"`, which held the only
 // witness of this prefix anywhere in the repository. The eight inner causes
 // those shell lines also asserted are already message-exact in
-// tests/unit/hooks.test.js and are deliberately NOT re-ported: what was
+// tests/unit/harnesses/codex/hooks.test.ts and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
 // with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:408::hook materialization failed`) is
 // asserted by the FS-HOOK-CONTAINMENT-01 case directly above.

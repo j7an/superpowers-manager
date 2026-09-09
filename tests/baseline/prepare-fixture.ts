@@ -268,11 +268,11 @@ function buildUpstream(): string {
   // (`classifyHooks`'s `manifest.hooks` extraction), so a plain string
   // reaches validateDeclaredFile and fails with `declared hook path must
   // start with ./` — a different cause, already covered in
-  // tests/unit/hooks.test.js. 42 falls through every accepted shape to the
+  // tests/unit/harnesses/codex/hooks.test.ts. 42 falls through every accepted shape to the
   // unsupported-declaration throw.
   //
   // The eight underlying causes the retired shell driver asserted behind this
-  // prefix are all already message-exact in tests/unit/hooks.test.js. This
+  // prefix are all already message-exact in tests/unit/harnesses/codex/hooks.test.ts. This
   // branch exists for the wrapper alone.
   branchWith("hooks-unsupported-declaration", () => {
     const declared = JSON.parse(
