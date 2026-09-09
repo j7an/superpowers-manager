@@ -37,7 +37,7 @@ export interface AdapterResult<T = JsonValue> {
 // Lives here, not in src/harnesses/codex/adapter.ts, rather than having context.ts import it
 // directly from adapter.ts. NOT a cycle avoidance: tsconfig.json's
 // verbatimModuleSyntax:true erases a type-only import
-// (`import type { AdapterContext } from "../adapter.js"`) at emit, so it
+// (`import type { AdapterContext } from "../harnesses/codex/adapter.js"`) at emit, so it
 // produces no runtime edge either way and a cycle was never possible. The
 // actual reason is grouping: AdapterContext, AdapterResult, and
 // AdapterOutcome are all protocol types, and this is the module that owns

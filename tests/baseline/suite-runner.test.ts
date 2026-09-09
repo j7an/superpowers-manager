@@ -812,7 +812,7 @@ void test("nested test file rejected", (t) => {
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
     files: {
-      "tests/unit/a.test.ts": PASSING_SUITE,
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
       "tests/unit/nested/buried.test.ts": EXECUTED_SUITE,
     },
   });
@@ -945,25 +945,22 @@ void test("a symlink nested inside a suite subdirectory pointing at a directory 
   const root = fakeRoot(t, {
     suites: ["tests/unit/a.test.ts"],
     files: {
-      "tests/unit/a.test.ts": PASSING_SUITE,
+      "tests/unit/a.test.ts": EXECUTED_SUITE,
       "tests/unit/helpers/keep.js": "module.exports = {};\n",
     },
   });
   const outside = mkdtempSync(join(tmpdir(), "spw-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
   mkdirSync(join(outside, "sub"), { recursive: true });
-  writeFileSync(join(outside, "sub", "hidden.js"), "", "utf8");
+  writeFileSync(join(outside, "sub", "hidden.test.ts"), EXECUTED_SUITE, "utf8");
   symlinkSync(
     join(outside, "sub"),
     join(root, "tests/unit/helpers/linked-dir"),
   );
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(
-    r.stderr,
+  assertRejectedWithoutExecution(
+    runIn(root),
     /suite entries may not be symlinks: tests\/unit\/helpers\/linked-dir/,
   );
-  assertNoRawFailure(r);
 });
 
 void test("unreadable nested directory fails closed without leaking errno", (t) => {

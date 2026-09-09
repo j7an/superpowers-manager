@@ -169,11 +169,8 @@ async function main() {
           // readdirSync above is wrapped to prevent.
           fail(`suite subdirectory could not be read: ${dir}/${entry.name}`);
         }
-        // Name-independent: a nested symlink is rejected regardless of what
-        // it is named, not only when it happens to end in .test.js. Node does
-        // not recurse *through* a symlinked directory when walking
-        // recursively, so the symlink itself always surfaces here as its own
-        // entry with isSymbolicLink() true.
+        // Name-independent: reject every symlink in the completed loop before
+        // collecting any nested candidate, regardless of what it is named.
         for (const nestedEntry of nested) {
           if (nestedEntry.isSymbolicLink()) {
             const fullPath = join(nestedEntry.parentPath, nestedEntry.name);

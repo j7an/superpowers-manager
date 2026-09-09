@@ -1,4 +1,4 @@
-// Child process for the TOCTOU case in ../adapter.test.js.
+// Child process for the TOCTOU case in ../../../harnesses/codex/adapter.test.ts.
 //
 // This drives the real interleaving: `readManifest` (`src/harnesses/codex/hooks.ts:113::readManifest`) reads
 // the candidate manifest once, fatally, for hook classification; the

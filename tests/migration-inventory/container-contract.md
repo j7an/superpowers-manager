@@ -470,7 +470,7 @@ installed package execution, and unchanged offline isolation before completion.
 
 Historical item 26 remains recorded as the original substring assertion. Its
 live counterpart now parses the `codex-spike)` dispatch line and requires its
-body to be exactly `exec sh tests/container/codex/offline-probe.sh ;;`. This
+body to be exactly `exec sh tests/container/codex-offline-probe.sh ;;`. This
 proves the independent CI job cannot regain the shared suite through the
 container launcher. The combined `suite)` sequence, UID gate, isolation checks,
 and all other runner assertions remain unchanged. The existing nested subtest

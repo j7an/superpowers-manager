@@ -1,4 +1,4 @@
-// Child process for the read-failure case in ../adapter.test.js.
+// Child process for the read-failure case in ../../../harnesses/codex/adapter.test.ts.
 //
 // Simulating a read failure at the overlay's own `readFile` call (and only
 // there — not at the pre-existing hook-classification read of the same
