@@ -222,7 +222,7 @@ required agent harness.
   inside an isolated container home with networking disabled, so it may mutate
   throwaway container state but never the developer's or runner's real harness
   state. `pnpm run test:acceptance` runs shared checks once, then both harnesses.
-- Use `tests/manual/codex-behavior-probe.sh` only for optional intentional
+- Use `tests/manual/codex/behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the
   error — a RegExp, an error class, an object matcher, or a validation

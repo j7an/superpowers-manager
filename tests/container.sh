@@ -17,20 +17,20 @@ if [ "${1:-}" = "--inside" ]; then
       sh tests/run.sh
       echo "container suite: shared checks: complete status=0"
       echo "container suite: Codex harness integration: start"
-      sh tests/container/codex-offline-probe.sh
+      sh tests/container/codex/offline-probe.sh
       echo "container suite: Codex harness integration: complete status=0"
       echo "container suite: Pi harness integration: start"
-      sh tests/container/pi-offline-probe.sh
+      sh tests/container/pi/offline-probe.sh
       echo "container suite: Pi harness integration: complete status=0"
       ;;
     harness-codex)
       echo "container: Codex harness integration: start"
-      sh tests/container/codex-offline-probe.sh
+      sh tests/container/codex/offline-probe.sh
       echo "container: Codex harness integration: complete status=0"
       ;;
     harness-pi)
       echo "container: Pi harness integration: start"
-      sh tests/container/pi-offline-probe.sh
+      sh tests/container/pi/offline-probe.sh
       echo "container: Pi harness integration: complete status=0"
       ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;

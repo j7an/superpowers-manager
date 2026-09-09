@@ -130,7 +130,7 @@ the port unless a merge is called out.
 81. `RELEASING.md` does not contain "npm-bootstrap"
 82. `RELEASING.md` does not contain "NPM_BOOTSTRAP_TOKEN"
 83. `RELEASING.md` does not contain "j7an/superpowers-wrapper"
-84. `tests/manual/codex-behavior-probe.sh` contains "Optional native-only Codex compatibility probe"
+84. `tests/manual/codex/behavior-probe.sh` contains "Optional native-only Codex compatibility probe"
 85. `README.md` does not contain "The automated suite is fully hermetic: it uses a fake local upstream repo and a"
 
 ## Structural release-section assertions (`:126-223`, embedded Python)

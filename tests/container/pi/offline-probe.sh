@@ -29,7 +29,7 @@ cd "$root/cwd"
 prepared="$PI_CODING_AGENT_DIR/superpowers-manager/prepared"
 installed="$PI_CODING_AGENT_DIR/superpowers-manager/installed"
 pi_package=/opt/spw-test-tools/node_modules/@earendil-works/pi-coding-agent
-observer=/workspace/tests/container/pi-resource-probe.ts
+observer=/workspace/tests/container/pi/resource-probe.ts
 
 run_manager() {
   timeout 60 node /workspace/src/cli.ts "$@"

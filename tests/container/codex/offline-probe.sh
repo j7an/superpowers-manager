@@ -367,7 +367,7 @@ PY
 capture_hooks_response() {
   probe_cwd=$(pwd -P)
   if ! "$timeout_bin" 30 python3 -S \
-    "$package/tests/container/hooks-list-rpc.py" \
+    "$package/tests/container/codex/hooks-list-rpc.py" \
     "$probe_cwd" "$hooks_response" "$hooks_stderr"; then
     cat "$hooks_stderr" >&2
     return 1

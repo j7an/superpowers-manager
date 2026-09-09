@@ -230,7 +230,7 @@ const textContentCases: Array<[string, string, boolean]> = [
   ["RELEASING.md", "NPM_BOOTSTRAP_TOKEN", false],
   ["RELEASING.md", "j7an/superpowers-wrapper", false],
   [
-    "tests/manual/codex-behavior-probe.sh",
+    "tests/manual/codex/behavior-probe.sh",
     "Optional native-only Codex compatibility probe",
     true,
   ],

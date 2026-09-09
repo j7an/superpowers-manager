@@ -42,7 +42,11 @@ SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
 
 The `toolchain` CI jobs cover native loading, package producer behavior, static validation, shared suites, and package-minimum runtime evidence. Independent Codex and Pi harness jobs run their isolated integrations without duplicating the shared suite.
 
-Use `sh tests/run.sh --concurrency 1` or `sh tests/run.sh --concurrency 2` for controlled shared-suite scheduling comparisons. `sh tests/manual/codex-behavior-probe.sh` is opt-in native-only compatibility residue, never acceptance. The Node 24.12.0 toolchain job covers native loading, the suite-runner assertion preload, and package-producer success/failure; latest Node 24.x alone runs static validation and the full shared suite. Release acceptance runs shared checks and both harnesses at both endpoints, while installed npm behavior uses Node 24.0.0.
+Use `sh tests/run.sh --concurrency 1` or `sh tests/run.sh --concurrency 2` for controlled shared-suite scheduling comparisons. `sh tests/manual/codex/behavior-probe.sh` is opt-in native-only compatibility residue, never acceptance. The Node 24.12.0 toolchain job covers native loading, the suite-runner assertion preload, and package-producer success/failure; latest Node 24.x alone runs static validation and the full shared suite. Release acceptance runs shared checks and both harnesses at both endpoints, while installed npm behavior uses Node 24.0.0.
+
+## Directory convention
+
+Responsibility determines ownership. Keep contracts and shared utilities at the root; put each concrete production integration under `src/harnesses/<name>`. Keep the test category outermost, preserve its suite groups, and place integration-specific tests below it. Shared tests may use concrete fixtures, but production harnesses must not import one another or expose barrels; existing mixed fixture corpora remain shared.
 
 ## pnpm maintenance
 

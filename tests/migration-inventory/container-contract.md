@@ -32,7 +32,7 @@ that block.
 1. `tests/container/Dockerfile` exists.
 2. `tests/container.sh` is executable.
 3. `tests/container/package.json` exists.
-4. `tests/container/codex-offline-probe.sh` is executable.
+4. `tests/container/codex/offline-probe.sh` is executable.
 5. `tests/tsconfig.json` exists.
 6. `.dockerignore` exists (repo root).
 
@@ -103,8 +103,8 @@ that block.
 
 ## `hooks-list-rpc.py` file assertions (`:81-93`)
 
-34. `tests/container/hooks-list-rpc.py` exists.
-35. `tests/container/hooks-list-rpc.py` is **not** executable.
+34. `tests/container/codex/hooks-list-rpc.py` exists.
+35. `tests/container/codex/hooks-list-rpc.py` is **not** executable.
 36. Contains the exact line `from __future__ import annotations`.
 37. `python3 -S -c ast.parse(...)` on the file's contents succeeds (the file
     is syntactically valid Python).
@@ -191,7 +191,7 @@ that block.
 71. The probe contains the substring
     `run_codex app-server generate-json-schema --out "$schema_root"`.
 72. The probe contains both `"$timeout_bin" 30 python3 -S \` and
-    `"$package/tests/container/hooks-list-rpc.py"` (the bounded hooks/list
+    `"$package/tests/container/codex/hooks-list-rpc.py"` (the bounded hooks/list
     helper invocation).
 73-90. The probe source contains each of the following 18 literal
     strings, checked independently: `schema_root="$root/app-server-schema"`;
@@ -470,7 +470,7 @@ installed package execution, and unchanged offline isolation before completion.
 
 Historical item 26 remains recorded as the original substring assertion. Its
 live counterpart now parses the `codex-spike)` dispatch line and requires its
-body to be exactly `exec sh tests/container/codex-offline-probe.sh ;;`. This
+body to be exactly `exec sh tests/container/codex/offline-probe.sh ;;`. This
 proves the independent CI job cannot regain the shared suite through the
 container launcher. The combined `suite)` sequence, UID gate, isolation checks,
 and all other runner assertions remain unchanged. The existing nested subtest

@@ -1,9 +1,9 @@
 {
   "adapter-protocol.md": "8d224f9dd2e62ff8e69c3871ab223d1e3888d0fe05f2c5dcd8d010b493a6cdc2",
   "bin-dispatch.md": "5d9725affa0d0a331f5db853e447f58cb596253a932df149049e8ae28e02449e",
-  "bootstrap.md": "7741a2c3c70d5505e977552135acd8e8a20203f3e56e0d7f751ca912cc5908ff",
+  "bootstrap.md": "03f0fc770c066f41aa1757aa2f551292b1ab04156ccc880fde03d8796fcd93da",
   "codex-state-units.md": "6c347004240e257e02a4fe9afdba38a4a27e13350a2d80a4a88b874c6e3bfdd4",
-  "container-contract.md": "58bb40081227a5d379c8d622a50a4ab4706feca16eef8d128aa1a0a7986fc5d8",
+  "container-contract.md": "b47f1f5f0d00c666fb2756f564102840a16bad6130933eb4ae90387bd941a689",
   "install-commands.md": "0145c8e7867fb879d05b521982e7e0be0b7ca4c5bf94a8acde7e4bf091a2e15d",
   "marketplace-reconcile.md": "9d93aa3eb6b79a98a9265611d65158ee26286d31db480feb731795d67fba05db",
   "node-cli-helper.md": "d4927ccf4ef6d92c3de73ac8fd60a4baa3e1eff25ae33be079dfe06316e90082",

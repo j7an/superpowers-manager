@@ -4,8 +4,8 @@
 //
 // The shell driver never invokes Docker, a real container, or the real
 // Codex CLI — it statically inspects tests/container/Dockerfile,
-// tests/container.sh, tests/container/codex-offline-probe.sh,
-// tests/container/hooks-list-rpc.py, and a handful of manifest/lockfile
+// tests/container.sh, tests/container/codex/offline-probe.sh,
+// tests/container/codex/hooks-list-rpc.py, and a handful of manifest/lockfile
 // files, then asserts the shell/Python source text has a specific
 // structure. This port reproduces exactly that: it is hermetic (no
 // network, no container runtime, no mutation of the real ~/.codex).
@@ -45,8 +45,20 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const DOCKERFILE_PATH = join(ROOT, "tests", "container", "Dockerfile");
 const RUNNER_PATH = join(ROOT, "tests", "container.sh");
 const TOOLS_PACKAGE_PATH = join(ROOT, "tests", "container", "package.json");
-const PROBE_PATH = join(ROOT, "tests", "container", "codex-offline-probe.sh");
-const HOOKS_RPC_PATH = join(ROOT, "tests", "container", "hooks-list-rpc.py");
+const PROBE_PATH = join(
+  ROOT,
+  "tests",
+  "container",
+  "codex",
+  "offline-probe.sh",
+);
+const HOOKS_RPC_PATH = join(
+  ROOT,
+  "tests",
+  "container",
+  "codex",
+  "hooks-list-rpc.py",
+);
 const TSCONFIG_PATH = join(ROOT, "tests", "tsconfig.json");
 const LOCKFILE_PATH = join(ROOT, "tests", "container", "package-lock.json");
 const GITIGNORE_PATH = join(ROOT, ".gitignore");
@@ -500,7 +512,7 @@ function validateProbe(probe: string) {
 
   const schemaGeneration =
     'run_codex app-server generate-json-schema --out "$schema_root"';
-  const rpcInvocation = '"$package/tests/container/hooks-list-rpc.py"';
+  const rpcInvocation = '"$package/tests/container/codex/hooks-list-rpc.py"';
   if (!probe.includes(schemaGeneration)) {
     throw new ContractViolation(
       "offline probe must generate the app-server schema",
@@ -534,7 +546,7 @@ function validateProbe(probe: string) {
     // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
     // single-quoted strings `\"` is not an escape sequence, so the
     // required text carries literal backslashes and guards the JSON
-    // heredoc's escaped-quote spelling at `tests/container/codex-offline-probe.sh:596::sh \`.
+    // heredoc's escaped-quote spelling at `tests/container/codex/offline-probe.sh:596::sh \`.
     'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
@@ -634,7 +646,7 @@ function validateProbe(probe: string) {
   const expectedCaptureLines = [
     "probe_cwd=$(pwd -P)",
     'if ! "$timeout_bin" 30 python3 -S \\',
-    '"$package/tests/container/hooks-list-rpc.py" \\',
+    '"$package/tests/container/codex/hooks-list-rpc.py" \\',
     '"$probe_cwd" "$hooks_response" "$hooks_stderr"; then',
     'cat "$hooks_stderr" >&2',
     "return 1",
@@ -877,10 +889,10 @@ function validateRunnerInsideBranch(runner: string) {
       "sh tests/run.sh",
       'echo "container suite: shared checks: complete status=0"',
       'echo "container suite: Codex harness integration: start"',
-      "sh tests/container/codex-offline-probe.sh",
+      "sh tests/container/codex/offline-probe.sh",
       'echo "container suite: Codex harness integration: complete status=0"',
       'echo "container suite: Pi harness integration: start"',
-      "sh tests/container/pi-offline-probe.sh",
+      "sh tests/container/pi/offline-probe.sh",
       'echo "container suite: Pi harness integration: complete status=0"',
     ],
     "suite mode must run shared checks, Codex, and Pi in order",
@@ -911,11 +923,11 @@ void test("container-contract", async (t) => {
       const runner = readFileSync(RUNNER_PATH, "utf8");
       assert.match(
         runner,
-        /harness-pi\)\s+echo "container: Pi harness integration: start"\s+sh tests\/container\/pi-offline-probe\.sh\s+echo "container: Pi harness integration: complete status=0"\s+;;/,
+        /harness-pi\)\s+echo "container: Pi harness integration: start"\s+sh tests\/container\/pi\/offline-probe\.sh\s+echo "container: Pi harness integration: complete status=0"\s+;;/,
       );
       assert.match(runner, /suite\|harness-codex\|harness-pi/);
       const probe = readFileSync(
-        join(ROOT, "tests/container/pi-offline-probe.sh"),
+        join(ROOT, "tests/container/pi/offline-probe.sh"),
         "utf8",
       );
       assert.match(probe, /env -i/);
@@ -925,7 +937,7 @@ void test("container-contract", async (t) => {
       assert.match(probe, /pi harness integration: complete status=0/);
       assert.match(probe, /unrelated-provider/);
       const observer = readFileSync(
-        join(ROOT, "tests/container/pi-resource-probe.ts"),
+        join(ROOT, "tests/container/pi/resource-probe.ts"),
         "utf8",
       );
       assert.match(observer, /await import\(pathToFileURL/);
@@ -1198,7 +1210,7 @@ void test("container-contract", async (t) => {
     await t.test("runner defines the named Codex harness mode", () => {
       assert.match(
         runner,
-        /harness-codex\)\s+echo "container: Codex harness integration: start"\s+sh tests\/container\/codex-offline-probe\.sh\s+echo "container: Codex harness integration: complete status=0"\s+;;/,
+        /harness-codex\)\s+echo "container: Codex harness integration: start"\s+sh tests\/container\/codex\/offline-probe\.sh\s+echo "container: Codex harness integration: complete status=0"\s+;;/,
       );
     });
     await t.test("runner reads the actual container uid", () => {
@@ -1227,17 +1239,29 @@ void test("container-contract", async (t) => {
           join(bin, "docker"),
           '#!/bin/sh\nprintf "%s\\n" docker >> "$SPW_RUNNER_LOG"\nexit 99\n',
         );
-        const childStub =
-          '#!/bin/sh\nname=${0##*/}\nprintf "%s\\n" "$name" >> "$SPW_RUNNER_LOG"\n[ "${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n';
+        const childStub = `#!/bin/sh
+set -eu
+case "$0" in
+  */codex/offline-probe.sh) probe_id=codex/offline-probe.sh ;;
+  */pi/offline-probe.sh) probe_id=pi/offline-probe.sh ;;
+  *) probe_id=run.sh ;;
+esac
+printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
+[ "\${SPW_FAIL_CHILD:-}" != "$probe_id" ] || exit 17
+`;
         writeFileSync(join(scratch, "tests", "run.sh"), childStub);
-        writeFileSync(join(container, "codex-offline-probe.sh"), childStub);
-        writeFileSync(join(container, "pi-offline-probe.sh"), childStub);
+        const codexProbe = join(container, "codex", "offline-probe.sh");
+        const piProbe = join(container, "pi", "offline-probe.sh");
+        mkdirSync(join(container, "codex"), { recursive: true });
+        mkdirSync(join(container, "pi"), { recursive: true });
+        writeFileSync(codexProbe, childStub);
+        writeFileSync(piProbe, childStub);
         for (const executable of [
           join(bin, "id"),
           join(bin, "docker"),
           join(scratch, "tests", "run.sh"),
-          join(container, "codex-offline-probe.sh"),
-          join(container, "pi-offline-probe.sh"),
+          codexProbe,
+          piProbe,
         ]) {
           chmodSync(executable, 0o755);
         }
@@ -1258,9 +1282,9 @@ void test("container-contract", async (t) => {
         };
 
         for (const [mode, expectedLog] of [
-          ["suite", "run.sh\ncodex-offline-probe.sh\npi-offline-probe.sh\n"],
-          ["harness-codex", "codex-offline-probe.sh\n"],
-          ["harness-pi", "pi-offline-probe.sh\n"],
+          ["suite", "run.sh\ncodex/offline-probe.sh\npi/offline-probe.sh\n"],
+          ["harness-codex", "codex/offline-probe.sh\n"],
+          ["harness-pi", "pi/offline-probe.sh\n"],
         ] as const) {
           const result = runInside(mode);
           assert.equal(result.status, 0, `${mode}: ${result.stderr}`);
@@ -1269,12 +1293,12 @@ void test("container-contract", async (t) => {
           assert.equal(readFileSync(log, "utf8"), expectedLog);
         }
 
-        const failed = runInside("suite", "codex-offline-probe.sh");
+        const failed = runInside("suite", "codex/offline-probe.sh");
         assert.equal(failed.status, 17);
         assert.equal(failed.stderr, "");
         assert.equal(
           readFileSync(log, "utf8"),
-          "run.sh\ncodex-offline-probe.sh\n",
+          "run.sh\ncodex/offline-probe.sh\n",
         );
         assert.doesNotMatch(
           failed.stdout,
