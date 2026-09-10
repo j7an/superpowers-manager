@@ -495,6 +495,44 @@ function validateProbe(probe: string) {
   if (probe.includes("install_plugin_and_assert_active")) {
     throw new ContractViolation("old generic install helper must be replaced");
   }
+  const nativeRefreshSteps = [
+    "codex_version=$(run_codex --version)",
+    'same_version_marketplace="$root/same-version-marketplace"',
+    'cp -R "$package" "$same_version_marketplace"',
+    'assert_active_installed_payload "$initial_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$same_version_marketplace"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$package"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    'assert_active_installed_payload "$reset_listing" "$package" "$version_a" "$commit_a"',
+    'damage_active_skill "$reset_listing" "$package" "$version_a" "$commit_a"',
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$same_version_marketplace"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    'assert_active_installed_payload "$damaged_migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    'damage_active_skill "$damaged_migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    'assert_active_installed_payload "$repair_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+  ];
+  requireOrderedSource(
+    probe,
+    nativeRefreshSteps,
+    "offline probe must demonstrate same-version migration and repair refresh",
+  );
+  if (
+    probe.includes("run_codex plugin remove superpowers@superpowers-manager")
+  ) {
+    throw new ContractViolation(
+      "same-version refresh gate must not remove the manager plugin",
+    );
+  }
+  if (!probe.includes('if matches[0].get("enabled") is not True:')) {
+    throw new ContractViolation(
+      "same-version refresh gate must require an enabled manager plugin",
+    );
+  }
   if (probe.includes('assert_marketplace_root "$moved"')) {
     throw new ContractViolation(
       "old moved-marketplace assertion must be replaced",
@@ -737,6 +775,40 @@ function validateProbe(probe: string) {
     "capture_hooks_response",
     'assert_manager_hooks_absent "$hooks_response"',
     "assert_sentinel_absent",
+    "codex_version=$(run_codex --version)",
+    "printf '%s\\n' \"codex native refresh prerequisite: $codex_version\"",
+    'same_version_marketplace="$root/same-version-marketplace"',
+    'cp -R "$package" "$same_version_marketplace"',
+    'assert_active_installed_payload "$initial_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$same_version_marketplace"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    "migration_listing=$(run_codex plugin list --json)",
+    'assert_marketplace_root "$same_version_marketplace"',
+    'assert_active_installed_payload "$migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$package"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    "reset_listing=$(run_codex plugin list --json)",
+    'assert_marketplace_root "$package"',
+    'assert_active_installed_payload "$reset_listing" "$package" "$version_a" "$commit_a"',
+    'damage_active_skill "$reset_listing" "$package" "$version_a" "$commit_a"',
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$same_version_marketplace"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    "damaged_migration_listing=$(run_codex plugin list --json)",
+    'assert_marketplace_root "$same_version_marketplace"',
+    'assert_active_installed_payload "$damaged_migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    'damage_active_skill "$damaged_migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    "repair_listing=$(run_codex plugin list --json)",
+    'assert_active_installed_payload "$repair_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
+    "run_codex plugin marketplace remove superpowers-manager",
+    'run_codex plugin marketplace add "$package"',
+    "run_codex plugin add superpowers@superpowers-manager",
+    "restored_listing=$(run_codex plugin list --json)",
+    'assert_marketplace_root "$package"',
+    'assert_active_installed_payload "$restored_listing" "$package" "$version_a" "$commit_a"',
     'commit_b=$(git -C "$upstream" rev-parse HEAD)',
     "short_b=$(printf '%s' \"$commit_b\" | cut -c 1-7)",
     'version_b="1.1.0+manager.$short_b"',
@@ -767,7 +839,7 @@ function validateProbe(probe: string) {
   ];
   assert.equal(
     lifecycle.length,
-    51,
+    85,
     "lifecycle lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   requireOrderedLifecycle(probe, lifecycle);

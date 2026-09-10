@@ -98,6 +98,101 @@ if manifest.get("version") != expected_version:
 PY
 }
 
+assert_active_installed_payload() {
+  listing="$1"
+  expected_marketplace="$2"
+  expected_version="$3"
+  expected_commit="$4"
+  python3 -S - "$listing" "$expected_marketplace" "$expected_version" "$expected_commit" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+listing, marketplace_arg, expected_version, expected_commit = sys.argv[1:]
+data = json.loads(listing)
+installed = data.get("installed") if isinstance(data, dict) else None
+if not isinstance(installed, list):
+    raise SystemExit("Codex plugin listing does not contain an installed array")
+matches = [
+    item for item in installed
+    if isinstance(item, dict) and item.get("pluginId") == "superpowers@superpowers-manager"
+]
+if len(matches) != 1 or matches[0].get("version") != expected_version:
+    raise SystemExit("Codex active manager version changed during same-version refresh")
+if matches[0].get("enabled") is not True:
+    raise SystemExit("Codex manager plugin is not enabled during same-version refresh")
+
+active_root = Path.home() / ".codex" / "plugins" / "cache" / "superpowers-manager" / "superpowers" / expected_version
+active_root = active_root.resolve(strict=True)
+source_root = (Path(marketplace_arg) / "plugins" / "superpowers").resolve(strict=True)
+for relative in [Path(".codex-plugin/plugin.json"), Path(".superpowers-upstream.json")]:
+    if (active_root / relative).read_bytes() != (source_root / relative).read_bytes():
+        raise SystemExit(f"same-version refresh did not replace {relative.as_posix()}")
+with (active_root / ".superpowers-upstream.json").open(encoding="utf-8") as handle:
+    provenance = json.load(handle)
+if provenance.get("commit") != expected_commit:
+    raise SystemExit("same-version refresh installed the wrong provenance commit")
+
+def regular_files(root):
+    if not root.is_dir() or root.is_symlink():
+        raise SystemExit(f"same-version refresh skills root is not a directory: {root}")
+    return sorted(
+        path.relative_to(root)
+        for path in root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    )
+
+active_skills = active_root / "skills"
+source_skills = source_root / "skills"
+if regular_files(active_skills) != regular_files(source_skills):
+    raise SystemExit("same-version refresh installed skill paths do not match the intact marketplace")
+for relative in regular_files(source_skills):
+    if (active_skills / relative).read_bytes() != (source_skills / relative).read_bytes():
+        raise SystemExit(f"same-version refresh installed skill payload differs: {relative.as_posix()}")
+PY
+}
+
+damage_active_skill() {
+  listing="$1"
+  expected_marketplace="$2"
+  expected_version="$3"
+  expected_commit="$4"
+  python3 -S - "$listing" "$expected_marketplace" "$expected_version" "$expected_commit" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+listing, marketplace_arg, expected_version, expected_commit = sys.argv[1:]
+data = json.loads(listing)
+installed = data.get("installed") if isinstance(data, dict) else None
+if not isinstance(installed, list):
+    raise SystemExit("Codex plugin listing does not contain an installed array")
+matches = [
+    item for item in installed
+    if isinstance(item, dict) and item.get("pluginId") == "superpowers@superpowers-manager"
+]
+if len(matches) != 1 or matches[0].get("version") != expected_version:
+    raise SystemExit("Codex active manager version changed before same-version repair")
+if matches[0].get("enabled") is not True:
+    raise SystemExit("Codex manager plugin is not enabled before same-version repair")
+
+active_root = Path.home() / ".codex" / "plugins" / "cache" / "superpowers-manager" / "superpowers" / expected_version
+active_root = active_root.resolve(strict=True)
+source_root = (Path(marketplace_arg) / "plugins" / "superpowers").resolve(strict=True)
+with (active_root / ".superpowers-upstream.json").open(encoding="utf-8") as handle:
+    provenance = json.load(handle)
+if provenance.get("commit") != expected_commit:
+    raise SystemExit("same-version repair started with the wrong provenance commit")
+damaged = active_root / "skills" / "probe" / "SKILL.md"
+expected = source_root / "skills" / "probe" / "SKILL.md"
+if damaged.read_bytes() != expected.read_bytes():
+    raise SystemExit("same-version repair fixture is not intact before damage")
+damaged.write_text("damaged same-version payload\n", encoding="utf-8")
+if damaged.read_bytes() == expected.read_bytes():
+    raise SystemExit("same-version repair fixture did not damage the installed skill payload")
+PY
+}
+
 snapshot_hook_state() {
   python3 -S - "$HOME/.codex/hooks.state" <<'PY'
 import hashlib
@@ -567,6 +662,41 @@ assert_hooks_schema_compatible
 capture_hooks_response
 assert_manager_hooks_absent "$hooks_response"
 assert_sentinel_absent
+
+codex_version=$(run_codex --version)
+printf '%s\n' "codex native refresh prerequisite: $codex_version"
+same_version_marketplace="$root/same-version-marketplace"
+cp -R "$package" "$same_version_marketplace"
+assert_active_installed_payload "$initial_listing" "$same_version_marketplace" "$version_a" "$commit_a"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$same_version_marketplace"
+run_codex plugin add superpowers@superpowers-manager
+migration_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$same_version_marketplace"
+assert_active_installed_payload "$migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$package"
+run_codex plugin add superpowers@superpowers-manager
+reset_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$package"
+assert_active_installed_payload "$reset_listing" "$package" "$version_a" "$commit_a"
+damage_active_skill "$reset_listing" "$package" "$version_a" "$commit_a"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$same_version_marketplace"
+run_codex plugin add superpowers@superpowers-manager
+damaged_migration_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$same_version_marketplace"
+assert_active_installed_payload "$damaged_migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"
+damage_active_skill "$damaged_migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"
+run_codex plugin add superpowers@superpowers-manager
+repair_listing=$(run_codex plugin list --json)
+assert_active_installed_payload "$repair_listing" "$same_version_marketplace" "$version_a" "$commit_a"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$package"
+run_codex plugin add superpowers@superpowers-manager
+restored_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$package"
+assert_active_installed_payload "$restored_listing" "$package" "$version_a" "$commit_a"
 
 printf '%s\n' '# Probe B' >> "$upstream/skills/probe/SKILL.md"
 cat > "$upstream/.codex-plugin/plugin.json" <<'JSON'
