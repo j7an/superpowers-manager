@@ -21,6 +21,7 @@ import {
 } from "../../adapter-result.ts";
 import {
   activePluginVersionFromJson,
+  codexInstalledPluginsFromJson,
   installedListingHas,
   marketplaceRootFromJson,
 } from "./json.ts";
@@ -35,6 +36,7 @@ import {
   installedRootForVersion,
   pathsEqual,
 } from "./state.ts";
+import { codexHome } from "./paths.ts";
 import { validateGeneratedPlugin } from "./generated-plugin.ts";
 import {
   classifyHooks,
@@ -75,6 +77,14 @@ export interface CodexBuildInput {
 export interface CodexRemovalInput {
   readonly pluginPresent: boolean;
   readonly marketplacePresent: boolean;
+}
+
+export interface CodexNativeState {
+  readonly marketplaceRoot: string | null;
+  readonly pluginPresent: boolean;
+  readonly pluginEnabled: boolean;
+  readonly activeVersion: string | null;
+  readonly activeRoot: string | null;
 }
 
 class AdapterFailure extends Error {
@@ -982,14 +992,11 @@ async function runInspect(
   fail("invalid-arguments", `unsupported inspect view: ${unsupportedView}`);
 }
 
-async function runCodexOperation(
+async function runCodexOperation<T = JsonValue>(
   operation: string,
   context: AdapterContext,
-  execute: (
-    env: NodeJS.ProcessEnv,
-    log: AdapterMessageLog,
-  ) => Promise<JsonValue>,
-): Promise<AdapterResult> {
+  execute: (env: NodeJS.ProcessEnv, log: AdapterMessageLog) => Promise<T>,
+): Promise<AdapterResult<T>> {
   const env = { ...process.env, ...context.env };
   const log = new AdapterMessageLog();
 
@@ -1044,6 +1051,80 @@ export function codexInspect(
   return runCodexOperation("inspect", context, (env, log) =>
     runInspect(view, context, env, log),
   );
+}
+
+export function codexReadNativeState(
+  context: AdapterContext,
+): Promise<AdapterResult<CodexNativeState>> {
+  return runCodexOperation("native-state", context, async (env, log) => {
+    const codexBin = env.SUPERPOWERS_CODEX || "codex";
+    await requireCodex(codexBin, env);
+    const plugins = await listingCommand(
+      log,
+      codexBin,
+      ["plugin", "list", "--json"],
+      env,
+    );
+    if (commandFailed(plugins))
+      fail(
+        "inspect-failed",
+        `cannot list Codex plugins via '${codexBin} plugin list --json'`,
+      );
+    const marketplaces = await listingCommand(
+      log,
+      codexBin,
+      ["plugin", "marketplace", "list", "--json"],
+      env,
+    );
+    if (commandFailed(marketplaces))
+      fail(
+        "inspect-failed",
+        `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+      );
+    let manager:
+      ReturnType<typeof codexInstalledPluginsFromJson>[number] | undefined;
+    let marketplaceRoot: string;
+    let activeVersion: string;
+    try {
+      const managers = codexInstalledPluginsFromJson(plugins.stdout).filter(
+        (plugin) => plugin.pluginId === PLUGIN_ID,
+      );
+      if (managers.length > 1)
+        fail("inspect-failed", "Codex manager plugin appears more than once");
+      manager = managers[0];
+      marketplaceRoot = marketplaceRootFromJson(
+        marketplaces.stdout,
+        MARKETPLACE_NAME,
+        true,
+      );
+      activeVersion =
+        manager === undefined
+          ? ""
+          : activePluginVersionFromJson(plugins.stdout, PLUGIN_ID);
+    } catch (cause) {
+      if (cause instanceof AdapterFailure) throw cause;
+      fail(
+        "inspect-failed",
+        `cannot parse output of '${codexBin} plugin list --json or plugin marketplace list --json'`,
+      );
+    }
+    const searchRoot =
+      env.SUPERPOWERS_INSTALLED_SEARCH_ROOT || codexHome(env, context.root);
+    return {
+      marketplaceRoot: marketplaceRoot || null,
+      pluginPresent: manager !== undefined,
+      pluginEnabled: manager?.enabled === true,
+      activeVersion: activeVersion || null,
+      activeRoot: activeVersion
+        ? installedRootForVersion(
+            searchRoot,
+            MARKETPLACE_NAME,
+            "superpowers",
+            activeVersion,
+          )
+        : null,
+    };
+  });
 }
 
 export async function runAdapter(

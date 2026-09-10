@@ -1,12 +1,25 @@
 import { readFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import {
+  failureResult,
+  successResult,
+  type AdapterContext,
+  type AdapterResult,
+} from "../../adapter-result.ts";
+import { digestArtifactTree, readArtifactObject } from "../../artifact-tree.ts";
 import { COMMIT_INPUT_RE } from "../../domain/refs.ts";
+import type { EffectiveSelection } from "../../effective-selection.ts";
+import type { InstalledState } from "../../harness.ts";
 import { SafetyError } from "../../safety-error.ts";
 import {
   parseStrictJson,
   type JsonValue,
   type StrictJsonProfile,
 } from "../../strict-json.ts";
+import { codexReadNativeState } from "./adapter.ts";
+import { readCodexAssessment } from "./compatibility.ts";
+import { readCodexMarketplace } from "./marketplace.ts";
+import { codexPaths } from "./paths.ts";
 
 const INSTALLED_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
@@ -93,4 +106,141 @@ async function comparablePath(path: string): Promise<string> {
 
 export async function pathsEqual(a: string, b: string): Promise<boolean> {
   return (await comparablePath(a)) === (await comparablePath(b));
+}
+
+function preserveFailure<T, U>(result: AdapterResult<U>): AdapterResult<T> {
+  if (result.outcome.ok) throw new Error("expected adapter failure");
+  return failureResult(
+    result.outcome.operation,
+    result.outcome.error.code,
+    result.outcome.error.message,
+    result.outcome.error.hints,
+    result.outcome.messages,
+  );
+}
+
+function mismatch(
+  identity: string,
+  messages: AdapterResult["outcome"]["messages"] = [],
+): AdapterResult<InstalledState> {
+  return successResult(
+    "inspect-codex-installed",
+    { kind: "mismatch", observedIdentity: identity },
+    messages,
+  );
+}
+
+async function matchesSelection(
+  root: string,
+  selection: EffectiveSelection,
+): Promise<boolean> {
+  const provenance = await readArtifactObject(
+    root,
+    join(root, ".superpowers-upstream.json"),
+  );
+  return provenance.source === selection.effectiveSource;
+}
+
+export async function inspectCodexInstallation(
+  selection: EffectiveSelection,
+  ctx: AdapterContext,
+  readNative: typeof codexReadNativeState = codexReadNativeState,
+): Promise<AdapterResult<InstalledState>> {
+  const operation = "inspect-codex-installed";
+  const native = await readNative(ctx);
+  if (!native.outcome.ok) return preserveFailure(native);
+  const messages = native.outcome.messages;
+  const paths = codexPaths(ctx.env ?? {}, ctx.root);
+  let marketplace;
+  try {
+    marketplace = await readCodexMarketplace(paths.marketplaceRoot);
+  } catch {
+    return failureResult(
+      operation,
+      "inspect-failed",
+      `cannot inspect owned Codex marketplace at ${paths.marketplaceRoot}`,
+      [],
+      messages,
+    );
+  }
+  if (marketplace !== null) {
+    try {
+      if (
+        marketplace.artifact.commit !== selection.desiredCommit ||
+        marketplace.artifact.compatibility.kind !== "supported" ||
+        !(await matchesSelection(marketplace.artifact.root, selection))
+      ) {
+        return mismatch(
+          "durable Codex marketplace differs from selection",
+          messages,
+        );
+      }
+    } catch {
+      return failureResult(
+        operation,
+        "inspect-failed",
+        `cannot inspect owned Codex marketplace at ${paths.marketplaceRoot}`,
+        [],
+        messages,
+      );
+    }
+  }
+  const observed = native.outcome.result;
+  if (!observed.pluginPresent && observed.marketplaceRoot === null) {
+    return successResult(
+      operation,
+      marketplace === null
+        ? { kind: "absent", observedIdentity: "" }
+        : {
+            kind: "mismatch",
+            observedIdentity: "durable Codex marketplace is not registered",
+          },
+      messages,
+    );
+  }
+  if (marketplace === null)
+    return mismatch("durable Codex marketplace is missing", messages);
+  if (
+    observed.marketplaceRoot === null ||
+    !(await pathsEqual(observed.marketplaceRoot, paths.marketplaceRoot))
+  ) {
+    return mismatch("legacy Codex marketplace source", messages);
+  }
+  if (
+    !observed.pluginPresent ||
+    !observed.pluginEnabled ||
+    observed.activeRoot === null
+  ) {
+    return mismatch("Codex manager plugin needs repair", messages);
+  }
+  let active;
+  try {
+    active = await readCodexAssessment(observed.activeRoot);
+  } catch {
+    return mismatch("active Codex plugin payload is invalid", messages);
+  }
+  try {
+    if (
+      active.commit !== selection.desiredCommit ||
+      active.compatibility.kind !== "supported" ||
+      !(await matchesSelection(active.root, selection)) ||
+      (await digestArtifactTree(active.root)) !==
+        (await digestArtifactTree(marketplace.artifact.root))
+    ) {
+      return mismatch(
+        "active Codex plugin payload differs from durable marketplace",
+        messages,
+      );
+    }
+  } catch {
+    return mismatch("active Codex plugin payload is invalid", messages);
+  }
+  return successResult(
+    operation,
+    {
+      kind: "current",
+      observedIdentity: await digestArtifactTree(active.root),
+    },
+    messages,
+  );
 }
