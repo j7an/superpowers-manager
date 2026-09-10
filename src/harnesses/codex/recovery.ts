@@ -183,7 +183,6 @@ function nativeValue(value: JsonValue): CodexNativeState {
   if (
     typeof candidate.pluginPresent !== "boolean" ||
     typeof candidate.pluginEnabled !== "boolean" ||
-    (candidate.pluginPresent === false && candidate.pluginEnabled) ||
     (candidate.pluginPresent === false && activeVersion !== null) ||
     (activeVersion === null) !== (activeRoot === null)
   ) {

@@ -18,6 +18,7 @@ dist/harnesses/codex/json.js
 dist/harnesses/codex/prepare.js
 dist/harnesses/codex/presentation.js
 dist/harnesses/codex/state.js
+dist/harnesses/codex/stored-state.js
 dist/commands/context.js
 dist/commands/install.js
 dist/commands/mutation.js

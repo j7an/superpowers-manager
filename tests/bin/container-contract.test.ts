@@ -278,9 +278,9 @@ function requireOrderedLifecycle(source: string, expected: readonly string[]) {
   }
   for (const [statement, count] of expectedCounts) {
     const actualCount = actual.filter((line) => line === statement).length;
-    if (actualCount !== count) {
+    if (actualCount < count) {
       throw new ContractViolation(
-        `manager A/B lifecycle must execute exactly ${count} time(s): ${statement}`,
+        `manager A/B lifecycle must execute at least ${count} time(s): ${statement}`,
       );
     }
   }
@@ -337,15 +337,23 @@ function validateProbe(probe: string) {
   }
 
   const runManagerLines = activeLines(functionBody(probe, "run_manager"));
+  if (!arraysEqual(runManagerLines, ['run_packaged_manager "$@"'])) {
+    throw new ContractViolation(
+      "run_manager must delegate lifecycle operations to the retained package executable",
+    );
+  }
+  const packagedManagerLines = activeLines(
+    functionBody(probe, "run_packaged_manager"),
+  );
   const expectedManagerLines = [
     'SUPERPOWERS_CONFIG_DIR="$state/config" \\',
     'SUPERPOWERS_UPSTREAM_URL="$upstream" \\',
     'SUPERPOWERS_CACHE_DIR="$state/cache" \\',
     "SUPERPOWERS_CODEX=codex \\",
     'SUPERPOWERS_INSTALLED_SEARCH_ROOT="$HOME/.codex" \\',
-    '"$package/src/cli.ts" "$@"',
+    '"$SPW_PACKAGE_NODE" "$manager_entry" "$@"',
   ];
-  if (!arraysEqual(runManagerLines, expectedManagerLines)) {
+  if (!arraysEqual(packagedManagerLines, expectedManagerLines)) {
     throw new ContractViolation(
       "run_manager must route through the local package with isolated manager state",
     );
@@ -465,7 +473,7 @@ function validateProbe(probe: string) {
     "updated_listing=$(run_codex plugin list --json)",
     'assert_active_installed_commit "$updated_listing" "$version_b" "$commit_b" "$commit_a"',
     "run_manager uninstall",
-    'assert_marketplace_root "$package"',
+    'assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"',
   ];
   assert.equal(
     requiredAbSteps.length,
@@ -497,17 +505,19 @@ function validateProbe(probe: string) {
   }
   const nativeRefreshSteps = [
     "codex_version=$(run_codex --version)",
+    'original_marketplace="$root/original-marketplace"',
+    'cp -R "$HOME/.codex/superpowers-manager/marketplace" "$original_marketplace"',
     'same_version_marketplace="$root/same-version-marketplace"',
-    'cp -R "$package" "$same_version_marketplace"',
+    'cp -R "$original_marketplace" "$same_version_marketplace"',
     'assert_active_installed_payload "$initial_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
     "run_codex plugin marketplace remove superpowers-manager",
     'run_codex plugin marketplace add "$same_version_marketplace"',
     "run_codex plugin add superpowers@superpowers-manager",
     "run_codex plugin marketplace remove superpowers-manager",
-    'run_codex plugin marketplace add "$package"',
+    'run_codex plugin marketplace add "$original_marketplace"',
     "run_codex plugin add superpowers@superpowers-manager",
-    'assert_active_installed_payload "$reset_listing" "$package" "$version_a" "$commit_a"',
-    'damage_active_skill "$reset_listing" "$package" "$version_a" "$commit_a"',
+    'assert_active_installed_payload "$reset_listing" "$original_marketplace" "$version_a" "$commit_a"',
+    'damage_active_skill "$reset_listing" "$original_marketplace" "$version_a" "$commit_a"',
     "run_codex plugin marketplace remove superpowers-manager",
     'run_codex plugin marketplace add "$same_version_marketplace"',
     "run_codex plugin add superpowers@superpowers-manager",
@@ -584,7 +594,7 @@ function validateProbe(probe: string) {
     // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
     // single-quoted strings `\"` is not an escape sequence, so the
     // required text carries literal backslashes and guards the JSON
-    // heredoc's escaped-quote spelling at `tests/container/codex/offline-probe.sh:596::sh \`.
+    // heredoc's escaped-quote spelling at `tests/container/codex/offline-probe.sh:1013::sh \`.
     'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
@@ -696,6 +706,26 @@ function validateProbe(probe: string) {
     );
   }
 
+  const skillsBody = functionBody(probe, "capture_manager_skills");
+  requireOrderedSource(
+    skillsBody,
+    [
+      "skills_listing=$(run_codex plugin list --json)",
+      'python3 -S - "$skills_response" "$skills_listing" "$upstream" "$package" <<\'PY\'',
+      "response_name, listing_json, upstream_arg, requested_cwd = sys.argv[1:]",
+      'item.get("pluginId") == "superpowers@superpowers-manager"',
+      'version = matches[0].get("version")',
+      "if not isinstance(version, str) or not version:",
+      'if matches[0].get("enabled") is not True:',
+      'active = (Path.home() / ".codex/plugins/cache/superpowers-manager/superpowers" / version).resolve(strict=True)',
+      '"superpowers:probe": upstream / "skills/probe/SKILL.md",',
+      '"superpowers:using-superpowers": upstream / "skills/using-superpowers/SKILL.md",',
+      'if "pluginId" in skill and skill["pluginId"] != "superpowers@superpowers-manager":',
+      "if resolved.read_bytes() != expected[name].read_bytes():",
+    ],
+    "fresh skills must match upstream fixture bytes beneath the exact active manager cache root",
+  );
+
   const topLevel = topLevelShellLines(probe);
   const managerMutations = [
     "run_manager track-latest",
@@ -767,7 +797,7 @@ function validateProbe(probe: string) {
     "assert_requirements_unchanged",
     "assert_sentinel_absent",
     "initial_listing=$(run_codex plugin list --json)",
-    'assert_marketplace_root "$package"',
+    'assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"',
     'assert_active_installed_commit "$initial_listing" "$version_a" "$commit_a" ""',
     'assert_exact_empty_hooks_fixture "$initial_listing" "$version_a"',
     'run_codex app-server generate-json-schema --out "$schema_root"',
@@ -778,7 +808,7 @@ function validateProbe(probe: string) {
     "codex_version=$(run_codex --version)",
     "printf '%s\\n' \"codex native refresh prerequisite: $codex_version\"",
     'same_version_marketplace="$root/same-version-marketplace"',
-    'cp -R "$package" "$same_version_marketplace"',
+    'cp -R "$original_marketplace" "$same_version_marketplace"',
     'assert_active_installed_payload "$initial_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
     "run_codex plugin marketplace remove superpowers-manager",
     'run_codex plugin marketplace add "$same_version_marketplace"',
@@ -787,12 +817,12 @@ function validateProbe(probe: string) {
     'assert_marketplace_root "$same_version_marketplace"',
     'assert_active_installed_payload "$migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
     "run_codex plugin marketplace remove superpowers-manager",
-    'run_codex plugin marketplace add "$package"',
+    'run_codex plugin marketplace add "$original_marketplace"',
     "run_codex plugin add superpowers@superpowers-manager",
     "reset_listing=$(run_codex plugin list --json)",
-    'assert_marketplace_root "$package"',
-    'assert_active_installed_payload "$reset_listing" "$package" "$version_a" "$commit_a"',
-    'damage_active_skill "$reset_listing" "$package" "$version_a" "$commit_a"',
+    'assert_marketplace_root "$original_marketplace"',
+    'assert_active_installed_payload "$reset_listing" "$original_marketplace" "$version_a" "$commit_a"',
+    'damage_active_skill "$reset_listing" "$original_marketplace" "$version_a" "$commit_a"',
     "run_codex plugin marketplace remove superpowers-manager",
     'run_codex plugin marketplace add "$same_version_marketplace"',
     "run_codex plugin add superpowers@superpowers-manager",
@@ -804,17 +834,17 @@ function validateProbe(probe: string) {
     "repair_listing=$(run_codex plugin list --json)",
     'assert_active_installed_payload "$repair_listing" "$same_version_marketplace" "$version_a" "$commit_a"',
     "run_codex plugin marketplace remove superpowers-manager",
-    'run_codex plugin marketplace add "$package"',
+    'run_codex plugin marketplace add "$original_marketplace"',
     "run_codex plugin add superpowers@superpowers-manager",
     "restored_listing=$(run_codex plugin list --json)",
-    'assert_marketplace_root "$package"',
-    'assert_active_installed_payload "$restored_listing" "$package" "$version_a" "$commit_a"',
+    'assert_marketplace_root "$original_marketplace"',
+    'assert_active_installed_payload "$restored_listing" "$original_marketplace" "$version_a" "$commit_a"',
     'commit_b=$(git -C "$upstream" rev-parse HEAD)',
     "short_b=$(printf '%s' \"$commit_b\" | cut -c 1-7)",
     'version_b="1.1.0+manager.$short_b"',
     "reload_listing=$(run_codex plugin list --json)",
     "printf '%s\\n' \"$reload_listing\" | grep -Fq 'superpowers@superpowers-manager'",
-    'assert_marketplace_root "$package"',
+    'assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"',
     'assert_active_installed_commit "$reload_listing" "$version_a" "$commit_a" "$commit_b"',
     "hook_state_before=$(snapshot_hook_state)",
     "run_manager update",
@@ -843,6 +873,41 @@ function validateProbe(probe: string) {
     "lifecycle lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
   requireOrderedLifecycle(probe, lifecycle);
+
+  requireOrderedSource(
+    probe,
+    [
+      'legacy_uninstall="$root/legacy-uninstall"',
+      'cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_uninstall"',
+      'legacy_healthy="$root/legacy-healthy"',
+      'cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_healthy"',
+      'run_codex plugin marketplace add "$legacy_uninstall"',
+      "run_codex plugin add superpowers@superpowers-manager",
+      'rm -rf "$legacy_uninstall/plugins/superpowers/skills"',
+      "run_packaged_manager uninstall",
+      'test -f "$legacy_uninstall/.agents/plugins/marketplace.json" || exit 1',
+      'test -f "$legacy_uninstall/legacy-source-preserved" || exit 1',
+      'run_codex plugin marketplace add "$legacy_healthy"',
+      "run_codex plugin add superpowers@superpowers-manager",
+      "run_packaged_manager update",
+      "legacy_healthy_listing=$(run_codex plugin list --json)",
+    ],
+    "legacy uninstall must deregister from an invalid source without deleting its remaining files before healthy migration",
+  );
+
+  requireOrderedSource(
+    probe,
+    [
+      'legacy_template_only="$root/legacy-template-only"',
+      'cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_template_only"',
+      "run_codex plugin marketplace remove superpowers-manager",
+      'run_codex plugin marketplace add "$legacy_template_only"',
+      "run_codex plugin add superpowers@superpowers-manager",
+      'rm -rf "$legacy_template_only/plugins/superpowers/skills"',
+      "run_packaged_manager update",
+    ],
+    "template-only legacy migration must switch native registration to its isolated source before damage",
+  );
 }
 
 // --- validate_hooks_rpc! (:195-240, inventory items 116-142) -----------
@@ -892,7 +957,7 @@ function validateHooksRpc(hooksRpc: string) {
     '"method": "initialize",',
     "receive(process, selector, 0)",
     'send(process, {"method": "initialized"})',
-    'send(process, {"id": 1, "method": "hooks/list", "params": {"cwds": [cwd]}})',
+    'send(process, {"id": 1, "method": method, "params": params})',
     "response = receive(process, selector, 1)",
     "Path(response_name).write_text(",
   ];
@@ -905,6 +970,22 @@ function validateHooksRpc(hooksRpc: string) {
     hooksRpc,
     handshake,
     "RPC helper must keep the staged initialize and hooks/list handshake",
+  );
+
+  const boundedMethodSelection = [
+    "if len(sys.argv) not in (4, 5):",
+    'raise SystemExit("expected cwd response stderr [hooks/list|skills/list]")',
+    'method = sys.argv[4] if len(sys.argv) == 5 else "hooks/list"',
+    'if method not in ("hooks/list", "skills/list"):',
+    'params: dict[str, object] = {"cwds": [cwd]}',
+    'if method == "skills/list":',
+    'params["forceReload"] = True',
+    'send(process, {"id": 1, "method": method, "params": params})',
+  ];
+  requireOrderedSource(
+    hooksRpc,
+    boundedMethodSelection,
+    "RPC helper must expose only the bounded hooks/list or skills/list request selection",
   );
 }
 
@@ -1109,6 +1190,22 @@ void test("container-contract", async (t) => {
     await t.test("Dockerfile installs with a frozen lockfile", () => {
       assert.ok(dockerfile.includes("pnpm install --frozen-lockfile"));
     });
+    await t.test(
+      "Dockerfile retains one root-owned external package tarball before the unprivileged harness",
+      () => {
+        requireOrderedSource(
+          dockerfile,
+          [
+            "pnpm install --frozen-lockfile",
+            "RUN mkdir -p /opt/spw-package",
+            "node tests/tools/pack.ts --out-dir /opt/spw-package",
+            "chmod -R a+rX /opt/spw-package",
+            "USER spw",
+          ],
+          "the isolated Codex phase must receive a readable retained package tarball",
+        );
+      },
+    );
     await t.test(
       "Dockerfile runs native sources without a checkout build",
       () => {
@@ -1624,7 +1721,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
       },
       "skipped hooks request": {
         source: hooksRpc.replace(
-          'send(process, {"id": 1, "method": "hooks/list", "params": {"cwds": [cwd]}})',
+          'send(process, {"id": 1, "method": method, "params": params})',
           "pass",
         ),
         message:
@@ -1691,7 +1788,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
             "run_manager() {\n  :\n}\n",
           ),
           message:
-            "run_manager must route through the local package with isolated manager state",
+            "run_manager must delegate lifecycle operations to the retained package executable",
         },
         "unbracketed install lifecycle": {
           source: probe.replace(

@@ -94,6 +94,10 @@
     { "path": "tests/unit/harnesses/codex/prepare.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/state.test.ts", "group": "unit" },
     {
+      "path": "tests/unit/harnesses/codex/stored-state.test.ts",
+      "group": "unit"
+    },
+    {
       "path": "tests/unit/harnesses/codex/durable-state.test.ts",
       "group": "integration"
     },

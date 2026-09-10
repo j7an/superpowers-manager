@@ -515,7 +515,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
   // The route is constructible end to end with no product code bent to reach
   // it. SUPERPOWERS_CODEX may name any existing executable (preflight's
   // codexBin resolution accepts a path outright), a POSIX filename may carry
-  // any byte but NUL and slash, and `src/harnesses/codex/adapter.ts:808-812::commandFailed(listing)` interpolates that
+  // any byte but NUL and slash, and `src/harnesses/codex/adapter.ts:846::if (commandFailed(listing)) {` interpolates that
   // path into an adapter-authored failure message when `codex plugin list
   // --json` exits non-zero. probe replays the resulting outcome AFTER its
   // try/catch has resolved (the loop below runProbe's catch), so the throw from
@@ -534,7 +534,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
       const codexBin = join(codexDir, "codex");
       // Writes a context line as well as failing: listingCommand appends the
       // child's stderr to the outcome's message records
-      // (`src/harnesses/codex/adapter.ts:251-260::async function listingCommand`). That record is what the hoist withholds, so
+      // (`src/harnesses/codex/adapter.ts:290::async function listingCommand(`). That record is what the hoist withholds, so
       // its absence below is the end-to-end half of the atomicity contract.
       writeFileSync(
         codexBin,

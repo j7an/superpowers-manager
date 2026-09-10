@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Two-mode child proving that the idiom carried row :2041 prescribes is
 // load-bearing rather than cosmetic. Stdout is a real child-process pipe — the
-// same channel `src/harnesses/codex/adapter.ts:147::execFile(` gives the fake `codex`.
+// same channel `src/harnesses/codex/adapter.ts:169::execFile(` gives the fake `codex`.
 //
 // argv[2] is "exit" (the old idiom) or "exitCode" (the new one). The parent
 // observes an uncorked seed write, pauses its reader, and then uses IPC to make

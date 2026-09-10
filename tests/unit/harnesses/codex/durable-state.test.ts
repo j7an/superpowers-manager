@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import { successResult } from "../../../../src/adapter-result.ts";
 import {
+  codexInspect,
+  codexInstall,
   codexReadNativeState,
   type CodexNativeState,
 } from "../../../../src/harnesses/codex/adapter.ts";
@@ -29,6 +31,48 @@ async function sandbox(t: import("node:test").TestContext) {
   const log = join(root, "commands.log");
   await writeFile(log, "");
   return { root, log };
+}
+
+async function adapterSandbox(t: import("node:test").TestContext) {
+  const fixture = await sandbox(t);
+  const codexHome = join(fixture.root, "codex");
+  const packageRoot = join(fixture.root, "package");
+  await Promise.all([mkdir(codexHome), mkdir(packageRoot)]);
+  return {
+    ...fixture,
+    codexHome,
+    packageRoot,
+    async commands(): Promise<string[]> {
+      return (await readFile(fixture.log, "utf8")).split("\n").filter(Boolean);
+    },
+    env(extra: Record<string, string>) {
+      return {
+        SUPERPOWERS_CODEX: FAKE_CODEX,
+        FAKE_CODEX_LOG: fixture.log,
+        ...extra,
+      };
+    },
+  };
+}
+
+async function seedMissingStoredState(
+  fixture: Awaited<ReturnType<typeof adapterSandbox>>,
+  extra = "",
+): Promise<string> {
+  const missingSource = join(fixture.root, "missing-manager-source");
+  await writeFile(
+    join(fixture.codexHome, "config.toml"),
+    [
+      '[marketplaces."superpowers-manager"]',
+      'source_type = "local"',
+      `source = ${JSON.stringify(missingSource)}`,
+      '[plugins."superpowers@superpowers-manager"]',
+      "enabled = true",
+      extra,
+      "",
+    ].join("\n"),
+  );
+  return missingSource;
 }
 
 function listings(version = "1.0.0") {
@@ -195,6 +239,215 @@ void test("native observation fails closed for malformed, ambiguous, and failed 
       );
     });
   }
+});
+
+void test("native observation names the plugin listing when its typed parse fails", async (t) => {
+  const fixture = await sandbox(t);
+  const result = await codexReadNativeState({
+    root: PACKAGE_ROOT,
+    env: {
+      SUPERPOWERS_CODEX: FAKE_CODEX,
+      FAKE_CODEX_LOG: fixture.log,
+      ...listings(),
+      FAKE_CODEX_PLUGIN_LIST: "{",
+    },
+  });
+  assert.equal(result.outcome.ok, false, JSON.stringify(result));
+  assert.equal(
+    result.outcome.error?.message,
+    `cannot parse output of '${FAKE_CODEX} plugin list --json'`,
+  );
+});
+
+void test("native observation falls back to stored configured and cache presence after a native listing failure", async (t) => {
+  const fixture = await sandbox(t);
+  const codexHome = join(fixture.root, "codex-home");
+  const missingSource = join(fixture.root, "missing-source");
+  await mkdir(
+    join(codexHome, "plugins/cache/superpowers-manager/superpowers/1.2.3"),
+    { recursive: true },
+  );
+  await writeFile(
+    join(codexHome, "config.toml"),
+    [
+      '[marketplaces."superpowers-manager"]',
+      'source_type = "local"',
+      `source = ${JSON.stringify(missingSource)}`,
+      '[plugins."superpowers@superpowers-manager"]',
+      "enabled = true",
+      "",
+    ].join("\n"),
+  );
+  const before = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(join(codexHome, "config.toml")),
+  );
+  const result = await codexReadNativeState({
+    root: PACKAGE_ROOT,
+    env: {
+      SUPERPOWERS_CODEX: FAKE_CODEX,
+      CODEX_HOME: codexHome,
+      FAKE_CODEX_LOG: fixture.log,
+      FAKE_CODEX_FAIL_PLUGIN_LIST: "1",
+      FAKE_CODEX_PLUGIN_LIST: "unused",
+      FAKE_CODEX_MARKETPLACE_LIST: "unused",
+    },
+  });
+  assert.equal(result.outcome.ok, true, JSON.stringify(result));
+  assert.deepEqual(result.outcome.result, {
+    marketplaceRoot: missingSource,
+    pluginPresent: true,
+    pluginEnabled: true,
+    activeVersion: null,
+    activeRoot: null,
+  });
+  assert.deepEqual(
+    await import("node:fs/promises").then(({ readFile }) =>
+      readFile(join(codexHome, "config.toml")),
+    ),
+    before,
+  );
+});
+
+void test("native observation validates successful plugin output before a later marketplace failure can fall back", async (t) => {
+  for (const [name, pluginList, message] of [
+    ["malformed", "{", "cannot parse output"],
+    [
+      "duplicate manager",
+      JSON.stringify({
+        installed: [
+          {
+            pluginId: "superpowers@superpowers-manager",
+            installed: true,
+            enabled: true,
+            version: "1.0.0",
+          },
+          {
+            pluginId: "superpowers@superpowers-manager",
+            installed: true,
+            enabled: true,
+            version: "1.0.1",
+          },
+        ],
+      }),
+      "Codex manager plugin appears more than once",
+    ],
+  ] as const) {
+    await t.test(name, async () => {
+      const fixture = await sandbox(t);
+      const codexHome = join(fixture.root, "codex-home");
+      await mkdir(codexHome);
+      await writeFile(
+        join(codexHome, "config.toml"),
+        [
+          '[marketplaces."superpowers-manager"]',
+          'source_type = "local"',
+          `source = ${JSON.stringify(join(fixture.root, "missing-source"))}`,
+          "",
+        ].join("\n"),
+      );
+      const result = await codexReadNativeState({
+        root: PACKAGE_ROOT,
+        env: {
+          SUPERPOWERS_CODEX: FAKE_CODEX,
+          CODEX_HOME: codexHome,
+          FAKE_CODEX_LOG: fixture.log,
+          FAKE_CODEX_PLUGIN_LIST: pluginList,
+          FAKE_CODEX_MARKETPLACE_LIST: "unused",
+          FAKE_CODEX_FAIL_MARKETPLACE_LIST: "1",
+        },
+      });
+      assert.equal(result.outcome.ok, false, JSON.stringify(result));
+      assert.match(result.outcome.error?.message ?? "", new RegExp(message));
+    });
+  }
+});
+
+void test("ownership inspection falls back after native failure and preserves stored legacy and unmanaged conflicts", async (t) => {
+  const fixture = await adapterSandbox(t);
+  const legacySource = join(fixture.root, "missing-legacy-source");
+  await seedMissingStoredState(
+    fixture,
+    [
+      '[marketplaces."superpowers-wrapper"]',
+      'source_type = "local"',
+      `source = ${JSON.stringify(legacySource)}`,
+      '[plugins."superpowers@superpowers-wrapper"]',
+      "enabled = true",
+      '[plugins."superpowers@another-provider"]',
+      "enabled = true",
+    ].join("\n"),
+  );
+  await mkdir(
+    join(
+      fixture.codexHome,
+      "plugins/cache/superpowers-manager/superpowers/1.0.0",
+    ),
+    { recursive: true },
+  );
+  const result = await codexInspect("ownership", {
+    root: PACKAGE_ROOT,
+    env: fixture.env({
+      CODEX_HOME: fixture.codexHome,
+      HOME: fixture.root,
+      FAKE_CODEX_FAIL_PLUGIN_LIST: "1",
+      FAKE_CODEX_PLUGIN_LIST: "unused",
+      FAKE_CODEX_MARKETPLACE_LIST: "unused",
+    }),
+  });
+  assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+  assert.deepEqual(result.outcome.result, {
+    view: "ownership",
+    resources: { plugin: true, marketplace: true },
+    legacy_resources: { plugin: false, marketplace: true },
+    identity_state: "both",
+    conflicts: [
+      "Codex plugin superpowers@another-provider has indeterminate activity",
+    ],
+  });
+  assert.deepEqual(await fixture.commands(), ["plugin list --json"]);
+});
+
+void test("ownership validates successful malformed plugin output before a later marketplace failure can fall back", async (t) => {
+  const fixture = await adapterSandbox(t);
+  await seedMissingStoredState(fixture);
+  const result = await codexInspect("ownership", {
+    root: PACKAGE_ROOT,
+    env: fixture.env({
+      CODEX_HOME: fixture.codexHome,
+      HOME: fixture.root,
+      FAKE_CODEX_PLUGIN_LIST: "{",
+      FAKE_CODEX_MARKETPLACE_LIST: "unused",
+      FAKE_CODEX_FAIL_MARKETPLACE_LIST: "1",
+    }),
+  });
+  assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
+  assert.equal(
+    result.outcome.error?.message,
+    `cannot parse output of '${FAKE_CODEX} plugin list --json'`,
+  );
+  assert.deepEqual(await fixture.commands(), ["plugin list --json"]);
+});
+
+void test("install uses missing-source stored registration after its native marketplace listing fails", async (t) => {
+  const fixture = await adapterSandbox(t);
+  await seedMissingStoredState(fixture);
+  const result = await codexInstall(fixture.packageRoot, {
+    root: PACKAGE_ROOT,
+    env: fixture.env({
+      CODEX_HOME: fixture.codexHome,
+      HOME: fixture.root,
+      FAKE_CODEX_FAIL_MARKETPLACE_LIST: "1",
+      FAKE_CODEX_PLUGIN_LIST: "unused",
+      FAKE_CODEX_MARKETPLACE_LIST: "unused",
+    }),
+  });
+  assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+  assert.deepEqual(await fixture.commands(), [
+    "plugin marketplace list --json",
+    "plugin marketplace remove superpowers-manager",
+    `plugin marketplace add ${fixture.packageRoot}`,
+    "plugin add superpowers@superpowers-manager",
+  ]);
 });
 
 async function durableFixture(t: import("node:test").TestContext) {

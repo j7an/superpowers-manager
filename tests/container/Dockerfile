@@ -25,6 +25,9 @@ RUN corepack enable \
     && chown -R root:root /workspace /opt/spw-test-tools /opt/node-min \
     && chmod a+r node_modules/.pnpm-workspace-state-v1.json \
     && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh
+RUN mkdir -p /opt/spw-package \
+    && node tests/tools/pack.ts --out-dir /opt/spw-package \
+    && chmod -R a+rX /opt/spw-package
 
 ENV HOME=/home/spw
 ENV PATH=/opt/spw-test-tools/node_modules/.bin:$PATH

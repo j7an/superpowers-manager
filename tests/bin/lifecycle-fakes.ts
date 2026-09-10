@@ -117,8 +117,8 @@ export function respondToListing(request: {
  * Probe issues `codex plugin list --json` TWICE per run, from two different
  * inspections that need different answers:
  *
- *   inspect --view fingerprint -> plugin list --json          (`src/harnesses/codex/adapter.ts:802-805::const listing`)
- *   inspect --view ownership   -> plugin list --json,         (`src/harnesses/codex/adapter.ts:876-879::const plugins`)
+ *   inspect --view fingerprint -> plugin list --json          (`src/harnesses/codex/adapter.ts:840::const listing = await listingCommand(`)
+ *   inspect --view ownership   -> plugin list --json,         (`src/harnesses/codex/adapter.ts:904::if (view === "ownership") {`)
  *                                 plugin marketplace list --json  (:883)
  *
  * They are separate runAdapter calls, so this fake is a fresh PROCESS each

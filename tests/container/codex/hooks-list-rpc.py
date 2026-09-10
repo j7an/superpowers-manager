@@ -8,7 +8,12 @@ import subprocess
 import sys
 import time
 
-cwd, response_name, stderr_name = sys.argv[1:]
+if len(sys.argv) not in (4, 5):
+    raise SystemExit("expected cwd response stderr [hooks/list|skills/list]")
+cwd, response_name, stderr_name = sys.argv[1:4]
+method = sys.argv[4] if len(sys.argv) == 5 else "hooks/list"
+if method not in ("hooks/list", "skills/list"):
+    raise SystemExit("expected cwd response stderr [hooks/list|skills/list]")
 deadline = time.monotonic() + 25
 buffer = bytearray()
 
@@ -112,7 +117,10 @@ with stderr_path.open("w", encoding="utf-8") as stderr_handle:
         )
         receive(process, selector, 0)
         send(process, {"method": "initialized"})
-        send(process, {"id": 1, "method": "hooks/list", "params": {"cwds": [cwd]}})
+        params: dict[str, object] = {"cwds": [cwd]}
+        if method == "skills/list":
+            params["forceReload"] = True
+        send(process, {"id": 1, "method": method, "params": params})
         response = receive(process, selector, 1)
         Path(response_name).write_text(
             json.dumps(response, allow_nan=False, separators=(",", ":")) + "\n",

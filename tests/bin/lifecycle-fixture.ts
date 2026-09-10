@@ -51,6 +51,16 @@ function buildSnapshot(): string {
     cpSync(join(ROOT, entry), join(snapshot, entry), { recursive: true });
   }
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
+  const dependencies = join(snapshot, "node_modules");
+  mkdirSync(dependencies, { recursive: true });
+  cpSync(
+    join(ROOT, "node_modules", "smol-toml"),
+    join(dependencies, "smol-toml"),
+    {
+      recursive: true,
+      dereference: true,
+    },
+  );
   const pluginDir = join(snapshot, "plugins", "superpowers", ".codex-plugin");
   mkdirSync(pluginDir, { recursive: true });
   cpSync(

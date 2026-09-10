@@ -16,6 +16,7 @@ import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
 import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
 import {
   codexInspect,
+  codexInstallRefreshMode,
   codexRemove,
   codexReadNativeState,
   type CodexNativeState,
@@ -672,6 +673,14 @@ export async function installCodexMarketplace(
   dependencies: CodexPublicationDependencies = DEFAULTS,
 ): Promise<AdapterResult<InstallReceipt>> {
   const messages: AdapterMessage[] = [];
+  const effectiveEnv = { ...process.env, ...ctx.env };
+  if (codexInstallRefreshMode(effectiveEnv) === null) {
+    return fail(
+      "invalid-arguments",
+      `unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: ${effectiveEnv.SUPERPOWERS_INSTALL_REFRESH_MODE}`,
+      messages,
+    );
+  }
   const paths = codexPaths(ctx.env ?? {}, process.cwd());
   let pending: PendingCodexPublication | undefined;
   let publication: DirectoryPublication | undefined;

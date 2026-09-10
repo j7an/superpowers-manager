@@ -389,6 +389,84 @@ void test("publication returns a pending transaction and preserves ordered nativ
   assert.equal(await readCodexRecovery(f.paths), null);
 });
 
+void test("configured enabled plugin without a cache starts and settles publication", async (t) => {
+  const f = await fixture(t);
+  f.setNative(
+    nativeState({
+      pluginPresent: false,
+      pluginEnabled: true,
+      activeVersion: null,
+      activeRoot: null,
+    }),
+  );
+  const result = await installCodexMarketplace(
+    f.artifact,
+    f.ctx,
+    f.activateCurrent,
+    f.dependencies,
+  );
+  const tx = transaction(result);
+  assert.equal((await tx.finalize()).outcome.ok, true);
+  assert.equal(await readCodexRecovery(f.paths), null);
+});
+
+void test("invalid refresh mode refuses publication before durable or native mutation", async (t) => {
+  const f = await fixture(t);
+  let activated = false;
+  const result = await installCodexMarketplace(
+    f.artifact,
+    {
+      ...f.ctx,
+      env: {
+        ...f.ctx.env,
+        SUPERPOWERS_INSTALL_REFRESH_MODE: "replace-in-place",
+      },
+    },
+    async () => {
+      activated = true;
+      return successResult("install", RECEIPT, []);
+    },
+    f.dependencies,
+  );
+  assert.equal(result.outcome.ok, false, JSON.stringify(result));
+  if (result.outcome.ok) assert.fail("expected invalid refresh mode failure");
+  assert.equal(result.outcome.error.code, "invalid-arguments");
+  assert.equal(
+    result.outcome.error.message,
+    "unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: replace-in-place",
+  );
+  assert.equal(activated, false);
+  assert.equal(await readCodexRecovery(f.paths), null);
+  assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
+});
+
+void test("inherited invalid refresh mode refuses publication before durable mutation", async (t) => {
+  const original = process.env.SUPERPOWERS_INSTALL_REFRESH_MODE;
+  process.env.SUPERPOWERS_INSTALL_REFRESH_MODE = "replace-in-place";
+  t.after(() => {
+    if (original === undefined) {
+      delete process.env.SUPERPOWERS_INSTALL_REFRESH_MODE;
+    } else {
+      process.env.SUPERPOWERS_INSTALL_REFRESH_MODE = original;
+    }
+  });
+  const f = await fixture(t);
+  const result = await installCodexMarketplace(
+    f.artifact,
+    f.ctx,
+    f.activateCurrent,
+    f.dependencies,
+  );
+  assert.equal(result.outcome.ok, false, JSON.stringify(result));
+  if (result.outcome.ok) assert.fail("expected invalid refresh mode failure");
+  assert.equal(
+    result.outcome.error.message,
+    "unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: replace-in-place",
+  );
+  assert.equal(await readCodexRecovery(f.paths), null);
+  assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
+});
+
 void test("an update retains an independent old tree until finalize", async (t) => {
   const f = await fixture(t);
   const old = await oldMarketplace(f);

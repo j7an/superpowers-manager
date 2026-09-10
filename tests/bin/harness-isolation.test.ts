@@ -442,7 +442,7 @@ for (const selected of ["codex", "pi"] as const) {
     assert.match(
       result.stderr,
       selected === "codex"
-        ? /codex plugin add failed for superpowers@superpowers-manager/
+        ? /Codex activation may have changed native state; preserve recovery material at /
         : /Pi activation failed; the previous snapshot and registration were restored/,
     );
     assert.deepEqual(snapshotHarness(fixture.c, other), before);
@@ -486,7 +486,7 @@ for (const selected of ["codex", "pi"] as const) {
     assert.match(
       result.stderr,
       selected === "codex"
-        ? /codex plugin marketplace remove failed for superpowers-manager/
+        ? /Codex native removal failed; preserve the marketplace and recovery material at /
         : /cannot verify Pi removal at .*; preserve the snapshot and any recovery material at /,
     );
     assert.deepEqual(snapshotHarness(fixture.c, other), before);

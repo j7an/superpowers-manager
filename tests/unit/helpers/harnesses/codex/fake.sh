@@ -36,6 +36,9 @@ emit() {
 
 case "$*" in
   "plugin list --json")
+    if [ "${FAKE_CODEX_FAIL_PLUGIN_LIST:-}" = "1" ]; then
+      exit 1
+    fi
     emit "${FAKE_CODEX_PLUGIN_LIST:?}"
     ;;
   "plugin marketplace list --json")

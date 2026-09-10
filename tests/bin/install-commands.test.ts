@@ -215,7 +215,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:464::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:498::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -1141,7 +1141,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/harnesses/codex/adapter.ts:643::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:681::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1292,7 +1292,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/harnesses/codex/adapter.ts:669::adding`).
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:707::adding`).
     assert.ok(
       out.includes(`plugin marketplace add ${durableMarketplace(c)}`) ||
         out.includes("Codex activation may have changed native state"),
@@ -1420,9 +1420,9 @@ void describe("install commands", { concurrency: true }, () => {
     // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
     // plugin as installed at 1.0.0 without materialising its cached tree, so
     // the REAL adapter's fingerprint handler resolves an active version
-    // (`src/harnesses/codex/adapter.ts:814-821::let activeVersion`), builds the installed root for it (:831-836),
+    // (`src/harnesses/codex/adapter.ts:830::if (view === "fingerprint") {`), builds the installed root for it (:877-882),
     // and finds nothing readable there — installedCommitFromRoot returns ""
-    // (`src/harnesses/codex/state.ts:67-84::installedCommitFromRoot`) — and fails with a controlled inspect-failed
+    // (`src/harnesses/codex/state.ts:81::export async function installedCommitFromRoot(`) — and fails with a controlled inspect-failed
     // outcome. The case therefore needs no interception and is not
     // seam-dependent.
     const c = installCase({
@@ -1528,7 +1528,7 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:122-130::tag.gpgsign=false`),
+    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:140::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757

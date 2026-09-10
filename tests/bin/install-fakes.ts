@@ -31,10 +31,10 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("codex.log", ctx.args.join(" "));
   injectSpuriousMutation(ctx, "plugin add superpowers@spurious");
 
-  const home = process.env.HOME;
+  const codexHome =
+    process.env.CODEX_HOME ?? join(process.env.HOME as string, ".codex");
   const durableMarketplace = join(
-    home as string,
-    ".codex",
+    codexHome,
     "superpowers-manager",
     "marketplace",
   );
@@ -108,7 +108,7 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
       // Codex reports the plugin installed at 1.0.0, but no cached tree is
       // ever written for it. The real adapter's fingerprint handler then
       // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — `src/harnesses/codex/adapter.ts:831-844::const activeRoot` — so it returns a
+      // finds nothing to read there — `src/harnesses/codex/adapter.ts:877::const activeRoot = installedRootForVersion(` — so it returns a
       // controlled inspect-failed outcome. No adapter interception needed.
       ctx.writeJson("plugin_list.json", {
         installed: [

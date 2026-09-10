@@ -37,6 +37,7 @@ import {
   pathsEqual,
 } from "./state.ts";
 import { codexHome } from "./paths.ts";
+import { readCodexStoredState, type CodexStoredState } from "./stored-state.ts";
 import { validateGeneratedPlugin } from "./generated-plugin.ts";
 import {
   classifyHooks,
@@ -85,6 +86,17 @@ export interface CodexNativeState {
   readonly pluginEnabled: boolean;
   readonly activeVersion: string | null;
   readonly activeRoot: string | null;
+}
+
+export type CodexInstallRefreshMode = "add-only" | "remove-add";
+
+export function codexInstallRefreshMode(
+  env: NodeJS.ProcessEnv,
+): CodexInstallRefreshMode | null {
+  const refreshMode = env.SUPERPOWERS_INSTALL_REFRESH_MODE || "add-only";
+  return refreshMode === "add-only" || refreshMode === "remove-add"
+    ? refreshMode
+    : null;
 }
 
 class AdapterFailure extends Error {
@@ -194,6 +206,18 @@ export { runCommand as runCommandForTest };
 
 function commandFailed(result: CommandResult): boolean {
   return result.status !== 0;
+}
+
+async function storedStateAfterListingFailure(
+  env: NodeJS.ProcessEnv,
+  code: "inspect-failed" | "install-failed",
+  message: string,
+): Promise<CodexStoredState> {
+  try {
+    return await readCodexStoredState(env, process.cwd());
+  } catch {
+    fail(code, message);
+  }
 }
 
 // Exported only so its unit test can reach it. No integration test can cover
@@ -597,12 +621,12 @@ async function runInstall(
     fail("invalid-arguments", `package root not found: ${packageRoot}`);
   }
   const codexBin = env.SUPERPOWERS_CODEX || "codex";
-  const refreshMode = env.SUPERPOWERS_INSTALL_REFRESH_MODE || "add-only";
+  const refreshMode = codexInstallRefreshMode(env);
   await requireCodex(codexBin, env);
-  if (refreshMode !== "add-only" && refreshMode !== "remove-add") {
+  if (refreshMode === null) {
     fail(
       "invalid-arguments",
-      `unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: ${refreshMode}`,
+      `unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: ${env.SUPERPOWERS_INSTALL_REFRESH_MODE}`,
     );
   }
 
@@ -619,23 +643,27 @@ async function runInstall(
           ["plugin", "marketplace", "list", "--json"],
           env,
         );
-        if (commandFailed(marketplaceList)) {
-          fail(
-            "install-failed",
-            `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
-          );
-        }
         let registeredRoot: string;
-        try {
-          registeredRoot = marketplaceRootFromJson(
-            marketplaceList.stdout,
-            MARKETPLACE_NAME,
-          );
-        } catch {
-          fail(
-            "install-failed",
-            `cannot parse output of '${codexBin} plugin marketplace list --json'`,
-          );
+        if (commandFailed(marketplaceList)) {
+          registeredRoot = (
+            await storedStateAfterListingFailure(
+              env,
+              "install-failed",
+              `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+            )
+          ).managerMarketplaceRoot;
+        } else {
+          try {
+            registeredRoot = marketplaceRootFromJson(
+              marketplaceList.stdout,
+              MARKETPLACE_NAME,
+            );
+          } catch {
+            fail(
+              "install-failed",
+              `cannot parse output of '${codexBin} plugin marketplace list --json'`,
+            );
+          }
         }
         if (registeredRoot.length === 0) {
           const added = await mutationCommand(
@@ -890,27 +918,43 @@ async function runInspect(
             env,
           );
           if (commandFailed(plugins)) {
-            fail(
+            const stored = await storedStateAfterListingFailure(
+              env,
               "inspect-failed",
               `cannot list Codex plugins via '${codexBin} plugin list --json'`,
             );
-          }
-          const marketplaces = await listingCommand(
-            log,
-            codexBin,
-            ["plugin", "marketplace", "list", "--json"],
-            env,
-          );
-          if (commandFailed(marketplaces)) {
-            fail(
-              "inspect-failed",
-              `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+            const conflicts = await inspectCodexConflicts(
+              { root: context.root, env },
+              stored.installedListingJson,
             );
+            const managerPresent =
+              stored.managerPluginPresent ||
+              stored.managerMarketplaceRoot.length > 0;
+            const legacyPresent =
+              stored.legacyPluginPresent ||
+              stored.legacyMarketplaceRoot !== null;
+            return {
+              view: "ownership",
+              resources: {
+                plugin: stored.managerPluginPresent,
+                marketplace: true,
+              },
+              legacy_resources: {
+                plugin: stored.legacyPluginPresent,
+                marketplace: stored.legacyMarketplaceRoot !== null,
+              },
+              identity_state: managerPresent
+                ? legacyPresent
+                  ? "both"
+                  : "manager"
+                : legacyPresent
+                  ? "legacy"
+                  : "neither",
+              conflicts: [...conflicts],
+            };
           }
           let managerPlugin: boolean;
           let legacyPlugin: boolean;
-          let managerMarketplace: boolean;
-          let legacyMarketplace: boolean;
           let conflicts: readonly string[];
           try {
             managerPlugin = installedListingHas(
@@ -935,6 +979,48 @@ async function runInspect(
               `cannot parse output of '${codexBin} plugin list --json'`,
             );
           }
+          const marketplaces = await listingCommand(
+            log,
+            codexBin,
+            ["plugin", "marketplace", "list", "--json"],
+            env,
+          );
+          if (commandFailed(marketplaces)) {
+            const stored = await storedStateAfterListingFailure(
+              env,
+              "inspect-failed",
+              `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+            );
+            const conflicts = await inspectCodexConflicts(
+              { root: context.root, env },
+              stored.installedListingJson,
+            );
+            const managerPresent = true;
+            const legacyPresent =
+              stored.legacyPluginPresent ||
+              stored.legacyMarketplaceRoot !== null;
+            return {
+              view: "ownership",
+              resources: {
+                plugin: stored.managerPluginPresent,
+                marketplace: true,
+              },
+              legacy_resources: {
+                plugin: stored.legacyPluginPresent,
+                marketplace: stored.legacyMarketplaceRoot !== null,
+              },
+              identity_state: managerPresent
+                ? legacyPresent
+                  ? "both"
+                  : "manager"
+                : legacyPresent
+                  ? "legacy"
+                  : "neither",
+              conflicts: [...conflicts],
+            };
+          }
+          let managerMarketplace: boolean;
+          let legacyMarketplace: boolean;
           try {
             managerMarketplace = installedListingHas(
               marketplaces.stdout,
@@ -1065,25 +1151,22 @@ export function codexReadNativeState(
       ["plugin", "list", "--json"],
       env,
     );
-    if (commandFailed(plugins))
-      fail(
+    if (commandFailed(plugins)) {
+      const stored = await storedStateAfterListingFailure(
+        env,
         "inspect-failed",
         `cannot list Codex plugins via '${codexBin} plugin list --json'`,
       );
-    const marketplaces = await listingCommand(
-      log,
-      codexBin,
-      ["plugin", "marketplace", "list", "--json"],
-      env,
-    );
-    if (commandFailed(marketplaces))
-      fail(
-        "inspect-failed",
-        `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
-      );
+      return {
+        marketplaceRoot: stored.managerMarketplaceRoot,
+        pluginPresent: stored.managerPluginPresent,
+        pluginEnabled: stored.managerPluginEnabled,
+        activeVersion: null,
+        activeRoot: null,
+      };
+    }
     let manager:
       ReturnType<typeof codexInstalledPluginsFromJson>[number] | undefined;
-    let marketplaceRoot: string;
     let activeVersion: string;
     try {
       const managers = codexInstalledPluginsFromJson(plugins.stdout).filter(
@@ -1092,11 +1175,6 @@ export function codexReadNativeState(
       if (managers.length > 1)
         fail("inspect-failed", "Codex manager plugin appears more than once");
       manager = managers[0];
-      marketplaceRoot = marketplaceRootFromJson(
-        marketplaces.stdout,
-        MARKETPLACE_NAME,
-        true,
-      );
       activeVersion =
         manager === undefined
           ? ""
@@ -1105,7 +1183,41 @@ export function codexReadNativeState(
       if (cause instanceof AdapterFailure) throw cause;
       fail(
         "inspect-failed",
-        `cannot parse output of '${codexBin} plugin list --json or plugin marketplace list --json'`,
+        `cannot parse output of '${codexBin} plugin list --json'`,
+      );
+    }
+    const marketplaces = await listingCommand(
+      log,
+      codexBin,
+      ["plugin", "marketplace", "list", "--json"],
+      env,
+    );
+    if (commandFailed(marketplaces)) {
+      const stored = await storedStateAfterListingFailure(
+        env,
+        "inspect-failed",
+        `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+      );
+      return {
+        marketplaceRoot: stored.managerMarketplaceRoot,
+        pluginPresent: stored.managerPluginPresent,
+        pluginEnabled: stored.managerPluginEnabled,
+        activeVersion: null,
+        activeRoot: null,
+      };
+    }
+    let marketplaceRoot: string;
+    try {
+      marketplaceRoot = marketplaceRootFromJson(
+        marketplaces.stdout,
+        MARKETPLACE_NAME,
+        true,
+      );
+    } catch (cause) {
+      if (cause instanceof AdapterFailure) throw cause;
+      fail(
+        "inspect-failed",
+        `cannot parse output of '${codexBin} plugin marketplace list --json'`,
       );
     }
     const searchRoot =

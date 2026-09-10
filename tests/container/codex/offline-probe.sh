@@ -12,6 +12,7 @@ survivor="$root/unrelated-provider"
 schema_root="$root/app-server-schema"
 hooks_response="$root/hooks-list.response.json"
 hooks_stderr="$root/hooks-list.stderr"
+skills_capture=0
 sentinel="/tmp/superpowers-manager-hook-sentinel"
 requirements="$HOME/.codex/requirements.toml"
 
@@ -33,12 +34,16 @@ else
 fi
 
 run_manager() {
+  run_packaged_manager "$@"
+}
+
+run_packaged_manager() {
   SUPERPOWERS_CONFIG_DIR="$state/config" \
   SUPERPOWERS_UPSTREAM_URL="$upstream" \
   SUPERPOWERS_CACHE_DIR="$state/cache" \
   SUPERPOWERS_CODEX=codex \
   SUPERPOWERS_INSTALLED_SEARCH_ROOT="$HOME/.codex" \
-    "$package/src/cli.ts" "$@"
+    "$SPW_PACKAGE_NODE" "$manager_entry" "$@"
 }
 
 run_codex() {
@@ -240,6 +245,15 @@ assert_sentinel_absent() {
     echo "synthetic plugin hook executed unexpectedly" >&2
     exit 1
   fi
+}
+
+uninstall_missing_legacy_source() {
+  hook_state_before=$(snapshot_hook_state)
+  run_packaged_manager uninstall
+  hook_state_after=$(snapshot_hook_state)
+  assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
+  assert_requirements_unchanged
+  assert_sentinel_absent
 }
 
 assert_exact_empty_hooks_fixture() {
@@ -469,6 +483,81 @@ capture_hooks_response() {
   fi
 }
 
+capture_manager_skills() {
+  skills_capture=$((skills_capture + 1))
+  skills_response="$root/skills-list-$skills_capture.response.json"
+  skills_stderr="$root/skills-list-$skills_capture.stderr"
+  if ! "$timeout_bin" 30 python3 -S \
+    "$package/tests/container/codex/hooks-list-rpc.py" \
+    "$package" "$skills_response" "$skills_stderr" skills/list; then
+    cat "$skills_stderr" >&2
+    return 1
+  fi
+  skills_listing=$(run_codex plugin list --json)
+  python3 -S - "$skills_response" "$skills_listing" "$upstream" "$package" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+response_name, listing_json, upstream_arg, requested_cwd = sys.argv[1:]
+with Path(response_name).open(encoding="utf-8") as handle:
+    response = json.load(handle)
+if not isinstance(response, dict) or response.get("id") != 1:
+    raise SystemExit("skills/list response is missing id 1")
+result = response.get("result")
+if not isinstance(result, dict) or not isinstance(result.get("data"), list):
+    raise SystemExit("skills/list response has no data array")
+entries = [item for item in result["data"] if isinstance(item, dict) and item.get("cwd") == requested_cwd]
+if len(entries) != 1:
+    raise SystemExit("skills/list must contain exactly one requested cwd entry")
+entry = entries[0]
+if entry.get("errors") != [] or not isinstance(entry.get("skills"), list):
+    raise SystemExit("skills/list reports errors or malformed skills")
+
+listing = json.loads(listing_json)
+installed = listing.get("installed") if isinstance(listing, dict) else None
+if not isinstance(installed, list):
+    raise SystemExit("Codex plugin listing does not contain an installed array")
+matches = [
+    item for item in installed
+    if isinstance(item, dict) and item.get("pluginId") == "superpowers@superpowers-manager"
+]
+if len(matches) != 1:
+    raise SystemExit("Codex listing must contain exactly one manager plugin")
+version = matches[0].get("version")
+if not isinstance(version, str) or not version:
+    raise SystemExit("Codex active manager version is missing or malformed")
+if matches[0].get("enabled") is not True:
+    raise SystemExit("Codex manager plugin is not enabled")
+
+active = (Path.home() / ".codex/plugins/cache/superpowers-manager/superpowers" / version).resolve(strict=True)
+upstream = Path(upstream_arg).resolve(strict=True)
+expected = {
+    "superpowers:probe": upstream / "skills/probe/SKILL.md",
+    "superpowers:using-superpowers": upstream / "skills/using-superpowers/SKILL.md",
+}
+found = {name: [] for name in expected}
+for skill in entry["skills"]:
+    if not isinstance(skill, dict):
+        continue
+    name, path = skill.get("name"), skill.get("path")
+    if name not in expected:
+        continue
+    if skill.get("enabled") is not True or not isinstance(path, str):
+        raise SystemExit("manager skill metadata is malformed or disabled")
+    if "pluginId" in skill and skill["pluginId"] != "superpowers@superpowers-manager":
+        raise SystemExit("manager skill pluginId does not match the manager identity")
+    resolved = Path(path).resolve(strict=True)
+    if active not in resolved.parents:
+        raise SystemExit("manager skill is not loaded from the active manager cache")
+    if resolved.read_bytes() != expected[name].read_bytes():
+        raise SystemExit(f"manager skill fixture bytes mismatch: {name}")
+    found[name].append(resolved)
+if any(len(paths) != 1 for paths in found.values()):
+    raise SystemExit("each expected manager fixture skill must occur exactly once")
+PY
+}
+
 assert_manager_hooks_absent() {
   response_name="$1"
   python3 -S - "$response_name" <<'PY'
@@ -637,6 +726,17 @@ printf '%s\n' '---' 'name: probe' 'description: Unrelated probe skill' '---' '# 
   > "$survivor/plugins/unrelated/skills/probe/SKILL.md"
 run_codex plugin marketplace add "$survivor"
 
+set -- /opt/spw-package/*.tgz
+test "$#" -eq 1 && test -f "$1" || exit 1
+manager_tarball="$1"
+first_extraction="$root/extracted-first"
+second_extraction="$root/extracted-second"
+mkdir -p "$first_extraction" "$second_extraction"
+tar -xzf "$manager_tarball" -C "$first_extraction"
+tar -xzf "$manager_tarball" -C "$second_extraction"
+manager_entry="$first_extraction/package/dist/cli.js"
+test -f "$manager_entry" || exit 1
+
 printf '%s\n' '# Comment-only hook requirements remain manager-independent.' > "$requirements"
 requirements_digest=$(python3 -S -c \
   'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' \
@@ -654,19 +754,34 @@ assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
 assert_sentinel_absent
 initial_listing=$(run_codex plugin list --json)
-assert_marketplace_root "$package"
+assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
 assert_active_installed_commit "$initial_listing" "$version_a" "$commit_a" ""
 assert_exact_empty_hooks_fixture "$initial_listing" "$version_a"
 run_codex app-server generate-json-schema --out "$schema_root"
 assert_hooks_schema_compatible
 capture_hooks_response
 assert_manager_hooks_absent "$hooks_response"
+capture_manager_skills
 assert_sentinel_absent
+
+case "$first_extraction" in "$root"/*) ;; *) echo "error: refusing extraction removal outside probe root" >&2; exit 1 ;; esac
+rm -rf "$first_extraction/package"
+manager_entry="$second_extraction/package/dist/cli.js"
+test -f "$manager_entry" || exit 1
+capture_manager_skills
+run_packaged_manager probe --harness codex
+mkdir -p "$first_extraction"
+tar -xzf "$manager_tarball" -C "$first_extraction"
+manager_entry="$first_extraction/package/dist/cli.js"
+capture_manager_skills
+run_codex plugin list --json >/dev/null
 
 codex_version=$(run_codex --version)
 printf '%s\n' "codex native refresh prerequisite: $codex_version"
+original_marketplace="$root/original-marketplace"
+cp -R "$HOME/.codex/superpowers-manager/marketplace" "$original_marketplace"
 same_version_marketplace="$root/same-version-marketplace"
-cp -R "$package" "$same_version_marketplace"
+cp -R "$original_marketplace" "$same_version_marketplace"
 assert_active_installed_payload "$initial_listing" "$same_version_marketplace" "$version_a" "$commit_a"
 run_codex plugin marketplace remove superpowers-manager
 run_codex plugin marketplace add "$same_version_marketplace"
@@ -675,12 +790,12 @@ migration_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$same_version_marketplace"
 assert_active_installed_payload "$migration_listing" "$same_version_marketplace" "$version_a" "$commit_a"
 run_codex plugin marketplace remove superpowers-manager
-run_codex plugin marketplace add "$package"
+run_codex plugin marketplace add "$original_marketplace"
 run_codex plugin add superpowers@superpowers-manager
 reset_listing=$(run_codex plugin list --json)
-assert_marketplace_root "$package"
-assert_active_installed_payload "$reset_listing" "$package" "$version_a" "$commit_a"
-damage_active_skill "$reset_listing" "$package" "$version_a" "$commit_a"
+assert_marketplace_root "$original_marketplace"
+assert_active_installed_payload "$reset_listing" "$original_marketplace" "$version_a" "$commit_a"
+damage_active_skill "$reset_listing" "$original_marketplace" "$version_a" "$commit_a"
 run_codex plugin marketplace remove superpowers-manager
 run_codex plugin marketplace add "$same_version_marketplace"
 run_codex plugin add superpowers@superpowers-manager
@@ -692,11 +807,183 @@ run_codex plugin add superpowers@superpowers-manager
 repair_listing=$(run_codex plugin list --json)
 assert_active_installed_payload "$repair_listing" "$same_version_marketplace" "$version_a" "$commit_a"
 run_codex plugin marketplace remove superpowers-manager
-run_codex plugin marketplace add "$package"
+run_codex plugin marketplace add "$original_marketplace"
 run_codex plugin add superpowers@superpowers-manager
 restored_listing=$(run_codex plugin list --json)
-assert_marketplace_root "$package"
-assert_active_installed_payload "$restored_listing" "$package" "$version_a" "$commit_a"
+assert_marketplace_root "$original_marketplace"
+assert_active_installed_payload "$restored_listing" "$original_marketplace" "$version_a" "$commit_a"
+run_packaged_manager update
+durable_seed_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
+assert_active_installed_commit "$durable_seed_listing" "$version_a" "$commit_a" ""
+
+# Seed old local registrations with an already-valid native cache, then make
+# the old source progressively less useful. The manager must use the native
+# artifact and publish its own durable marketplace without removing the old
+# source directory.
+legacy_uninstall="$root/legacy-uninstall"
+cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_uninstall"
+legacy_healthy="$root/legacy-healthy"
+cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_healthy"
+printf '%s\n' preserved > "$legacy_uninstall/legacy-source-preserved"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$legacy_uninstall"
+run_codex plugin add superpowers@superpowers-manager
+case "$legacy_uninstall" in "$root"/*) ;; *) echo "error: refusing legacy fixture mutation outside probe root" >&2; exit 1 ;; esac
+rm -rf "$legacy_uninstall/plugins/superpowers/skills"
+mkdir -p "$legacy_uninstall/plugins/superpowers/skills"
+run_packaged_manager uninstall
+legacy_uninstall_plugins=$(run_codex plugin list --json)
+legacy_uninstall_marketplaces=$(run_codex plugin marketplace list --json)
+python3 -S - "$legacy_uninstall_plugins" "$legacy_uninstall_marketplaces" <<'PY'
+import json
+import sys
+plugins, marketplaces = map(json.loads, sys.argv[1:])
+if any(item.get("pluginId") == "superpowers@superpowers-manager" for item in plugins.get("installed", []) if isinstance(item, dict)):
+    raise SystemExit("legacy uninstall left the manager plugin registered")
+if any(item.get("name") == "superpowers-manager" for item in marketplaces.get("marketplaces", []) if isinstance(item, dict)):
+    raise SystemExit("legacy uninstall left the manager marketplace registered")
+PY
+test -f "$legacy_uninstall/.agents/plugins/marketplace.json" || exit 1
+test -f "$legacy_uninstall/legacy-source-preserved" || exit 1
+
+legacy_missing_uninstall="$root/legacy-missing-uninstall"
+cp -R "$original_marketplace" "$legacy_missing_uninstall"
+run_codex plugin marketplace add "$legacy_missing_uninstall"
+run_codex plugin add superpowers@superpowers-manager
+test -f "$state/config/selection.json" || exit 1
+test -d "$HOME/.codex/superpowers-manager/prepared" || exit 1
+cp "$state/config/selection.json" "$root/missing-uninstall-selection.before"
+cp -R "$HOME/.codex/superpowers-manager/prepared" "$root/missing-uninstall-prepared.before"
+case "$legacy_missing_uninstall" in "$root"/*) ;; *) echo "error: refusing legacy fixture removal outside probe root" >&2; exit 1 ;; esac
+rm -rf "$legacy_missing_uninstall"
+uninstall_missing_legacy_source
+test ! -e "$legacy_missing_uninstall" && test ! -L "$legacy_missing_uninstall" || exit 1
+cmp "$root/missing-uninstall-selection.before" "$state/config/selection.json"
+diff -r "$root/missing-uninstall-prepared.before" "$HOME/.codex/superpowers-manager/prepared"
+legacy_missing_uninstall_plugins=$(run_codex plugin list --json)
+legacy_missing_uninstall_marketplaces=$(run_codex plugin marketplace list --json)
+python3 -S - "$legacy_missing_uninstall_plugins" "$legacy_missing_uninstall_marketplaces" <<'PY'
+import json
+import sys
+plugins, marketplaces = map(json.loads, sys.argv[1:])
+if any(item.get("pluginId") == "superpowers@superpowers-manager" for item in plugins.get("installed", []) if isinstance(item, dict)):
+    raise SystemExit("missing-source uninstall left the manager plugin registered")
+names = [item.get("name") for item in marketplaces.get("marketplaces", []) if isinstance(item, dict)]
+if "superpowers-manager" in names:
+    raise SystemExit("missing-source uninstall left the manager marketplace registered")
+if "unrelated-provider" not in names:
+    raise SystemExit("missing-source uninstall removed the unrelated provider")
+PY
+
+run_codex plugin marketplace add "$legacy_healthy"
+run_codex plugin add superpowers@superpowers-manager
+run_packaged_manager update
+legacy_healthy_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
+assert_active_installed_commit "$legacy_healthy_listing" "$version_a" "$commit_a" ""
+capture_manager_skills
+
+legacy_template_only="$root/legacy-template-only"
+cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_template_only"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$legacy_template_only"
+run_codex plugin add superpowers@superpowers-manager
+case "$legacy_template_only" in "$root"/*) ;; *) echo "error: refusing legacy fixture mutation outside probe root" >&2; exit 1 ;; esac
+rm -rf "$legacy_template_only/plugins/superpowers/skills"
+mkdir -p "$legacy_template_only/plugins/superpowers/skills"
+run_packaged_manager update
+legacy_template_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
+assert_active_installed_commit "$legacy_template_listing" "$version_a" "$commit_a" ""
+capture_manager_skills
+
+legacy_missing="$root/legacy-missing"
+cp -R "$HOME/.codex/superpowers-manager/marketplace" "$legacy_missing"
+run_codex plugin marketplace remove superpowers-manager
+run_codex plugin marketplace add "$legacy_missing"
+run_codex plugin add superpowers@superpowers-manager
+case "$legacy_missing" in "$root"/*) ;; *) echo "error: refusing legacy fixture removal outside probe root" >&2; exit 1 ;; esac
+rm -rf "$legacy_missing"
+run_packaged_manager update
+legacy_missing_listing=$(run_codex plugin list --json)
+assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
+assert_active_installed_commit "$legacy_missing_listing" "$version_a" "$commit_a" ""
+capture_manager_skills
+
+driver="$root/codex-publication-reader.ts"
+cat > "$driver" <<'EOF'
+import { execFile } from "node:child_process";
+import { rename } from "node:fs/promises";
+import { promisify } from "node:util";
+import { beginDirectoryPublication } from "/workspace/src/atomic.ts";
+import { codexInstall, codexInspect, codexReadNativeState } from "/workspace/src/harnesses/codex/adapter.ts";
+import { normalizeCodexInstallForContext } from "/workspace/src/harnesses/codex/harness.ts";
+import { readCodexPrepared } from "/workspace/src/harnesses/codex/prepare.ts";
+import { codexPaths } from "/workspace/src/harnesses/codex/paths.ts";
+import { installCodexMarketplace } from "/workspace/src/harnesses/codex/publication.ts";
+import { readCodexRecovery } from "/workspace/src/harnesses/codex/recovery.ts";
+
+const run = promisify(execFile);
+const [packageRoot, helper, response, stderr] = process.argv.slice(2);
+if (![packageRoot, helper, response, stderr].every((value) => typeof value === "string")) throw new Error("driver arguments");
+const env = { ...process.env, SUPERPOWERS_CONFIG_DIR: process.env.SUPERPOWERS_CONFIG_DIR!, SUPERPOWERS_UPSTREAM_URL: process.env.SUPERPOWERS_UPSTREAM_URL!, SUPERPOWERS_CACHE_DIR: process.env.SUPERPOWERS_CACHE_DIR!, SUPERPOWERS_CODEX: "codex", SUPERPOWERS_INSTALLED_SEARCH_ROOT: process.env.SUPERPOWERS_INSTALLED_SEARCH_ROOT! };
+const ctx = { root: packageRoot, env };
+const prepared = await readCodexPrepared(ctx);
+if (!prepared.outcome.ok || prepared.outcome.result === null) throw new Error("prepared artifact unavailable");
+const paths = codexPaths(env, process.cwd());
+let observed = false;
+const result = await installCodexMarketplace(
+  prepared.outcome.result,
+  ctx,
+  async (root, context) => normalizeCodexInstallForContext(await codexInstall(root, context), context),
+  {
+    readNative: codexReadNativeState,
+    inspectNative: codexInspect,
+    beginPublication: async (candidate, live, options) => await beginDirectoryPublication(candidate, live, {
+      ...options,
+      hooks: {
+        rename: async (from, to) => {
+          await rename(from, to);
+          if (from === paths.marketplaceRoot && to === options.backupPath) {
+            observed = true;
+            const readers = await Promise.allSettled([
+              run("codex", ["plugin", "list", "--json"], { timeout: 10_000 }),
+              run("python3", ["-S", helper, packageRoot, response, stderr, "skills/list"], { timeout: 10_000 }),
+            ]);
+            for (const reader of readers) {
+              if (reader.status === "rejected") {
+                const reason = reader.reason as { code?: unknown; killed?: unknown };
+                console.error(`boundary reader failed code=${String(reason.code)} killed=${String(reason.killed)}`);
+              } else {
+                console.error(`boundary reader completed stdout=${reader.value.stdout.length} stderr=${reader.value.stderr.length}`);
+              }
+            }
+          }
+        },
+      },
+    }),
+  },
+);
+if (!observed) throw new Error("live-to-backup publication boundary was not observed");
+if (!result.outcome.ok || result.status !== 0 || result.outcome.result === null) {
+  if (result.outcome.ok || result.status === 0) throw new Error("failed boundary publication reported success");
+  const recovered = await codexReadNativeState(ctx);
+  if (!recovered.outcome.ok) throw new Error("failed publication left unverifiable recovery state");
+  if ((await readCodexRecovery(paths)) === null) throw new Error("failed publication left no validated recovery record");
+  console.error("publication boundary outcome: retained validated recovery");
+  process.exitCode = 0;
+} else {
+  const settled = await result.outcome.result.transaction.finalize();
+  if (!settled.outcome.ok || settled.status !== 0) throw new Error("published transaction did not finalize");
+  console.error("publication boundary outcome: finalized");
+}
+EOF
+boundary_response="$root/boundary-skills.response.json"
+boundary_stderr="$root/boundary-skills.stderr"
+SUPERPOWERS_CONFIG_DIR="$state/config" SUPERPOWERS_UPSTREAM_URL="$upstream" SUPERPOWERS_CACHE_DIR="$state/cache" SUPERPOWERS_INSTALLED_SEARCH_ROOT="$HOME/.codex" \
+  node "$driver" "$package" "$package/tests/container/codex/hooks-list-rpc.py" "$boundary_response" "$boundary_stderr"
+capture_manager_skills
 
 printf '%s\n' '# Probe B' >> "$upstream/skills/probe/SKILL.md"
 cat > "$upstream/.codex-plugin/plugin.json" <<'JSON'
@@ -744,9 +1031,10 @@ version_b="1.1.0+manager.$short_b"
 
 reload_listing=$(run_codex plugin list --json)
 printf '%s\n' "$reload_listing" | grep -Fq 'superpowers@superpowers-manager'
-assert_marketplace_root "$package"
+assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
 assert_active_installed_commit "$reload_listing" "$version_a" "$commit_a" "$commit_b"
 
+manager_entry="$second_extraction/package/dist/cli.js"
 hook_state_before=$(snapshot_hook_state)
 run_manager update
 hook_state_after=$(snapshot_hook_state)
@@ -758,6 +1046,7 @@ assert_active_installed_commit "$updated_listing" "$version_b" "$commit_b" "$com
 assert_active_hooks_fixture "$updated_listing" "$version_b"
 capture_hooks_response
 assert_manager_hook_active "$hooks_response"
+capture_manager_skills
 assert_sentinel_absent
 
 before_uninstall_marketplaces=$(run_codex plugin marketplace list --json)
