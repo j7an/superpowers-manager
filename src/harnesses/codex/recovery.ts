@@ -360,7 +360,7 @@ async function validateObservedObjects(
   }
   if (
     record.oldIdentity !== null &&
-    ["published", "activating", "ready", "finalizing"].includes(record.phase) &&
+    ["published", "activating", "ready"].includes(record.phase) &&
     backup === null
   ) {
     throw new Error("retained marketplace backup is missing");

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   cp,
   chmod,
@@ -653,6 +655,104 @@ void test("journal cleanup failure reports verified activation after backup remo
     await readFile(join(f.paths.recoveryRoot, "unknown"), "utf8"),
     "preserve\n",
   );
+});
+
+void test("a process killed after real backup deletion leaves a readable finalizing journal", async (t) => {
+  const f = await fixture(t);
+  await oldMarketplace(f);
+  const adapterResultUrl = new URL(
+    "../../../../src/adapter-result.ts",
+    import.meta.url,
+  ).href;
+  const atomicUrl = new URL("../../../../src/atomic.ts", import.meta.url).href;
+  const publicationUrl = new URL(
+    "../../../../src/harnesses/codex/publication.ts",
+    import.meta.url,
+  ).href;
+  const script = `
+    import { cp, mkdir } from "node:fs/promises";
+    import { successResult } from ${JSON.stringify(adapterResultUrl)};
+    import { beginDirectoryPublication } from ${JSON.stringify(atomicUrl)};
+    import { installCodexMarketplace } from ${JSON.stringify(publicationUrl)};
+    const artifact = JSON.parse(process.argv[1]);
+    const ctx = JSON.parse(process.argv[2]);
+    const paths = JSON.parse(process.argv[3]);
+    let native = ${JSON.stringify(nativeState())};
+    const dependencies = {
+      readNative: async () => successResult("native-state", native, []),
+      inspectNative: async (view) => successResult(
+        "inspect",
+        view === "ownership"
+          ? {
+              view,
+              identity_state: "manager",
+              resources: { plugin: true, marketplace: true },
+              conflicts: [],
+            }
+          : { view, update_control: "managed" },
+        [],
+      ),
+      beginPublication: async (...args) => {
+        const publication = await beginDirectoryPublication(...args);
+        return {
+          ...publication,
+          async finalize() {
+            await publication.finalize();
+            process.kill(process.pid, "SIGKILL");
+          },
+        };
+      },
+    };
+    const activated = async (root) => {
+      const activeRoot = paths.codexHome + "/plugins/cache/superpowers-manager/superpowers/fixture";
+      await mkdir(activeRoot + "/..", { recursive: true });
+      await cp(paths.publishedPluginRoot, activeRoot, { recursive: true });
+      native = {
+        marketplaceRoot: root,
+        pluginPresent: true,
+        pluginEnabled: true,
+        activeVersion: "fixture",
+        activeRoot,
+      };
+      return successResult("install", ${JSON.stringify(RECEIPT)}, []);
+    };
+    const result = await installCodexMarketplace(
+      artifact,
+      ctx,
+      activated,
+      dependencies,
+    );
+    if (!result.outcome.ok || result.outcome.result.transaction === undefined) {
+      process.exit(81);
+    }
+    await result.outcome.result.transaction.finalize();
+    process.exit(82);
+  `;
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      script,
+      JSON.stringify(f.artifact),
+      JSON.stringify(f.ctx),
+      JSON.stringify(f.paths),
+    ],
+    { stdio: "ignore" },
+  );
+  const [code, signal] = (await once(child, "exit")) as [
+    number | null,
+    NodeJS.Signals | null,
+  ];
+  assert.equal(code, null);
+  assert.equal(signal, "SIGKILL");
+  assert.equal(
+    (await readdir(f.paths.managerRoot)).some((name) =>
+      name.startsWith(".marketplace.bak."),
+    ),
+    false,
+  );
+  assert.equal((await readCodexRecovery(f.paths))?.phase, "finalizing");
 });
 
 void test("inspectable damaged active content reaches activation but is not reverse-migrated", async (t) => {

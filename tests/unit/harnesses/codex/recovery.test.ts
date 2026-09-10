@@ -139,6 +139,28 @@ void test("recovery reader rejects a symlinked marketplace root", async (t) => {
   );
 });
 
+void test("recovery reader rejects a symlinked journal without changing its target", async (t) => {
+  const { paths } = await fixture(t);
+  await beginCodexRecovery(paths, {
+    marketplaceRoot: paths.marketplaceRoot,
+    priorNative: ABSENT_NATIVE,
+    oldDigest: null,
+    oldIdentity: null,
+  });
+  const journal = join(paths.recoveryRoot, "transaction.json");
+  const target = join(paths.codexHome, "foreign-journal");
+  const bytes = "foreign journal bytes\n";
+  await writeFile(target, bytes);
+  await rm(journal);
+  await symlink(target, journal);
+
+  await assert.rejects(
+    readCodexRecovery(paths),
+    /cannot inspect Codex recovery state:/,
+  );
+  assert.equal(await readFile(target, "utf8"), bytes);
+});
+
 void test("phase updates retain inspected evidence and reject changed journal identity", async (t) => {
   const { paths } = await fixture(t);
   const pending = await beginCodexRecovery(paths, {
