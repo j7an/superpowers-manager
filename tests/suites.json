@@ -72,6 +72,7 @@
     { "path": "tests/unit/harnesses/codex/json.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/conflicts.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/harness.test.ts", "group": "integration" },
+    { "path": "tests/unit/harnesses/codex/paths.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/prepare.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/state.test.ts", "group": "unit" },
     { "path": "tests/unit/commands-install.test.ts", "group": "unit" },
