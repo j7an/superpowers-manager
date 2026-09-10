@@ -20,6 +20,7 @@ import { codexReadNativeState } from "./adapter.ts";
 import { readCodexAssessment } from "./compatibility.ts";
 import { readCodexMarketplace } from "./marketplace.ts";
 import { codexPaths } from "./paths.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
 
 const INSTALLED_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
@@ -141,6 +142,36 @@ async function matchesSelection(
   return provenance.source === selection.effectiveSource;
 }
 
+function hasFilesystemAccessFailure(cause: unknown): boolean {
+  let current = cause;
+  for (
+    let depth = 0;
+    depth < 8 && current !== null && typeof current === "object";
+    depth += 1
+  ) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && code !== "ENOENT" && code !== "ENOTDIR") {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+function activeInspectionFailure(
+  operation: string,
+  root: string,
+  messages: AdapterResult["outcome"]["messages"],
+): AdapterResult<InstalledState> {
+  return failureResult(
+    operation,
+    "inspect-failed",
+    `cannot inspect active Codex plugin payload at ${root}`,
+    [],
+    messages,
+  );
+}
+
 export async function inspectCodexInstallation(
   selection: EffectiveSelection,
   ctx: AdapterContext,
@@ -189,23 +220,18 @@ export async function inspectCodexInstallation(
   if (!observed.pluginPresent && observed.marketplaceRoot === null) {
     return successResult(
       operation,
-      marketplace === null
-        ? { kind: "absent", observedIdentity: "" }
-        : {
-            kind: "mismatch",
-            observedIdentity: "durable Codex marketplace is not registered",
-          },
+      { kind: "absent", observedIdentity: "" },
       messages,
     );
   }
-  if (marketplace === null)
-    return mismatch("durable Codex marketplace is missing", messages);
   if (
-    observed.marketplaceRoot === null ||
+    observed.marketplaceRoot !== null &&
     !(await pathsEqual(observed.marketplaceRoot, paths.marketplaceRoot))
   ) {
     return mismatch("legacy Codex marketplace source", messages);
   }
+  if (marketplace === null)
+    return mismatch("durable Codex marketplace is missing", messages);
   if (
     !observed.pluginPresent ||
     !observed.pluginEnabled ||
@@ -213,33 +239,64 @@ export async function inspectCodexInstallation(
   ) {
     return mismatch("Codex manager plugin needs repair", messages);
   }
+  let activeKind;
+  try {
+    activeKind = await classifyPathNoFollow(observed.activeRoot);
+  } catch {
+    return activeInspectionFailure(operation, observed.activeRoot, messages);
+  }
+  if (activeKind === "missing") {
+    return mismatch("active Codex plugin payload is missing", messages);
+  }
+  if (activeKind !== "directory") {
+    return activeInspectionFailure(operation, observed.activeRoot, messages);
+  }
   let active;
+  let activeDigest: string;
   try {
     active = await readCodexAssessment(observed.activeRoot);
-  } catch {
+    activeDigest = await digestArtifactTree(active.root);
+  } catch (cause) {
+    if (hasFilesystemAccessFailure(cause)) {
+      return activeInspectionFailure(operation, observed.activeRoot, messages);
+    }
     return mismatch("active Codex plugin payload is invalid", messages);
+  }
+  let durableDigest: string;
+  try {
+    durableDigest = await digestArtifactTree(marketplace.artifact.root);
+  } catch {
+    return failureResult(
+      operation,
+      "inspect-failed",
+      `cannot inspect owned Codex marketplace at ${paths.marketplaceRoot}`,
+      [],
+      messages,
+    );
   }
   try {
     if (
       active.commit !== selection.desiredCommit ||
       active.compatibility.kind !== "supported" ||
       !(await matchesSelection(active.root, selection)) ||
-      (await digestArtifactTree(active.root)) !==
-        (await digestArtifactTree(marketplace.artifact.root))
+      activeDigest !== durableDigest
     ) {
       return mismatch(
         "active Codex plugin payload differs from durable marketplace",
         messages,
       );
     }
-  } catch {
+  } catch (cause) {
+    if (hasFilesystemAccessFailure(cause)) {
+      return activeInspectionFailure(operation, observed.activeRoot, messages);
+    }
     return mismatch("active Codex plugin payload is invalid", messages);
   }
   return successResult(
     operation,
     {
       kind: "current",
-      observedIdentity: await digestArtifactTree(active.root),
+      observedIdentity: activeDigest,
     },
     messages,
   );

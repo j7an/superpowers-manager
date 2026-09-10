@@ -119,9 +119,37 @@ void test("native observation fails closed for malformed, ambiguous, and failed 
       message: "cannot parse output",
     },
     {
+      name: "duplicate manager plugin",
+      env: {
+        ...listings(),
+        FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
+          installed: [
+            {
+              pluginId: "superpowers@superpowers-manager",
+              installed: true,
+              enabled: true,
+              version: "1.0.0",
+            },
+            {
+              pluginId: "superpowers@superpowers-manager",
+              installed: true,
+              enabled: true,
+              version: "1.0.1",
+            },
+          ],
+        }),
+      },
+      message: "manager plugin appears more than once",
+    },
+    {
       name: "listing command failure",
       env: { SUPERPOWERS_CODEX: "/usr/bin/false" },
       message: "cannot list Codex plugins",
+    },
+    {
+      name: "marketplace listing command failure",
+      env: { ...listings(), FAKE_CODEX_FAIL_MARKETPLACE_LIST: "1" },
+      message: "cannot list Codex marketplaces",
     },
   ];
   for (const entry of cases) {
@@ -196,9 +224,15 @@ async function nativeResult(value: CodexNativeState) {
 
 void test("inspection classifies an inspectable legacy source as mismatch without reading its cache", async (t) => {
   const fixture = await durableFixture(t);
+  const active = native(fixture.paths);
+  await mkdir(join(active.activeRoot!, ".."), { recursive: true });
+  await cp(fixture.paths.publishedPluginRoot, active.activeRoot!, {
+    recursive: true,
+  });
+  await rm(fixture.paths.marketplaceRoot, { recursive: true });
   const legacy = native(fixture.paths, {
     marketplaceRoot: join(fixture.root, "missing-old-extraction"),
-    activeRoot: join(fixture.root, "empty-cache"),
+    activeRoot: active.activeRoot,
   });
   const result = await inspectCodexInstallation(
     fixture.selection,
@@ -211,6 +245,71 @@ void test("inspection classifies an inspectable legacy source as mismatch withou
     kind: "mismatch",
     observedIdentity: "legacy Codex marketplace source",
   });
+});
+
+void test("inspection reports absence when neither native manager resource exists", async (t) => {
+  const fixture = await durableFixture(t);
+  const absent = native(fixture.paths, {
+    marketplaceRoot: null,
+    pluginPresent: false,
+    pluginEnabled: false,
+    activeVersion: null,
+    activeRoot: null,
+  });
+  for (const [name, removeDurable] of [
+    ["valid durable marketplace remains", false],
+    ["durable marketplace is missing", true],
+  ] as const) {
+    await t.test(name, async () => {
+      if (removeDurable)
+        await rm(fixture.paths.marketplaceRoot, { recursive: true });
+      const result = await inspectCodexInstallation(
+        fixture.selection,
+        { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },
+        () => nativeResult(absent),
+      );
+      assert.equal(result.outcome.ok, true, JSON.stringify(result));
+      if (!result.outcome.ok) assert.fail("expected absent inspection");
+      assert.deepEqual(result.outcome.result, {
+        kind: "absent",
+        observedIdentity: "",
+      });
+    });
+  }
+});
+
+void test("inspection classifies disabled and missing active manager payloads as repairable mismatches", async (t) => {
+  const fixture = await durableFixture(t);
+  for (const [name, observed] of [
+    ["disabled plugin", native(fixture.paths, { pluginEnabled: false })],
+    ["missing active cache", native(fixture.paths)],
+  ] as const) {
+    await t.test(name, async () => {
+      const result = await inspectCodexInstallation(
+        fixture.selection,
+        { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },
+        () => nativeResult(observed),
+      );
+      assert.equal(result.outcome.ok, true, JSON.stringify(result));
+      if (!result.outcome.ok) assert.fail("expected repairable inspection");
+      assert.equal(result.outcome.result.kind, "mismatch");
+    });
+  }
+});
+
+void test("inspection fails for an uninspectable active payload", async (t) => {
+  const fixture = await durableFixture(t);
+  const active = native(fixture.paths, { activeRoot: "/dev/null" });
+  const result = await inspectCodexInstallation(
+    fixture.selection,
+    { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },
+    () => nativeResult(active),
+  );
+  assert.equal(result.outcome.ok, false);
+  assert.match(
+    result.outcome.error?.message ?? "",
+    /active Codex plugin payload/,
+  );
 });
 
 void test("inspection requires durable and active assessed payloads before current", async (t) => {
