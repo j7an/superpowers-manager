@@ -64,6 +64,8 @@ node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
 
 Do not use bare checkout `npm pack`. `dist/` belongs only to staging, and all of `plugins/superpowers/` except its fallback manifest template is generated.
 
+Run the maintained CLI from the checkout with `node src/cli.ts`. Run published-package `npx superpowers-manager ...` commands outside this checkout: npm can select the local package when invoked from its repository. Checkout-local `dist/` is unsupported generated residue; package only through the external staging tool.
+
 Follow [RELEASING.md](RELEASING.md) for protected publication; package staging does not authorize a release.
 
 ```text

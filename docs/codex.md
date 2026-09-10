@@ -24,6 +24,38 @@ Stable tags form versions such as `6.0.3+manager.896224c`; prerelease tags retai
 
 `.superpowers-upstream.json` records `source`, `requested_ref`, `resolved_ref`, `commit`, and upstream manifest version. The generated version is for display and Codex package identity; the upstream commit is the authoritative identity that `probe` and `update` compare.
 
+## Durable storage, migration, and recovery
+
+The Manager keeps Codex preparation, publication, and unsettled-operation
+material under the selected Codex home (`CODEX_HOME`, or `$HOME/.codex` by
+default):
+
+```text
+superpowers-manager/
+  prepared/                 validated plugin candidate
+  marketplace/              registered Manager-owned marketplace and plugin
+  recovery/                 material retained for an unsettled operation
+```
+
+`prepare` writes only the prepared candidate. `SUPERPOWERS_PLUGIN_ROOT` changes
+that preparation location only; it does not change the durable marketplace.
+`probe` is read-only. It can report that a previous Manager registration needs
+migration or that recovery is required, but it does not migrate or repair it.
+
+`install` and `update` publish the validated candidate to the durable
+marketplace and verify Codex registration and the installed plugin. They
+automatically migrate an earlier Manager marketplace source from an npm cache
+or checkout, including when its selected upstream commit is unchanged. The old
+source directory is left in place. Restart Codex if it has not loaded a
+successful change yet.
+
+`uninstall` removes the Manager-owned plugin and marketplace through Codex,
+then removes the durable marketplace only after native deregistration is
+verified. It retains the prepared candidate and saved upstream selection. If
+the operation cannot establish the relevant state safely, it preserves recovery
+material and blocks conflicting mutations until the state is inspected. There
+is no general repair or purge command.
+
 ## Compare Codex routes
 
 The following are alternative providers. Native CLI behavior below was checked against Codex `0.153.3`; retain that dated evidence until it is rechecked.
@@ -63,4 +95,7 @@ npx superpowers-wrapper@0.1.1 uninstall
 npx superpowers-manager install --harness codex
 ```
 
-Legacy wrapper-owned state blocks Manager mutation until removed; it is never removed automatically.
+State owned by the older `superpowers-wrapper` provider blocks Manager mutation
+until removed with that provider's own command; it is never removed
+automatically. This is separate from automatic migration of an earlier
+`superpowers-manager` source described above.
