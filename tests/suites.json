@@ -53,6 +53,7 @@
     { "path": "tests/bin/container-contract.test.ts", "group": "repository" },
     { "path": "tests/bin/error-assertions.test.ts", "group": "repository" },
     { "path": "tests/bin/install-commands.test.ts", "group": "integration" },
+    { "path": "tests/bin/harness-isolation.test.ts", "group": "integration" },
     { "path": "tests/bin/lifecycle-fakes.test.ts", "group": "integration" },
     { "path": "tests/bin/lifecycle-fixture.test.ts", "group": "integration" },
     { "path": "tests/bin/migration-inventory.test.ts", "group": "repository" },

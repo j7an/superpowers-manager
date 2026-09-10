@@ -71,6 +71,11 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
     c === "remove" &&
     d === "superpowers-manager"
   ) {
+    if (ctx.config.marketplaceRemove === "fail") {
+      process.stderr.write("marketplace remove exploded\n");
+      process.exitCode = 1;
+      return;
+    }
     const data = ctx.readJson("marketplace_list.json");
     data.marketplaces = data.marketplaces.filter(
       (item: { name?: string }) => item.name !== "superpowers-manager",
@@ -148,6 +153,11 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
     b === "remove" &&
     c === "superpowers@superpowers-manager"
   ) {
+    const data = ctx.readJson("plugin_list.json");
+    data.installed = data.installed.filter(
+      (item: { pluginId?: string }) => item.pluginId !== c,
+    );
+    ctx.writeJson("plugin_list.json", data);
     rmSync(
       join(ctx.state, "codex-home", "plugins", "cache", "superpowers-manager"),
       {

@@ -48,6 +48,7 @@ export const INSTALL_SCHEMA: Record<string, Rule> = {
   // intercepting the adapter — see install-commands.test.js's
   // "a failed fingerprint inspection is reported as an inspection failure".
   pluginAdd: ["ok", "fail", "noop", "stale", "orphan"],
+  marketplaceRemove: ["ok", "fail"],
   // No `fail`: the failed-inspection case is driven from the fake Codex by
   // `pluginAdd: "orphan"` instead, so the enum carries only the protocol-level
   // fault the real adapter cannot produce.
@@ -61,6 +62,7 @@ export const INSTALL_DEFAULTS = {
   updateControl: "managed",
   marketplaceAdd: "ok",
   pluginAdd: "ok",
+  marketplaceRemove: "ok",
   fingerprintInspect: "ok",
   pluginListRc: 0,
   marketplaceListRc: 0,

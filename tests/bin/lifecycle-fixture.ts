@@ -6,12 +6,16 @@
 // (`git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:418-423::established`).
 
 import {
+  chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
+  readlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
@@ -220,7 +224,7 @@ function spawnManager(
   executable: string,
   args: string[],
   env: Record<string, string>,
-  script: "install" | "update" | "prepare" | "uninstall",
+  script: "install" | "update" | "prepare" | "probe" | "uninstall",
   timeoutMs: number | undefined,
   watchdogArmPath: string | undefined,
   signal: AbortSignal | undefined,
@@ -410,8 +414,9 @@ function spawnManager(
  */
 export async function runScript(
   caseEnv: CaseEnv,
-  script: "install" | "update" | "prepare" | "uninstall",
+  script: "install" | "update" | "prepare" | "probe" | "uninstall",
   options: {
+    args?: string[];
     env?: Record<string, string>;
     path?: string;
     timeoutMs?: number;
@@ -494,7 +499,7 @@ export async function runScript(
   // over unchanged to the Node entrypoint.
   return await spawnManager(
     process.execPath,
-    [join(caseEnv.pkg, "src", "cli.ts"), script],
+    [join(caseEnv.pkg, "src", "cli.ts"), script, ...(options.args ?? [])],
     env,
     script,
     timeoutMs,
@@ -617,4 +622,77 @@ export function spawnFakeAdapter(
     stdout: result.stdout,
     stderr: result.stderr,
   };
+}
+
+export type ByteSnapshotEntry =
+  | readonly [relative: string, kind: "directory", mode: number]
+  | readonly [relative: string, kind: "file", mode: number, bytes: string]
+  | readonly [relative: string, kind: "symlink", target: string];
+
+export function snapshotTree(root: string): readonly ByteSnapshotEntry[] {
+  const rootStat = lstatSync(root);
+  if (!rootStat.isDirectory()) throw new Error(`${root} is not a directory`);
+  const entries: ByteSnapshotEntry[] = [
+    ["", "directory", rootStat.mode & 0o7777],
+  ];
+  const visit = (directory: string, prefix: string): void => {
+    for (const name of readdirSync(directory).sort()) {
+      const path = join(directory, name);
+      const relative = prefix ? `${prefix}/${name}` : name;
+      const stat = lstatSync(path);
+      const mode = stat.mode & 0o7777;
+      if (stat.isDirectory()) {
+        entries.push([relative, "directory", mode]);
+        visit(path, relative);
+      } else if (stat.isFile()) {
+        entries.push([
+          relative,
+          "file",
+          mode,
+          readFileSync(path).toString("base64"),
+        ]);
+      } else if (stat.isSymbolicLink()) {
+        entries.push([relative, "symlink", readlinkSync(path)]);
+      } else {
+        throw new Error(`unsupported fixture entry at ${path}`);
+      }
+    }
+  };
+  visit(root, "");
+  return entries;
+}
+
+export function writePiExecutable(
+  c: CaseEnv,
+  options: { failure?: "install" | "remove"; runtimeVersion?: string } = {},
+): string {
+  const module = join(c.dir, "fake-pi.mjs");
+  const executable = join(c.dir, "pi");
+  const runtimeVersion = options.runtimeVersion ?? "99.2.3";
+  writeFileSync(
+    module,
+    `import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";\n` +
+      `import { dirname, join } from "node:path";\n` +
+      `const args = process.argv.slice(2);\n` +
+      `writeFileSync(process.env.SPW_PI_LOG, args.join(" ") + "\\n", { flag: "a" });\n` +
+      `if (args.length === 1 && args[0] === "--version") {\n` +
+      `  process.stdout.write(${JSON.stringify(runtimeVersion + "\n")});\n` +
+      `} else if (args.length === 3 && (args[0] === "install" || args[0] === "remove") && args[2] === "--no-approve") {\n` +
+      `  if (args[0] === ${JSON.stringify(options.failure)}) process.exitCode = 7;\n` +
+      `  else {\n` +
+      `    const settingsFile = join(process.env.PI_CODING_AGENT_DIR, "settings.json");\n` +
+      `    const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, "utf8")) : {};\n` +
+      `    const packages = Array.isArray(settings.packages) ? settings.packages.filter((entry) => entry !== args[1]) : [];\n` +
+      `    if (args[0] === "install") packages.push(args[1]);\n` +
+      `    mkdirSync(dirname(settingsFile), { recursive: true });\n` +
+      `    writeFileSync(settingsFile, JSON.stringify({ ...settings, packages }));\n` +
+      `  }\n` +
+      `} else { process.exitCode = 99; }\n`,
+  );
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nexec "${process.execPath}" "${module}" "$@"\n`,
+  );
+  chmodSync(executable, 0o755);
+  return executable;
 }

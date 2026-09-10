@@ -1955,7 +1955,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   const err = capture();
   const status = await runProbe(["--porcelain"], {
     root: c.pkg,
-    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:118-126::tag.gpgsign=false` creates on
+    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:122-130::tag.gpgsign=false` creates on
     // UPSTREAM; both values come from the fixture, neither is invented.
     env: caseEnv(c, {
       SUPERPOWERS_REF: "v1.0.0",
@@ -2310,7 +2310,7 @@ void test("UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources
 void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", async () => {
   {
     // `pluginAdd: "stale"` makes the fake Codex's install branch write a
-    // deliberately wrong cached commit (`tests/bin/install-fakes.ts:139::data.commit = "0".repeat(40)`), so the
+    // deliberately wrong cached commit (`tests/bin/install-fakes.ts:144::data.commit = "0".repeat(40)`), so the
     // post-install fingerprint verification finds a real, installed, but
     // MISMATCHED commit — install's own verification failure, not a fixture
     // fault.

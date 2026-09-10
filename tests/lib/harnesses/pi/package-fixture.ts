@@ -30,6 +30,13 @@ export function nativeFixture(t: TestContext): string {
   return root;
 }
 
+export function crossHarnessUpstream(t: TestContext): string {
+  const upstream = nativeFixture(t);
+  writeFileSync(join(upstream, "README.md"), "cross-harness fixture\n");
+  writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "fixture conduct\n");
+  return upstream;
+}
+
 export function fixtureGit(root: string, ...args: string[]): string {
   return execFileSync(
     "git",
