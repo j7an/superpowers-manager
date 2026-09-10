@@ -65,5 +65,11 @@
     ".agents/plugins/marketplace.json",
     "plugins/superpowers/.codex-plugin/plugin.template.json",
     "README.md"
+  ],
+  "dependencies": {
+    "smol-toml": "1.8.0"
+  },
+  "bundleDependencies": [
+    "smol-toml"
   ]
 }

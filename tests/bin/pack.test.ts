@@ -415,7 +415,9 @@ void test("one staged package is delivered and all staging is removed", (t) => {
   assert.equal(sealed.version, "0.0.0-fixture");
   assert.equal(sealed.bin["superpowers-manager"], "dist/cli.js");
   assert.equal(sealed.scripts.prepack, undefined);
-  assert.deepEqual(Object.keys(sealed.dependencies ?? {}), []);
+  assert.equal(typeof sealed.dependencies?.["smol-toml"], "string");
+  assert.equal(sealed.bundleDependencies?.includes("smol-toml"), true);
+  assert.match(listing, /^package\/node_modules\/smol-toml\/LICENSE$/m);
 });
 
 void test("direct npm pack refuses absent and stale checkout output", (t) => {
