@@ -278,6 +278,48 @@ void test("inspection reports absence when neither native manager resource exist
   }
 });
 
+void test("native absence and legacy migration outrank a stale durable selection", async (t) => {
+  const fixture = await durableFixture(t);
+  const stale = nativeSelection(
+    "a".repeat(40),
+    "https://example.invalid/stale-selection.git",
+  );
+  const absent = native(fixture.paths, {
+    marketplaceRoot: null,
+    pluginPresent: false,
+    pluginEnabled: false,
+    activeVersion: null,
+    activeRoot: null,
+  });
+  const absentResult = await inspectCodexInstallation(
+    stale,
+    { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },
+    () => nativeResult(absent),
+  );
+  assert.equal(absentResult.outcome.ok, true, JSON.stringify(absentResult));
+  if (!absentResult.outcome.ok) assert.fail("expected absent inspection");
+  assert.deepEqual(absentResult.outcome.result, {
+    kind: "absent",
+    observedIdentity: "",
+  });
+
+  const legacy = native(fixture.paths, {
+    marketplaceRoot: join(fixture.root, "legacy-marketplace"),
+    activeRoot: join(fixture.root, "legacy-cache"),
+  });
+  const legacyResult = await inspectCodexInstallation(
+    stale,
+    { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },
+    () => nativeResult(legacy),
+  );
+  assert.equal(legacyResult.outcome.ok, true, JSON.stringify(legacyResult));
+  if (!legacyResult.outcome.ok) assert.fail("expected migration inspection");
+  assert.deepEqual(legacyResult.outcome.result, {
+    kind: "mismatch",
+    observedIdentity: "legacy Codex marketplace source",
+  });
+});
+
 void test("inspection classifies disabled and missing active manager payloads as repairable mismatches", async (t) => {
   const fixture = await durableFixture(t);
   for (const [name, observed] of [

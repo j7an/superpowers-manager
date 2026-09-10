@@ -194,28 +194,6 @@ export async function inspectCodexInstallation(
       messages,
     );
   }
-  if (marketplace !== null) {
-    try {
-      if (
-        marketplace.artifact.commit !== selection.desiredCommit ||
-        marketplace.artifact.compatibility.kind !== "supported" ||
-        !(await matchesSelection(marketplace.artifact.root, selection))
-      ) {
-        return mismatch(
-          "durable Codex marketplace differs from selection",
-          messages,
-        );
-      }
-    } catch {
-      return failureResult(
-        operation,
-        "inspect-failed",
-        `cannot inspect owned Codex marketplace at ${paths.marketplaceRoot}`,
-        [],
-        messages,
-      );
-    }
-  }
   const observed = native.outcome.result;
   if (!observed.pluginPresent && observed.marketplaceRoot === null) {
     return successResult(
@@ -232,6 +210,26 @@ export async function inspectCodexInstallation(
   }
   if (marketplace === null)
     return mismatch("durable Codex marketplace is missing", messages);
+  try {
+    if (
+      marketplace.artifact.commit !== selection.desiredCommit ||
+      marketplace.artifact.compatibility.kind !== "supported" ||
+      !(await matchesSelection(marketplace.artifact.root, selection))
+    ) {
+      return mismatch(
+        "durable Codex marketplace differs from selection",
+        messages,
+      );
+    }
+  } catch {
+    return failureResult(
+      operation,
+      "inspect-failed",
+      `cannot inspect owned Codex marketplace at ${paths.marketplaceRoot}`,
+      [],
+      messages,
+    );
+  }
   if (
     !observed.pluginPresent ||
     !observed.pluginEnabled ||
