@@ -52,7 +52,7 @@ function preparedCommit(c: CaseEnv): string {
 
 async function runDurable(
   c: CaseEnv,
-  command: "install" | "update" | "prepare" | "probe",
+  command: "install" | "update" | "prepare" | "probe" | "uninstall",
   args: string[] = [],
 ) {
   return await runScript(c, command, {
@@ -60,6 +60,79 @@ async function runDurable(
     env: DURABLE_ENV,
   });
 }
+
+void test("durable uninstall removes only the owned marketplace", async () => {
+  const c = lifecycleCase();
+  await installCurrent(c);
+  const p = paths(c);
+  const legacySentinel = join(c.pkg, "legacy-source-marker");
+  writeFileSync(legacySentinel, "preserve legacy source\n");
+  const preparedSkill = join(
+    p.preparedRoot,
+    "skills",
+    "using-superpowers",
+    "SKILL.md",
+  );
+  const preparedText = readFileSync(preparedSkill, "utf8");
+  const selectionPath = join(
+    c.home,
+    ".config",
+    "superpowers-manager",
+    "selection.json",
+  );
+  mkdirSync(join(selectionPath, ".."), { recursive: true });
+  writeFileSync(selectionPath, '{"mode":"persistent","source":"local"}\n');
+  const selectionText = readFileSync(selectionPath, "utf8");
+  writeFileSync(
+    join(c.state, "marketplace_list.json"),
+    `${JSON.stringify({
+      marketplaces: [
+        { name: "openai-curated", root: "/other" },
+        { name: "superpowers-manager", root: p.marketplaceRoot },
+      ],
+    })}\n`,
+  );
+
+  const removed = await runDurable(c, "uninstall");
+
+  assert.equal(removed.status, 0, removed.stdout + removed.stderr);
+  assert.equal(
+    readFileSync(legacySentinel, "utf8"),
+    "preserve legacy source\n",
+  );
+  assert.equal(readFileSync(preparedSkill, "utf8"), preparedText);
+  assert.equal(readFileSync(selectionPath, "utf8"), selectionText);
+  assert.equal(await readCodexMarketplace(p.marketplaceRoot), null);
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(c.state, "marketplace_list.json"), "utf8")),
+    { marketplaces: [{ name: "openai-curated", root: "/other" }] },
+  );
+});
+
+void test("legacy uninstall never depends on or deletes its source tree", async (t) => {
+  for (const source of ["present", "missing"] as const) {
+    await t.test(source, async () => {
+      const c = lifecycleCase();
+      await installCurrent(c);
+      makeLegacy(c);
+      const legacySentinel = join(c.pkg, "legacy-source-marker");
+      const before = readFileSync(legacySentinel, "utf8");
+      if (source === "missing") {
+        rmSync(join(c.pkg, "plugins", "superpowers"), {
+          recursive: true,
+          force: true,
+        });
+      }
+
+      const removed = await runDurable(c, "uninstall");
+
+      assert.equal(removed.status, 0, removed.stdout + removed.stderr);
+      assert.equal(readFileSync(legacySentinel, "utf8"), before);
+      assert.equal(existsSync(c.pkg), true);
+      assert.equal(await readCodexMarketplace(paths(c).marketplaceRoot), null);
+    });
+  }
+});
 
 async function installCurrent(c: CaseEnv): Promise<void> {
   const result = await runDurable(c, "install");
@@ -256,7 +329,7 @@ void test("invalid saved selection fails before native access", async () => {
   assert.deepEqual(readLog(c.codexLog), []);
 });
 
-void test("unresolved recovery blocks prepare, install, and update", async () => {
+void test("unresolved recovery blocks every lifecycle mutation", async () => {
   const c = lifecycleCase();
   await installCurrent(c);
   const p = paths(c);
@@ -277,7 +350,12 @@ void test("unresolved recovery blocks prepare, install, and update", async () =>
     oldDigest: old.digest,
     oldIdentity: { dev: old.dev, ino: old.ino },
   });
-  for (const command of ["prepare", "install", "update"] as const) {
+  for (const command of [
+    "prepare",
+    "install",
+    "update",
+    "uninstall",
+  ] as const) {
     writeFileSync(c.codexLog, "");
     const result = await runDurable(c, command);
     assert.equal(

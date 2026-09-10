@@ -919,6 +919,7 @@ async function codexSandbox(t: import("node:test").TestContext) {
   await mkdir(searchRoot);
   return {
     env: {
+      CODEX_HOME: searchRoot,
       SUPERPOWERS_CODEX: FAKE_CODEX,
       SUPERPOWERS_INSTALLED_SEARCH_ROOT: searchRoot,
       FAKE_CODEX_LOG: log,
@@ -944,6 +945,12 @@ void test("Codex harness inspection and removal stay inside the isolated fake Co
     0,
   );
   assert.deepEqual(await sandbox.commands(), [
+    "plugin list --json",
+    "plugin marketplace list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
     "plugin list --json",
     "plugin marketplace list --json",
   ]);

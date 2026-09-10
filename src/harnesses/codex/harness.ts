@@ -8,7 +8,6 @@ import {
 import {
   codexInspect,
   codexInstall,
-  codexRemove,
   type CodexRemovalInput,
 } from "./adapter.ts";
 import {
@@ -38,7 +37,10 @@ import {
 } from "./lifecycle.ts";
 import { commitMatches } from "../../status.ts";
 import { codexHome, codexPaths } from "./paths.ts";
-import { installCodexMarketplace } from "./publication.ts";
+import {
+  installCodexMarketplace,
+  removeCodexMarketplace,
+} from "./publication.ts";
 import { readCodexRecovery } from "./recovery.ts";
 import { inspectCodexInstallation } from "./state.ts";
 
@@ -491,7 +493,7 @@ export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
       ),
     ),
   remove: async (input, ctx) => {
-    const result = await codexRemove(input, ctx);
+    const result = await removeCodexMarketplace(input, ctx);
     if (!result.outcome.ok) return preserveFailure(result);
     if (result.status !== 0) {
       return invalidStatus(

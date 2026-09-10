@@ -45,7 +45,7 @@ import { successResult, failureResult } from "../../src/adapter-result.ts";
 
 // Fixture JSON, verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:101-108::plugin_present='{"installed":[{"pluginId":"superpowers@superpowers-manager`.
 const PLUGIN_PRESENT =
-  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager"}],"available":[]}';
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager","installed":true,"enabled":true,"version":"1.0.0"}],"available":[]}';
 const PLUGIN_ABSENT = '{"installed":[],"available":[]}';
 const MARKETPLACE_PRESENT =
   '{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"/y"}]}';
@@ -56,7 +56,7 @@ const LEGACY_PLUGIN_PRESENT =
 const LEGACY_MARKETPLACE_PRESENT =
   '{"marketplaces":[{"name":"superpowers-wrapper","root":"/legacy"}]}';
 const BOTH_PLUGINS_PRESENT =
-  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager"},{"pluginId":"superpowers@superpowers-wrapper","name":"superpowers","marketplaceName":"superpowers-wrapper"}],"available":[]}';
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager","installed":true,"enabled":true,"version":"1.0.0"},{"pluginId":"superpowers@superpowers-wrapper","name":"superpowers","marketplaceName":"superpowers-wrapper"}],"available":[]}';
 const BOTH_MARKETPLACES_PRESENT =
   '{"marketplaces":[{"name":"superpowers-manager","root":"/manager"},{"name":"superpowers-wrapper","root":"/legacy"}]}';
 
@@ -197,12 +197,13 @@ function assertNoAdapterUninstall(codex: string[], message: string) {
 
 /**
  * The positive counterpart, and the Codex-level witness that the adapter
- * uninstall operation ran to completion: the verify-after ownership inspection
- * in `src/commands/uninstall.ts` exists only on that path.
+ * uninstall operation ran to completion: the durable wrapper's three fresh
+ * native observations and the command's verify-after ownership inspection
+ * exist only on that path.
  *
- * It is an ORDERING witness, not a call witness: two inspections do not by
- * themselves prove the adapter-uninstall step ran, since the before and after
- * inspections emit one each.
+ * It is an ORDERING witness, not a call witness: listings alone do not prove
+ * the adapter-uninstall step ran, since both the command and wrapper inspect
+ * around that call.
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
@@ -211,10 +212,14 @@ function assertNoAdapterUninstall(codex: string[], message: string) {
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
  */
-function assertAdapterUninstallRan(codex: string[], message: string) {
+function assertAdapterUninstallRan(
+  codex: string[],
+  message: string,
+  inspections = 5,
+) {
   assert.equal(
     ownershipInspections(codex),
-    2,
+    inspections,
     `${message}:\n${codex.join("\n")}`,
   );
 }
@@ -420,8 +425,14 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assert.deepEqual(readLog(c.codexLog), [
       "plugin list --json",
       "plugin marketplace list --json",
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin list --json",
+      "plugin marketplace list --json",
       "plugin remove superpowers@superpowers-manager",
       "plugin marketplace remove superpowers-manager",
+      "plugin list --json",
+      "plugin marketplace list --json",
       "plugin list --json",
       "plugin marketplace list --json",
     ]);
@@ -829,11 +840,12 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assertAdapterUninstallRan(
       codex,
       "verify-after must re-run ownership inspection after adapter uninstall",
+      4,
     );
     // :408 — the removal was attempted...
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     // :410 — ...but the plugin is still present on re-query.
-    assert.ok(out.includes("still installed"), out);
+    assert.ok(out.includes("deregistration could not be verified"), out);
   });
 
   void test("verify-after schema drift: fail closed instead of reporting success (:412-426)", async () => {
@@ -856,11 +868,12 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assertAdapterUninstallRan(
       codex,
       "verify-after must re-run ownership inspection after adapter uninstall",
+      4,
     );
     // :420
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     // :421
-    assert.ok(out.includes("cannot parse output of"), out);
+    assert.ok(out.includes("deregistration could not be verified"), out);
     // :422-426 — non-vacuous: the assertion above proves `out` carries the
     // subject's diagnostics.
     assert.ok(

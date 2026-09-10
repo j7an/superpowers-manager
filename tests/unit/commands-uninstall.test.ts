@@ -33,7 +33,7 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -73,7 +73,7 @@ void test("the two closing lines port verbatim except for the prepare invocation
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -108,7 +108,7 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -146,7 +146,7 @@ void test("a plugin resource still installed after removal is a distinct, named 
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -172,7 +172,7 @@ void test("an unrecognised identity state after removal is a distinct, named fai
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -201,7 +201,7 @@ void test("a non-string identity_state after removal fails closed with its own d
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -241,7 +241,7 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -278,7 +278,7 @@ void test("stage 1 malformed presence content is a DIFFERENT failure than stage 
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -324,7 +324,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
   };
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -366,7 +366,7 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -404,7 +404,7 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -440,7 +440,7 @@ void test("stage 3 malformed presence content is a DIFFERENT failure than stage 
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -472,7 +472,7 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
   ]);
   const status = await runUninstall(["--bogus", "extra"], {
     root: "/nowhere",
-    env: {},
+    env: { HOME: "/nowhere" },
     stdout: out.stream,
     stderr: err.stream,
     options: { harness: "codex", allowExperimental: false },
@@ -532,7 +532,7 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
     };
     const status = await runUninstall([], {
       root: "/nowhere",
-      env: { TMPDIR: parent },
+      env: { HOME: "/nowhere", TMPDIR: parent },
       stdout: out.stream,
       stderr: err.stream,
       options: { harness: "codex", allowExperimental: false },

@@ -384,8 +384,10 @@ async function validateObservedObjects(
       ];
       break;
     case "restored":
-    case "deregistered":
       liveAllowed = [record.oldIdentity];
+      break;
+    case "deregistered":
+      liveAllowed = [record.oldIdentity, null];
       break;
     default:
       liveAllowed = [record.publishedIdentity];

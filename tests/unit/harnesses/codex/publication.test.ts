@@ -36,9 +36,14 @@ import {
 import { codexPaths } from "../../../../src/harnesses/codex/paths.ts";
 import {
   installCodexMarketplace,
+  removeCodexMarketplace,
   type CodexPublicationDependencies,
+  type CodexRemovalDependencies,
 } from "../../../../src/harnesses/codex/publication.ts";
-import { readCodexRecovery } from "../../../../src/harnesses/codex/recovery.ts";
+import {
+  beginCodexRecovery,
+  readCodexRecovery,
+} from "../../../../src/harnesses/codex/recovery.ts";
 import { writeQualifiedCodexFixture } from "../../../lib/harnesses/codex/prepared-fixture.ts";
 
 const RECEIPT: InstallReceipt = {
@@ -188,6 +193,182 @@ async function oldMarketplace(f: Awaited<ReturnType<typeof fixture>>) {
   await seedMarketplace(old, f.pkg, f.paths.marketplaceRoot);
   return old;
 }
+
+async function removalFixture(t: test.TestContext) {
+  const f = await fixture(t);
+  await seedMarketplace(f.artifact, f.pkg, f.paths.marketplaceRoot);
+  f.setNative(
+    nativeState({
+      marketplaceRoot: f.paths.marketplaceRoot,
+      pluginPresent: true,
+      pluginEnabled: true,
+      activeVersion: "fixture",
+      activeRoot: f.paths.publishedPluginRoot,
+    }),
+  );
+  let removeCalls = 0;
+  const dependencies: CodexRemovalDependencies = {
+    readNative: f.dependencies.readNative,
+    removeNative: async () => {
+      removeCalls += 1;
+      f.setNative(nativeState());
+      return successResult("uninstall", {}, [
+        { channel: "stdout", text: "removed" },
+      ]);
+    },
+  };
+  return { ...f, dependencies, removeCalls: () => removeCalls };
+}
+
+void test("already absent native registration cleans a verified durable marketplace", async (t) => {
+  const f = await removalFixture(t);
+  f.setNative(nativeState());
+  const result = await removeCodexMarketplace(
+    { pluginPresent: true, marketplacePresent: true },
+    f.ctx,
+    f.dependencies,
+  );
+  assert.equal(result.outcome.ok, true, JSON.stringify(result));
+  assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
+  assert.equal(await readCodexRecovery(f.paths), null);
+  assert.equal(f.removeCalls(), 1);
+});
+
+void test("unknown durable content refuses native removal", async (t) => {
+  const f = await fixture(t);
+  await mkdir(f.paths.marketplaceRoot, { recursive: true });
+  await writeFile(join(f.paths.marketplaceRoot, "unknown"), "foreign\n");
+  let removeCalls = 0;
+  const result = await removeCodexMarketplace(
+    { pluginPresent: false, marketplacePresent: false },
+    f.ctx,
+    {
+      readNative: f.dependencies.readNative,
+      removeNative: async () => {
+        removeCalls += 1;
+        return successResult("uninstall", {}, []);
+      },
+    },
+  );
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok)
+    assert.equal(result.outcome.error.code, "removal-refused");
+  assert.equal(removeCalls, 0);
+  assert.equal(
+    await readFile(join(f.paths.marketplaceRoot, "unknown"), "utf8"),
+    "foreign\n",
+  );
+});
+
+void test("native failure after apparent deregistration preserves durable recovery evidence", async (t) => {
+  const f = await removalFixture(t);
+  const result = await removeCodexMarketplace(
+    { pluginPresent: true, marketplacePresent: true },
+    f.ctx,
+    {
+      readNative: f.dependencies.readNative,
+      removeNative: async () => {
+        f.setNative(nativeState());
+        return failureResult(
+          "uninstall",
+          "uninstall-failed",
+          "native removal failed",
+          [],
+          [],
+        );
+      },
+    },
+  );
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok)
+    assert.equal(result.outcome.error.code, "native-failed");
+  assert.ok(await readCodexMarketplace(f.paths.marketplaceRoot));
+  assert.equal((await readCodexRecovery(f.paths))?.phase, "removing");
+});
+
+void test("durable content changed during removal is preserved with unresolved recovery", async (t) => {
+  const f = await removalFixture(t);
+  const marker = join(f.paths.publishedPluginRoot, "README.md");
+  const result = await removeCodexMarketplace(
+    { pluginPresent: true, marketplacePresent: true },
+    f.ctx,
+    {
+      readNative: f.dependencies.readNative,
+      removeNative: async () => {
+        await writeFile(marker, "changed during removal\n");
+        f.setNative(nativeState());
+        return successResult("uninstall", {}, []);
+      },
+    },
+  );
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok)
+    assert.equal(result.outcome.error.code, "recovery-required");
+  assert.equal(await readFile(marker, "utf8"), "changed during removal\n");
+  await assert.rejects(
+    readCodexRecovery(f.paths),
+    /cannot inspect Codex recovery state/u,
+  );
+});
+
+void test("an unresolved recovery journal blocks removal before native observation", async (t) => {
+  const f = await removalFixture(t);
+  const owned = await readCodexMarketplace(f.paths.marketplaceRoot);
+  assert.ok(owned);
+  await beginCodexRecovery(f.paths, {
+    marketplaceRoot: f.paths.marketplaceRoot,
+    priorNative: f.getNative(),
+    oldDigest: owned.digest,
+    oldIdentity: { dev: owned.dev, ino: owned.ino },
+  });
+  let reads = 0;
+  let removes = 0;
+  const result = await removeCodexMarketplace(
+    { pluginPresent: true, marketplacePresent: true },
+    f.ctx,
+    {
+      readNative: async () => {
+        reads += 1;
+        return nativeResult(f.getNative());
+      },
+      removeNative: async () => {
+        removes += 1;
+        return successResult("uninstall", {}, []);
+      },
+    },
+  );
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok)
+    assert.equal(result.outcome.error.code, "recovery-required");
+  assert.equal(reads, 0);
+  assert.equal(removes, 0);
+  assert.ok(await readCodexMarketplace(f.paths.marketplaceRoot));
+});
+
+void test("intact durable files remain retryable after cleanup failure", async (t) => {
+  const f = await removalFixture(t);
+  await chmod(f.paths.marketplaceRoot, 0o500);
+  t.after(() => chmod(f.paths.marketplaceRoot, 0o700).catch(() => undefined));
+  const first = await removeCodexMarketplace(
+    { pluginPresent: true, marketplacePresent: true },
+    f.ctx,
+    f.dependencies,
+  );
+  assert.equal(first.outcome.ok, false);
+  if (!first.outcome.ok)
+    assert.equal(first.outcome.error.code, "cleanup-failed");
+  assert.ok(await readCodexMarketplace(f.paths.marketplaceRoot));
+  assert.equal(await readCodexRecovery(f.paths), null);
+
+  await chmod(f.paths.marketplaceRoot, 0o700);
+  const second = await removeCodexMarketplace(
+    { pluginPresent: false, marketplacePresent: false },
+    f.ctx,
+    f.dependencies,
+  );
+  assert.equal(second.outcome.ok, true, JSON.stringify(second));
+  assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
+});
 
 void test("publication returns a pending transaction and preserves ordered native messages", async (t) => {
   const f = await fixture(t);

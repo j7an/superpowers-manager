@@ -16,8 +16,10 @@ import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
 import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
 import {
   codexInspect,
+  codexRemove,
   codexReadNativeState,
   type CodexNativeState,
+  type CodexRemovalInput,
 } from "./adapter.ts";
 import { readCodexAssessment } from "./compatibility.ts";
 import {
@@ -47,6 +49,11 @@ export interface CodexPublicationDependencies {
   readonly beginPublication: typeof beginDirectoryPublication;
 }
 
+export interface CodexRemovalDependencies {
+  readonly readNative: typeof codexReadNativeState;
+  readonly removeNative: typeof codexRemove;
+}
+
 export type ActivateCodex = (
   root: string,
   ctx: AdapterContext,
@@ -58,12 +65,25 @@ const DEFAULTS: CodexPublicationDependencies = {
   beginPublication: beginDirectoryPublication,
 };
 
+const REMOVAL_DEFAULTS: CodexRemovalDependencies = {
+  readNative: codexReadNativeState,
+  removeNative: codexRemove,
+};
+
 function fail<T>(
   code: string,
   message: string,
   messages: readonly AdapterMessage[],
 ): AdapterResult<T> {
   return failureResult("install-codex", code, message, [], messages);
+}
+
+function removalFailure(
+  code: string,
+  message: string,
+  messages: readonly AdapterMessage[],
+): AdapterResult<null> {
+  return failureResult("uninstall-codex", code, message, [], messages);
 }
 
 function objectResult(result: AdapterResult): Record<string, unknown> {
@@ -168,6 +188,199 @@ function sameMarketplace(
         left.digest === right.digest;
 }
 
+function nativeAbsent(state: CodexNativeState): boolean {
+  return (
+    state.marketplaceRoot === null &&
+    !state.pluginPresent &&
+    !state.pluginEnabled &&
+    state.activeVersion === null &&
+    state.activeRoot === null
+  );
+}
+
+function durableRegistrationMissing(
+  state: CodexNativeState,
+  marketplaceRoot: string,
+  snapshot: MarketplaceSnapshot | null,
+): boolean {
+  return (
+    snapshot === null &&
+    state.marketplaceRoot !== null &&
+    state.marketplaceRoot === marketplaceRoot
+  );
+}
+
+async function sameCapturedMarketplace(
+  root: string,
+  captured: MarketplaceSnapshot,
+): Promise<boolean> {
+  try {
+    return sameMarketplace(await readCodexMarketplace(root), captured);
+  } catch {
+    return false;
+  }
+}
+
+export async function removeCodexMarketplace(
+  _input: CodexRemovalInput,
+  ctx: AdapterContext,
+  dependencies: CodexRemovalDependencies = REMOVAL_DEFAULTS,
+): Promise<AdapterResult<null>> {
+  const messages: AdapterMessage[] = [];
+  const paths = codexPaths(ctx.env ?? {}, process.cwd());
+  let pending: PendingCodexPublication | undefined;
+  let captured: MarketplaceSnapshot | null = null;
+  let nativeAttempted = false;
+  try {
+    if ((await readCodexRecovery(paths)) !== null) {
+      return removalFailure(
+        "recovery-required",
+        `Codex recovery is required before mutation; preserve material at ${paths.recoveryRoot}`,
+        messages,
+      );
+    }
+    const priorNative = await observeNative(ctx, dependencies, messages);
+    captured = await readCodexMarketplace(paths.marketplaceRoot);
+    if (
+      durableRegistrationMissing(priorNative, paths.marketplaceRoot, captured)
+    ) {
+      return removalFailure(
+        "removal-refused",
+        `cannot remove Codex registration because owned marketplace content is missing at ${paths.marketplaceRoot}`,
+        messages,
+      );
+    }
+    if (captured !== null) {
+      pending = await beginCodexRecovery(paths, {
+        marketplaceRoot: paths.marketplaceRoot,
+        priorNative,
+        oldDigest: captured.digest,
+        oldIdentity: { dev: captured.dev, ino: captured.ino },
+      });
+      await advanceCodexRecovery(pending, "removing");
+    }
+
+    const beforeRemoval = await observeNative(ctx, dependencies, messages);
+    const marketplaceUnchanged =
+      captured === null ||
+      (await sameCapturedMarketplace(paths.marketplaceRoot, captured));
+    if (!sameNative(beforeRemoval, priorNative) || !marketplaceUnchanged) {
+      if (pending !== undefined && marketplaceUnchanged) {
+        await finishCodexRecovery(pending);
+      }
+      return removalFailure(
+        "removal-refused",
+        "Codex native or durable marketplace state changed before removal",
+        messages,
+      );
+    }
+
+    const currentInput: CodexRemovalInput = {
+      pluginPresent: beforeRemoval.pluginPresent,
+      marketplacePresent: beforeRemoval.marketplaceRoot !== null,
+    };
+    nativeAttempted = true;
+    let removed: AdapterResult;
+    try {
+      removed = await dependencies.removeNative(currentInput, ctx);
+    } catch {
+      removed = failureResult(
+        "uninstall",
+        "native-failed",
+        "Codex native removal threw before returning a result",
+        [],
+        [],
+      );
+    }
+    messages.push(...removed.outcome.messages);
+
+    let afterRemoval: CodexNativeState;
+    try {
+      afterRemoval = await observeNative(ctx, dependencies, messages);
+    } catch {
+      return removalFailure(
+        "recovery-required",
+        pending === undefined
+          ? "Codex deregistration could not be verified"
+          : `Codex deregistration could not be verified; preserve the marketplace and recovery material at ${paths.marketplaceRoot} and ${paths.recoveryRoot}`,
+        messages,
+      );
+    }
+    if (removed.status !== 0 || !removed.outcome.ok) {
+      if (pending === undefined && !removed.outcome.ok) {
+        return failureResult(
+          removed.outcome.operation,
+          removed.outcome.error.code,
+          removed.outcome.error.message,
+          removed.outcome.error.hints,
+          messages,
+        );
+      }
+      return removalFailure(
+        "native-failed",
+        pending === undefined
+          ? "Codex native removal failed"
+          : `Codex native removal failed; preserve the marketplace and recovery material at ${paths.marketplaceRoot} and ${paths.recoveryRoot}`,
+        messages,
+      );
+    }
+    if (!nativeAbsent(afterRemoval)) {
+      return removalFailure(
+        "recovery-required",
+        pending === undefined
+          ? "Codex deregistration could not be verified"
+          : `Codex deregistration could not be verified; preserve the marketplace and recovery material at ${paths.marketplaceRoot} and ${paths.recoveryRoot}`,
+        messages,
+      );
+    }
+    if (pending === undefined || captured === null) {
+      return successResult("uninstall", null, messages);
+    }
+
+    await advanceCodexRecovery(pending, "deregistered");
+    if (!(await sameCapturedMarketplace(paths.marketplaceRoot, captured))) {
+      return removalFailure(
+        "recovery-required",
+        `Codex deregistered, but the durable marketplace changed; preserve recovery material at ${paths.recoveryRoot}`,
+        messages,
+      );
+    }
+    try {
+      await rm(paths.marketplaceRoot, { recursive: true });
+    } catch {
+      if (await sameCapturedMarketplace(paths.marketplaceRoot, captured)) {
+        try {
+          await finishCodexRecovery(pending);
+          return removalFailure(
+            "cleanup-failed",
+            `Codex deregistered, but the owned marketplace could not be removed at ${paths.marketplaceRoot}; retry uninstall to clean it`,
+            messages,
+          );
+        } catch {
+          // Fall through to the unresolved-recovery result below.
+        }
+      }
+      return removalFailure(
+        "recovery-required",
+        `Codex deregistered, but durable cleanup could not be completed safely; preserve recovery material at ${paths.recoveryRoot}`,
+        messages,
+      );
+    }
+    await finishCodexRecovery(pending);
+    return successResult("uninstall", null, messages);
+  } catch {
+    return removalFailure(
+      pending !== undefined && nativeAttempted
+        ? "recovery-required"
+        : "removal-refused",
+      pending !== undefined
+        ? `Codex removal could not be completed safely; preserve the marketplace and recovery material at ${paths.marketplaceRoot} and ${paths.recoveryRoot}`
+        : `cannot remove Codex marketplace; verify native and durable ownership at ${paths.marketplaceRoot}`,
+      messages,
+    );
+  }
+}
+
 function hasFilesystemAccessFailure(cause: unknown): boolean {
   let current = cause;
   for (
@@ -226,7 +439,7 @@ async function verifyPrepared(
 
 async function observeNative(
   ctx: AdapterContext,
-  dependencies: CodexPublicationDependencies,
+  dependencies: Pick<CodexPublicationDependencies, "readNative">,
   messages: AdapterMessage[],
 ): Promise<CodexNativeState> {
   const result = await dependencies.readNative(ctx);

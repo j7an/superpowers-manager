@@ -231,6 +231,24 @@ void test("interrupted publishing is readable in a fresh process-style inspectio
   assert.equal((await readCodexRecovery(paths))?.phase, "publishing");
 });
 
+void test("interrupted durable cleanup remains a readable deregistered recovery", async (t) => {
+  const { paths } = await fixture(t);
+  await mkdir(paths.marketplaceRoot, { recursive: true });
+  await writeFile(join(paths.marketplaceRoot, "owned"), "before\n");
+  const old = await lstat(paths.marketplaceRoot);
+  const pending = await beginCodexRecovery(paths, {
+    marketplaceRoot: paths.marketplaceRoot,
+    priorNative: ABSENT_NATIVE,
+    oldDigest: await digestArtifactTree(paths.marketplaceRoot),
+    oldIdentity: { dev: old.dev, ino: old.ino },
+  });
+  await advanceCodexRecovery(pending, "removing");
+  await advanceCodexRecovery(pending, "deregistered");
+  await rm(paths.marketplaceRoot, { recursive: true });
+
+  assert.equal((await readCodexRecovery(paths))?.phase, "deregistered");
+});
+
 void test("finish removes only the captured journal and empty recovery directory", async (t) => {
   const { paths } = await fixture(t);
   const pending = await beginCodexRecovery(paths, {
