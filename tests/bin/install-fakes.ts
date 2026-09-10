@@ -31,7 +31,13 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("codex.log", ctx.args.join(" "));
   injectSpuriousMutation(ctx, "plugin add superpowers@spurious");
 
-  const pkgRoot = process.env.SPW_TEST_PKG_ROOT;
+  const home = process.env.HOME;
+  const durableMarketplace = join(
+    home as string,
+    ".codex",
+    "superpowers-manager",
+    "marketplace",
+  );
   const [a, b, c, d] = ctx.args;
 
   if (
@@ -49,7 +55,7 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
     a === "plugin" &&
     b === "marketplace" &&
     c === "add" &&
-    d === pkgRoot
+    d === durableMarketplace
   ) {
     if (ctx.config.marketplaceAdd === "fail") {
       process.exitCode = 1;
@@ -123,18 +129,17 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
       "1.0.0",
     );
     mkdirSync(dest, { recursive: true });
-    cpSync(
-      join(
-        pkgRoot as string,
-        "plugins",
-        "superpowers",
-        ".superpowers-upstream.json",
-      ),
-      join(dest, ".superpowers-upstream.json"),
-    );
+    cpSync(join(durableMarketplace, "plugins", "superpowers"), dest, {
+      recursive: true,
+    });
     ctx.writeJson("plugin_list.json", {
       installed: [
-        { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
+        {
+          pluginId: "superpowers@superpowers-manager",
+          installed: true,
+          enabled: true,
+          version: "1.0.0",
+        },
       ],
       available: [],
     });

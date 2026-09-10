@@ -50,12 +50,17 @@ void test("Codex home falls back only from an empty CODEX_HOME", () => {
 void test("Codex preparation rejects only paths that overlap published or recovery storage", async (t) => {
   const root = await sandbox(t);
   const paths = codexPaths({ CODEX_HOME: join(root, "codex-home") }, root);
-  const prefixSibling = `${paths.publishedPluginRoot}-scratch`;
+  const prefixSibling = `${paths.marketplaceRoot}-scratch`;
   const alias = join(root, "prepared-alias");
   await symlink(paths.publishedPluginRoot, alias);
 
   const cases: readonly [string, string, boolean][] = [
     ["the published root itself", paths.publishedPluginRoot, true],
+    [
+      "a different descendant of the published marketplace",
+      join(paths.marketplaceRoot, ".agents", "prepared"),
+      true,
+    ],
     ["a published ancestor", paths.managerRoot, true],
     [
       "a descendant of recovery storage",

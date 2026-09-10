@@ -62,6 +62,7 @@ async function makeCtx(
       HOME: join(dir, "home"),
       PATH: process.env.PATH ?? "",
       SUPERPOWERS_CONFIG_DIR: configDir,
+      SUPERPOWERS_PLUGIN_ROOT: join(dir, "plugins", "superpowers"),
       SUPERPOWERS_UPSTREAM_URL: "https://example.invalid/upstream",
       SUPERPOWERS_REF: opts.desiredCommit,
       ...opts.extraEnv,

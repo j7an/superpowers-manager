@@ -121,13 +121,17 @@ function preserveFailure<T, U>(result: AdapterResult<U>): AdapterResult<T> {
 }
 
 function mismatch(
-  identity: string,
+  reason: string,
   messages: AdapterResult["outcome"]["messages"] = [],
+  observedIdentity = "",
 ): AdapterResult<InstalledState> {
   return successResult(
     "inspect-codex-installed",
-    { kind: "mismatch", observedIdentity: identity },
-    messages,
+    { kind: "mismatch", observedIdentity },
+    [
+      ...messages,
+      { channel: "stderr", text: `Codex installation state: ${reason}` },
+    ],
   );
 }
 
@@ -181,7 +185,7 @@ export async function inspectCodexInstallation(
   const native = await readNative(ctx);
   if (!native.outcome.ok) return preserveFailure(native);
   const messages = native.outcome.messages;
-  const paths = codexPaths(ctx.env ?? {}, ctx.root);
+  const paths = codexPaths(ctx.env ?? {}, process.cwd());
   let marketplace;
   try {
     marketplace = await readCodexMarketplace(paths.marketplaceRoot);
@@ -195,6 +199,10 @@ export async function inspectCodexInstallation(
     );
   }
   const observed = native.outcome.result;
+  const observedIdentity =
+    observed.pluginPresent && observed.activeRoot !== null
+      ? await installedCommitFromRoot(observed.activeRoot)
+      : "";
   if (!observed.pluginPresent && observed.marketplaceRoot === null) {
     return successResult(
       operation,
@@ -206,10 +214,18 @@ export async function inspectCodexInstallation(
     observed.marketplaceRoot !== null &&
     !(await pathsEqual(observed.marketplaceRoot, paths.marketplaceRoot))
   ) {
-    return mismatch("legacy Codex marketplace source", messages);
+    return mismatch(
+      "legacy Codex marketplace source",
+      messages,
+      observedIdentity,
+    );
   }
   if (marketplace === null)
-    return mismatch("durable Codex marketplace is missing", messages);
+    return mismatch(
+      "durable Codex marketplace is missing",
+      messages,
+      observedIdentity,
+    );
   try {
     if (
       marketplace.artifact.commit !== selection.desiredCommit ||
@@ -219,6 +235,7 @@ export async function inspectCodexInstallation(
       return mismatch(
         "durable Codex marketplace differs from selection",
         messages,
+        observedIdentity,
       );
     }
   } catch {
@@ -235,7 +252,11 @@ export async function inspectCodexInstallation(
     !observed.pluginEnabled ||
     observed.activeRoot === null
   ) {
-    return mismatch("Codex manager plugin needs repair", messages);
+    return mismatch(
+      "Codex manager plugin needs repair",
+      messages,
+      observedIdentity,
+    );
   }
   let activeKind;
   try {
@@ -244,7 +265,11 @@ export async function inspectCodexInstallation(
     return activeInspectionFailure(operation, observed.activeRoot, messages);
   }
   if (activeKind === "missing") {
-    return mismatch("active Codex plugin payload is missing", messages);
+    return mismatch(
+      "active Codex plugin payload is missing",
+      messages,
+      observedIdentity,
+    );
   }
   if (activeKind !== "directory") {
     return activeInspectionFailure(operation, observed.activeRoot, messages);
@@ -258,7 +283,11 @@ export async function inspectCodexInstallation(
     if (hasFilesystemAccessFailure(cause)) {
       return activeInspectionFailure(operation, observed.activeRoot, messages);
     }
-    return mismatch("active Codex plugin payload is invalid", messages);
+    return mismatch(
+      "active Codex plugin payload is invalid",
+      messages,
+      observedIdentity,
+    );
   }
   let durableDigest: string;
   try {
@@ -282,19 +311,24 @@ export async function inspectCodexInstallation(
       return mismatch(
         "active Codex plugin payload differs from durable marketplace",
         messages,
+        active.commit,
       );
     }
   } catch (cause) {
     if (hasFilesystemAccessFailure(cause)) {
       return activeInspectionFailure(operation, observed.activeRoot, messages);
     }
-    return mismatch("active Codex plugin payload is invalid", messages);
+    return mismatch(
+      "active Codex plugin payload is invalid",
+      messages,
+      observedIdentity,
+    );
   }
   return successResult(
     operation,
     {
       kind: "current",
-      observedIdentity: activeDigest,
+      observedIdentity: active.commit,
     },
     messages,
   );

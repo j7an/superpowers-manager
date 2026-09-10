@@ -6,7 +6,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { successResult } from "../../../../src/adapter-result.ts";
-import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 import {
   codexReadNativeState,
   type CodexNativeState,
@@ -94,6 +93,33 @@ void test("native observation preserves explicit inspection-root precedence", as
   assert.equal(
     result.outcome.result.activeRoot,
     join(inspectionRoot, "plugins/cache/superpowers-manager/superpowers/1.0.0"),
+  );
+});
+
+void test("native observation resolves a relative CODEX_HOME from the invocation cwd", async (t) => {
+  const fixture = await sandbox(t);
+  const relativeHome = join(
+    "relative-codex-homes",
+    fixture.root.slice(fixture.root.lastIndexOf("/") + 1),
+  );
+  const result = await codexReadNativeState({
+    root: join(fixture.root, "package-root"),
+    env: {
+      SUPERPOWERS_CODEX: FAKE_CODEX,
+      CODEX_HOME: relativeHome,
+      FAKE_CODEX_LOG: fixture.log,
+      ...listings("1.2.3"),
+    },
+  });
+  assert.equal(result.outcome.ok, true, JSON.stringify(result));
+  if (!result.outcome.ok) assert.fail("expected native observation");
+  assert.equal(
+    result.outcome.result.activeRoot,
+    join(
+      process.cwd(),
+      relativeHome,
+      "plugins/cache/superpowers-manager/superpowers/1.2.3",
+    ),
   );
 });
 
@@ -243,8 +269,12 @@ void test("inspection classifies an inspectable legacy source as mismatch withou
   if (!result.outcome.ok) assert.fail("expected inspectable migration state");
   assert.deepEqual(result.outcome.result, {
     kind: "mismatch",
-    observedIdentity: "legacy Codex marketplace source",
+    observedIdentity: COMMIT,
   });
+  assert.match(
+    result.outcome.messages.at(-1)?.text ?? "",
+    /legacy Codex marketplace source/,
+  );
 });
 
 void test("inspection reports absence when neither native manager resource exists", async (t) => {
@@ -316,7 +346,7 @@ void test("native absence and legacy migration outrank a stale durable selection
   if (!legacyResult.outcome.ok) assert.fail("expected migration inspection");
   assert.deepEqual(legacyResult.outcome.result, {
     kind: "mismatch",
-    observedIdentity: "legacy Codex marketplace source",
+    observedIdentity: "",
   });
 });
 
@@ -370,6 +400,7 @@ void test("inspection requires durable and active assessed payloads before curre
   assert.equal(current.outcome.ok, true, JSON.stringify(current));
   if (!current.outcome.ok) assert.fail("expected current inspection");
   assert.equal(current.outcome.result.kind, "current");
+  assert.equal(current.outcome.result.observedIdentity, COMMIT);
 
   const wrongSource = await inspectCodexInstallation(
     nativeSelection(COMMIT, "https://example.invalid/other.git"),
@@ -392,6 +423,7 @@ void test("inspection requires durable and active assessed payloads before curre
   assert.equal(damaged.outcome.ok, true, JSON.stringify(damaged));
   if (!damaged.outcome.ok) assert.fail("expected damaged inspection");
   assert.equal(damaged.outcome.result.kind, "mismatch");
+  assert.equal(damaged.outcome.result.observedIdentity, COMMIT);
 });
 
 void test("inspection fails when an owned durable marketplace is invalid", async (t) => {

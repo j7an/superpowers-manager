@@ -71,15 +71,15 @@ export async function assertCodexPreparationSeparate(
   try {
     await Promise.all([
       assertNoFollowType(preparedRoot, ["directory", "missing"]),
-      assertNoFollowType(paths.publishedPluginRoot, ["directory", "missing"]),
+      assertNoFollowType(paths.marketplaceRoot, ["directory", "missing"]),
       assertNoFollowType(paths.recoveryRoot, ["directory", "missing"]),
     ]);
-    const [prepared, published, recovery] = await Promise.all([
+    const [prepared, marketplace, recovery] = await Promise.all([
       canonicalizeProspectivePath(preparedRoot),
-      canonicalizeProspectivePath(paths.publishedPluginRoot),
+      canonicalizeProspectivePath(paths.marketplaceRoot),
       canonicalizeProspectivePath(paths.recoveryRoot),
     ]);
-    if (overlaps(prepared, published) || overlaps(prepared, recovery)) {
+    if (overlaps(prepared, marketplace) || overlaps(prepared, recovery)) {
       throw separationError();
     }
   } catch (cause) {

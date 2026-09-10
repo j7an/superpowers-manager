@@ -1109,7 +1109,7 @@ export function codexReadNativeState(
       );
     }
     const searchRoot =
-      env.SUPERPOWERS_INSTALLED_SEARCH_ROOT || codexHome(env, context.root);
+      env.SUPERPOWERS_INSTALLED_SEARCH_ROOT || codexHome(env, process.cwd());
     return {
       marketplaceRoot: marketplaceRoot || null,
       pluginPresent: manager !== undefined,
