@@ -16,14 +16,11 @@ import test from "node:test";
 import { describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  chmodSync,
   cpSync,
   existsSync,
-  lstatSync,
   mkdirSync,
   renameSync,
   readFileSync,
-  readlinkSync,
   readdirSync,
   statSync,
   symlinkSync,
@@ -41,7 +38,9 @@ import {
   lastIndex,
   readLog,
   runScript,
+  snapshotTree,
   spawnFakeAdapter,
+  writePiExecutable,
 } from "./lifecycle-fixture.ts";
 import { caseContext, recordingAdapter } from "./command-context.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
@@ -51,46 +50,13 @@ import { preparePiCandidate } from "../../src/harnesses/pi/prepare.ts";
 import { digestPiTree, readPiReceipt } from "../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
+  crossHarnessUpstream,
   fixtureGit,
   nativeFixture,
   nativeSelection,
 } from "../lib/harnesses/pi/package-fixture.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-
-type ByteSnapshotEntry =
-  | readonly [relative: string, kind: "directory"]
-  | readonly [relative: string, kind: "file", bytes: string]
-  | readonly [relative: string, kind: "symlink", target: string];
-
-function snapshotTree(root: string): readonly ByteSnapshotEntry[] {
-  assert.equal(
-    lstatSync(root).isDirectory(),
-    true,
-    `${root} is not a directory`,
-  );
-  const entries: ByteSnapshotEntry[] = [];
-  const visit = (directory: string, prefix: string): void => {
-    for (const name of readdirSync(directory).sort()) {
-      const path = join(directory, name);
-      const relative = prefix.length === 0 ? name : `${prefix}/${name}`;
-      const stat = lstatSync(path);
-      if (stat.isDirectory()) {
-        entries.push([relative, "directory"]);
-        visit(path, relative);
-      } else if (stat.isFile()) {
-        entries.push([relative, "file", readFileSync(path).toString("base64")]);
-      } else if (stat.isSymbolicLink()) {
-        entries.push([relative, "symlink", readlinkSync(path)]);
-      } else {
-        assert.fail(`unsupported fixture entry at ${path}`);
-      }
-    }
-  };
-  visit(root, "");
-  assert.ok(entries.length > 0, `${root} has no bytes to snapshot`);
-  return entries;
-}
 
 function commitPhaseB(upstream: string): string {
   const skill = join(upstream, "skills/using-superpowers/SKILL.md");
@@ -101,49 +67,6 @@ function commitPhaseB(upstream: string): string {
   fixtureGit(upstream, "add", ".");
   fixtureGit(upstream, "commit", "-qm", "fixture phase B");
   return fixtureGit(upstream, "rev-parse", "HEAD");
-}
-
-function crossHarnessUpstream(t: Parameters<typeof nativeFixture>[0]): string {
-  const upstream = nativeFixture(t);
-  // The Pi fixture already carries the native package, skill, extension, and
-  // license. Codex preparation additionally requires these inert documents.
-  writeFileSync(join(upstream, "README.md"), "cross-harness fixture\n");
-  writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "fixture conduct\n");
-  return upstream;
-}
-
-function writePiExecutable(
-  c: import("./lifecycle-fixture.ts").CaseEnv,
-  runtimeVersion = "99.2.3",
-): string {
-  const module = join(c.dir, "fake-pi.mjs");
-  const executable = join(c.dir, "pi");
-  writeFileSync(
-    module,
-    `import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";\n` +
-      `import { dirname, join } from "node:path";\n` +
-      `const args = process.argv.slice(2);\n` +
-      `writeFileSync(process.env.SPW_PI_LOG, args.join(" ") + "\\n", { flag: "a" });\n` +
-      `if (args.length === 1 && args[0] === "--version") {\n` +
-      `  process.stdout.write(${JSON.stringify(runtimeVersion + "\n")});\n` +
-      `} else if (args.length === 3 && (args[0] === "install" || args[0] === "remove") && args[2] === "--no-approve") {\n` +
-      `  const settingsFile = join(process.env.PI_CODING_AGENT_DIR, "settings.json");\n` +
-      `  const settings = existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, "utf8")) : {};\n` +
-      `  const packages = Array.isArray(settings.packages) ? settings.packages.filter((entry) => entry !== args[1]) : [];\n` +
-      `  if (args[0] === "install") packages.push(args[1]);\n` +
-      `  mkdirSync(dirname(settingsFile), { recursive: true });\n` +
-      `  writeFileSync(settingsFile, JSON.stringify({ ...settings, packages }));\n` +
-      `} else {\n` +
-      `  process.stderr.write("unexpected fake Pi command: " + args.join(" ") + "\\n");\n` +
-      `  process.exitCode = 99;\n` +
-      `}\n`,
-  );
-  writeFileSync(
-    executable,
-    `#!/bin/sh\nexec "${process.execPath}" "${module}" "$@"\n`,
-  );
-  chmodSync(executable, 0o755);
-  return executable;
 }
 
 // These cases execute the native production command functions directly with
@@ -1603,7 +1526,7 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:118-126::tag.gpgsign=false`),
+    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:122-130::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757
