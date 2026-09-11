@@ -60,6 +60,7 @@
     { "path": "tests/bin/node-tooling.test.ts", "group": "repository" },
     { "path": "tests/bin/npm-pack-contents.test.ts", "group": "integration" },
     { "path": "tests/bin/readme-requirements.test.ts", "group": "repository" },
+    { "path": "tests/bin/release-bump.test.ts", "group": "repository" },
     { "path": "tests/bin/scripts-consumers.test.ts", "group": "repository" },
     { "path": "tests/bin/tooling-coverage.test.ts", "group": "repository" },
     { "path": "tests/bin/uninstall-commands.test.ts", "group": "integration" },
