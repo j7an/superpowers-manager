@@ -95,6 +95,11 @@ function fixture(t: test.TestContext, options: FixtureOptions = {}): Fixture {
   git(cwd, "commit", "--quiet", "-m", "base");
   const before = git(cwd, "rev-parse", "HEAD");
 
+  if (options.topology === "merge") {
+    git(cwd, "branch", "side", before);
+    git(cwd, "checkout", "--quiet", "side");
+  }
+
   if (afterPackage === null) {
     git(cwd, "rm", "--quiet", "package.json");
   } else if (options.packageSymlink) {
@@ -117,9 +122,6 @@ function fixture(t: test.TestContext, options: FixtureOptions = {}): Fixture {
     git(cwd, "commit", "--quiet", "--allow-empty", "-m", "second commit");
   }
   if (options.topology === "merge") {
-    git(cwd, "branch", "side", before);
-    git(cwd, "checkout", "--quiet", "side");
-    git(cwd, "commit", "--quiet", "--allow-empty", "-m", "side commit");
     git(cwd, "checkout", "--quiet", "main");
     git(cwd, "merge", "--quiet", "--no-ff", "side", "-m", "merge side");
   }
@@ -263,7 +265,6 @@ void test("invalid push revisions do not skip tests", (t) => {
 
 for (const [name, options] of [
   ["a two-commit push", { topology: "two-commit" }],
-  ["a merge commit", { topology: "merge" }],
   ["an additional changed file", { extraAfter: { "README.md": "changed\n" } }],
   ["a deleted package", { afterPackage: null }],
   [
@@ -320,6 +321,28 @@ for (const [name, options] of [
     assert.equal(result.skipTests, false);
   });
 }
+
+void test("a merge commit is rejected after a package-only diff", (t) => {
+  const current = fixture(t, { topology: "merge" });
+  assert.equal(
+    git(current.cwd, "rev-parse", `${current.after}^1`),
+    current.before,
+  );
+  assert.equal(
+    git(current.cwd, "rev-list", "--parents", "-n", "1", current.after).split(
+      " ",
+    ).length,
+    3,
+  );
+  assert.equal(
+    git(current.cwd, "diff", "--name-only", current.before, current.after),
+    "package.json",
+  );
+  assert.deepEqual(classifyReleaseBump(current.input), {
+    skipTests: false,
+    reason: "unverified-change",
+  });
+});
 
 for (const [name, config] of [
   ["malformed", "{"],
@@ -409,7 +432,10 @@ void test("the cli writes a verified true output and summary", (t) => {
   });
   assert.equal(invocation, "");
   assert.equal(readFileSync(outputPath, "utf8"), "skip_tests=true\n");
-  assert.match(readFileSync(summaryPath, "utf8"), /verified release bump/i);
+  assert.match(
+    readFileSync(summaryPath, "utf8"),
+    /^Release-bump test skip enabled: Release owns validation for this verified release bump\.\n$/,
+  );
 });
 
 void test("the cli names the validation owner for every classification reason", (t) => {
@@ -421,7 +447,7 @@ void test("the cli names the validation owner for every classification reason", 
       BOT_LOGIN,
       BOT_ID,
       current.input.event,
-      /normal CI owns validation/i,
+      /Release-bump test skip disabled: normal CI owns validation because this is not a push event\.\n$/,
     ],
     [
       "identity mismatch",
@@ -429,15 +455,18 @@ void test("the cli names the validation owner for every classification reason", 
       "human",
       BOT_ID,
       current.input.event,
-      /normal CI owns validation/i,
+      /Release-bump test skip disabled: normal CI owns validation because the event identity is not the release bot\.\n$/,
     ],
     [
       "unverified change",
       "push",
       BOT_LOGIN,
       BOT_ID,
-      {},
-      /normal CI owns validation/i,
+      {
+        ...(current.input.event as Record<string, unknown>),
+        ref: "refs/heads/release-test",
+      },
+      /Release-bump test skip disabled: normal CI owns validation because the pushed change is not a verified release bump\.\n$/,
     ],
     [
       "inspection failure",
@@ -448,7 +477,7 @@ void test("the cli names the validation owner for every classification reason", 
         ...(current.input.event as Record<string, unknown>),
         after: "a".repeat(40),
       },
-      /normal CI owns validation/i,
+      /Release-bump test skip disabled: normal CI owns validation because immutable Git inspection failed\.\n$/,
     ],
     [
       "verified release bump",
@@ -456,7 +485,7 @@ void test("the cli names the validation owner for every classification reason", 
       BOT_LOGIN,
       BOT_ID,
       current.input.event,
-      /Release owns validation/i,
+      /^Release-bump test skip enabled: Release owns validation/,
     ],
   ] as const) {
     const eventPath = join(current.cwd, `${name}.json`);
@@ -476,6 +505,12 @@ void test("the cli names the validation owner for every classification reason", 
       },
       stdio: "pipe",
     });
+    assert.equal(
+      readFileSync(outputPath, "utf8"),
+      name === "verified release bump"
+        ? "skip_tests=true\n"
+        : "skip_tests=false\n",
+    );
     assert.match(readFileSync(summaryPath, "utf8"), expected);
   }
 });
@@ -492,6 +527,9 @@ void test("the cli writes false for a negative, malformed, and unreadable event"
       env: {
         ...process.env,
         GITHUB_EVENT_PATH: eventPath,
+        GITHUB_EVENT_NAME: "push",
+        GITHUB_ACTOR: BOT_LOGIN,
+        GITHUB_ACTOR_ID: BOT_ID,
         GITHUB_OUTPUT: outputPath,
         GITHUB_STEP_SUMMARY: summaryPath,
       },
@@ -509,6 +547,9 @@ void test("the cli writes false for a negative, malformed, and unreadable event"
     env: {
       ...process.env,
       GITHUB_EVENT_PATH: unreadable,
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_ACTOR: BOT_LOGIN,
+      GITHUB_ACTOR_ID: BOT_ID,
       GITHUB_OUTPUT: outputPath,
       GITHUB_STEP_SUMMARY: summaryPath,
     },
