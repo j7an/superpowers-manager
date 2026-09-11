@@ -1,6 +1,6 @@
 {
   "name": "superpowers-manager",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Install obra/superpowers directly from upstream for Codex and Pi. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
