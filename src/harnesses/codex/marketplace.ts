@@ -14,13 +14,8 @@ import {
   digestArtifactTree,
   readArtifactObject,
 } from "../../artifact-tree.ts";
-import { COMMIT_RE } from "../../domain/refs.ts";
 import type { PreparedArtifact } from "../../harness.ts";
-import {
-  assertNoFollowType,
-  assertSymlinkTargetContained,
-  classifyPathNoFollow,
-} from "../../safe-path.ts";
+import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import type { JsonValue } from "../../strict-json.ts";
 import { readCodexAssessment } from "./compatibility.ts";
@@ -79,18 +74,6 @@ async function requireEntries(
   }
 }
 
-async function validatePluginLinks(root: string, relative = ""): Promise<void> {
-  const directory = join(root, relative);
-  for (const entry of await readdir(directory)) {
-    const path = join(directory, entry);
-    const kind = await classifyPathNoFollow(path);
-    if (kind === "directory")
-      await validatePluginLinks(root, join(relative, entry));
-    else if (kind === "symlink") await assertSymlinkTargetContained(root, path);
-    else if (kind !== "regular-file") throw new Error("plugin entry");
-  }
-}
-
 async function readMarketplace(root: string): Promise<MarketplaceSnapshot> {
   try {
     await assertNoFollowType(root, ["directory"]);
@@ -106,7 +89,6 @@ async function readMarketplace(root: string): Promise<MarketplaceSnapshot> {
     await requireEntries(join(root, "plugins"), ["superpowers"]);
     const pluginRoot = join(root, PLUGIN_PATH);
     await assertNoFollowType(pluginRoot, ["directory"]);
-    await validatePluginLinks(pluginRoot);
     validateMarketplace(
       await readArtifactObject(root, join(root, MARKETPLACE_PATH)),
     );
@@ -127,7 +109,6 @@ async function readMarketplace(root: string): Promise<MarketplaceSnapshot> {
     const digest = await digestArtifactTree(root);
     if (digest !== receipt.digest) throw new Error("digest");
     const artifact = await readCodexAssessment(pluginRoot);
-    if (!COMMIT_RE.test(artifact.commit)) throw new Error("assessment");
     const after = await lstat(root);
     if (before.dev !== after.dev || before.ino !== after.ino) {
       throw new Error("root changed");
@@ -175,7 +156,6 @@ export async function stageCodexMarketplace(
     ) {
       throw new Error("copied artifact");
     }
-    await validatePluginLinks(copied.root);
     validateMarketplace(
       await readArtifactObject(
         candidateRoot,

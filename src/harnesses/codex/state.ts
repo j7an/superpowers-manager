@@ -146,7 +146,7 @@ async function matchesSelection(
   return provenance.source === selection.effectiveSource;
 }
 
-function hasFilesystemAccessFailure(cause: unknown): boolean {
+export function hasFilesystemAccessFailure(cause: unknown): boolean {
   let current = cause;
   for (
     let depth = 0;

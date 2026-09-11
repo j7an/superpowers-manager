@@ -42,7 +42,7 @@ import {
   type FileIdentity,
   type PendingCodexPublication,
 } from "./recovery.ts";
-import { pathsEqual } from "./state.ts";
+import { hasFilesystemAccessFailure, pathsEqual } from "./state.ts";
 
 export interface CodexPublicationDependencies {
   readonly readNative: typeof codexReadNativeState;
@@ -380,22 +380,6 @@ export async function removeCodexMarketplace(
       messages,
     );
   }
-}
-
-function hasFilesystemAccessFailure(cause: unknown): boolean {
-  let current = cause;
-  for (
-    let depth = 0;
-    depth < 8 && current !== null && typeof current === "object";
-    depth += 1
-  ) {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string" && code !== "ENOENT" && code !== "ENOTDIR") {
-      return true;
-    }
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
 }
 
 async function activeDigest(state: CodexNativeState): Promise<string | null> {

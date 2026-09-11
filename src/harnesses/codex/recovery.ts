@@ -618,7 +618,6 @@ export async function advanceCodexRecovery(
       phase,
     };
     const bytes = recordBytes(record);
-    await decodeRecord(bytes, pending.paths);
     await atomicWriteFile(recordPath(pending.paths), bytes, {
       validate: async (temporary) => {
         await assertNoFollowType(temporary, ["regular-file"]);
