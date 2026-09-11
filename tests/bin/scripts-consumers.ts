@@ -94,7 +94,7 @@
 // The two exact-file filters include grep's trailing output delimiter so a
 // similarly named executable consumer remains audited.
 //
-// Both audit checks use runAudit so they share AUDIT_COMMAND without
+// Both audit checks use runScriptsAudit so they share AUDIT_COMMAND without
 // retyping it. Two invocations differing by a `grep -v` turn "every hit is
 // dispositioned" and "zero rows remain" into claims about different sets, and
 // the gap between them is invisible from either side (spec §6.3).
@@ -174,8 +174,8 @@ export function auditKey(hit: {
  * A failing stage writes a diagnostic to stderr while a legitimately empty
  * match is silent, so a non-empty stderr is the signal the status cannot
  * carry. It is fatal here. That keeps AUDIT_COMMAND a single byte-identical
- * literal for 4c to import, which decomposing the pipeline into per-stage
- * spawns would not.
+ * literal shared by both checks through this function, which decomposing
+ * the pipeline into per-stage spawns would not.
  */
 export function runScriptsAudit(root: string): AuditHit[] {
   const result = spawnSync("sh", ["-c", AUDIT_COMMAND], {
