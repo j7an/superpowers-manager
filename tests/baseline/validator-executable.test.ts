@@ -14,7 +14,7 @@ import test from "node:test";
 import { createCase, runScript } from "../bin/lifecycle-fixture.ts";
 import { prepare } from "./prepare-fixture.ts";
 
-export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
+type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 
 // `createCase` builds the fake executables and the state directory and NOTHING
 // else; the listings are the case's own precondition. `prepare` never contacts

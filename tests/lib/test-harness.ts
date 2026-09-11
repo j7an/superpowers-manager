@@ -19,7 +19,7 @@ import type {
 } from "../../src/harness.ts";
 import { capture, observingCoordinator } from "./command-doubles.ts";
 
-export interface TestRemovalInput {
+interface TestRemovalInput {
   readonly receipt: string;
 }
 

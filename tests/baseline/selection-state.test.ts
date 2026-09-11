@@ -56,7 +56,7 @@ const NORMALIZED_ABSENT = {
 const BARRIER_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 5;
 
-export type HelperResult = { status: number; stdout: string; stderr: string };
+type HelperResult = { status: number; stdout: string; stderr: string };
 
 function runHelper(argumentList: readonly string[]): HelperResult {
   const result = spawnSync(process.execPath, [HELPER, ...argumentList], {
@@ -96,7 +96,7 @@ function runHelperAsync(
   });
 }
 
-export type Fixture = { base: string; statePath: string; output: string };
+type Fixture = { base: string; statePath: string; output: string };
 
 function fixture(t: import("node:test").TestContext): Fixture {
   const base = mkdtempSync(join(tmpdir(), "spw-selection-"));

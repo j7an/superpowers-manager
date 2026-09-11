@@ -39,7 +39,7 @@ import { PROBE_PORCELAIN_KEYS } from "../../src/harnesses/codex/presentation.ts"
 
 import { writeSelectionState } from "../../src/selection-store.ts";
 
-export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
+type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 
 // One listing shape reused wherever a case needs the manager plugin ACTIVE at
 // the manifest version seedCodex writes, so `installed_commit` resolves to the

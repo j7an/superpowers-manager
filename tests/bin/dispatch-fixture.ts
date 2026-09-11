@@ -154,7 +154,7 @@ function buildPackageRoot(kind: "real" | "throwing"): string {
 }
 
 /** The shared base carries the real native source. */
-export const PACKAGE_ROOT = buildPackageRoot("real");
+const PACKAGE_ROOT = buildPackageRoot("real");
 
 /**
  * An independent native package root for direct launcher cases.

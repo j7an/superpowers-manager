@@ -27,7 +27,7 @@ export interface HookPlan {
 }
 
 // Annotated, not `as const`, matching
-// `src/provenance.ts:20::export const PROVENANCE_STRICT_PROFILE` and
+// `src/provenance.ts:20::const PROVENANCE_STRICT_PROFILE` and
 // `src/selection-store.ts:19::const SELECTION_JSON_PROFILE`. The annotation
 // rejects a misspelled or unsupported profile field here rather than at the
 // parseStrictJson call.

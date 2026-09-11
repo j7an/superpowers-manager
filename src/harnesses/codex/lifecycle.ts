@@ -77,12 +77,9 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
 
 import type { AdapterResult } from "../../adapter-result.ts";
 
-export {
-  verifyInstalledFingerprint,
-  type FingerprintVerdict,
-} from "./presentation.ts";
+export { verifyInstalledFingerprint } from "./presentation.ts";
 
-export interface Refusal {
+interface Refusal {
   readonly ok: false;
   readonly message: string;
 }

@@ -63,7 +63,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export type CaseEnv = import("./lifecycle-fixture.ts").CaseEnv;
+type CaseEnv = import("./lifecycle-fixture.ts").CaseEnv;
 
 const WRITABLE_KEYS: (keyof CaseEnv)[] = ["dir", "pkg", "state", "tmp"];
 

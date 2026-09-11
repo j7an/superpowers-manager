@@ -17,18 +17,18 @@ export interface ProvenanceRecord {
   readonly upstream_manifest_version: string;
 }
 
-export const PROVENANCE_STRICT_PROFILE: StrictJsonProfile = {
+const PROVENANCE_STRICT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
   nonStandardConstants: "reject",
   maxDepth: 256,
 };
 
-export const PROVENANCE_LENIENT_PROFILE: StrictJsonProfile = {
+const PROVENANCE_LENIENT_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
   nonStandardConstants: "reject",
 };
 
-export const PROVENANCE_CODEX_SOURCE_PROFILE: StrictJsonProfile = {
+const PROVENANCE_CODEX_SOURCE_PROFILE: StrictJsonProfile = {
   duplicateKeys: "last-wins",
   nonStandardConstants: "accept",
 };

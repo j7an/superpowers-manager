@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export interface PackEntry {
+interface PackEntry {
   filename: string;
   files: { path: string; [key: string]: unknown }[];
   [key: string]: unknown;
