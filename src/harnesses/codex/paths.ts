@@ -56,36 +56,90 @@ function overlaps(a: string, b: string): boolean {
   return inside(a, b) || inside(b, a);
 }
 
-function separationError(cause?: unknown): SafetyError {
-  return new SafetyError(
+export type CodexPathFailureDetails =
+  | { readonly kind: "overlap" }
+  | {
+      readonly kind: "inspection";
+      readonly root: "preparation" | "marketplace" | "recovery";
+      readonly path: string;
+    };
+
+function separationError(): SafetyError<CodexPathFailureDetails> {
+  return new SafetyError<CodexPathFailureDetails>(
     "codex-paths",
     "preparation overlaps Codex published or recovery storage",
-    { cause },
+    { details: { kind: "overlap" } },
   );
+}
+
+async function inspectRoot(
+  path: string,
+  root: "preparation" | "marketplace" | "recovery",
+): Promise<string> {
+  try {
+    await assertNoFollowType(path, ["directory", "missing"]);
+    return await canonicalizeProspectivePath(path);
+  } catch (cause) {
+    throw new SafetyError<CodexPathFailureDetails>(
+      "codex-paths",
+      `cannot inspect ${root} root: ${path}`,
+      { cause, details: { kind: "inspection", root, path } },
+    );
+  }
+}
+
+export function codexPathFailureDetails(
+  cause: unknown,
+): CodexPathFailureDetails | null {
+  if (!(cause instanceof SafetyError) || cause.module !== "codex-paths") {
+    return null;
+  }
+  const details: unknown = cause.details;
+  if (details === null || typeof details !== "object" || !("kind" in details)) {
+    return null;
+  }
+  if (details.kind === "overlap") return { kind: "overlap" };
+  if (
+    details.kind !== "inspection" ||
+    !("root" in details) ||
+    !("path" in details) ||
+    (details.root !== "preparation" &&
+      details.root !== "marketplace" &&
+      details.root !== "recovery") ||
+    typeof details.path !== "string"
+  ) {
+    return null;
+  }
+  return { kind: "inspection", root: details.root, path: details.path };
 }
 
 export async function assertCodexPreparationSeparate(
   preparedRoot: string,
   paths: CodexPaths,
 ): Promise<void> {
+  const recovery = await inspectRoot(paths.recoveryRoot, "recovery");
+  const marketplace = await inspectRoot(paths.marketplaceRoot, "marketplace");
+  let prepared: string;
   try {
-    await Promise.all([
-      assertNoFollowType(preparedRoot, ["directory", "missing"]),
-      assertNoFollowType(paths.marketplaceRoot, ["directory", "missing"]),
-      assertNoFollowType(paths.recoveryRoot, ["directory", "missing"]),
-    ]);
-    const [prepared, marketplace, recovery] = await Promise.all([
-      canonicalizeProspectivePath(preparedRoot),
-      canonicalizeProspectivePath(paths.marketplaceRoot),
-      canonicalizeProspectivePath(paths.recoveryRoot),
-    ]);
-    if (overlaps(prepared, marketplace) || overlaps(prepared, recovery)) {
-      throw separationError();
-    }
+    prepared = await inspectRoot(preparedRoot, "preparation");
   } catch (cause) {
-    if (cause instanceof SafetyError && cause.module === "codex-paths") {
+    const failure = codexPathFailureDetails(cause);
+    if (failure?.kind !== "inspection" || failure.root !== "preparation") {
       throw cause;
     }
-    throw separationError(cause);
+    try {
+      const canonical = await canonicalizeProspectivePath(preparedRoot);
+      if (overlaps(canonical, marketplace) || overlaps(canonical, recovery)) {
+        throw separationError();
+      }
+    } catch (resolutionCause) {
+      if (codexPathFailureDetails(resolutionCause)?.kind === "overlap") {
+        throw resolutionCause;
+      }
+    }
+    throw cause;
+  }
+  if (overlaps(prepared, marketplace) || overlaps(prepared, recovery)) {
+    throw separationError();
   }
 }

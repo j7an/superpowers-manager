@@ -281,6 +281,19 @@ that block.
     independently of them: a statement can have the right *count* while
     being out of *order*).
 
+Current-port adaptation for items 104-115: the native port preserves the
+historical manager A/B witness by forming `historicalProbe` from the source
+before the durability scenario and from `commit_b` onward, then applying the
+four historical mutation checks and exact 51-step lifecycle to that region.
+It separately extracts and exactly validates the 34-step same-version native
+refresh region. Two boundary checks make those regions explicit, and a
+full-source scan requires every detected manager lifecycle mutation to be
+immediately bracketed by hook-state snapshots and followed by a comparison.
+The current source contains 9 top-level hook-state comparisons and 10
+top-level sentinel checks; one additional comparison/sentinel pair is inside
+the invoked missing-source-uninstall helper. Those current-source counts are
+observations, not global exact-count predicates. See port-only entries 8-11.
+
 ## `hooks-list-rpc.py` protocol-gate assertions (`:195-224`, Ruby block 2, `validate_hooks_rpc!`)
 
 116-141. The RPC helper's source contains each of the following 26 literal
@@ -391,6 +404,70 @@ it).
    none either. Asserted as an exact sorted set rather than as "does not contain
    ruby", because the latter is an enumeration of one known-bad value.
    Port-only; outside the 1:1 mapping.
+3. `run_manager` delegates exactly to `run_packaged_manager "$@"`, while the
+   mapped item 43 environment and invocation contract is enforced on
+   `run_packaged_manager`. Port-only; asserted at
+   `tests/bin/container-contract.test.ts::run_manager must delegate lifecycle operations to the retained package executable`.
+4. The ordered native-refresh setup, migration, reset, damage, and repair
+   sequence is present. Port-only; asserted at
+   `tests/bin/container-contract.test.ts::const nativeRefreshSteps = [`.
+5. The same-version refresh scenario contains no
+   `run_codex plugin remove superpowers@superpowers-manager`. Port-only;
+   asserted at
+   `tests/bin/container-contract.test.ts::same-version refresh gate must not remove the manager plugin`.
+6. The same-version refresh helpers retain the exact enabled-plugin guard.
+   Port-only; asserted at
+   `tests/bin/container-contract.test.ts::same-version refresh gate must require an enabled manager plugin`.
+7. `capture_manager_skills` binds fresh `skills/list` results to the enabled
+   manager version, active cache root, manager identity, and exact upstream
+   fixture bytes. Port-only; asserted at
+   `tests/bin/container-contract.test.ts::fresh skills must match upstream fixture bytes beneath the exact active manager cache root`.
+8. The historical manager A/B region has present, ordered boundaries.
+   Port-only; asserted at
+   `tests/bin/container-contract.test.ts::manager A/B lifecycle boundaries are missing or reordered`.
+9. The same-version refresh terminal, first packaged update, and historical
+   continuation have present, ordered boundaries. Port-only; asserted at
+   `tests/bin/container-contract.test.ts::same-version native refresh boundaries are missing or reordered`.
+10. Every detected `run_manager` or `run_packaged_manager` lifecycle mutation
+    is immediately bracketed by hook-state snapshots and followed by their
+    comparison. Port-only; asserted at
+    `tests/bin/container-contract.test.ts::manager mutation must be immediately bracketed and compared:`.
+11. The extracted same-version native-refresh region contains exactly its
+    ordered 34-step lifecycle, including exact occurrence counts. Port-only;
+    asserted at
+    `tests/bin/container-contract.test.ts::same-version native refresh lifecycle lost or gained a step`.
+12. Invalid-source legacy uninstall preserves the legacy files before a
+    healthy legacy update migrates to durable storage. Port-only; asserted at
+    `tests/bin/container-contract.test.ts::legacy uninstall must deregister from an invalid source without deleting its remaining files before healthy migration`.
+13. Template-only legacy migration registers its isolated source before
+    damaging it and invoking packaged update. Port-only; asserted at
+    `tests/bin/container-contract.test.ts::template-only legacy migration must switch native registration to its isolated source before damage`.
+14. The publication-boundary driver exercises plugin and skill readers during
+    live-to-backup rename and accepts only verified recovery or finalized
+    success. Port-only; asserted at
+    `tests/bin/container-contract.test.ts::publication boundary must exercise readers during the live-to-backup rename and retain only verified outcomes`.
+15. The RPC helper exposes only bounded `hooks/list` and `skills/list`
+    selection, with forced reload for skills. Port-only; asserted at
+    `tests/bin/container-contract.test.ts::RPC helper must expose only the bounded hooks/list or skills/list request selection`.
+16. The Dockerfile creates one readable external package artifact after
+    dependency installation and before switching to the unprivileged user.
+    Port-only; asserted at
+    `tests/bin/container-contract.test.ts::Dockerfile retains one root-owned external package tarball before the unprivileged harness`.
+17. The `removed native refresh listing` mutation is non-no-op and rejected.
+    Port-only; fixture at
+    `tests/bin/container-contract.test.ts::name: "removed native refresh listing",`.
+18. The `reordered restored listing and root assertion` mutation is non-no-op
+    and rejected. Port-only; fixture at
+    `tests/bin/container-contract.test.ts::name: "reordered restored listing and root assertion",`.
+19. The `repeated native refresh command` mutation is non-no-op and rejected.
+    Port-only; fixture at
+    `tests/bin/container-contract.test.ts::name: "repeated native refresh command",`.
+20. The `weakened publication-boundary readers` mutation is non-no-op and
+    rejected. Port-only; fixture at
+    `tests/bin/container-contract.test.ts::name: "weakened publication-boundary readers",`.
+21. The `removed publication finalization success guard` mutation is non-no-op
+    and rejected. Port-only; fixture at
+    `tests/bin/container-contract.test.ts::name: "removed publication finalization success guard",`.
 
 <!-- inventory:port-only:end -->
 
@@ -399,7 +476,7 @@ it).
 ```json inventory
 {
   "shellOriginal": 172,
-  "portOnly": 2,
+  "portOnly": 21,
   "ports": { "tests/bin/container-contract.test.ts": 1 }
 }
 ```
@@ -410,16 +487,16 @@ it).
   file, 3 `--inside` structural, 75 `validate_probe!` structural (items
   41-115), 27 `validate_hooks_rpc!` protocol-gate (items 116-142), 10 probe
   semantic-mutation fixtures, 20 RPC semantic-mutation fixtures).
-- Port (`tests/bin/container-contract.test.ts`): 173 assertions (**171 live
+- Port (`tests/bin/container-contract.test.ts`): 192 assertions (**171 live
   of 172 numbered** — item 21 retired, its number not reused — 1:1-mapped
-  to the shell, plus 2 strictly-additive port-only checks — see
-  the note under item 87 and port-only entries 1-2 below). Items 34-35 remain
+  to the shell, plus 21 strictly-additive port-only checks — see
+  the note under item 87 and port-only entries 1-21 below). Items 34-35 remain
   top-level immediately before the hooks RPC parent so the existence/mode
   preconditions run before its read; items 36-37, 116-142, and 153-172 remain
   under that parent. The six resource-owning `node:test` parents still scope
   one repo-controlled read apiece and add no behavioral assertion. This
-  reparenting preserves 73 test nodes, all 66 existing leaf names, and the
-  173-assertion port total. Items expressed as loops over a literal-string
+  current suite has 76 test nodes, 69 leaf names, and the 192-assertion port
+  total. Items expressed as loops over a literal-string
   array in the shell (e.g. 51-65, 73-90, 116-141) are ported as loops over
   the same array inside `validateProbe`/`validateHooksRpc`, one `throw` per
   missing element (the loop bodies' `throw new ContractViolation(...)`
@@ -434,8 +511,8 @@ it).
   array entry.
 - Reconciliation: 1:1 for 171 of 172 shell items, no merges and no drops;
   item 21 is a **deliberate retirement**, not a drop — items 19-20 subsume
-  it (see the note at item 21) — plus 2 additional port-only assertions (see
-  item 87's note and port-only entries 1-2 below) that are strictly additive
+  it (see the note at item 21) — plus 21 additional port-only assertions (see
+  item 87's note and port-only entries 1-21 below) that are strictly additive
   and outside the 1:1 mapping.
 
 ## Native TypeScript reconciliation (issue #113)
@@ -451,10 +528,15 @@ Task 6 completes the native container wiring. Historical item 7's exact single
 24.12.0 or latest 24, and copies, smoke-tests, and declares the installed-package
 minimum Node 24.0.0 binary. Historical item 13's checkout build requirement adapts
 to native source execution without compilation, with executable `src/cli.ts`.
-The item 43 manager invocation and the package-copy chmod precondition now name
-`$package/src/cli.ts`; the remaining probe assertions and mutation cases are
-unchanged. Historical quoted paths and original numbered counts above remain
-historical evidence, not current launcher instructions.
+Item 43's current counterpart keeps the six-line isolated environment on
+`run_packaged_manager`, ending in `$SPW_PACKAGE_NODE "$manager_entry" "$@"`;
+`run_manager` delegates to it as recorded by port-only entry 3. Item 142's
+current counterpart sends the selected `method` and `params`; port-only entry
+15 bounds that selection to `hooks/list` or forced-reload `skills/list` while
+preserving the historical handshake. Historical quoted paths and original
+numbered counts above remain historical evidence, not current launcher
+instructions. The durability additions are reconciled in port-only entries
+3-21 rather than folded into those historical counts.
 
 Existing runner and ignore cases additionally require the closed selector,
 version-specific image/build argument, invalid-selector rejection, both tmpfs

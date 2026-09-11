@@ -11,6 +11,7 @@ import {
   readdir,
   rename,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -794,6 +795,94 @@ void test("overlapping preparation is reported before direct installation state 
   );
   assert.equal(accessed, false);
   assert.equal(await readCodexRecovery(f.paths), null);
+});
+
+void test("direct installation distinguishes unsafe protected storage from preparation overlap", async (t) => {
+  const cases = [
+    {
+      name: "recovery symlink",
+      root: "recovery" as const,
+      kind: "symlink" as const,
+      code: "recovery-required",
+    },
+    {
+      name: "recovery regular file",
+      root: "recovery" as const,
+      kind: "regular-file" as const,
+      code: "recovery-required",
+    },
+    {
+      name: "marketplace symlink",
+      root: "marketplace" as const,
+      kind: "symlink" as const,
+      code: "activation-refused",
+    },
+    {
+      name: "marketplace regular file",
+      root: "marketplace" as const,
+      kind: "regular-file" as const,
+      code: "activation-refused",
+    },
+  ];
+
+  for (const item of cases) {
+    await t.test(item.name, async (t) => {
+      const f = await fixture(t);
+      const unsafeRoot =
+        item.root === "recovery"
+          ? f.paths.recoveryRoot
+          : f.paths.marketplaceRoot;
+      if (item.kind === "symlink") {
+        await symlink(f.paths.preparedRoot, unsafeRoot);
+      } else {
+        await writeFile(unsafeRoot, "preserve\n");
+      }
+      let nativeAccessed = false;
+      let activated = false;
+      const dependencies: CodexPublicationDependencies = {
+        ...f.dependencies,
+        readNative: async () => {
+          nativeAccessed = true;
+          return nativeResult(nativeState());
+        },
+      };
+
+      const result = await installCodexMarketplace(
+        f.artifact,
+        f.ctx,
+        async () => {
+          activated = true;
+          return successResult("install", RECEIPT, []);
+        },
+        dependencies,
+      );
+
+      assert.equal(result.outcome.ok, false);
+      if (result.outcome.ok) assert.fail("expected unsafe storage refusal");
+      assert.equal(result.outcome.error.code, item.code);
+      assert.equal(
+        result.outcome.error.message,
+        item.root === "recovery"
+          ? `cannot inspect Codex recovery state at ${f.paths.recoveryRoot}; recovery is required before mutation`
+          : `cannot inspect Codex marketplace storage at ${f.paths.marketplaceRoot}`,
+      );
+      assert.equal(nativeAccessed, false);
+      assert.equal(activated, false);
+      assert.equal(
+        item.kind === "symlink"
+          ? (await lstat(unsafeRoot)).isSymbolicLink()
+          : (await lstat(unsafeRoot)).isFile(),
+        true,
+      );
+      assert.equal(
+        (await readdir(f.paths.preparedRoot)).includes("transaction.json"),
+        false,
+      );
+      if (item.root === "marketplace") {
+        assert.equal(await readCodexRecovery(f.paths), null);
+      }
+    });
+  }
 });
 
 void test("failed marketplace staging retires its candidate and remains retryable", async (t) => {

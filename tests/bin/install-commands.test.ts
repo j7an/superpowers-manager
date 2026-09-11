@@ -1342,8 +1342,8 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    assert.ok(out.includes("does not match the prepared plugin"), out);
-    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
+    // :655
+    assert.ok(out.includes("fingerprint is not detectable"), out);
     // The native add was attempted, so a missing cache cannot prove that
     // registration and cache stayed unchanged. Preserve recovery evidence.
     assert.ok(out.includes("Codex restoration could not be verified"), out);
@@ -1403,8 +1403,10 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    assert.ok(out.includes("does not match the prepared plugin"), out);
-    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
+    // :684
+    assert.ok(out.includes("fingerprint is not detectable"), out);
+    // :685 — the missing hint is replayed from the adapter receipt.
+    assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
     assert.ok(out.includes("Codex restoration could not be verified"), out);
     assert.ok(
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
@@ -1421,18 +1423,21 @@ void describe("install commands", { concurrency: true }, () => {
     // as item 104: it proves the string appears, not that the subject produced
     // it.
     //
-    // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
-    // plugin as installed at 1.0.0 without materialising its cached tree, so
-    // the REAL adapter's fingerprint handler resolves an active version
-    // (`src/harnesses/codex/adapter.ts:830::if (view === "fingerprint") {`), builds the installed root for it (:877-882),
-    // and finds nothing readable there — installedCommitFromRoot returns ""
-    // (`src/harnesses/codex/state.ts:81::export async function installedCommitFromRoot(`) — and fails with a controlled inspect-failed
-    // outcome. The case therefore needs no interception and is not
-    // seam-dependent.
+    // The lower lever is the fake CODEX plus a real unsafe active-cache shape.
+    // `pluginAdd: "orphan"` reports an enabled plugin at 1.0.0 without
+    // materialising its cache. This case pre-seeds that computed active root as
+    // a regular file, so the real state reader rejects the non-directory as an
+    // inspection failure. The case needs no adapter interception.
     const c = installCase({
       config: { pluginAdd: "orphan" },
     }); // :693
     await prepareGeneratedTree(c);
+    const activeRoot = join(
+      c.state,
+      "codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0",
+    );
+    mkdirSync(join(activeRoot, ".."), { recursive: true });
+    writeFileSync(activeRoot, "unsafe active cache shape\n");
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
@@ -1442,8 +1447,14 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    assert.ok(out.includes("does not match the prepared plugin"), out);
-    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
+    // :695 — constrain the command's own whole-line post-install diagnostic.
+    assert.ok(
+      hasLine(
+        out,
+        "error: installed manager fingerprint inspection failed after install.",
+      ),
+      out,
+    );
     assert.ok(out.includes("Codex restoration could not be verified"), out);
     assert.ok(
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),

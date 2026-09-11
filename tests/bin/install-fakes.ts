@@ -105,14 +105,18 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
       return;
     }
     if (ctx.config.pluginAdd === "orphan") {
-      // Codex reports the plugin installed at 1.0.0, but no cached tree is
-      // ever written for it. The real adapter's fingerprint handler then
-      // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — `src/harnesses/codex/adapter.ts:877::const activeRoot = installedRootForVersion(` — so it returns a
-      // controlled inspect-failed outcome. No adapter interception needed.
+      // Codex reports the plugin installed and enabled at 1.0.0 but does not
+      // materialise its cached tree. The inspection-failure case pre-seeds
+      // that active root with an unsafe non-directory so the real state reader
+      // returns a controlled inspect-failed outcome. No adapter interception.
       ctx.writeJson("plugin_list.json", {
         installed: [
-          { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
+          {
+            pluginId: "superpowers@superpowers-manager",
+            installed: true,
+            enabled: true,
+            version: "1.0.0",
+          },
         ],
         available: [],
       });

@@ -32,7 +32,11 @@ import { classifyPathNoFollow } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import type { ResolutionKind } from "../../upstream-version.ts";
 import { manifestVersionForRef } from "../../upstream-version.ts";
-import { assertCodexPreparationSeparate, codexPaths } from "./paths.ts";
+import {
+  assertCodexPreparationSeparate,
+  codexPathFailureDetails,
+  codexPaths,
+} from "./paths.ts";
 import { readCodexRecovery } from "./recovery.ts";
 
 // Order is inherited from the original prepare command; the first miss wins.
@@ -155,11 +159,34 @@ export async function validateCodexPreparationBeforeFetch(
   const preparedRoot = codexPreparationLocation(ctx).destinationRoot;
   try {
     await assertCodexPreparationSeparate(preparedRoot, paths);
-  } catch {
+  } catch (cause) {
+    const failure = codexPathFailureDetails(cause);
+    if (failure?.kind === "inspection") {
+      if (failure.root === "recovery") {
+        return failureResult(
+          "prepare",
+          "recovery-required",
+          `cannot inspect Codex recovery state at ${paths.recoveryRoot}`,
+          [],
+          [],
+        );
+      }
+      return failureResult(
+        "prepare",
+        "prepare-failed",
+        failure.root === "marketplace"
+          ? `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`
+          : `cannot inspect Codex preparation root at ${preparedRoot}`,
+        [],
+        [],
+      );
+    }
     return failureResult(
       "prepare",
-      "preparation-overlap",
-      `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`,
+      failure?.kind === "overlap" ? "preparation-overlap" : "prepare-failed",
+      failure?.kind === "overlap"
+        ? `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`
+        : `cannot validate Codex preparation storage separation at ${preparedRoot}`,
       [],
       [],
     );

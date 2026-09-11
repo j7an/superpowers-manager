@@ -32,7 +32,11 @@ import {
   stageCodexMarketplace,
   type MarketplaceSnapshot,
 } from "./marketplace.ts";
-import { assertCodexPreparationSeparate, codexPaths } from "./paths.ts";
+import {
+  assertCodexPreparationSeparate,
+  codexPathFailureDetails,
+  codexPaths,
+} from "./paths.ts";
 import { codexPreparationLocation } from "./prepare.ts";
 import {
   beginCodexRecovery,
@@ -657,10 +661,31 @@ export async function installCodexMarketplace(
   const preparedRoot = codexPreparationLocation(ctx).destinationRoot;
   try {
     await assertCodexPreparationSeparate(preparedRoot, paths);
-  } catch {
+  } catch (cause) {
+    const failure = codexPathFailureDetails(cause);
+    if (failure?.kind === "inspection") {
+      if (failure.root === "recovery") {
+        return fail(
+          "recovery-required",
+          `cannot inspect Codex recovery state at ${paths.recoveryRoot}; recovery is required before mutation`,
+          messages,
+        );
+      }
+      return fail(
+        "activation-refused",
+        failure.root === "marketplace"
+          ? `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`
+          : `cannot inspect Codex preparation root at ${preparedRoot}`,
+        messages,
+      );
+    }
     return fail(
-      "preparation-overlap",
-      `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`,
+      failure?.kind === "overlap"
+        ? "preparation-overlap"
+        : "activation-refused",
+      failure?.kind === "overlap"
+        ? `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`
+        : `cannot validate Codex preparation storage separation at ${preparedRoot}`,
       messages,
     );
   }

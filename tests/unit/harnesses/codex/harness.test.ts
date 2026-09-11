@@ -737,6 +737,20 @@ void test("verification presentation preserves missing, mismatch, and inspection
     codexPresentation.renderInstallVerification(
       DESIRED,
       receipt,
+      successResult("inspect", { kind: "mismatch", observedIdentity: "" }, []),
+    ),
+    {
+      stdout: [`desired_commit=${DESIRED}`, "installed_commit="],
+      stderr: [
+        "error: installed manager fingerprint is not detectable after install.",
+        "hint: verify the installed plugin",
+      ],
+    },
+  );
+  assert.deepEqual(
+    codexPresentation.renderInstallVerification(
+      DESIRED,
+      receipt,
       successResult(
         "inspect",
         { kind: "mismatch", observedIdentity: OTHER },
