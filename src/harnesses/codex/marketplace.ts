@@ -4,6 +4,7 @@ import {
   lstat,
   mkdir,
   readdir,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -30,6 +31,7 @@ export interface MarketplaceSnapshot {
 
 const MARKETPLACE_PATH = ".agents/plugins/marketplace.json";
 const PLUGIN_PATH = "plugins/superpowers";
+type DirectoryIdentity = { readonly dev: number; readonly ino: number };
 
 function inspectionError(root: string, cause?: unknown): SafetyError {
   return new SafetyError(
@@ -125,16 +127,34 @@ async function readMarketplace(root: string): Promise<MarketplaceSnapshot> {
   }
 }
 
+async function removeOwnedCandidate(
+  root: string,
+  identity: DirectoryIdentity,
+): Promise<void> {
+  try {
+    await assertNoFollowType(root, ["directory"]);
+    const current = await lstat(root);
+    if (current.dev !== identity.dev || current.ino !== identity.ino) return;
+    await rm(root, { recursive: true });
+  } catch {
+    // A candidate that cannot still be proven as ours must remain untouched.
+  }
+}
+
 export async function stageCodexMarketplace(
   artifact: PreparedArtifact,
   packageRoot: string,
   candidateRoot: string,
 ): Promise<MarketplaceSnapshot> {
+  let candidateIdentity: DirectoryIdentity | null = null;
   try {
     const assessed = await readCodexAssessment(artifact.root);
     if (assessed.commit !== artifact.commit) throw new Error("artifact commit");
     const sourceDigest = await digestArtifactTree(artifact.root);
     await assertNoFollowType(candidateRoot, ["missing"]);
+    await mkdir(candidateRoot, { mode: 0o700 });
+    const candidate = await lstat(candidateRoot);
+    candidateIdentity = { dev: candidate.dev, ino: candidate.ino };
     await mkdir(join(candidateRoot, ".agents", "plugins"), { recursive: true });
     await mkdir(join(candidateRoot, "plugins"), { recursive: true });
     await copyFile(
@@ -176,6 +196,9 @@ export async function stageCodexMarketplace(
     );
     return await readMarketplace(candidateRoot);
   } catch (cause) {
+    if (candidateIdentity !== null) {
+      await removeOwnedCandidate(candidateRoot, candidateIdentity);
+    }
     throw new SafetyError(
       "codex-marketplace",
       `cannot stage owned Codex marketplace: ${candidateRoot}`,

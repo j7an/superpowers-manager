@@ -152,11 +152,19 @@ export async function validateCodexPreparationBeforeFetch(
   ctx: AdapterContext,
 ): Promise<AdapterResult<null>> {
   const paths = codexPaths(ctx.env ?? {}, process.cwd());
+  const preparedRoot = codexPreparationLocation(ctx).destinationRoot;
   try {
-    await assertCodexPreparationSeparate(
-      codexPreparationLocation(ctx).destinationRoot,
-      paths,
+    await assertCodexPreparationSeparate(preparedRoot, paths);
+  } catch {
+    return failureResult(
+      "prepare",
+      "preparation-overlap",
+      `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`,
+      [],
+      [],
     );
+  }
+  try {
     if ((await readCodexRecovery(paths)) !== null) {
       return failureResult(
         "prepare",

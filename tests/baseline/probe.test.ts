@@ -47,6 +47,8 @@ export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 const ACTIVE_VERSION = `0.0.0+manager.${SHORT}`;
 const ACTIVE = `{"installed":[{"pluginId":"superpowers@superpowers-manager","installed":true,"enabled":true,"version":"${ACTIVE_VERSION}"}]}`;
 const EMPTY_PLUGINS = '{"installed":[]}';
+const MANAGER_MARKETPLACE = '{"marketplaces":[{"name":"superpowers-manager"}]}';
+const EMPTY_MARKETPLACES = '{"marketplaces":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
@@ -109,12 +111,14 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
   const c = createCase({ fakes: "probe" });
   await seedQualifiedGenerated(c);
   seedCodex(c, {
-    // Two listings, one per invocation. The FIRST answers
-    // `inspect --view fingerprint` and carries the active manager version, so
-    // installed_commit resolves. The SECOND answers `inspect --view ownership`
-    // and is empty, so identity_state is `neither`. One shared listing could
-    // not produce both -- see seedCodex's note and adjudication finding 3.
+    // Installed inspection and its coherence recheck use the first listing;
+    // ownership uses the empty middle listing, so identity_state is `neither`.
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
     installedProvenance: "{",
   });
@@ -184,6 +188,11 @@ void test("a saved exact pin stays authoritative after its source disappears", a
   await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
   });
   // A saved pin short-circuits resolveRef (`src/effective-selection.ts:122-134::if (usesSavedPin)`),
@@ -228,8 +237,8 @@ void test("an environment ref overrides only the ref side and the saved fields s
     commit: DESIRED,
   });
   await seedQualifiedGenerated(c, DESIRED, source);
-  // FOUR listings: this case runs probe twice (porcelain, then human) and each
-  // run issues `plugin list --json` twice. The on-disk counter in
+  // SIX listings: this case runs probe twice (porcelain, then human) and each
+  // run issues `plugin list --json` three times. The on-disk counter in
   // tests/bin/lifecycle-fakes.js is per case, not per run.
   seedCodex(c, {
     pluginListings: [
@@ -239,6 +248,14 @@ void test("an environment ref overrides only the ref side and the saved fields s
       ACTIVE,
       EMPTY_PLUGINS,
       ACTIVE,
+    ],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
     ],
     manifestVersion: ACTIVE_VERSION,
   });
@@ -301,6 +318,11 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
   await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
   });
   const result = await probeSaved(c, ["--porcelain"]);
@@ -357,13 +379,16 @@ void test("probe reports every validated identity state without mutating anythin
   ]) {
     const c = createCase({ fakes: "probe" });
     await seedQualifiedGenerated(c);
-    // The fingerprint listing stays the ACTIVE manager version in all four so
-    // installed_commit resolves and status can be `current` even for the
-    // `legacy` and `neither` rows -- impossible with one shared listing
-    // (adjudication finding 3).
+    // Installed observation and its coherence recheck stay ACTIVE with a
+    // manager registration in all four rows. The middle responses independently
+    // drive ownership, including the `legacy` and `neither` rows.
     seedCodex(c, {
       pluginListings: [ACTIVE, ownership],
-      marketplaces,
+      marketplaceListings: [
+        MANAGER_MARKETPLACE,
+        marketplaces,
+        MANAGER_MARKETPLACE,
+      ],
       manifestVersion: ACTIVE_VERSION,
     });
     const pkgBefore = snapshotTree(c.pkg);
@@ -390,6 +415,11 @@ void test("semantically invalid installed provenance falls through to the manife
   await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
     installedProvenance: '{"commit":"not-a-fingerprint"}',
   });

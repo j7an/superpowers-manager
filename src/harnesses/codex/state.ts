@@ -210,10 +210,14 @@ export async function inspectCodexInstallation(
       messages,
     );
   }
-  if (
-    observed.marketplaceRoot !== null &&
-    !(await pathsEqual(observed.marketplaceRoot, paths.marketplaceRoot))
-  ) {
+  if (observed.marketplaceRoot === null) {
+    return mismatch(
+      "Codex marketplace registration is missing",
+      messages,
+      observedIdentity,
+    );
+  }
+  if (!(await pathsEqual(observed.marketplaceRoot, paths.marketplaceRoot))) {
     return mismatch(
       "legacy Codex marketplace source",
       messages,

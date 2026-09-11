@@ -102,9 +102,18 @@ export function respondToListing(request: {
     c === "list" &&
     d === "--json"
   ) {
-    process.stdout.write(
-      readFileSync(join(state, "marketplace_list.json"), "utf8"),
-    );
+    const resolved:
+      { ok: true; path: string } | { ok: false; message: string } = existsSync(
+      join(state, "marketplace_list.0.json"),
+    )
+      ? nextMarketplaceList(state)
+      : { ok: true, path: join(state, "marketplace_list.json") };
+    if (!resolved.ok) {
+      process.stderr.write(`${resolved.message}\n`);
+      process.exitCode = 1;
+      return true;
+    }
+    process.stdout.write(readFileSync(resolved.path, "utf8"));
     process.exitCode = marketplaceListRc;
     return true;
   }
@@ -114,12 +123,15 @@ export function respondToListing(request: {
 /**
  * Added 2026-08-07 after adjudication finding 3.
  *
- * Probe issues `codex plugin list --json` TWICE per run, from two different
- * inspections that need different answers:
+ * Probe issues `codex plugin list --json` THREE times per run, from three
+ * inspections that can need different answers:
  *
- *   inspect --view fingerprint -> plugin list --json          (`src/harnesses/codex/adapter.ts:840::const listing = await listingCommand(`)
- *   inspect --view ownership   -> plugin list --json,         (`src/harnesses/codex/adapter.ts:904::if (view === "ownership") {`)
- *                                 plugin marketplace list --json  (:883)
+ *   inspect installed          -> plugin list --json,
+ *                                 plugin marketplace list --json
+ *   inspect --view ownership   -> plugin list --json,
+ *                                 plugin marketplace list --json
+ *   inspect installed recheck  -> plugin list --json,
+ *                                 plugin marketplace list --json
  *
  * They are separate runAdapter calls, so this fake is a fresh PROCESS each
  * time and the argv is byte-identical -- there is nothing to branch on. A
@@ -143,7 +155,20 @@ export function respondToListing(request: {
 function nextPluginList(
   state: string,
 ): { ok: true; path: string } | { ok: false; message: string } {
-  const counterPath = join(state, "plugin_list.counter");
+  return nextListing(state, "plugin");
+}
+
+function nextMarketplaceList(
+  state: string,
+): { ok: true; path: string } | { ok: false; message: string } {
+  return nextListing(state, "marketplace");
+}
+
+function nextListing(
+  state: string,
+  kind: "plugin" | "marketplace",
+): { ok: true; path: string } | { ok: false; message: string } {
+  const counterPath = join(state, `${kind}_list.counter`);
   let index = 0;
   if (existsSync(counterPath)) {
     const raw = readFileSync(counterPath, "utf8").trim();
@@ -151,16 +176,16 @@ function nextPluginList(
     if (!Number.isInteger(index) || index < 0) {
       return {
         ok: false,
-        message: `fake codex: unreadable plugin listing counter at ${counterPath}`,
+        message: `fake codex: unreadable ${kind} listing counter at ${counterPath}`,
       };
     }
   }
   writeFileSync(counterPath, `${index + 1}`, "utf8");
-  const path = join(state, `plugin_list.${index}.json`);
+  const path = join(state, `${kind}_list.${index}.json`);
   if (!existsSync(path)) {
     return {
       ok: false,
-      message: `fake codex: no plugin listing configured for invocation ${index}`,
+      message: `fake codex: no ${kind} listing configured for invocation ${index}`,
     };
   }
   return { ok: true, path };

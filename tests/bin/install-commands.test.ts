@@ -1212,20 +1212,18 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("update stays read-only when probe reports current (:587-602)", async () => {
     const c = installCase();
-    await prepareGeneratedTree(c);
-    seedInstalledCurrent(c); // :591
+    const installed = await runScript(c, "install");
+    assert.equal(
+      installed.status,
+      0,
+      `fixture: install must establish a healthy durable manager:\n${installed.stdout}${installed.stderr}`,
+    );
     clearLogs(c);
     const result = await runScript(c, "update");
     // :593
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.ok(result.stdout.includes("manager updated"), result.stdout);
-    assert.ok(
-      has(
-        readLog(c.codexLog),
-        `plugin marketplace add ${durableMarketplace(c)}`,
-      ),
-      "an unchanged legacy installation must migrate to durable storage",
-    );
+    assert.ok(result.stdout.includes("manager is current"), result.stdout);
+    assertNoCodexMutation(readLog(c.codexLog));
   });
 
   void test("update rejects mixed legacy state even when the fingerprint is current (:604-620)", async () => {
@@ -1344,6 +1342,8 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
+    assert.ok(out.includes("does not match the prepared plugin"), out);
+    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     // The native add was attempted, so a missing cache cannot prove that
     // registration and cache stayed unchanged. Preserve recovery evidence.
     assert.ok(out.includes("Codex restoration could not be verified"), out);
@@ -1375,6 +1375,8 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
+    assert.ok(out.includes("does not match the prepared plugin"), out);
+    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     assert.ok(out.includes("Codex restoration could not be verified"), out);
     assert.ok(
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
@@ -1401,6 +1403,8 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
+    assert.ok(out.includes("does not match the prepared plugin"), out);
+    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     assert.ok(out.includes("Codex restoration could not be verified"), out);
     assert.ok(
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
@@ -1438,6 +1442,8 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
+    assert.ok(out.includes("does not match the prepared plugin"), out);
+    assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
     assert.ok(out.includes("Codex restoration could not be verified"), out);
     assert.ok(
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),

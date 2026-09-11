@@ -812,7 +812,12 @@ run_codex plugin add superpowers@superpowers-manager
 restored_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$original_marketplace"
 assert_active_installed_payload "$restored_listing" "$original_marketplace" "$version_a" "$commit_a"
+hook_state_before=$(snapshot_hook_state)
 run_packaged_manager update
+hook_state_after=$(snapshot_hook_state)
+assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
+assert_requirements_unchanged
+assert_sentinel_absent
 durable_seed_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
 assert_active_installed_commit "$durable_seed_listing" "$version_a" "$commit_a" ""
@@ -832,7 +837,12 @@ run_codex plugin add superpowers@superpowers-manager
 case "$legacy_uninstall" in "$root"/*) ;; *) echo "error: refusing legacy fixture mutation outside probe root" >&2; exit 1 ;; esac
 rm -rf "$legacy_uninstall/plugins/superpowers/skills"
 mkdir -p "$legacy_uninstall/plugins/superpowers/skills"
+hook_state_before=$(snapshot_hook_state)
 run_packaged_manager uninstall
+hook_state_after=$(snapshot_hook_state)
+assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
+assert_requirements_unchanged
+assert_sentinel_absent
 legacy_uninstall_plugins=$(run_codex plugin list --json)
 legacy_uninstall_marketplaces=$(run_codex plugin marketplace list --json)
 python3 -S - "$legacy_uninstall_plugins" "$legacy_uninstall_marketplaces" <<'PY'
@@ -878,7 +888,12 @@ PY
 
 run_codex plugin marketplace add "$legacy_healthy"
 run_codex plugin add superpowers@superpowers-manager
+hook_state_before=$(snapshot_hook_state)
 run_packaged_manager update
+hook_state_after=$(snapshot_hook_state)
+assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
+assert_requirements_unchanged
+assert_sentinel_absent
 legacy_healthy_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
 assert_active_installed_commit "$legacy_healthy_listing" "$version_a" "$commit_a" ""
@@ -892,7 +907,12 @@ run_codex plugin add superpowers@superpowers-manager
 case "$legacy_template_only" in "$root"/*) ;; *) echo "error: refusing legacy fixture mutation outside probe root" >&2; exit 1 ;; esac
 rm -rf "$legacy_template_only/plugins/superpowers/skills"
 mkdir -p "$legacy_template_only/plugins/superpowers/skills"
+hook_state_before=$(snapshot_hook_state)
 run_packaged_manager update
+hook_state_after=$(snapshot_hook_state)
+assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
+assert_requirements_unchanged
+assert_sentinel_absent
 legacy_template_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
 assert_active_installed_commit "$legacy_template_listing" "$version_a" "$commit_a" ""
@@ -905,7 +925,12 @@ run_codex plugin marketplace add "$legacy_missing"
 run_codex plugin add superpowers@superpowers-manager
 case "$legacy_missing" in "$root"/*) ;; *) echo "error: refusing legacy fixture removal outside probe root" >&2; exit 1 ;; esac
 rm -rf "$legacy_missing"
+hook_state_before=$(snapshot_hook_state)
 run_packaged_manager update
+hook_state_after=$(snapshot_hook_state)
+assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
+assert_requirements_unchanged
+assert_sentinel_absent
 legacy_missing_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"
 assert_active_installed_commit "$legacy_missing_listing" "$version_a" "$commit_a" ""

@@ -278,9 +278,9 @@ function requireOrderedLifecycle(source: string, expected: readonly string[]) {
   }
   for (const [statement, count] of expectedCounts) {
     const actualCount = actual.filter((line) => line === statement).length;
-    if (actualCount < count) {
+    if (actualCount !== count) {
       throw new ContractViolation(
-        `manager A/B lifecycle must execute at least ${count} time(s): ${statement}`,
+        `manager A/B lifecycle must execute exactly ${count} time(s): ${statement}`,
       );
     }
   }
@@ -594,7 +594,7 @@ function validateProbe(probe: string) {
     // (`'sh \"${PLUGIN_ROOT}/hooks/session-start-codex\"'`); in Ruby
     // single-quoted strings `\"` is not an escape sequence, so the
     // required text carries literal backslashes and guards the JSON
-    // heredoc's escaped-quote spelling at `tests/container/codex/offline-probe.sh:1013::sh \`.
+    // heredoc's escaped-quote spelling at `tests/container/codex/offline-probe.sh:1038::sh \`.
     'sh \\"${PLUGIN_ROOT}/hooks/session-start-codex\\"',
     "/tmp/superpowers-manager-hook-sentinel",
     "$HOME/.codex/hooks.state",
@@ -726,7 +726,46 @@ function validateProbe(probe: string) {
     "fresh skills must match upstream fixture bytes beneath the exact active manager cache root",
   );
 
-  const topLevel = topLevelShellLines(probe);
+  const durabilityStart = probe.indexOf("codex_version=$(run_codex --version)");
+  const historicalContinuation = probe.indexOf(
+    'commit_b=$(git -C "$upstream" rev-parse HEAD)',
+  );
+  if (
+    durabilityStart === -1 ||
+    historicalContinuation === -1 ||
+    durabilityStart >= historicalContinuation
+  ) {
+    throw new ContractViolation(
+      "manager A/B lifecycle boundaries are missing or reordered",
+    );
+  }
+  const nativeRefreshTerminal =
+    'assert_active_installed_payload "$restored_listing" "$original_marketplace" "$version_a" "$commit_a"';
+  const nativeRefreshTerminalStart = probe.indexOf(
+    nativeRefreshTerminal,
+    durabilityStart,
+  );
+  const firstPackagedUpdate = probe.indexOf(
+    "run_packaged_manager update",
+    durabilityStart,
+  );
+  if (
+    nativeRefreshTerminalStart === -1 ||
+    firstPackagedUpdate === -1 ||
+    nativeRefreshTerminalStart >= firstPackagedUpdate ||
+    firstPackagedUpdate >= historicalContinuation
+  ) {
+    throw new ContractViolation(
+      "same-version native refresh boundaries are missing or reordered",
+    );
+  }
+  const nativeRefreshProbe = probe.slice(
+    durabilityStart,
+    nativeRefreshTerminalStart + nativeRefreshTerminal.length,
+  );
+  const historicalProbe =
+    probe.slice(0, durabilityStart) + probe.slice(historicalContinuation);
+  const historicalTopLevel = topLevelShellLines(historicalProbe);
   const managerMutations = [
     "run_manager track-latest",
     "run_manager install",
@@ -735,7 +774,7 @@ function validateProbe(probe: string) {
   ];
   for (const mutation of managerMutations) {
     const indices: number[] = [];
-    topLevel.forEach((line, index) => {
+    historicalTopLevel.forEach((line, index) => {
       if (line === mutation) indices.push(index);
     });
     if (indices.length !== 1) {
@@ -745,15 +784,40 @@ function validateProbe(probe: string) {
     }
     const index = indices[0];
     if (!(
-      topLevel[index - 1] === "hook_state_before=$(snapshot_hook_state)" &&
-      topLevel[index + 1] === "hook_state_after=$(snapshot_hook_state)"
+      historicalTopLevel[index - 1] ===
+        "hook_state_before=$(snapshot_hook_state)" &&
+      historicalTopLevel[index + 1] ===
+        "hook_state_after=$(snapshot_hook_state)"
     )) {
       throw new ContractViolation(
         `manager mutation must be immediately bracketed by hook-state snapshots: ${mutation}`,
       );
     }
   }
-  const unchangedCount = topLevel.filter(
+  const activeProbeLines = activeLines(probe);
+  const allManagerMutationIndices = activeProbeLines.flatMap((line, index) =>
+    /^run_(?:packaged_)?manager (?:track-latest|install|update|uninstall)(?:\s|$)/.test(
+      line,
+    )
+      ? [index]
+      : [],
+  );
+  for (const index of allManagerMutationIndices) {
+    const mutation = activeProbeLines[index];
+    if (!(
+      activeProbeLines[index - 1] ===
+        "hook_state_before=$(snapshot_hook_state)" &&
+      activeProbeLines[index + 1] ===
+        "hook_state_after=$(snapshot_hook_state)" &&
+      activeProbeLines[index + 2] ===
+        'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"'
+    )) {
+      throw new ContractViolation(
+        `manager mutation must be immediately bracketed and compared: ${mutation}`,
+      );
+    }
+  }
+  const unchangedCount = historicalTopLevel.filter(
     (line) =>
       line ===
       'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"',
@@ -763,7 +827,7 @@ function validateProbe(probe: string) {
       "every manager mutation must compare hook-state snapshots",
     );
   }
-  const requirementsCount = topLevel.filter(
+  const requirementsCount = historicalTopLevel.filter(
     (line) => line === "assert_requirements_unchanged",
   ).length;
   if (requirementsCount < managerMutations.length) {
@@ -771,7 +835,7 @@ function validateProbe(probe: string) {
       "requirements.toml must remain unchanged across manager mutations",
     );
   }
-  const sentinelCount = topLevel.filter(
+  const sentinelCount = historicalTopLevel.filter(
     (line) => line === "assert_sentinel_absent",
   ).length;
   if (sentinelCount < 5) {
@@ -780,31 +844,7 @@ function validateProbe(probe: string) {
     );
   }
 
-  const lifecycle = [
-    'chmod +x "$package/src/cli.ts"',
-    'commit_a=$(git -C "$upstream" rev-parse HEAD)',
-    "short_a=$(printf '%s' \"$commit_a\" | cut -c 1-7)",
-    'version_a="1.0.0+manager.$short_a"',
-    "hook_state_before=$(snapshot_hook_state)",
-    "run_manager track-latest",
-    "hook_state_after=$(snapshot_hook_state)",
-    'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"',
-    "assert_requirements_unchanged",
-    "hook_state_before=$(snapshot_hook_state)",
-    "run_manager install",
-    "hook_state_after=$(snapshot_hook_state)",
-    'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"',
-    "assert_requirements_unchanged",
-    "assert_sentinel_absent",
-    "initial_listing=$(run_codex plugin list --json)",
-    'assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"',
-    'assert_active_installed_commit "$initial_listing" "$version_a" "$commit_a" ""',
-    'assert_exact_empty_hooks_fixture "$initial_listing" "$version_a"',
-    'run_codex app-server generate-json-schema --out "$schema_root"',
-    "assert_hooks_schema_compatible",
-    "capture_hooks_response",
-    'assert_manager_hooks_absent "$hooks_response"',
-    "assert_sentinel_absent",
+  const nativeRefreshLifecycle = [
     "codex_version=$(run_codex --version)",
     "printf '%s\\n' \"codex native refresh prerequisite: $codex_version\"",
     'same_version_marketplace="$root/same-version-marketplace"',
@@ -838,7 +878,40 @@ function validateProbe(probe: string) {
     "run_codex plugin add superpowers@superpowers-manager",
     "restored_listing=$(run_codex plugin list --json)",
     'assert_marketplace_root "$original_marketplace"',
-    'assert_active_installed_payload "$restored_listing" "$original_marketplace" "$version_a" "$commit_a"',
+    nativeRefreshTerminal,
+  ];
+  assert.equal(
+    nativeRefreshLifecycle.length,
+    34,
+    "same-version native refresh lifecycle lost or gained a step",
+  );
+  requireOrderedLifecycle(nativeRefreshProbe, nativeRefreshLifecycle);
+
+  const lifecycle = [
+    'chmod +x "$package/src/cli.ts"',
+    'commit_a=$(git -C "$upstream" rev-parse HEAD)',
+    "short_a=$(printf '%s' \"$commit_a\" | cut -c 1-7)",
+    'version_a="1.0.0+manager.$short_a"',
+    "hook_state_before=$(snapshot_hook_state)",
+    "run_manager track-latest",
+    "hook_state_after=$(snapshot_hook_state)",
+    'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"',
+    "assert_requirements_unchanged",
+    "hook_state_before=$(snapshot_hook_state)",
+    "run_manager install",
+    "hook_state_after=$(snapshot_hook_state)",
+    'assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"',
+    "assert_requirements_unchanged",
+    "assert_sentinel_absent",
+    "initial_listing=$(run_codex plugin list --json)",
+    'assert_marketplace_root "$HOME/.codex/superpowers-manager/marketplace"',
+    'assert_active_installed_commit "$initial_listing" "$version_a" "$commit_a" ""',
+    'assert_exact_empty_hooks_fixture "$initial_listing" "$version_a"',
+    'run_codex app-server generate-json-schema --out "$schema_root"',
+    "assert_hooks_schema_compatible",
+    "capture_hooks_response",
+    'assert_manager_hooks_absent "$hooks_response"',
+    "assert_sentinel_absent",
     'commit_b=$(git -C "$upstream" rev-parse HEAD)',
     "short_b=$(printf '%s' \"$commit_b\" | cut -c 1-7)",
     'version_b="1.1.0+manager.$short_b"',
@@ -869,10 +942,10 @@ function validateProbe(probe: string) {
   ];
   assert.equal(
     lifecycle.length,
-    85,
+    51,
     "lifecycle lost or gained a case — update tests/migration-inventory/container-contract.md",
   );
-  requireOrderedLifecycle(probe, lifecycle);
+  requireOrderedLifecycle(historicalProbe, lifecycle);
 
   requireOrderedSource(
     probe,
@@ -907,6 +980,38 @@ function validateProbe(probe: string) {
       "run_packaged_manager update",
     ],
     "template-only legacy migration must switch native registration to its isolated source before damage",
+  );
+
+  requireOrderedSource(
+    probe,
+    [
+      'driver="$root/codex-publication-reader.ts"',
+      "cat > \"$driver\" <<'EOF'",
+      'import { beginDirectoryPublication } from "/workspace/src/atomic.ts";',
+      "const result = await installCodexMarketplace(",
+      "beginPublication: async (candidate, live, options) => await beginDirectoryPublication(candidate, live, {",
+      "rename: async (from, to) => {",
+      "await rename(from, to);",
+      "if (from === paths.marketplaceRoot && to === options.backupPath) {",
+      "observed = true;",
+      "const readers = await Promise.allSettled([",
+      'run("codex", ["plugin", "list", "--json"], { timeout: 10_000 }),',
+      'run("python3", ["-S", helper, packageRoot, response, stderr, "skills/list"], { timeout: 10_000 }),',
+      "for (const reader of readers) {",
+      "console.error(`boundary reader failed code=${String(reason.code)} killed=${String(reason.killed)}`);",
+      "console.error(`boundary reader completed stdout=${reader.value.stdout.length} stderr=${reader.value.stderr.length}`);",
+      'if (!observed) throw new Error("live-to-backup publication boundary was not observed");',
+      "if (!result.outcome.ok || result.status !== 0 || result.outcome.result === null) {",
+      'if (result.outcome.ok || result.status === 0) throw new Error("failed boundary publication reported success");',
+      "const recovered = await codexReadNativeState(ctx);",
+      'if (!recovered.outcome.ok) throw new Error("failed publication left unverifiable recovery state");',
+      'if ((await readCodexRecovery(paths)) === null) throw new Error("failed publication left no validated recovery record");',
+      "const settled = await result.outcome.result.transaction.finalize();",
+      'if (!settled.outcome.ok || settled.status !== 0) throw new Error("published transaction did not finalize");',
+      'node "$driver" "$package" "$package/tests/container/codex/hooks-list-rpc.py" "$boundary_response" "$boundary_stderr"',
+      "capture_manager_skills",
+    ],
+    "publication boundary must exercise readers during the live-to-backup rename and retain only verified outcomes",
   );
 }
 
@@ -1772,6 +1877,65 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
       "codex-offline-probe.sh satisfies the full structural/ordering contract",
       () => {
         assert.doesNotThrow(() => validateProbe(probe));
+        const currentContractMutations = [
+          {
+            name: "removed native refresh listing",
+            source: probe.replace(
+              "migration_listing=$(run_codex plugin list --json)",
+              ":",
+            ),
+            message:
+              "manager A/B lifecycle is missing or reordered: migration_listing=$(run_codex plugin list --json)",
+          },
+          {
+            name: "reordered restored listing and root assertion",
+            source: probe.replace(
+              'restored_listing=$(run_codex plugin list --json)\nassert_marketplace_root "$original_marketplace"',
+              'assert_marketplace_root "$original_marketplace"\nrestored_listing=$(run_codex plugin list --json)',
+            ),
+            message:
+              'manager A/B lifecycle is missing or reordered: assert_marketplace_root "$original_marketplace"',
+          },
+          {
+            name: "repeated native refresh command",
+            source: probe.replace(
+              "migration_listing=$(run_codex plugin list --json)",
+              "migration_listing=$(run_codex plugin list --json)\nmigration_listing=$(run_codex plugin list --json)",
+            ),
+            message:
+              "manager A/B lifecycle must execute exactly 1 time(s): migration_listing=$(run_codex plugin list --json)",
+          },
+          {
+            name: "weakened publication-boundary readers",
+            source: probe.replace(
+              "const readers = await Promise.allSettled([",
+              "const readers = [];",
+            ),
+            message:
+              "publication boundary must exercise readers during the live-to-backup rename and retain only verified outcomes",
+          },
+          {
+            name: "removed publication finalization success guard",
+            source: probe.replace(
+              'if (!settled.outcome.ok || settled.status !== 0) throw new Error("published transaction did not finalize");',
+              ":",
+            ),
+            message:
+              "publication boundary must exercise readers during the live-to-backup rename and retain only verified outcomes",
+          },
+        ] as const;
+        for (const { name, source, message } of currentContractMutations) {
+          assert.notEqual(
+            source,
+            probe,
+            `mutation fixture made no change: ${name}`,
+          );
+          assert.throws(
+            () => validateProbe(source),
+            exactError(ContractViolation, message),
+            name,
+          );
+        }
       },
     );
 

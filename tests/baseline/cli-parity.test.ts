@@ -2024,7 +2024,7 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * `codex` — never a fake adapter. `createCase` is what writes both fakes.
  *
  * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
- * discipline — `nextPluginList` (`tests/bin/lifecycle-fakes.ts:146::const counterPath`), which
+ * discipline — `nextPluginList` (`tests/bin/lifecycle-fakes.ts:171::const counterPath`), which
  * fails closed when a fixture makes more listing calls than it configured —
  * is NOT in force for these five IDs, and is deliberately not simulated.
  * `respondToListing` consults `nextPluginList` only when its caller passes
@@ -2413,7 +2413,18 @@ void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", as
       result.stderr,
       /active Codex plugin payload differs from durable marketplace/,
     );
-    assert.match(result.stderr, /error: installation could not be verified/);
+    assert.match(
+      result.stderr,
+      /error: installed manager fingerprint does not match the prepared plugin after install\./,
+    );
+    assert.match(
+      result.stderr,
+      /hint: retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add/,
+    );
+    assert.match(
+      result.stderr,
+      /installed state after rollback: mismatch; identity=0{40}/,
+    );
     assert.ok(!out.includes("manager updated"), out);
     const operations = codexOperations(c);
     const activation = operations.lastIndexOf(

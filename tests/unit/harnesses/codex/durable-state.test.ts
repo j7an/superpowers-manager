@@ -655,6 +655,24 @@ void test("inspection requires durable and active assessed payloads before curre
   assert.equal(current.outcome.result.kind, "current");
   assert.equal(current.outcome.result.observedIdentity, COMMIT);
 
+  const missingRegistration = await inspectCodexInstallation(
+    fixture.selection,
+    { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },
+    () => nativeResult(native(fixture.paths, { marketplaceRoot: null })),
+  );
+  assert.equal(
+    missingRegistration.outcome.ok,
+    true,
+    JSON.stringify(missingRegistration),
+  );
+  if (!missingRegistration.outcome.ok)
+    assert.fail("expected missing-registration inspection");
+  assert.equal(missingRegistration.outcome.result.kind, "mismatch");
+  assert.match(
+    missingRegistration.outcome.messages.at(-1)?.text ?? "",
+    /registration.*missing/i,
+  );
+
   const wrongSource = await inspectCodexInstallation(
     nativeSelection(COMMIT, "https://example.invalid/other.git"),
     { root: fixture.root, env: { CODEX_HOME: fixture.paths.codexHome } },

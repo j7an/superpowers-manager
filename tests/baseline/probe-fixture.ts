@@ -64,7 +64,7 @@ export function caseEnv(
     SUPERPOWERS_PLUGIN_ROOT: join(c.pkg, "plugins", "superpowers"),
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
-    // (`tests/bin/lifecycle-fakes.ts:213::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
+    // (`tests/bin/lifecycle-fakes.ts:238::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
     // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:492::const env = {`).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
     // (`src/harnesses/codex/adapter.ts:1086::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
@@ -99,11 +99,16 @@ export const SHORT = DESIRED.slice(0, 7);
  *
  * `pluginListings` is an ARRAY, one entry per `codex plugin list --json`
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
- * Probe issues that command twice per run and the two calls need different
- * answers -- `inspect --view fingerprint` (`src/harnesses/codex/adapter.ts:840::const listing = await listingCommand(`) then
- * `inspect --view ownership` (:871). With a single listing, a manager version
- * present for `installed_commit` also forces `identity_state=manager`, so
- * scenario 1 and the four-state identity matrix could not be written at all.
+ * Probe now issues that command for installed inspection, ownership, and the
+ * installed coherence recheck. A two-entry fixture is expanded to repeat its
+ * first installed response after ownership. With a single listing, a manager
+ * version present for `installed_commit` also forces
+ * `identity_state=manager`, so scenario 1 and the four-state identity matrix
+ * could not be written at all.
+ *
+ * `marketplaceListings`, when present, is the corresponding explicit sequence
+ * for `codex plugin marketplace list --json`. Without it the fake retains its
+ * historical static `marketplaces` response.
  * The fake fails closed if a run asks for more listings than are configured,
  * so a miscounted fixture is loud rather than silently wrong -- see
  * `nextPluginList` in `tests/bin/lifecycle-fakes.js`.
@@ -113,6 +118,7 @@ export function seedCodex(
   c: CaseEnv,
   state: {
     pluginListings?: string[];
+    marketplaceListings?: string[];
     marketplaces?: string;
     manifestVersion?: string | null;
     installedProvenance?: string | null;
@@ -128,6 +134,13 @@ export function seedCodex(
       : initialListings;
   listings.forEach((body, index) => {
     writeFileSync(join(c.state, `plugin_list.${index}.json`), body, "utf8");
+  });
+  state.marketplaceListings?.forEach((body, index) => {
+    writeFileSync(
+      join(c.state, `marketplace_list.${index}.json`),
+      qualifyMarketplaceListing(c, body),
+      "utf8",
+    );
   });
   writeFileSync(
     join(c.state, "marketplace_list.json"),

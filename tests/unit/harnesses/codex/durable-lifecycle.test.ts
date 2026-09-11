@@ -319,6 +319,86 @@ void test("prepare leaves published and native state untouched", async () => {
   );
 });
 
+void test("overlapping preparation fails before native mutation or durable writes", async (t) => {
+  for (const command of ["prepare", "install"] as const) {
+    await t.test(command, async () => {
+      const c = lifecycleCase();
+      const p = paths(c);
+      const result = await runScript(c, command, {
+        env: { SUPERPOWERS_PLUGIN_ROOT: p.marketplaceRoot },
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stdout + result.stderr,
+        /preparation overlaps Codex published or recovery storage/,
+      );
+      assert.match(
+        result.stdout + result.stderr,
+        new RegExp(p.marketplaceRoot),
+      );
+      assert.equal(
+        readLog(c.codexLog).every((line) => line.endsWith("list --json")),
+        true,
+      );
+      assert.equal(existsSync(p.preparedRoot), false);
+      assert.equal(existsSync(p.marketplaceRoot), false);
+      assert.equal(existsSync(p.recoveryRoot), false);
+    });
+  }
+});
+
+void test("enabled plugin without its marketplace registration is repairable", async () => {
+  const c = lifecycleCase();
+  await installCurrent(c);
+  writeFileSync(join(c.state, "marketplace_list.json"), EMPTY_MARKETPLACES);
+  writeFileSync(c.codexLog, "");
+
+  const probed = await runDurable(c, "probe", ["--porcelain"]);
+
+  assert.equal(probed.status, 0, probed.stdout + probed.stderr);
+  assert.match(probed.stdout, /^installation_state=mismatch$/m);
+  assert.equal(
+    readLog(c.codexLog).every((line) => line.endsWith("list --json")),
+    true,
+  );
+});
+
+void test("missing durable tree still deregisters and preserves manager inputs", async () => {
+  const c = lifecycleCase();
+  await installCurrent(c);
+  const p = paths(c);
+  const preparedSkill = join(
+    p.preparedRoot,
+    "skills",
+    "using-superpowers",
+    "SKILL.md",
+  );
+  const preparedText = readFileSync(preparedSkill, "utf8");
+  const selectionPath = join(
+    c.home,
+    ".config",
+    "superpowers-manager",
+    "selection.json",
+  );
+  mkdirSync(join(selectionPath, ".."), { recursive: true });
+  writeFileSync(selectionPath, '{"mode":"persistent","source":"local"}\n');
+  const selectionText = readFileSync(selectionPath, "utf8");
+  const unrelated = join(c.pkg, "unrelated-state");
+  writeFileSync(unrelated, "preserve\n");
+  rmSync(p.marketplaceRoot, { recursive: true });
+
+  const removed = await runDurable(c, "uninstall");
+  const repeated = await runDurable(c, "uninstall");
+
+  assert.equal(removed.status, 0, removed.stdout + removed.stderr);
+  assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+  assert.equal(readFileSync(preparedSkill, "utf8"), preparedText);
+  assert.equal(readFileSync(selectionPath, "utf8"), selectionText);
+  assert.equal(readFileSync(unrelated, "utf8"), "preserve\n");
+  assert.equal(await readCodexMarketplace(p.marketplaceRoot), null);
+  assert.equal(existsSync(p.recoveryRoot), false);
+});
+
 void test("invalid saved selection fails before native access", async () => {
   const c = lifecycleCase();
   const config = join(c.home, ".config", "superpowers-manager");

@@ -199,18 +199,6 @@ function nativeAbsent(state: CodexNativeState): boolean {
   );
 }
 
-function durableRegistrationMissing(
-  state: CodexNativeState,
-  marketplaceRoot: string,
-  snapshot: MarketplaceSnapshot | null,
-): boolean {
-  return (
-    snapshot === null &&
-    state.marketplaceRoot !== null &&
-    state.marketplaceRoot === marketplaceRoot
-  );
-}
-
 async function sameCapturedMarketplace(
   root: string,
   captured: MarketplaceSnapshot,
@@ -240,17 +228,16 @@ export async function removeCodexMarketplace(
         messages,
       );
     }
+  } catch {
+    return removalFailure(
+      "recovery-required",
+      `cannot inspect Codex recovery state at ${paths.recoveryRoot}; recovery is required before removal`,
+      messages,
+    );
+  }
+  try {
     const priorNative = await observeNative(ctx, dependencies, messages);
     captured = await readCodexMarketplace(paths.marketplaceRoot);
-    if (
-      durableRegistrationMissing(priorNative, paths.marketplaceRoot, captured)
-    ) {
-      return removalFailure(
-        "removal-refused",
-        `cannot remove Codex registration because owned marketplace content is missing at ${paths.marketplaceRoot}`,
-        messages,
-      );
-    }
     if (captured !== null) {
       pending = await beginCodexRecovery(paths, {
         operation: "uninstall",
@@ -667,6 +654,16 @@ export async function installCodexMarketplace(
     );
   }
   const paths = codexPaths(ctx.env ?? {}, process.cwd());
+  const preparedRoot = codexPreparationLocation(ctx).destinationRoot;
+  try {
+    await assertCodexPreparationSeparate(preparedRoot, paths);
+  } catch {
+    return fail(
+      "preparation-overlap",
+      `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`,
+      messages,
+    );
+  }
   let pending: PendingCodexPublication | undefined;
   let publication: DirectoryPublication | undefined;
   let previous: MarketplaceSnapshot | null = null;
@@ -674,8 +671,6 @@ export async function installCodexMarketplace(
   let priorActiveDigest: string | null = null;
   let activationAttempted = false;
   try {
-    const preparedRoot = codexPreparationLocation(ctx).destinationRoot;
-    await assertCodexPreparationSeparate(preparedRoot, paths);
     if ((await readCodexRecovery(paths)) !== null) {
       return fail(
         "recovery-required",

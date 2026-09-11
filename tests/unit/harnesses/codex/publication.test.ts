@@ -344,6 +344,79 @@ void test("an unresolved recovery journal blocks removal before native observati
   assert.ok(await readCodexMarketplace(f.paths.marketplaceRoot));
 });
 
+void test("malformed or foreign recovery material requires recovery before removal", async (t) => {
+  for (const [name, entry, contents] of [
+    ["malformed journal", "transaction.json", "{\n"],
+    ["foreign recovery entry", "foreign", "unknown\n"],
+  ] as const) {
+    await t.test(name, async (t) => {
+      const f = await fixture(t);
+      await mkdir(f.paths.recoveryRoot, { recursive: true });
+      await writeFile(join(f.paths.recoveryRoot, entry), contents);
+      let reads = 0;
+      let removes = 0;
+      const result = await removeCodexMarketplace(
+        { pluginPresent: true, marketplacePresent: true },
+        f.ctx,
+        {
+          readNative: async () => {
+            reads += 1;
+            return nativeResult(nativeState());
+          },
+          removeNative: async () => {
+            removes += 1;
+            return successResult("uninstall", {}, []);
+          },
+        },
+      );
+      assert.equal(result.outcome.ok, false);
+      if (result.outcome.ok) assert.fail("expected recovery requirement");
+      assert.equal(result.outcome.error.code, "recovery-required");
+      assert.match(result.outcome.error.message, /Codex recovery/);
+      assert.match(
+        result.outcome.error.message,
+        new RegExp(f.paths.recoveryRoot),
+      );
+      assert.equal(reads, 0);
+      assert.equal(removes, 0);
+      assert.equal(
+        await readFile(join(f.paths.recoveryRoot, entry), "utf8"),
+        contents,
+      );
+    });
+  }
+});
+
+void test("missing durable content still deregisters native state", async (t) => {
+  const f = await fixture(t);
+  f.setNative(
+    nativeState({
+      marketplaceRoot: f.paths.marketplaceRoot,
+      pluginPresent: true,
+      pluginEnabled: true,
+      activeVersion: "fixture",
+      activeRoot: f.paths.publishedPluginRoot,
+    }),
+  );
+  let removes = 0;
+  const result = await removeCodexMarketplace(
+    { pluginPresent: true, marketplacePresent: true },
+    f.ctx,
+    {
+      readNative: f.dependencies.readNative,
+      removeNative: async () => {
+        removes += 1;
+        f.setNative(nativeState());
+        return successResult("uninstall", {}, []);
+      },
+    },
+  );
+  assert.equal(result.outcome.ok, true, JSON.stringify(result));
+  assert.equal(removes, 1);
+  assert.deepEqual(f.getNative(), nativeState());
+  assert.equal(await readCodexRecovery(f.paths), null);
+});
+
 void test("intact durable files remain retryable after cleanup failure", async (t) => {
   const f = await removalFixture(t);
   await chmod(f.paths.marketplaceRoot, 0o500);
@@ -684,6 +757,88 @@ void test("artifact roots outside the resolved preparation location are refused 
   );
   assert.equal(result.outcome.ok, false);
   assert.equal(accessed, false);
+});
+
+void test("overlapping preparation is reported before direct installation state access", async (t) => {
+  const f = await fixture(t);
+  let accessed = false;
+  const dependencies: CodexPublicationDependencies = {
+    ...f.dependencies,
+    readNative: async () => {
+      accessed = true;
+      return nativeResult(nativeState());
+    },
+  };
+  const result = await installCodexMarketplace(
+    f.artifact,
+    {
+      ...f.ctx,
+      env: {
+        ...f.ctx.env,
+        SUPERPOWERS_PLUGIN_ROOT: f.paths.marketplaceRoot,
+      },
+    },
+    f.activateCurrent,
+    dependencies,
+  );
+  assert.equal(result.outcome.ok, false);
+  if (result.outcome.ok) assert.fail("expected preparation overlap");
+  assert.equal(result.outcome.error.code, "preparation-overlap");
+  assert.match(
+    result.outcome.error.message,
+    /preparation overlaps Codex published or recovery storage/,
+  );
+  assert.match(
+    result.outcome.error.message,
+    new RegExp(f.paths.marketplaceRoot),
+  );
+  assert.equal(accessed, false);
+  assert.equal(await readCodexRecovery(f.paths), null);
+});
+
+void test("failed marketplace staging retires its candidate and remains retryable", async (t) => {
+  const f = await fixture(t);
+  const old = await oldMarketplace(f);
+  const priorNative = nativeState({ marketplaceRoot: f.paths.marketplaceRoot });
+  f.setNative(priorNative);
+  const definition = join(f.pkg, ".agents/plugins/marketplace.json");
+  const definitionBytes = await readFile(definition);
+  await rm(definition);
+
+  const failed = await installCodexMarketplace(
+    f.artifact,
+    f.ctx,
+    f.activateCurrent,
+    f.dependencies,
+  );
+
+  assert.equal(failed.outcome.ok, false);
+  if (failed.outcome.ok) assert.fail("expected staging refusal");
+  assert.equal(failed.outcome.error.code, "activation-refused");
+  assert.deepEqual(f.getNative(), priorNative);
+  assert.equal(
+    (await readCodexMarketplace(f.paths.marketplaceRoot))?.artifact.commit,
+    old.commit,
+  );
+  assert.equal(await readCodexRecovery(f.paths), null);
+  assert.equal(
+    (await readdir(f.paths.managerRoot)).some((name) =>
+      name.startsWith(".stage-"),
+    ),
+    false,
+  );
+
+  await writeFile(definition, definitionBytes);
+  const retried = await installCodexMarketplace(
+    f.artifact,
+    f.ctx,
+    f.activateCurrent,
+    f.dependencies,
+  );
+  assert.equal(retried.outcome.ok, true, JSON.stringify(retried));
+  const tx = transaction(retried);
+  assert.equal((await tx.finalize()).outcome.ok, true);
+  assert.equal(await readCodexRecovery(f.paths), null);
 });
 
 void test("failure before the first rename preserves the old tree and settles owned staging", async (t) => {

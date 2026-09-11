@@ -509,7 +509,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/harnesses/codex/harness.ts::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:471::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:487::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
@@ -946,6 +946,122 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
     "error: installed manager fingerprint does not match the prepared plugin after install.\n",
   );
   assert.equal(calls.length, 16);
+
+  for (const scenario of [
+    {
+      name: "missing verification with successful rollback",
+      fingerprint: null,
+      restoredFingerprint: null,
+      rollbackOk: true,
+      installedCommit: "",
+      verification: [
+        "error: installed manager fingerprint is not detectable after install.",
+        "hint: receipt missing retry",
+      ],
+      restoration: "installed state after rollback: absent; identity=",
+    },
+    {
+      name: "mismatch verification with refused rollback",
+      fingerprint: Y,
+      restoredFingerprint: Y,
+      rollbackOk: false,
+      installedCommit: Y,
+      verification: [
+        "error: installed manager fingerprint does not match the prepared plugin after install.",
+        "hint: receipt mismatch retry",
+      ],
+      restoration: `installed state after rollback: mismatch; identity=${Y}`,
+    },
+  ] as const) {
+    const transactionOut = capture();
+    const transactionErr = capture();
+    const { adapter: scripted, calls: transactionCalls } = scriptedAdapter([
+      ...PROBE_OK,
+      successResult("inspect", ownership("manager"), []),
+      successResult("inspect", { update_control: "managed" }, []),
+      successResult("inspect", { fingerprint: scenario.fingerprint }, []),
+      successResult(
+        "inspect",
+        { fingerprint: scenario.restoredFingerprint },
+        [],
+      ),
+    ]);
+    let rollbackCalls = 0;
+    const transactionalAdapter = {
+      ...scripted,
+      async install(artifact: Parameters<typeof scripted.install>[0]) {
+        transactionCalls.push({ operation: "install", input: artifact });
+        return successResult(
+          "install",
+          {
+            missingVerificationOutput: {
+              stdout: [],
+              stderr: [
+                "error: installed manager fingerprint is not detectable after install.",
+                "hint: receipt missing retry",
+              ],
+            },
+            mismatchVerificationOutput: {
+              stdout: [],
+              stderr: [
+                "error: installed manager fingerprint does not match the prepared plugin after install.",
+                "hint: receipt mismatch retry",
+              ],
+            },
+            transaction: {
+              async finalize() {
+                assert.fail("failed verification must not finalize");
+              },
+              async rollback() {
+                rollbackCalls += 1;
+                return scenario.rollbackOk
+                  ? successResult("rollback", null, [])
+                  : failureResult(
+                      "rollback",
+                      "rollback-refused",
+                      "rollback refused",
+                      ["preserve recovery material"],
+                      [],
+                    );
+              },
+            },
+          },
+          [],
+        );
+      },
+    };
+    const transactionCtx = await makeCtx(
+      { desiredCommit: X, generatedCommit: X },
+      transactionOut,
+      transactionErr,
+      transactionalAdapter,
+    );
+
+    const transactionStatus = await runInstall([], transactionCtx);
+
+    assert.equal(transactionStatus, 1, scenario.name);
+    assert.equal(rollbackCalls, 1, scenario.name);
+    assert.equal(
+      transactionOut.text(),
+      `${NOTE}desired_commit=${X}\ninstalled_commit=${scenario.installedCommit}\n`,
+      scenario.name,
+    );
+    const rollbackFailure = scenario.rollbackOk
+      ? []
+      : ["error: rollback refused", "hint: preserve recovery material"];
+    assert.equal(
+      transactionErr.text(),
+      [...rollbackFailure, ...scenario.verification, scenario.restoration]
+        .map((line) => `${line}\n`)
+        .join(""),
+      scenario.name,
+    );
+    assert.doesNotMatch(
+      transactionOut.text(),
+      /manager updated/,
+      scenario.name,
+    );
+  }
 });
 
 // --- The STRICT reader, not the LENIENT one, and the empty-desiredCommit
