@@ -31,7 +31,13 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("codex.log", ctx.args.join(" "));
   injectSpuriousMutation(ctx, "plugin add superpowers@spurious");
 
-  const pkgRoot = process.env.SPW_TEST_PKG_ROOT;
+  const codexHome =
+    process.env.CODEX_HOME ?? join(process.env.HOME as string, ".codex");
+  const durableMarketplace = join(
+    codexHome,
+    "superpowers-manager",
+    "marketplace",
+  );
   const [a, b, c, d] = ctx.args;
 
   if (
@@ -49,7 +55,7 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
     a === "plugin" &&
     b === "marketplace" &&
     c === "add" &&
-    d === pkgRoot
+    d === durableMarketplace
   ) {
     if (ctx.config.marketplaceAdd === "fail") {
       process.exitCode = 1;
@@ -99,14 +105,18 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
       return;
     }
     if (ctx.config.pluginAdd === "orphan") {
-      // Codex reports the plugin installed at 1.0.0, but no cached tree is
-      // ever written for it. The real adapter's fingerprint handler then
-      // resolves an active version, builds the installed root for it, and
-      // finds nothing to read there — `src/harnesses/codex/adapter.ts:831-844::const activeRoot` — so it returns a
-      // controlled inspect-failed outcome. No adapter interception needed.
+      // Codex reports the plugin installed and enabled at 1.0.0 but does not
+      // materialise its cached tree. The inspection-failure case pre-seeds
+      // that active root with an unsafe non-directory so the real state reader
+      // returns a controlled inspect-failed outcome. No adapter interception.
       ctx.writeJson("plugin_list.json", {
         installed: [
-          { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
+          {
+            pluginId: "superpowers@superpowers-manager",
+            installed: true,
+            enabled: true,
+            version: "1.0.0",
+          },
         ],
         available: [],
       });
@@ -123,18 +133,17 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
       "1.0.0",
     );
     mkdirSync(dest, { recursive: true });
-    cpSync(
-      join(
-        pkgRoot as string,
-        "plugins",
-        "superpowers",
-        ".superpowers-upstream.json",
-      ),
-      join(dest, ".superpowers-upstream.json"),
-    );
+    cpSync(join(durableMarketplace, "plugins", "superpowers"), dest, {
+      recursive: true,
+    });
     ctx.writeJson("plugin_list.json", {
       installed: [
-        { pluginId: "superpowers@superpowers-manager", version: "1.0.0" },
+        {
+          pluginId: "superpowers@superpowers-manager",
+          installed: true,
+          enabled: true,
+          version: "1.0.0",
+        },
       ],
       available: [],
     });

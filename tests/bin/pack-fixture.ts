@@ -51,6 +51,7 @@ export function makePackFixture(t: TestContext): PackFixture {
     join(f.root, "src"),
     join(f.root, "tests"),
     join(f.root, "node_modules", ".bin"),
+    join(f.root, "node_modules", "smol-toml"),
   ]) {
     mkdirSync(path, { recursive: true });
   }
@@ -74,6 +75,8 @@ export function makePackFixture(t: TestContext): PackFixture {
       type: "module",
       bin: { "superpowers-manager": "dist/cli.js" },
       files: ["dist/", ...Object.keys(assets)],
+      dependencies: { "smol-toml": "1.0.0-fixture" },
+      bundleDependencies: ["smol-toml"],
       scripts: { prepack: 'node -e "process.exit(9)"' },
     }),
   );
@@ -85,14 +88,34 @@ export function makePackFixture(t: TestContext): PackFixture {
     }),
   );
   writeFileSync(join(f.root, "src", "cli.ts"), "export {};\n");
+  writeFileSync(
+    join(f.root, "node_modules", "smol-toml", "package.json"),
+    '{ "name": "smol-toml", "type": "module" }\n',
+  );
+  writeFileSync(
+    join(f.root, "node_modules", "smol-toml", "index.js"),
+    "export function parse() {}\n",
+  );
+  writeFileSync(
+    join(f.root, "node_modules", "smol-toml", "LICENSE"),
+    "fixture parser license\n",
+  );
   copyFileSync(
     join(REPO, "tests", "assert_pack_contents.sh"),
     join(f.root, "tests", "assert_pack_contents.sh"),
   );
   writeFileSync(
     join(f.root, "tests", "expected_tarball_contents.txt"),
-    [...Object.keys(assets), "dist/cli.js", "package.json"].sort().join("\n") +
-      "\n",
+    [
+      ...Object.keys(assets),
+      "dist/cli.js",
+      "node_modules/smol-toml/LICENSE",
+      "node_modules/smol-toml/index.js",
+      "node_modules/smol-toml/package.json",
+      "package.json",
+    ]
+      .sort()
+      .join("\n") + "\n",
   );
   writeFileSync(
     join(f.root, "node_modules", ".bin", "tsc"),

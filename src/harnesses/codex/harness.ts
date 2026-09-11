@@ -1,5 +1,3 @@
-import { join, resolve } from "node:path";
-
 import {
   failureResult,
   hasTerminalControl,
@@ -10,7 +8,6 @@ import {
 import {
   codexInspect,
   codexInstall,
-  codexRemove,
   type CodexRemovalInput,
 } from "./adapter.ts";
 import {
@@ -38,8 +35,14 @@ import {
   requireNoLegacyState,
   verifyUninstalledResources,
 } from "./lifecycle.ts";
-import { SafetyError } from "../../safety-error.ts";
 import { commitMatches } from "../../status.ts";
+import { codexHome, codexPaths } from "./paths.ts";
+import {
+  installCodexMarketplace,
+  removeCodexMarketplace,
+} from "./publication.ts";
+import { readCodexRecovery } from "./recovery.ts";
+import { inspectCodexInstallation } from "./state.ts";
 
 function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
   if (result.outcome.ok) {
@@ -435,19 +438,40 @@ function requirements(
 }
 
 async function mutationRoots(ctx: AdapterContext): Promise<readonly string[]> {
-  const env = ctx.env ?? {};
-  const configured = env.CODEX_HOME;
-  if (configured !== undefined && configured.length > 0) {
-    return [resolve(configured)];
+  return [codexHome(ctx.env ?? {}, process.cwd())];
+}
+
+async function inspectCodexUpdateControl(
+  ctx: AdapterContext,
+): Promise<AdapterResult<UpdateControlInspection>> {
+  const normalized = normalizeCodexControl(
+    await codexInspect("update-control", ctx),
+  );
+  if (!normalized.outcome.ok) return normalized;
+  const paths = codexPaths(ctx.env ?? {}, process.cwd());
+  let diagnostic: string | null = null;
+  try {
+    if ((await readCodexRecovery(paths)) !== null) {
+      diagnostic = `Codex recovery required; preserve material at ${paths.recoveryRoot} for manual resolution`;
+    }
+  } catch {
+    diagnostic = `cannot inspect Codex recovery state at ${paths.recoveryRoot}`;
   }
-  const home = env.HOME;
-  if (home === undefined || home.length === 0) {
-    throw new SafetyError(
-      "codex-harness",
-      "cannot determine Codex state root without HOME",
-    );
-  }
-  return [join(resolve(home), ".codex")];
+  if (diagnostic === null) return normalized;
+  const decision: Decision = {
+    kind: "blocked",
+    output: { stdout: [], stderr: [`error: ${diagnostic}`] },
+  };
+  return successResult(
+    normalized.outcome.operation,
+    {
+      probeEligibility: decision,
+      mutationEligibility: decision,
+      presentationValue: diagnostic,
+      recoveryState: "required",
+    },
+    normalized.outcome.messages,
+  );
 }
 
 export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
@@ -459,21 +483,17 @@ export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
   readPrepared: readCodexPrepared,
   inspectOwnership: async (ctx) =>
     normalizeCodexOwnership(await codexInspect("ownership", ctx)),
-  inspectUpdateControl: async (ctx) =>
-    normalizeCodexControl(await codexInspect("update-control", ctx)),
-  inspectInstalled: async (selection, ctx) =>
-    normalizeCodexInstalled(
-      await codexInspect("fingerprint", ctx),
-      selection.desiredCommit,
+  inspectUpdateControl: inspectCodexUpdateControl,
+  inspectInstalled: inspectCodexInstallation,
+  install: async (artifact, ctx) =>
+    installCodexMarketplace(artifact, ctx, async (root, context) =>
+      normalizeCodexInstallForContext(
+        await codexInstall(root, context),
+        context,
+      ),
     ),
-  install: async (_artifact, ctx) => {
-    return normalizeCodexInstallForContext(
-      await codexInstall(ctx.root, ctx),
-      ctx,
-    );
-  },
   remove: async (input, ctx) => {
-    const result = await codexRemove(input, ctx);
+    const result = await removeCodexMarketplace(input, ctx);
     if (!result.outcome.ok) return preserveFailure(result);
     if (result.status !== 0) {
       return invalidStatus(

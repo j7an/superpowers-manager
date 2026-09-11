@@ -604,17 +604,19 @@ before the status switch that would otherwise report it).
      the assertion proved the string appeared, not that the subject produced
      it.
      PR 11.5 slice 3.5 replaced the mechanism with a lever below the fixture.
-     `pluginAdd: "orphan"` makes the fake CODEX register the plugin as
-     installed at 1.0.0 without materialising its cached tree, so the **real**
-     adapter's fingerprint handler resolves an active version
-     (`activePluginVersionFromJson`, called at `src/adapter.ts:806-817`), builds
-     the installed root for it (`installedRootForVersion`, called at `:831-836`),
-     finds nothing readable there — `installedCommitFromRoot` returns `""`
-     (`src/codex-state.ts:67-84`) — and returns a controlled `inspect-failed`
-     envelope. The port now asserts the **subject-owned** whole line
+     The current port retains that boundary: `pluginAdd: "orphan"` makes the
+     fake CODEX report an enabled plugin at 1.0.0 without materialising its
+     cache (`tests/bin/install-fakes.ts::if (ctx.config.pluginAdd === "orphan") {`),
+     while the case pre-seeds that computed active root as a regular file
+     (`tests/bin/install-commands.test.ts::const activeRoot = join(`). The real
+     Codex state reader resolves the active root, rejects its non-directory
+     type (`src/harnesses/codex/state.ts::if (activeKind !== "directory") {`),
+     and returns a controlled `inspect-failed` envelope. The command's real
+     presentation then emits the **subject-owned** whole line
      `error: installed manager fingerprint inspection failed after install.`
-     (`scripts/core/lifecycle.sh:92`), which no fixture emits. The claim is
-     the shell's, discharged by a stronger witness; the item is not narrowed.
+     (`src/harnesses/codex/presentation.ts::if (inspection.status !== 0 || !inspection.outcome.ok) {`),
+     which no fixture emits. The claim is the shell's, discharged by a stronger
+     witness; the item is not narrowed.
      The `fingerprintInspect: "fail"` config value and the fake-adapter branch
      behind it were retired in the same commit, having lost their only
      consumer.
@@ -622,9 +624,9 @@ before the status switch that would otherwise report it).
      first grep of the rule-8 `||` chain). Port: `:1440-1443`.
 106. Output does **not** contain `manager updated` (`:697`, second grep of
      the same chain). Port: `:1444-1447`. Items 105-106 are non-vacuous because
-     item 104 proves `out` carries the subject's diagnostic stream — which,
-     since the re-base, it does: the line it matches has exactly one emitter
-     and that emitter is `scripts/core/lifecycle.sh`, not the fixture.
+     item 104 proves `out` carries the subject's diagnostic stream: the real
+     Codex presentation in `src/harnesses/codex/presentation.ts` supplies the
+     matched line; the fixture does not emit it.
 
 ### Scenario 8b — malformed fingerprint inspection output (`:702-716`) — **RETIRED**
 

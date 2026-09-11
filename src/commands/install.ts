@@ -333,18 +333,34 @@ async function gatherInstallStages<R>(
             const restoration = restored.ok
               ? `installed state after rollback: ${restored.result.outcome.result.kind}; identity=${restored.result.outcome.result.observedIdentity}`
               : "installed state after rollback could not be inspected";
-            const message = !settlement.ok
-              ? settlement.message
-              : !inspected.ok
+            const verificationOutput =
+              inspection === null
+                ? null
+                : ctx.adapter.presentation.renderInstallVerification(
+                    selection.desiredCommit,
+                    install.result,
+                    inspection,
+                  );
+            const inspectionMessage =
+              verificationOutput === null && !inspected.ok
                 ? inspected.message
-                : "installation could not be verified";
+                : null;
+            const settlementMessage = !settlement.ok
+              ? settlement.message
+              : null;
             return {
               kind: "verified",
               outcomes,
               status: 1,
-              stdout: [],
+              stdout: verificationOutput?.stdout ?? [],
               stderr: [
-                ...(message === null ? [] : [`error: ${message}`]),
+                ...(verificationOutput?.stderr ?? []),
+                ...(inspectionMessage === null
+                  ? []
+                  : [`error: ${inspectionMessage}`]),
+                ...(settlementMessage === null
+                  ? []
+                  : [`error: ${settlementMessage}`]),
                 restoration,
               ],
             };

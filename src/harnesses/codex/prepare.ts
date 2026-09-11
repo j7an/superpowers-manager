@@ -32,6 +32,12 @@ import { classifyPathNoFollow } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import type { ResolutionKind } from "../../upstream-version.ts";
 import { manifestVersionForRef } from "../../upstream-version.ts";
+import {
+  assertCodexPreparationSeparate,
+  codexPathFailureDetails,
+  codexPaths,
+} from "./paths.ts";
+import { readCodexRecovery } from "./recovery.ts";
 
 // Order is inherited from the original prepare command; the first miss wins.
 const REQUIRED_UPSTREAM = [
@@ -137,10 +143,11 @@ export function codexPreparationLocation(
 ): PreparationLocation {
   const env = ctx.env ?? {};
   return {
-    destinationRoot: resolveFromCwd(
-      env.SUPERPOWERS_PLUGIN_ROOT || join(ctx.root, "plugins", "superpowers"),
-      process.cwd(),
-    ),
+    destinationRoot:
+      env.SUPERPOWERS_PLUGIN_ROOT !== undefined &&
+      env.SUPERPOWERS_PLUGIN_ROOT.length > 0
+        ? resolveFromCwd(env.SUPERPOWERS_PLUGIN_ROOT, process.cwd())
+        : codexPaths(env, process.cwd()).preparedRoot,
     stagingLeaf: "superpowers",
   };
 }
@@ -148,6 +155,61 @@ export function codexPreparationLocation(
 export async function validateCodexPreparationBeforeFetch(
   ctx: AdapterContext,
 ): Promise<AdapterResult<null>> {
+  const paths = codexPaths(ctx.env ?? {}, process.cwd());
+  const preparedRoot = codexPreparationLocation(ctx).destinationRoot;
+  try {
+    await assertCodexPreparationSeparate(preparedRoot, paths);
+  } catch (cause) {
+    const failure = codexPathFailureDetails(cause);
+    if (failure?.kind === "inspection") {
+      if (failure.root === "recovery") {
+        return failureResult(
+          "prepare",
+          "recovery-required",
+          `cannot inspect Codex recovery state at ${paths.recoveryRoot}`,
+          [],
+          [],
+        );
+      }
+      return failureResult(
+        "prepare",
+        "prepare-failed",
+        failure.root === "marketplace"
+          ? `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`
+          : `cannot inspect Codex preparation root at ${preparedRoot}`,
+        [],
+        [],
+      );
+    }
+    return failureResult(
+      "prepare",
+      failure?.kind === "overlap" ? "preparation-overlap" : "prepare-failed",
+      failure?.kind === "overlap"
+        ? `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`
+        : `cannot validate Codex preparation storage separation at ${preparedRoot}`,
+      [],
+      [],
+    );
+  }
+  try {
+    if ((await readCodexRecovery(paths)) !== null) {
+      return failureResult(
+        "prepare",
+        "recovery-required",
+        `Codex recovery is required before preparation; preserve material at ${paths.recoveryRoot}`,
+        [],
+        [],
+      );
+    }
+  } catch {
+    return failureResult(
+      "prepare",
+      "recovery-required",
+      `cannot inspect Codex recovery state at ${paths.recoveryRoot}`,
+      [],
+      [],
+    );
+  }
   const template = manifestTemplate(ctx);
   if (!(await regularFileExists(template))) {
     return failureResult(

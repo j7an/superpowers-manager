@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import {
   access,
   chmod,
+  cp,
   copyFile,
   lstat,
   mkdir,
@@ -71,6 +72,18 @@ async function copyStageFile(source: string, target: string): Promise<void> {
     await copyFile(source, target);
   } catch {
     throw new PackFailure(`cannot stage package asset: ${source}`);
+  }
+}
+
+async function copyStageDirectory(
+  source: string,
+  target: string,
+): Promise<void> {
+  try {
+    await mkdir(dirname(target), { recursive: true });
+    await cp(source, target, { recursive: true, dereference: true });
+  } catch {
+    throw new PackFailure(`cannot stage package dependency: ${source}`);
   }
 }
 
@@ -442,6 +455,11 @@ export async function runPack(
         await copyStageFile(join(sourceRoot, asset), join(packageRoot, asset));
         checkCancellation();
       }
+      await copyStageDirectory(
+        join(sourceRoot, "node_modules", "smol-toml"),
+        join(packageRoot, "node_modules", "smol-toml"),
+      );
+      checkCancellation();
       await runStep(
         join(sourceRoot, "node_modules", ".bin", "tsc"),
         [

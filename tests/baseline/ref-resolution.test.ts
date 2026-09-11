@@ -62,7 +62,7 @@ process.on("exit", () => {
 
 // Per-invocation identity flags only. These write no git config at any scope
 // and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
-// convention `tests/bin/lifecycle-fixture.ts:81-83::spw_git_commit` documents.
+// convention `tests/bin/lifecycle-fixture.ts:91::// and mirror tests/lib/harness.sh (spw_git_commit, spw_git_tag). Do not` documents.
 const IDENTITY = [
   "-c",
   "user.email=superpowers-manager@example.invalid",

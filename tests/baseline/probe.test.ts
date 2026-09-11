@@ -45,12 +45,14 @@ export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 // the manifest version seedCodex writes, so `installed_commit` resolves to the
 // manifest's short SHA.
 const ACTIVE_VERSION = `0.0.0+manager.${SHORT}`;
-const ACTIVE = `{"installed":[{"pluginId":"superpowers@superpowers-manager","version":"${ACTIVE_VERSION}"}]}`;
+const ACTIVE = `{"installed":[{"pluginId":"superpowers@superpowers-manager","installed":true,"enabled":true,"version":"${ACTIVE_VERSION}"}]}`;
 const EMPTY_PLUGINS = '{"installed":[]}';
+const MANAGER_MARKETPLACE = '{"marketplaces":[{"name":"superpowers-manager"}]}';
+const EMPTY_MARKETPLACES = '{"marketplaces":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than `tests/baseline/cli-parity.test.ts:247::function snapshotTree`'s mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.ts:255::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  */
@@ -109,24 +111,29 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
   const c = createCase({ fakes: "probe" });
   await seedQualifiedGenerated(c);
   seedCodex(c, {
-    // Two listings, one per invocation. The FIRST answers
-    // `inspect --view fingerprint` and carries the active manager version, so
-    // installed_commit resolves. The SECOND answers `inspect --view ownership`
-    // and is empty, so identity_state is `neither`. One shared listing could
-    // not produce both -- see seedCodex's note and adjudication finding 3.
+    // Installed inspection and its coherence recheck use the first listing;
+    // ownership uses the empty middle listing, so identity_state is `neither`.
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
     installedProvenance: "{",
   });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stderr, "");
+  assert.equal(
+    result.stderr,
+    "Codex installation state: active Codex plugin payload is invalid\n",
+  );
   assert.match(result.stdout, /^harness=codex$/m);
   assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, new RegExp(`^generated_commit=${DESIRED}$`, "m"));
   assert.match(result.stdout, new RegExp(`^installed_commit=${SHORT}$`, "m"));
   assert.match(result.stdout, /^identity_state=neither$/m);
-  assert.match(result.stdout, /^status=current$/m);
+  assert.match(result.stdout, /^status=needs install$/m);
   assert.match(result.stdout, /^update_control=managed$/m);
   assert.match(result.stdout, /^selection_origin=environment$/m);
   assert.match(result.stdout, /^selection_mode=override$/m);
@@ -181,6 +188,11 @@ void test("a saved exact pin stays authoritative after its source disappears", a
   await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
   });
   // A saved pin short-circuits resolveRef (`src/effective-selection.ts:122-134::if (usesSavedPin)`),
@@ -194,7 +206,10 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     assert.match(result.stdout, /^requested_ref=v1\.0\.0$/m);
     assert.match(result.stdout, /^resolved_ref=v1\.0\.0$/m);
     assert.match(result.stdout, new RegExp(`^desired_commit=${DESIRED}$`, "m"));
-    assert.match(result.stdout, new RegExp(`^installed_commit=${SHORT}$`, "m"));
+    assert.match(
+      result.stdout,
+      new RegExp(`^installed_commit=${DESIRED}$`, "m"),
+    );
     assert.match(result.stdout, /^status=current$/m);
     assert.match(result.stdout, /^selection_origin=user-config$/m);
     assert.match(result.stdout, /^selection_mode=pinned$/m);
@@ -222,8 +237,8 @@ void test("an environment ref overrides only the ref side and the saved fields s
     commit: DESIRED,
   });
   await seedQualifiedGenerated(c, DESIRED, source);
-  // FOUR listings: this case runs probe twice (porcelain, then human) and each
-  // run issues `plugin list --json` twice. The on-disk counter in
+  // SIX listings: this case runs probe twice (porcelain, then human) and each
+  // run issues `plugin list --json` three times. The on-disk counter in
   // tests/bin/lifecycle-fakes.js is per case, not per run.
   seedCodex(c, {
     pluginListings: [
@@ -233,6 +248,14 @@ void test("an environment ref overrides only the ref side and the saved fields s
       ACTIVE,
       EMPTY_PLUGINS,
       ACTIVE,
+    ],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
     ],
     manifestVersion: ACTIVE_VERSION,
   });
@@ -295,6 +318,11 @@ void test("a dash-prefixed local source saved by track-latest stays usable", asy
   await seedQualifiedGenerated(c, DESIRED, source);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
   });
   const result = await probeSaved(c, ["--porcelain"]);
@@ -351,13 +379,16 @@ void test("probe reports every validated identity state without mutating anythin
   ]) {
     const c = createCase({ fakes: "probe" });
     await seedQualifiedGenerated(c);
-    // The fingerprint listing stays the ACTIVE manager version in all four so
-    // installed_commit resolves and status can be `current` even for the
-    // `legacy` and `neither` rows -- impossible with one shared listing
-    // (adjudication finding 3).
+    // Installed observation and its coherence recheck stay ACTIVE with a
+    // manager registration in all four rows. The middle responses independently
+    // drive ownership, including the `legacy` and `neither` rows.
     seedCodex(c, {
       pluginListings: [ACTIVE, ownership],
-      marketplaces,
+      marketplaceListings: [
+        MANAGER_MARKETPLACE,
+        marketplaces,
+        MANAGER_MARKETPLACE,
+      ],
       manifestVersion: ACTIVE_VERSION,
     });
     const pkgBefore = snapshotTree(c.pkg);
@@ -384,14 +415,22 @@ void test("semantically invalid installed provenance falls through to the manife
   await seedQualifiedGenerated(c);
   seedCodex(c, {
     pluginListings: [ACTIVE, EMPTY_PLUGINS],
+    marketplaceListings: [
+      MANAGER_MARKETPLACE,
+      EMPTY_MARKETPLACES,
+      MANAGER_MARKETPLACE,
+    ],
     manifestVersion: ACTIVE_VERSION,
     installedProvenance: '{"commit":"not-a-fingerprint"}',
   });
   const result = await probe(c, ["--porcelain"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stderr, "");
+  assert.equal(
+    result.stderr,
+    "Codex installation state: active Codex plugin payload is invalid\n",
+  );
   assert.match(result.stdout, new RegExp(`^installed_commit=${SHORT}$`, "m"));
-  assert.match(result.stdout, /^status=current$/m);
+  assert.match(result.stdout, /^status=needs install$/m);
 });
 
 void test("no active plugin yields a null fingerprint and needs install", async () => {
@@ -524,7 +563,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // runInspect's real inspect-failed path (`src/harnesses/codex/adapter.ts:816::activeVersion = activePluginVersionFromJson`).
+  // runInspect's real inspect-failed path (`src/harnesses/codex/adapter.ts:854::activeVersion = activePluginVersionFromJson`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the fingerprint inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -537,9 +576,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
-// (`src/harnesses/codex/adapter.ts:973-999::async function runCodexOperation(`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/harnesses/codex/adapter.ts:1081::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:294::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:328::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -578,7 +617,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (`src/harnesses/codex/adapter.ts:251-259::async function listingCommand`), and the fake writes nothing there
+// child's stderr (`src/harnesses/codex/adapter.ts:290::async function listingCommand(`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr. Recorded in tests/migration-inventory/probe.md.

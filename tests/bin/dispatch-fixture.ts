@@ -126,6 +126,16 @@ function buildPackageRoot(kind: "real" | "throwing"): string {
     `${JSON.stringify({ name: "superpowers-manager", version: "9.9.9-test", type: "module" })}\n`,
   );
   cpSync(join(ROOT, "src"), join(root, "src"), { recursive: true });
+  const dependencies = join(root, "node_modules");
+  mkdirSync(dependencies, { recursive: true });
+  cpSync(
+    join(ROOT, "node_modules", "smol-toml"),
+    join(dependencies, "smol-toml"),
+    {
+      recursive: true,
+      dereference: true,
+    },
+  );
   // In-process commands resolve the package's upstream ref from this file.
   mkdirSync(join(root, "config"), { recursive: true });
   cpSync(

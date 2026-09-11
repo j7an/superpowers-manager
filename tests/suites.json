@@ -66,14 +66,45 @@
     { "path": "tests/bin/units.test.ts", "group": "unit" },
     { "path": "tests/bin/workflows.test.ts", "group": "repository" },
     { "path": "tests/unit/adapter-result.test.ts", "group": "integration" },
-    { "path": "tests/unit/harnesses/codex/adapter.test.ts", "group": "integration" },
+    {
+      "path": "tests/unit/harnesses/codex/adapter.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/atomic.test.ts", "group": "unit" },
     { "path": "tests/unit/retained-publication.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/json.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/conflicts.test.ts", "group": "unit" },
-    { "path": "tests/unit/harnesses/codex/harness.test.ts", "group": "integration" },
+    {
+      "path": "tests/unit/harnesses/codex/harness.test.ts",
+      "group": "integration"
+    },
+    { "path": "tests/unit/harnesses/codex/paths.test.ts", "group": "unit" },
+    {
+      "path": "tests/unit/harnesses/codex/marketplace.test.ts",
+      "group": "unit"
+    },
+    {
+      "path": "tests/unit/harnesses/codex/recovery.test.ts",
+      "group": "unit"
+    },
+    {
+      "path": "tests/unit/harnesses/codex/publication.test.ts",
+      "group": "unit"
+    },
     { "path": "tests/unit/harnesses/codex/prepare.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/state.test.ts", "group": "unit" },
+    {
+      "path": "tests/unit/harnesses/codex/stored-state.test.ts",
+      "group": "unit"
+    },
+    {
+      "path": "tests/unit/harnesses/codex/durable-state.test.ts",
+      "group": "integration"
+    },
+    {
+      "path": "tests/unit/harnesses/codex/durable-lifecycle.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/commands-install.test.ts", "group": "unit" },
     { "path": "tests/unit/commands-pin.test.ts", "group": "unit" },
     { "path": "tests/unit/commands-prepare.test.ts", "group": "unit" },
@@ -88,19 +119,37 @@
     },
     { "path": "tests/unit/domain.test.ts", "group": "unit" },
     { "path": "tests/unit/effective-selection.test.ts", "group": "unit" },
-    { "path": "tests/unit/harnesses/codex/generated-plugin.test.ts", "group": "integration" },
+    {
+      "path": "tests/unit/harnesses/codex/generated-plugin.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/harness-boundary.test.ts", "group": "integration" },
     { "path": "tests/unit/harness-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/hooks.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/codex/lifecycle.test.ts", "group": "unit" },
-    { "path": "tests/unit/harnesses/codex/manifest-overlay.test.ts", "group": "unit" },
+    {
+      "path": "tests/unit/harnesses/codex/manifest-overlay.test.ts",
+      "group": "unit"
+    },
     { "path": "tests/unit/package-runtime.test.ts", "group": "unit" },
-    { "path": "tests/unit/harnesses/pi/install.test.ts", "group": "integration" },
-    { "path": "tests/unit/harnesses/pi/harness.test.ts", "group": "integration" },
+    {
+      "path": "tests/unit/harnesses/pi/install.test.ts",
+      "group": "integration"
+    },
+    {
+      "path": "tests/unit/harnesses/pi/harness.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/harnesses/pi/native.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/pi/paths.test.ts", "group": "unit" },
-    { "path": "tests/unit/harnesses/pi/package.test.ts", "group": "integration" },
-    { "path": "tests/unit/harnesses/pi/prepare.test.ts", "group": "integration" },
+    {
+      "path": "tests/unit/harnesses/pi/package.test.ts",
+      "group": "integration"
+    },
+    {
+      "path": "tests/unit/harnesses/pi/prepare.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/harnesses/pi/state.test.ts", "group": "unit" },
     { "path": "tests/unit/upstream-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/pi/settings.test.ts", "group": "unit" },

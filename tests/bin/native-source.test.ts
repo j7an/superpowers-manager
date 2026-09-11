@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,6 +20,16 @@ void test("source CLI runs without dist and reads its own package version", (t) 
   t.after(() => rmSync(root, { recursive: true, force: true }));
   cpSync(join(ROOT, "src"), join(root, "src"), { recursive: true });
   cpSync(join(ROOT, "package.json"), join(root, "package.json"));
+  const dependencies = join(root, "node_modules");
+  mkdirSync(dependencies, { recursive: true });
+  cpSync(
+    join(ROOT, "node_modules", "smol-toml"),
+    join(dependencies, "smol-toml"),
+    {
+      recursive: true,
+      dereference: true,
+    },
+  );
   const version = JSON.parse(
     readFileSync(join(root, "package.json"), "utf8"),
   ).version;

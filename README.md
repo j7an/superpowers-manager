@@ -56,7 +56,7 @@ Codex installs the Manager-owned marketplace plugin after preparation and
 validation. Review upstream hook definitions with Codex's `/hooks` flow before
 trusting or running them; updates can change a referenced script or surface a
 new definition. The manager neither creates hooks nor changes Codex trust state.
-See the [Codex reference](https://github.com/j7an/superpowers-manager/blob/main/docs/codex.md).
+See the [Codex reference](https://github.com/j7an/superpowers-manager/blob/main/docs/codex.md#durable-storage-migration-and-recovery) for durable storage, migration, and recovery.
 
 ### Pi
 

@@ -9,7 +9,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   capture,
@@ -17,6 +17,8 @@ import {
 } from "../unit/helpers/command-harness.ts";
 import { UPSTREAM } from "../bin/lifecycle-fixture.ts";
 import { writeQualifiedCodexFixture } from "../lib/harnesses/codex/prepared-fixture.ts";
+import { stageCodexMarketplace } from "../../src/harnesses/codex/marketplace.ts";
+import { codexPaths } from "../../src/harnesses/codex/paths.ts";
 
 /**
  * `createCase`'s return type, referenced as a type only. Naming the typedef
@@ -28,7 +30,7 @@ export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 /**
  * Every environment name runProbe's dependencies read. Declared, never
  * derived: a predicate would also accept an env that lost a name.
- * runAdapter merges process.env (`src/harnesses/codex/adapter.ts:993::const env = { ...process.env, ...context.env };`) and runGit spreads it
+ * runAdapter merges process.env (`src/harnesses/codex/adapter.ts:1086::const env = { ...process.env, ...context.env };`) and runGit spreads it
  * (`src/git.ts:32::env: { ...process.env`), so an unset name here leaks the developer's shell into a
  * supposedly hermetic case.
  */
@@ -36,9 +38,11 @@ export const REQUIRED_ENV = [
   "HOME",
   "TMPDIR",
   "PATH",
+  "CODEX_HOME",
   "SUPERPOWERS_CONFIG_DIR",
   "SUPERPOWERS_CODEX",
   "SUPERPOWERS_INSTALLED_SEARCH_ROOT",
+  "SUPERPOWERS_PLUGIN_ROOT",
 ];
 
 /**
@@ -53,15 +57,17 @@ export function caseEnv(
     HOME: c.home,
     TMPDIR: c.tmp,
     PATH: process.env.PATH ?? "",
+    CODEX_HOME: join(c.home, ".codex"),
     SUPERPOWERS_CONFIG_DIR: join(c.home, ".config", "superpowers-manager"),
     SUPERPOWERS_CODEX: c.codexBin,
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(c.home, ".codex"),
+    SUPERPOWERS_PLUGIN_ROOT: join(c.pkg, "plugins", "superpowers"),
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
-    // (`tests/bin/lifecycle-fakes.ts:213::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
-    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:482::const env = {`).
+    // (`tests/bin/lifecycle-fakes.ts:238::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
+    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:492::const env = {`).
     // runAdapter execs the fake with `{...process.env, ...ctx.env}`
-    // (`src/harnesses/codex/adapter.ts:993::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
+    // (`src/harnesses/codex/adapter.ts:1086::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with
     // `fixture: SPW_FIXTURE_STATE is unset` -- which is why the declared
     // hermeticity guard does not need to cover it.
@@ -93,11 +99,16 @@ export const SHORT = DESIRED.slice(0, 7);
  *
  * `pluginListings` is an ARRAY, one entry per `codex plugin list --json`
  * invocation, in order (amended 2026-08-07 after adjudication finding 3).
- * Probe issues that command twice per run and the two calls need different
- * answers -- `inspect --view fingerprint` (`src/harnesses/codex/adapter.ts:802-807::const listing`) then
- * `inspect --view ownership` (:871). With a single listing, a manager version
- * present for `installed_commit` also forces `identity_state=manager`, so
- * scenario 1 and the four-state identity matrix could not be written at all.
+ * Probe now issues that command for installed inspection, ownership, and the
+ * installed coherence recheck. A two-entry fixture is expanded to repeat its
+ * first installed response after ownership. With a single listing, a manager
+ * version present for `installed_commit` also forces
+ * `identity_state=manager`, so scenario 1 and the four-state identity matrix
+ * could not be written at all.
+ *
+ * `marketplaceListings`, when present, is the corresponding explicit sequence
+ * for `codex plugin marketplace list --json`. Without it the fake retains its
+ * historical static `marketplaces` response.
  * The fake fails closed if a run asks for more listings than are configured,
  * so a miscounted fixture is loud rather than silently wrong -- see
  * `nextPluginList` in `tests/bin/lifecycle-fakes.js`.
@@ -107,6 +118,7 @@ export function seedCodex(
   c: CaseEnv,
   state: {
     pluginListings?: string[];
+    marketplaceListings?: string[];
     marketplaces?: string;
     manifestVersion?: string | null;
     installedProvenance?: string | null;
@@ -123,9 +135,16 @@ export function seedCodex(
   listings.forEach((body, index) => {
     writeFileSync(join(c.state, `plugin_list.${index}.json`), body, "utf8");
   });
+  state.marketplaceListings?.forEach((body, index) => {
+    writeFileSync(
+      join(c.state, `marketplace_list.${index}.json`),
+      qualifyMarketplaceListing(c, body),
+      "utf8",
+    );
+  });
   writeFileSync(
     join(c.state, "marketplace_list.json"),
-    state.marketplaces ?? '{"marketplaces":[]}',
+    qualifyMarketplaceListing(c, state.marketplaces ?? '{"marketplaces":[]}'),
     "utf8",
   );
   if (state.manifestVersion !== undefined && state.manifestVersion !== null) {
@@ -138,12 +157,17 @@ export function seedCodex(
       "superpowers",
       state.manifestVersion,
     );
-    mkdirSync(join(root, ".codex-plugin"), { recursive: true });
-    writeFileSync(
-      join(root, ".codex-plugin", "plugin.json"),
-      `{"name":"superpowers","version":"${state.manifestVersion}"}`,
-      "utf8",
-    );
+    const published = codexPaths(caseEnv(c), c.pkg).publishedPluginRoot;
+    if (existsSync(published)) {
+      cpSync(published, root, { recursive: true });
+    } else {
+      mkdirSync(join(root, ".codex-plugin"), { recursive: true });
+      writeFileSync(
+        join(root, ".codex-plugin", "plugin.json"),
+        `{"name":"superpowers","version":"${state.manifestVersion}"}`,
+        "utf8",
+      );
+    }
     if (
       state.installedProvenance !== undefined &&
       state.installedProvenance !== null
@@ -155,6 +179,36 @@ export function seedCodex(
       );
     }
   }
+}
+
+function qualifyMarketplaceListing(c: CaseEnv, body: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    !Array.isArray((parsed as { marketplaces?: unknown }).marketplaces)
+  ) {
+    return body;
+  }
+  const marketplaces = (parsed as { marketplaces: unknown[] }).marketplaces;
+  return JSON.stringify({
+    ...(parsed as Record<string, unknown>),
+    marketplaces: marketplaces.map((entry) =>
+      entry !== null &&
+      typeof entry === "object" &&
+      (entry as { name?: unknown }).name === "superpowers-manager"
+        ? {
+            ...(entry as Record<string, unknown>),
+            root: codexPaths(caseEnv(c), c.pkg).marketplaceRoot,
+          }
+        : entry,
+    ),
+  });
 }
 
 /**
@@ -175,11 +229,14 @@ export async function seedQualifiedGenerated(
   commit = DESIRED,
   source = UPSTREAM,
 ): Promise<void> {
-  await writeQualifiedCodexFixture(
+  const artifact = await writeQualifiedCodexFixture(
     join(c.pkg, "plugins", "superpowers"),
     commit,
     source,
   );
+  const paths = codexPaths(caseEnv(c), c.pkg);
+  mkdirSync(paths.managerRoot, { recursive: true });
+  await stageCodexMarketplace(artifact, c.pkg, paths.marketplaceRoot);
 }
 
 import { runProbe } from "../../src/commands/probe.ts";

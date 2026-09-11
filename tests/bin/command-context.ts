@@ -37,6 +37,7 @@ export function caseEnvVars(
     SPW_FIXTURE_STATE: c.state,
     SPW_TEST_PKG_ROOT: c.pkg,
     SUPERPOWERS_CODEX: c.codexBin,
+    SUPERPOWERS_PLUGIN_ROOT: join(c.pkg, "plugins", "superpowers"),
     SUPERPOWERS_UPSTREAM_URL: UPSTREAM,
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(c.state, "codex-home"),
     ...extra,

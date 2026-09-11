@@ -208,6 +208,20 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
     accessSync(executable, constants.X_OK);
     assert.match(readFileSync(executable, "utf8"), /^#!\/usr\/bin\/env node\n/);
 
+    const installedPackage = join(
+      consumer,
+      "node_modules",
+      "superpowers-manager",
+    );
+    assert.equal(
+      readFileSync(
+        join(installedPackage, "node_modules", "smol-toml", "LICENSE"),
+        "utf8",
+      ),
+      readFileSync(join(ROOT, "node_modules", "smol-toml", "LICENSE"), "utf8"),
+      "the bundled parser retains its complete upstream license",
+    );
+
     for (const [index, executableNode] of runtimes.entries()) {
       const runtimeBin = join(root, `runtime-bin-${index}`);
       mkdirSync(runtimeBin);
@@ -216,6 +230,16 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
         ...environment,
         PATH: `${runtimeBin}:${environment.PATH}`,
       };
+      const parser = run(
+        executableNode,
+        [
+          "--input-type=module",
+          "--eval",
+          "import { parse } from 'smol-toml'; if (parse('enabled = true').enabled !== true) process.exit(1);",
+        ],
+        { cwd: installedPackage, env: consumerEnv },
+      );
+      assertSucceeded(parser, "installed bundled TOML parser");
       const help = run(executable, ["--help"], {
         cwd: consumer,
         env: consumerEnv,

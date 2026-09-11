@@ -184,6 +184,12 @@ function hasLine(text: string, needle: string): boolean {
   return text.split("\n").includes(needle);
 }
 
+function durableMarketplace(
+  c: import("./lifecycle-fixture.ts").CaseEnv,
+): string {
+  return join(c.home, ".codex/superpowers-manager/marketplace");
+}
+
 /**
  * Replaces `assert_no_codex_mutation` (:313-319).
  *
@@ -209,7 +215,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:464::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:498::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -1045,7 +1051,7 @@ void describe("install commands", { concurrency: true }, () => {
       codex,
       [
         "plugin marketplace list",
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin add superpowers@superpowers-manager",
       ],
       "order must be: marketplace list, marketplace add, plugin add",
@@ -1094,7 +1100,7 @@ void describe("install commands", { concurrency: true }, () => {
       readLog(c.codexLog),
       [
         "plugin marketplace list",
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin add superpowers@superpowers-manager",
       ],
       "current install must still reconcile via adapter install",
@@ -1123,7 +1129,7 @@ void describe("install commands", { concurrency: true }, () => {
       readLog(c.codexLog),
       [
         "plugin marketplace remove superpowers-manager",
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin add superpowers@superpowers-manager",
       ],
       "same-commit install must still reconcile a different package root",
@@ -1135,7 +1141,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/harnesses/codex/adapter.ts:643::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:681::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1151,14 +1157,16 @@ void describe("install commands", { concurrency: true }, () => {
       has(codex, "plugin add superpowers@superpowers-manager"),
       codex.join("\n"),
     );
-    // :561-563 — two independent greps sharing one diagnostic block.
-    assert.ok(
-      !has(codex, "marketplace add"),
-      `same-root install must not re-register the marketplace:\n${codex.join("\n")}`,
-    );
-    assert.ok(
-      !has(codex, "marketplace remove"),
-      `same-root install must not re-register the marketplace:\n${codex.join("\n")}`,
+    // A package-root alias remains a legacy source. The durable lifecycle
+    // migrates it to manager-owned storage even when its content matches.
+    assertOrder(
+      codex,
+      [
+        "plugin marketplace remove superpowers-manager",
+        `plugin marketplace add ${durableMarketplace(c)}`,
+        "plugin add superpowers@superpowers-manager",
+      ],
+      "legacy aliases must migrate to the durable marketplace",
     );
     // :565-567
     assert.ok(
@@ -1186,7 +1194,7 @@ void describe("install commands", { concurrency: true }, () => {
       codex,
       [
         "plugin marketplace remove superpowers-manager",
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin add superpowers@superpowers-manager",
       ],
       "order must be: marketplace remove, marketplace add, plugin add",
@@ -1204,28 +1212,17 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("update stays read-only when probe reports current (:587-602)", async () => {
     const c = installCase();
-    await prepareGeneratedTree(c);
-    seedInstalledCurrent(c); // :591
+    const installed = await runScript(c, "install");
+    assert.equal(
+      installed.status,
+      0,
+      `fixture: install must establish a healthy durable manager:\n${installed.stdout}${installed.stderr}`,
+    );
     clearLogs(c);
     const result = await runScript(c, "update");
     // :593
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :594. Also the precondition pin: `manager is current` is printed only by
-    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:20::manager`, inside the `current)` branch, so a lost generated
-    // tree or cache seed turns this RED rather than silently rerouting the
-    // case through needs-prepare.
     assert.ok(result.stdout.includes("manager is current"), result.stdout);
-    // :595-599, re-anchored onto codex.log. `install --package-root` absent
-    // from the adapter log and "no Codex mutation" are the same claim here:
-    // the adapter install operation unconditionally reaches `codex plugin add
-    // superpowers@superpowers-manager` (runInstall's pluginAdded
-    // mutationCommand call), which CODEX_MUTATION matches, so :600-602 below
-    // already excludes it — and it carries its own emptiness guard, which is
-    // what `nonEmpty` gave the adapter-log form.
-    // :600-602. The shell guarded this with `[ ! -s "$log" ] ||`, tolerating an
-    // empty Codex log. That escape hatch is deliberately not ported: probe
-    // always reaches `codex plugin list`, so an empty log is a fixture fault,
-    // and assertNoCodexMutation's emptiness guard reports it as one.
     assertNoCodexMutation(readLog(c.codexLog));
   });
 
@@ -1293,8 +1290,12 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/harnesses/codex/adapter.ts:669::adding`).
-    assert.ok(out.includes(`plugin marketplace add ${c.pkg}`), out);
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:707::adding`).
+    assert.ok(
+      out.includes(`plugin marketplace add ${durableMarketplace(c)}`) ||
+        out.includes("Codex activation may have changed native state"),
+      out,
+    );
     assert.ok(out.includes(otherRoot), out);
     // :632-634
     const codex = nonEmpty(readLog(c.codexLog), "codex");
@@ -1343,6 +1344,13 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :655
     assert.ok(out.includes("fingerprint is not detectable"), out);
+    // The native add was attempted, so a missing cache cannot prove that
+    // registration and cache stayed unchanged. Preserve recovery evidence.
+    assert.ok(out.includes("Codex restoration could not be verified"), out);
+    assert.ok(
+      existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
+      "unverifiable native activation must retain recovery evidence",
+    );
     // :656
     assertTmpEmpty(c);
     // :657-659 — non-vacuous: :655 proves `out` carries the subject's
@@ -1367,13 +1375,13 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :670
     assert.ok(out.includes("does not match the prepared plugin"), out);
-    // :671 — the hint text lives in runInstall's
-    // `verification_hints.mismatch`, returned after the `pluginAdded`
-    // mutation, and is replayed from the adapter result by
-    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:109::mismatch`,121; core owns no copy of it.
     assert.ok(out.includes("SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"), out);
+    assert.ok(out.includes("Codex restoration could not be verified"), out);
+    assert.ok(
+      existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
+      "a mismatched post-add cache must retain recovery evidence",
+    );
     // :672-674
     assert.ok(
       !out.includes("manager updated"),
@@ -1397,8 +1405,13 @@ void describe("install commands", { concurrency: true }, () => {
     );
     // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
-    // :685 — `src/harnesses/codex/adapter.ts:702::missing:`, replayed through the install result.
+    // :685 — the missing hint is replayed from the adapter receipt.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
+    assert.ok(out.includes("Codex restoration could not be verified"), out);
+    assert.ok(
+      existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
+      "a missing post-add cache must retain recovery evidence",
+    );
   });
 
   void test("a failed fingerprint inspection is reported as an inspection failure (:687-700)", async () => {
@@ -1410,18 +1423,21 @@ void describe("install commands", { concurrency: true }, () => {
     // as item 104: it proves the string appears, not that the subject produced
     // it.
     //
-    // The lower lever is the fake CODEX. `pluginAdd: "orphan"` registers the
-    // plugin as installed at 1.0.0 without materialising its cached tree, so
-    // the REAL adapter's fingerprint handler resolves an active version
-    // (`src/harnesses/codex/adapter.ts:814-821::let activeVersion`), builds the installed root for it (:831-836),
-    // and finds nothing readable there — installedCommitFromRoot returns ""
-    // (`src/harnesses/codex/state.ts:67-84::installedCommitFromRoot`) — and fails with a controlled inspect-failed
-    // outcome. The case therefore needs no interception and is not
-    // seam-dependent.
+    // The lower lever is the fake CODEX plus a real unsafe active-cache shape.
+    // `pluginAdd: "orphan"` reports an enabled plugin at 1.0.0 without
+    // materialising its cache. This case pre-seeds that computed active root as
+    // a regular file, so the real state reader rejects the non-directory as an
+    // inspection failure. The case needs no adapter interception.
     const c = installCase({
       config: { pluginAdd: "orphan" },
     }); // :693
     await prepareGeneratedTree(c);
+    const activeRoot = join(
+      c.state,
+      "codex-home/plugins/cache/superpowers-manager/superpowers/1.0.0",
+    );
+    mkdirSync(join(activeRoot, ".."), { recursive: true });
+    writeFileSync(activeRoot, "unsafe active cache shape\n");
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
@@ -1431,15 +1447,18 @@ void describe("install commands", { concurrency: true }, () => {
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :695, re-anchored onto the SUBJECT's own diagnostic at
-    // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:92::echo "error: installed manager fingerprint inspection`, whole-line so no substring of a longer
-    // adapter or fixture message can satisfy it.
+    // :695 — constrain the command's own whole-line post-install diagnostic.
     assert.ok(
       hasLine(
         out,
         "error: installed manager fingerprint inspection failed after install.",
       ),
       out,
+    );
+    assert.ok(out.includes("Codex restoration could not be verified"), out);
+    assert.ok(
+      existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
+      "an uninspectable post-add cache must retain recovery evidence",
     );
     // :696-700 — two independent greps, now non-vacuous because the assertion
     // above proves `out` carries the subject's verification diagnostics.
@@ -1476,7 +1495,7 @@ void describe("install commands", { concurrency: true }, () => {
       codex,
       [
         "plugin marketplace list",
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin remove superpowers@superpowers-manager",
         "plugin add superpowers@superpowers-manager",
       ],
@@ -1526,7 +1545,7 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:122-130::tag.gpgsign=false`),
+    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:140::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757
@@ -1539,7 +1558,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertOrder(
       readLog(c.codexLog),
       [
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin add superpowers@superpowers-manager",
       ],
       "remediating install must reconcile via adapter install",
@@ -1571,7 +1590,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertOrder(
       readLog(c.codexLog),
       [
-        `plugin marketplace add ${c.pkg}`,
+        `plugin marketplace add ${durableMarketplace(c)}`,
         "plugin add superpowers@superpowers-manager",
       ],
       "remediating update must reconcile via adapter install",

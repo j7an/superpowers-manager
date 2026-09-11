@@ -108,9 +108,14 @@ export function codexInstalledPluginsFromJson(
 export function marketplaceRootFromJson(
   raw: string | Uint8Array,
   marketplaceName: string,
+  requireUnique = false,
 ): string {
   const items = checkedItems(raw, ACCEPT_CONSTANTS, "marketplaces", "name");
-  const match = items.find((item) => item.name === marketplaceName);
+  const matches = items.filter((item) => item.name === marketplaceName);
+  if (requireUnique && matches.length > 1) {
+    fail("marketplace appears more than once");
+  }
+  const match = matches[0];
   if (match === undefined) return "";
   if (typeof match.root !== "string" || match.root.length === 0) {
     fail("matching marketplace needs a non-empty root");

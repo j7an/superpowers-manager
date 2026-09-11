@@ -32,6 +32,9 @@ import type {
   ProbeSnapshot,
 } from "../../../../src/harness.ts";
 import type { JsonValue } from "../../../../src/strict-json.ts";
+import { codexPaths } from "../../../../src/harnesses/codex/paths.ts";
+import { readCodexMarketplace } from "../../../../src/harnesses/codex/marketplace.ts";
+import { writeQualifiedCodexFixture } from "../../../lib/harnesses/codex/prepared-fixture.ts";
 
 const DESIRED = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 const OTHER = "1".repeat(40);
@@ -734,6 +737,20 @@ void test("verification presentation preserves missing, mismatch, and inspection
     codexPresentation.renderInstallVerification(
       DESIRED,
       receipt,
+      successResult("inspect", { kind: "mismatch", observedIdentity: "" }, []),
+    ),
+    {
+      stdout: [`desired_commit=${DESIRED}`, "installed_commit="],
+      stderr: [
+        "error: installed manager fingerprint is not detectable after install.",
+        "hint: verify the installed plugin",
+      ],
+    },
+  );
+  assert.deepEqual(
+    codexPresentation.renderInstallVerification(
+      DESIRED,
+      receipt,
       successResult(
         "inspect",
         { kind: "mismatch", observedIdentity: OTHER },
@@ -916,6 +933,7 @@ async function codexSandbox(t: import("node:test").TestContext) {
   await mkdir(searchRoot);
   return {
     env: {
+      CODEX_HOME: searchRoot,
       SUPERPOWERS_CODEX: FAKE_CODEX,
       SUPERPOWERS_INSTALLED_SEARCH_ROOT: searchRoot,
       FAKE_CODEX_LOG: log,
@@ -943,30 +961,66 @@ void test("Codex harness inspection and removal stay inside the isolated fake Co
   assert.deepEqual(await sandbox.commands(), [
     "plugin list --json",
     "plugin marketplace list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
   ]);
 });
 
-void test("Codex harness install retains the current package-root authority", async (t) => {
+void test("Codex harness reports malformed recovery as required and blocks mutation", async (t) => {
   const sandbox = await codexSandbox(t);
-  const ctx = { root: PACKAGE_ROOT, env: sandbox.env };
-  const installed = await codexHarness.install(
-    {
-      root: "/evidence-only",
-      commit: DESIRED,
-      compatibility: {
-        kind: "supported",
-        generation: "codex-native",
-        reason: "fixture compatibility",
-      },
-      identity: DESIRED,
-    },
-    ctx,
+  const env = {
+    ...sandbox.env,
+    CODEX_HOME: sandbox.env.SUPERPOWERS_INSTALLED_SEARCH_ROOT,
+  };
+  const paths = codexPaths(env, process.cwd());
+  await mkdir(paths.recoveryRoot, { recursive: true });
+  await writeFile(join(paths.recoveryRoot, "transaction.json"), "{\n");
+  const result = await codexHarness.inspectUpdateControl({
+    root: PACKAGE_ROOT,
+    env,
+  });
+  assert.equal(result.outcome.ok, true, JSON.stringify(result));
+  if (!result.outcome.ok) assert.fail("expected recovery observation");
+  assert.equal(result.outcome.result.recoveryState, "required");
+  assert.equal(result.outcome.result.probeEligibility.kind, "blocked");
+  assert.equal(result.outcome.result.mutationEligibility.kind, "blocked");
+  assert.match(
+    result.outcome.result.presentationValue,
+    /cannot inspect Codex recovery state at/,
   );
+});
+
+void test("Codex harness install publishes and activates the durable marketplace root", async (t) => {
+  const sandbox = await codexSandbox(t);
+  const env = {
+    ...sandbox.env,
+    CODEX_HOME: sandbox.env.SUPERPOWERS_INSTALLED_SEARCH_ROOT,
+  };
+  const ctx = { root: PACKAGE_ROOT, env };
+  const paths = codexPaths(env, process.cwd());
+  const artifact = await writeQualifiedCodexFixture(
+    paths.preparedRoot,
+    DESIRED,
+    "https://example.invalid/upstream",
+  );
+  const installed = await codexHarness.install(artifact, ctx);
   assert.equal(installed.status, 0);
   assert.equal(installed.outcome.ok, true);
+  assert.ok(installed.outcome.ok && installed.outcome.result.transaction);
+  assert.ok(await readCodexMarketplace(paths.marketplaceRoot));
   assert.deepEqual(await sandbox.commands(), [
+    "plugin list --json",
     "plugin marketplace list --json",
-    `plugin marketplace add ${PACKAGE_ROOT}`,
+    "plugin list --json",
+    "plugin marketplace list --json",
+    "plugin list --json",
+    "plugin marketplace list --json",
+    "plugin marketplace list --json",
+    `plugin marketplace add ${paths.marketplaceRoot}`,
     "plugin add superpowers@superpowers-manager",
   ]);
 });

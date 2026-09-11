@@ -347,20 +347,21 @@ export const codexPresentation: HarnessPresentation<CodexRemovalInput> = {
     if (inspection.outcome.result.kind === "current") {
       return { stdout: [...stdout, "manager updated"], stderr: [] };
     }
+    const missing =
+      inspection.outcome.result.kind === "absent" || observed.length === 0;
     if (receipt.status !== 0 || !receipt.outcome.ok) {
       return {
         stdout,
         stderr: [
-          inspection.outcome.result.kind === "absent"
+          missing
             ? "error: installed manager fingerprint is not detectable after install."
             : "error: installed manager fingerprint does not match the prepared plugin after install.",
         ],
       };
     }
-    const output =
-      inspection.outcome.result.kind === "absent"
-        ? receipt.outcome.result.missingVerificationOutput
-        : receipt.outcome.result.mismatchVerificationOutput;
+    const output = missing
+      ? receipt.outcome.result.missingVerificationOutput
+      : receipt.outcome.result.mismatchVerificationOutput;
     return { stdout, stderr: output.stderr };
   },
   renderRemovalCompletion(ownership) {

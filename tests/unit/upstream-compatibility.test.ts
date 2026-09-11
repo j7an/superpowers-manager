@@ -209,9 +209,11 @@ void test("historical native Codex manifest modes retain qualified hook packagin
 
 void test("Codex prepared qualification binds provenance, resources and current assessment rules", async (t) => {
   const root = nativeFixture(t);
+  const home = join(root, "home");
+  const ctx = { root, env: { HOME: home } };
   for (const name of ["README.md", "CODE_OF_CONDUCT.md"])
     writeFileSync(join(root, name), name);
-  const candidateRoot = join(root, "plugins/superpowers");
+  const candidateRoot = join(home, ".codex/superpowers-manager/prepared");
   mkdirSync(join(root, ".codex-plugin"));
   writeFileSync(
     join(root, ".codex-plugin/plugin.json"),
@@ -242,11 +244,11 @@ void test("Codex prepared qualification binds provenance, resources and current 
     "supported",
     JSON.stringify(built),
   );
-  const state = await inspectCodexPrepared(selection, { root });
+  const state = await inspectCodexPrepared(selection, ctx);
   assert.equal(state.outcome.ok && state.outcome.result.kind, "current");
   const overrideCtx = {
     root: join(root, "different-manager-root"),
-    env: { SUPERPOWERS_PLUGIN_ROOT: candidateRoot },
+    env: { HOME: home, SUPERPOWERS_PLUGIN_ROOT: candidateRoot },
   };
   assert.equal((await readCodexPrepared(overrideCtx)).outcome.ok, true);
   const overridden = await inspectCodexPrepared(selection, overrideCtx);
@@ -260,8 +262,8 @@ void test("Codex prepared qualification binds provenance, resources and current 
     receiptPath,
     JSON.stringify({ ...JSON.parse(receipt), generation: "invented" }),
   );
-  assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
-  const invalidReceipt = await inspectCodexPrepared(selection, { root });
+  assert.equal((await readCodexPrepared(ctx)).outcome.ok, false);
+  const invalidReceipt = await inspectCodexPrepared(selection, ctx);
   assert.equal(invalidReceipt.outcome.ok, false);
   if (invalidReceipt.outcome.ok)
     assert.fail("expected invalid receipt failure");
@@ -281,9 +283,9 @@ void test("Codex prepared qualification binds provenance, resources and current 
         [key]: key === "commit" ? "2".repeat(40) : "https://other.invalid/repo",
       }),
     );
-    assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
+    assert.equal((await readCodexPrepared(ctx)).outcome.ok, false);
     assert.equal(
-      (await inspectCodexPrepared(selection, { root })).outcome.ok,
+      (await inspectCodexPrepared(selection, ctx)).outcome.ok,
       false,
     );
   }
@@ -291,11 +293,8 @@ void test("Codex prepared qualification binds provenance, resources and current 
   const skillPath = join(candidateRoot, "skills/using-superpowers/SKILL.md"),
     skill = readFileSync(skillPath);
   writeFileSync(skillPath, "invalid");
-  assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
-  assert.equal(
-    (await inspectCodexPrepared(selection, { root })).outcome.ok,
-    false,
-  );
+  assert.equal((await readCodexPrepared(ctx)).outcome.ok, false);
+  assert.equal((await inspectCodexPrepared(selection, ctx)).outcome.ok, false);
 
   writeFileSync(skillPath, skill);
   mkdirSync(join(candidateRoot, ".codex"));
@@ -305,7 +304,7 @@ void test("Codex prepared qualification binds provenance, resources and current 
     digest: await digestArtifactTree(candidateRoot),
   };
   writeFileSync(receiptPath, JSON.stringify(unsupportedReceipt));
-  const unsupported = await inspectCodexPrepared(selection, { root });
+  const unsupported = await inspectCodexPrepared(selection, ctx);
   assert.equal(unsupported.status, 0);
   assert.equal(unsupported.outcome.ok, true);
   if (!unsupported.outcome.ok) assert.fail("expected unsupported inspection");
@@ -323,11 +322,11 @@ void test("Codex prepared qualification binds provenance, resources and current 
       effectiveSource: "https://other.invalid/superpowers",
       desiredCommit: "3".repeat(40),
     },
-    { root },
+    ctx,
   );
   assert.equal(mismatch.outcome.ok, true);
   if (!mismatch.outcome.ok) assert.fail("expected mismatched inspection");
   assert.equal(mismatch.outcome.result.kind, "needs-prepare");
   assert.equal(mismatch.outcome.result.compatibility.kind, "unknown");
-  assert.equal((await readCodexPrepared({ root })).outcome.ok, false);
+  assert.equal((await readCodexPrepared(ctx)).outcome.ok, false);
 });

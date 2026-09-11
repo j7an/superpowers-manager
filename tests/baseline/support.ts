@@ -301,6 +301,16 @@ function copyRuntimePackage(pkg: string) {
   cpSync(join(ROOT, "src"), join(pkg, "src"), { recursive: true });
   cpSync(join(ROOT, "config"), join(pkg, "config"), { recursive: true });
   copyFileSync(join(ROOT, "package.json"), join(pkg, "package.json"));
+  const dependencies = join(pkg, "node_modules");
+  mkdirSync(dependencies, { recursive: true });
+  cpSync(
+    join(ROOT, "node_modules", "smol-toml"),
+    join(dependencies, "smol-toml"),
+    {
+      recursive: true,
+      dereference: true,
+    },
+  );
 
   const manifestDirectory = join(
     pkg,

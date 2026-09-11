@@ -47,10 +47,20 @@ function buildSnapshot(): string {
   const snapshot = mkdtempSync(join(SCRATCH, "snapshot-"));
   // The snapshot carries the maintained native entry src/cli.ts and its
   // production module graph. runScript launches that source directly.
-  for (const entry of ["src", "config"]) {
+  for (const entry of ["src", "config", ".agents"]) {
     cpSync(join(ROOT, entry), join(snapshot, entry), { recursive: true });
   }
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
+  const dependencies = join(snapshot, "node_modules");
+  mkdirSync(dependencies, { recursive: true });
+  cpSync(
+    join(ROOT, "node_modules", "smol-toml"),
+    join(dependencies, "smol-toml"),
+    {
+      recursive: true,
+      dereference: true,
+    },
+  );
   const pluginDir = join(snapshot, "plugins", "superpowers", ".codex-plugin");
   mkdirSync(pluginDir, { recursive: true });
   cpSync(
@@ -487,6 +497,7 @@ export async function runScript(
     SPW_FIXTURE_STATE: caseEnv.state,
     SPW_TEST_PKG_ROOT: caseEnv.pkg,
     SUPERPOWERS_CODEX: caseEnv.codexBin,
+    SUPERPOWERS_PLUGIN_ROOT: join(caseEnv.pkg, "plugins", "superpowers"),
     SUPERPOWERS_UPSTREAM_URL: UPSTREAM,
     SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(caseEnv.state, "codex-home"),
     ...options.env,
