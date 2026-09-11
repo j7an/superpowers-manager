@@ -10,8 +10,7 @@ import {
 } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { atomicWriteFile } from "../../atomic.ts";
-import { ARTIFACT_DIGEST_RE, digestArtifactTree } from "../../artifact-tree.ts";
+import { ARTIFACT_DIGEST_RE } from "../../artifact-tree.ts";
 import {
   assertDesignatedParentDirectory,
   assertNoFollowType,
@@ -26,34 +25,19 @@ import {
 import type { CodexNativeState } from "./adapter.ts";
 import type { CodexPaths } from "./paths.ts";
 
-export type RecoveryPhase =
-  | "staging"
-  | "publishing"
-  | "published"
-  | "activating"
-  | "ready"
-  | "finalizing"
-  | "rolling-back"
-  | "restored"
-  | "removing"
-  | "deregistered";
-
 export interface FileIdentity {
   readonly dev: number;
   readonly ino: number;
 }
 
 export interface RecoveryRecord {
-  readonly schema: 1;
+  readonly schema: 2;
+  readonly operation: "install" | "uninstall";
   readonly token: string;
-  readonly phase: RecoveryPhase;
   readonly marketplaceRoot: string;
   readonly priorNative: CodexNativeState;
   readonly oldDigest: string | null;
-  readonly newDigest: string | null;
   readonly oldIdentity: FileIdentity | null;
-  readonly stageIdentity: FileIdentity | null;
-  readonly publishedIdentity: FileIdentity | null;
 }
 
 export interface PendingCodexPublication {
@@ -61,33 +45,21 @@ export interface PendingCodexPublication {
   readonly stage: string;
   readonly backup: string;
   readonly recoveryIdentity: FileIdentity;
-  journalIdentity: FileIdentity;
-  record: RecoveryRecord;
+  readonly journalIdentity: FileIdentity;
+  readonly record: RecoveryRecord;
+  newDigest: string | null;
+  stageIdentity: FileIdentity | null;
+  publishedIdentity: FileIdentity | null;
   settled: boolean;
 }
 
 export type RecoveryInput = Pick<
   RecoveryRecord,
-  "marketplaceRoot" | "priorNative" | "oldDigest" | "oldIdentity"
->;
-export type RecoveryEvidence = Partial<
-  Pick<RecoveryRecord, "newDigest" | "stageIdentity" | "publishedIdentity">
+  "operation" | "marketplaceRoot" | "priorNative" | "oldDigest" | "oldIdentity"
 >;
 
 const JOURNAL = "transaction.json";
 const TOKEN_RE = /^[a-f0-9]{32}$/u;
-const PHASES: readonly RecoveryPhase[] = [
-  "staging",
-  "publishing",
-  "published",
-  "activating",
-  "ready",
-  "finalizing",
-  "rolling-back",
-  "restored",
-  "removing",
-  "deregistered",
-];
 const PROFILE: StrictJsonProfile = {
   duplicateKeys: "reject",
   nonStandardConstants: "reject",
@@ -97,15 +69,12 @@ const PROFILE: StrictJsonProfile = {
 };
 const RECORD_KEYS = [
   "schema",
+  "operation",
   "token",
-  "phase",
   "marketplaceRoot",
   "priorNative",
   "oldDigest",
-  "newDigest",
   "oldIdentity",
-  "stageIdentity",
-  "publishedIdentity",
 ].sort();
 const NATIVE_KEYS = [
   "marketplaceRoot",
@@ -205,42 +174,9 @@ function digestValue(value: JsonValue): string | null {
   return value;
 }
 
-function phaseValue(value: JsonValue): RecoveryPhase {
-  if (typeof value !== "string" || !PHASES.includes(value as RecoveryPhase)) {
-    throw new Error("invalid recovery phase");
-  }
-  return value as RecoveryPhase;
-}
-
 function validateEvidenceShape(record: RecoveryRecord): void {
   if ((record.oldDigest === null) !== (record.oldIdentity === null)) {
     throw new Error("incomplete old recovery evidence");
-  }
-  if ((record.newDigest === null) !== (record.stageIdentity === null)) {
-    throw new Error("incomplete stage recovery evidence");
-  }
-  if (record.publishedIdentity !== null && record.stageIdentity === null) {
-    throw new Error("incomplete published recovery evidence");
-  }
-  if (
-    [
-      "publishing",
-      "published",
-      "activating",
-      "ready",
-      "finalizing",
-      "rolling-back",
-      "restored",
-    ].includes(record.phase) &&
-    record.stageIdentity === null
-  ) {
-    throw new Error("recovery phase lacks staged evidence");
-  }
-  if (
-    ["published", "activating", "ready", "finalizing"].includes(record.phase) &&
-    record.publishedIdentity === null
-  ) {
-    throw new Error("recovery phase lacks published evidence");
   }
 }
 
@@ -251,7 +187,10 @@ async function decodeRecord(
   const parsed = object(parseStrictJson(bytes, PROFILE));
   if (parsed === null) throw new Error("recovery journal is not an object");
   exactKeys(parsed, RECORD_KEYS);
-  if (parsed.schema !== 1) throw new Error("invalid recovery schema");
+  if (parsed.schema !== 2) throw new Error("invalid recovery schema");
+  if (parsed.operation !== "install" && parsed.operation !== "uninstall") {
+    throw new Error("invalid recovery operation");
+  }
   if (typeof parsed.token !== "string" || !TOKEN_RE.test(parsed.token)) {
     throw new Error("invalid recovery token");
   }
@@ -262,27 +201,17 @@ async function decodeRecord(
   ) {
     throw new Error("invalid recovery marketplace root");
   }
-  const expectedRoot = await canonicalizeProspectivePath(paths.marketplaceRoot);
-  const recordedRoot = await canonicalizeProspectivePath(
-    parsed.marketplaceRoot,
-  );
-  if (
-    parsed.marketplaceRoot !== paths.marketplaceRoot ||
-    recordedRoot !== expectedRoot
-  ) {
+  if (parsed.marketplaceRoot !== paths.marketplaceRoot) {
     throw new Error("foreign recovery marketplace root");
   }
   const record: RecoveryRecord = {
-    schema: 1,
+    schema: 2,
+    operation: parsed.operation,
     token: parsed.token,
-    phase: phaseValue(parsed.phase!),
     marketplaceRoot: parsed.marketplaceRoot,
     priorNative: nativeValue(parsed.priorNative!),
     oldDigest: digestValue(parsed.oldDigest!),
-    newDigest: digestValue(parsed.newDigest!),
     oldIdentity: identityValue(parsed.oldIdentity!),
-    stageIdentity: identityValue(parsed.stageIdentity!),
-    publishedIdentity: identityValue(parsed.publishedIdentity!),
   };
   validateEvidenceShape(record);
   return record;
@@ -315,105 +244,6 @@ async function optionalIdentity(path: string): Promise<FileIdentity | null> {
   return kind === "missing" ? null : await identity(path);
 }
 
-async function validateObservedObjects(
-  paths: CodexPaths,
-  record: RecoveryRecord,
-): Promise<void> {
-  await assertNoFollowType(paths.managerRoot, ["directory"]);
-  const stage = await optionalIdentity(stagePath(paths, record.token));
-  const backup = await optionalIdentity(backupPath(paths, record.token));
-  const live = await optionalIdentity(paths.marketplaceRoot);
-
-  if (stage !== null && !sameIdentity(stage, record.stageIdentity)) {
-    throw new Error("staged marketplace identity changed");
-  }
-  if (
-    stage !== null &&
-    (record.newDigest === null ||
-      (await digestArtifactTree(stagePath(paths, record.token))) !==
-        record.newDigest)
-  ) {
-    throw new Error("staged marketplace content changed");
-  }
-  const backupAllowed = [
-    "publishing",
-    "published",
-    "activating",
-    "ready",
-    "finalizing",
-    "rolling-back",
-  ].includes(record.phase);
-  if (
-    backup !== null &&
-    (!backupAllowed || !sameIdentity(backup, record.oldIdentity))
-  ) {
-    throw new Error("retained marketplace backup changed");
-  }
-  if (
-    backup !== null &&
-    (record.oldDigest === null ||
-      (await digestArtifactTree(backupPath(paths, record.token))) !==
-        record.oldDigest)
-  ) {
-    throw new Error("retained marketplace backup content changed");
-  }
-  if (
-    record.oldIdentity !== null &&
-    ["published", "activating", "ready"].includes(record.phase) &&
-    backup === null
-  ) {
-    throw new Error("retained marketplace backup is missing");
-  }
-
-  let liveAllowed: readonly (FileIdentity | null)[];
-  switch (record.phase) {
-    case "staging":
-    case "removing":
-      liveAllowed = [record.oldIdentity];
-      break;
-    case "publishing":
-      liveAllowed = [record.oldIdentity, record.stageIdentity, null];
-      break;
-    case "rolling-back":
-      liveAllowed = [
-        record.publishedIdentity,
-        record.stageIdentity,
-        record.oldIdentity,
-        null,
-      ];
-      break;
-    case "restored":
-      liveAllowed = [record.oldIdentity];
-      break;
-    case "deregistered":
-      liveAllowed = [record.oldIdentity, null];
-      break;
-    default:
-      liveAllowed = [record.publishedIdentity];
-  }
-  if (
-    !liveAllowed.some((allowed) =>
-      live === null ? allowed === null : sameIdentity(live, allowed),
-    )
-  ) {
-    throw new Error("published marketplace identity changed");
-  }
-  if (live !== null) {
-    const expectedDigest = sameIdentity(live, record.oldIdentity)
-      ? record.oldDigest
-      : sameIdentity(live, record.stageIdentity) ||
-          sameIdentity(live, record.publishedIdentity)
-        ? record.newDigest
-        : null;
-    if (
-      expectedDigest === null ||
-      (await digestArtifactTree(paths.marketplaceRoot)) !== expectedDigest
-    ) {
-      throw new Error("published marketplace content changed");
-    }
-  }
-}
-
 async function syncDirectory(path: string): Promise<void> {
   const handle = await open(path, "r");
   try {
@@ -431,9 +261,7 @@ async function readOwnedRecord(paths: CodexPaths): Promise<RecoveryRecord> {
   }
   const path = recordPath(paths);
   await assertNoFollowType(path, ["regular-file"]);
-  const record = await decodeRecord(await readFile(path), paths);
-  await validateObservedObjects(paths, record);
-  return record;
+  return await decodeRecord(await readFile(path), paths);
 }
 
 export async function readCodexRecovery(
@@ -506,16 +334,13 @@ export async function beginCodexRecovery(
     const recoveryIdentity = await identity(paths.recoveryRoot);
     const token = randomBytes(16).toString("hex");
     const record: RecoveryRecord = {
-      schema: 1,
+      schema: 2,
+      operation: input.operation,
       token,
-      phase: "staging",
       marketplaceRoot: input.marketplaceRoot,
       priorNative: input.priorNative,
       oldDigest: input.oldDigest,
-      newDigest: null,
       oldIdentity: input.oldIdentity,
-      stageIdentity: null,
-      publishedIdentity: null,
     };
     await decodeRecord(recordBytes(record), paths);
     const path = recordPath(paths);
@@ -535,6 +360,9 @@ export async function beginCodexRecovery(
       recoveryIdentity,
       journalIdentity: { dev: journal.dev, ino: journal.ino },
       record,
+      newDigest: null,
+      stageIdentity: null,
+      publishedIdentity: null,
       settled: false,
     };
   } catch (cause) {
@@ -544,6 +372,22 @@ export async function beginCodexRecovery(
         ? ": unresolved Codex recovery state"
         : "";
     throw recoveryError(`cannot begin Codex recovery journal${suffix}`, cause);
+  }
+}
+
+export async function verifyCodexRecovery(
+  pending: PendingCodexPublication,
+): Promise<void> {
+  try {
+    await requirePending(pending);
+  } catch (cause) {
+    const message =
+      cause instanceof Error &&
+      (cause.message === "Codex recovery journal changed" ||
+        cause.message === "Codex recovery journal is already settled")
+        ? cause.message
+        : "cannot verify Codex recovery journal";
+    throw recoveryError(message, cause);
   }
 }
 
@@ -578,65 +422,6 @@ async function requirePending(pending: PendingCodexPublication): Promise<void> {
     throw new Error("Codex recovery journal changed");
   }
   await decodeRecord(recordBytes(pending.record), pending.paths);
-}
-
-function transitionAllowed(from: RecoveryPhase, to: RecoveryPhase): boolean {
-  if (from === "staging" && to === "staging") return true;
-  switch (from) {
-    case "staging":
-      return to === "publishing" || to === "removing";
-    case "publishing":
-      return to === "published" || to === "rolling-back";
-    case "published":
-      return to === "activating" || to === "rolling-back";
-    case "activating":
-      return to === "ready" || to === "rolling-back";
-    case "ready":
-      return to === "finalizing" || to === "rolling-back";
-    case "rolling-back":
-      return to === "restored";
-    case "removing":
-      return to === "deregistered";
-    default:
-      return false;
-  }
-}
-
-export async function advanceCodexRecovery(
-  pending: PendingCodexPublication,
-  phase: RecoveryPhase,
-  evidence: RecoveryEvidence = {},
-): Promise<void> {
-  try {
-    await requirePending(pending);
-    if (!transitionAllowed(pending.record.phase, phase)) {
-      throw new Error("invalid Codex recovery phase transition");
-    }
-    const record: RecoveryRecord = {
-      ...pending.record,
-      ...evidence,
-      phase,
-    };
-    const bytes = recordBytes(record);
-    await atomicWriteFile(recordPath(pending.paths), bytes, {
-      validate: async (temporary) => {
-        await assertNoFollowType(temporary, ["regular-file"]);
-        await decodeRecord(await readFile(temporary), pending.paths);
-      },
-    });
-    await syncDirectory(pending.paths.recoveryRoot);
-    const journal = await lstat(recordPath(pending.paths));
-    pending.record = record;
-    pending.journalIdentity = { dev: journal.dev, ino: journal.ino };
-  } catch (cause) {
-    const message =
-      cause instanceof Error &&
-      (cause.message === "Codex recovery journal changed" ||
-        cause.message === "Codex recovery journal is already settled")
-        ? cause.message
-        : "cannot advance Codex recovery journal";
-    throw recoveryError(message, cause);
-  }
 }
 
 export async function finishCodexRecovery(

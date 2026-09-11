@@ -54,7 +54,9 @@ then removes the durable marketplace only after native deregistration is
 verified. It retains the prepared candidate and saved upstream selection. If
 the operation cannot establish the relevant state safely, it preserves recovery
 material and blocks conflicting mutations until the state is inspected. There
-is no general repair or purge command.
+is no general repair or purge command. The recovery record identifies retained
+material; it does not certify which steps completed or that the current files
+are intact. An interrupted operation is not resumed automatically.
 
 ## Compare Codex routes
 

@@ -20,10 +20,10 @@ import type { CodexNativeState } from "../../../../src/harnesses/codex/adapter.t
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
 import { codexPaths } from "../../../../src/harnesses/codex/paths.ts";
 import {
-  advanceCodexRecovery,
   beginCodexRecovery,
   finishCodexRecovery,
   readCodexRecovery,
+  verifyCodexRecovery,
 } from "../../../../src/harnesses/codex/recovery.ts";
 
 const ABSENT_NATIVE: CodexNativeState = {
@@ -47,11 +47,14 @@ void test("recovery journal is exclusively owned and strictly readable", async (
   assert.equal((await readdir(paths.codexHome)).length, 0);
 
   const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
     oldIdentity: null,
   });
+  assert.equal(pending.record.schema, 2);
+  assert.equal(pending.record.operation, "install");
   assert.match(pending.record.token, /^[a-f0-9]{32}$/u);
   assert.equal(
     pending.stage,
@@ -64,6 +67,7 @@ void test("recovery journal is exclusively owned and strictly readable", async (
   assert.deepEqual(await readCodexRecovery(paths), pending.record);
   await assert.rejects(
     beginCodexRecovery(paths, {
+      operation: "install",
       marketplaceRoot: paths.marketplaceRoot,
       priorNative: ABSENT_NATIVE,
       oldDigest: null,
@@ -73,9 +77,42 @@ void test("recovery journal is exclusively owned and strictly readable", async (
   );
 });
 
+void test("recovery journal bytes and identity remain stable while artifact layout changes", async (t) => {
+  const { paths } = await fixture(t);
+  await mkdir(paths.marketplaceRoot, { recursive: true });
+  const old = await lstat(paths.marketplaceRoot);
+  const pending = await beginCodexRecovery(paths, {
+    operation: "install",
+    marketplaceRoot: paths.marketplaceRoot,
+    priorNative: ABSENT_NATIVE,
+    oldDigest: await digestArtifactTree(paths.marketplaceRoot),
+    oldIdentity: { dev: old.dev, ino: old.ino },
+  });
+  const journal = join(paths.recoveryRoot, "transaction.json");
+  const beforeBytes = await readFile(journal);
+  const before = await lstat(journal);
+
+  await mkdir(pending.stage);
+  const staged = await lstat(pending.stage);
+  pending.newDigest = await digestArtifactTree(pending.stage);
+  pending.stageIdentity = { dev: staged.dev, ino: staged.ino };
+  await verifyCodexRecovery(pending);
+  await rename(paths.marketplaceRoot, pending.backup);
+  await rename(pending.stage, paths.marketplaceRoot);
+
+  const after = await lstat(journal);
+  assert.deepEqual(await readFile(journal), beforeBytes);
+  assert.deepEqual(
+    { dev: after.dev, ino: after.ino },
+    { dev: before.dev, ino: before.ino },
+  );
+  assert.deepEqual(await readCodexRecovery(paths), pending.record);
+});
+
 void test("recovery reader rejects duplicate keys and exact-schema violations", async (t) => {
   const { paths } = await fixture(t);
   const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
@@ -84,11 +121,24 @@ void test("recovery reader rejects duplicate keys and exact-schema violations", 
   const journal = join(paths.recoveryRoot, "transaction.json");
   const valid = await readFile(journal, "utf8");
   const malformed = [
-    valid.replace('"schema":1', '"schema":1,"schema":1'),
-    valid.replace('"schema":1', '"schema":2'),
+    valid.replace('"schema":2', '"schema":2,"schema":2'),
+    valid.replace('"schema":2', '"schema":1'),
+    valid.replace('"operation":"install"', '"operation":"repair"'),
     valid.replace(pending.record.token, "not-a-token"),
     valid.replace(paths.marketplaceRoot, join(paths.codexHome, "foreign")),
     valid.replace(/\}\n$/u, ',"extra":true}\n'),
+    `${JSON.stringify({
+      schema: 1,
+      token: pending.record.token,
+      phase: "publishing",
+      marketplaceRoot: paths.marketplaceRoot,
+      priorNative: ABSENT_NATIVE,
+      oldDigest: null,
+      newDigest: null,
+      oldIdentity: null,
+      stageIdentity: null,
+      publishedIdentity: null,
+    })}\n`,
   ];
   for (const bytes of malformed) {
     await writeFile(journal, bytes);
@@ -102,6 +152,7 @@ void test("recovery reader rejects duplicate keys and exact-schema violations", 
 void test("recovery reader rejects unknown material and symlinked recovery paths", async (t) => {
   const first = await fixture(t);
   await beginCodexRecovery(first.paths, {
+    operation: "install",
     marketplaceRoot: first.paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
@@ -130,6 +181,7 @@ void test("recovery reader rejects a symlinked marketplace root", async (t) => {
   await symlink(join(codexHome, "foreign"), paths.marketplaceRoot);
   await assert.rejects(
     beginCodexRecovery(paths, {
+      operation: "install",
       marketplaceRoot: paths.marketplaceRoot,
       priorNative: ABSENT_NATIVE,
       oldDigest: null,
@@ -142,6 +194,7 @@ void test("recovery reader rejects a symlinked marketplace root", async (t) => {
 void test("recovery reader rejects a symlinked journal without changing its target", async (t) => {
   const { paths } = await fixture(t);
   await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
@@ -161,9 +214,10 @@ void test("recovery reader rejects a symlinked journal without changing its targ
   assert.equal(await readFile(target, "utf8"), bytes);
 });
 
-void test("phase updates retain inspected evidence and reject changed journal identity", async (t) => {
+void test("recovery verification retains in-memory evidence and rejects changed journal identity", async (t) => {
   const { paths } = await fixture(t);
   const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
@@ -172,41 +226,35 @@ void test("phase updates retain inspected evidence and reject changed journal id
   await mkdir(pending.stage);
   const stage = await lstat(pending.stage);
   const digest = await digestArtifactTree(pending.stage);
-  await advanceCodexRecovery(pending, "staging", {
-    newDigest: digest,
-    stageIdentity: { dev: stage.dev, ino: stage.ino },
-  });
-  await advanceCodexRecovery(pending, "publishing");
-  assert.equal((await readCodexRecovery(paths))?.phase, "publishing");
+  pending.newDigest = digest;
+  pending.stageIdentity = { dev: stage.dev, ino: stage.ino };
+  await verifyCodexRecovery(pending);
+  assert.equal((await readCodexRecovery(paths))?.operation, "install");
 
   const journal = join(paths.recoveryRoot, "transaction.json");
   const replacement = join(paths.recoveryRoot, "replacement");
   await writeFile(replacement, await readFile(journal));
   await rename(replacement, journal);
   await assert.rejects(
-    advanceCodexRecovery(pending, "published", {
-      publishedIdentity: { dev: stage.dev, ino: stage.ino },
-    }),
+    verifyCodexRecovery(pending),
     /Codex recovery journal changed/,
   );
 });
 
-void test("recovery reader rejects content changed behind a captured directory identity", async (t) => {
+void test("recovery reader retains diagnostic evidence after marketplace content changes", async (t) => {
   const { paths } = await fixture(t);
   await mkdir(paths.marketplaceRoot, { recursive: true });
   await writeFile(join(paths.marketplaceRoot, "owned"), "before\n");
   const old = await lstat(paths.marketplaceRoot);
-  await beginCodexRecovery(paths, {
+  const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: await digestArtifactTree(paths.marketplaceRoot),
     oldIdentity: { dev: old.dev, ino: old.ino },
   });
   await writeFile(join(paths.marketplaceRoot, "owned"), "after\n");
-  await assert.rejects(
-    readCodexRecovery(paths),
-    /cannot inspect Codex recovery state:/,
-  );
+  assert.deepEqual(await readCodexRecovery(paths), pending.record);
 });
 
 void test("interrupted publishing is readable in a fresh process-style inspection", async (t) => {
@@ -214,6 +262,7 @@ void test("interrupted publishing is readable in a fresh process-style inspectio
   await mkdir(paths.marketplaceRoot, { recursive: true });
   const old = await lstat(paths.marketplaceRoot);
   const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: await digestArtifactTree(paths.marketplaceRoot),
@@ -222,36 +271,35 @@ void test("interrupted publishing is readable in a fresh process-style inspectio
   await mkdir(pending.stage);
   const stage = await lstat(pending.stage);
   const stageDigest = await digestArtifactTree(pending.stage);
-  await advanceCodexRecovery(pending, "staging", {
-    newDigest: stageDigest,
-    stageIdentity: { dev: stage.dev, ino: stage.ino },
-  });
-  await advanceCodexRecovery(pending, "publishing");
+  pending.newDigest = stageDigest;
+  pending.stageIdentity = { dev: stage.dev, ino: stage.ino };
+  await verifyCodexRecovery(pending);
   await rename(paths.marketplaceRoot, pending.backup);
-  assert.equal((await readCodexRecovery(paths))?.phase, "publishing");
+  assert.equal((await readCodexRecovery(paths))?.operation, "install");
 });
 
-void test("interrupted durable cleanup remains a readable deregistered recovery", async (t) => {
+void test("interrupted durable cleanup remains readable after marketplace deletion", async (t) => {
   const { paths } = await fixture(t);
   await mkdir(paths.marketplaceRoot, { recursive: true });
   await writeFile(join(paths.marketplaceRoot, "owned"), "before\n");
   const old = await lstat(paths.marketplaceRoot);
   const pending = await beginCodexRecovery(paths, {
+    operation: "uninstall",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: await digestArtifactTree(paths.marketplaceRoot),
     oldIdentity: { dev: old.dev, ino: old.ino },
   });
-  await advanceCodexRecovery(pending, "removing");
-  await advanceCodexRecovery(pending, "deregistered");
+  await verifyCodexRecovery(pending);
   await rm(paths.marketplaceRoot, { recursive: true });
 
-  assert.equal((await readCodexRecovery(paths))?.phase, "deregistered");
+  assert.equal((await readCodexRecovery(paths))?.operation, "uninstall");
 });
 
 void test("finish removes only the captured journal and empty recovery directory", async (t) => {
   const { paths } = await fixture(t);
   const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
@@ -268,6 +316,7 @@ void test("finish removes only the captured journal and empty recovery directory
 void test("finish refuses unknown material without following or removing it", async (t) => {
   const { paths } = await fixture(t);
   const pending = await beginCodexRecovery(paths, {
+    operation: "install",
     marketplaceRoot: paths.marketplaceRoot,
     priorNative: ABSENT_NATIVE,
     oldDigest: null,
@@ -287,9 +336,9 @@ void test("finish refuses unknown material without following or removing it", as
   ]);
 });
 
-void test("a killed publisher leaves publishing and published journals readable by a fresh process", async (t) => {
-  for (const phase of ["publishing", "published"] as const) {
-    await t.test(phase, async (t) => {
+void test("a killed publisher leaves immutable journals readable by a fresh process", async (t) => {
+  for (const boundary of ["backup-renamed", "published"] as const) {
+    await t.test(boundary, async (t) => {
       const { paths } = await fixture(t);
       const moduleUrl = new URL(
         "../../../../src/harnesses/codex/recovery.ts",
@@ -298,12 +347,13 @@ void test("a killed publisher leaves publishing and published journals readable 
       const script = `
         import { lstat, mkdir, rename } from "node:fs/promises";
         import { digestArtifactTree } from ${JSON.stringify(new URL("../../../../src/artifact-tree.ts", import.meta.url).href)};
-        import { advanceCodexRecovery, beginCodexRecovery } from ${JSON.stringify(moduleUrl)};
+        import { beginCodexRecovery, verifyCodexRecovery } from ${JSON.stringify(moduleUrl)};
         const paths = JSON.parse(process.argv[1]);
-        const finalPhase = process.argv[2];
+        const boundary = process.argv[2];
         await mkdir(paths.marketplaceRoot, { recursive: true });
         const old = await lstat(paths.marketplaceRoot);
         const pending = await beginCodexRecovery(paths, {
+          operation: "install",
           marketplaceRoot: paths.marketplaceRoot,
           priorNative: ${JSON.stringify(ABSENT_NATIVE)},
           oldDigest: await digestArtifactTree(paths.marketplaceRoot),
@@ -311,23 +361,20 @@ void test("a killed publisher leaves publishing and published journals readable 
         });
         await mkdir(pending.stage);
         const stage = await lstat(pending.stage);
-        await advanceCodexRecovery(pending, "staging", {
-          newDigest: await digestArtifactTree(pending.stage),
-          stageIdentity: { dev: stage.dev, ino: stage.ino },
-        });
-        await advanceCodexRecovery(pending, "publishing");
+        pending.newDigest = await digestArtifactTree(pending.stage);
+        pending.stageIdentity = { dev: stage.dev, ino: stage.ino };
+        await verifyCodexRecovery(pending);
         await rename(paths.marketplaceRoot, pending.backup);
-        if (finalPhase === "published") {
+        if (boundary === "published") {
           await rename(pending.stage, paths.marketplaceRoot);
-          await advanceCodexRecovery(pending, "published", {
-            publishedIdentity: { dev: stage.dev, ino: stage.ino },
-          });
+          pending.publishedIdentity = { dev: stage.dev, ino: stage.ino };
+          await verifyCodexRecovery(pending);
         }
         process.kill(process.pid, "SIGKILL");
       `;
       const child = spawn(
         process.execPath,
-        ["--input-type=module", "-e", script, JSON.stringify(paths), phase],
+        ["--input-type=module", "-e", script, JSON.stringify(paths), boundary],
         { stdio: "ignore" },
       );
       const [code, signal] = (await once(child, "exit")) as [
@@ -336,7 +383,7 @@ void test("a killed publisher leaves publishing and published journals readable 
       ];
       assert.equal(code, null);
       assert.equal(signal, "SIGKILL");
-      assert.equal((await readCodexRecovery(paths))?.phase, phase);
+      assert.equal((await readCodexRecovery(paths))?.operation, "install");
     });
   }
 });

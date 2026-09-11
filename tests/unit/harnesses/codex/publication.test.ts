@@ -4,6 +4,7 @@ import { once } from "node:events";
 import {
   cp,
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -283,7 +284,7 @@ void test("native failure after apparent deregistration preserves durable recove
   if (!result.outcome.ok)
     assert.equal(result.outcome.error.code, "native-failed");
   assert.ok(await readCodexMarketplace(f.paths.marketplaceRoot));
-  assert.equal((await readCodexRecovery(f.paths))?.phase, "removing");
+  assert.equal((await readCodexRecovery(f.paths))?.operation, "uninstall");
 });
 
 void test("durable content changed during removal is preserved with unresolved recovery", async (t) => {
@@ -305,10 +306,7 @@ void test("durable content changed during removal is preserved with unresolved r
   if (!result.outcome.ok)
     assert.equal(result.outcome.error.code, "recovery-required");
   assert.equal(await readFile(marker, "utf8"), "changed during removal\n");
-  await assert.rejects(
-    readCodexRecovery(f.paths),
-    /cannot inspect Codex recovery state/u,
-  );
+  assert.equal((await readCodexRecovery(f.paths))?.operation, "uninstall");
 });
 
 void test("an unresolved recovery journal blocks removal before native observation", async (t) => {
@@ -316,6 +314,7 @@ void test("an unresolved recovery journal blocks removal before native observati
   const owned = await readCodexMarketplace(f.paths.marketplaceRoot);
   assert.ok(owned);
   await beginCodexRecovery(f.paths, {
+    operation: "uninstall",
     marketplaceRoot: f.paths.marketplaceRoot,
     priorNative: f.getNative(),
     oldDigest: owned.digest,
@@ -372,13 +371,27 @@ void test("intact durable files remain retryable after cleanup failure", async (
 
 void test("publication returns a pending transaction and preserves ordered native messages", async (t) => {
   const f = await fixture(t);
+  const journal = join(f.paths.recoveryRoot, "transaction.json");
+  let activationBytes: Buffer | undefined;
+  let activationIdentity: { dev: number; ino: number } | undefined;
   const result = await installCodexMarketplace(
     f.artifact,
     f.ctx,
-    f.activateCurrent,
+    async (root) => {
+      activationBytes = await readFile(journal);
+      const info = await lstat(journal);
+      activationIdentity = { dev: info.dev, ino: info.ino };
+      return await f.activateCurrent(root);
+    },
     f.dependencies,
   );
   const tx = transaction(result);
+  const pendingInfo = await lstat(journal);
+  assert.deepEqual(await readFile(journal), activationBytes);
+  assert.deepEqual(
+    { dev: pendingInfo.dev, ino: pendingInfo.ino },
+    activationIdentity,
+  );
   assert.ok(await readCodexMarketplace(f.paths.marketplaceRoot));
   assert.ok(await readCodexRecovery(f.paths));
   assert.deepEqual(
@@ -576,7 +589,7 @@ void test("verification rollback refuses a changed live identity", async (t) => 
   assert.equal(settled.outcome.ok, false);
   if (settled.outcome.ok) assert.fail("expected recovery requirement");
   assert.equal(settled.outcome.error.code, "recovery-required");
-  assert.ok(await readCodexRecovery(f.paths).catch(() => ({ changed: true })));
+  assert.equal((await readCodexRecovery(f.paths))?.operation, "install");
 });
 
 void test("a pre-existing derived backup blocks publication without deleting it", async (t) => {
@@ -605,10 +618,7 @@ void test("a pre-existing derived backup blocks publication without deleting it"
     ).length,
     1,
   );
-  await assert.rejects(
-    readCodexRecovery(f.paths),
-    /cannot inspect Codex recovery state:/,
-  );
+  assert.equal((await readCodexRecovery(f.paths))?.operation, "install");
 });
 
 void test("an inconsistent derived backup path is rejected and retained", async (t) => {
@@ -772,7 +782,7 @@ void test("failed restoration after the second rename preserves the identified b
   assert.doesNotMatch(JSON.stringify(result), /PLANTED-RESTORE/);
   const recovery = await readCodexRecovery(f.paths);
   assert.ok(recovery);
-  assert.equal(recovery.phase, "publishing");
+  assert.equal(recovery.operation, "install");
   assert.equal(
     (
       await readCodexMarketplace(
@@ -1011,7 +1021,7 @@ void test("a process killed after real backup deletion leaves a readable finaliz
     ),
     false,
   );
-  assert.equal((await readCodexRecovery(f.paths))?.phase, "finalizing");
+  assert.equal((await readCodexRecovery(f.paths))?.operation, "install");
 });
 
 void test("inspectable damaged active content reaches activation but is not reverse-migrated", async (t) => {

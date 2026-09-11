@@ -336,6 +336,7 @@ void test("unresolved recovery blocks every lifecycle mutation", async () => {
   const old = await readCodexMarketplace(p.marketplaceRoot);
   assert.ok(old);
   await beginCodexRecovery(p, {
+    operation: "install",
     marketplaceRoot: p.marketplaceRoot,
     priorNative: {
       marketplaceRoot: p.marketplaceRoot,

@@ -35,10 +35,10 @@ import {
 import { assertCodexPreparationSeparate, codexPaths } from "./paths.ts";
 import { codexPreparationLocation } from "./prepare.ts";
 import {
-  advanceCodexRecovery,
   beginCodexRecovery,
   finishCodexRecovery,
   readCodexRecovery,
+  verifyCodexRecovery,
   type FileIdentity,
   type PendingCodexPublication,
 } from "./recovery.ts";
@@ -253,12 +253,12 @@ export async function removeCodexMarketplace(
     }
     if (captured !== null) {
       pending = await beginCodexRecovery(paths, {
+        operation: "uninstall",
         marketplaceRoot: paths.marketplaceRoot,
         priorNative,
         oldDigest: captured.digest,
         oldIdentity: { dev: captured.dev, ino: captured.ino },
       });
-      await advanceCodexRecovery(pending, "removing");
     }
 
     const beforeRemoval = await observeNative(ctx, dependencies, messages);
@@ -280,6 +280,7 @@ export async function removeCodexMarketplace(
       pluginPresent: beforeRemoval.pluginPresent,
       marketplacePresent: beforeRemoval.marketplaceRoot !== null,
     };
+    if (pending !== undefined) await verifyCodexRecovery(pending);
     nativeAttempted = true;
     let removed: AdapterResult;
     try {
@@ -338,7 +339,6 @@ export async function removeCodexMarketplace(
       return successResult("uninstall", null, messages);
     }
 
-    await advanceCodexRecovery(pending, "deregistered");
     if (!(await sameCapturedMarketplace(paths.marketplaceRoot, captured))) {
       return removalFailure(
         "recovery-required",
@@ -347,6 +347,7 @@ export async function removeCodexMarketplace(
       );
     }
     try {
+      await verifyCodexRecovery(pending);
       await rm(paths.marketplaceRoot, { recursive: true });
     } catch {
       if (await sameCapturedMarketplace(paths.marketplaceRoot, captured)) {
@@ -484,11 +485,12 @@ async function cleanupBeforePublication(
       const staged = await readCodexMarketplace(pending.stage);
       if (
         staged === null ||
-        !sameIdentity(staged, pending.record.stageIdentity) ||
-        staged.digest !== pending.record.newDigest
+        !sameIdentity(staged, pending.stageIdentity) ||
+        staged.digest !== pending.newDigest
       ) {
         return false;
       }
+      await verifyCodexRecovery(pending);
       await rm(pending.stage, { recursive: true });
     }
     await finishCodexRecovery(pending);
@@ -545,8 +547,8 @@ async function rollbackPublication(
     const published = await readCodexMarketplace(pending.paths.marketplaceRoot);
     if (
       published === null ||
-      !sameIdentity(published, pending.record.publishedIdentity) ||
-      published.digest !== pending.record.newDigest
+      !sameIdentity(published, pending.publishedIdentity) ||
+      published.digest !== pending.newDigest
     ) {
       throw new Error("published Codex marketplace changed");
     }
@@ -554,7 +556,7 @@ async function rollbackPublication(
     if (!sameMarketplace(backup, previous)) {
       throw new Error("retained Codex marketplace changed");
     }
-    await advanceCodexRecovery(pending, "rolling-back");
+    await verifyCodexRecovery(pending);
     await publication.rollback();
     await verifyPrevious(pending, previous);
     if (
@@ -562,7 +564,6 @@ async function rollbackPublication(
     ) {
       throw new Error("Codex native state changed during rollback");
     }
-    await advanceCodexRecovery(pending, "restored");
     await finishCodexRecovery(pending);
     return successResult("rollback-codex", null, messages);
   } catch {
@@ -583,8 +584,8 @@ async function verifyActivated(
   const published = await readCodexMarketplace(pending.paths.marketplaceRoot);
   if (
     published === null ||
-    !sameIdentity(published, pending.record.publishedIdentity) ||
-    published.digest !== pending.record.newDigest
+    !sameIdentity(published, pending.publishedIdentity) ||
+    published.digest !== pending.newDigest
   ) {
     throw new Error("published Codex marketplace changed");
   }
@@ -630,7 +631,7 @@ async function finalizePublication(
   let backupRemoved = false;
   try {
     await verifyActivated(pending, dependencies, ctx, messages);
-    await advanceCodexRecovery(pending, "finalizing");
+    await verifyCodexRecovery(pending);
     verified = true;
     await publication.finalize();
     backupRemoved = true;
@@ -688,6 +689,7 @@ export async function installCodexMarketplace(
     priorActiveDigest = await activeDigest(priorNative);
     await requireEligibility(ctx, dependencies, messages);
     pending = await beginCodexRecovery(paths, {
+      operation: "install",
       marketplaceRoot: paths.marketplaceRoot,
       priorNative,
       oldDigest: previous?.digest ?? null,
@@ -699,11 +701,9 @@ export async function installCodexMarketplace(
       ctx.root,
       pending.stage,
     );
-    await advanceCodexRecovery(pending, "staging", {
-      newDigest: staged.digest,
-      stageIdentity: { dev: staged.dev, ino: staged.ino },
-    });
-    await advanceCodexRecovery(pending, "publishing");
+    pending.newDigest = staged.digest;
+    pending.stageIdentity = { dev: staged.dev, ino: staged.ino };
+    await verifyCodexRecovery(pending);
     if ((await verifyPrepared(artifact, preparedRoot)) !== preparedDigest) {
       throw new Error("Codex prepared artifact changed");
     }
@@ -713,6 +713,7 @@ export async function installCodexMarketplace(
     ) {
       throw new Error("Codex native state changed");
     }
+    await verifyCodexRecovery(pending);
     publication = await dependencies.beginPublication(
       pending.stage,
       paths.marketplaceRoot,
@@ -725,10 +726,11 @@ export async function installCodexMarketplace(
       throw new Error("Codex publication returned inconsistent paths");
     }
     const publishedStat = await lstat(paths.marketplaceRoot);
-    await advanceCodexRecovery(pending, "published", {
-      publishedIdentity: { dev: publishedStat.dev, ino: publishedStat.ino },
-    });
-    await advanceCodexRecovery(pending, "activating");
+    pending.publishedIdentity = {
+      dev: publishedStat.dev,
+      ino: publishedStat.ino,
+    };
+    await verifyCodexRecovery(pending);
     activationAttempted = true;
     let activated: AdapterResult<InstallReceipt>;
     try {
@@ -768,7 +770,7 @@ export async function installCodexMarketplace(
         messages,
       );
     }
-    await advanceCodexRecovery(pending, "ready");
+    await verifyCodexRecovery(pending);
     const owned = pending;
     const retained = publication;
     let transactionSettled = false;
