@@ -68,6 +68,14 @@ function bumpConfig() {
 function fixture(t: test.TestContext, options: FixtureOptions = {}): Fixture {
   const cwd = mkdtempSync(join(tmpdir(), "spw-release-bump-"));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const afterPackage =
+    options.afterPackage === undefined
+      ? packageText("1.2.4")
+      : options.afterPackage;
+  const afterConfig =
+    options.afterConfig === undefined
+      ? (options.beforeConfig ?? bumpConfig())
+      : options.afterConfig;
   git(cwd, "init", "--quiet", "--initial-branch=main");
   git(cwd, "config", "user.name", "release fixture");
   git(cwd, "config", "user.email", "release-fixture@example.invalid");
@@ -80,21 +88,17 @@ function fixture(t: test.TestContext, options: FixtureOptions = {}): Fixture {
     join(cwd, ".version-bump.json"),
     options.beforeConfig ?? bumpConfig(),
   );
+  if (options.packageSymlink && afterPackage !== null) {
+    writeFileSync(join(cwd, "package-target.json"), afterPackage);
+  }
   git(cwd, "add", ".");
   git(cwd, "commit", "--quiet", "-m", "base");
   const before = git(cwd, "rev-parse", "HEAD");
 
-  const afterPackage =
-    options.afterPackage === undefined
-      ? packageText("1.2.4")
-      : options.afterPackage;
-  const afterConfig =
-    options.afterConfig === undefined ? bumpConfig() : options.afterConfig;
   if (afterPackage === null) {
     git(cwd, "rm", "--quiet", "package.json");
   } else if (options.packageSymlink) {
     rmSync(join(cwd, "package.json"));
-    writeFileSync(join(cwd, "package-target.json"), afterPackage);
     symlinkSync("package-target.json", join(cwd, "package.json"));
   } else {
     writeFileSync(join(cwd, "package.json"), afterPackage);
@@ -316,6 +320,47 @@ for (const [name, options] of [
     assert.equal(result.skipTests, false);
   });
 }
+
+for (const [name, config] of [
+  ["malformed", "{"],
+  [
+    "expanded",
+    JSON.stringify({
+      files: [
+        { path: "package.json", field: "version" },
+        { path: "other", field: "version" },
+      ],
+    }),
+  ],
+  [
+    "wrong-field",
+    JSON.stringify({ files: [{ path: "package.json", field: "name" }] }),
+  ],
+] as const) {
+  void test(`unchanged ${name} bump config is rejected after package-only diff`, (t) => {
+    const current = fixture(t, { beforeConfig: config });
+    assert.equal(
+      git(current.cwd, "diff", "--name-only", current.before, current.after),
+      "package.json",
+    );
+    assert.deepEqual(classifyReleaseBump(current.input), {
+      skipTests: false,
+      reason: "unverified-change",
+    });
+  });
+}
+
+void test("a package symlink is rejected after a package-only diff", (t) => {
+  const current = fixture(t, { packageSymlink: true });
+  assert.equal(
+    git(current.cwd, "diff", "--name-only", current.before, current.after),
+    "package.json",
+  );
+  assert.deepEqual(classifyReleaseBump(current.input), {
+    skipTests: false,
+    reason: "unverified-change",
+  });
+});
 
 void test("a checkout mismatch does not skip tests", (t) => {
   const { current } = classify(t);
