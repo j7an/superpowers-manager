@@ -188,15 +188,15 @@ export function classifyReleaseBump(
 function summary(reason: Classification["reason"]): string {
   const explanation: Record<Classification["reason"], string> = {
     "ordinary-event":
-      "Release-bump test skip disabled: this is not a push event.",
+      "Release-bump test skip disabled: normal CI owns validation because this is not a push event.",
     "identity-mismatch":
-      "Release-bump test skip disabled: the event identity is not the release bot.",
+      "Release-bump test skip disabled: normal CI owns validation because the event identity is not the release bot.",
     "unverified-change":
-      "Release-bump test skip disabled: the pushed change is not a verified release bump.",
+      "Release-bump test skip disabled: normal CI owns validation because the pushed change is not a verified release bump.",
     "inspection-failed":
-      "Release-bump test skip disabled: immutable Git inspection failed.",
+      "Release-bump test skip disabled: normal CI owns validation because immutable Git inspection failed.",
     "verified-release-bump":
-      "Release-bump test skip enabled: verified release bump.",
+      "Release-bump test skip enabled: Release owns validation for this verified release bump.",
   };
   return `${explanation[reason]}\n`;
 }

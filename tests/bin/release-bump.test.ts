@@ -412,6 +412,74 @@ void test("the cli writes a verified true output and summary", (t) => {
   assert.match(readFileSync(summaryPath, "utf8"), /verified release bump/i);
 });
 
+void test("the cli names the validation owner for every classification reason", (t) => {
+  const current = fixture(t);
+  for (const [name, eventName, actor, actorId, event, expected] of [
+    [
+      "ordinary event",
+      "workflow_dispatch",
+      BOT_LOGIN,
+      BOT_ID,
+      current.input.event,
+      /normal CI owns validation/i,
+    ],
+    [
+      "identity mismatch",
+      "push",
+      "human",
+      BOT_ID,
+      current.input.event,
+      /normal CI owns validation/i,
+    ],
+    [
+      "unverified change",
+      "push",
+      BOT_LOGIN,
+      BOT_ID,
+      {},
+      /normal CI owns validation/i,
+    ],
+    [
+      "inspection failure",
+      "push",
+      BOT_LOGIN,
+      BOT_ID,
+      {
+        ...(current.input.event as Record<string, unknown>),
+        after: "a".repeat(40),
+      },
+      /normal CI owns validation/i,
+    ],
+    [
+      "verified release bump",
+      "push",
+      BOT_LOGIN,
+      BOT_ID,
+      current.input.event,
+      /Release owns validation/i,
+    ],
+  ] as const) {
+    const eventPath = join(current.cwd, `${name}.json`);
+    const outputPath = join(current.cwd, `${name}-output.txt`);
+    const summaryPath = join(current.cwd, `${name}-summary.txt`);
+    writeFileSync(eventPath, JSON.stringify(event));
+    execFileSync(process.execPath, [TOOL], {
+      cwd: current.cwd,
+      env: {
+        ...process.env,
+        GITHUB_EVENT_PATH: eventPath,
+        GITHUB_EVENT_NAME: eventName,
+        GITHUB_ACTOR: actor,
+        GITHUB_ACTOR_ID: actorId,
+        GITHUB_OUTPUT: outputPath,
+        GITHUB_STEP_SUMMARY: summaryPath,
+      },
+      stdio: "pipe",
+    });
+    assert.match(readFileSync(summaryPath, "utf8"), expected);
+  }
+});
+
 void test("the cli writes false for a negative, malformed, and unreadable event", (t) => {
   for (const eventText of ["{", JSON.stringify({ ref: "refs/heads/main" })]) {
     const { cwd } = fixture(t);
