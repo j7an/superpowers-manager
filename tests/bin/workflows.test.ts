@@ -246,6 +246,34 @@ const FULL_SHARED_PACKAGE_ALIASES = new Set([
   "test:acceptance",
 ]);
 
+const RELEASE_CLASSIFIER_JOB = "classify-release";
+const RELEASE_TEST_CONDITION =
+  "${{ !cancelled() && (needs.classify-release.result != 'success' || needs.classify-release.outputs.skip_tests != 'true') }}";
+const RELEASE_CONCURRENCY_GROUP =
+  "${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor_id == '275375463' && github.actor == 'shared-workflows-release-bot[bot]' && 'release-bot' || 'ordinary' }}";
+
+function shouldRunReleaseTestJob(
+  cancelled: boolean,
+  classifierResult: string | undefined,
+  skipTests: string | undefined,
+): boolean {
+  return !cancelled && (classifierResult !== "success" || skipTests !== "true");
+}
+
+function releaseConcurrencyClass(
+  eventName: string,
+  ref: string,
+  actorId: string | undefined,
+  actor: string | undefined,
+): "release-bot" | "ordinary" {
+  return eventName === "push" &&
+    ref === "refs/heads/main" &&
+    actorId === "275375463" &&
+    actor === "shared-workflows-release-bot[bot]"
+    ? "release-bot"
+    : "ordinary";
+}
+
 function isFullSharedCommandLine(line: string): boolean {
   const words = line.trim().split(/\s+/).filter(Boolean);
   if (words[0] === "sh" && words[1] === "tests/run.sh") return true;
@@ -271,16 +299,132 @@ void test("ci.yml declares the expected top-level contract", () => {
     push: { branches: ["main"] },
   });
   assert.deepEqual(ci.concurrency, {
-    group: "${{ github.workflow }}-${{ github.ref }}",
+    group: RELEASE_CONCURRENCY_GROUP,
     "cancel-in-progress": true,
   });
   assert.deepEqual(ci.permissions, {});
   const jobs = requireMapping(ci.jobs, "jobs");
   assert.deepEqual(Object.keys(jobs), [
+    "classify-release",
     "harness-codex",
     "harness-pi",
     "toolchain",
   ]);
+
+  const classifier = requireMapping(
+    jobs[RELEASE_CLASSIFIER_JOB],
+    "jobs.classify-release",
+  );
+  assert.equal(classifier.if, "github.event_name == 'push'");
+  assert.equal(classifier["runs-on"], "ubuntu-latest");
+  assert.deepEqual(classifier.permissions, { contents: "read" });
+  assert.deepEqual(classifier.outputs, {
+    skip_tests: "${{ steps.classify.outputs.skip_tests }}",
+  });
+  const classifierSteps = classifier.steps;
+  assert.ok(
+    Array.isArray(classifierSteps),
+    "expected jobs.classify-release.steps to be an array",
+  );
+  assert.equal(
+    classifierSteps.length,
+    4,
+    "classifier must run only harden, checkout, setup, and classification",
+  );
+  const classifierHarden = requireMapping(
+    classifierSteps[0],
+    "classifier harden step",
+  );
+  const classifierCheckout = requireMapping(
+    classifierSteps[1],
+    "classifier checkout step",
+  );
+  const classifierSetup = requireMapping(
+    classifierSteps[2],
+    "classifier setup step",
+  );
+  const classification = requireMapping(
+    classifierSteps[3],
+    "classification step",
+  );
+  const harness = requireMapping(jobs["harness-codex"], "jobs.harness-codex");
+  const harnessSteps = harness.steps as unknown[];
+  const harnessHarden = requireMapping(harnessSteps[0], "harness harden step");
+  const harnessCheckout = requireMapping(
+    harnessSteps[1],
+    "harness checkout step",
+  );
+  assert.equal(
+    classifierHarden.uses,
+    harnessHarden.uses,
+    "classifier must reuse the existing harden-runner pin",
+  );
+  assert.equal(
+    classifierCheckout.uses,
+    harnessCheckout.uses,
+    "classifier must reuse the existing checkout pin",
+  );
+  assert.equal(
+    classifierSetup.uses,
+    requireMapping(
+      requireMapping(jobs.toolchain, "jobs.toolchain").steps[4],
+      "toolchain setup step",
+    ).uses,
+    "classifier must reuse the existing setup-node pin",
+  );
+  assert.deepEqual(classifierHarden.with, harnessHarden.with);
+  assert.deepEqual(classifierCheckout.with, {
+    "persist-credentials": false,
+    "fetch-depth": 0,
+    ref: "${{ github.sha }}",
+  });
+  assert.deepEqual(classifierSetup.with, { "node-version": "24" });
+  assert.deepEqual(classification, {
+    name: "Classify release bump",
+    id: "classify",
+    run: "node tests/tools/classify-release-bump.ts",
+  });
+  for (const key of ["harness-codex", "harness-pi", "toolchain"]) {
+    const job = requireMapping(jobs[key], `jobs.${key}`);
+    assert.equal(job.needs, RELEASE_CLASSIFIER_JOB);
+    assert.equal(job.if, RELEASE_TEST_CONDITION);
+  }
+  assert.deepEqual(
+    [
+      shouldRunReleaseTestJob(false, "success", "true"),
+      shouldRunReleaseTestJob(false, "success", "false"),
+      shouldRunReleaseTestJob(false, "success", undefined),
+      shouldRunReleaseTestJob(false, "failure", "true"),
+      shouldRunReleaseTestJob(false, "skipped", undefined),
+      shouldRunReleaseTestJob(true, "success", "false"),
+    ],
+    [false, true, true, true, true, false],
+    "test-job release gating must be fail-open except for a verified skip",
+  );
+  assert.deepEqual(
+    [
+      releaseConcurrencyClass(
+        "push",
+        "refs/heads/main",
+        "275375463",
+        "shared-workflows-release-bot[bot]",
+      ),
+      releaseConcurrencyClass(
+        "pull_request",
+        "refs/pull/1/merge",
+        "275375463",
+        "shared-workflows-release-bot[bot]",
+      ),
+      releaseConcurrencyClass(
+        "push",
+        "refs/heads/main",
+        undefined,
+        "shared-workflows-release-bot[bot]",
+      ),
+    ],
+    ["release-bot", "ordinary", "ordinary"],
+    "only authenticated release-bot main pushes may use separate concurrency",
+  );
 });
 
 type HarnessJobContract = {
@@ -315,14 +459,8 @@ function validateCiHarnessJob(
     !Object.hasOwn(harnessJob, "continue-on-error"),
     `${path} must not use continue-on-error`,
   );
-  assert.ok(
-    !Object.hasOwn(harnessJob, "if"),
-    `${path} must run unconditionally`,
-  );
-  assert.ok(
-    !Object.hasOwn(harnessJob, "needs"),
-    `${path} must remain independent of jobs.toolchain and the other harness`,
-  );
+  assert.equal(harnessJob.if, RELEASE_TEST_CONDITION);
+  assert.equal(harnessJob.needs, RELEASE_CLASSIFIER_JOB);
   assertNoNativeSelectorEnv(harnessJob, path);
   assert.equal(harnessJob.name, contract.name);
   assert.equal(harnessJob["runs-on"], "ubuntu-latest");
@@ -495,14 +633,8 @@ function validateCiToolchain(document: unknown): void {
     !Object.hasOwn(toolchain, "continue-on-error"),
     "jobs.toolchain must not use continue-on-error",
   );
-  assert.ok(
-    !Object.hasOwn(toolchain, "if"),
-    "jobs.toolchain must run unconditionally",
-  );
-  assert.ok(
-    !Object.hasOwn(toolchain, "needs"),
-    "jobs.toolchain must remain independent of native harness jobs",
-  );
+  assert.equal(toolchain.if, RELEASE_TEST_CONDITION);
+  assert.equal(toolchain.needs, RELEASE_CLASSIFIER_JOB);
   assertNoNativeSelectorEnv(toolchain, "jobs.toolchain");
   assert.equal(toolchain["runs-on"], "ubuntu-latest");
   assert.equal(

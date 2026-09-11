@@ -6,14 +6,46 @@ on:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor_id == '275375463' && github.actor == 'shared-workflows-release-bot[bot]' && 'release-bot' || 'ordinary' }}
   cancel-in-progress: true
 
 permissions: {}
 
 jobs:
+  classify-release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      skip_tests: ${{ steps.classify.outputs.skip_tests }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: release-bump verification compares immutable commits.
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Classify release bump
+        id: classify
+        run: node tests/tools/classify-release-bump.ts
+
   harness-codex:
     name: Codex harness integration
+    needs: classify-release
+    if: ${{ !cancelled() && (needs.classify-release.result != 'success' || needs.classify-release.outputs.skip_tests != 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,6 +69,8 @@ jobs:
 
   harness-pi:
     name: Pi harness integration
+    needs: classify-release
+    if: ${{ !cancelled() && (needs.classify-release.result != 'success' || needs.classify-release.outputs.skip_tests != 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -59,6 +93,8 @@ jobs:
         run: sh tests/container.sh harness-pi
 
   toolchain:
+    needs: classify-release
+    if: ${{ !cancelled() && (needs.classify-release.result != 'success' || needs.classify-release.outputs.skip_tests != 'true') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

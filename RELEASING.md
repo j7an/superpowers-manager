@@ -114,6 +114,17 @@ prerelease, publish manually, or introduce an npm token for this decision.
 7. Verify the completed npm package, SLSA provenance, GitHub tag, GitHub Release,
    release asset digest, and clean `npx` execution against the same source SHA.
 
+CI skips its test jobs only when a main push is verified as a single release-bot
+commit changing only the configured package version. Release then owns static
+validation and full acceptance at both native runtime endpoints on the tagged
+commit before publication. A skipped CI job is not a passing test result.
+
+If the version bump lands but tag creation fails, the bump can remain without
+test evidence until release recovery succeeds. Follow the existing Tag Release
+recovery procedure; do not move tags or retry publication as a substitute.
+Release-bot pushes have separate CI concurrency so they cannot cancel ordinary
+main validation. Unverified changes retain normal CI tests.
+
 Do not combine environment approvals with trust changes, package deprecation,
 tag recovery, or any other registry mutation.
 
