@@ -94,7 +94,7 @@
 // The two exact-file filters include grep's trailing output delimiter so a
 // similarly named executable consumer remains audited.
 //
-// AUDIT_COMMAND is exported so 4c's zero-rows exit check imports it rather than
+// Both audit checks use runAudit so they share AUDIT_COMMAND without
 // retyping it. Two invocations differing by a `grep -v` turn "every hit is
 // dispositioned" and "zero rows remain" into claims about different sets, and
 // the gap between them is invisible from either side (spec §6.3).
@@ -110,7 +110,7 @@ import { spawnSync } from "node:child_process";
  * regular expression are `\|`, and a plain template literal would collapse each
  * one to a bare `|`, silently changing the pattern to one that matches nothing.
  */
-export const AUDIT_COMMAND = String.raw`grep -rn 'scripts/core/\|scripts/adapters/\|"scripts"\|scripts/probe\|scripts/prepare\|scripts/install\|scripts/update\|scripts/uninstall' tests/ \
+const AUDIT_COMMAND = String.raw`grep -rn 'scripts/core/\|scripts/adapters/\|"scripts"\|scripts/probe\|scripts/prepare\|scripts/install\|scripts/update\|scripts/uninstall' tests/ \
   | grep -v '^tests/migration-inventory/' | grep -v '^tests/bin/scripts-consumers\.' | grep -v '^tests/citation-ledger\.json:' | grep -v '^tests/bin/citations\.test\.ts:' | grep -v ':[0-9]*: *//'`;
 
 /** The disposition vocabulary. Three values; `comment-only` is withdrawn. */
@@ -135,7 +135,7 @@ export type ScriptsConsumer = {
  * The matched line with runs of whitespace collapsed to one space and leading
  * and trailing space removed.
  */
-export function normalizeAuditLine(text: string): string {
+function normalizeAuditLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 

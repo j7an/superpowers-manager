@@ -28,7 +28,7 @@ import { schemaFor, validateConfig } from "./lifecycle-config.ts";
  * it eagerly; this is defence in depth, and it is what makes a hand-written
  * config.json fail closed too.
  */
-export function loadFixtureConfig(
+function loadFixtureConfig(
   kind: "install" | "uninstall" | "probe",
   state: string,
 ): Record<string, unknown> {
@@ -191,7 +191,7 @@ function nextListing(
   return { ok: true, path };
 }
 
-export function logLine(state: string, name: string, line: string) {
+function logLine(state: string, name: string, line: string) {
   appendFileSync(join(state, name), `${line}\n`);
 }
 

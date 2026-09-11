@@ -60,7 +60,7 @@ function decodePathBytes(bytes: Uint8Array): string {
  * syscall, so a string carrying one would open a different file than the
  * caller named. CPython raises `UnicodeEncodeError` instead.
  */
-export function hasUnpairedSurrogate(value: string): boolean {
+function hasUnpairedSurrogate(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const unit = value.charCodeAt(index);
     if (unit >= 0xd800 && unit <= 0xdbff) {

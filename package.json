@@ -35,10 +35,12 @@
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "check": "pnpm run check:static && pnpm run test",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
+    "knip": "knip"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "knip": "^6.35.1",
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "7.0.2001",
     "prettier": "^3.9.6",

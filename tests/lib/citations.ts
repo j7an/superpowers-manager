@@ -20,7 +20,7 @@ import {
 import { spawnSync } from "node:child_process";
 import { basename, isAbsolute, join, relative, sep } from "node:path";
 
-export const MIN_ANCHOR = 3;
+const MIN_ANCHOR = 3;
 const WIDEN_LIMIT = 5;
 
 /** The enforced corpus, declared and never globbed. */
@@ -355,7 +355,7 @@ export function scan(files: string[]): Citation[] {
   return out;
 }
 
-export function hasDotSegment(path: string): boolean {
+function hasDotSegment(path: string): boolean {
   return path.split("/").some((segment) => segment === "." || segment === "..");
 }
 
@@ -382,7 +382,7 @@ export function targetExists(path: string, root: string): boolean {
  * resolution citation a claim rather than a shape: without it a stamped
  * object name that names nothing passes.
  */
-export function historicalTargetExists(
+function historicalTargetExists(
   sha: string,
   path: string,
   root: string,
@@ -402,7 +402,7 @@ export function historicalTargetExists(
  * A shallow checkout has a repository and lacks the objects, so it fails the
  * existence check rather than degrading here.
  */
-export function historicalChecksAvailable(root: string): boolean {
+function historicalChecksAvailable(root: string): boolean {
   return existsSync(join(root, ".git"));
 }
 
@@ -419,18 +419,11 @@ function anchorLinesIn(lines: readonly string[], anchor: string): number[] {
 }
 
 /**
- * Every line of `path` containing `anchor`, one-based.
- */
-export function anchorLines(path: string, anchor: string): number[] {
-  return anchorLinesIn(readLines(path), anchor);
-}
-
-/**
  * The content of path as it stood in object sha, or null when it cannot be
  * read. Callers have already established existence with historicalTargetExists,
  * so null here means the object could not be streamed, not that it is absent.
  */
-export function historicalLines(
+function historicalLines(
   sha: string,
   path: string,
   root: string,

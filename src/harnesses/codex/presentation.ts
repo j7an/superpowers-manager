@@ -41,7 +41,7 @@ interface Field {
 
 // One ordered table drives both formats, preserving the public human and
 // porcelain field order exposed through the harness presentation.
-export function fields(f: ProbeFacts): readonly Field[] {
+function fields(f: ProbeFacts): readonly Field[] {
   return [
     { key: "harness", label: "harness", value: f.harness },
     { key: "requested_ref", label: "requested ref", value: f.requestedRef },

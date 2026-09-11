@@ -38,7 +38,7 @@ import { writeSelectionState } from "../../src/selection-store.ts";
 
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
 
-export type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
+type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const MANIFESTS = join(ROOT, "tests/fixtures/baseline/manifests");

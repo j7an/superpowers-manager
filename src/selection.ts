@@ -12,7 +12,7 @@ export interface PinnedSelectionRecord {
   readonly commit: string;
 }
 
-export interface TrackLatestSelectionRecord {
+interface TrackLatestSelectionRecord {
   readonly schema_version: 1;
   readonly mode: "track-latest";
   readonly source: string;

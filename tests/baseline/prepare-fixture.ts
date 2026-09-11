@@ -409,7 +409,7 @@ export function commitOf(ref: string): string {
  * would also accept an env that lost a name. The child's process.env is this
  * object and nothing else, so an omission is a hermeticity hole, not a default.
  */
-export const REQUIRED_ENV = [
+const REQUIRED_ENV = [
   "HOME",
   "TMPDIR",
   "PATH",

@@ -5,7 +5,7 @@
 
 export type Rule = "boolean" | "integer" | string[];
 
-export const UNINSTALL_SCHEMA: Record<string, Rule> = {
+const UNINSTALL_SCHEMA: Record<string, Rule> = {
   updateControl: ["managed", "unsupported"],
   pluginRemove: ["ok", "missing-installed"],
   marketplaceRemove: ["ok", "fail"],
@@ -22,7 +22,7 @@ export const UNINSTALL_SCHEMA: Record<string, Rule> = {
   removesMutateState: "boolean",
 };
 
-export const UNINSTALL_DEFAULTS = {
+const UNINSTALL_DEFAULTS = {
   updateControl: "managed",
   pluginRemove: "ok",
   marketplaceRemove: "ok",
@@ -32,7 +32,7 @@ export const UNINSTALL_DEFAULTS = {
   removesMutateState: true,
 };
 
-export const INSTALL_SCHEMA: Record<string, Rule> = {
+const INSTALL_SCHEMA: Record<string, Rule> = {
   updateControl: [
     "managed",
     "unsupported",
@@ -58,7 +58,7 @@ export const INSTALL_SCHEMA: Record<string, Rule> = {
   spuriousMutation: "boolean",
 };
 
-export const INSTALL_DEFAULTS = {
+const INSTALL_DEFAULTS = {
   updateControl: "managed",
   marketplaceAdd: "ok",
   pluginAdd: "ok",
@@ -74,12 +74,12 @@ export const INSTALL_DEFAULTS = {
  * mutation, and its malformed-evidence cases are driven by writing malformed
  * JSON into plugin_list.json rather than by a config toggle.
  */
-export const PROBE_SCHEMA: Record<string, Rule> = {
+const PROBE_SCHEMA: Record<string, Rule> = {
   pluginListRc: "integer",
   marketplaceListRc: "integer",
 };
 
-export const PROBE_DEFAULTS = {
+const PROBE_DEFAULTS = {
   pluginListRc: 0,
   marketplaceListRc: 0,
 };

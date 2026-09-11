@@ -424,13 +424,10 @@ export {
   resolvePackageRoot,
   isMain,
   parseArgs,
-  findTool,
   commandRequirements,
   commandRequirementsFor,
   preflight,
-  preflightFor,
   usage,
-  dispatch,
   main,
 };
 

@@ -120,7 +120,7 @@ async function copyPathIfPresent(
   );
 }
 
-export function resolveFromCwd(value: string, cwd: string): string {
+function resolveFromCwd(value: string, cwd: string): string {
   return isAbsolute(value) ? value : resolve(cwd, value);
 }
 

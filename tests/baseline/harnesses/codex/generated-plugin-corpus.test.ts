@@ -37,13 +37,13 @@ const SOURCE = "https://example.invalid/superpowers.git";
 const REQUIRED_TOP_LEVEL_FILES = ["LICENSE", "README.md", "CODE_OF_CONDUCT.md"];
 assert.equal(REQUIRED_TOP_LEVEL_FILES.length, 3);
 
-export type ValidatorResult = {
+type ValidatorResult = {
   status: number;
   stdout: string;
   stderr: string;
 };
 
-export type Harness = {
+type Harness = {
   base: string;
   plugin: string;
   manifestSource: string;

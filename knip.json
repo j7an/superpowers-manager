@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/cli.ts",
+    "tests/**/*.test.ts",
+    "tests/tools/pack.ts",
+    "tests/tools/citations.ts",
+    "tests/tools/float-differential.ts",
+    "tests/bin/helpers/pack-driver.ts",
+    "tests/bin/{install,probe,uninstall}-fakes.ts",
+    "tests/container/pi/resource-probe.ts",
+    "tests/unit/helpers/workspace-signal{,-failure}-child.ts"
+  ],
+  "project": ["src/**/*.ts", "tests/**/*.ts"],
+  "ignoreBinaries": ["mkfifo"],
+  "includeEntryExports": true
+}

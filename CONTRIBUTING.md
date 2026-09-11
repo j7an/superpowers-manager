@@ -19,6 +19,8 @@ pnpm run test:acceptance
 
 The package scripts above are alternative iteration selectors; do not run every row sequentially as a substitute for acceptance. `pnpm test` runs shared suites once. The harness scripts run only their named isolated Docker integration. Complete acceptance is `pnpm run check:static` followed by `pnpm run test:acceptance` with package-minimum Node evidence. A completed shared run emits both `run-node-suites: complete status=<status>` and `tests/run.sh: complete failed=<count>`; absence of either means incomplete.
 
+Run `pnpm knip` to check unused files, dependencies, and exports. `knip.json` includes the test suites and explicitly lists tooling and subprocess helpers whose callers are not visible through imports. Keep those entry points aligned with their callers; shared helpers should remain reachable through imports. The `mkfifo` allowance covers the system command used by the tests.
+
 Use a Homebrew-managed local pnpm; do not use Corepack. `check:static` checks formatting, lint, and no-emit typechecking. Run the maintained CLI with `node src/cli.ts`; tests import `src/` directly.
 
 On macOS, reuse an exact package-minimum Node executable by setting and verifying `SPW_PACKAGE_NODE` and `SPW_PACKAGE_NODE_VERSION=24.0.0`:

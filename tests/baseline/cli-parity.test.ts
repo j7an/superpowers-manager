@@ -59,7 +59,7 @@ import { successResult } from "../../src/adapter-result.ts";
 
 import { runUpdate } from "../../src/commands/update.ts";
 
-export type Sandbox = import("./support.ts").Sandbox;
+type Sandbox = import("./support.ts").Sandbox;
 
 const USAGE = `usage: superpowers-manager [command] [args...]
 
