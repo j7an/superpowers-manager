@@ -215,7 +215,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:480::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:437::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -1101,7 +1101,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (`src/harnesses/codex/adapter.ts:590-672::const marketplaceList`), and the second of them
+    // the three commands below (`src/harnesses/codex/adapter.ts:557-562::const marketplaceList`), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
@@ -1150,7 +1150,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/harnesses/codex/adapter.ts:647::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:595::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1299,7 +1299,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/harnesses/codex/adapter.ts:673::adding`).
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:621::adding`).
     assert.ok(
       out.includes(`plugin marketplace add ${durableMarketplace(c)}`) ||
         out.includes("Codex activation may have changed native state"),
@@ -1558,7 +1558,7 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
-    // (`src/harnesses/codex/adapter.ts:590-672::const marketplaceList`): the marketplace add carries the same package
+    // (`src/harnesses/codex/adapter.ts:557-562::const marketplaceList`): the marketplace add carries the same package
     // root the original needle pinned, and the plugin add is unconditional.
     // clearLogs above means both lines can only have come from this run.
     assertOrder(

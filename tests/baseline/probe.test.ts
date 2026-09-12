@@ -563,7 +563,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:1009-1012::activeVersion =`).
+  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:933-936::activeVersion =`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the native-state inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -576,9 +576,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // Amended after Task 5's own verification. Exit criterion 8's rethrow branch
-// (`src/harnesses/codex/adapter.ts:905::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/harnesses/codex/adapter.ts:829::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:338::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:299::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -617,7 +617,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (`src/harnesses/codex/adapter.ts:300::async function listingCommand(`), and the fake writes nothing there
+// child's stderr (`src/harnesses/codex/adapter.ts:261::async function listingCommand(`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr.
