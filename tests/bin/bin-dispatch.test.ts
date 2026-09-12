@@ -278,8 +278,8 @@ void test("`unpin` succeeds in-process with git absent from PATH", () => {
 //
 // unpin's in-process flip (PR 11.5) made every one of these properties true
 // at once, since `COMMAND_REQUIREMENTS.unpin` no longer names a shell
-// either. The two cases below cover the property item 41 actually
-// protects — success — plus a new sibling for `sh` absent, which was
+// either. The two cases below cover successful execution plus a new sibling
+// for `sh` absent, which was
 // previously unwriteable through this fixture (`sh` was unconditionally on
 // PATH).
 
