@@ -7,16 +7,14 @@ import {
   type AdapterResult,
 } from "../../src/adapter-result.ts";
 import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
-import {
-  codexHarness,
-  normalizeCodexControl,
-  normalizeCodexInstallForContext,
-  normalizeCodexInstalled,
-  normalizeCodexOwnership,
-} from "../../src/harnesses/codex/harness.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import type {
   HarnessAdapter,
+  InstalledState,
+  InstallReceipt,
+  OwnershipInspection,
   PrepareCandidateInput,
+  UpdateControlInspection,
 } from "../../src/harness.ts";
 import { writeQualifiedCodexFixture } from "../lib/harnesses/codex/prepared-fixture.ts";
 import {
@@ -44,7 +42,7 @@ export function caseEnvVars(
   };
 }
 
-function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
+function preserveFailure<T>(result: AdapterResult<unknown>): AdapterResult<T> {
   if (result.outcome.ok) {
     throw new Error("cannot preserve a successful adapter result as failure");
   }
@@ -59,7 +57,7 @@ export function recordingAdapter(
   const record = (operation: string, input?: unknown): void => {
     calls.push(input === undefined ? { operation } : { operation, input });
   };
-  const answer = (argv: readonly string[]): AdapterResult => {
+  const answer = <T>(argv: readonly string[]): AdapterResult<T> => {
     handlerCalls += 1;
     let value;
     try {
@@ -74,7 +72,7 @@ export function recordingAdapter(
       value !== undefined,
       `recordingAdapter exhausted at call ${handlerCalls}: ${argv.join(" ")}`,
     );
-    return value as AdapterResult;
+    return value as AdapterResult<T>;
   };
   const adapter: HarnessAdapter<CodexRemovalInput> & {
     calls: HarnessCall[];
@@ -102,7 +100,7 @@ export function recordingAdapter(
           ".codex-plugin",
           "plugin.template.json",
         );
-      const result = answer([
+      const result = answer<unknown>([
         "build",
         "--candidate-root",
         input.candidateRoot,
@@ -140,33 +138,31 @@ export function recordingAdapter(
     },
     async inspectOwnership() {
       record("inspect-ownership");
-      return normalizeCodexOwnership(
-        answer(["inspect", "--view", "ownership"]),
-      );
+      return answer<OwnershipInspection<CodexRemovalInput>>([
+        "inspect",
+        "--view",
+        "ownership",
+      ]);
     },
     async inspectUpdateControl() {
       record("inspect-update-control");
-      return normalizeCodexControl(
-        answer(["inspect", "--view", "update-control"]),
-      );
+      return answer<UpdateControlInspection>([
+        "inspect",
+        "--view",
+        "update-control",
+      ]);
     },
     async inspectInstalled(selection) {
       record("inspect-installed", selection);
-      return normalizeCodexInstalled(
-        answer(["inspect", "--view", "fingerprint"]),
-        selection.desiredCommit,
-      );
+      return answer<InstalledState>(["inspect-installed"]);
     },
     async install(artifact, ctx) {
       record("install", artifact);
-      return normalizeCodexInstallForContext(
-        answer(["install", "--package-root", ctx.root]),
-        ctx,
-      );
+      return answer<InstallReceipt>(["install", "--package-root", ctx.root]);
     },
     async remove(removalInput, ctx) {
       record("remove", removalInput);
-      const result = answer([
+      const result = answer<unknown>([
         "uninstall",
         "--plugin-present",
         String(removalInput.pluginPresent),

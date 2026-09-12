@@ -28,9 +28,18 @@ import {
 import { beginDirectoryPublication } from "../../../../src/atomic.ts";
 import type {
   InstallReceipt,
+  OwnershipInspection,
   PreparedArtifact,
+  UpdateControlInspection,
 } from "../../../../src/harness.ts";
-import type { CodexNativeState } from "../../../../src/harnesses/codex/adapter.ts";
+import type {
+  CodexNativeState,
+  CodexRemovalInput,
+} from "../../../../src/harnesses/codex/adapter.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   readCodexMarketplace,
   stageCodexMarketplace,
@@ -79,28 +88,26 @@ function nativeResult(
   return successResult("native-state", state, messages);
 }
 
-function inspection(
-  view: "ownership" | "update-control" | "fingerprint",
+function ownershipInspection(
   message: string,
-): AdapterResult {
-  if (view === "ownership") {
-    return successResult(
-      "inspect",
-      {
-        view,
-        identity_state: "manager",
-        resources: { plugin: true, marketplace: true },
-        conflicts: [],
-      },
-      [{ channel: "stderr", text: message }],
-    );
-  }
-  if (view === "update-control") {
-    return successResult("inspect", { view, update_control: "managed" }, [
-      { channel: "stderr", text: message },
-    ]);
-  }
-  return successResult("inspect", { view, fingerprint: null }, []);
+): AdapterResult<OwnershipInspection<CodexRemovalInput>> {
+  return successResult(
+    "inspect",
+    codexOwnershipInspection(
+      "manager",
+      { pluginPresent: true, marketplacePresent: true },
+      [],
+    ),
+    [{ channel: "stderr", text: message }],
+  );
+}
+
+function controlInspection(
+  message: string,
+): AdapterResult<UpdateControlInspection> {
+  return successResult("inspect", codexControlInspection("managed"), [
+    { channel: "stderr", text: message },
+  ]);
 }
 
 async function fixture(t: test.TestContext) {
@@ -129,10 +136,18 @@ async function fixture(t: test.TestContext) {
     "https://example.invalid/upstream",
   );
   let native = nativeState();
+  const inspectionCalls: string[] = [];
   const dependencies: CodexPublicationDependencies = {
     readNative: async () =>
       nativeResult(native, [{ channel: "stderr", text: "native" }]),
-    inspectNative: async (view) => inspection(view, view),
+    inspectOwnership: async () => {
+      inspectionCalls.push("ownership");
+      return ownershipInspection("ownership");
+    },
+    inspectControl: async () => {
+      inspectionCalls.push("update-control");
+      return controlInspection("update-control");
+    },
     beginPublication: beginDirectoryPublication,
   };
   const activateCurrent = async (root: string) => {
@@ -162,6 +177,7 @@ async function fixture(t: test.TestContext) {
     artifact,
     dependencies,
     activateCurrent,
+    inspectionCalls,
     getNative: () => native,
     setNative: (value: CodexNativeState) => {
       native = value;
@@ -472,6 +488,7 @@ void test("publication returns a pending transaction and preserves ordered nativ
     result.outcome.ok ? result.outcome.messages.map((item) => item.text) : [],
     ["native", "ownership", "update-control", "native", "activated"],
   );
+  assert.deepEqual(f.inspectionCalls, ["ownership", "update-control"]);
   assert.equal((await tx.finalize()).outcome.ok, true);
   assert.equal(await readCodexRecovery(f.paths), null);
 });
@@ -1193,16 +1210,26 @@ void test("a process killed after real backup deletion leaves a readable finaliz
     let native = ${JSON.stringify(nativeState())};
     const dependencies = {
       readNative: async () => successResult("native-state", native, []),
-      inspectNative: async (view) => successResult(
+      inspectOwnership: async () => successResult(
         "inspect",
-        view === "ownership"
-          ? {
-              view,
-              identity_state: "manager",
-              resources: { plugin: true, marketplace: true },
-              conflicts: [],
-            }
-          : { view, update_control: "managed" },
+        {
+          installEligibility: { kind: "allowed" },
+          removalInput: { pluginPresent: true, marketplacePresent: true },
+          removalVerification: { kind: "blocked", output: { stdout: [], stderr: [] } },
+          postRemovalOutput: { stdout: [], stderr: [] },
+          presentationValue: "manager",
+          presentationConflicts: [],
+        },
+        [],
+      ),
+      inspectControl: async () => successResult(
+        "inspect",
+        {
+          probeEligibility: { kind: "allowed" },
+          mutationEligibility: { kind: "allowed" },
+          presentationValue: "managed",
+          recoveryState: "clean",
+        },
         [],
       ),
       beginPublication: async (...args) => {

@@ -33,9 +33,12 @@ Validate native artifacts before returning success. Shared orchestration runs
 configured validation, replaces the candidate, and owns staging cleanup.
 
 Inspect real state without mutation. Distinguish absence, mismatch, and failure.
-Ownership/control decisions must be current before mutation; success requires
-post-mutation inspection. Keep native identity/resource interpretation inside
-the adapter and preserve controlled diagnostics.
+Codex ownership, update-control, and install operations return the shared typed
+payloads directly. Ownership/control decisions must be current before mutation;
+success requires post-mutation inspection. The public Codex control wrapper
+adds recovery blocking, while publication uses the lower-level control result
+inside its own recovery transaction. Keep native identity/resource
+interpretation inside the adapter and preserve controlled diagnostics.
 
 Use typed outcomes, existing diagnostic helpers, and hermetic tests. Native
 output and filesystem contents still require validation. Do not place raw

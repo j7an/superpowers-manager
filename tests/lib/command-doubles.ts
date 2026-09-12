@@ -7,18 +7,16 @@ import {
   type AdapterResult,
 } from "../../src/adapter-result.ts";
 import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
-import {
-  codexHarness,
-  normalizeCodexControl,
-  normalizeCodexInstallForContext,
-  normalizeCodexInstalled,
-  normalizeCodexOwnership,
-} from "../../src/harnesses/codex/harness.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import type {
   HarnessAdapter,
   HarnessCommand,
+  InstalledState,
+  InstallReceipt,
+  OwnershipInspection,
   PrepareCandidateInput,
   PreparedArtifact,
+  UpdateControlInspection,
 } from "../../src/harness.ts";
 import type { ResourceCoordinator } from "../../src/resource-lock.ts";
 
@@ -121,31 +119,34 @@ export function successfulNonzeroResult<T>(
   };
 }
 
-function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
+function preserveFailure<T>(result: AdapterResult<unknown>): AdapterResult<T> {
   assert.equal(result.outcome.ok, false);
   return { status: result.status, outcome: result.outcome };
 }
 
-export function scriptedAdapter(responses: readonly AdapterResult[]) {
-  // A fingerprint/ownership/control triple describes one stable probe. Supply
+export function scriptedAdapter(responses: readonly AdapterResult<unknown>[]) {
+  // An installed/ownership/control triple describes one stable probe. Supply
   // its independent closing observations explicitly, without consuming the
   // subsequent mutation-stage responses. Preserve their complete adapter
   // responses; gatherProbe decides which successful observation messages are
   // operator-facing.
-  const expanded: AdapterResult[] = [];
+  const expanded: AdapterResult<unknown>[] = [];
   for (let offset = 0; offset < responses.length; offset += 1) {
     const first = responses[offset]!;
     const ownership = responses[offset + 1];
     const control = responses[offset + 2];
-    const field = (response: AdapterResult | undefined, name: string) =>
+    const field = (
+      response: AdapterResult<unknown> | undefined,
+      name: string,
+    ) =>
       response?.outcome.ok &&
       response.outcome.result !== null &&
       typeof response.outcome.result === "object" &&
       name in response.outcome.result;
     if (
-      field(first, "fingerprint") &&
-      field(ownership, "identity_state") &&
-      field(control, "update_control")
+      field(first, "kind") &&
+      field(ownership, "installEligibility") &&
+      field(control, "probeEligibility")
     ) {
       expanded.push(first, ownership!, control!, first, control!);
       offset += 2;
@@ -156,13 +157,13 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
   const record = (operation: string, input?: unknown): void => {
     calls.push(input === undefined ? { operation } : { operation, input });
   };
-  const next = (operation: string): AdapterResult => {
+  const next = <T>(operation: string): AdapterResult<T> => {
     const response = expanded[index++];
     assert.ok(
       response !== undefined,
       `scriptedAdapter exhausted at response ${index} for ${operation}`,
     );
-    return response;
+    return response as AdapterResult<T>;
   };
   const adapter: HarnessAdapter<CodexRemovalInput> = {
     preparationLocation(ctx) {
@@ -182,7 +183,7 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
     },
     async prepareCandidate(input: PrepareCandidateInput) {
       record("prepare-candidate", input);
-      const result = next("prepare-candidate");
+      const result = next<unknown>("prepare-candidate");
       if (!result.outcome.ok) return preserveFailure(result);
       if (result.status !== 0) {
         return failureResult(
@@ -214,26 +215,23 @@ export function scriptedAdapter(responses: readonly AdapterResult[]) {
     },
     async inspectOwnership() {
       record("inspect-ownership");
-      return normalizeCodexOwnership(next("inspect-ownership"));
+      return next<OwnershipInspection<CodexRemovalInput>>("inspect-ownership");
     },
     async inspectUpdateControl() {
       record("inspect-update-control");
-      return normalizeCodexControl(next("inspect-update-control"));
+      return next<UpdateControlInspection>("inspect-update-control");
     },
     async inspectInstalled(selection) {
       record("inspect-installed", selection);
-      return normalizeCodexInstalled(
-        next("inspect-installed"),
-        selection.desiredCommit,
-      );
+      return next<InstalledState>("inspect-installed");
     },
-    async install(artifact, ctx) {
+    async install(artifact, _ctx) {
       record("install", artifact);
-      return normalizeCodexInstallForContext(next("install"), ctx);
+      return next<InstallReceipt>("install");
     },
     async remove(removalInput, ctx) {
       record("remove", removalInput);
-      const result = next("remove");
+      const result = next<unknown>("remove");
       if (!result.outcome.ok) return preserveFailure(result);
       if (result.status !== 0) {
         return failureResult(

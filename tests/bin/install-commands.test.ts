@@ -73,6 +73,11 @@ import { runInstall } from "../../src/commands/install.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "../../src/harnesses/codex/lifecycle.ts";
+import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 // Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:16-21::forbidden_literals =`.
 const FORBIDDEN_LITERALS = [
@@ -210,7 +215,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:473::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:480::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -453,17 +458,17 @@ function readGeneratedCommit(
  */
 function scenarioAdapter(
   scenario: {
-    fingerprint?: (string | null) | ((call: number) => string | null);
+    installedIdentity?: (string | null) | ((call: number) => string | null);
     identityState?: string | ((call: number) => string);
     updateControl?: string | ((call: number) => string);
     install?: (argv: readonly string[]) => unknown;
     build?: (argv: readonly string[]) => unknown;
   } = {},
 ) {
-  const counters = { fingerprint: 0, identityState: 0, updateControl: 0 };
+  const counters = { installedIdentity: 0, identityState: 0, updateControl: 0 };
 
   const resolve = (
-    field: "fingerprint" | "identityState" | "updateControl",
+    field: "installedIdentity" | "identityState" | "updateControl",
     fallback: string | null,
   ): string | null => {
     counters[field] += 1;
@@ -475,19 +480,27 @@ function scenarioAdapter(
   };
   return recordingAdapter((argv) => {
     const joined = argv.join(" ");
-    if (joined === "inspect --view fingerprint") {
-      const fingerprint = resolve("fingerprint", null);
-      return successResult("inspect", { view: "fingerprint", fingerprint }, []);
-    }
-    if (joined === "inspect --view ownership") {
-      const identity_state = resolve("identityState", "neither");
+    if (joined === "inspect-installed") {
+      const observedIdentity = resolve("installedIdentity", null);
       return successResult(
         "inspect",
-        {
-          view: "ownership",
-          resources: { plugin: false, marketplace: false },
-          identity_state,
-        },
+        observedIdentity === null
+          ? { kind: "absent", observedIdentity: "" }
+          : { kind: "current", observedIdentity },
+        [],
+      );
+    }
+    if (joined === "inspect --view ownership") {
+      const identityState = resolve("identityState", "neither");
+      if (identityState === null)
+        assert.fail("identity state must be a string");
+      return successResult(
+        "inspect",
+        codexOwnershipInspection(
+          identityState,
+          { pluginPresent: false, marketplacePresent: false },
+          [],
+        ),
         [],
       );
     }
@@ -502,16 +515,13 @@ function scenarioAdapter(
           [],
         );
       }
-      return successResult(
-        "inspect",
-        { view: "update-control", update_control: value },
-        [],
-      );
+      if (value === null) assert.fail("update control must be a string");
+      return successResult("inspect", codexControlInspection(value), []);
     }
     if (argv[0] === "install") {
       return scenario.install
         ? scenario.install(argv)
-        : successResult("install", {}, []);
+        : successResult("install", codexInstallReceipt("", ""), []);
     }
     if (argv[0] === "build") {
       if (!scenario.build) copyFallbackManifestIntoCandidate(argv);
@@ -710,7 +720,7 @@ void describe("install commands", { concurrency: true }, () => {
       // "current": the installed fingerprint matches the generated commit.
       // Replaces `seedInstalledCurrent(c)`, which drove the same precondition
       // through a real fake Codex cache this case no longer spawns.
-      fingerprint: commit,
+      installedIdentity: commit,
       updateControl: "unsupported",
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
@@ -872,7 +882,7 @@ void describe("install commands", { concurrency: true }, () => {
     const commit = readGeneratedCommit(c);
     let fingerprintCalls = 0;
     const adapter = scenarioAdapter({
-      fingerprint: () => {
+      installedIdentity: () => {
         fingerprintCalls += 1;
         // First call is probe's own, before any mutation: null (nothing
         // installed yet, the needs-install precondition). Second is
@@ -1140,7 +1150,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/harnesses/codex/adapter.ts:640::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:647::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1238,7 +1248,7 @@ void describe("install commands", { concurrency: true }, () => {
       // "current", even though this case never reaches the branch that would
       // report it as such -- the legacy check runs first, which is the
       // property "even when the fingerprint is current" names.
-      fingerprint: commit,
+      installedIdentity: commit,
       identityState: "both",
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
@@ -1289,7 +1299,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/harnesses/codex/adapter.ts:666::adding`).
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:673::adding`).
     assert.ok(
       out.includes(`plugin marketplace add ${durableMarketplace(c)}`) ||
         out.includes("Codex activation may have changed native state"),

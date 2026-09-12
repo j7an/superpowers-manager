@@ -11,8 +11,8 @@ adapter-process exit or independent operation/response validation on the
 product path.
 
 The concrete Codex harness calls the typed Codex operation engines directly.
-Their results are normalized at the harness boundary before shared commands
-consume them. There is no argv-based compatibility dispatcher.
+Those engines return the lifecycle payload types shared commands consume. There
+is no argv-based compatibility dispatcher or shape-normalization layer.
 
 ## Messages and errors
 
@@ -26,8 +26,8 @@ applies to message `text`, error `code`, error `message`, every error hint, and
 every install verification hint. Three constructs enforce it, one per
 population: `writeAdapterFailure` (`src/adapter-result.ts`) refuses the error
 `code`, `message`, and hints before the first write; `AdapterMessageLog`
-escapes message `text` on ingress; and `normalizeCodexInstall`
-(`src/harnesses/codex/harness.ts`) omits an unsafe verification hint before
+escapes message `text` on ingress; and `codexInstallReceipt`
+(`src/harnesses/codex/presentation.ts`) omits an unsafe verification hint before
 `codexPresentation.renderInstallVerification` renders it.
 
 Messages are replayed in array order to their declared streams.
@@ -40,14 +40,15 @@ not require another integration to reproduce these Codex-native fields.
 
 | Codex operation/view | Exact engine result contract |
 |---|---|
-| `install` | Exact key `verification_hints`; its object carries `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only`. Each hint satisfies the terminal-facing string rule. |
-| `inspect/fingerprint` | Exact keys `view` and `fingerprint`; view is `fingerprint`; `fingerprint` is `null` or a 7- or 40-character hexadecimal string. |
-| `inspect/ownership` | Exact keys `view`, `resources`, `legacy_resources`, and `identity_state`; each resource object has Boolean `plugin` and `marketplace`. State is `neither`, `manager`, `legacy`, or `both` and must equal the presence derived from the two resource groups. |
-| `inspect/update-control` | Exact keys `view` and `update_control`; view is `update-control`, and the emitted value is `managed`. |
+| `install` | `InstallReceipt`; the missing verification output always includes the safe listing hint, and the mismatch output includes the safe remove-add retry hint only in `add-only` refresh mode. |
+| ownership inspection | `OwnershipInspection<CodexRemovalInput>`; the producer derives install/removal policy, presentation values, conflicts, and the exact manager resource booleans consumed by removal. |
+| update-control inspection | `UpdateControlInspection`; the low-level producer reports managed capability and the public harness may overlay recovery blocking. |
+| installed-state inspection | `InstalledState`, through `inspectCodexInstallation`; absence, mismatch, and current require the existing native, durable, provenance, and payload evidence. |
 
-For ownership, manager presence is whether either Boolean in `resources` is
-true, and legacy presence is whether either Boolean in `legacy_resources` is
-true. Those two derived presence values determine `identity_state`.
+For ownership, manager presence is whether either observed manager resource is
+present, and legacy presence is whether either observed legacy resource is
+present. Those values determine the policy's presentation identity while the
+manager booleans remain the removal input.
 
 For update control, `unsupported` is never emitted on this path. It survives as
 an input the consumer still recognizes: `requireManagedUpdateControl`

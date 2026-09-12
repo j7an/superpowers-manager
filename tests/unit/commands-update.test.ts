@@ -17,6 +17,11 @@ import { codexPresentation } from "../../src/harnesses/codex/presentation.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import { gatherProbe } from "../../src/commands/probe.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "../../src/harnesses/codex/lifecycle.ts";
+import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-update-"));
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
@@ -78,27 +83,47 @@ async function makeCtx(
 const X = "1".repeat(40);
 
 function ownership(identityState: string | number | null) {
+  if (typeof identityState !== "string") {
+    return { presentationValue: identityState };
+  }
+  return codexOwnershipInspection(
+    identityState,
+    { pluginPresent: false, marketplacePresent: false },
+    [],
+  );
+}
+
+function control(value: string | number | null) {
+  return typeof value === "string"
+    ? codexControlInspection(value)
+    : { presentationValue: value };
+}
+
+function installed(
+  kind: "absent" | "current" | "mismatch",
+  observedIdentity: string,
+) {
   return {
-    resources: { plugin: false, marketplace: false },
-    identity_state: identityState,
+    kind,
+    observedIdentity,
   };
 }
 
 /** gatherProbe's three stages, in call order, reporting a clean "current" state. */
 function probeCurrent() {
   return [
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", installed("current", X), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ];
 }
 
 /** Same three stages, but with no installed fingerprint -- "needs install". */
 function probeNeedsInstall() {
   return [
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ];
 }
 
@@ -268,9 +293,9 @@ void test("current: refuses an unsupported update control BEFORE printing anythi
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", installed("current", X), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "unsupported" }, []),
+    successResult("inspect", control("unsupported"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -295,9 +320,9 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", installed("current", X), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "wat" }, []),
+    successResult("inspect", control("wat"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -358,22 +383,22 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
   const { adapter, calls } = scriptedAdapter([
     // update's own probe. No generated tree exists yet, so statusForCommits
     // returns "needs prepare" whatever the installed fingerprint says.
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
     // runPrepare's single adapter call. runPrepare itself creates and fills
     // the candidate root, so a scripted success is enough for the swap that
     // follows to find a real tree.
     successResult("build", {}, []),
     // runInstall's own probe, which now sees the freshly prepared tree.
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
     // runInstall's four mutation stages.
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: UPSTREAM.commit }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("current", UPSTREAM.commit), []),
   ]);
   const ctx = await makePreparableCtx(out, err, adapter);
 
@@ -440,9 +465,9 @@ void test("needs install: delegates to runInstall alone, and a success propagate
     ...probeNeedsInstall(),
     ...probeNeedsInstall(),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("current", X), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -497,7 +522,7 @@ void test("needs install: a non-zero runInstall return propagates as update's st
     ...probeNeedsInstall(),
     ...probeNeedsInstall(),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "unsupported" }, []),
+    successResult("inspect", control("unsupported"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -527,9 +552,9 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: X }, []),
-    successResult("inspect", ownership(null), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", installed("current", X), []),
+    successResult("inspect", ownership(""), []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -551,9 +576,9 @@ void test("a legacy identity state stops before the update-control guard even ru
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", installed("current", X), []),
     successResult("inspect", ownership("both"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -584,9 +609,9 @@ void test("an UNKNOWN probe identity state is a distinct diagnostic from the leg
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", installed("current", X), []),
     successResult("inspect", ownership("chaos"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -613,9 +638,9 @@ void test("an empty probe-reported update-control capability fails closed, and r
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", installed("current", X), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: null }, []),
+    successResult("inspect", control(""), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -662,9 +687,9 @@ void test("needs prepare: an empty identity state refuses before prepare, not in
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", ownership(null), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", installed("absent", ""), []),
+    successResult("inspect", ownership(""), []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);
@@ -693,9 +718,9 @@ void test("needs prepare: a legacy identity state refuses before prepare, not in
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("both"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);
@@ -726,9 +751,9 @@ void test("needs prepare: an empty update control refuses before prepare, not in
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: null }, []),
+    successResult("inspect", control(""), []),
   ]);
   const ctx = await makePreparableCtx(out, err, adapter);
   const status = await runUpdate([], ctx);

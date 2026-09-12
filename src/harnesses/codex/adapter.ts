@@ -15,6 +15,7 @@ import { delimiter, isAbsolute, join } from "node:path";
 import {
   AdapterMessageLog,
   failureResult,
+  hasTerminalControl,
   successResult,
   type AdapterContext,
   type AdapterResult,
@@ -31,11 +32,7 @@ import {
   inspectCodexConflicts,
 } from "./conflicts.ts";
 import { oneLine } from "../../cli-arguments.ts";
-import {
-  installedCommitFromRoot,
-  installedRootForVersion,
-  pathsEqual,
-} from "./state.ts";
+import { installedRootForVersion, pathsEqual } from "./state.ts";
 import { codexHome } from "./paths.ts";
 import { readCodexStoredState, type CodexStoredState } from "./stored-state.ts";
 import { validateGeneratedPlugin } from "./generated-plugin.ts";
@@ -50,6 +47,16 @@ import { readCodexBuildSource } from "../../provenance.ts";
 import type { JsonValue } from "../../strict-json.ts";
 import { isAcceptedSplitValue } from "../../validate-generated-plugin-cli.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../../workspace.ts";
+import type {
+  InstallReceipt,
+  OwnershipInspection,
+  UpdateControlInspection,
+} from "../../harness.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "./lifecycle.ts";
+import { codexInstallReceipt } from "./presentation.ts";
 
 const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
 const MARKETPLACE_NAME = "superpowers-manager";
@@ -249,13 +256,13 @@ function reportOrphanedWorkspace(
   };
 }
 
-async function withCodexWorkspace(
-  label: "build" | "install" | "uninstall" | "fingerprint" | "inspect",
+async function withCodexWorkspace<T>(
+  label: "build" | "install" | "uninstall" | "inspect",
   failureCode:
     "build-failed" | "install-failed" | "uninstall-failed" | "inspect-failed",
   log: AdapterMessageLog,
-  execute: () => Promise<JsonValue>,
-): Promise<JsonValue> {
+  execute: () => Promise<T>,
+): Promise<T> {
   let entered = false;
   try {
     return await withWorkspace(
@@ -574,7 +581,7 @@ async function runInstall(
   packageRoot: string,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
-): Promise<JsonValue> {
+): Promise<InstallReceipt> {
   if (!isAbsolute(packageRoot)) {
     fail("invalid-arguments", "--package-root must be an absolute path");
   }
@@ -688,17 +695,12 @@ async function runInstall(
       if (commandFailed(pluginAdded)) {
         fail("install-failed", `codex plugin add failed for ${PLUGIN_ID}`);
       }
-      return {
-        verification_hints: {
-          ...(refreshMode === "add-only"
-            ? {
-                mismatch:
-                  "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add",
-              }
-            : {}),
-          missing: "verify with 'codex plugin list --json'.",
-        },
-      };
+      return codexInstallReceipt(
+        "verify with 'codex plugin list --json'.",
+        refreshMode === "add-only"
+          ? "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"
+          : "",
+      );
     },
   );
 }
@@ -755,240 +757,151 @@ async function runUninstall(
   );
 }
 
-async function runInspect(
-  view: "ownership" | "update-control" | "fingerprint",
+function ownershipFromResources(
+  pluginPresent: boolean,
+  marketplacePresent: boolean,
+  legacyPresent: boolean,
+  conflicts: readonly string[],
+): OwnershipInspection<CodexRemovalInput> {
+  if (
+    conflicts.some(
+      (item) =>
+        typeof item !== "string" ||
+        item.length === 0 ||
+        hasTerminalControl(item),
+    )
+  ) {
+    fail("malformed-result", "expected an array of strings at conflicts");
+  }
+  const managerPresent = pluginPresent || marketplacePresent;
+  const identityState = managerPresent
+    ? legacyPresent
+      ? "both"
+      : "manager"
+    : legacyPresent
+      ? "legacy"
+      : "neither";
+  return codexOwnershipInspection(
+    identityState,
+    { pluginPresent, marketplacePresent },
+    conflicts,
+  );
+}
+
+async function runOwnership(
   context: AdapterContext,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
-): Promise<JsonValue> {
-  if (view === "update-control") {
-    return { view: "update-control", update_control: "managed" };
-  }
-  if (view === "fingerprint") {
-    const codexBin = env.SUPERPOWERS_CODEX || "codex";
-    await requireCodex(codexBin, env);
-    return await withCodexWorkspace(
-      "fingerprint",
-      "inspect-failed",
-      log,
-      async () => {
-        const listing = await listingCommand(
-          log,
-          codexBin,
-          ["plugin", "list", "--json"],
+): Promise<OwnershipInspection<CodexRemovalInput>> {
+  const codexBin = env.SUPERPOWERS_CODEX || "codex";
+  await requireCodex(codexBin, env);
+  return await withCodexWorkspace(
+    "inspect",
+    "inspect-failed",
+    log,
+    async () => {
+      const plugins = await listingCommand(
+        log,
+        codexBin,
+        ["plugin", "list", "--json"],
+        env,
+      );
+      if (commandFailed(plugins)) {
+        const stored = await storedStateAfterListingFailure(
           env,
+          "inspect-failed",
+          `cannot list Codex plugins via '${codexBin} plugin list --json'`,
         );
-        if (commandFailed(listing)) {
-          fail(
-            "inspect-failed",
-            `cannot list Codex plugins via '${codexBin} plugin list --json'`,
-          );
-        }
-        let activeVersion: string;
-        try {
-          activeVersion = activePluginVersionFromJson(
-            listing.stdout,
-            PLUGIN_ID,
-          );
-        } catch {
-          fail(
-            "inspect-failed",
-            `cannot parse output of '${codexBin} plugin list --json'`,
-          );
-        }
-        if (activeVersion.length === 0) {
-          return { view: "fingerprint", fingerprint: null };
-        }
-        let searchRoot = env.SUPERPOWERS_INSTALLED_SEARCH_ROOT;
-        if (!searchRoot) {
-          if (env.HOME === undefined) {
-            fail(
-              "inspect-failed",
-              "cannot inspect active Codex plugin fingerprint without HOME",
-            );
-          }
-          searchRoot = join(env.HOME || "/", ".codex");
-        }
-        const activeRoot = installedRootForVersion(
-          searchRoot,
+        const conflicts = await inspectCodexConflicts(
+          { root: context.root, env },
+          stored.installedListingJson,
+        );
+        return ownershipFromResources(
+          stored.managerPluginPresent,
+          true,
+          stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
+          conflicts,
+        );
+      }
+      let managerPlugin: boolean;
+      let legacyPlugin: boolean;
+      let conflicts: readonly string[];
+      try {
+        managerPlugin = installedListingHas(
+          plugins.stdout,
+          "installed",
+          "pluginId",
+          PLUGIN_ID,
+        );
+        legacyPlugin = installedListingHas(
+          plugins.stdout,
+          "installed",
+          "pluginId",
+          LEGACY_PLUGIN_ID,
+        );
+        conflicts = await inspectCodexConflicts(
+          { root: context.root, env },
+          plugins.stdout.toString("utf8"),
+        );
+      } catch {
+        fail(
+          "inspect-failed",
+          `cannot parse output of '${codexBin} plugin list --json'`,
+        );
+      }
+      const marketplaces = await listingCommand(
+        log,
+        codexBin,
+        ["plugin", "marketplace", "list", "--json"],
+        env,
+      );
+      if (commandFailed(marketplaces)) {
+        const stored = await storedStateAfterListingFailure(
+          env,
+          "inspect-failed",
+          `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+        );
+        const conflicts = await inspectCodexConflicts(
+          { root: context.root, env },
+          stored.installedListingJson,
+        );
+        return ownershipFromResources(
+          stored.managerPluginPresent,
+          true,
+          stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
+          conflicts,
+        );
+      }
+      let managerMarketplace: boolean;
+      let legacyMarketplace: boolean;
+      try {
+        managerMarketplace = installedListingHas(
+          marketplaces.stdout,
+          "marketplaces",
+          "name",
           MARKETPLACE_NAME,
-          "superpowers",
-          activeVersion,
         );
-        const fingerprint = await installedCommitFromRoot(activeRoot);
-        if (fingerprint.length === 0) {
-          fail(
-            "inspect-failed",
-            `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
-          );
-        }
-        return { view: "fingerprint", fingerprint };
-      },
-    );
-  }
-  if (view === "ownership") {
-    const codexBin = env.SUPERPOWERS_CODEX || "codex";
-    await requireCodex(codexBin, env);
-    return await withCodexWorkspace(
-      "inspect",
-      "inspect-failed",
-      log,
-      async () => {
-        const plugins = await listingCommand(
-          log,
-          codexBin,
-          ["plugin", "list", "--json"],
-          env,
+        legacyMarketplace = installedListingHas(
+          marketplaces.stdout,
+          "marketplaces",
+          "name",
+          LEGACY_MARKETPLACE_NAME,
         );
-        if (commandFailed(plugins)) {
-          const stored = await storedStateAfterListingFailure(
-            env,
-            "inspect-failed",
-            `cannot list Codex plugins via '${codexBin} plugin list --json'`,
-          );
-          const conflicts = await inspectCodexConflicts(
-            { root: context.root, env },
-            stored.installedListingJson,
-          );
-          const managerPresent =
-            stored.managerPluginPresent ||
-            stored.managerMarketplaceRoot.length > 0;
-          const legacyPresent =
-            stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null;
-          return {
-            view: "ownership",
-            resources: {
-              plugin: stored.managerPluginPresent,
-              marketplace: true,
-            },
-            legacy_resources: {
-              plugin: stored.legacyPluginPresent,
-              marketplace: stored.legacyMarketplaceRoot !== null,
-            },
-            identity_state: managerPresent
-              ? legacyPresent
-                ? "both"
-                : "manager"
-              : legacyPresent
-                ? "legacy"
-                : "neither",
-            conflicts: [...conflicts],
-          };
-        }
-        let managerPlugin: boolean;
-        let legacyPlugin: boolean;
-        let conflicts: readonly string[];
-        try {
-          managerPlugin = installedListingHas(
-            plugins.stdout,
-            "installed",
-            "pluginId",
-            PLUGIN_ID,
-          );
-          legacyPlugin = installedListingHas(
-            plugins.stdout,
-            "installed",
-            "pluginId",
-            LEGACY_PLUGIN_ID,
-          );
-          conflicts = await inspectCodexConflicts(
-            { root: context.root, env },
-            plugins.stdout.toString("utf8"),
-          );
-        } catch {
-          fail(
-            "inspect-failed",
-            `cannot parse output of '${codexBin} plugin list --json'`,
-          );
-        }
-        const marketplaces = await listingCommand(
-          log,
-          codexBin,
-          ["plugin", "marketplace", "list", "--json"],
-          env,
+      } catch {
+        fail(
+          "inspect-failed",
+          `cannot parse output of '${codexBin} plugin marketplace list --json'`,
         );
-        if (commandFailed(marketplaces)) {
-          const stored = await storedStateAfterListingFailure(
-            env,
-            "inspect-failed",
-            `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
-          );
-          const conflicts = await inspectCodexConflicts(
-            { root: context.root, env },
-            stored.installedListingJson,
-          );
-          const managerPresent = true;
-          const legacyPresent =
-            stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null;
-          return {
-            view: "ownership",
-            resources: {
-              plugin: stored.managerPluginPresent,
-              marketplace: true,
-            },
-            legacy_resources: {
-              plugin: stored.legacyPluginPresent,
-              marketplace: stored.legacyMarketplaceRoot !== null,
-            },
-            identity_state: managerPresent
-              ? legacyPresent
-                ? "both"
-                : "manager"
-              : legacyPresent
-                ? "legacy"
-                : "neither",
-            conflicts: [...conflicts],
-          };
-        }
-        let managerMarketplace: boolean;
-        let legacyMarketplace: boolean;
-        try {
-          managerMarketplace = installedListingHas(
-            marketplaces.stdout,
-            "marketplaces",
-            "name",
-            MARKETPLACE_NAME,
-          );
-          legacyMarketplace = installedListingHas(
-            marketplaces.stdout,
-            "marketplaces",
-            "name",
-            LEGACY_MARKETPLACE_NAME,
-          );
-        } catch {
-          fail(
-            "inspect-failed",
-            `cannot parse output of '${codexBin} plugin marketplace list --json'`,
-          );
-        }
-        const managerPresent = managerPlugin || managerMarketplace;
-        const legacyPresent = legacyPlugin || legacyMarketplace;
-        return {
-          view: "ownership",
-          resources: {
-            plugin: managerPlugin,
-            marketplace: managerMarketplace,
-          },
-          legacy_resources: {
-            plugin: legacyPlugin,
-            marketplace: legacyMarketplace,
-          },
-          identity_state: managerPresent
-            ? legacyPresent
-              ? "both"
-              : "manager"
-            : legacyPresent
-              ? "legacy"
-              : "neither",
-          conflicts: [...conflicts],
-        };
-      },
-    );
-  }
-  const unsupportedView: string = view;
-  fail("invalid-arguments", `unsupported inspect view: ${unsupportedView}`);
+      }
+      return ownershipFromResources(
+        managerPlugin,
+        managerMarketplace,
+        legacyPlugin || legacyMarketplace,
+        conflicts,
+      );
+    },
+  );
 }
-
 async function runCodexOperation<T = JsonValue>(
   operation: string,
   context: AdapterContext,
@@ -1026,7 +939,7 @@ export function codexBuild(
 export function codexInstall(
   packageRoot: string,
   context: AdapterContext,
-): Promise<AdapterResult> {
+): Promise<AdapterResult<InstallReceipt>> {
   return runCodexOperation("install", context, (env, log) =>
     runInstall(packageRoot, env, log),
   );
@@ -1041,12 +954,19 @@ export function codexRemove(
   );
 }
 
-export function codexInspect(
-  view: "ownership" | "update-control" | "fingerprint",
+export function codexInspectOwnership(
   context: AdapterContext,
-): Promise<AdapterResult> {
+): Promise<AdapterResult<OwnershipInspection<CodexRemovalInput>>> {
   return runCodexOperation("inspect", context, (env, log) =>
-    runInspect(view, context, env, log),
+    runOwnership(context, env, log),
+  );
+}
+
+export function codexInspectControl(
+  context: AdapterContext,
+): Promise<AdapterResult<UpdateControlInspection>> {
+  return runCodexOperation("inspect", context, async () =>
+    codexControlInspection("managed"),
   );
 }
 

@@ -22,6 +22,11 @@ import {
 import { runInstall } from "../../src/commands/install.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "../../src/harnesses/codex/lifecycle.ts";
+import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-install-"));
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
@@ -104,18 +109,41 @@ async function makeCtx(
 const X = "1".repeat(40);
 const Z = "2".repeat(40);
 
-function ownership(identityState: string | number | null) {
+function ownership(
+  identityState: string | number | null,
+  conflicts: readonly string[] = [],
+) {
+  if (typeof identityState !== "string") {
+    return { presentationValue: identityState };
+  }
+  return codexOwnershipInspection(
+    identityState,
+    { pluginPresent: false, marketplacePresent: false },
+    conflicts,
+  );
+}
+
+function control(value: string | number | null) {
+  return typeof value === "string"
+    ? codexControlInspection(value)
+    : { presentationValue: value };
+}
+
+function installed(
+  kind: "absent" | "current" | "mismatch",
+  observedIdentity: string,
+) {
   return {
-    resources: { plugin: false, marketplace: false },
-    identity_state: identityState,
+    kind,
+    observedIdentity,
   };
 }
 
 /** The three probe-stage responses, in gatherProbe's own call order. */
 const PROBE_OK = [
-  successResult("inspect", { fingerprint: null }, []),
+  successResult("inspect", installed("absent", ""), []),
   successResult("inspect", ownership("manager"), []),
-  successResult("inspect", { update_control: "managed" }, []),
+  successResult("inspect", control("managed"), []),
 ];
 
 // --- The four fail-closed rules (milestone spec §7 / spec §4.3) ---
@@ -127,15 +155,14 @@ void test("install re-inspects ownership and update control itself", async (t) =
       const out = capture();
       const err = capture();
       const { adapter: scripted, calls } = scriptedAdapter([
-        successResult("inspect", { fingerprint: null }, []),
+        successResult("inspect", installed("absent", ""), []),
         successResult("inspect", ownership("manager"), []),
-        successResult("inspect", { update_control: "managed" }, []),
+        successResult("inspect", control("managed"), []),
         successResult(
           "inspect",
-          {
-            ...ownership("manager"),
-            conflicts: ["active Codex plugin superpowers@another-provider"],
-          },
+          ownership("manager", [
+            "active Codex plugin superpowers@another-provider",
+          ]),
           [],
         ),
       ]);
@@ -213,9 +240,9 @@ void test("install re-inspects ownership and update control itself", async (t) =
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("current", X), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -255,9 +282,9 @@ void test("a successful install prints the fingerprint verification lines and no
   const { adapter } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("current", X), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -287,9 +314,9 @@ void test("desiredCommit comes from generated provenance, never from selection",
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("current", X), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X, savedCommit: Z },
@@ -456,9 +483,9 @@ void test("an empty probe-reported identity state is its own diagnostic, distinc
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: null }, []),
-    successResult("inspect", ownership(null), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", installed("absent", ""), []),
+    successResult("inspect", ownership(""), []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -480,9 +507,9 @@ void test("a legacy identity state stops before the workspace is created", async
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("legacy"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -515,9 +542,9 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { fingerprint: null }, []),
+    successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("chaos"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -541,7 +568,7 @@ void test("an unsupported update-control capability refuses before any install m
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "unsupported" }, []),
+    successResult("inspect", control("unsupported"), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -604,28 +631,6 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
   assert.equal(
     err.text(),
     "error: cannot inspect ownership\nhint: check codex is installed\n",
-  );
-  assert.equal(calls.length, 13);
-});
-
-void test("stage 1 malformed identity_state is a DIFFERENT failure than stage 1's adapter failure", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    ...PROBE_OK,
-    successResult("inspect", ownership(42), []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runInstall([], ctx);
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: adapter returned a non-string identity_state for inspect --view ownership\n",
   );
   assert.equal(calls.length, 13);
 });
@@ -769,36 +774,13 @@ void test("stage 2 (inspect update-control) failure stops before the install mut
   assert.equal(calls.length, 14);
 });
 
-void test("stage 2 malformed update_control is a DIFFERENT failure than stage 2's adapter failure", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    ...PROBE_OK,
-    successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: 7 }, []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runInstall([], ctx);
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: adapter returned a non-string update_control for inspect --view update-control\n",
-  );
-  assert.equal(calls.length, 14);
-});
-
 void test("stage 3 (install) failure stops before the post-install fingerprint inspection", async () => {
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
+    successResult("inspect", control("managed"), []),
     failureResult("install", "E_ADAPTER", "cannot install plugin", [], []),
   ]);
   const ctx = await makeCtx(
@@ -833,8 +815,8 @@ void test("stage 4 (post-install inspect fingerprint) failure reports the replay
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
     failureResult(
       "inspect",
       "E_ADAPTER",
@@ -874,8 +856,8 @@ void test("stage 4 (post-install inspect fingerprint) reports a ctx.adapter thro
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
   ]);
 
   const throwingAdapter = {
@@ -925,9 +907,9 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
   const { adapter, calls } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: Y }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("mismatch", Y), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -978,11 +960,21 @@ void test("a fingerprint MISMATCH still reports both commit lines, then fails cl
     const { adapter: scripted, calls: transactionCalls } = scriptedAdapter([
       ...PROBE_OK,
       successResult("inspect", ownership("manager"), []),
-      successResult("inspect", { update_control: "managed" }, []),
-      successResult("inspect", { fingerprint: scenario.fingerprint }, []),
+      successResult("inspect", control("managed"), []),
       successResult(
         "inspect",
-        { fingerprint: scenario.restoredFingerprint },
+        installed(
+          scenario.fingerprint === null ? "absent" : "mismatch",
+          scenario.fingerprint ?? "",
+        ),
+        [],
+      ),
+      successResult(
+        "inspect",
+        installed(
+          scenario.restoredFingerprint === null ? "absent" : "mismatch",
+          scenario.restoredFingerprint ?? "",
+        ),
         [],
       ),
     ]);
@@ -1127,9 +1119,9 @@ void test("argv is ignored by src/commands/install.ts", async () => {
   const { adapter } = scriptedAdapter([
     ...PROBE_OK,
     successResult("inspect", ownership("manager"), []),
-    successResult("inspect", { update_control: "managed" }, []),
-    successResult("install", {}, []),
-    successResult("inspect", { fingerprint: X }, []),
+    successResult("inspect", control("managed"), []),
+    successResult("install", codexInstallReceipt("", ""), []),
+    successResult("inspect", installed("current", X), []),
   ]);
   const ctx = await makeCtx(
     { desiredCommit: X, generatedCommit: X },
@@ -1163,9 +1155,9 @@ void test("a post-success workspace cleanup failure still reports the domain out
     const responses = [
       ...PROBE_OK,
       successResult("inspect", ownership("manager"), []),
-      successResult("inspect", { update_control: "managed" }, []),
-      successResult("install", {}, []),
-      successResult("inspect", { fingerprint: X }, []),
+      successResult("inspect", control("managed"), []),
+      successResult("install", codexInstallReceipt("", ""), []),
+      successResult("inspect", installed("current", X), []),
     ];
     const { adapter: scripted, calls } = scriptedAdapter(responses);
     // The FINAL scripted call chmods the workspace's own PARENT directory
