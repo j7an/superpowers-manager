@@ -702,8 +702,32 @@ before filtering it; every call site runs a subject that reaches
 `codex plugin list` (and, for the adapter, `inspect --view ownership`), so an
 empty log there is a fixture fault, never a legitimate state.
 
-Item 21 remains a numbered historical port-only record. Task 2 retires its
-live observer because the subject cannot reach the fake adapter it observed.
+**Historical Task 9 record (PR 11.5 slice 4b, 2026-08-11).** Item 21 has no
+shell original at all: the shell had no in-process subject whose non-spawning
+could be guarded, so there is nothing for it to be additive, non-vacuous, or
+channel-changed *relative to*. It is row 18's consumer — see
+`tests/bin/lifecycle-fakes.ts`'s `tripwireTriggered` and its callers in
+`tests/bin/uninstall-fakes.ts`.
+
+Be precise about what that consumer witnessed, because the obvious reading was
+wrong. A subject that never spawns the adapter cannot, by running correctly,
+observe the tripwire fire: on the passing path the fake adapter's process did
+not exist. As first committed (`94794bd`) the case therefore passed unchanged
+with `tripwireTriggered` forced to return `false` — it constrained the port,
+not the tripwire. The case then carried a second half that spawned the SAME
+case's fake adapter directly, through `lifecycle-fixture.js`'s
+`spawnFakeAdapter`, and pinned the refusal: exit 94, the tripwire's own message
+on stderr, and the recorded line in the log the first half required to be
+empty. That half died when the tripwire was disarmed, which was what earned the
+first half its meaning — the same non-vacuity argument items 7-20 above make
+for their own logs. The tripwire firing was still observed through a direct
+spawn rather than through the subject, because post-flip no subject could
+produce one; the direct spawn ran inside the case whose emptiness claim depended
+on it, with that case's own executable, state and seam.
+
+**Current retirement (Task 2, 2026-09-12).** Item 21 remains a numbered
+historical port-only record, but its live observer is retired because the
+subject cannot reach the fake adapter it observed.
 
 <!-- inventory:port-only:start -->
 
@@ -1015,11 +1039,11 @@ rows O1-O3.
   marketplace-remove-fails; sum:
   2+4+3+4+4+6+12+4+4+4+3+4+3+4+3+5+5+9 = 83).
 - Port (`tests/bin/uninstall-commands.test.ts`): **18** static `test(` call
-  sites after Task 2 (2026-09-12; was 18 before Task 9, then 19), one
-  per shell scenario plus one port-only case with no shell scenario at all
-  (17 `reset` call sites, the source-guard block at `:9-16` which precedes the
-  first `reset`, and the retired Task 9 row-18 tripwire case). No call site is
-  data-driven, so the 18 static sites produce 18 runtime cases. Unchanged by
+  sites after Task 2 (2026-09-12; was 18 before Task 9, then 19), comprising
+  17 `reset` call sites and the source-guard block at `:9-16`, which precedes
+  the first `reset`. The retired Task 9 row-18 tripwire case is historical, not
+  a live site. No call site is data-driven, so the 18 static sites produce 18
+  runtime cases. Unchanged by
   Task 6 (PR 11.5 slice 4b, 2026-08-10): three cases converted in place
   (selection-independent recovery and missing-Codex to an injected double;
   both-present re-anchored onto `codex.log`, still via `runScript`), so the
