@@ -110,12 +110,11 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
       },
     }),
   );
-  const matchedInspection = normalizeCodexInstalled(
-    inspect,
-    desired,
-  );
+  const matchedInspection = normalizeCodexInstalled(inspect, desired);
   const matched = codexPresentation.renderInstallVerification(
-    desired, matchedReceipt, matchedInspection,
+    desired,
+    matchedReceipt,
+    matchedInspection,
   );
   assert.deepEqual(matched, {
     stdout: [
@@ -126,7 +125,8 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     stderr: [],
   });
   assert.equal(matchedInspection.outcome.ok, true);
-  if (!matchedInspection.outcome.ok) assert.fail("expected normalized inspection");
+  if (!matchedInspection.outcome.ok)
+    assert.fail("expected normalized inspection");
   assert.equal(matchedInspection.outcome.result.kind, "current");
 
   const shortReceipt = normalizeCodexInstall(ok({}));
@@ -135,7 +135,9 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     desired,
   );
   const short = codexPresentation.renderInstallVerification(
-    desired, shortReceipt, shortInspection,
+    desired,
+    shortReceipt,
+    shortInspection,
   );
   assert.deepEqual(short, {
     stdout: [
@@ -146,7 +148,8 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     stderr: [],
   });
   assert.equal(shortInspection.outcome.ok, true);
-  if (!shortInspection.outcome.ok) assert.fail("expected normalized inspection");
+  if (!shortInspection.outcome.ok)
+    assert.fail("expected normalized inspection");
   assert.equal(shortInspection.outcome.result.kind, "current");
 
   const mismatchDesired = "1111111111111111111111111111111111111111";
@@ -158,7 +161,9 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     mismatchDesired,
   );
   const mismatch = codexPresentation.renderInstallVerification(
-    mismatchDesired, mismatchReceipt, mismatchInspection,
+    mismatchDesired,
+    mismatchReceipt,
+    mismatchInspection,
   );
   assert.deepEqual(mismatch.stderr, [
     "error: installed manager fingerprint does not match the prepared plugin after install.",
@@ -173,7 +178,9 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     desired,
   );
   const missing = codexPresentation.renderInstallVerification(
-    desired, missingReceipt, missingInspection,
+    desired,
+    missingReceipt,
+    missingInspection,
   );
   assert.deepEqual(missing.stderr, [
     "error: installed manager fingerprint is not detectable after install.",
@@ -186,7 +193,9 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     desired,
   );
   const malformed = codexPresentation.renderInstallVerification(
-    desired, malformedReceipt, malformedInspection,
+    desired,
+    malformedReceipt,
+    malformedInspection,
   );
   assert.deepEqual(malformed.stderr, [
     "error: cannot parse installed manager fingerprint inspection result after install.",
@@ -321,39 +330,52 @@ void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (
 });
 
 void test("UNINSTALL-VERIFY-01 both manager resources must be absent", () => {
-  const remainingPlugin = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: true, marketplace: false },
-  }));
+  const remainingPlugin = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: true, marketplace: false },
+    }),
+  );
   assert.equal(remainingPlugin.outcome.ok, true);
   if (!remainingPlugin.outcome.ok) assert.fail("expected normalized ownership");
   assert.deepEqual(remainingPlugin.outcome.result.removalVerification, {
     kind: "blocked",
-    output: { stdout: [], stderr: [
-      "error: owned plugin resource is still installed after removal",
-    ] },
+    output: {
+      stdout: [],
+      stderr: ["error: owned plugin resource is still installed after removal"],
+    },
   });
 
-  const remainingMarketplace = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: false, marketplace: true },
-  }));
+  const remainingMarketplace = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: true },
+    }),
+  );
   assert.equal(remainingMarketplace.outcome.ok, true);
-  if (!remainingMarketplace.outcome.ok) assert.fail("expected normalized ownership");
+  if (!remainingMarketplace.outcome.ok)
+    assert.fail("expected normalized ownership");
   assert.deepEqual(remainingMarketplace.outcome.result.removalVerification, {
     kind: "blocked",
-    output: { stdout: [], stderr: [
-      "error: owned marketplace resource is still registered after removal",
-    ] },
+    output: {
+      stdout: [],
+      stderr: [
+        "error: owned marketplace resource is still registered after removal",
+      ],
+    },
   });
 
-  const absent = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: false, marketplace: false },
-  }));
+  const absent = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: false },
+    }),
+  );
   assert.equal(absent.outcome.ok, true);
   if (!absent.outcome.ok) assert.fail("expected normalized ownership");
-  assert.deepEqual(absent.outcome.result.removalVerification, { kind: "allowed" });
+  assert.deepEqual(absent.outcome.result.removalVerification, {
+    kind: "allowed",
+  });
 
   const missing = normalizeCodexOwnership(ok({ identity_state: "manager" }));
   assert.equal(missing.outcome.ok, false);

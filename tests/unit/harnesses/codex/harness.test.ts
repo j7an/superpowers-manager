@@ -139,21 +139,56 @@ void test("Codex verification modules are safe in every supported entry order", 
 void test("ownership normalization preserves every Codex removal flag combination", () => {
   const cases = [
     [false, false, { kind: "allowed" }],
-    [true, false, { kind: "blocked", output: { stdout: [], stderr: [
-      "error: owned plugin resource is still installed after removal",
-    ] } }],
-    [false, true, { kind: "blocked", output: { stdout: [], stderr: [
-      "error: owned marketplace resource is still registered after removal",
-    ] } }],
-    [true, true, { kind: "blocked", output: { stdout: [], stderr: [
-      "error: owned plugin resource is still installed after removal",
-    ] } }],
+    [
+      true,
+      false,
+      {
+        kind: "blocked",
+        output: {
+          stdout: [],
+          stderr: [
+            "error: owned plugin resource is still installed after removal",
+          ],
+        },
+      },
+    ],
+    [
+      false,
+      true,
+      {
+        kind: "blocked",
+        output: {
+          stdout: [],
+          stderr: [
+            "error: owned marketplace resource is still registered after removal",
+          ],
+        },
+      },
+    ],
+    [
+      true,
+      true,
+      {
+        kind: "blocked",
+        output: {
+          stdout: [],
+          stderr: [
+            "error: owned plugin resource is still installed after removal",
+          ],
+        },
+      },
+    ],
   ] as const;
   for (const [pluginPresent, marketplacePresent, expected] of cases) {
-    const normalized = unwrap(normalizeCodexOwnership(
-      ownershipResult("manager", pluginPresent, marketplacePresent),
-    ));
-    assert.deepEqual(normalized.removalInput, { pluginPresent, marketplacePresent });
+    const normalized = unwrap(
+      normalizeCodexOwnership(
+        ownershipResult("manager", pluginPresent, marketplacePresent),
+      ),
+    );
+    assert.deepEqual(normalized.removalInput, {
+      pluginPresent,
+      marketplacePresent,
+    });
     assert.deepEqual(normalized.removalVerification, expected);
   }
 });

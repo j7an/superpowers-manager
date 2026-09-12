@@ -144,7 +144,9 @@ void test("install verification accepts an exact commit match", () => {
     desired,
   );
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -167,7 +169,9 @@ void test("install verification accepts the seven-character short form", () => {
     desired,
   );
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -180,7 +184,9 @@ void test("install verification reports a failed inspection", () => {
   const receipt = normalizeCodexInstall(ok({}));
   const inspection = normalizeCodexInstalled(failed(), desired);
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, false);
   assert.deepEqual(output.stdout, []);
@@ -199,7 +205,9 @@ void test("install verification reports a mismatch and surfaces its hint", () =>
     desired,
   );
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -224,7 +232,9 @@ void test("install verification reports an undetectable fingerprint and its own 
     desired,
   );
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -243,7 +253,9 @@ void test("install verification omits the hint line when no hint is present", ()
     desired,
   );
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -262,7 +274,9 @@ void test("ADAPTER-TERMINAL-01 install verification omits a hint carrying a term
     desired,
   );
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -300,7 +314,9 @@ void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lon
       desired,
     );
     const output = codexPresentation.renderInstallVerification(
-      desired, receipt, inspection,
+      desired,
+      receipt,
+      inspection,
     );
     assert.equal(inspection.outcome.ok, true, code.toString(16));
     if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
@@ -314,42 +330,54 @@ void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lon
 });
 
 void test("removal verification accepts both resources absent", () => {
-  const normalized = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: false, marketplace: false },
-  }));
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: false },
+    }),
+  );
   assert.equal(normalized.outcome.ok, true);
   if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
-  assert.deepEqual(normalized.outcome.result.removalVerification, { kind: "allowed" });
+  assert.deepEqual(normalized.outcome.result.removalVerification, {
+    kind: "allowed",
+  });
 });
 
 void test("removal verification rejects a surviving plugin", () => {
-  const normalized = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: true, marketplace: false },
-  }));
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: true, marketplace: false },
+    }),
+  );
   assert.equal(normalized.outcome.ok, true);
   if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
   assert.deepEqual(normalized.outcome.result.removalVerification, {
     kind: "blocked",
-    output: { stdout: [], stderr: [
-      "error: owned plugin resource is still installed after removal",
-    ] },
+    output: {
+      stdout: [],
+      stderr: ["error: owned plugin resource is still installed after removal"],
+    },
   });
 });
 
 void test("removal verification rejects a surviving marketplace", () => {
-  const normalized = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: false, marketplace: true },
-  }));
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: true },
+    }),
+  );
   assert.equal(normalized.outcome.ok, true);
   if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
   assert.deepEqual(normalized.outcome.result.removalVerification, {
     kind: "blocked",
-    output: { stdout: [], stderr: [
-      "error: owned marketplace resource is still registered after removal",
-    ] },
+    output: {
+      stdout: [],
+      stderr: [
+        "error: owned marketplace resource is still registered after removal",
+      ],
+    },
   });
 });
 
@@ -357,10 +385,12 @@ void test("removal verification fails closed on a non-Boolean resource", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean` died with `expected Boolean adapter result`
   // rather than treating an unparseable value as absent. Unparseable state is
   // never success — spec §4.3 rule 4.
-  const normalized = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: "false", marketplace: false },
-  }));
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: "false", marketplace: false },
+    }),
+  );
   assert.equal(normalized.outcome.ok, false);
   if (normalized.outcome.ok) assert.fail("expected malformed ownership");
   assert.equal(
@@ -378,7 +408,9 @@ void test("an unparseable fingerprint result names parsing, not inspection", () 
   const receipt = normalizeCodexInstall(ok({}));
   const inspection = normalizeCodexInstalled(ok("not-an-object"), desired);
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, false);
   assert.deepEqual(output.stderr, [
@@ -400,7 +432,9 @@ void test("an unparseable fingerprint result names parsing, not inspection", () 
     desired,
   );
   const failureOutput = codexPresentation.renderInstallVerification(
-    desired, receipt, normalizedFailure,
+    desired,
+    receipt,
+    normalizedFailure,
   );
   assert.equal(normalizedFailure.outcome.ok, false);
   assert.deepEqual(failureOutput.stderr, [
@@ -416,7 +450,9 @@ void test("a non-string fingerprint is unparseable, not empty", () => {
   const receipt = normalizeCodexInstall(ok({}));
   const inspection = normalizeCodexInstalled(ok({ fingerprint: 42 }), desired);
   const output = codexPresentation.renderInstallVerification(
-    desired, receipt, inspection,
+    desired,
+    receipt,
+    inspection,
   );
   assert.equal(inspection.outcome.ok, false);
   assert.deepEqual(output.stderr, [
@@ -427,10 +463,12 @@ void test("a non-string fingerprint is unparseable, not empty", () => {
 void test("the marketplace Boolean check names its own key", () => {
   // The loop covers both keys but only the `plugin` interpolation was
   // asserted, so a template that hardcoded "plugin" would have passed.
-  const normalized = normalizeCodexOwnership(ok({
-    identity_state: "manager",
-    resources: { plugin: false, marketplace: "yes" },
-  }));
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: "yes" },
+    }),
+  );
   assert.equal(normalized.outcome.ok, false);
   if (normalized.outcome.ok) assert.fail("expected malformed ownership");
   assert.equal(

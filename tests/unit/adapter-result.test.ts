@@ -365,8 +365,9 @@ function assertRefused(
 //   AdapterMessage.text -> escaped on the way in by AdapterMessageLog,
 //                          through both ingresses (appendText, appendBytes)
 //   install verification hint
-//                       -> dropped at the consumer by verifyInstalledFingerprint
-//                          (src/harnesses/codex/lifecycle.ts), per D0c
+//                       -> normalized by normalizeCodexInstall
+//                          (src/harnesses/codex/harness.ts) before
+//                          codexPresentation.renderInstallVerification renders it, per D0c
 //
 // The first three subtests below are one per mechanism, and all three are
 // required: a witness naming only writeAdapterFailure would stay green while a
