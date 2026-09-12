@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { registerScratch } from "./fixture-scratch.ts";
 import {
-  CONSTRUCTOR_MATCHER_EXEMPTIONS,
   auditConstructorMatchers,
   exactError,
   matchingError,
@@ -16,12 +15,10 @@ class ExpectedError extends Error {}
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 void test("repository has no unreviewed constructor-only error matcher", () => {
-  assert.deepEqual(CONSTRUCTOR_MATCHER_EXEMPTIONS, []);
   assert.deepEqual(
     auditConstructorMatchers({
       root: PACKAGE_ROOT,
       tsconfigPath: join(PACKAGE_ROOT, "tests", "tsconfig.json"),
-      exemptions: CONSTRUCTOR_MATCHER_EXEMPTIONS,
     }),
     [],
   );
@@ -103,7 +100,6 @@ void test("fixture", async () => {
     auditConstructorMatchers({
       root,
       tsconfigPath: join(root, "tests", "tsconfig.json"),
-      exemptions: [],
     }).map(({ path, test: name, matcher }) => ({ path, test: name, matcher })),
     [
       { path: "tests/unit/subject.test.ts", test: "fixture", matcher: "Alias" },
@@ -124,23 +120,6 @@ void test("fixture", async () => {
       },
     ],
   );
-  assert.throws(
-    () =>
-      auditConstructorMatchers({
-        root,
-        tsconfigPath: join(root, "tests", "tsconfig.json"),
-        exemptions: [
-          {
-            path: "tests/unit/subject.test.ts",
-            test: "fixture",
-            matcher: "MissingError",
-            rationale: "controlled stale-exemption fixture",
-          },
-        ],
-      }),
-    { message: /unused constructor matcher exemption/ },
-  );
-  assert.deepEqual(CONSTRUCTOR_MATCHER_EXEMPTIONS, []);
 });
 
 void test("constructor audit excludes shadowed user-defined assertion methods", () => {
@@ -181,7 +160,6 @@ void exercise;
     auditConstructorMatchers({
       root,
       tsconfigPath: join(root, "tests", "tsconfig.json"),
-      exemptions: [],
     }),
     [],
   );
@@ -195,7 +173,6 @@ void test("constructor audit fails closed when the configured project is missing
       auditConstructorMatchers({
         root,
         tsconfigPath: join(root, "tests", "missing.json"),
-        exemptions: [],
       }),
     { message: /could not open/ },
   );
@@ -233,7 +210,6 @@ dynamicThrows(() => { throw new DynamicError("dynamic"); }, DynamicError);
       auditConstructorMatchers({
         root,
         tsconfigPath: join(root, "tests", "tsconfig.json"),
-        exemptions: [],
       }),
     {
       message:

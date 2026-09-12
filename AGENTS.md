@@ -228,13 +228,12 @@ required agent harness.
   position. This is enforced by `tests/assert-matcher-gate.ts`, which the
   suite runner loads into every suite, so a violation fails the test that
   contains it. A bare error class passes that runtime check because it constrains the error
-  type, but it does not constrain the message. Repository tests must also pin the
-  message with a RegExp, object matcher, or validation function, unless a
-  class-only contract is listed by stable path, test name, matcher, and rationale
-  in `CONSTRUCTOR_MATCHER_EXEMPTIONS`. This static rule is enforced by
-  `tests/bin/error-assertions.test.ts` through
-  `tests/lib/error-assertions.ts`; the registry is empty unless a reviewed
-  class-only contract requires otherwise. **Why:** `node:assert` reads a string
+  type, but it does not constrain the message. Repository rejection tests must
+  constrain the message with a RegExp, object matcher, or validation function.
+  The static constructor-only matcher audit and runtime matcher gate remain
+  required. There is no class-only exemption registry. This static rule is
+  enforced by `tests/bin/error-assertions.test.ts` through
+  `tests/lib/error-assertions.ts`. **Why:** `node:assert` reads a string
   second argument as the failure _label_ and an absent one as no constraint,
   so either form passes on any error. One such call left PR 10's entire
   rejection corpus asserting nothing through several reviews.
