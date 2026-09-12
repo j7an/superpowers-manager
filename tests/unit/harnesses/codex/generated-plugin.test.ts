@@ -24,6 +24,8 @@ import * as generated from "../../../../src/harnesses/codex/generated-plugin.ts"
 
 import { isAcceptedSplitValue } from "../../../../src/validate-generated-plugin-cli.ts";
 
+const execFileAsync = promisify(execFile);
+
 /** An `OSError`-shaped rejection whose errno is not absence-like. */
 function permissionDenied() {
   const error = new Error("permission denied");
@@ -116,7 +118,7 @@ function options(pluginRoot: string) {
   };
 }
 
-void test("pythonStrip matches CPython str.strip and not JavaScript trim", () => {
+void test("pythonStrip matches CPython str.strip and not JavaScript trim", async () => {
   assert.equal(pythonStrip("  value  "), "value");
   assert.equal(pythonStrip("\t\n\v\f\r value \r\f\v\n\t"), "value");
   // Python-only: the C0 separators and NEL.
@@ -138,6 +140,23 @@ void test("pythonStrip matches CPython str.strip and not JavaScript trim", () =>
   }
   assert.equal(pythonStrip("a\u001fb"), "a\u001fb");
   assert.equal(pythonStrip("\ufeff"), "\ufeff");
+  const helperUrl = new URL("../../../../src/python-text.ts", import.meta.url)
+    .href;
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      [
+        "import { pythonStrip } from " + JSON.stringify(helperUrl) + ";",
+        "const input = 'x' + ' '.repeat(1_000_000) + 'y';",
+        "if (pythonStrip(input) !== input) process.exit(1);",
+      ].join("\n"),
+    ],
+    { timeout: 10_000 },
+  );
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
 });
 
 void test("pythonSplitlines matches CPython str.splitlines", () => {
@@ -951,7 +970,6 @@ void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", asy
   );
 });
 
-const execFileAsync = promisify(execFile);
 const CLI = fileURLToPath(
   new URL("../../../../src/validate-generated-plugin-cli.ts", import.meta.url),
 );

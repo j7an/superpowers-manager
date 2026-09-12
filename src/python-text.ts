@@ -1,9 +1,10 @@
-// Exact CPython strip characters; JavaScript trim()/\s differ at FEFF and C0/NEL.
+// Match first through last non-whitespace; avoid suffix retries on internal runs.
 export function pythonStrip(value: string): string {
-  return value.replace(
-    // oxlint-disable-next-line no-control-regex -- CPython whitespace includes C0 controls.
-    /^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000]+$/g,
-    "",
+  return (
+    value.match(
+      // oxlint-disable-next-line no-control-regex -- exact CPython whitespace includes C0 separators.
+      /[^\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000](?:[\s\S]*[^\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000])?/,
+    )?.[0] ?? ""
   );
 }
 
