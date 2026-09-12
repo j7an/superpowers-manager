@@ -10,6 +10,7 @@ import {
   codexBuild,
   codexInspect,
   codexInstall,
+  codexRemove,
   mapCodexLaunchFailure,
   runCommandForTest,
 } from "../../../../src/harnesses/codex/adapter.ts";
@@ -43,8 +44,8 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:373::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
-  // `src/harnesses/codex/adapter.ts:466::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:388::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
+  // `src/harnesses/codex/adapter.ts:478::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -105,6 +106,70 @@ void test("the adapter replays the validator success line as one stdout record",
       text: `generated plugin validation passed: ${workspace.candidate}`,
     },
   ]);
+
+  await t.test(
+    "workspace creation failures keep each operation diagnostic",
+    async () => {
+      const sandbox = await codexSandbox(t);
+      const context = { root: PACKAGE_ROOT, env: sandbox.env({}) };
+      const missingParent = join(workspace.base, "missing-temp-parent");
+      const previous = process.env.TMPDIR;
+      process.env.TMPDIR = missingParent;
+      try {
+        const operations = [
+          [
+            "build",
+            "build-failed",
+            () => codexBuild(buildInput(workspace), context),
+          ],
+          [
+            "install",
+            "install-failed",
+            () => codexInstall(sandbox.packageRoot, context),
+          ],
+          [
+            "uninstall",
+            "uninstall-failed",
+            () =>
+              codexRemove(
+                {
+                  pluginPresent: false,
+                  marketplacePresent: false,
+                },
+                context,
+              ),
+          ],
+          [
+            "fingerprint",
+            "inspect-failed",
+            () => codexInspect("fingerprint", context),
+          ],
+          [
+            "inspect",
+            "inspect-failed",
+            () => codexInspect("ownership", context),
+          ],
+        ] as const;
+        for (const [label, code, run] of operations) {
+          const result = await run();
+          assert.equal(result.outcome.ok, false);
+          if (result.outcome.ok)
+            assert.fail("expected workspace creation failure");
+          assert.equal(result.outcome.error.code, code);
+          assert.equal(
+            result.outcome.error.message,
+            "cannot create adapter " +
+              label +
+              " workspace under " +
+              missingParent,
+          );
+        }
+      } finally {
+        if (previous === undefined) delete process.env.TMPDIR;
+        else process.env.TMPDIR = previous;
+      }
+    },
+  );
 });
 
 void test("the adapter replays a multi-error failure as one record per line", async (t) => {
@@ -131,7 +196,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/harnesses/codex/adapter.ts:413::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
+// call (`src/harnesses/codex/adapter.ts:425::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/harnesses/codex/hooks.ts) must keep succeeding, so this exercises the read at
@@ -474,7 +539,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/harnesses/codex/adapter.ts:620::registeredRoot = marketplaceRootFromJson(`) is the destructive
+// The install reconciliation read (`src/harnesses/codex/adapter.ts:616::registeredRoot = marketplaceRootFromJson(`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -700,7 +765,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
   }
 });
 
-// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:1006::const managerPresent = managerPlugin || managerMarketplace;` computes
+// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:964::const managerPresent = managerPlugin || managerMarketplace;` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -859,7 +924,7 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
 });
 
 /**
- * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:670::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
+ * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:666::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -897,13 +962,13 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: `src/harnesses/codex/adapter.ts:587::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
+      // executor's shell: `src/harnesses/codex/adapter.ts:585::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:644::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
+      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:640::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/harnesses/codex/adapter.ts:587::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
+      // the default (`src/harnesses/codex/adapter.ts:585::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -934,7 +999,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. `src/harnesses/codex/adapter.ts:670::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
+  // witness that. `src/harnesses/codex/adapter.ts:666::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);
