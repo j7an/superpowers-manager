@@ -761,6 +761,8 @@ void test("ADAPTER-OWNERSHIP-01 typed policy is derived from all four manager an
       const result = await codexInspectOwnership({
         root: PACKAGE_ROOT,
         env: sandbox.env({
+          HOME: sandbox.base,
+          CODEX_HOME: join(sandbox.base, "codex"),
           FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
             installed: [
               {
