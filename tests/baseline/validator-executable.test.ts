@@ -1,6 +1,6 @@
 // End-to-end coverage for SUPERPOWERS_VALIDATOR_EXECUTABLE across prepare, install
 // and update. A NEW suite, deliberately: tests/baseline/prepare.test.js is frozen at
-// 31 call sites by tests/migration-inventory/prepare.md.
+// 31 call sites in the retained prepare baseline suite.
 import assert from "node:assert/strict";
 import {
   existsSync,

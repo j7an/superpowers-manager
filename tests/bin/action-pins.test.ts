@@ -1,7 +1,7 @@
 // Ported from tests/test_workflows.sh's test_action_pin_helper (:347-419)
 // and test_literal_action_pin_detector (:486-537), which characterise the
 // awk functions in tests/lib/action-pin-assertions.sh. See
-// tests/migration-inventory/workflows.md for the numbered inventory.
+// the retained workflow contract tests.
 //
 // Fixture SHAs are CONSTRUCTED, never written as literals. The literal-pin
 // source policy in tests/bin/workflows.test.js scans this file, and an
@@ -28,7 +28,7 @@ const UPPERCASE_SHA = "A".repeat(40);
 const TARGET = "github/codeql-action/analyze";
 const CHECKOUT = "actions/checkout";
 
-// --- inventory items 2-4: accepted pin forms ---------------------------
+// --- accepted pin forms -------------------------------------------------
 const ACCEPTED_PIN_BLOCKS = [
   { name: "unquoted", block: `        uses: ${TARGET}@${SHA_ONE} # v4.99.0` },
   {
@@ -44,7 +44,7 @@ const ACCEPTED_PIN_BLOCKS = [
 assert.equal(
   ACCEPTED_PIN_BLOCKS.length,
   3,
-  "ACCEPTED_PIN_BLOCKS lost or gained a case — update tests/migration-inventory/workflows.md",
+  "ACCEPTED_PIN_BLOCKS lost or gained a case; review the accepted pin contract",
 );
 
 for (const { name, block } of ACCEPTED_PIN_BLOCKS) {
@@ -56,7 +56,7 @@ for (const { name, block } of ACCEPTED_PIN_BLOCKS) {
   });
 }
 
-// --- inventory item 5: agreeing duplicate references ------------------
+// --- agreeing duplicate references -------------------------------------
 void test("action pin pair: agreeing duplicate references yield one pair", () => {
   const block = [
     `        uses: ${TARGET}@${SHA_ONE} # v4.99.0`,
@@ -68,7 +68,7 @@ void test("action pin pair: agreeing duplicate references yield one pair", () =>
   });
 });
 
-// --- inventory items 6-16: rejected pin forms -------------------------
+// --- rejected pin forms -------------------------------------------------
 const OSV_EXACT =
   "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml";
 const OSV_NEAR =
@@ -147,7 +147,7 @@ const REJECTED_PIN_BLOCKS = [
 assert.equal(
   REJECTED_PIN_BLOCKS.length,
   11,
-  "REJECTED_PIN_BLOCKS lost or gained a case — update tests/migration-inventory/workflows.md",
+  "REJECTED_PIN_BLOCKS lost or gained a case; review the rejected pin contract",
 );
 
 for (const { name, target, block } of REJECTED_PIN_BLOCKS) {
@@ -163,7 +163,7 @@ for (const { name, target, block } of REJECTED_PIN_BLOCKS) {
 // port silently loses (controller ruling, 2026-08-02). None of the shell's
 // 16 action-pin fixtures actually exercises any of these three properties —
 // verified by mutation testing each one and observing every existing
-// fixture stay GREEN (see tests/migration-inventory/workflows.md). These
+// fixture stay GREEN. These
 // three have no shell counterpart; they exist only in the port. Each was
 // proven discriminating: break the property in tests/bin/workflow-support.js,
 // this fixture (and only this one, among these three) goes RED; restore, it
@@ -192,7 +192,7 @@ const PORT_ONLY_DISCRIMINATING_BLOCKS = [
 assert.equal(
   PORT_ONLY_DISCRIMINATING_BLOCKS.length,
   3,
-  "PORT_ONLY_DISCRIMINATING_BLOCKS lost or gained a case — update tests/migration-inventory/workflows.md",
+  "PORT_ONLY_DISCRIMINATING_BLOCKS lost or gained a case; review the port-only contract",
 );
 
 for (const { name, target, block } of PORT_ONLY_DISCRIMINATING_BLOCKS) {
@@ -204,7 +204,7 @@ for (const { name, target, block } of PORT_ONLY_DISCRIMINATING_BLOCKS) {
   });
 }
 
-// --- inventory items 17-18: the literal-pin detector -------------------
+// --- the literal-pin detector ------------------------------------------
 // The detector's fixtures are written to a temp file because it reads from
 // disk. The SHAs are still constructed, never inline literals.
 
@@ -229,12 +229,12 @@ const DETECTOR_NEGATIVE_LINES = [
 assert.equal(
   DETECTOR_POSITIVE_LINES.length,
   8,
-  "DETECTOR_POSITIVE_LINES lost or gained a case — update tests/migration-inventory/workflows.md",
+  "DETECTOR_POSITIVE_LINES lost or gained a case; review the detector contract",
 );
 assert.equal(
   DETECTOR_NEGATIVE_LINES.length,
   4,
-  "DETECTOR_NEGATIVE_LINES lost or gained a case — update tests/migration-inventory/workflows.md",
+  "DETECTOR_NEGATIVE_LINES lost or gained a case; review the detector contract",
 );
 
 void test("literal pin detector reports every embedded-pin form", (t) => {

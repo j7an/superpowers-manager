@@ -63,7 +63,7 @@ void test("reportLegacyState reports legacy and both with the frozen text", () =
 // PORT-ONLY. tests/test_codex_state_units.sh never exercised the `*)` arms of
 // either case statement (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:56-58::spw_die "unknown adapter identity state: $identity_state` and :81-83), so the
 // spw_die path was unwitnessed on the shell side. Recorded as port-only items
-// 1-4 in tests/migration-inventory/codex-state-units.md — the port-only region
+// 1-4 in the historical migration record — the port-only region
 // restarts at 1 rather than continuing the mapped region's numbering.
 void test("both predicates reject an unrecognised identity state", () => {
   assert.deepEqual(requireNoLegacyState("garbage"), {
@@ -289,9 +289,7 @@ void test("ADAPTER-TERMINAL-01 install verification omits a hint carrying a term
 
 void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lone surrogate", () => {
   // BOTH halves of the surrogate range, in one test() rather than two:
-  // tests/migration-inventory/codex-state-units.md pins this file at 26 static
-  // `test(` call sites, so the second value is a row here rather than a case
-  // of its own.
+  // The second value is a row here rather than a case of its own.
   //
   // hasTerminalControl covers 0xd800-0xdfff (`src/adapter-result.ts:199::(code >= 0xd800`).
   // U+D800 alone leaves that clause under-constrained: narrowing it to
@@ -501,8 +499,8 @@ void test("a non-object resources falls through to the Boolean message", () => {
 // retires with the transport. src/harnesses/codex/adapter.ts's update-control view returns
 // the literal `managed`; the old witness at
 // `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:102-104::run_adapter update` ran a fixture SHELL adapter emitting
-// a canned outcome, and no shell adapters remain. tests/migration-inventory/
-// probe.md item 92 instructs slice 5 to port that witness; it cannot be
+// a canned outcome, and no shell adapters remain. The historical migration
+// record instructs slice 5 to port that witness; it cannot be
 // ported, because there is nothing in-process that produces the value.
 
 void test("ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value", () => {

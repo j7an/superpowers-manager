@@ -1,7 +1,7 @@
 // Support module for the workflow-contract suites. Ported from
 // tests/test_workflows.sh's embedded Ruby checker and from
 // tests/lib/action-pin-assertions.sh (see
-// tests/migration-inventory/workflows.md for the numbered assertion
+// the retained workflow contract for the expected assertions
 // inventory those suites map to 1:1).
 //
 // This is the only file in the repository that imports `yaml`.
@@ -72,7 +72,7 @@ export function actionPinPair(
     // matching, since target is not a substring of the near-miss line at
     // any offset. The discriminating fixture for this property is the
     // port-only "anchored prefix match" case; see
-    // tests/migration-inventory/workflows.md.)
+    // the historical migration record.)
     if (line.indexOf(`${target}@`) !== 0) {
       continue;
     }

@@ -6,8 +6,8 @@ Every behavior ID in
 committed shell `BASELINE CASE` marker. A supporting artifact is optional; it
 never substitutes for the named test.
 
-Later migration pull requests must cite the affected IDs and preserve their
-selectors or intentionally update the inventory, test, and this map together.
+Later pull requests must cite affected IDs and preserve their selectors or
+intentionally update the behavior, test, and this map together.
 
 | Behavior ID | Exact test case | Fixture / builder |
 |---|---|---|
@@ -138,7 +138,7 @@ purpose: a line pointer into a file under edit goes stale silently, and nothing
 gates it. The claim is therefore co-owned by the two IDs, not orphaned:
 broadening the `GENERATED-HOOKS-FORBID-01` case would duplicate an assertion
 already made a few lines away in the same file, and would cost a case rename
-that both this table and `tests/migration-inventory/prepare.md` cite by name.
+that this table cites by name.
 
 Before PR 11.5 slice 3.5 the row anchored a single retired shell case that
 carried both halves; the split is a consequence of that case's deletion, not of

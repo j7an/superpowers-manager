@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // End-to-end driver for the in-process `probe` command, ported from
-// tests/test_probe.sh (see tests/migration-inventory/probe.md).
+// tests/test_probe.sh.
 //
 // It calls `runProbe` directly rather than spawning `node dist/cli.js probe`:
 // driving the function is what lets these cases assert exact stream contents
@@ -620,7 +620,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // child's stderr (`src/harnesses/codex/adapter.ts:293::async function listingCommand(`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
-// the child's stderr. Recorded in tests/migration-inventory/probe.md.
+// the child's stderr.
 void test("adapter messages precede the error line on a controlled failure", async () => {
   const c = createCase({ fakes: "probe" });
   seedGenerated(c, `{"commit":"${DESIRED}"}`);

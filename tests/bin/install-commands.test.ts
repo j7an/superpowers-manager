@@ -1,17 +1,13 @@
 // Port of tests/test_install_commands.sh (782 lines, deleted in this commit).
-// Reconciliation: tests/migration-inventory/install-commands.md
+// The retained install-command contract follows.
 //
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup — which is
 // why the driver's corrupt-and-restore dance (:418-423, :458-467, :475-476)
 // has no counterpart here, and why each case must state the preconditions the
-// shell inherited from the scenario above it. See the inventory for those.
+// shell inherited from the scenario above it.
 
-// Two statements, not one. `tests/bin/migration-inventory.test.ts:66::const TEST_IMPORT` matches
-// /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.ts:692-695::TEST_IMPORT.test(portSource)`, because the
-// static call-site counter recognises exactly one binding form and fails closed
-// rather than miscount. Both `import { describe, test } from "node:test";` and
-// `import test, { describe } from "node:test";` FAIL that regex.
+// Two statements, not one: the explicit imports keep the test binding clear.
 import test from "node:test";
 import { describe } from "node:test";
 import assert from "node:assert/strict";
@@ -782,7 +778,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   // "malformed update-control output exits exactly 1" (:354-364) is RETIRED
-  // at the gap: tests/migration-inventory/install-commands.md items 22-24.
+  // at the historical migration boundary.
   // Its subject -- an adapter transport emitting non-JSON bytes across a
   // process boundary -- cannot occur through `ctx.adapter`, an in-process
   // function call that returns an already-typed AdapterResult with no
@@ -1418,9 +1414,7 @@ void describe("install commands", { concurrency: true }, () => {
     // its claim. The shell fixture made the FAKE adapter print
     // "fingerprint inspection failed in adapter fixture" and exit 99, so :695's
     // `out.includes("fingerprint inspection")` matched the fixture's own stderr
-    // line — `tests/migration-inventory/install-commands.md:598::104. Output` records this
-    // as item 104: it proves the string appears, not that the subject produced
-    // it.
+    // line: it proves the string appears, not that the subject produced it.
     //
     // The lower lever is the fake CODEX plus a real unsafe active-cache shape.
     // `pluginAdd: "orphan"` reports an enabled plugin at 1.0.0 without
@@ -1472,8 +1466,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   // "malformed fingerprint output is rejected by response validation"
-  // (:702-716) is RETIRED at the gap: tests/migration-inventory/
-  // install-commands.md items 107-111. Same as items 22-24 above: a bare `{`
+  // (:702-716) is RETIRED at the historical migration boundary. Same as above: a bare `{`
   // on stdout is a transport-level fault with no analogue through
   // `ctx.adapter`, which returns an already-typed AdapterResult with nothing
   // to garble in between.

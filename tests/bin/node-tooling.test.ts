@@ -1,5 +1,5 @@
 // Ported from tests/test_node_tooling.sh (see
-// tests/migration-inventory/node-tooling.md for the assertion inventory).
+// the retained tooling contract).
 //
 // This is the only typechecker invocation on the `sh tests/run.sh` path —
 // package.json's "typecheck" script includes the same project but does

@@ -1,5 +1,5 @@
 // Ported from tests/test_container_contract.sh (see
-// tests/migration-inventory/container-contract.md for the numbered
+// the retained container contract for the expected
 // assertion inventory this file maps to 1:1).
 //
 // The shell driver never invokes Docker, a real container, or the real
@@ -311,7 +311,7 @@ function validateHookResponseAssertion(
   assert.equal(
     requiredGate.length,
     10,
-    "requiredGate lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "requiredGate lost or gained a case; review the required gate contract",
   );
   requireOrderedSource(
     body,
@@ -412,7 +412,7 @@ function validateProbe(probe: string) {
   assert.equal(
     bindingSequence.length,
     9,
-    "bindingSequence lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "bindingSequence lost or gained a case; review the binding sequence contract",
   );
   {
     let cursor = -1;
@@ -478,7 +478,7 @@ function validateProbe(probe: string) {
   assert.equal(
     requiredAbSteps.length,
     15,
-    "requiredAbSteps lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "requiredAbSteps lost or gained a case; review the required A/B contract",
   );
   for (const text of requiredAbSteps) {
     if (!probe.includes(text)) {
@@ -603,7 +603,7 @@ function validateProbe(probe: string) {
   assert.equal(
     hookContract.length,
     18,
-    "hookContract lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "hookContract lost or gained a case; review the hook contract",
   );
   for (const text of hookContract) {
     if (!probe.includes(text)) {
@@ -659,7 +659,7 @@ function validateProbe(probe: string) {
   assert.equal(
     activeFields.length,
     5,
-    "activeFields lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "activeFields lost or gained a case; review the active fields contract",
   );
   for (const text of activeFields) {
     if (!activeBody.includes(text)) {
@@ -680,7 +680,7 @@ function validateProbe(probe: string) {
   assert.equal(
     schemaGates.length,
     5,
-    "schemaGates lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "schemaGates lost or gained a case; review the schema gate contract",
   );
   requireOrderedSource(
     schemaBody,
@@ -943,7 +943,7 @@ function validateProbe(probe: string) {
   assert.equal(
     lifecycle.length,
     51,
-    "lifecycle lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "lifecycle lost or gained a case; review the lifecycle contract",
   );
   requireOrderedLifecycle(historicalProbe, lifecycle);
 
@@ -1049,7 +1049,7 @@ function validateHooksRpc(hooksRpc: string) {
   assert.equal(
     required.length,
     26,
-    "required (validateHooksRpc) lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "required (validateHooksRpc) lost or gained a case; review the hook validation contract",
   );
   for (const text of required) {
     if (!hooksRpc.includes(text)) {
@@ -1069,7 +1069,7 @@ function validateHooksRpc(hooksRpc: string) {
   assert.equal(
     handshake.length,
     7,
-    "handshake lost or gained a case — update tests/migration-inventory/container-contract.md",
+    "handshake lost or gained a case; review the handshake contract",
   );
   requireOrderedSource(
     hooksRpc,
@@ -1849,7 +1849,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
     assert.equal(
       Object.keys(rpcMutations).length,
       20,
-      "rpcMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
+      "rpcMutations lost or gained a case; review the RPC mutation contract",
     );
 
     for (const [name, { source, message }] of Object.entries(rpcMutations)) {
@@ -2024,7 +2024,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
     assert.equal(
       Object.keys(probeMutations).length,
       10,
-      "probeMutations lost or gained a case — update tests/migration-inventory/container-contract.md",
+      "probeMutations lost or gained a case; review the probe mutation contract",
     );
 
     for (const [name, { source, message }] of Object.entries(probeMutations)) {

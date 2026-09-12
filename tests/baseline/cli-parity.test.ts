@@ -181,7 +181,7 @@ function createReleaseRepo(sandbox: Sandbox, name: string = "upstream") {
  * A `codex` that answers the two listing commands the in-process probe's
  * adapter views issue (`src/harnesses/codex/adapter.ts:758::async function runInspect(` — the argument
  * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
- * `tests/migration-inventory/probe.md` cite them) with empty inventories, and
+ * the retained probe baseline suite cites them) with empty inventories, and
  * rejects anything else. `writeNoopTool`'s `exit 0` stub is
  * enough for a preflight lookup but not for a command that actually reads
  * Codex state: probe fails closed on its unparseable empty output.

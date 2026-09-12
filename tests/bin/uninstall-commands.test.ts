@@ -1,14 +1,10 @@
 // Port of tests/test_uninstall_commands.sh (457 lines, deleted in this commit).
-// Reconciliation: tests/migration-inventory/uninstall-commands.md
+// The retained uninstall-command contract follows.
 //
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup.
 
-// Two statements, not one. `tests/bin/migration-inventory.test.ts:66::const TEST_IMPORT` matches
-// /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.ts:692-695::TEST_IMPORT.test(portSource)`, because the
-// static call-site counter recognises exactly one binding form and fails closed
-// rather than miscount. Both `import { describe, test } from "node:test";` and
-// `import test, { describe } from "node:test";` FAIL that regex — verified.
+// Two statements, not one: the explicit imports keep the test binding clear.
 import test from "node:test";
 import { describe } from "node:test";
 import assert from "node:assert/strict";
@@ -383,7 +379,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   // Rewritten in place at PR 11.5 slice 4b, Task 8. Items 7, 8 and 9 are
-  // RETIRED at the gap in tests/migration-inventory/uninstall-commands.md: the
+  // RETIRED at the historical migration boundary: the
   // shell's `spw_require_command python3` (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:10::spw_require_command`) has no port,
   // and `COMMAND_REQUIREMENTS.uninstall` drops from `["python3", "codex"]` to
   // `["codex"]` at the flip, because `python3` was only ever required so

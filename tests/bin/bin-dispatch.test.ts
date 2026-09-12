@@ -1,5 +1,5 @@
 // Ported from tests/test_bin_dispatch.sh (see
-// tests/migration-inventory/bin-dispatch.md for the numbered assertion
+// the retained dispatch contract for the expected assertions
 // inventory this file maps to 1:1).
 //
 // Every case names the tools present on its PATH at the assertion. The shell
@@ -58,7 +58,7 @@ void test("a source module that throws keeps its real error and is not relabelle
 // at slice 3.4. `SPAWN_COMMANDS`, which sized the table from production, is
 // deleted from tests/bin/dispatch-fixture.js with it: at 8/8 in-process the
 // subset is permanently empty. See the retirement notes for items 7-14 in
-// tests/migration-inventory/bin-dispatch.md and the dedicated in-process
+// the retained dispatch contract and the dedicated in-process
 // routing cases below.
 
 void test("routing: `track-latest` succeeds in-process", () => {
@@ -107,7 +107,7 @@ void test("routing: `pin` succeeds in-process", () => {
 // ("rejects an override that changes nothing"), so it goes with it: a fixture
 // whose only remaining test is a test of itself is residue, not coverage. See
 // the retirement notes for port-only items 41-43 in
-// tests/migration-inventory/bin-dispatch.md.
+// the historical migration record.
 
 // --- inventory items 15-19: unknown subcommand -----------------------------
 
@@ -250,7 +250,7 @@ void test("an invalid pin ref is a usage error decided before any tool lookup", 
 // `uninstall` (formerly item 40) — its last entry — left the same way at slice
 // 4b's flip, so the table and its loop are deleted rather than left with zero
 // entries, for the same reason `NO_CODEX_CASES` was. See the retirement notes
-// for items 38, 39 and 40 in tests/migration-inventory/bin-dispatch.md and the
+// for the historical shell cases and the
 // dedicated cases just below.
 
 // Item 40's successor. `uninstall`'s shell contract was that preflight does not
@@ -429,7 +429,7 @@ void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () 
 // table and its loop are deleted rather than left with zero entries, because a
 // `for` over `[]` reports success without asserting anything. See the
 // retirement notes for items 48, 49, 50, and 51 in
-// tests/migration-inventory/bin-dispatch.md; the four standalone cases below
+// the historical migration record; the four standalone cases below
 // carry the analogous in-process properties.
 void test("`prepare` runs in-process with codex absent from PATH", () => {
   // Item 51's shell contract was that preflight does not require Codex for

@@ -93,8 +93,8 @@ void test("readUpstreamManifestVersion delegates every read and parse failure to
     assert.equal(error.message, `cannot read manifest JSON in ${unreadable}`);
     // No errno vocabulary reaches the message. The apostrophe in Node's
     // `open '<path>'` prose is written as \x27, not literally: this file is an
-    // inventoried port file, and tests/bin/migration-inventory.test.js's
-    // stripInert does not track regex-literal context, so an unpaired quote
+    // retained port file, and this test's source scanner does not track
+    // regex-literal context, so an unpaired quote
     // here starts a phantom string that swallows the next two `void test(`
     // call sites and silently undercounts the suite (measured: 4 instead of
     // 6). Identical pattern, no unpaired quote.

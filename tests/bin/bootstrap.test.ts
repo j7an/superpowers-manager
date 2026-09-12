@@ -1,5 +1,5 @@
 // Ported from tests/test_bootstrap.sh (see
-// tests/migration-inventory/bootstrap.md for the numbered assertion
+// the retained bootstrap contract for the expected assertions
 // inventory this file maps to 1:1).
 
 import assert from "node:assert/strict";
@@ -49,7 +49,7 @@ const EXPECTED_FILES = [
 assert.equal(
   EXPECTED_FILES.length,
   6,
-  "EXPECTED_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "EXPECTED_FILES lost or gained a case; review the expected file contract",
 );
 
 void test("bootstrap: expected repository files are present", () => {
@@ -66,7 +66,7 @@ const ABSENT_FILES = [
 assert.equal(
   ABSENT_FILES.length,
   2,
-  "ABSENT_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "ABSENT_FILES lost or gained a case; review the absent file contract",
 );
 
 void test("bootstrap: deleted repository files stay absent", () => {
@@ -238,7 +238,7 @@ const textContentCases: Array<[string, string, boolean]> = [
 assert.equal(
   textContentCases.length,
   67,
-  "textContentCases lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "textContentCases lost or gained a case; review the text content contract",
 );
 
 void test("bootstrap: text-content assertions", () => {
@@ -319,7 +319,7 @@ const REQUIRED_PRE = [
 assert.equal(
   REQUIRED_PRE.length,
   5,
-  "REQUIRED_PRE lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "REQUIRED_PRE lost or gained a case; review the pre-bootstrap contract",
 );
 
 const REQUIRED_POST = [
@@ -331,7 +331,7 @@ const REQUIRED_POST = [
 assert.equal(
   REQUIRED_POST.length,
   4,
-  "REQUIRED_POST lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "REQUIRED_POST lost or gained a case; review the post-bootstrap contract",
 );
 
 function assertReleaseVerificationSections(document: string) {

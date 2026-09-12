@@ -1,5 +1,5 @@
 // Ported from tests/test_workflows.sh (see
-// tests/migration-inventory/workflows.md for the numbered assertion
+// the retained workflow contract for the expected assertions
 // inventory this file maps to 1:1).
 //
 // YAML is parsed by the `yaml` devDependency rather than by a hand-written
@@ -81,7 +81,7 @@ const EXPECTED_EXTERNAL_PINS = [
 assert.equal(
   EXPECTED_EXTERNAL_PINS.length,
   9,
-  "EXPECTED_EXTERNAL_PINS lost or gained a case — update tests/migration-inventory/workflows.md",
+  "EXPECTED_EXTERNAL_PINS lost or gained a case; review the external pin contract",
 );
 
 // --- inventory items 97-98: manifest-fixture shape guards --------------
@@ -168,7 +168,7 @@ void test("all shared-workflows pins agree with one another", () => {
   assert.equal(
     shared.length,
     6,
-    "shared-workflows pin count changed — update tests/migration-inventory/workflows.md",
+    "shared-workflows pin count changed; review the shared workflow contract",
   );
 
   const pairs = shared.map(([relativePath, target]) =>

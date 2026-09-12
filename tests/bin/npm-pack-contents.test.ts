@@ -1,5 +1,5 @@
 // Ported from tests/test_npm_pack_contents.sh (see
-// tests/migration-inventory/npm-pack-contents.md for the numbered
+// the retained package-content contract for the expected
 // assertion inventory this file maps to 1:1).
 //
 // The shell driver never inspects `npm pack`'s JSON report itself — it
@@ -186,7 +186,7 @@ void test("npm-pack-contents", async (t) => {
   assert.equal(
     Object.keys(malformedShapes).length,
     5,
-    "malformedShapes lost or gained a case — update tests/migration-inventory/npm-pack-contents.md",
+    "malformedShapes lost or gained a case; review the malformed shape contract",
   );
 
   for (const [name, report] of Object.entries(malformedShapes)) {
@@ -222,7 +222,7 @@ void test("npm-pack-contents", async (t) => {
   // `startsWith`, or a missing `parts` split). This synthetic fixture is
   // not present in the original shell driver — it exists solely to make
   // each category's predicate independently falsifiable. See
-  // tests/migration-inventory/npm-pack-contents.md for the discriminating
+  // the historical migration record for the discriminating
   // rationale.
   const FORBIDDEN_PATH_FIXTURES = [
     ["selection.json", "some/dir/selection.json"],
@@ -235,7 +235,7 @@ void test("npm-pack-contents", async (t) => {
   assert.equal(
     FORBIDDEN_PATH_FIXTURES.length,
     6,
-    "FORBIDDEN_PATH_FIXTURES lost or gained a case — update tests/migration-inventory/npm-pack-contents.md",
+    "FORBIDDEN_PATH_FIXTURES lost or gained a case; review the forbidden path contract",
   );
 
   for (const [category, path] of FORBIDDEN_PATH_FIXTURES) {

@@ -357,7 +357,7 @@ void test("a classification failure reaches stderr through the adapter wrapper",
 });
 
 // P2a — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the SOURCE-side call at :358. Ports the
-// retired driver's :1041 and :1044 cases (inventory items 127 and 128).
+// retired driver's :1041 and :1044 cases.
 //
 // The PATH is the assertion, not the message. Three different failures print
 // `hook subtree escapes or is broken`: this one names the hooks root under the
@@ -383,7 +383,7 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
 });
 
 // P2b — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the CANDIDATE-side call at :367. Ports
-// the retired driver's :1035 case (inventory item 125), which is the only
+// the retired driver's :1035 case, which is the only
 // root-specific witness that post-copy validation runs.
 //
 // The discriminator is which root the emitted path names. Both P2a and this
@@ -1131,9 +1131,7 @@ void test(
 );
 
 // P4 — `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the ACCEPTING side of the hooks-root symlink
-// policy, covering both halves the retired shell driver held alone (items
-// 83-85 in tests/migration-inventory/prepare.md, whose entry for item 83 ends
-// "Slice 3.5, read this before deleting the shell file").
+// policy, covering both halves the retired shell driver held alone.
 //
 // Every other root-symlink case in the repository asserts rejection:
 // `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:772-840::the hook subtree rejects unsafe symlinks` is twelve cases of

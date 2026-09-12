@@ -21,10 +21,6 @@
     { "path": "tests/baseline/packaged-cli.test.ts", "group": "integration" },
     { "path": "tests/baseline/prepare.test.ts", "group": "integration" },
     { "path": "tests/baseline/probe.test.ts", "group": "integration" },
-    {
-      "path": "tests/baseline/protocol-disposition.test.ts",
-      "group": "repository"
-    },
     { "path": "tests/baseline/ref-resolution.test.ts", "group": "integration" },
     {
       "path": "tests/baseline/selection-commands.test.ts",
@@ -56,7 +52,6 @@
     { "path": "tests/bin/harness-isolation.test.ts", "group": "integration" },
     { "path": "tests/bin/lifecycle-fakes.test.ts", "group": "integration" },
     { "path": "tests/bin/lifecycle-fixture.test.ts", "group": "integration" },
-    { "path": "tests/bin/migration-inventory.test.ts", "group": "repository" },
     { "path": "tests/bin/node-tooling.test.ts", "group": "repository" },
     { "path": "tests/bin/npm-pack-contents.test.ts", "group": "integration" },
     { "path": "tests/bin/readme-requirements.test.ts", "group": "repository" },
