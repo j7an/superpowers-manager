@@ -169,9 +169,7 @@ const textContentCases: Array<[string, string, boolean]> = [
     "dist/harnesses/codex/hooks.js",
     true,
   ],
-  // These constructed strings are deliberate negative assertions over deleted
-  // paths, excluded from the literal active-consumer audit. Active references
-  // must remain literal and dispositioned; construction must not hide one.
+  // These are deliberate absence checks for retired production files.
   [
     "tests/expected_tarball_contents.txt",
     ["scripts/", "core/selection.sh"].join(""),

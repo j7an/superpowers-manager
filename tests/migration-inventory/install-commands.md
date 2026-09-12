@@ -761,28 +761,32 @@ described in the section above.
 
 Item 41 extends the shell's install-path provenance check to the update path.
 
-Item 42 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
-the shell had no in-process subject whose non-spawning could be guarded, so
-there is nothing for it to be additive, non-vacuous, or channel-changed
-*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.ts`'s
-`tripwireTriggered` and its callers in `tests/bin/install-fakes.ts`.
+**Historical Task 9 record (PR 11.5 slice 4b, 2026-08-11).** Item 42 has no
+shell original at all: the shell had no in-process subject whose non-spawning
+could be guarded, so there is nothing for it to be additive, non-vacuous, or
+channel-changed *relative to*. It is row 18's consumer — see
+`tests/bin/lifecycle-fakes.ts`'s `tripwireTriggered` and its callers in
+`tests/bin/install-fakes.ts`.
 
-Be precise about what that consumer witnesses, because the obvious reading is
+Be precise about what that consumer witnessed, because the obvious reading was
 wrong. A subject that never spawns the adapter cannot, by running correctly,
-observe the tripwire fire: on the passing path the fake adapter's process does
+observe the tripwire fire: on the passing path the fake adapter's process did
 not exist. As first committed (`94794bd`) the case therefore passed unchanged
 with `tripwireTriggered` forced to return `false` — it constrained the port,
-not the tripwire. The case now carries a second half that spawns the SAME
+not the tripwire. The case then carried a second half that spawned the SAME
 case's fake adapter directly, through `lifecycle-fixture.js`'s
-`spawnFakeAdapter`, and pins the refusal: exit 94, the tripwire's own message
+`spawnFakeAdapter`, and pinned the refusal: exit 94, the tripwire's own message
 on stderr, and the recorded line in the log the first half required to be
-empty. That half dies when the tripwire is disarmed, which is what earns the
+empty. That half died when the tripwire was disarmed, which was what earned the
 first half its meaning — the same non-vacuity argument items 7-20 above make
-for their own logs. The tripwire firing is still observed through a direct
-spawn rather than through the subject, because post-flip no subject can
-produce one; what changed is that the direct spawn now runs inside the case
-whose emptiness claim depends on it, with that case's own executable, state
-and seam.
+for their own logs. The tripwire firing was still observed through a direct
+spawn rather than through the subject, because post-flip no subject could
+produce one; the direct spawn ran inside the case whose emptiness claim depended
+on it, with that case's own executable, state and seam.
+
+**Current retirement (Task 2, 2026-09-12).** Item 42 remains a numbered
+historical port-only record, but its live observer is retired because the
+subject cannot reach the fake adapter it observed.
 
 ***Port-only entries 1-4, 7, 9, 11-13, 15, 20 and 34 describe channels that no
 longer exist. Recorded 2026-08-11 at slice 4b's closeout; the numbering and the
