@@ -118,7 +118,7 @@ The installed package requires Node >=24. Native source, tests, and packaging to
 | `pin` | yes | no | no | no |
 | `track-latest` | no | no | no | no |
 | `unpin` | no | no | no | no |
-| `prepare` | yes | only with SUPERPOWERS_VALIDATOR | no | no |
+| `prepare` | yes | no | no | no |
 | `probe` | yes | no | yes | no |
 | `install` | yes | no | yes | yes |
 | `update` | yes | no | yes | yes |

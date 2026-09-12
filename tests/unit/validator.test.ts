@@ -3,7 +3,6 @@
 // bounded drain content, grace-window output capture, the
 // exit-inside-the-drain-window race, and the legacy path's parity contracts.
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -21,12 +20,10 @@ import { fileURLToPath } from "node:url";
 
 import {
   runValidator,
-  UNBOUNDED_LEGACY,
   BOUNDED_EXECUTABLE,
   resolveValidator,
   displayPath,
   launchFailureMessage,
-  bothConfigured,
   configurationErrors,
 } from "../../src/validator.ts";
 
@@ -46,7 +43,6 @@ import {
 // and only here. Settlement is timeout+grace+drain = 1640 ms; measured 1648-1657 ms
 // across six full-suite runs, against the 5000 ms elapsed bounds those cases assert.
 const TIMES_OUT = {
-  kind: "bounded" as const,
   timeoutMs: 1200,
   graceMs: 400,
   drainMs: 40,
@@ -67,7 +63,6 @@ const TIMES_OUT = {
 // ~30x the measured worst and >8x that observed excursion, while settling at
 // timeout+grace+drain = 10.44 s leaves 19.5 s of headroom below the 30 s sleep.
 const RUNS_THEN_TIMES_OUT = {
-  kind: "bounded" as const,
   timeoutMs: 10_000,
   graceMs: 400,
   drainMs: 40,
@@ -88,7 +83,6 @@ const RUNS_THEN_TIMES_OUT = {
 // The value is free in the same way F1's was: the validator sleeps 30 s, so any
 // timeout well below that still takes the timeout path.
 const TRAPS_THEN_TIMES_OUT = {
-  kind: "bounded" as const,
   timeoutMs: 15_000,
   graceMs: 400,
   drainMs: 40,
@@ -105,7 +99,6 @@ const TRAPS_THEN_TIMES_OUT = {
 // place. It carries the small byte cap too, so a case needing the cap does not
 // have to fall back to a short timeout to get it.
 const SUCCEEDS = {
-  kind: "bounded" as const,
   timeoutMs: 30_000,
   graceMs: 400,
   drainMs: 40,
@@ -116,7 +109,6 @@ const SUCCEEDS = {
 // 8 s around a 6 s drain boundary. A halved drain loses the inside marker;
 // settling on close captures the outside marker.
 const DRAIN_CONTENT = {
-  kind: "bounded" as const,
   timeoutMs: 30_000,
   graceMs: 7_000,
   drainMs: 6_000,
@@ -128,7 +120,6 @@ const GRACE_CHILD = fileURLToPath(
 );
 
 const CAPTURES_GRACE_OUTPUT = {
-  kind: "bounded" as const,
   timeoutMs: 10_000,
   graceMs: 1_000,
   drainMs: 200,
@@ -157,7 +148,6 @@ const CAPTURES_GRACE_OUTPUT = {
 // deliberate safety factor over the measured range, and the ~1.5x it leaves is the
 // margin this construction actually depends on.
 const DRAIN_RACE = {
-  kind: "bounded" as const,
   timeoutMs: 4_000,
   graceMs: 3_300,
   drainMs: 3_200,
@@ -363,24 +353,6 @@ void test("a validator far past the cap still exits cleanly, never blocking into
   assert.ok(run.stderr.droppedBytes > 1_000_000);
 });
 
-void test("the unbounded policy retains everything", async (t) => {
-  const dir = sandbox(t);
-  const exe = writeScript(
-    dir,
-    "some.sh",
-    "i=0; while [ $i -lt 100 ]; do printf 0123456789; i=$((i+1)); done",
-  );
-  const run = await runValidator(
-    [exe, "/candidate"],
-    UNBOUNDED_LEGACY,
-    {},
-    dir,
-  );
-  assert.equal(run.kind, "exited");
-  assert.equal(run.stdout.text.length, 1000);
-  assert.equal(run.stdout.droppedBytes, 0);
-});
-
 void test("the validator receives the candidate root as its SOLE argument, with no shell interpretation", async (t) => {
   const dir = sandbox(t);
   // Guards two contract points at once: exactly one argument, and no shell
@@ -396,11 +368,6 @@ void test("the validator receives the candidate root as its SOLE argument, with 
     /^pwned$/m,
     "the shell must not have interpreted it",
   );
-});
-
-void test("UNBOUNDED_LEGACY declares itself unbounded", () => {
-  assert.equal(UNBOUNDED_LEGACY.kind, "unbounded");
-  assert.equal(BOUNDED_EXECUTABLE.kind, "bounded");
 });
 
 void test("a hanging validator is reported as timedOut inside the bound", async (t) => {
@@ -510,21 +477,6 @@ void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", a
   );
 });
 
-void test("PARITY: the unbounded policy captures output written after the child exits", async (t) => {
-  const dir = sandbox(t);
-  // The legacy path settles on `close`, so a backgrounded late write IS captured
-  // today. Under an exit-plus-drain settle it would be lost.
-  const exe = writeScript(dir, "late.sh", "(sleep 0.6; echo late) &\nexit 0");
-  const run = await runValidator(
-    [exe, "/candidate"],
-    UNBOUNDED_LEGACY,
-    {},
-    dir,
-  );
-  assert.equal(run.kind, "exited");
-  assert.match(run.stdout.text, /late/);
-});
-
 void test("bounded drain captures only bytes written inside the window", async (t) => {
   const dir = sandbox(t);
   const completion = join(dir, "drain-descendant-complete");
@@ -560,45 +512,11 @@ void test("bounded drain captures only bytes written inside the window", async (
   );
 });
 
-void test("PARITY: the legacy path is NOT spawned as a process-group leader", async (t) => {
+void test("a leading BOM survives decoding", async (t) => {
   const dir = sandbox(t);
-  // The child prints its own process group. Under the unbounded policy it must
-  // inherit the manager's; under the bounded policy it must lead its own. Without
-  // this, reverting `detached` to unconditional passes every other parity test.
-  const exe = writeScript(dir, "pgid.sh", "ps -o pgid= -p $$");
-  const mine = execSync(`ps -o pgid= -p ${process.pid}`).toString().trim();
-  const legacy = await runValidator(
-    [exe, "/candidate"],
-    UNBOUNDED_LEGACY,
-    {},
-    dir,
-  );
-  assert.equal(legacy.kind, "exited");
-  assert.equal(
-    legacy.stdout.text.trim(),
-    mine,
-    "legacy must inherit the manager's group",
-  );
-  const bounded = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
-  assert.equal(bounded.kind, "exited");
-  assert.notEqual(
-    bounded.stdout.text.trim(),
-    mine,
-    "bounded must lead its own group",
-  );
-});
-
-void test("PARITY: a leading BOM survives decoding", async (t) => {
-  const dir = sandbox(t);
-  // TextDecoder strips a BOM; Buffer.toString does not. The legacy path's
-  // current accumulator preserves it, so both paths must.
+  // TextDecoder strips a BOM; Buffer.toString does not.
   const exe = writeScript(dir, "bom.sh", "printf '\\357\\273\\277hi'");
-  const run = await runValidator(
-    [exe, "/candidate"],
-    UNBOUNDED_LEGACY,
-    {},
-    dir,
-  );
+  const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
   assert.equal(run.kind, "exited");
   assert.equal(run.stdout.text, "\ufeffhi");
 });
@@ -717,10 +635,6 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
     DRAIN_RACE,
     BOUNDED_EXECUTABLE,
   })) {
-    // Live, not a type-narrowing formality: BOUNDED_EXECUTABLE is declared as the
-    // ValidatorPolicy union, so this fails if a policy here ever stops being
-    // bounded -- and only then does the comparison below become unreachable.
-    assert.ok(policy.kind === "bounded", `${name} must be a bounded policy`);
     assert.ok(
       policy.graceMs > policy.drainMs,
       `${name}: graceMs (${policy.graceMs}) must exceed drainMs (${policy.drainMs})`,
@@ -794,70 +708,35 @@ void test("each launch failure gets its own message", () => {
   );
 });
 
-void test("both-set is detected with legacy emptiness semantics", () => {
-  assert.equal(
-    bothConfigured({
-      SUPERPOWERS_VALIDATOR: "/a",
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
-    }),
-    true,
-  );
-  assert.equal(bothConfigured({ SUPERPOWERS_VALIDATOR: "/a" }), false);
-  assert.equal(
-    bothConfigured({
-      SUPERPOWERS_VALIDATOR: "",
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
-    }),
-    false,
-  );
-  // Whitespace-only counts as set, exactly as the legacy path treats it. No trim.
-  assert.equal(
-    bothConfigured({
-      SUPERPOWERS_VALIDATOR: " ",
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
-    }),
-    true,
-  );
-  // The feature's own happy path: configuring ONLY the new variable must
-  // never be mistaken for a contradiction, or the feature is DOA.
-  assert.equal(
-    bothConfigured({ SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b" }),
-    false,
-  );
-  // The null-configuration case. A default that silently means "skip" is a
-  // fail-open gate.
-  assert.equal(bothConfigured({}), false);
-});
-
-void test("the both-set error is scoped to the commands that run a validator", () => {
-  const env = {
-    SUPERPOWERS_VALIDATOR: "/a",
-    SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
-  };
+void test("retired validator configuration fails closed with legacy emptiness semantics", () => {
+  const message =
+    "SUPERPOWERS_VALIDATOR has been removed; unset it and configure " +
+    "SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.";
   for (const cmd of ["prepare", "install", "update"]) {
-    assert.equal(configurationErrors(cmd, env).length, 1, `${cmd} must reject`);
-    assert.match(configurationErrors(cmd, env)[0], /both set/);
+    for (const legacy of ["/validator.py", " ", "secret\nvalue"]) {
+      for (const executable of ["", "/validator"]) {
+        assert.deepEqual(
+          configurationErrors(cmd, {
+            SUPERPOWERS_VALIDATOR: legacy,
+            SUPERPOWERS_VALIDATOR_EXECUTABLE: executable,
+          }),
+          [message],
+        );
+      }
+    }
+    for (const env of [
+      {},
+      { SUPERPOWERS_VALIDATOR: "" },
+      { SUPERPOWERS_VALIDATOR_EXECUTABLE: "/validator" },
+    ]) {
+      assert.deepEqual(configurationErrors(cmd, env), []);
+    }
   }
   for (const cmd of ["probe", "pin", "unpin", "track-latest", "uninstall"]) {
     assert.deepEqual(
-      configurationErrors(cmd, env),
+      configurationErrors(cmd, { SUPERPOWERS_VALIDATOR: "/retired" }),
       [],
       `${cmd} must be unaffected`,
-    );
-  }
-  // Neither the null-configuration case nor the executable-only happy path
-  // may be reported as a contradiction, for any command that runs a
-  // validator.
-  for (const cmd of ["prepare", "install", "update"]) {
-    assert.deepEqual(
-      configurationErrors(cmd, {}),
-      [],
-      `${cmd} must accept no validator configured at all`,
-    );
-    assert.deepEqual(
-      configurationErrors(cmd, { SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b" }),
-      [],
-      `${cmd} must accept the executable configured alone`,
     );
   }
 });

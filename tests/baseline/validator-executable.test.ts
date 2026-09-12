@@ -4,13 +4,18 @@ import assert from "node:assert/strict";
 import {
   existsSync,
   lstatSync,
+  readFileSync,
   realpathSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { createCase, runScript } from "../bin/lifecycle-fixture.ts";
+import {
+  createCase,
+  runScript,
+  snapshotTree,
+} from "../bin/lifecycle-fixture.ts";
 import { prepare } from "./prepare-fixture.ts";
 
 type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
@@ -205,36 +210,41 @@ void test("prepare discloses a dangling executable-validator symlink", async () 
   );
 });
 
-void test("install rejects a contradictory validator configuration before any network access", async () => {
-  const c = lifecycleCase();
-  const result = await runScript(c, "install", {
-    env: {
-      SUPERPOWERS_VALIDATOR: writeValidator(c, "legacy.py", "exit 0"),
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeValidator(c, "exe.sh", "exit 0"),
-    },
-  });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /both set/);
-});
-
-void test("update rejects a contradictory validator configuration before any network access", async () => {
-  const c = lifecycleCase();
-  const result = await runScript(c, "update", {
-    env: {
-      SUPERPOWERS_VALIDATOR: writeValidator(c, "legacy2.py", "exit 0"),
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeValidator(c, "exe2.sh", "exit 0"),
-    },
-  });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /both set/);
-  // Mirrors "a both-set rejection touches no integration state" below, for
-  // `update`: asserting only the exit status would pass even if the
-  // rejection happened after `update`'s own probe.
-  assert.equal(
-    existsSync(c.codexLog),
-    false,
-    "Codex was contacted before the rejection",
-  );
+void test("retired validator rejects both harness routes without external calls", async () => {
+  for (const harness of ["codex", "pi"]) {
+    for (const command of ["prepare", "install", "update"] as const) {
+      for (const configureReplacement of [false, true]) {
+        const c = lifecycleCase();
+        const log = join(c.dir, "must-not-run.log");
+        const tripwire = writeValidator(
+          c,
+          "must-not-run.sh",
+          'printf reached >> "$SPW_NO_CALL_LOG"\nexit 99',
+        );
+        writeFileSync(join(c.dir, "git"), readFileSync(tripwire), {
+          mode: 0o755,
+        });
+        const before = snapshotTree(c.state);
+        const result = await runScript(c, command, {
+          args: ["--harness", harness],
+          path: c.dir,
+          env: {
+            SUPERPOWERS_VALIDATOR: "/retired",
+            SUPERPOWERS_VALIDATOR_EXECUTABLE: configureReplacement
+              ? tripwire
+              : "",
+            SUPERPOWERS_CODEX: tripwire,
+            SUPERPOWERS_PI: tripwire,
+            SPW_NO_CALL_LOG: log,
+          },
+        });
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /SUPERPOWERS_VALIDATOR has been removed/);
+        assert.equal(existsSync(log), false);
+        assert.deepEqual(snapshotTree(c.state), before);
+      }
+    }
+  }
 });
 
 void test("install runs the executable validator and rejects on its nonzero exit", async () => {
@@ -281,35 +291,4 @@ void test("install runs the executable validator and reaches Codex on a passing 
   });
   assert.equal(result.status, 0);
   assert.ok(existsSync(c.codexLog), "Codex was never contacted");
-});
-
-void test("a both-set rejection touches no integration state", async () => {
-  // The rejection is at preflight, before any network or Codex access, so the
-  // fixture's logs must be untouched. Asserting only the exit status would pass
-  // even if the rejection happened after a probe.
-  const c = lifecycleCase();
-  const result = await runScript(c, "install", {
-    env: {
-      SUPERPOWERS_VALIDATOR: writeValidator(c, "l3.py", "exit 0"),
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeValidator(c, "e3.sh", "exit 0"),
-    },
-  });
-  assert.notEqual(result.status, 0);
-  assert.equal(
-    existsSync(c.codexLog),
-    false,
-    "Codex was contacted before the rejection",
-  );
-});
-
-void test("PARITY: the legacy validator is not bounded by the new timeout", async () => {
-  // Sleeps well past BOUNDED_EXECUTABLE.timeoutMs. Under the unbounded policy it
-  // must still succeed. If this fails, the legacy path acquired a timeout — a
-  // behaviour change to CLI-ENV-VALIDATOR-01, which this PR is NOT authorized to
-  // make. Stop and escalate; do not shorten the sleep.
-  const c = createCase({ fakes: "probe" });
-  const validator = join(c.dir, "slow.py");
-  writeFileSync(validator, "import time\ntime.sleep(31)\n");
-  const result = await prepare(c, { SUPERPOWERS_VALIDATOR: validator });
-  assert.equal(result.status, 0);
 });

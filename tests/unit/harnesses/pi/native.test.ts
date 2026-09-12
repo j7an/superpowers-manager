@@ -216,7 +216,6 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
       await runPi(["--version"], paths, { root }, async () => ({
         kind: "launchFailed",
         errno: "ENOENT",
-        cause: new Error("private"),
       })),
     );
     assert.equal(result.outcome.ok, false);

@@ -986,24 +986,28 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoCodexMutation(readLog(c.codexLog));
   });
 
-  void test("additional-validator failure leaves Codex untouched (:478-487)", async () => {
+  void test("executable-validator failure leaves Codex untouched (:478-487)", async () => {
     const c = installCase();
     // :84-89 — the failing additional-validator fixture.
     const validator = join(c.dir, "failing_validator.py");
-    writeFileSync(validator, "import sys\nsys.exit(1)\n");
+    writeFileSync(
+      validator,
+      "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
+      { mode: 0o755 },
+    );
 
     const result = await runScript(c, "install", {
-      env: { SUPERPOWERS_VALIDATOR: validator },
+      env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
     });
     const out = result.stdout + result.stderr;
     // :481-485
     assert.notEqual(
       result.status,
       0,
-      `expected install to fail on additional validation:\n${out}`,
+      `expected install to fail on external validation:\n${out}`,
     );
     // :486
-    assert.ok(out.includes("additional plugin validation failed"), out);
+    assert.ok(out.includes("external plugin validation failed"), out);
     // :487
     assertNoCodexMutation(readLog(c.codexLog));
   });

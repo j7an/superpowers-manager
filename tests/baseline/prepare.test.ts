@@ -529,18 +529,19 @@ void test("prepare rejects an upstream missing any required path", async () => {
   }
 });
 
-void test("prepare runs the additional plugin validator inside the staging workspace", async () => {
+void test("prepare runs the executable validator inside the staging workspace", async () => {
   // (a) A validator that succeeds. Its stdout reaches result.stdout, and it
   // prints the TMPDIR it actually ran under.
   const ok = createCase({ fakes: "probe" });
   const okValidator = join(ok.dir, "validator-ok.py");
   writeFileSync(
     okValidator,
-    'import os\nimport sys\nprint("validator saw " + sys.argv[1])\nprint("TMPDIR=" + os.environ["TMPDIR"])\n',
+    '#!/usr/bin/env python3\nimport os\nimport sys\nprint("validator saw " + sys.argv[1])\nprint("TMPDIR=" + os.environ["TMPDIR"])\n',
+    { mode: 0o755 },
   );
   const passed = await prepare(ok, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: okValidator,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: okValidator,
   });
   assert.equal(passed.status, 0, passed.stderr);
   assert.match(passed.stdout, /^validator saw .*\/superpowers$/m);
@@ -564,13 +565,17 @@ void test("prepare runs the additional plugin validator inside the staging works
   const failing = createCase({ fakes: "probe" });
   const before = seedSentinel(failing);
   const failValidator = join(failing.dir, "validator-fail.py");
-  writeFileSync(failValidator, "import sys\nsys.exit(1)\n");
+  writeFileSync(
+    failValidator,
+    "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
+    { mode: 0o755 },
+  );
   const rejected = await prepare(failing, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: failValidator,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: failValidator,
   });
   assert.equal(rejected.status, 1, rejected.stdout);
-  assert.equal(rejected.stderr, "error: additional plugin validation failed\n");
+  assert.equal(rejected.stderr, "error: external plugin validation failed\n");
   assertNoLeakedInternals(rejected.stderr);
   assert.deepEqual(snapshotTree(generated(failing)), before);
 
@@ -579,12 +584,12 @@ void test("prepare runs the additional plugin validator inside the staging works
   const missing = join(absent.dir, "validator-missing.py");
   const notFound = await prepare(absent, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: missing,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: missing,
   });
   assert.equal(notFound.status, 1, notFound.stdout);
   assert.equal(
     notFound.stderr,
-    `error: additional plugin validator not found: ${missing}\n`,
+    `error: external plugin validator not found: ${missing}\n`,
   );
   assertNoLeakedInternals(notFound.stderr);
 });
@@ -613,6 +618,7 @@ function poisoningValidator(c: CaseEnv, exitCode: number): string {
   writeFileSync(
     path,
     [
+      "#!/usr/bin/env python3",
       "import os",
       "import sys",
       'workspace = os.environ["TMPDIR"]',
@@ -627,6 +633,7 @@ function poisoningValidator(c: CaseEnv, exitCode: number): string {
       `sys.exit(${exitCode})`,
       "",
     ].join("\n"),
+    { mode: 0o755 },
   );
   return path;
 }
@@ -679,7 +686,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
   try {
     const result = await prepare(c, {
       SUPERPOWERS_REF: REFS.fallback,
-      SUPERPOWERS_VALIDATOR: validator,
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
     });
 
     const printed = result.stdout.match(/^validator-stdout TMPDIR=(.*)$/m)?.[1];
@@ -732,7 +739,7 @@ void test("a cleanup failure after a FAILED prepare still replays the outcome be
   try {
     const result = await prepare(c, {
       SUPERPOWERS_REF: REFS.fallback,
-      SUPERPOWERS_VALIDATOR: validator,
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
     });
 
     const printed = result.stdout.match(/^validator-stdout TMPDIR=(.*)$/m)?.[1];
@@ -754,7 +761,7 @@ void test("a cleanup failure after a FAILED prepare still replays the outcome be
     //    leaked-workspace warning.
     assert.equal(
       result.stderr,
-      `validator-stderr sentinel\nerror: additional plugin validation failed\n${`error: ${workspaceRemovalFailure(workspace)}\n`}`,
+      `validator-stderr sentinel\nerror: external plugin validation failed\n${`error: ${workspaceRemovalFailure(workspace)}\n`}`,
     );
     assertNoLeakedInternals(result.stderr);
 
@@ -943,7 +950,7 @@ void test("prepare rejects a directory as the fallback manifest template before 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-void test("prepare rejects a directory as the additional plugin validator", async () => {
+void test("prepare rejects a directory as the executable validator", async () => {
   const c = createCase({ fakes: "probe" });
   const before = seedSentinel(c);
   const validator = join(c.dir, "validator-directory");
@@ -951,12 +958,12 @@ void test("prepare rejects a directory as the additional plugin validator", asyn
 
   const result = await prepare(c, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: validator,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
   });
   assert.equal(result.status, 1, result.stdout);
   assert.equal(
     result.stderr,
-    `error: additional plugin validator not found: ${validator}\n`,
+    `error: external plugin validator is a directory: ${validator}\n`,
   );
   assertNoLeakedInternals(result.stderr);
   assert.deepEqual(snapshotTree(generated(c)), before);

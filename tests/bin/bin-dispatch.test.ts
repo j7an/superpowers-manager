@@ -3,8 +3,8 @@
 // inventory this file maps to 1:1).
 //
 // Every case names the tools present on its PATH at the assertion. The shell
-// mutated one shared fakebin in place and restored it. The successor block `tests/bin/bin-dispatch.test.ts:256-287::Item 40's successor.`
-// carries the three git-absent cases; its surviving contract is stated at `tests/bin/bin-dispatch.test.ts:260::item 40 actually protected`.
+// mutated one shared fakebin in place and restored it. The successor block `tests/bin/bin-dispatch.test.ts:255-287::Item 40's successor.`
+// carries the three git-absent cases; its surviving contract is stated at `tests/bin/bin-dispatch.test.ts:259::item 40 actually protected`.
 // That is the isolation-sensitive class this port exists to make
 // visible.
 
@@ -174,8 +174,7 @@ void test("--version through a symlink resolves, as npm and npx invoke bins", ()
 // `ctx.env`, which is `process.env` itself (src/cli.ts's single CommandContext
 // construction site). There is no "passthrough" left to break. The surviving
 // property — that a SUPERPOWERS_* variable actually changes what the command
-// does — is asserted directly by the two `prepare` cases below
-// (SUPERPOWERS_VALIDATOR flipping preflight's `python3` requirement) and, for
+// does — is asserted directly by the `prepare` retirement case below and, for
 // the full ten-variable set, by tests/baseline/cli-parity.test.js's
 // CLI-ENV-PASSTHROUGH-01.
 
@@ -390,11 +389,6 @@ void test("missing codex blocks `install` before dispatch and names the tool", (
   assert.ok(result.stderr.includes("required command not found: codex"));
 });
 
-// --- prepare's conditional python3 requirement -------------------------------
-// The accessor is unit-tested in units.test.js; these prove preflight reads it.
-// Without them, reverting preflight to the static COMMAND_REQUIREMENTS table is
-// green everywhere and a configured validator fails late, inside runValidator,
-// after the clone and the build (PR 11.5 slice 3, D5).
 void test("`prepare` does not require python3 when no validator is configured", () => {
   // The exact status and stderr are asserted, not just the diagnostic's
   // absence, because an absence alone is satisfied by a preflight rejection
@@ -407,7 +401,7 @@ void test("`prepare` does not require python3 when no validator is configured", 
   );
 });
 
-void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () => {
+void test("`prepare` rejects the retired validator before tool discovery", () => {
   const result = runDispatch({
     tools: ["git", "codex"],
     args: ["prepare"],
@@ -416,7 +410,7 @@ void test("`prepare` requires python3 once SUPERPOWERS_VALIDATOR names one", () 
   assert.equal(result.status, 1);
   assert.equal(
     result.stderr,
-    "error: required command not found: python3 — install python3 and re-run\n",
+    "error: SUPERPOWERS_VALIDATOR has been removed; unset it and configure SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.\n",
   );
 });
 

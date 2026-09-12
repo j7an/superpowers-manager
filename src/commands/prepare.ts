@@ -12,7 +12,6 @@ import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
 import { upstreamCacheRoot } from "../upstream-workspace.ts";
 import {
   BOUNDED_EXECUTABLE,
-  UNBOUNDED_LEGACY,
   launchFailureMessage,
   resolveValidator,
   runValidator,
@@ -31,18 +30,6 @@ import { runWithMutation } from "./mutation.ts";
 // (`src/harnesses/codex/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
-}
-
-// `[ -f ]` — regular file. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` uses -f, and
-// tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
-// template bytes and non-file rejection" also covers the separately extracted
-// fallback check.
-async function regularFileExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
 }
 
 // `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
@@ -178,7 +165,6 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
     throw prepareError("adapter returned an invalid preparation staging leaf");
   }
   const pluginRoot = location.destinationRoot;
-  const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const tmpParent = dirname(pluginRoot);
   await owned(`cannot create directory: ${tmpParent}`, () =>
@@ -309,44 +295,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         return failed(prepared.outcome.result.compatibility.reason);
       }
       let validator = NO_VALIDATOR_OUTPUT;
-      if (additionalValidator.length > 0) {
-        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` — `[ -f ]`.
-        if (!(await regularFileExists(additionalValidator))) {
-          return {
-            kind: "failed",
-            outcomes,
-            validator,
-            message: `additional plugin validator not found: ${additionalValidator}`,
-          };
-        }
-        const ran = await runValidator(
-          ["python3", additionalValidator, candidate],
-          UNBOUNDED_LEGACY,
-          env,
-          workspace,
-        );
-        if (ran.kind === "launchFailed") {
-          // PARITY, and it must stay a THROW. The legacy path rejects the workspace
-          // callback on a spawn failure; withWorkspace returns the callback error
-          // and the `outcomes` collected above are LOST. That loss is a recorded,
-          // deliberately unassigned defect. Returning a failed outcome here would
-          // replay those outcomes instead -- observably different control flow for
-          // CLI-ENV-VALIDATOR-01, which this PR is not authorized to change.
-          throw prepareError(
-            `cannot execute additional plugin validator: ${additionalValidator}`,
-            ran.cause,
-          );
-        }
-        validator = { stdout: ran.stdout.text, stderr: ran.stderr.text };
-        if (ran.kind !== "exited" || ran.code !== 0) {
-          return {
-            kind: "failed",
-            outcomes,
-            validator,
-            message: "additional plugin validation failed",
-          };
-        }
-      } else if (executableValidator.length > 0) {
+      if (executableValidator.length > 0) {
         const resolution = await resolveValidator(executableValidator);
         const ran = await runValidator(
           [executableValidator, candidate],

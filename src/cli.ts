@@ -220,13 +220,6 @@ function findTool(
   return null;
 }
 
-// python3 is required by `prepare` only when SUPERPOWERS_VALIDATOR names one:
-// after the port, that optional spawn (runValidator, in src/validator.ts,
-// called from src/commands/prepare.ts) is Python's only remaining consumer
-// on the prepare path. The conditional lives here, in the accessor preflight reads,
-// rather than inside preflight — an accessor that under-reports what
-// preflight enforces is the blind spot slice 2 closed when it made
-// CLI-PREFLIGHT-01 derive its map from production.
 function sharedRequirement(name: string): ToolRequirement {
   return {
     name,
@@ -242,9 +235,6 @@ function commandRequirementsFor<R>(
 ): Record<Subcommand, readonly ToolRequirement[]> {
   const forCommand = (command: Subcommand): readonly ToolRequirement[] => {
     const shared = SHARED_COMMAND_REQUIREMENTS[command].map(sharedRequirement);
-    if (command === "prepare" && env.SUPERPOWERS_VALIDATOR) {
-      shared.push(sharedRequirement("python3"));
-    }
     return [...shared, ...adapter.requirements(command as HarnessCommand, env)];
   };
   return {
@@ -284,6 +274,7 @@ function preflightFor<R>(
   adapter: HarnessAdapter<R>,
 ): PreflightResult {
   const errors: string[] = [...configurationErrors(cmd, env)];
+  if (errors.length > 0) return { ok: false, errors };
   for (const requirement of commandRequirementsFor(env, adapter)[cmd]) {
     const found =
       requirement.lookup === "explicit-path-or-path" &&

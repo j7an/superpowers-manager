@@ -317,7 +317,8 @@ function writeFailingValidator(
       : `Path(${JSON.stringify(candidateRecord)}).write_text(str(candidate) + "\\n", encoding="utf-8")\n`;
   writeFileSync(
     validator,
-    `from pathlib import Path
+    `#!/usr/bin/env python3
+from pathlib import Path
 import sys
 
 candidate = Path(sys.argv[1])
@@ -327,7 +328,7 @@ ${recordCandidate}if not (candidate / ".codex-plugin" / "plugin.template.json").
 print("baseline additional validator rejection", file=sys.stderr)
 raise SystemExit(7)
 `,
-    "utf8",
+    { encoding: "utf8", mode: 0o755 },
   );
   return validator;
 }
@@ -1041,10 +1042,9 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // while this expectation stayed silently stale; it also encoded the retired
   // DISPATCH table a second time through the presence of "sh".
   //
-  // commandRequirements(env) takes the environment — `prepare`
-  // requires python3 only when SUPERPOWERS_VALIDATOR names one — and returns
-  // the whole Record<Subcommand, string[]>; index it per command. These cases
-  // configure no validator, so the empty env is the right derivation for them.
+  // commandRequirements(env) takes the environment and returns the whole
+  // Record<Subcommand, string[]>; index it per command. These cases configure
+  // no validator, so the empty env is the right derivation for them.
   const declared = commandRequirements({});
   // DISPATCH and its "spawn" | "in-process" split are gone (slice 6): there is
   // no second mode this map could encode any more, so it is a plain copy of
@@ -1254,11 +1254,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       SUPERPOWERS_PLUGIN_ROOT: join(sandbox.root, "custom plugin"),
       SUPERPOWERS_MANIFEST_TEMPLATE: join(sandbox.root, "custom template.json"),
       // Empty, and deliberately so. `update` is a VALIDATOR_COMMAND, and
-      // `src/validator.ts:387::configurationErrors` rejects the run before any
-      // adapter call when both validator names are non-empty -- so a distinctive
-      // path here would abort preflight and the codex child would never run.
-      // `src/validator.ts:370-377::export function bothConfigured` reads "" as unset without trimming, which is
-      // what clears the conflict. The key is still forwarded and still asserted:
+      // The retired variable is deliberately empty. The key is still forwarded and still asserted:
       // a dropped variable is an ABSENT key in superpowers_env and `null` in
       // passthrough, and neither equals "" under deepEqual.
       SUPERPOWERS_VALIDATOR: "",
@@ -1426,15 +1422,15 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
     const validatorMarker = join(sandbox.root, "validator-ran");
     writeFileSync(
       customValidator,
-      "from pathlib import Path\nimport os\n" +
+      "#!/usr/bin/env python3\nfrom pathlib import Path\nimport os\n" +
         'Path(os.environ["SPW_BASELINE_VALIDATOR_MARKER"]).write_text("ran\\n")\n',
-      "utf8",
+      { encoding: "utf8", mode: 0o755 },
     );
     const result = runCli(sandbox, ["prepare"], {
       SPW_BASELINE_VALIDATOR_MARKER: validatorMarker,
       SUPERPOWERS_CACHE_DIR: customCache,
       SUPERPOWERS_PLUGIN_ROOT: customPlugin,
-      SUPERPOWERS_VALIDATOR: customValidator,
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: customValidator,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
@@ -1821,16 +1817,16 @@ void test("PREPARE-VALIDATE-01 validation completes before activation", () => {
     result = runCli(sandbox, ["prepare"], {
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_VALIDATOR: writeFailingValidator(sandbox),
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(sandbox),
     });
     assertCleanResult(result, 1);
     assert.match(
       result.stdout,
-      /^generated plugin validation passed: .*\/superpowers\n$/,
+      /^generated plugin validation passed: .*\/superpowers\n\[superpowers-manager: running external validator .+\]\n$/,
     );
     assert.doesNotMatch(result.stdout, /^prepared /m);
     assert.match(result.stderr, /baseline additional validator rejection/);
-    assert.match(result.stderr, /error: additional plugin validation failed/);
+    assert.match(result.stderr, /error: external plugin validation failed/);
     assert.deepEqual(snapshotTree(sandbox.plugin), accepted);
     assertNoInvocationPrepareWorkspace(join(sandbox.pkg, "plugins"));
     assertNoCodexContact(sandbox);
@@ -1850,14 +1846,14 @@ void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", (
     const result = runCli(sandbox, ["prepare"], {
       SUPERPOWERS_REF: "v1.0.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_VALIDATOR: writeFailingValidator(
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(
         sandbox,
         "reject-atomic-candidate.py",
         candidateRecord,
       ),
     });
     assertCleanResult(result, 1);
-    assert.match(result.stderr, /error: additional plugin validation failed/);
+    assert.match(result.stderr, /error: external plugin validation failed/);
     const candidate = readFileSync(candidateRecord, "utf8").trimEnd();
     const candidateWorkspace = dirname(candidate);
     assert.equal(basename(candidate), basename(sandbox.plugin));
@@ -1890,13 +1886,13 @@ void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => 
       SUPERPOWERS_PLUGIN_ROOT: topology.PREVIOUS_TREE,
       SUPERPOWERS_REF: "v1.0.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_VALIDATOR: writeFailingValidator(
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(
         sandbox,
         "reject-interrupted-candidate.py",
       ),
     });
     assertCleanResult(result, 1);
-    assert.match(result.stderr, /error: additional plugin validation failed/);
+    assert.match(result.stderr, /error: external plugin validation failed/);
     assert.deepEqual(snapshotTree(topology.PREVIOUS_TREE), previous);
     assert.deepEqual(snapshotTree(topology.PREPARE_STAGING), interrupted);
     assert.deepEqual(snapshotTree(topology.SIBLING), sibling);
@@ -2144,13 +2140,17 @@ void test("INSTALL-ORDER-01 install prepares and validates before adapter mutati
   {
     const c = lifecycleCodexCase({ fakes: "install" });
     const validator = join(c.dir, "reject-install-candidate.py");
-    writeFileSync(validator, "import sys\nsys.exit(1)\n");
+    writeFileSync(
+      validator,
+      "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
+      { mode: 0o755 },
+    );
     const result = await runScript(c, "install", {
-      env: { SUPERPOWERS_VALIDATOR: validator },
+      env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
     });
     const out = result.stdout + result.stderr;
     assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
-    assert.match(out, /additional plugin validation failed/);
+    assert.match(out, /external plugin validation failed/);
     // The probe triple (fingerprint: one listing; ownership: two listings)
     // runs before prepare's `build` step rejects the candidate — build issues
     // no Codex command of its own (`src/harnesses/codex/adapter.ts:304-558::async function runBuild`, `runBuild`), so a
@@ -2746,7 +2746,7 @@ void test("CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:997::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:510::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:554::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
+  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:511::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:555::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2818,8 +2818,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1332::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1378::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1328::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1374::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is
