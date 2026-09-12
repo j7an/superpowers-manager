@@ -75,10 +75,7 @@ class Sink {
   }
 
   done(): Captured {
-    // Buffer.toString, NOT TextDecoder: TextDecoder strips a leading BOM and the
-    // legacy path's current string accumulator preserves it. Measured:
-    // decode(<BOM>hi) is "hi" but toString("utf8") is "\ufeffhi". The legacy path
-    // must be byte-identical, so BOTH paths use toString.
+    // Buffer.toString preserves a leading BOM; TextDecoder would strip it.
     return {
       text: Buffer.concat(this.chunks).toString("utf8"),
       droppedBytes: this.dropped,

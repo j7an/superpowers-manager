@@ -1,7 +1,7 @@
 // Unit coverage for src/validator.ts: the per-stream byte cap
 // (maxBytesPerStream), the timeout and the SIGTERM/SIGKILL escalation it drives,
 // bounded drain content, grace-window output capture, the
-// exit-inside-the-drain-window race, and the legacy path's parity contracts.
+// exit-inside-the-drain-window race, and leading-BOM output preservation.
 import assert from "node:assert/strict";
 import {
   existsSync,

@@ -1,7 +1,6 @@
 // Ported from tests/test_workflows.sh's test_action_pin_helper (:347-419)
 // and test_literal_action_pin_detector (:486-537), which characterise the
-// awk functions in tests/lib/action-pin-assertions.sh. See
-// the retained workflow contract tests.
+// awk functions in tests/lib/action-pin-assertions.sh.
 //
 // Fixture SHAs are CONSTRUCTED, never written as literals. The literal-pin
 // source policy in tests/bin/workflows.test.js scans this file, and an

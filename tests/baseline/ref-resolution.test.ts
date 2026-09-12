@@ -13,8 +13,7 @@
 //     retired outright: tests/unit/upstream.test.js's "manifestVersionForRef
 //     reproduces the shell derivation table" (:159-257) already exercises the
 //     exact same (requestedRef, resolutionKind, resolvedRef, commit) tuples
-//     with the exact same expected strings — see the retirement notes at
-//     historical migration record.
+//     with the exact same expected strings.
 //   - Two spw_config_ref checks (shell :30-31) are retired: they exist only
 //     because a POSIX shell function without an explicit `()` subshell would
 //     leak/clobber its caller's `root`/`config_root` locals — which is why

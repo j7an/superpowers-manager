@@ -1,6 +1,4 @@
-// Ported from tests/test_workflows.sh (see
-// the retained workflow contract for the expected assertions
-// inventory this file maps to 1:1).
+// Workflow contract tests.
 //
 // YAML is parsed by the `yaml` devDependency rather than by a hand-written
 // subset parser. See
@@ -43,7 +41,7 @@ void test("workflow documents parse under YAML 1.2, keeping `on` a string key", 
   assert.equal(typeof ci.on, "object");
 });
 
-// --- inventory items 19-22: the external-pin inventory ----------------
+// --- the external-pin inventory ----------------------------------------
 // The expected inventory is a fixture this test defines for itself: it
 // asserts which workflow references which external target, never which SHA
 // that target is pinned to. The SHA is Dependabot's to move; asserting it
@@ -84,10 +82,9 @@ assert.equal(
   "EXPECTED_EXTERNAL_PINS lost or gained a case; review the external pin contract",
 );
 
-// --- inventory items 97-98: manifest-fixture shape guards --------------
+// --- manifest-fixture shape guards -------------------------------------
 // The shell's `load_expected_external_pins` parsed a tab-separated manifest
-// *file* and raised on a malformed line (item 97) or a duplicate row
-// (item 98) — both are claims about tracked repository content
+// *file* and raised on malformed or duplicate rows — both are claims about tracked repository content
 // (`write_expected_external_pins`, a maintainer-edited literal), reinstated
 // on controller adjudication. The port has no manifest text to malform —
 // EXPECTED_EXTERNAL_PINS is a JS array literal, not parsed from a file — but
@@ -95,7 +92,7 @@ assert.equal(
 // catch either defect: the array is inferred as `string[][]`, not a
 // fixed-length tuple type, so a row with the wrong field count or an empty
 // field passes typechecking silently.
-void test("external-pin manifest fixture entries are well-formed (item 97)", () => {
+void test("external-pin manifest fixture entries are well-formed", () => {
   for (const [index, entry] of EXPECTED_EXTERNAL_PINS.entries()) {
     assert.equal(
       entry.length,
@@ -111,7 +108,7 @@ void test("external-pin manifest fixture entries are well-formed (item 97)", () 
   }
 });
 
-void test("external-pin manifest fixture has no duplicate entries (item 98)", () => {
+void test("external-pin manifest fixture has no duplicate entries", () => {
   const serialized = EXPECTED_EXTERNAL_PINS.map((pair) => pair.join("\t"));
   assert.equal(
     new Set(serialized).size,
@@ -183,7 +180,7 @@ void test("all shared-workflows pins agree with one another", () => {
   }
 });
 
-// --- inventory item 23: the literal-pin source policy -----------------
+// --- the literal-pin source policy -------------------------------------
 const POLICY_EXTENSIONS = [".sh", ".py", ".js", ".mjs", ".ts"];
 
 void test("no test source embeds a literal action pin snapshot", () => {
@@ -203,7 +200,7 @@ void test("no test source embeds a literal action pin snapshot", () => {
   assert.deepEqual(findLiteralActionPinSnapshots(scanned), []);
 });
 
-// --- inventory items 42-71: the CI workflow contract -------------------
+// --- the CI workflow contract ------------------------------------------
 
 /**
  * Assert a value is a non-null object and return it narrowed.
@@ -1082,7 +1079,7 @@ void test("pnpm packageManager updates delegate on the weekly and manual trigger
   assert.deepEqual(update.with, { minimum_release_age_days: 5 });
 });
 
-// --- inventory items 72-83: the release workflow contract --------------
+// --- the release workflow contract -------------------------------------
 const EXPECTED_VERIFY_COMMAND = `attempt=1
 for delay in 0 30 60 90 120 150; do
   if [ "$delay" -gt 0 ]; then
@@ -1189,7 +1186,7 @@ void test("the forbidden-publish detector rejects a planted violation", () => {
   );
 });
 
-// --- inventory items 84-96, 99-100: the tag-release workflow contract ---
+// --- the tag-release workflow contract ---------------------------------
 const EXPECTED_BUMP_OPTIONS = ["auto", "patch", "minor", "major"];
 const STABLE_SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
@@ -1259,7 +1256,7 @@ void test("tag-release.yml wires the shared tag-release workflow", () => {
 void test("tag-release.yml offers exactly the supported bump options", () => {
   const tagRelease = loadWorkflow(join(WORKFLOW_DIR, "tag-release.yml"));
   // This is the 1:1 port of the shell's `assert_supported_bump_options`
-  // (item 92). `assertSupportedBumpOptions` throws unless the options are
+  // `assertSupportedBumpOptions` throws unless the options are
   // exactly EXPECTED_BUMP_OPTIONS, so not throwing IS the assertion.
   //
   // Do NOT also assert `deepEqual(bumpOptions(tagRelease),
@@ -1312,7 +1309,7 @@ void test("the bump-option check reads `bump`, not a decoy sibling input", () =>
   );
 });
 
-void test("the bump-option check reports a missing options block distinctly from a wrong one (items 99-100)", () => {
+void test("the bump-option check reports a missing options block distinctly from a wrong one", () => {
   // Item 100 (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:646::raise ValueError("Tag Release bump options are missing`): extract_bump_options raises
   // "Tag Release bump options are missing" when the
   // on.workflow_dispatch.inputs.bump.options path is never found. A naive
@@ -1360,7 +1357,7 @@ void test("the bump-option check reports a missing options block distinctly from
   );
 });
 
-void test("a duplicated bump options block is rejected while parsing, distinctly from missing or wrong (item 99)", () => {
+void test("a duplicated bump options block is rejected while parsing, distinctly from missing or wrong", () => {
   // Item 99 (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:632::duplicated`): extract_bump_options raised
   // "Tag Release bump options are duplicated" when its indentation walker
   // encountered the on.workflow_dispatch.inputs.bump.options key path a

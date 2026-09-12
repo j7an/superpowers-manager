@@ -443,10 +443,7 @@ const WORD = /[A-Za-z0-9_$]/;
  * "tion h" (the middle of "function hookError"), which satisfy the gate and
  * tell a reader nothing.
  */
-export function anchorRespectsBoundaries(
-  line: string,
-  anchor: string,
-): boolean {
+function anchorRespectsBoundaries(line: string, anchor: string): boolean {
   if (anchor.length === 0) return false;
   const first = anchor[0];
   const last = anchor[anchor.length - 1];

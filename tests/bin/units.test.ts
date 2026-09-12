@@ -104,12 +104,10 @@ const requirements = bin.commandRequirements({});
 assert.deepStrictEqual(requirements.pin, ["git"]);
 assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
-// `python3` left uninstall at slice 4b's flip: it was required only because
-// every adapter call ran validate-adapter-response.py (scripts/core/adapter.sh),
-// and the in-process path has no validator process. `codex` stays.
+// Uninstall requires Codex but not Python; it has no validator process.
 assert.deepStrictEqual(requirements.uninstall, ["codex"]);
 assert.deepStrictEqual(requirements.prepare, ["git"]);
-// An empty value is not a configured validator.
+// An empty legacy-validator value leaves tool requirements unchanged.
 assert.deepStrictEqual(
   bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
   ["git"],

@@ -109,13 +109,7 @@ async function makeCtx(
 const X = "1".repeat(40);
 const Z = "2".repeat(40);
 
-function ownership(
-  identityState: string | number | null,
-  conflicts: readonly string[] = [],
-) {
-  if (typeof identityState !== "string") {
-    return { presentationValue: identityState };
-  }
+function ownership(identityState: string, conflicts: readonly string[] = []) {
   return codexOwnershipInspection(
     identityState,
     { pluginPresent: false, marketplacePresent: false },
@@ -123,10 +117,8 @@ function ownership(
   );
 }
 
-function control(value: string | number | null) {
-  return typeof value === "string"
-    ? codexControlInspection(value)
-    : { presentationValue: value };
+function control(value: string) {
+  return codexControlInspection(value);
 }
 
 function installed(

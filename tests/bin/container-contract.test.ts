@@ -1,6 +1,4 @@
-// Ported from tests/test_container_contract.sh (see
-// the retained container contract for the expected
-// assertion inventory this file maps to 1:1).
+// Container contract tests.
 //
 // The shell driver never invokes Docker, a real container, or the real
 // Codex CLI — it statically inspects tests/container/Dockerfile,
@@ -14,7 +12,7 @@
 // `ruby - ... <<'RUBY'` heredocs). This port re-implements the same
 // helper functions and validators directly in JavaScript, rather than
 // spawning `ruby`, so the port has no new runtime dependency. Only the
-// Python-syntax-validity check (inventory item 37) still shells out to
+// Python-syntax-validity check still shells out to
 // `python3`, mirroring the shell driver's own use of `python3 -S` for the
 // same purpose — `python3` is already a required tool for this project
 // (see AGENTS.md's "Node 24+ and Python-standard-library boundaries").
@@ -70,7 +68,7 @@ const DOCKERIGNORE_PATH = join(ROOT, ".dockerignore");
  * Asserts the *effective* value rather than the file's text: --showConfig
  * applies `extends`, resolves implied options, resolves duplicate keys
  * last-wins, and emits tsc's own canonical lowercase spelling. That is why
- * the retired inventory item 21 — a negative `!includes('"Node16"')`
+ * a retired negative `!includes('"Node16"')`
  * substring test — is gone: a config whose effective module resolves to
  * Node16 by any route, including a duplicate key, now fails the positive
  * assertions below.
@@ -320,7 +318,7 @@ function validateHookResponseAssertion(
   );
 }
 
-// --- validate_probe! (:263-524, inventory items 41-115) ----------------
+// --- validate_probe! -----------------------------------------------------
 
 function validateProbe(probe: string) {
   if (/^\s*codex\s+plugin\s+/m.test(probe)) {
@@ -1015,7 +1013,7 @@ function validateProbe(probe: string) {
   );
 }
 
-// --- validate_hooks_rpc! (:195-240, inventory items 116-142) -----------
+// --- validate_hooks_rpc! ------------------------------------------------
 
 function validateHooksRpc(hooksRpc: string) {
   const required = [
@@ -1094,8 +1092,7 @@ function validateHooksRpc(hooksRpc: string) {
   );
 }
 
-// --- validate the "--inside" branch of tests/container.sh (:95-115,
-// inventory items 38-40) -------------------------------------------------
+// --- validate the "--inside" branch of tests/container.sh ---------------
 
 function validateRunnerInsideBranch(runner: string) {
   const insideRe =
@@ -1207,7 +1204,7 @@ void test("container-contract", async (t) => {
       assert.match(observer, /assert\.equal\(digest, receipt\.digest/);
     },
   );
-  // --- inventory items 1-6: file-existence / executable-bit -----------
+  // --- file-existence / executable-bit ---------------------------------
 
   await t.test("tests/container/Dockerfile exists", () => {
     assert.ok(existsSync(DOCKERFILE_PATH));
@@ -1232,7 +1229,7 @@ void test("container-contract", async (t) => {
     const dockerfile = readFileSync(DOCKERFILE_PATH, "utf8");
     const dockerfileLines = dockerfile.split("\n");
 
-    // --- inventory items 7-13: Dockerfile literal-text -------------------
+    // --- Dockerfile literal-text ------------------------------------------
 
     await t.test(
       "Dockerfile separates native harness and installed-package minimum runtimes",
@@ -1377,7 +1374,7 @@ void test("container-contract", async (t) => {
     );
   });
 
-  // --- inventory items 14-18: container tool package/lockfile ----------
+  // --- container tool package/lockfile ---------------------------------
 
   await t.test(
     "tests/container/package.json declares only approved harness dependencies, exact-pinned and lockfile-consistent",
@@ -1421,11 +1418,11 @@ void test("container-contract", async (t) => {
     },
   );
 
-  // --- inventory items 19-20: tests/tsconfig.json (item 21 retired) ------
-  // Item 21 was a negative `!includes('"Node16"')` substring check. It is
-  // retired rather than renumbered: asserting the effective compiler config
+  // --- tests/tsconfig.json ----------------------------------------------
+  // The retired negative `!includes('"Node16"')` substring check is subsumed:
+  // asserting the effective compiler config
   // subsumes it, because a duplicate "module" key resolving to Node16 fails
-  // the positive assertions below. See the inventory for the retirement note.
+  // the positive assertions below.
 
   await t.test('tsconfig resolves "module" to NodeNext', () => {
     const effectiveTsconfig = readEffectiveTsconfig();
@@ -1439,7 +1436,7 @@ void test("container-contract", async (t) => {
     );
   });
 
-  // --- inventory items 22-28: tests/container.sh literal-text ----------
+  // --- tests/container.sh literal-text ---------------------------------
 
   await t.test("container runner resource contract", async (t) => {
     const runner = readFileSync(RUNNER_PATH, "utf8");
@@ -1581,7 +1578,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
       },
     );
 
-    // --- inventory items 38-40: runner --inside structural check ---------
+    // --- runner --inside structural check ---------------------------------
 
     await t.test(
       "runner's --inside branch gates UID 10001, then runs shared checks and both harnesses in order",
@@ -1591,7 +1588,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
     );
   });
 
-  // --- inventory items 29-33: .gitignore / .dockerignore exact lines ---
+  // --- .gitignore / .dockerignore exact lines ---------------------------
 
   await t.test("gitignore resource contract", async (t) => {
     const gitignoreLines = readFileSync(GITIGNORE_PATH, "utf8").split("\n");
@@ -1645,7 +1642,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
     );
   });
 
-  // --- inventory items 34-35: hooks-list-rpc.py file preconditions ------
+  // --- hooks-list-rpc.py file preconditions ------------------------------
 
   await t.test("tests/container/hooks-list-rpc.py exists", () => {
     assert.ok(existsSync(HOOKS_RPC_PATH));
@@ -1657,7 +1654,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
   await t.test("hooks RPC resource contract", async (t) => {
     const hooksRpc = readFileSync(HOOKS_RPC_PATH, "utf8");
 
-    // --- inventory items 36-37: hooks-list-rpc.py content assertions -----
+    // --- hooks-list-rpc.py content assertions -----------------------------
 
     await t.test(
       "hooks-list-rpc.py opts into postponed annotations (exact line)",
@@ -1685,7 +1682,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
       );
     });
 
-    // --- inventory items 116-142: hooks-list-rpc.py protocol gates -------
+    // --- hooks-list-rpc.py protocol gates ---------------------------------
 
     await t.test(
       "hooks-list-rpc.py satisfies the full protocol-gate/handshake-ordering contract",
@@ -1694,7 +1691,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
       },
     );
 
-    // --- inventory items 153-172: RPC-helper semantic-mutation fixtures --
+    // --- RPC-helper semantic-mutation fixtures ----------------------------
     // Mirrors the `rpc_mutations` hash at :584-665.
 
     const rpcMutations: Record<string, { source: string; message: string }> = {
@@ -1871,7 +1868,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
   await t.test("offline probe resource contract", async (t) => {
     const probe = readFileSync(PROBE_PATH, "utf8");
 
-    // --- inventory items 41-115: codex-offline-probe.sh structure --------
+    // --- codex-offline-probe.sh structure ---------------------------------
 
     await t.test(
       "codex-offline-probe.sh satisfies the full structural/ordering contract",
@@ -1939,7 +1936,7 @@ printf "%s\\n" "$probe_id" >> "$SPW_RUNNER_LOG"
       },
     );
 
-    // --- inventory items 143-152: probe semantic-mutation fixtures -------
+    // --- probe semantic-mutation fixtures ---------------------------------
     // Mirrors the `mutations` hash at :531-572: each entry is a single
     // substring rewrite of the real probe text that must be rejected by
     // validateProbe.

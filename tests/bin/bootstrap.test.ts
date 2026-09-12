@@ -1,6 +1,4 @@
-// Ported from tests/test_bootstrap.sh (see
-// the retained bootstrap contract for the expected assertions
-// inventory this file maps to 1:1).
+// Bootstrap contract tests.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -36,7 +34,7 @@ function isRegularFile(relPath: string) {
   }
 }
 
-// --- inventory items 1-7, 9: file-presence assertions -----------------
+// --- file-presence assertions -------------------------------------------
 
 const EXPECTED_FILES = [
   ".gitignore",
@@ -79,7 +77,7 @@ void test("bootstrap: deleted repository files stay absent", () => {
   }
 });
 
-// --- inventory items 10-85: text-content assertions --------------------
+// --- text-content assertions --------------------------------------------
 
 const textContentCases: Array<[string, string, boolean]> = [
   ["package.json", '"type": "module"', true],
@@ -276,7 +274,7 @@ void test("bootstrap: an unreadable path is reported by name, without errno or a
   );
 });
 
-// --- inventory items 86-99: structural release-section assertions ------
+// --- structural release-section assertions ------------------------------
 // Re-implements tests/test_bootstrap.sh's embedded Python
 // extract_section/assert_release_verification_sections logic in JS, so no
 // python3 invocation is needed for this check.

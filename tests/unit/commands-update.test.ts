@@ -82,10 +82,7 @@ async function makeCtx(
 
 const X = "1".repeat(40);
 
-function ownership(identityState: string | number | null) {
-  if (typeof identityState !== "string") {
-    return { presentationValue: identityState };
-  }
+function ownership(identityState: string) {
   return codexOwnershipInspection(
     identityState,
     { pluginPresent: false, marketplacePresent: false },
@@ -93,10 +90,8 @@ function ownership(identityState: string | number | null) {
   );
 }
 
-function control(value: string | number | null) {
-  return typeof value === "string"
-    ? codexControlInspection(value)
-    : { presentationValue: value };
+function control(value: string) {
+  return codexControlInspection(value);
 }
 
 function installed(

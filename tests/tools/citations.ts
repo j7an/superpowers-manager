@@ -21,7 +21,7 @@ import {
 // never set this. Without it the CLI's own dispatch could only be exercised
 // against the repository, which the design forbids for --fix. The override
 // belongs HERE, on the tool: the suite keeps its ordinary repository root,
-// because CITATION-01 through CITATION-03 must read the real corpus.
+// because the corpus-validation gate must read the real corpus.
 const ROOT = process.env.SPW_CITATIONS_ROOT
   ? resolve(process.env.SPW_CITATIONS_ROOT)
   : fileURLToPath(new URL("../..", import.meta.url));

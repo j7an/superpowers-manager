@@ -1,5 +1,5 @@
 // The citation gate. PR 12.2 builds the mechanism and repairs nothing.
-// Fixture trees are scratch directories; the two live gates at the bottom read
+// Fixture trees are scratch directories; the live corpus gate at the bottom reads
 // the real corpus.
 
 import assert from "node:assert/strict";
@@ -953,7 +953,7 @@ for (const mode of ["--suggest", "--write-ledger"]) {
   });
 }
 
-// ---- the two live gates -------------------------------------------------
+// ---- the live corpus gate -----------------------------------------------
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 // The container is a copy of a checkout, not a checkout, so the historical leg

@@ -122,9 +122,7 @@ void test("reportLegacyState reports legacy and both with the frozen text", () =
 
 // PORT-ONLY. tests/test_codex_state_units.sh never exercised the `*)` arms of
 // either case statement (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:56-58::spw_die "unknown adapter identity state: $identity_state` and :81-83), so the
-// spw_die path was unwitnessed on the shell side. Recorded as port-only items
-// 1-4 in the historical migration record — the port-only region
-// restarts at 1 rather than continuing the mapped region's numbering.
+// spw_die path was unwitnessed on the shell side.
 void test("both predicates reject an unrecognised identity state", () => {
   assert.deepEqual(requireNoLegacyState("garbage"), {
     kind: "unknown",
@@ -423,9 +421,8 @@ void test("removal verification rejects a surviving marketplace", () => {
 // retires with the transport. src/harnesses/codex/adapter.ts's update-control view returns
 // the literal `managed`; the old witness at
 // `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:102-104::run_adapter update` ran a fixture SHELL adapter emitting
-// a canned outcome, and no shell adapters remain. The historical migration
-// record instructs slice 5 to port that witness; it cannot be
-// ported, because there is nothing in-process that produces the value.
+// a canned outcome, and no shell adapters remain. It cannot be ported because
+// nothing in-process produces the value.
 
 void test("ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value", () => {
   assert.deepEqual(requireManagedUpdateControl("managed"), { ok: true });
