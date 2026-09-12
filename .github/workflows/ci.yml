@@ -59,10 +59,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Full history: the citation gate resolves `git show <sha>:path`
-          # citations into commits that predate HEAD. A depth-1 checkout makes
-          # every one of them unresolvable.
-          fetch-depth: 0
 
       - name: Run Codex harness integration
         run: sh tests/container.sh harness-codex
@@ -84,10 +80,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # Full history: the citation gate resolves `git show <sha>:path`
-          # citations into commits that predate HEAD. A depth-1 checkout makes
-          # every one of them unresolvable.
-          fetch-depth: 0
 
       - name: Run Pi harness integration
         run: sh tests/container.sh harness-pi
