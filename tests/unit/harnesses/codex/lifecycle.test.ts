@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  codexControlInspection,
+  codexOwnershipInspection,
   requireNoLegacyState,
   reportLegacyState,
   requireManagedUpdateControl,
@@ -13,7 +15,10 @@ import {
   normalizeCodexInstalled,
   normalizeCodexOwnership,
 } from "../../../../src/harnesses/codex/harness.ts";
-import { codexPresentation } from "../../../../src/harnesses/codex/presentation.ts";
+import {
+  codexInstallReceipt,
+  codexPresentation,
+} from "../../../../src/harnesses/codex/presentation.ts";
 
 // Frozen operator text. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
@@ -27,6 +32,66 @@ const REPORT_LINES = [
   "Legacy superpowers-wrapper Codex state remains installed.",
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
 ];
+
+void test("typed Codex policy builders retain ownership and control decisions", () => {
+  const clean = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: true, marketplacePresent: true },
+    [],
+  );
+  assert.equal(clean.installEligibility.kind, "allowed");
+  assert.equal(clean.removalVerification.kind, "blocked");
+  assert.deepEqual(clean.removalInput, {
+    pluginPresent: true,
+    marketplacePresent: true,
+  });
+  const conflict = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: true, marketplacePresent: true },
+    ["active Codex plugin superpowers@another-provider"],
+  );
+  assert.equal(conflict.installEligibility.kind, "blocked");
+  assert.equal(
+    codexOwnershipInspection(
+      "legacy",
+      { pluginPresent: false, marketplacePresent: false },
+      [],
+    ).installEligibility.kind,
+    "blocked",
+  );
+  assert.equal(
+    codexControlInspection("managed").mutationEligibility.kind,
+    "allowed",
+  );
+  assert.equal(
+    codexControlInspection("unsupported").mutationEligibility.kind,
+    "blocked",
+  );
+  assert.equal(
+    codexControlInspection("unrecognized").mutationEligibility.kind,
+    "blocked",
+  );
+});
+
+void test("receipt construction omits unsafe verification hints", () => {
+  for (const hint of ["unsafe\nline", "\u001b[31munsafe", "\ud800"]) {
+    const receipt = codexInstallReceipt(hint, hint);
+    assert.equal(receipt.missingVerificationOutput.stderr.length, 1);
+    assert.equal(receipt.mismatchVerificationOutput.stderr.length, 1);
+  }
+  const receipt = codexInstallReceipt(
+    "verify installation",
+    "retry installation",
+  );
+  assert.equal(
+    receipt.missingVerificationOutput.stderr.at(-1),
+    "hint: verify installation",
+  );
+  assert.equal(
+    receipt.mismatchVerificationOutput.stderr.at(-1),
+    "hint: retry installation",
+  );
+});
 
 void test("requireNoLegacyState admits the two clean identity states", () => {
   for (const state of ["neither", "manager"]) {
@@ -222,7 +287,7 @@ void test("install verification reports an undetectable fingerprint and its own 
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
   // the production normalizer's behaviour for JSON null
-  // (`src/harnesses/codex/harness.ts:91::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
+  // (`src/harnesses/codex/harness.ts:89::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
   const desired = "f".repeat(40);
   const receipt = normalizeCodexInstall(
     ok({ verification_hints: { missing: "codex reported nothing" } }),

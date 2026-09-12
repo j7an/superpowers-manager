@@ -7,6 +7,13 @@
 // be relabelled as a domain failure. Keeping the predicates write-free means
 // the hazard cannot exist here at all.
 
+import type {
+  Decision,
+  OwnershipInspection,
+  UpdateControlInspection,
+} from "../../harness.ts";
+import type { CodexRemovalInput } from "./adapter.ts";
+
 // A three-way verdict rather than a boolean, because the shell has two
 // distinct failure paths and collapsing them changes operator-visible text:
 //
@@ -96,5 +103,138 @@ export function requireManagedUpdateControl(value: string): Check {
   return {
     ok: false,
     message: `unknown adapter update-control capability: ${value}`,
+  };
+}
+
+function installDecision(legacy: LegacyVerdict): Decision {
+  switch (legacy.kind) {
+    case "ok":
+      return { kind: "allowed" };
+    case "blocked":
+      return {
+        kind: "blocked",
+        output: { stdout: [], stderr: legacy.lines },
+      };
+    case "unknown":
+      return {
+        kind: "blocked",
+        output: { stdout: [], stderr: [`error: ${legacy.message}`] },
+      };
+    case "report":
+      return {
+        kind: "blocked",
+        output: {
+          stdout: [],
+          stderr: ["error: unexpected legacy report during installation"],
+        },
+      };
+  }
+}
+
+export function codexOwnershipInspection(
+  identityState: string,
+  removalInput: CodexRemovalInput,
+  conflicts: readonly string[],
+): OwnershipInspection<CodexRemovalInput> {
+  const { pluginPresent, marketplacePresent } = removalInput;
+  const legacyEligibility: Decision =
+    identityState.length === 0
+      ? {
+          kind: "blocked",
+          output: {
+            stdout: [],
+            stderr: ["error: probe did not report adapter identity state"],
+          },
+        }
+      : installDecision(requireNoLegacyState(identityState));
+  const installEligibility: Decision =
+    legacyEligibility.kind === "blocked" || conflicts.length === 0
+      ? legacyEligibility
+      : {
+          kind: "blocked",
+          output: {
+            stdout: [],
+            stderr: [
+              "Conflicting unmanaged Superpowers Codex resources require manual resolution:",
+              ...conflicts.map((conflict) => `- ${conflict}`),
+              "Remove or disable each resource manually, then retry.",
+            ],
+          },
+        };
+
+  const legacyReport = reportLegacyState(identityState);
+  let removalVerification: Decision;
+  if (pluginPresent || marketplacePresent) {
+    const message = pluginPresent
+      ? "owned plugin resource is still installed after removal"
+      : "owned marketplace resource is still registered after removal";
+    removalVerification = {
+      kind: "blocked",
+      output: { stdout: [], stderr: ["error: " + message] },
+    };
+  } else if (legacyReport.kind === "unknown") {
+    removalVerification = {
+      kind: "blocked",
+      output: { stdout: [], stderr: [`error: ${legacyReport.message}`] },
+    };
+  } else if (legacyReport.kind === "blocked") {
+    removalVerification = {
+      kind: "blocked",
+      output: {
+        stdout: [],
+        stderr: ["error: unexpected legacy block after removal"],
+      },
+    };
+  } else {
+    removalVerification = { kind: "allowed" };
+  }
+
+  const postRemovalOutput =
+    legacyReport.kind === "report"
+      ? { stdout: legacyReport.lines, stderr: [] }
+      : { stdout: [], stderr: [] };
+
+  return {
+    installEligibility,
+    removalInput,
+    removalVerification,
+    postRemovalOutput,
+    presentationValue: identityState,
+    presentationConflicts: conflicts,
+  };
+}
+
+export function codexControlInspection(
+  updateControl: string,
+): UpdateControlInspection {
+  const probeEligibility: Decision =
+    updateControl.length === 0
+      ? {
+          kind: "blocked",
+          output: {
+            stdout: [],
+            stderr: [
+              "error: probe did not report adapter update-control capability",
+            ],
+          },
+        }
+      : { kind: "allowed" };
+  const managed = requireManagedUpdateControl(updateControl);
+  const mutationEligibility: Decision =
+    probeEligibility.kind === "blocked"
+      ? probeEligibility
+      : managed.ok
+        ? { kind: "allowed" }
+        : {
+            kind: "blocked",
+            output: {
+              stdout: [],
+              stderr: [`error: ${managed.message}`],
+            },
+          };
+  return {
+    probeEligibility,
+    mutationEligibility,
+    presentationValue: updateControl,
   };
 }

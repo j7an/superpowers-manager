@@ -29,10 +29,8 @@ import type {
   UpdateControlInspection,
 } from "../../harness.ts";
 import {
-  type LegacyVerdict,
-  reportLegacyState,
-  requireManagedUpdateControl,
-  requireNoLegacyState,
+  codexControlInspection,
+  codexOwnershipInspection,
 } from "./lifecycle.ts";
 import { commitMatches } from "../../status.ts";
 import { codexHome, codexPaths } from "./paths.ts";
@@ -128,31 +126,6 @@ function conflictDescriptions(
   return descriptions;
 }
 
-function installDecision(legacy: LegacyVerdict): Decision {
-  switch (legacy.kind) {
-    case "ok":
-      return { kind: "allowed" };
-    case "blocked":
-      return {
-        kind: "blocked",
-        output: { stdout: [], stderr: legacy.lines },
-      };
-    case "unknown":
-      return {
-        kind: "blocked",
-        output: { stdout: [], stderr: [`error: ${legacy.message}`] },
-      };
-    case "report":
-      return {
-        kind: "blocked",
-        output: {
-          stdout: [],
-          stderr: ["error: unexpected legacy report during installation"],
-        },
-      };
-  }
-}
-
 export function normalizeCodexOwnership(
   result: AdapterResult,
 ): AdapterResult<OwnershipInspection<CodexRemovalInput>> {
@@ -198,73 +171,13 @@ export function normalizeCodexOwnership(
   if (conflicts === null) {
     return malformed(result, "expected an array of strings at conflicts");
   }
-  const legacyEligibility: Decision =
-    identityState.length === 0
-      ? {
-          kind: "blocked",
-          output: {
-            stdout: [],
-            stderr: ["error: probe did not report adapter identity state"],
-          },
-        }
-      : installDecision(requireNoLegacyState(identityState));
-  const installEligibility: Decision =
-    legacyEligibility.kind === "blocked" || conflicts.length === 0
-      ? legacyEligibility
-      : {
-          kind: "blocked",
-          output: {
-            stdout: [],
-            stderr: [
-              "Conflicting unmanaged Superpowers Codex resources require manual resolution:",
-              ...conflicts.map((conflict) => `- ${conflict}`),
-              "Remove or disable each resource manually, then retry.",
-            ],
-          },
-        };
-
-  const legacyReport = reportLegacyState(identityState);
-  let removalVerification: Decision;
-  if (pluginPresent || marketplacePresent) {
-    const message = pluginPresent
-      ? "owned plugin resource is still installed after removal"
-      : "owned marketplace resource is still registered after removal";
-    removalVerification = {
-      kind: "blocked",
-      output: { stdout: [], stderr: ["error: " + message] },
-    };
-  } else if (legacyReport.kind === "unknown") {
-    removalVerification = {
-      kind: "blocked",
-      output: { stdout: [], stderr: [`error: ${legacyReport.message}`] },
-    };
-  } else if (legacyReport.kind === "blocked") {
-    removalVerification = {
-      kind: "blocked",
-      output: {
-        stdout: [],
-        stderr: ["error: unexpected legacy block after removal"],
-      },
-    };
-  } else {
-    removalVerification = { kind: "allowed" };
-  }
-
-  const postRemovalOutput =
-    legacyReport.kind === "report"
-      ? { stdout: legacyReport.lines, stderr: [] }
-      : { stdout: [], stderr: [] };
-
   return successResult(
     result.outcome.operation,
-    {
-      installEligibility,
-      removalInput: { pluginPresent, marketplacePresent },
-      removalVerification,
-      postRemovalOutput,
-      presentationValue: identityState,
-      presentationConflicts: conflicts,
-    },
+    codexOwnershipInspection(
+      identityState,
+      { pluginPresent, marketplacePresent },
+      conflicts,
+    ),
     result.outcome.messages,
   );
 }
@@ -293,35 +206,9 @@ export function normalizeCodexControl(
       "adapter returned a non-string update_control for inspect --view update-control",
     );
   }
-  const updateControl = control.value;
-  const probeEligibility: Decision =
-    updateControl.length === 0
-      ? {
-          kind: "blocked",
-          output: {
-            stdout: [],
-            stderr: [
-              "error: probe did not report adapter update-control capability",
-            ],
-          },
-        }
-      : { kind: "allowed" };
-  const managed = requireManagedUpdateControl(updateControl);
-  const mutationEligibility: Decision =
-    probeEligibility.kind === "blocked"
-      ? probeEligibility
-      : managed.ok
-        ? { kind: "allowed" }
-        : {
-            kind: "blocked",
-            output: {
-              stdout: [],
-              stderr: [`error: ${managed.message}`],
-            },
-          };
   return successResult(
     result.outcome.operation,
-    { probeEligibility, mutationEligibility, presentationValue: updateControl },
+    codexControlInspection(control.value),
     result.outcome.messages,
   );
 }
@@ -365,10 +252,6 @@ export function normalizeCodexInstalled(
   );
 }
 
-function safeHint(value: unknown): string {
-  return typeof value === "string" && !hasTerminalControl(value) ? value : "";
-}
-
 export function normalizeCodexInstall(
   result: AdapterResult,
 ): AdapterResult<InstallReceipt> {
@@ -393,7 +276,7 @@ export function normalizeCodexInstall(
       : {};
   return successResult(
     result.outcome.operation,
-    codexInstallReceipt(safeHint(bag.missing), safeHint(bag.mismatch)),
+    codexInstallReceipt(bag.missing, bag.mismatch),
     result.outcome.messages,
   );
 }

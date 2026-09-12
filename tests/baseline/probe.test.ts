@@ -144,7 +144,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/harnesses/codex/presentation.ts:189::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/harnesses/codex/presentation.ts:197::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);

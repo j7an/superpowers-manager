@@ -1,4 +1,5 @@
 import { displaySource } from "../../selection.ts";
+import { hasTerminalControl } from "../../adapter-result.ts";
 import type {
   FailureSite,
   HarnessPresentation,
@@ -158,13 +159,23 @@ function verificationOutput(
   return { stdout: [], stderr };
 }
 
+function safeHint(value: unknown): string {
+  return typeof value === "string" && !hasTerminalControl(value) ? value : "";
+}
+
 export function codexInstallReceipt(
-  missingHint: string,
-  mismatchHint: string,
+  missingHint: unknown,
+  mismatchHint: unknown,
 ): InstallReceipt {
   return {
-    missingVerificationOutput: verificationOutput("missing", missingHint),
-    mismatchVerificationOutput: verificationOutput("mismatch", mismatchHint),
+    missingVerificationOutput: verificationOutput(
+      "missing",
+      safeHint(missingHint),
+    ),
+    mismatchVerificationOutput: verificationOutput(
+      "mismatch",
+      safeHint(mismatchHint),
+    ),
   };
 }
 
