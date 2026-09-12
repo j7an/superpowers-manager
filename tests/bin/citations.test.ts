@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -945,6 +946,10 @@ for (const mode of ["--suggest", "--write-ledger"]) {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /unknown mode/);
     assert.equal(readFileSync(path, "utf8"), before);
+    assert.equal(
+      existsSync(join(root, "tests", "citation-ledger.json")),
+      false,
+    );
   });
 }
 
