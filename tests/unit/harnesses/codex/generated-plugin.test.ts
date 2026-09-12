@@ -128,6 +128,16 @@ void test("pythonStrip matches CPython str.strip and not JavaScript trim", () =>
   // Neither runtime strips these.
   assert.equal(pythonStrip("᠎value​"), "᠎value​");
   assert.equal(pythonStrip("   "), "");
+  for (const code of [
+    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0,
+    0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007,
+    0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+  ]) {
+    const character = String.fromCharCode(code);
+    assert.equal(pythonStrip(character + "value" + character), "value");
+  }
+  assert.equal(pythonStrip("a\u001fb"), "a\u001fb");
+  assert.equal(pythonStrip("\ufeff"), "\ufeff");
 });
 
 void test("pythonSplitlines matches CPython str.splitlines", () => {
@@ -147,6 +157,18 @@ void test("pythonSplitlines matches CPython str.splitlines", () => {
     "name: x",
     "---",
   ]);
+  for (const code of [
+    0x0a, 0x0d, 0x0b, 0x0c, 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029,
+  ]) {
+    assert.deepEqual(pythonSplitlines("a" + String.fromCharCode(code) + "b"), [
+      "a",
+      "b",
+    ]);
+  }
+  assert.deepEqual(pythonSplitlines("\n\n"), ["", ""]);
+  assert.deepEqual(pythonSplitlines("a\r\n\r\n"), ["a", ""]);
+  assert.deepEqual(pythonSplitlines("a\u001fb"), ["a\u001fb"]);
+  assert.deepEqual(pythonSplitlines("\ufeff"), ["\ufeff"]);
 });
 
 void test("FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures", async (t) => {

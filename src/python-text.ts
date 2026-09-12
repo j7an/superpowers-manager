@@ -1,75 +1,17 @@
-// CPython `str.strip()` whitespace, from Unicode's Bidi/White_Space tables as
-// CPython applies them. Deliberately excludes U+FEFF, which JavaScript's
-// `trim()` removes and Python's `strip()` does not.
-const PYTHON_WHITESPACE = new Set([
-  "\t",
-  "\n",
-  "\v",
-  "\f",
-  "\r",
-  " ",
-  "\x1c",
-  "\x1d",
-  "\x1e",
-  "\x1f",
-  "\x85",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  " ",
-  "　",
-]);
-
-// CPython `str.splitlines()` boundaries. `\r\n` is handled as a pair below.
-const PYTHON_LINE_BOUNDARIES = new Set([
-  "\n",
-  "\r",
-  "\v",
-  "\f",
-  "\x1c",
-  "\x1d",
-  "\x1e",
-  "\x85",
-  " ",
-  " ",
-]);
-
+// Exact CPython strip characters; JavaScript trim()/\s differ at FEFF and C0/NEL.
 export function pythonStrip(value: string): string {
-  let start = 0;
-  let end = value.length;
-  while (start < end && PYTHON_WHITESPACE.has(value[start]!)) start += 1;
-  while (end > start && PYTHON_WHITESPACE.has(value[end - 1]!)) end -= 1;
-  return value.slice(start, end);
+  return value.replace(
+    // oxlint-disable-next-line no-control-regex -- CPython whitespace includes C0 controls.
+    /^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028-\u2029\u202f\u205f\u3000]+$/g,
+    "",
+  );
 }
 
+// CRLF is one boundary; a terminating boundary adds no final empty line.
 export function pythonSplitlines(value: string): string[] {
-  const lines: string[] = [];
-  let start = 0;
-  let index = 0;
-  while (index < value.length) {
-    const character = value[index]!;
-    if (!PYTHON_LINE_BOUNDARIES.has(character)) {
-      index += 1;
-      continue;
-    }
-    lines.push(value.slice(start, index));
-    index += character === "\r" && value[index + 1] === "\n" ? 2 : 1;
-    start = index;
-  }
-  if (start < value.length) lines.push(value.slice(start));
+  // oxlint-disable-next-line no-control-regex -- CPython boundaries include C0 controls.
+  const lines = value.split(/\r\n|[\n\r\v\f\u001c-\u001e\u0085\u2028\u2029]/);
+  if (lines.at(-1) === "") lines.pop();
   return lines;
 }
 
