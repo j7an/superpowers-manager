@@ -110,6 +110,58 @@ function controlInspection(
   ]);
 }
 
+function successfulNonzero<T>(result: T, message: string): AdapterResult<T> {
+  const succeeded = successResult("inspect", result, [
+    { channel: "stderr", text: message },
+  ]);
+  return { status: 1, outcome: succeeded.outcome };
+}
+
+type RefusalVariant =
+  | "inspection failure"
+  | "successful nonzero status"
+  | "blocked eligibility"
+  | "missing eligibility"
+  | "undefined eligibility"
+  | "corrupt eligibility";
+
+function refusedEligibility<T extends object>(
+  target: "ownership" | "control",
+  variant: RefusalVariant,
+  allowed: T,
+  field: "installEligibility" | "mutationEligibility",
+): AdapterResult<T> {
+  const message = `${target} ${variant}`;
+  if (variant === "inspection failure") {
+    return failureResult(
+      "inspect",
+      "inspect-failed",
+      `${target} inspection failed`,
+      [],
+      [{ channel: "stderr", text: message }],
+    );
+  }
+  if (variant === "successful nonzero status") {
+    return successfulNonzero(allowed, message);
+  }
+  const result = { ...allowed } as Record<string, unknown>;
+  if (variant === "missing eligibility") {
+    delete result[field];
+  } else if (variant === "undefined eligibility") {
+    result[field] = undefined;
+  } else if (variant === "blocked eligibility") {
+    result[field] = {
+      kind: "blocked",
+      output: { stdout: [], stderr: [`${target} blocked`] },
+    };
+  } else {
+    result[field] = { kind: "corrupt" };
+  }
+  return successResult("inspect", result as T, [
+    { channel: "stderr", text: message },
+  ]);
+}
+
 async function fixture(t: test.TestContext) {
   const root = await mkdtemp(join(tmpdir(), "spw-codex-publication-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -457,6 +509,92 @@ void test("intact durable files remain retryable after cleanup failure", async (
   );
   assert.equal(second.outcome.ok, true, JSON.stringify(second));
   assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
+});
+
+void test("publication requires affirmative ownership and control eligibility before mutation", async (t) => {
+  const ownershipAllowed = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: true, marketplacePresent: true },
+    [],
+  );
+  const controlAllowed = codexControlInspection("managed");
+  const variants: readonly RefusalVariant[] = [
+    "inspection failure",
+    "successful nonzero status",
+    "blocked eligibility",
+    "missing eligibility",
+    "undefined eligibility",
+    "corrupt eligibility",
+  ];
+  for (const target of ["ownership", "control"] as const) {
+    for (const variant of variants) {
+      await t.test(`${target}: ${variant}`, async (t) => {
+        const f = await fixture(t);
+        let ownershipCalls = 0;
+        let controlCalls = 0;
+        let publicationCalls = 0;
+        let activationCalls = 0;
+        const dependencies: CodexPublicationDependencies = {
+          readNative: f.dependencies.readNative,
+          inspectOwnership: async () => {
+            ownershipCalls += 1;
+            return target === "ownership"
+              ? refusedEligibility(
+                  "ownership",
+                  variant,
+                  ownershipAllowed,
+                  "installEligibility",
+                )
+              : ownershipInspection("ownership allowed");
+          },
+          inspectControl: async () => {
+            controlCalls += 1;
+            return target === "control"
+              ? refusedEligibility(
+                  "control",
+                  variant,
+                  controlAllowed,
+                  "mutationEligibility",
+                )
+              : controlInspection("control allowed");
+          },
+          beginPublication: async (...args) => {
+            publicationCalls += 1;
+            return await beginDirectoryPublication(...args);
+          },
+        };
+        const result = await installCodexMarketplace(
+          f.artifact,
+          f.ctx,
+          async () => {
+            activationCalls += 1;
+            return successResult("install", RECEIPT, []);
+          },
+          dependencies,
+        );
+
+        assert.equal(result.outcome.ok, false, JSON.stringify(result));
+        if (result.outcome.ok) assert.fail("expected publication refusal");
+        assert.equal(result.outcome.error.code, "activation-refused");
+        assert.equal(
+          result.outcome.error.message,
+          `cannot activate Codex artifact ${f.artifact.root}; verify prepared content, ownership, and native state`,
+        );
+        assert.deepEqual(
+          result.outcome.messages.map((message) => message.text),
+          target === "ownership"
+            ? ["native", `ownership ${variant}`]
+            : ["native", "ownership allowed", `control ${variant}`],
+        );
+        assert.equal(ownershipCalls, 1);
+        assert.equal(controlCalls, target === "ownership" ? 0 : 1);
+        assert.equal(publicationCalls, 0);
+        assert.equal(activationCalls, 0);
+        assert.equal(await readCodexRecovery(f.paths), null);
+        assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
+      });
+    }
+  }
 });
 
 void test("publication returns a pending transaction and preserves ordered native messages", async (t) => {

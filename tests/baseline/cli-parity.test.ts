@@ -2103,7 +2103,7 @@ async function seedLifecycleManagerState(
  * subcase below with the opposite assertion.
  *
  * The real adapter's update-control view is hardcoded to "managed"
- * (`runInspect` in src/harnesses/codex/adapter.ts), which is why interception is needed at all
+ * (`codexInspectControl` in src/harnesses/codex/adapter.ts), which is why interception is needed at all
  * and why the third subcase needs none.
  *
  * `"malformed"` re-anchors onto the port's own reader rather than the shell's.
@@ -2246,7 +2246,7 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
 
   {
     // The real adapter's update-control view always answers "managed"
-    // (`runInspect` in src/harnesses/codex/adapter.ts), which is exactly what this branch
+    // (`codexInspectControl` in src/harnesses/codex/adapter.ts), which is exactly what this branch
     // needs, so no interception is wired at all.
     const c = lifecycleCodexCase({ fakes: "install" });
     const result = await runScript(c, "update");

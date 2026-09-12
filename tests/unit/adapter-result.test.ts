@@ -366,7 +366,7 @@ function assertRefused(
 //                          through both ingresses (appendText, appendBytes)
 //   install verification hint
 //                       -> filtered by codexInstallReceipt
-//                          (src/harnesses/codex/harness.ts) before
+//                          (src/harnesses/codex/presentation.ts) before
 //                          codexPresentation.renderInstallVerification renders it, per D0c
 //
 // The first three subtests below are one per mechanism, and all three are
