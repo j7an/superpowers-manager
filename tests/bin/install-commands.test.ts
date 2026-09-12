@@ -39,7 +39,6 @@ import {
   readLog,
   runScript,
   snapshotTree,
-  spawnFakeAdapter,
   writePiExecutable,
 } from "./lifecycle-fixture.ts";
 import { caseContext, recordingAdapter } from "./command-context.ts";
@@ -1923,70 +1922,6 @@ void describe("install commands", { concurrency: true }, () => {
         assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
         assert.ok(readLog(piLog).includes("--version"));
       },
-    );
-  });
-
-  // Port-only (no shell original): row 18's first genuine consumer. The shell
-  // had no in-process subject to guard, so this case has nothing to port —
-  // see tests/migration-inventory/install-commands.md's port-only section.
-  // Appended at the end of the file, rather than beside the fresh-install
-  // case it is thematically closest to, so it does not shift the line number
-  // of any existing item — most of this inventory's `Port:` pointers are
-  // already stale (see the file's own POINTER PROVENANCE note) and inserting
-  // in the middle would silently break the ones that are not.
-  //
-  // The subject must not reach the fake adapter at all. install-fakes.js's
-  // adapter role refuses unconditionally (tests/bin/lifecycle-fakes.js's
-  // tripwireTriggered). The subject itself dispatches in-process, and the
-  // SPW_ADAPTER seam runScript once defaulted was retired together with the
-  // fixture machinery that selected the fake's behaviour.
-  //
-  // Read the emptiness half for what it now is. With the seam retired, no
-  // channel points the subject at c.adapterBin: runScript's env allowlist no
-  // longer carries SPW_ADAPTER, the case's bin/ directory is never on the
-  // subject's PATH, and nothing under src/ reads an environment variable
-  // naming an adapter executable. A spawn is therefore unreachable, not merely
-  // unobserved, so an empty c.adapterLog is a residual structural check rather
-  // than a spawn detector. The live guarantee that SPW_ADAPTER cannot re-enter
-  // src/ is tests/unit/ctx-adapter-provenance.test.js (registered in
-  // tests/suites.json), not this case.
-  //
-  // The armed-witness half below is what still carries weight, and what it
-  // proves is bounded: run this case's own fake adapter for real and it
-  // refuses with the tripwire's exact status and message, and the refusal
-  // lands in c.adapterLog. That is a claim about the FIXTURE. It is what keeps
-  // c.adapterLog a path something writes to, so the emptiness half above is
-  // not vacuous — and it is the property the seam-retirement mutation gate
-  // measured. Neither half detects a regressed spawn any more.
-  void test("fresh install leaves the fake adapter log empty; the tripwire refuses a direct spawn (row 18)", async () => {
-    const c = installCase();
-    const result = await runScript(c, "install");
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(
-      readLog(c.adapterLog),
-      [],
-      "the in-process port must never reach the fake adapter executable",
-    );
-    assert.ok(
-      !result.stderr.includes("must not spawn the adapter"),
-      `the tripwire's own message leaked onto the subject's stderr:\n${result.stderr}`,
-    );
-    // Armed witness, after the emptiness assertion above and never before it:
-    // this call is the one thing in the case that writes to c.adapterLog.
-    const witness = spawnFakeAdapter(c, ["inspect", "--view", "ownership"]);
-    assert.equal(
-      witness.status,
-      94,
-      `the armed tripwire did not refuse a real spawn of this case's fake adapter:\n${witness.stderr}`,
-    );
-    assert.equal(
-      witness.stderr,
-      "fixture: install must not spawn the adapter\n",
-    );
-    assert.deepEqual(
-      readLog(c.adapterLog),
-      ["inspect --view ownership"],
-      "c.adapterLog is not the path this case's fake adapter records to, so the emptiness assertion above proves nothing",
     );
   });
 });

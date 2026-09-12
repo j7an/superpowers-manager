@@ -882,20 +882,11 @@ Three groups, each verifiable from the port file rather than from this prose:*
     remediation path (`:1470`). The shell ran this check only for install
     (`:759-768`); update reaches the same remediation through
     `scripts/update:22-25`, so the same claim is asserted there.
-42. `adapterSeam: "tripwire"` armed on a fresh install: the subject's own exit
-    status is 0, the fake adapter's log holds no line at all, and a direct
-    spawn of that same case's fake adapter is then refused with exit 94 and
-    the tripwire's own message, leaving in the log the one line the emptiness
-    check demanded be absent (`:1609`, within `:1609-1639`). Appended at the
-    end of the file rather than beside the fresh-install case it is
-    thematically closest to, so adding it does not shift any other item's
-    pointer. Two things, not one — an exit status alone cannot distinguish
-    "refused" from "delegated, then failed" — mirroring
-    `tests/bin/lifecycle-fakes.test.ts`'s own precedent for the same subject.
-    Counted as ONE port-only item, as it was when it held three assertions:
-    the added half is this item's own non-vacuity guard, not a separate
-    claim, and splitting it would move `portOnly` for no change in what the
-    inventory maps.
+42. **Retired by the approved repository simplification.** The row-18
+    fresh-install case observed a fake adapter the subject could no longer
+    reach. Direct refusal remains covered by
+    `tests/bin/lifecycle-fakes.test.ts`; the production adapter provenance
+    gate remains in `tests/unit/ctx-adapter-provenance.test.ts`.
 
 <!-- inventory:port-only:end -->
 
@@ -1308,7 +1299,7 @@ merge cannot be falsified for one member alone.
 {
   "shellOriginal": 124,
   "portOnly": 42,
-  "ports": { "tests/bin/install-commands.test.ts": 31 }
+  "ports": { "tests/bin/install-commands.test.ts": 30 }
 }
 ```
 
@@ -1324,15 +1315,15 @@ merge cannot be falsified for one member alone.
   sum: 6+6+3+4+2+3+3+5+3+3+12+3+3+8+3+3+4+4+3+4+4+2+4+4+3+4+5+4+2+4+3 = 124).
   Unchanged by Task 6: this is a fact about the deleted shell file, not about
   the port.
-- Port (`tests/bin/install-commands.test.ts`): **31** static `test(` call
-  sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 32 before Task 6, then
-  30, now 31), counted with `migration-inventory.test.js`'s own `stripInert` +
+- Port (`tests/bin/install-commands.test.ts`): **30** static `test(` call
+  sites after Task 2 (2026-09-12; was 32 before Task 6, then 30, then 31 after
+  Task 9), counted with `migration-inventory.test.js`'s own `stripInert` +
   `/(?<![A-Za-z0-9_$.])test\(/g` method rather than a naive grep. Task 6's drop
   of two was the two retirements below, each deleting its case's `test(` call
   site outright rather than converting it. Task 9 added exactly one call
-  site — the row-18 tripwire case, port-only item 42 — and no other task
-  between them added or removed one. No remaining call site is data-driven,
-  so the 31 static sites produce 31 runtime cases. The `for legacy_state in
+  site — the row-18 tripwire case, port-only item 42. Task 2 retired that
+  obsolete observer, so the 30 static sites produce 30 runtime cases. No
+  remaining call site is data-driven. The `for legacy_state in
   legacy both` loop at `:426` is still expanded into two explicit call sites
   (`:948`, `:953`) sharing one helper.
 - Reconciliation: **113 of 124** shell items retain a port counterpart; the
@@ -1585,13 +1576,18 @@ merge cannot be falsified for one member alone.
   items 61 and 94 carry a **narrowed TMPDIR scope** forced by per-case
   isolation, and item 81 **drops the shell's empty-log escape hatch**,
   making the claim strictly stronger. Neither changes the count. The 42
-  port-only assertions (41 before Task 9, plus item 42's tripwire case) are
-  strictly additive and are excluded from the 124-item accounting above.
+  historical port-only entries (41 before Task 9, plus item 42's tripwire
+  case) are excluded from the 124-item accounting above. Task 2 retires item
+  42's live observer while preserving its numbered historical record.
 
 ## Native TypeScript reconciliation (issue #113)
 
-Current ports: `tests/bin/install-commands.test.ts` (31 static `test(` call sites).
+Current ports: `tests/bin/install-commands.test.ts` (30 static `test(` call sites).
 The `.ts` paths identify the current native counterparts; the quoted shell
 assertions, original counts, historical dispositions, freeze header, and Git
 resolution anchors remain historical. Imports, child entry points, preloads, and
 maintained helper references follow the renamed native source paths.
+
+Task 2 retired the row-18 fresh-install observer because the subject cannot
+reach its fake adapter; direct fixture refusal and production adapter provenance
+remain covered by their named suites in item 42.

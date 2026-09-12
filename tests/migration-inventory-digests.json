@@ -4,7 +4,7 @@
   "bootstrap.md": "03f0fc770c066f41aa1757aa2f551292b1ab04156ccc880fde03d8796fcd93da",
   "codex-state-units.md": "6c347004240e257e02a4fe9afdba38a4a27e13350a2d80a4a88b874c6e3bfdd4",
   "container-contract.md": "62696fba6d488208a477d49055337fc9a0257196ba585bbe1b6b10884220e23f",
-  "install-commands.md": "44aee19a548e8c2f781cccda57ed43feec6d9466ce4f58740e08209131411ad4",
+  "install-commands.md": "34cc5bb409e953d055057b409bd4af2d25e0626484ef4386ea3c1fab1462c6f9",
   "marketplace-reconcile.md": "9d93aa3eb6b79a98a9265611d65158ee26286d31db480feb731795d67fba05db",
   "node-cli-helper.md": "d4927ccf4ef6d92c3de73ac8fd60a4baa3e1eff25ae33be079dfe06316e90082",
   "node-tooling.md": "f8ca7d8ac2515c61271d52b7d9e3c937977d49689d68e61938fa297b9b0e9551",
@@ -14,6 +14,6 @@
   "ref-resolution.md": "49f95506b3897868005abb90025e1404c49d3ec0aa7df48e71ce0591890870f4",
   "selection-commands.md": "5cfe19ee2c091ca54da46f3d46239449862ad7390c99b2a3530a12f4953ecb58",
   "selection-state.md": "9b3f6fd47c3c72c435c33d536ced3af94568eb9245ace7843315e4364847fd6c",
-  "uninstall-commands.md": "2808d389bf7cb5c91cbffe375cd4f034082bd321dd54f1883278c321d1ca2966",
+  "uninstall-commands.md": "9fda9c620d8856148c103d0e044fa6fa11d0587354b762d86fad3aa715a0a0e3",
   "workflows.md": "a628f467caf3fe13b5b9f920be1b8450c7d398f0070f6f219d9e88b8abb00b10"
 }

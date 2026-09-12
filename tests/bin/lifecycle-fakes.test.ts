@@ -6,18 +6,7 @@
 // role ends at the tripwire, with the tripwire's exact status and diagnostic
 // and nothing running after it.
 //
-// Nothing here goes through runScript (tests/bin/lifecycle-fixture.js), or
-// through a CaseEnv at all: every case below spawns a fake executable directly
-// with an env it builds itself. Two committed cases go the other way, driving
-// the real subject through runScript — the row-18 cases in
-// tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js.
-// With the seam retired no channel points the subject at a fake adapter, so
-// those cases read its log as a residual structural check, and pair that with
-// an armed-witness spawn of their own case's fake (lifecycle-fixture.js's
-// spawnFakeAdapter) so the check is not reading a path nothing writes to.
-// This file is the complement, not a duplicate: it exercises the fixture's own
-// contract with no subject in the picture, which is how the exit codes below
-// stay reachable at all.
+// The direct adapter-role tests verify refusal, exact diagnostics, and logging.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
