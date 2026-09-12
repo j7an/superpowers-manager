@@ -22,10 +22,11 @@ compatibility facts, not a recommendation to make every parser identical.
 
 ## Environment and location
 
-The eleven `SUPERPOWERS_*` variables below are the complete public override set.
-The CLI inherits the environment wholesale. “Unset” means the consumer uses
-the source-derived default shown here. `SUPERPOWERS_CODEX` appears three times
-to separate launcher preflight, listing, and mutation use.
+The table below records the public overrides and the rejected legacy
+`SUPERPOWERS_VALIDATOR` input. The CLI inherits the environment wholesale.
+“Unset” means the consumer uses the source-derived default shown here.
+`SUPERPOWERS_CODEX` appears three times to separate launcher preflight, listing,
+and mutation use.
 
 | Behavior ID | Variable | Current default | Production consumer and effect |
 |---|---|---|---|

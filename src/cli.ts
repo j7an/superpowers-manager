@@ -87,8 +87,8 @@ const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
 // required because `spw_invoke_adapter` ran validate-adapter-response.py once
 // per adapter call
 // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:37-44::--response "$response_file" --result "$result_file" \`);
-// the in-process path has no validator process. It remains CONDITIONAL for
-// `prepare` through commandRequirements(env) below, unchanged from slice 3.4.
+// the in-process path no longer uses that adapter-response validator.
+// No command has a Python requirement in commandRequirements(env).
 // No command requires a POSIX shell any more.
 const SHARED_COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
