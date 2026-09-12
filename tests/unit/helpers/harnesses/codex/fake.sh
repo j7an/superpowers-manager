@@ -8,18 +8,9 @@
 # real adapter listing call sites. Everything around the token stays valid
 # JSON, so a lossy decode would still parse -- the point is that only a strict
 # byte-level reader rejects the payload.
-#
-# $FAKE_CODEX_LOCK_DIR, when set, is made read-only on every invocation so the
-# adapter's own workspace cleanup fails afterwards. Re-applying the mode is
-# idempotent, so repeated calls are harmless. Note this is a no-op as root,
-# where the case it supports fails loudly rather than passing silently.
 set -eu
 
 printf '%s\n' "$*" >> "$FAKE_CODEX_LOG"
-
-if [ -n "${FAKE_CODEX_LOCK_DIR:-}" ]; then
-  chmod 500 "$FAKE_CODEX_LOCK_DIR"
-fi
 
 emit() {
   before=${1%%@@BAD@@*}
