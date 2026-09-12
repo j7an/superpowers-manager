@@ -180,9 +180,7 @@ function createReleaseRepo(sandbox: Sandbox, name: string = "upstream") {
 
 /**
  * A `codex` that answers the two listing commands the in-process probe's
- * native-state and ownership readers issue (`src/harnesses/codex/adapter.ts:722::async function runOwnership(` — the argument
- * arrays at the call sites, matching how `tests/bin/lifecycle-fakes.js` and
- * the retained probe baseline suite cites them) with empty inventories, and
+ * native-state and ownership readers issue, with empty inventories, and
  * rejects anything else. `writeNoopTool`'s `exit 0` stub is
  * enough for a preflight lookup but not for a command that actually reads
  * Codex state: probe fails closed on its unparseable empty output.
@@ -2744,7 +2742,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:512::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:556::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
+  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:510::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:554::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2816,8 +2814,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1329::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1375::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1327::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1373::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is
