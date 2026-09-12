@@ -40,10 +40,11 @@ function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
   return { status: result.status, outcome: result.outcome };
 }
 
-function invalidStatus<T>(
+export function rejectSuccessfulNonzeroStatus<T>(
   result: AdapterResult<T>,
   message: string,
 ): AdapterResult<T> {
+  if (!result.outcome.ok || result.status === 0) return result;
   return failureResult(
     result.outcome.operation,
     "invalid-status",
@@ -83,14 +84,11 @@ async function mutationRoots(ctx: AdapterContext): Promise<readonly string[]> {
 async function inspectCodexUpdateControl(
   ctx: AdapterContext,
 ): Promise<AdapterResult<UpdateControlInspection>> {
-  const result = await codexInspectControl(ctx);
+  const result = rejectSuccessfulNonzeroStatus(
+    await codexInspectControl(ctx),
+    "adapter reported a failure status for inspect --view update-control",
+  );
   if (!result.outcome.ok) return result;
-  if (result.status !== 0) {
-    return invalidStatus(
-      result,
-      "adapter reported a failure status for inspect --view update-control",
-    );
-  }
   const paths = codexPaths(ctx.env ?? {}, process.cwd());
   let diagnostic: string | null = null;
   try {
@@ -130,22 +128,16 @@ export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
   install: async (artifact, ctx) =>
     installCodexMarketplace(artifact, ctx, async (root, context) => {
       const result = await codexInstall(root, context);
-      if (result.outcome.ok && result.status !== 0) {
-        return failureResult(
-          result.outcome.operation,
-          "invalid-status",
-          codexPresentation.callFailure("install", context).invalidStatus,
-          [],
-          result.outcome.messages,
-        );
-      }
-      return result;
+      return rejectSuccessfulNonzeroStatus(
+        result,
+        codexPresentation.callFailure("install", context).invalidStatus,
+      );
     }),
   remove: async (input, ctx) => {
     const result = await removeCodexMarketplace(input, ctx);
     if (!result.outcome.ok) return preserveFailure(result);
     if (result.status !== 0) {
-      return invalidStatus(
+      return rejectSuccessfulNonzeroStatus(
         result,
         codexPresentation.callFailure("remove", ctx, input).invalidStatus,
       );

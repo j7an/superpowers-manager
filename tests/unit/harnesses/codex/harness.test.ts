@@ -11,7 +11,10 @@ import {
   successResult,
 } from "../../../../src/adapter-result.ts";
 import type { CodexRemovalInput } from "../../../../src/harnesses/codex/adapter.ts";
-import { codexHarness } from "../../../../src/harnesses/codex/harness.ts";
+import {
+  codexHarness,
+  rejectSuccessfulNonzeroStatus,
+} from "../../../../src/harnesses/codex/harness.ts";
 import {
   codexControlInspection,
   codexOwnershipInspection,
@@ -289,6 +292,62 @@ void test("install receipt converts only safe verification hints into output", (
   const unsafe = codexInstallReceipt("unsafe\nline", 4);
   assert.equal(unsafe.missingVerificationOutput.stderr.length, 1);
   assert.equal(unsafe.mismatchVerificationOutput.stderr.length, 1);
+});
+
+void test("Codex boundaries reject successful nonzero statuses before reading typed results", () => {
+  const messages = [
+    { channel: "stderr" as const, text: "captured adapter context" },
+  ];
+  const cases = [
+    {
+      operation: "inspect",
+      message:
+        "adapter reported a failure status for inspect --view update-control",
+    },
+    {
+      operation: "install",
+      message:
+        "adapter reported a failure status for install --package-root /package root",
+    },
+  ] as const;
+  for (const { operation, message } of cases) {
+    const succeeded = successResult(operation, null, messages);
+    const guarded = rejectSuccessfulNonzeroStatus(
+      { status: 1, outcome: succeeded.outcome },
+      message,
+    );
+    assert.equal(guarded.status, 1);
+    assert.equal(guarded.outcome.ok, false);
+    if (guarded.outcome.ok) assert.fail("expected invalid status rejection");
+    assert.equal(guarded.outcome.operation, operation);
+    assert.equal(guarded.outcome.error.code, "invalid-status");
+    assert.equal(guarded.outcome.error.message, message);
+    assert.deepEqual(guarded.outcome.error.hints, []);
+    assert.deepEqual(guarded.outcome.messages, messages);
+  }
+});
+
+void test("Codex status guard passes zero successes and controlled failures through unchanged", () => {
+  const succeeded = successResult(
+    "inspect",
+    codexControlInspection("managed"),
+    [],
+  );
+  const failed = failureResult(
+    "install",
+    "controlled-failure",
+    "controlled failure",
+    ["controlled hint"],
+    [{ channel: "stdout", text: "captured context" }],
+  );
+  assert.strictEqual(
+    rejectSuccessfulNonzeroStatus(succeeded, "unused status diagnostic"),
+    succeeded,
+  );
+  assert.strictEqual(
+    rejectSuccessfulNonzeroStatus(failed, "unused status diagnostic"),
+    failed,
+  );
 });
 
 function selection(): EffectiveSelection {

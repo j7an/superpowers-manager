@@ -2665,7 +2665,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // a CLI run fails at preflight with "required command not found" before
   // `src/harnesses/codex/adapter.ts:287::for (const directory of env.PATH.split(delimiter))` is reached at all. The product CLI binds
   // `codexHarness`, whose installed-state inspection reaches the same native
-  // engine (`src/harnesses/codex/harness.ts:129::inspectInstalled: inspectCodexInstallation,`).
+  // engine (`src/harnesses/codex/harness.ts:127::inspectInstalled: inspectCodexInstallation,`).
   //
   // Be precise about what that buys, because the next reader auditing whether
   // `src/harnesses/codex/adapter.ts:286::if (env.PATH === undefined) return false;` is reachable needs the true answer: the preflight
