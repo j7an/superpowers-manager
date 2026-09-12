@@ -58,9 +58,7 @@ void test("bootstrap: expected repository files are present", () => {
   }
 });
 
-// These constructed strings are deliberate negative assertions over deleted
-// paths, excluded from the literal active-consumer audit. Active references
-// must remain literal and dispositioned; construction must not hide one.
+// These are deliberate absence checks for retired production files.
 const ABSENT_FILES = [
   ["scripts/", "adapters/codex/adapter"].join(""),
   ["scripts/", "core/validate-adapter-response.py"].join(""),
