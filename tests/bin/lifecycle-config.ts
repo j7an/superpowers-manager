@@ -43,7 +43,7 @@ const INSTALL_SCHEMA: Record<string, Rule> = {
   marketplaceAdd: ["ok", "fail"],
   // `orphan` registers the plugin as installed without materialising its
   // cached tree, which is the only lever that makes the REAL adapter's
-  // fingerprint inspection fail (`src/harnesses/codex/adapter.ts:877::const activeRoot = installedRootForVersion(`). It exists so the
+  // fingerprint inspection fail (`src/harnesses/codex/adapter.ts:840::const activeRoot = installedRootForVersion(`). It exists so the
   // failed-inspection case can assert the subject's own diagnostic instead of
   // intercepting the adapter — see install-commands.test.js's
   // "a failed fingerprint inspection is reported as an inspection failure".

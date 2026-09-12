@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { withWorkspace, workspaceRemovalFailure } from "../../src/workspace.ts";
 
-import { runAdapter } from "../../src/harnesses/codex/adapter.ts";
+import { codexRemove } from "../../src/harnesses/codex/adapter.ts";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const FAKE_CODEX = fileURLToPath(
@@ -279,8 +279,8 @@ void test("an adapter operation keeps its result when workspace cleanup fails", 
     await rm(base, { recursive: true, force: true });
   });
 
-  const result = await runAdapter(
-    ["uninstall", "--plugin-present", "true", "--marketplace-present", "false"],
+  const result = await codexRemove(
+    { pluginPresent: true, marketplacePresent: false },
     {
       root: PACKAGE_ROOT,
       env: {

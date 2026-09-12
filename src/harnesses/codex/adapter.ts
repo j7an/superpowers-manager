@@ -118,32 +118,6 @@ function fail(
   throw new AdapterFailure(code, message, hints);
 }
 
-function parseFlags(
-  argv: readonly string[],
-  allowed: readonly string[],
-): Readonly<Record<string, string>> {
-  const values: Record<string, string> = {};
-  for (let index = 0; index < argv.length; index += 2) {
-    const flag = argv[index]!;
-    if (!allowed.includes(flag)) {
-      fail("invalid-arguments", `unknown flag: ${flag}`);
-    }
-    if (index + 1 >= argv.length) {
-      fail("invalid-arguments", `missing value for ${flag}`);
-    }
-    if (Object.hasOwn(values, flag)) {
-      fail("invalid-arguments", `duplicate flag: ${flag}`);
-    }
-    values[flag] = argv[index + 1]!;
-  }
-  for (const flag of allowed) {
-    if (!Object.hasOwn(values, flag)) {
-      fail("invalid-arguments", `missing required flag: ${flag}`);
-    }
-  }
-  return values;
-}
-
 interface CommandResult {
   readonly status: number | null;
   readonly signal: NodeJS.Signals | null;
@@ -329,17 +303,6 @@ async function requireCodex(
     fail("command-not-found", `required Codex command not found: ${codexBin}`);
   }
 }
-
-const BUILD_FLAGS = [
-  "--upstream-root",
-  "--candidate-root",
-  "--requested-ref",
-  "--resolved-ref",
-  "--commit",
-  "--manager-version",
-  "--upstream-manifest-version",
-  "--fallback-manifest",
-] as const;
 
 async function directoryExists(path: string): Promise<boolean> {
   try {
@@ -1237,87 +1200,4 @@ export function codexReadNativeState(
         : null,
     };
   });
-}
-
-export async function runAdapter(
-  argv: readonly string[],
-  context: AdapterContext,
-): Promise<AdapterResult> {
-  const rawOperation = argv[0];
-  const operation = rawOperation || "adapter";
-  const args = argv.slice(1);
-
-  try {
-    if (rawOperation === undefined || rawOperation.length === 0) {
-      fail("invalid-arguments", "missing adapter operation");
-    } else if (operation === "build") {
-      const flags = parseFlags(args, BUILD_FLAGS);
-      return codexBuild(
-        {
-          upstreamRoot: flags["--upstream-root"]!,
-          candidateRoot: flags["--candidate-root"]!,
-          requestedRef: flags["--requested-ref"]!,
-          resolvedRef: flags["--resolved-ref"]!,
-          commit: flags["--commit"]!,
-          managerVersion: flags["--manager-version"]!,
-          upstreamManifestVersion: flags["--upstream-manifest-version"]!,
-          fallbackManifest: flags["--fallback-manifest"]!,
-        },
-        context,
-      );
-    } else if (operation === "install") {
-      const flags = parseFlags(args, ["--package-root"]);
-      return codexInstall(flags["--package-root"]!, context);
-    } else if (operation === "uninstall") {
-      const flags = parseFlags(args, [
-        "--plugin-present",
-        "--marketplace-present",
-      ]);
-      const pluginPresent = flags["--plugin-present"]!;
-      const marketplacePresent = flags["--marketplace-present"]!;
-      if (pluginPresent !== "true" && pluginPresent !== "false") {
-        fail("invalid-arguments", "--plugin-present must be true or false");
-      }
-      if (marketplacePresent !== "true" && marketplacePresent !== "false") {
-        fail(
-          "invalid-arguments",
-          "--marketplace-present must be true or false",
-        );
-      }
-      return codexRemove(
-        {
-          pluginPresent: pluginPresent === "true",
-          marketplacePresent: marketplacePresent === "true",
-        },
-        context,
-      );
-    } else if (operation === "inspect") {
-      const flags = parseFlags(args, ["--view"]);
-      const view = flags["--view"]!;
-      if (
-        view !== "ownership" &&
-        view !== "update-control" &&
-        view !== "fingerprint"
-      ) {
-        fail("invalid-arguments", `unsupported inspect view: ${view}`);
-      }
-      return codexInspect(view, context);
-    } else {
-      fail(
-        "unsupported-operation",
-        `unsupported adapter operation: ${operation}`,
-      );
-    }
-  } catch (cause) {
-    if (cause instanceof AdapterFailure) {
-      return failureResult(
-        operation,
-        cause.code,
-        cause.message,
-        cause.hints,
-        [],
-      );
-    }
-    throw cause;
-  }
 }

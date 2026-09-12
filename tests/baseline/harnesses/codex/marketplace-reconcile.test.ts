@@ -12,7 +12,11 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runAdapter } from "../../../../src/harnesses/codex/adapter.ts";
+import {
+  codexInspect,
+  codexInstall,
+  codexRemove,
+} from "../../../../src/harnesses/codex/adapter.ts";
 
 import {
   verifyInstalledFingerprint,
@@ -83,7 +87,7 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     "utf8",
   );
 
-  const inspect = await runAdapter(["inspect", "--view", "fingerprint"], {
+  const inspect = await codexInspect("fingerprint", {
     root: PACKAGE_ROOT,
     env: sandbox.env({
       FAKE_CODEX_PLUGIN_LIST:
@@ -166,7 +170,7 @@ void test("a marketplace-list command failure fails without mutation", async (t)
   const packageRoot = join(sandbox.base, "requested");
   await mkdir(packageRoot);
 
-  const result = await runAdapter(["install", "--package-root", packageRoot], {
+  const result = await codexInstall(packageRoot, {
     root: PACKAGE_ROOT,
     env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: "" }),
   });
@@ -192,13 +196,10 @@ void test("unrelated marketplace roots do not block manager registration", async
       const packageRoot = join(sandbox.base, "requested");
       await mkdir(packageRoot);
 
-      const result = await runAdapter(
-        ["install", "--package-root", packageRoot],
-        {
-          root: PACKAGE_ROOT,
-          env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: marketplaces }),
-        },
-      );
+      const result = await codexInstall(packageRoot, {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: marketplaces }),
+      });
 
       assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
       assert.deepEqual(
@@ -244,7 +245,7 @@ esac
   );
   await chmod(failingCodex, 0o755);
 
-  const result = await runAdapter(["install", "--package-root", packageRoot], {
+  const result = await codexInstall(packageRoot, {
     root: PACKAGE_ROOT,
     env: sandbox.env({
       SUPERPOWERS_CODEX: failingCodex,
@@ -280,8 +281,8 @@ esac
 
 void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await runAdapter(
-    ["uninstall", "--plugin-present", "true", "--marketplace-present", "true"],
+  const result = await codexRemove(
+    { pluginPresent: true, marketplacePresent: true },
     { root: PACKAGE_ROOT, env: sandbox.env() },
   );
   assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));

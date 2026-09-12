@@ -331,13 +331,13 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:433::hook classification failed`). Ported from
+// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:396::hook classification failed`). Ported from
 // `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:1001-1022::"hooks-mixed-array" "out-hooks-mixed-array"`, which held the only
 // witness of this prefix anywhere in the repository. The eight inner causes
 // those shell lines also asserted are already message-exact in
 // tests/unit/harnesses/codex/hooks.test.ts and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
-// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:442::hook materialization failed`) is
+// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:405::hook materialization failed`) is
 // asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
 void test("a classification failure reaches stderr through the adapter wrapper", async () => {
   const c = createCase({ fakes: "probe" });
@@ -693,7 +693,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
     assert.ok(existsSync(join(generated(c), ".superpowers-upstream.json")));
 
     // 2. stdout, in order: the REPLAYED ADAPTER OUTCOME (an adapter build
-    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:593::generated plugin validation passed` --
+    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:556::generated plugin validation passed` --
     //    outcome loss is the first thing this slice fixes, so it is asserted
     //    directly), then the validator's stdout, then the domain result.
     assertOrder(result.stdout, [

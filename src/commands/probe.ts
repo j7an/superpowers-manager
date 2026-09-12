@@ -184,14 +184,14 @@ function validControl(value: UpdateControlInspection): boolean {
   );
 }
 
-// `runAdapter` reports a CONTROLLED failure by RETURN VALUE, not by throwing
+// `runCodexOperation` reports a CONTROLLED failure by RETURN VALUE, not by throwing
 // (`src/adapter-result.ts:32-35::export interface AdapterResult`). The shell got
 // fail-closed behaviour for free: spw_invoke_adapter returned 1 and
 // scripts/probe ran under `set -eu`.
 // Omitting the status check here would read a failed inspection as absent
 // evidence and report it as success.
 //
-// It does still THROW for a non-AdapterFailure cause (runAdapter's closing
+// It does still THROW for a non-AdapterFailure cause (runCodexOperation's closing
 // `throw cause`, src/harnesses/codex/adapter.ts). That is caught here rather than in runProbe's
 // outer catch, because the two need different diagnostics -- see spec §3.3a.
 //
@@ -526,7 +526,7 @@ export async function runProbe<R>(
     // all. It (src/provenance.ts) delegates to readGeneratedCommitLenient,
     // which catches every failure and returns "".
     //
-    // A non-AdapterFailure re-thrown by runAdapter's closing `throw cause`
+    // A non-AdapterFailure re-thrown by runCodexOperation's closing `throw cause`
     // (src/harnesses/codex/adapter.ts) does NOT reach here: inspect() catches it and converts
     // it to a hand-written message per AGENTS.md's reader-diagnostics rule -- a
     // rethrown cause is exactly the failure src/harnesses/codex/adapter.ts declined to own, so

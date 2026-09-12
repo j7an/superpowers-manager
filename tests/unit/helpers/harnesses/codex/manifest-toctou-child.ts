@@ -111,7 +111,7 @@ void test("manifest TOCTOU child", async (t) => {
   });
 
   const {
-    runAdapter,
+    codexBuild,
   }: typeof import("../../../../../src/harnesses/codex/adapter.ts") =
     await import(
       new URL(
@@ -119,26 +119,19 @@ void test("manifest TOCTOU child", async (t) => {
         import.meta.url,
       ).href
     );
-  const argv = [
-    "build",
-    "--upstream-root",
-    upstream,
-    "--candidate-root",
-    candidate,
-    "--requested-ref",
-    "latest-release",
-    "--resolved-ref",
-    "v6.1.1",
-    "--commit",
-    COMMIT,
-    "--manager-version",
-    "6.1.1+manager.d884ae0",
-    "--upstream-manifest-version",
-    "6.1.1",
-    "--fallback-manifest",
-    fallback,
-  ];
-  const result = await runAdapter(argv, { root: PACKAGE_ROOT });
+  const result = await codexBuild(
+    {
+      upstreamRoot: upstream,
+      candidateRoot: candidate,
+      requestedRef: "latest-release",
+      resolvedRef: "v6.1.1",
+      commit: COMMIT,
+      managerVersion: "6.1.1+manager." + COMMIT.slice(0, 7),
+      upstreamManifestVersion: "6.1.1",
+      fallbackManifest: fallback,
+    },
+    { root: PACKAGE_ROOT },
+  );
   // Only the overlay's own read (src/harnesses/codex/adapter.ts) is observable here; hook
   // classification's read bypasses this mock entirely (see the comment
   // above). Exactly one call confirms the corruption above landed on the

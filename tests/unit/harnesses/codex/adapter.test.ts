@@ -10,11 +10,10 @@ import {
   codexBuild,
   codexInspect,
   codexInstall,
-  codexRemove,
-  runAdapter,
   mapCodexLaunchFailure,
   runCommandForTest,
 } from "../../../../src/harnesses/codex/adapter.ts";
+import type { CodexBuildInput } from "../../../../src/harnesses/codex/adapter.ts";
 
 const PACKAGE_ROOT = resolve(
   fileURLToPath(new URL("../../../../", import.meta.url)),
@@ -44,8 +43,8 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:410::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
-  // `src/harnesses/codex/adapter.ts:503::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:373::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
+  // `src/harnesses/codex/adapter.ts:466::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -78,28 +77,27 @@ async function buildWorkspace(t: import("node:test").TestContext) {
   return { base, upstream, candidate, fallback };
 }
 
-function buildArgv(
+function buildInput(
   workspace: { upstream: string; candidate: string; fallback: string },
-  overrides: Record<string, string> = {},
-) {
-  const flags: Record<string, string> = {
-    "--upstream-root": workspace.upstream,
-    "--candidate-root": workspace.candidate,
-    "--requested-ref": "latest-release",
-    "--resolved-ref": "v6.1.1",
-    "--commit": COMMIT,
-    "--manager-version": "6.1.1+manager.d884ae0",
-    "--upstream-manifest-version": "6.1.1",
-    "--fallback-manifest": workspace.fallback,
+  overrides: Partial<CodexBuildInput> = {},
+): CodexBuildInput {
+  return {
+    upstreamRoot: workspace.upstream,
+    candidateRoot: workspace.candidate,
+    requestedRef: "latest-release",
+    resolvedRef: "v6.1.1",
+    commit: COMMIT,
+    managerVersion: "6.1.1+manager." + COMMIT.slice(0, 7),
+    upstreamManifestVersion: "6.1.1",
+    fallbackManifest: workspace.fallback,
     ...overrides,
   };
-  return ["build", ...Object.entries(flags).flat()];
 }
 
 void test("the adapter replays the validator success line as one stdout record", async (t) => {
   const workspace = await buildWorkspace(t);
   const context = { root: PACKAGE_ROOT };
-  const result = await runAdapter(buildArgv(workspace), context);
+  const result = await codexBuild(buildInput(workspace), context);
   assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
   assert.deepStrictEqual(result.outcome.messages, [
     {
@@ -107,29 +105,15 @@ void test("the adapter replays the validator success line as one stdout record",
       text: `generated plugin validation passed: ${workspace.candidate}`,
     },
   ]);
-  assert.deepEqual(
-    await codexBuild(
-      {
-        upstreamRoot: workspace.upstream,
-        candidateRoot: workspace.candidate,
-        requestedRef: "latest-release",
-        resolvedRef: "v6.1.1",
-        commit: COMMIT,
-        managerVersion: "6.1.1+manager.d884ae0",
-        upstreamManifestVersion: "6.1.1",
-        fallbackManifest: workspace.fallback,
-      },
-      context,
-    ),
-    result,
-  );
 });
 
 void test("the adapter replays a multi-error failure as one record per line", async (t) => {
   const workspace = await buildWorkspace(t);
   await rm(join(workspace.candidate, "LICENSE"));
   await rm(join(workspace.candidate, "README.md"));
-  const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
+  const result = await codexBuild(buildInput(workspace), {
+    root: PACKAGE_ROOT,
+  });
   assert.equal(result.outcome.ok, false);
   assert.deepStrictEqual(result.outcome.messages, [
     { channel: "stderr", text: "Generated plugin validation failed:" },
@@ -147,7 +131,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/harnesses/codex/adapter.ts:450::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
+// call (`src/harnesses/codex/adapter.ts:413::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/harnesses/codex/hooks.ts) must keep succeeding, so this exercises the read at
@@ -316,8 +300,8 @@ void test("a manifest overlay read fails closed when the file changes between th
 
 void test("a split dash-leading ref fails before the validator with a named-flag record", async (t) => {
   const workspace = await buildWorkspace(t);
-  const result = await runAdapter(
-    buildArgv(workspace, { "--requested-ref": "-foo" }),
+  const result = await codexBuild(
+    buildInput(workspace, { requestedRef: "-foo" }),
     { root: PACKAGE_ROOT },
   );
   assert.equal(result.outcome.ok, false);
@@ -339,8 +323,8 @@ void test("a split dash-leading ref fails before the validator with a named-flag
 
 void test("a split dash-leading value on a different flag names that flag", async (t) => {
   const workspace = await buildWorkspace(t);
-  const result = await runAdapter(
-    buildArgv(workspace, { "--commit": "-deadbeef" }),
+  const result = await codexBuild(
+    buildInput(workspace, { commit: "-deadbeef" }),
     { root: PACKAGE_ROOT },
   );
   assert.equal(result.outcome.ok, false);
@@ -366,8 +350,8 @@ void test("split Unicode-decimal values still reach the validator", async (t) =>
   for (const value of ["-١", "-१", "-١.٥"]) {
     await t.test(value, async (t) => {
       const workspace = await buildWorkspace(t);
-      const result = await runAdapter(
-        buildArgv(workspace, { "--requested-ref": value }),
+      const result = await codexBuild(
+        buildInput(workspace, { requestedRef: value }),
         { root: PACKAGE_ROOT },
       );
       assert.equal(result.outcome.ok, false);
@@ -386,8 +370,8 @@ void test("split dash-leading exceptions still reach the validator", async (t) =
   for (const value of ["-", "-1", "-1.5", "-.5"]) {
     await t.test(value, async (t) => {
       const workspace = await buildWorkspace(t);
-      const result = await runAdapter(
-        buildArgv(workspace, { "--requested-ref": value }),
+      const result = await codexBuild(
+        buildInput(workspace, { requestedRef: value }),
         { root: PACKAGE_ROOT },
       );
       assert.equal(result.outcome.ok, false);
@@ -440,35 +424,6 @@ async function codexSandbox(t: import("node:test").TestContext) {
   };
 }
 
-void test("typed inspection matches the compatibility adapter result", async () => {
-  const context = { root: PACKAGE_ROOT, env: {} };
-  assert.deepEqual(
-    await codexInspect("update-control", context),
-    await runAdapter(["inspect", "--view", "update-control"], context),
-  );
-});
-
-void test("typed removal matches the compatibility adapter result", async (t) => {
-  const sandbox = await codexSandbox(t);
-  const context = { root: PACKAGE_ROOT, env: sandbox.env({}) };
-  assert.deepEqual(
-    await codexRemove(
-      { pluginPresent: false, marketplacePresent: false },
-      context,
-    ),
-    await runAdapter(
-      [
-        "uninstall",
-        "--plugin-present",
-        "false",
-        "--marketplace-present",
-        "false",
-      ],
-      context,
-    ),
-  );
-});
-
 // The adapter reads `codex plugin list --json` as raw bytes: `CommandResult`'s
 // `stdout: Buffer` field, read by `activePluginVersionFromJson`. `@@BAD@@` is
 // a raw 0xff byte inside an otherwise well-formed JSON string, so a lossy
@@ -482,7 +437,7 @@ void test("typed removal matches the compatibility adapter result", async (t) =>
 // resolves to no directory. Pre-populating `searchRoot` would defeat it.
 void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+  const result = await codexInspect("fingerprint", {
     root: PACKAGE_ROOT,
     env: sandbox.env({
       FAKE_CODEX_PLUGIN_LIST:
@@ -503,7 +458,7 @@ void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async 
 // every resource `false`. The assertion therefore requires a rejection.
 void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await runAdapter(["inspect", "--view", "ownership"], {
+  const result = await codexInspect("ownership", {
     root: PACKAGE_ROOT,
     env: sandbox.env({
       FAKE_CODEX_PLUGIN_LIST:
@@ -519,22 +474,19 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/harnesses/codex/adapter.ts:657::registeredRoot = marketplaceRootFromJson(`) is the destructive
+// The install reconciliation read (`src/harnesses/codex/adapter.ts:620::registeredRoot = marketplaceRootFromJson(`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
 void test("install rejects an invalid-UTF-8 marketplace listing without mutating", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await runAdapter(
-    ["install", "--package-root", sandbox.packageRoot],
-    {
-      root: PACKAGE_ROOT,
-      env: sandbox.env({
-        FAKE_CODEX_MARKETPLACE_LIST:
-          '{"marketplaces":[{"name":"superpowers-manager","root":"/registered@@BAD@@"}]}',
-      }),
-    },
-  );
+  const result = await codexInstall(sandbox.packageRoot, {
+    root: PACKAGE_ROOT,
+    env: sandbox.env({
+      FAKE_CODEX_MARKETPLACE_LIST:
+        '{"marketplaces":[{"name":"superpowers-manager","root":"/registered@@BAD@@"}]}',
+    }),
+  });
   assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
   assert.equal(result.outcome.error?.code, "install-failed");
   assert.equal(
@@ -641,7 +593,7 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
 // ADAPTER-FINGERPRINT-01 / -REJECT-01 / -OWNERSHIP-01 were owned by
 // tests/test_adapter_protocol.py until PR 11.5 slice 5. The protocol carried
 // these results; it never produced them. `runInspect` does, so the contracts
-// are asserted here directly over `runAdapter`.
+// are asserted here directly over `codexInspect`.
 //
 // The fingerprint vocabulary itself lives in src/harnesses/codex/state.ts
 // (`codexMetadataCommit` accepts 40-hex or 7-hex; `manifestShortSha` returns
@@ -690,7 +642,7 @@ void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-he
     const sandbox = await codexSandbox(t);
     const version = "6.1.1+manager.d884ae0";
     await seedInstalledCommit(sandbox, version, fingerprint);
-    const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+    const result = await codexInspect("fingerprint", {
       root: PACKAGE_ROOT,
       env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
     });
@@ -708,7 +660,7 @@ void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-he
   // Nothing is seeded under the search root, proving the view returns before it
   // reads one.
   const empty = await codexSandbox(t);
-  const nullResult = await runAdapter(["inspect", "--view", "fingerprint"], {
+  const nullResult = await codexInspect("fingerprint", {
     root: PACKAGE_ROOT,
     env: empty.env({
       FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed: [] }),
@@ -734,7 +686,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
     const sandbox = await codexSandbox(t);
     const version = "6.1.1+manager.d884ae0";
     const activeRoot = await seedInstalledCommit(sandbox, version, commit);
-    const result = await runAdapter(["inspect", "--view", "fingerprint"], {
+    const result = await codexInspect("fingerprint", {
       root: PACKAGE_ROOT,
       env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
     });
@@ -748,7 +700,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
   }
 });
 
-// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:1043::const managerPresent = managerPlugin || managerMarketplace;` computes
+// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:1006::const managerPresent = managerPlugin || managerMarketplace;` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -798,7 +750,7 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
             legacyPlugin,
             legacyMarketplace,
           });
-          const result = await runAdapter(["inspect", "--view", "ownership"], {
+          const result = await codexInspect("ownership", {
             root: PACKAGE_ROOT,
             env: sandbox.env({
               FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed }),
@@ -832,7 +784,7 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
     "reuses one native plugin listing for unmanaged conflicts",
     async () => {
       const sandbox = await codexSandbox(t);
-      const result = await runAdapter(["inspect", "--view", "ownership"], {
+      const result = await codexInspect("ownership", {
         root: PACKAGE_ROOT,
         env: sandbox.env({
           FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
@@ -886,46 +838,28 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
   ];
   for (const [refreshMode, hints] of cases) {
     const sandbox = await codexSandbox(t);
-    const result = await runAdapter(
-      ["install", "--package-root", sandbox.packageRoot],
-      {
-        root: PACKAGE_ROOT,
-        env: sandbox.env({
-          SUPERPOWERS_INSTALL_REFRESH_MODE: refreshMode,
-          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({
-            marketplaces: [
-              { name: "superpowers-manager", root: sandbox.packageRoot },
-            ],
-          }),
+    const result = await codexInstall(sandbox.packageRoot, {
+      root: PACKAGE_ROOT,
+      env: sandbox.env({
+        SUPERPOWERS_INSTALL_REFRESH_MODE: refreshMode,
+        FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({
+          marketplaces: [
+            { name: "superpowers-manager", root: sandbox.packageRoot },
+          ],
         }),
-      },
-    );
+      }),
+    });
     assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
     assert.deepStrictEqual(
       result.outcome.result,
       { verification_hints: hints },
       refreshMode,
     );
-    assert.deepEqual(
-      await codexInstall(sandbox.packageRoot, {
-        root: PACKAGE_ROOT,
-        env: sandbox.env({
-          SUPERPOWERS_INSTALL_REFRESH_MODE: refreshMode,
-          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({
-            marketplaces: [
-              { name: "superpowers-manager", root: sandbox.packageRoot },
-            ],
-          }),
-        }),
-      }),
-      result,
-      refreshMode,
-    );
   }
 });
 
 /**
- * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:707::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
+ * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:670::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -958,18 +892,18 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
     ].join("\n"),
     { mode: 0o755 },
   );
-  const result = await runAdapter(["install", "--package-root", packageRoot], {
+  const result = await codexInstall(packageRoot, {
     root: PACKAGE_ROOT,
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: `src/harnesses/codex/adapter.ts:624::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
+      // executor's shell: `src/harnesses/codex/adapter.ts:587::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:681::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
+      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:644::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/harnesses/codex/adapter.ts:624::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
+      // the default (`src/harnesses/codex/adapter.ts:587::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -980,7 +914,9 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
 void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1", async (t) => {
   const workspace = await buildWorkspace(t);
   await rm(join(workspace.candidate, "LICENSE"));
-  const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
+  const result = await codexBuild(buildInput(workspace), {
+    root: PACKAGE_ROOT,
+  });
   assert.equal(result.status, 1);
   assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
   // "yields no result" is the half a field probe would miss.
@@ -998,7 +934,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. `src/harnesses/codex/adapter.ts:707::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
+  // witness that. `src/harnesses/codex/adapter.ts:670::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);
@@ -1023,7 +959,9 @@ void test("DIAG-ADAPTER-01 adapter messages, errors, and hints retain their decl
   const workspace = await buildWorkspace(t);
   await rm(join(workspace.candidate, "LICENSE"));
   await rm(join(workspace.candidate, "README.md"));
-  const result = await runAdapter(buildArgv(workspace), { root: PACKAGE_ROOT });
+  const result = await codexBuild(buildInput(workspace), {
+    root: PACKAGE_ROOT,
+  });
   // Order AND stream together, as one deepStrictEqual over the whole array:
   // asserting membership, or per-record channel, would pass on a reordered
   // log. The validator emits the header first and then one record per error

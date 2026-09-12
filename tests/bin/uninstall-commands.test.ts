@@ -142,7 +142,7 @@ function assertNoRemoves(log: string[]) {
  * How many ownership inspections reached Codex.
  *
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
- * then one `codex plugin marketplace list --json` (`src/harnesses/codex/adapter.ts:904::if (view === "ownership") {`).
+ * then one `codex plugin marketplace list --json` (`src/harnesses/codex/adapter.ts:867::if (view === "ownership") {`).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
  * --json` does not contain it as a substring, and nothing else in
  * `src/commands/uninstall.ts`'s ownership-inspect / adapter-uninstall /
@@ -171,7 +171,7 @@ function ownershipInspections(codex: string[]): number {
  *
  * WHAT IT DOES NOT CATCH: an adapter uninstall that was invoked and then failed
  * before issuing any Codex command — `requireCodex` or the workspace creation
- * failing inside `runUninstall` (`src/harnesses/codex/adapter.ts:769::superpowers-manager.adapter-uninstall.`). That leaves one
+ * failing inside `runUninstall` (`src/harnesses/codex/adapter.ts:732::superpowers-manager.adapter-uninstall.`). That leaves one
  * inspection and no removes, and passes here where the shell's
  * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
  * theoretical, and it is accepted only because in all six call sites the abort
@@ -206,7 +206,7 @@ function assertNoAdapterUninstall(codex: string[], message: string) {
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
- * (`src/harnesses/codex/adapter.ts:787::plugin not installed; skipping`, :761).
+ * (`src/harnesses/codex/adapter.ts:750::plugin not installed; skipping`, :724).
  *
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
@@ -501,7 +501,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
-    // of each (`src/harnesses/codex/adapter.ts:787::plugin not installed; skipping`, :761) — so together they pin both the call
+    // of each (`src/harnesses/codex/adapter.ts:750::plugin not installed; skipping`, :724) — so together they pin both the call
     // and the both-false pair. The completion check is kept beneath them as the
     // ordering witness it actually is.
     assert.ok(
@@ -575,7 +575,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
-    // `plugin list --json` (`src/harnesses/codex/adapter.ts:904::if (view === "ownership") {`) and one
+    // `plugin list --json` (`src/harnesses/codex/adapter.ts:867::if (view === "ownership") {`) and one
     // `plugin marketplace list --json` (:883); `ownershipInspections` (below)
     // already counts the former. The adapter uninstall op itself issues no
     // listing, only the two removes asserted at :277-281 further down, so
@@ -896,7 +896,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // which would be false here: the marketplace remove fails, so the flow dies
     // before `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`'s verify-after inspection. The true/true flag
     // pair is witnessed instead by the two removes at :437-438, which the
-    // adapter issues only when both flags are true (`src/harnesses/codex/adapter.ts:762::const { pluginPresent, marketplacePresent } = input;`).
+    // adapter issues only when both flags are true (`src/harnesses/codex/adapter.ts:725::const { pluginPresent, marketplacePresent } = input;`).
     // :437-438
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
