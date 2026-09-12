@@ -115,17 +115,9 @@ type PrepareOutcome =
 // Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
 // StageRun documents a precondition that its callback never throws, so it has
 // no "callback also failed" case to lose the cleanup message to. That
-// precondition does NOT hold here: the additional-validator branch below
-// itself throws prepareError when the shared runner (src/validator.ts)
-// settles a launchFailed result from a legacy-validator spawn failure, and
-// withWorkspace THROWS the callback error on that path
-// (`src/workspace.ts:136-137::} catch (cleanupError`, :141) without ever
-// consulting the reporter below.
-// The outcomes the callback below collected into its `outcomes` array are
-// lost there. That is a separate, unassigned defect -- the callback-throw
-// path discards them -- and it is out of scope here: this type fixes only
-// the post-success cleanup case, and its existence should not be read as
-// covering the other.
+// precondition does not hold here: a callback throw makes withWorkspace throw
+// without consulting the reporter below. This type covers only the
+// post-success cleanup case.
 interface PrepareRun {
   readonly outcome: PrepareOutcome;
   readonly cleanupWarning: string | null;
@@ -405,10 +397,7 @@ async function performPrepare<R>(
   } catch (cause) {
     // Hand-written messages, per AGENTS.md's reader-diagnostics rule.
     // Reachable here: prepareError(), from this module's owned() wrappers,
-    // its two manifest-version checks, asResolutionKind, and the
-    // additional-validator branch's own throw on a legacy-validator launch
-    // failure (its cause is the shared runner's (src/validator.ts) captured
-    // spawn error, which oneLine never reads -- it takes .message only);
+    // its two manifest-version checks, and asResolutionKind;
     // readManifest's three hookError messages
     // (`src/harnesses/codex/hooks.ts:113-138::readManifest`), pinned by
     // `tests/unit/harnesses/codex/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
