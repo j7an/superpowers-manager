@@ -509,7 +509,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/harnesses/codex/harness.ts::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:487::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:486::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();

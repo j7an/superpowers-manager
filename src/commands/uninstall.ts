@@ -205,7 +205,7 @@ async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
   } catch (cause) {
     // Reachable only for mkdtemp failure, with nothing collected yet: this
     // callback never throws -- every ctx.adapter throw is already caught
-    // inside invoke(), and presenceFlag/verifyUninstalledResources/
+    // inside invoke(), and presenceFlag/
     // reportLegacyState are pure (src/harnesses/codex/lifecycle.ts's header comment) -- so a
     // post-success cleanup failure is handled by onCleanupFailure above and
     // cannot reach here. Wrapping with `outcomes` anyway keeps the class

@@ -109,12 +109,19 @@ void test("Codex verification modules are safe in every supported entry order", 
         status: 0,
         outcome: { operation: "inspect", ok: true, messages: [], result, error: null },
       });
-      const verdict = loaded.lifecycle.verifyInstalledFingerprint(
-        desired,
+      const receipt = loaded.harness.normalizeCodexInstall(
         ok({ verification_hints: {} }),
-        ok({ view: "fingerprint", fingerprint: desired }),
       );
-      if (!verdict.ok) throw new Error("verification export changed");
+      const inspection = loaded.harness.normalizeCodexInstalled(
+        ok({ view: "fingerprint", fingerprint: desired }), desired,
+      );
+      const output = loaded.presentation.codexPresentation.renderInstallVerification(
+        desired, receipt, inspection,
+      );
+      if (!inspection.outcome.ok || inspection.outcome.result.kind !== "current") {
+        throw new Error("verification normalization changed");
+      }
+      if (output.stderr.length !== 0) throw new Error("verification rendering changed");
     `;
     const result = spawnSync(
       process.execPath,
@@ -130,22 +137,24 @@ void test("Codex verification modules are safe in every supported entry order", 
 });
 
 void test("ownership normalization preserves every Codex removal flag combination", () => {
-  for (const pluginPresent of [false, true]) {
-    for (const marketplacePresent of [false, true]) {
-      const normalized = unwrap(
-        normalizeCodexOwnership(
-          ownershipResult("manager", pluginPresent, marketplacePresent),
-        ),
-      );
-      assert.deepEqual(normalized.removalInput, {
-        pluginPresent,
-        marketplacePresent,
-      });
-      assert.equal(
-        normalized.removalVerification.kind,
-        pluginPresent || marketplacePresent ? "blocked" : "allowed",
-      );
-    }
+  const cases = [
+    [false, false, { kind: "allowed" }],
+    [true, false, { kind: "blocked", output: { stdout: [], stderr: [
+      "error: owned plugin resource is still installed after removal",
+    ] } }],
+    [false, true, { kind: "blocked", output: { stdout: [], stderr: [
+      "error: owned marketplace resource is still registered after removal",
+    ] } }],
+    [true, true, { kind: "blocked", output: { stdout: [], stderr: [
+      "error: owned plugin resource is still installed after removal",
+    ] } }],
+  ] as const;
+  for (const [pluginPresent, marketplacePresent, expected] of cases) {
+    const normalized = unwrap(normalizeCodexOwnership(
+      ownershipResult("manager", pluginPresent, marketplacePresent),
+    ));
+    assert.deepEqual(normalized.removalInput, { pluginPresent, marketplacePresent });
+    assert.deepEqual(normalized.removalVerification, expected);
   }
 });
 

@@ -75,10 +75,6 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
   return unknownState(identityState);
 }
 
-import type { AdapterResult } from "../../adapter-result.ts";
-
-export { verifyInstalledFingerprint } from "./presentation.ts";
-
 interface Refusal {
   readonly ok: false;
   readonly message: string;
@@ -101,81 +97,4 @@ export function requireManagedUpdateControl(value: string): Check {
     ok: false,
     message: `unknown adapter update-control capability: ${value}`,
   };
-}
-
-// scripts/core/lifecycle.sh drew a line the first port collapsed. The shell
-// reaches "inspection failed" only when the inspect CALL failed (:91), and
-// "cannot parse" when the call succeeded but its content is unusable (:95).
-// Callers need both, because the two produce different operator text.
-// Spec §6.2.3 item 3.
-type ResultRead =
-  | { readonly kind: "object"; readonly value: Record<string, unknown> }
-  // The call itself failed: non-zero status, or an ok:false outcome.
-  | { readonly kind: "call-failed" }
-  // The call succeeded and the result is not a usable object.
-  | { readonly kind: "unusable" };
-
-function readResult(adapterResult: AdapterResult): ResultRead {
-  if (adapterResult.status !== 0) return { kind: "call-failed" };
-  const outcome = adapterResult.outcome;
-  if (!outcome.ok) return { kind: "call-failed" };
-  const value = outcome.result;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { kind: "unusable" };
-  }
-  return { kind: "object", value: value as Record<string, unknown> };
-}
-
-// Ported from
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:126-141::spw_verify_uninstalled_resources`,
-// with the Boolean coercion of
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean`
-// folded in: a non-Boolean is a hard failure, never a falsy "absent".
-export function verifyUninstalledResources(
-  inspectResult: AdapterResult,
-): Check {
-  const read = readResult(inspectResult);
-  if (read.kind !== "object") {
-    return {
-      ok: false,
-      message: "cannot read the adapter ownership inspection after removal",
-    };
-  }
-  const inspected = read.value;
-  // A missing or non-object `resources` falls THROUGH to the Boolean check
-  // rather than getting its own message.
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected`
-  // emits "expected Boolean adapter result at resources.plugin" for input {} —
-  // the input tests/unit/harnesses/codex/lifecycle.test.ts's "a non-object resources falls
-  // through to the Boolean message" exercises — so a distinct "not an object"
-  // message here would be a port-only divergence. Parity, not divergence. Spec
-  // §6.2.3 item 3.
-  const resources = inspected.resources;
-  const bag: Record<string, unknown> =
-    typeof resources === "object" &&
-    resources !== null &&
-    !Array.isArray(resources)
-      ? (resources as Record<string, unknown>)
-      : {};
-  for (const key of ["plugin", "marketplace"] as const) {
-    if (typeof bag[key] !== "boolean") {
-      return {
-        ok: false,
-        message: `expected a Boolean adapter result at resources.${key}`,
-      };
-    }
-  }
-  if (bag.plugin === true) {
-    return {
-      ok: false,
-      message: "owned plugin resource is still installed after removal",
-    };
-  }
-  if (bag.marketplace === true) {
-    return {
-      ok: false,
-      message: "owned marketplace resource is still registered after removal",
-    };
-  }
-  return { ok: true };
 }

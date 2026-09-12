@@ -27,7 +27,8 @@ every install verification hint. Three constructs enforce it, one per
 population: `writeAdapterFailure` (`src/adapter-result.ts`) refuses the error
 `code`, `message`, and hints before the first write; `AdapterMessageLog`
 escapes message `text` on ingress; and `normalizeCodexInstall`
-(`src/harnesses/codex/harness.ts`) omits an unsafe verification hint before presentation.
+(`src/harnesses/codex/harness.ts`) omits an unsafe verification hint before
+`codexPresentation.renderInstallVerification` renders it.
 
 Messages are replayed in array order to their declared streams.
 

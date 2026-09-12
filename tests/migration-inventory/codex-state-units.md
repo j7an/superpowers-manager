@@ -79,8 +79,8 @@ shell driver only ever called either function with `neither`, `manager`,
 does add an `error: ` prefix — was therefore unwitnessed on the shell side.
 These four items close that gap; they do not carry one across from the shell.
 
-Items 5-25 close a second, larger gap. `requireManagedUpdateControl`,
-`verifyInstalledFingerprint`, and `verifyUninstalledResources` port
+Items 5-25 close a second, larger gap. `requireManagedUpdateControl`, the
+install normalizers and renderer, and ownership normalization port
 `scripts/core/lifecycle.sh:62-70`, `:87-124`, and `:126-141`.
 `tests/test_codex_state_units.sh` is 47 lines and sources only the two
 identity-state functions (confirmed above); it never calls any of these
@@ -328,7 +328,10 @@ or "counterpart" claim is quoted inline in that item.
     takes only a file path and has no shell-level notion of the *inspection
     call* failing independently of its content — every case that driver
     constructs is a real file, well-formed or not, never a captured nonzero
-    exit status.
+    exit status. **Retired in I3:** this helper-only failed-inspection case no
+    longer has a lifecycle caller; `normalizers preserve controlled native
+    failure outcomes unchanged` in `tests/unit/harnesses/codex/harness.test.ts`
+    preserves the validated ownership-normalizer failure path.
 26. **New, this commit.** `verifyInstalledFingerprint` returns `ok: false`
     when the inspect call *succeeds* but its `result` is not an object (a
     string, here). Port: `tests/unit/harnesses/codex/lifecycle.test.ts:272-287` ("an
@@ -378,7 +381,10 @@ or "counterpart" claim is quoted inline in that item.
     ownership inspection after removal"`. This is the assertion that closes
     the operator-string gap item 25 left open. Port:
     `tests/unit/harnesses/codex/lifecycle.test.ts:303-312`. No counterpart in either driver,
-    same rationale as item 25.
+    same rationale as item 25. **Retired in I3:** the deleted helper's generic
+    reading diagnostic is not a current product contract; the normalized
+    ownership failure described at item 25 remains covered by the harness
+    normalizer test named there.
 33. **New, this commit.** `verifyUninstalledResources` returns `ok: false`
     when the `["plugin", "marketplace"]` Boolean-check loop meets a valid
     `plugin` and a non-Boolean `marketplace`. Port:
@@ -418,9 +424,9 @@ or "counterpart" claim is quoted inline in that item.
 
 ```json inventory
 {
-  "shellOriginal": 16,
-  "portOnly": 36,
-  "ports": { "tests/unit/harnesses/codex/lifecycle.test.ts": 28 }
+ "shellOriginal": 16,
+ "portOnly": 36,
+  "ports": { "tests/unit/harnesses/codex/lifecycle.test.ts": 26 }
 }
 ```
 
@@ -428,7 +434,7 @@ or "counterpart" claim is quoted inline in that item.
   `spw_require_no_legacy_state`, 2 rejection checks + 6 `grep -Fxq` checks for
   its `legacy`/`both` arm, 2 clean-state checks for `spw_report_legacy_state`,
   4 `grep -Fxq` checks for its `legacy`/`both` arm; sum: 2+2+6+2+4 = 16).
-- Port (`tests/unit/harnesses/codex/lifecycle.test.ts`): 28 static `test(` call sites,
+- Port (`tests/unit/harnesses/codex/lifecycle.test.ts`): 26 static `test(` call sites,
   carrying all 16 shell assertions (each of the four `void test(...)` cases
   covering `neither`/`manager`/`legacy`/`both` groups multiple shell
   assertions behind one `assert.deepEqual`, since the port returns a verdict
@@ -436,7 +442,7 @@ or "counterpart" claim is quoted inline in that item.
   (items 1-36 above): items 1-4 cover the `*)` arm neither shell case
   statement ever reached, and items 5-25 are the 21 assertions across the 14
   original new `void test(...)` cases for `requireManagedUpdateControl`,
-  `verifyInstalledFingerprint`, and `verifyUninstalledResources`
+  the install normalizers/renderer, and ownership normalization
   (1+1+1+3+1+3+2+2+2+1+1+1+1+1 = 21, reading the fourteen cases top to
   bottom). Of those 21, 10 (items 8, 9, 11, 15, 16, 17, 18, 21, 22, 23) have a
   counterpart — full or partial — in `tests/test_marketplace_reconcile.sh`;
@@ -507,8 +513,21 @@ or "counterpart" claim is quoted inline in that item.
 
 ## Native TypeScript reconciliation (issue #113)
 
-Current ports: `tests/unit/harnesses/codex/lifecycle.test.ts` (28 static `test(` call sites).
+Current ports: `tests/unit/harnesses/codex/lifecycle.test.ts` (26 static `test(` call sites).
 The `.ts` paths identify the current native counterparts; the quoted shell
 assertions, original counts, historical dispositions, freeze header, and Git
 resolution anchors remain historical. Imports, child entry points, preloads, and
 maintained helper references follow the renamed native source paths.
+
+**Present-day disposition (I3).** The historical `verifyInstalledFingerprint`
+and `verifyUninstalledResources` names in rows 8-36 describe retired facades,
+not current call sites. Surviving fingerprint assertions now bind
+`normalizeCodexInstall`, `normalizeCodexInstalled`, and
+`codexPresentation.renderInstallVerification`; surviving removal assertions
+bind `normalizeCodexOwnership` and its decision. The helper-only
+failed-inspection reading-diagnostic obligation at rows 31-32 is retired at
+its original entry. Controlled failed ownership outcomes remain covered by
+`normalizers preserve controlled native failure outcomes unchanged` in
+`tests/unit/harnesses/codex/harness.test.ts`. `shellOriginal: 16` and
+`portOnly: 36` remain counts of the frozen history; the two helper-only cases
+are why the current lifecycle suite has 26 static cases.

@@ -332,8 +332,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
         ownershipCalls += 1;
         // First call is pre-removal (both present); second is verify-after,
         // post-removal (src/commands/uninstall.ts's own second inspection) --
-        // both flipped to false is what lets `verifyUninstalledResources`
-        // succeed.
+        // both flipped to false are the validated removal-success state.
         const present = ownershipCalls === 1;
         return successResult(
           "inspect",
