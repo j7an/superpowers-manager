@@ -183,9 +183,9 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
 
 function runAdapter(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("adapter.log", ctx.args.join(" "));
-  // Post-flip, uninstall dispatches in-process: `ctx.adapter` is a direct
-  // call into src/harnesses/codex/adapter.ts's runAdapter, never a spawn of this executable,
-  // so reaching it is never legitimate. The tripwire refuses unconditionally,
+  // Post-flip, uninstall dispatches in-process through the typed Codex engine
+  // and `runCodexOperation`, never a spawn of this executable, so reaching it
+  // is never legitimate. The tripwire refuses unconditionally,
   // matching probe-fakes.js's own adapter role.
   //
   // The return value is discarded because this call is the last statement in

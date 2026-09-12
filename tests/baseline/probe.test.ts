@@ -102,7 +102,7 @@ void test("the case environment pins every name runProbe's dependencies read", (
     assert.equal(
       typeof env[name] === "string" && (env[name] as string).length > 0,
       true,
-      `caseEnv must set ${name}: runAdapter and runGit both inherit process.env`,
+      `caseEnv must set ${name}: runCodexOperation and runGit both inherit process.env`,
     );
   }
 });
