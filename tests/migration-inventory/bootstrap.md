@@ -66,7 +66,10 @@ the port unless a merge is called out.
 37. `README.md` contains "selection commands save intent only"
 38. `README.md` contains `` `SUPERPOWERS_REF` is an invocation-only override ``
 39. `README.md` contains "SUPERPOWERS_REF=feature/foo npx superpowers-manager probe"
-40. `tests/expected_tarball_contents.txt` contains `dist/selection-state-cli.js`
+40. `tests/expected_tarball_contents.txt` contains `dist/selection-state-cli.js`.
+    **RETIRED at the gap (Task 1, I1):** the internal helper CLI is removed;
+    tarball equality continues to guard package membership without a new
+    permanent absence assertion.
 41. `tests/expected_tarball_contents.txt` does not contain `scripts/core/selection-state.py`.
     **RETIRED at the gap (Task 3, 4c):** vacuous once the whole tree leaves the
     manifest; no port counterpart.
@@ -194,13 +197,14 @@ same real file and the same two fixture strings.
   exactly-one-section checks, 1 ordering check, 5 pre-publication phrase
   checks, 4 post-publication phrase checks, and 2 negative-fixture rejection
   checks).
-- Port (`tests/bin/bootstrap.test.ts`): 90 mapped assertions retain counterparts
+- Port (`tests/bin/bootstrap.test.ts`): 89 mapped assertions retain counterparts
   across the file-presence, text-content, and release-section cases,
   **plus** 1 port-only assertion (the unreadable-path guard added in Task 4)
   that has no shell counterpart and is outside the 1:1 mapping.
-- Reconciliation: **90 of 99** original items retain a port counterpart. The eight
+- Reconciliation: **89 of 99** original items retain a port counterpart. The eight
   prior absence assertions remain historical at items 8, 41, 48, 52, 54,
-  and 56-58; issue #113 additionally retires only item 11. Items 5 and 9
+  and 56-58; issue #113 additionally retires item 11, and Task 1 (I1) retires
+  item 40. Items 5 and 9
   invert into the repository absence set; items 42 and 55
   invert in the tarball manifest. The one additional port-only assertion is
   strictly additive coverage, not a reconciliation of a shell assertion.
@@ -213,17 +217,18 @@ assertions, original counts, historical dispositions, freeze header, and Git
 resolution anchors remain historical. Imports, child entry points, preloads, and
 maintained helper references follow the renamed native source paths.
 
-Item 11 alone loses its text assertion because the thin bin is deleted. The
-containing text-content case remains, with its row count 69 -> 68. The README
+Items 11 and 40 lose their text assertions because the thin bin and internal
+selection helper are deleted. The containing text-content case remains, with
+its row count 68 -> 67. The README
 build-command assertion now requires `node src/cli.ts`; the RELEASING build
 assertion requires `node tests/tools/pack.ts --out-dir`. Current mapped counts are
-6 expected files + 2 absent files + 68 text rows + 14 release checks = 90, plus
+6 expected files + 2 absent files + 67 text rows + 14 release checks = 89, plus
 one unreadable-input guard. All 11 static cases and release-section fixtures
 remain.
 
 ## Test-suite separation reconciliation (2026-09-06)
 
-The historical text rows above remain unchanged. In the live 68-row table, the
+The historical text rows above remain unchanged. In the live 67-row table, the
 obsolete AGENTS completion sentence now requires static validation followed by
 `pnpm run test:acceptance`, and the obsolete README combined-container command
 row now requires the explanation that package scripts are alternative iteration
@@ -231,7 +236,7 @@ selectors. README and AGENTS document the shared selectors, both completion
 sentinels, controlled concurrency, explicit minimum-runtime evidence, the
 macOS verified-archive prerequisite, Linux CI provisioning, independent Codex
 integration, retained dual-endpoint combined release validation, and the
-optional native manual probe. The 68-row table and 11 static `test(` calls are
+optional native manual probe. The 67-row table and 11 static `test(` calls are
 unchanged. The focused workflow/container/bootstrap group passed 118/118 on
 2026-09-06. The inventory and digest change is submitted for independent
 reviewer authorization; this note does not authorize its own re-freeze.
@@ -239,7 +244,7 @@ reviewer authorization; this note does not authorize its own re-freeze.
 ## README reference relocation reconciliation (issue #120)
 
 The historical assertions at items 26-39 remain unchanged above. Their live
-ports preserve the same 68-row cardinality while following ownership after the
+ports preserve the same 67-row cardinality while following ownership after the
 README simplification: items 26-32 now read `CONTRIBUTING.md` (test execution,
 acceptance layers, package-manager, maintained CLI, and CI toolchain); items
 34-39 now read `docs/usage.md` (selection commands and invocation-only ref

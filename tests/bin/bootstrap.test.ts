@@ -139,7 +139,6 @@ const textContentCases: Array<[string, string, boolean]> = [
     "SUPERPOWERS_REF=feature/foo npx superpowers-manager probe",
     true,
   ],
-  ["tests/expected_tarball_contents.txt", "dist/selection-state-cli.js", true],
   ["tests/expected_tarball_contents.txt", "dist/adapter-cli.js", false],
   ["tests/expected_tarball_contents.txt", "dist/adapter-result.js", true],
   [
@@ -240,7 +239,7 @@ const textContentCases: Array<[string, string, boolean]> = [
 ];
 assert.equal(
   textContentCases.length,
-  68,
+  67,
   "textContentCases lost or gained a case — update tests/migration-inventory/bootstrap.md",
 );
 

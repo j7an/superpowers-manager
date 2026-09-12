@@ -61,13 +61,11 @@ dist/python-text.js
 dist/resource-lock.js
 dist/safe-path.js
 dist/safety-error.js
-dist/selection-state-cli.js
 dist/selection-store.js
 dist/selection.js
 dist/skill-validation.js
 dist/status.js
 dist/strict-json.js
-dist/upstream-cli.js
 dist/upstream-version.js
 dist/upstream-workspace.js
 dist/upstream.js

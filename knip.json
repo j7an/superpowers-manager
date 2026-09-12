@@ -8,6 +8,7 @@
     "tests/tools/float-differential.ts",
     "tests/bin/helpers/pack-driver.ts",
     "tests/bin/{install,probe,uninstall}-fakes.ts",
+    "tests/baseline/selection-writer-child.ts",
     "tests/container/pi/resource-probe.ts",
     "tests/unit/helpers/workspace-signal{,-failure}-child.ts"
   ],

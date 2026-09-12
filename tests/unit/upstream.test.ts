@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 
 import {
+  COMMIT_INPUT_RE,
   parseStableTag,
   compareStable,
+  isTagRef,
   TAG_RE,
   SEMVER_BASE_RE,
 } from "../../src/domain/refs.ts";
@@ -611,52 +611,11 @@ void test("resolveExactTag prefers the peeled entry over the direct one", async 
   assert.equal(commit, "2222222222222222222222222222222222222222");
 });
 
-const execFileAsync = promisify(execFile);
-const UPSTREAM_CLI = new URL("../../src/upstream-cli.ts", import.meta.url)
-  .pathname;
-
-async function runCli(args: string[]) {
-  try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [
-      UPSTREAM_CLI,
-      ...args,
-    ]);
-    return { status: 0, stdout, stderr };
-  } catch (error) {
-    const failure = error as any;
-    return {
-      status: failure.code,
-      stdout: failure.stdout ?? "",
-      stderr: failure.stderr ?? "",
-    };
-  }
-}
-
-void test("pin-kind classifies without normalizing", async () => {
-  assert.equal((await runCli(["pin-kind", "--ref=v6.0.3"])).stdout, "tag\n");
+void test("pin syntax distinguishes exact tags and full commits", () => {
+  assert.equal(isTagRef("v6.0.3"), true);
+  assert.equal(isTagRef("main"), false);
+  assert.equal(isTagRef("v6.0"), false);
   const upper = "ABCDEF1234567890abcdef1234567890ABCDEF12";
-  assert.equal(
-    (await runCli(["pin-kind", `--ref=${upper}`])).stdout,
-    "raw-commit\n",
-  );
-  assert.equal((await runCli(["pin-kind", "--ref=main"])).stdout, "none\n");
-  assert.equal((await runCli(["pin-kind", "--ref=v6.0"])).stdout, "none\n");
-});
-
-void test("manifest-version rejects an unknown resolution kind with usage status", async () => {
-  const result = await runCli([
-    "manifest-version",
-    "--requested-ref=main",
-    "--resolution-kind=bogus",
-    "--resolved-ref=main",
-    "--commit=896224c4b1879920ab573417e68fd51d2ccc9072",
-  ]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /unknown resolution kind: bogus/);
-});
-
-void test("an unknown subcommand exits 2", async () => {
-  const result = await runCli(["nope"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /unknown subcommand: nope/);
+  assert.equal(COMMIT_INPUT_RE.test(upper), true);
+  assert.equal(isTagRef(upper), false);
 });

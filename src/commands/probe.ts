@@ -516,10 +516,9 @@ export async function runProbe<R>(
     //
     // fetchExactCommit is deliberately NOT in this list, unlike prepare's
     // fetchExactCommit exception, which runPrepare's catch block documents.
-    // Its only callers are `src/upstream-cli.ts:83::await fetchExactCommit` and
-    // gatherPrepare's own call in src/commands/prepare.ts (git grep -n
-    // fetchExactCommit -- src/ is the check that keeps "only" true), so probe
-    // never reaches it and
+    // Its only remaining caller is gatherPrepare's call in
+    // src/commands/prepare.ts (git grep -n fetchExactCommit -- src/ is the
+    // check that keeps "only" true), so probe never reaches it and
     // its splice sites cannot appear on this stream. Do not add it back by
     // symmetry with prepare.
     //
