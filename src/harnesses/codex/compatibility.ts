@@ -95,24 +95,9 @@ export async function readCodexAssessment(
       manifestSource: receipt.manifestSource as "upstream" | "fallback",
     });
     if (errors.length) throw new Error("generated resources");
-    const selection: EffectiveSelection = {
+    const compatibility = await assessCodexCompatibility(root, {
       effectiveSource: receipt.source,
-      desiredCommit: receipt.commit,
-      requestedRef: provenance.requested_ref,
-      resolvedRef: provenance.resolved_ref,
-      resolutionKind: "raw-commit",
-      selectionOrigin: "package-default",
-      selectionMode: "default",
-      upstreamSourceOrigin: "package-default",
-      saved: {
-        saved_mode: "none",
-        saved_source: "",
-        saved_requested_ref: "",
-        saved_resolved_ref: "",
-        saved_commit: "",
-      },
-    };
-    const compatibility = await assessCodexCompatibility(root, selection);
+    });
     return {
       root,
       commit: receipt.commit,
@@ -130,7 +115,7 @@ export async function readCodexAssessment(
 
 export async function assessCodexCompatibility(
   root: string,
-  selection: EffectiveSelection,
+  selection: Pick<EffectiveSelection, "effectiveSource">,
 ): Promise<Compatibility> {
   try {
     validateSource(selection.effectiveSource);
