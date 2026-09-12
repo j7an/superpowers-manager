@@ -537,9 +537,11 @@ function validateCiHarnessJob(
     false,
   );
 
-  assert.equal(
-    requireMapping(checkout.with, "checkout step.with")["fetch-depth"],
-    0,
+  const checkoutWith = requireMapping(checkout.with, "checkout step.with");
+  const depth = checkoutWith["fetch-depth"];
+  assert.ok(
+    depth === undefined || depth === 1,
+    "harness checkout must be shallow",
   );
 
   const acceptanceStep = requireMapping(
@@ -565,6 +567,22 @@ void test("ci.yml native harness jobs run one independent integration each", asy
   for (const contract of HARNESS_JOBS) {
     await t.test(`${contract.name} has its isolated selector`, () => {
       assert.doesNotThrow(() => validateCiHarnessJob(ci, contract));
+    });
+
+    await t.test(contract.name + " rejects unnecessary full history", () => {
+      const mutant = structuredClone(ci);
+      const jobs = requireMapping(requireMapping(mutant, "ci").jobs, "jobs");
+      const job = requireMapping(jobs[contract.key], "harness job");
+      const steps = job.steps as Record<string, unknown>[];
+      const checkout = requireMapping(
+        steps[uniqueStepTargetIndex(steps, "actions/checkout")],
+        "checkout step",
+      );
+      requireMapping(checkout.with, "checkout step.with")["fetch-depth"] = 0;
+      assert.throws(
+        () => validateCiHarnessJob(mutant, contract),
+        /harness checkout must be shallow/,
+      );
     });
 
     await t.test(

@@ -702,28 +702,32 @@ before filtering it; every call site runs a subject that reaches
 `codex plugin list` (and, for the adapter, `inspect --view ownership`), so an
 empty log there is a fixture fault, never a legitimate state.
 
-Item 21 (Task 9, PR 11.5 slice 4b, 2026-08-11) has no shell original at all:
-the shell had no in-process subject whose non-spawning could be guarded, so
-there is nothing for it to be additive, non-vacuous, or channel-changed
-*relative to*. It is row 18's consumer — see `tests/bin/lifecycle-fakes.ts`'s
-`tripwireTriggered` and its callers in `tests/bin/uninstall-fakes.ts`.
+**Historical Task 9 record (PR 11.5 slice 4b, 2026-08-11).** Item 21 has no
+shell original at all: the shell had no in-process subject whose non-spawning
+could be guarded, so there is nothing for it to be additive, non-vacuous, or
+channel-changed *relative to*. It is row 18's consumer — see
+`tests/bin/lifecycle-fakes.ts`'s `tripwireTriggered` and its callers in
+`tests/bin/uninstall-fakes.ts`.
 
-Be precise about what that consumer witnesses, because the obvious reading is
+Be precise about what that consumer witnessed, because the obvious reading was
 wrong. A subject that never spawns the adapter cannot, by running correctly,
-observe the tripwire fire: on the passing path the fake adapter's process does
+observe the tripwire fire: on the passing path the fake adapter's process did
 not exist. As first committed (`94794bd`) the case therefore passed unchanged
 with `tripwireTriggered` forced to return `false` — it constrained the port,
-not the tripwire. The case now carries a second half that spawns the SAME
+not the tripwire. The case then carried a second half that spawned the SAME
 case's fake adapter directly, through `lifecycle-fixture.js`'s
-`spawnFakeAdapter`, and pins the refusal: exit 94, the tripwire's own message
+`spawnFakeAdapter`, and pinned the refusal: exit 94, the tripwire's own message
 on stderr, and the recorded line in the log the first half required to be
-empty. That half dies when the tripwire is disarmed, which is what earns the
+empty. That half died when the tripwire was disarmed, which was what earned the
 first half its meaning — the same non-vacuity argument items 7-20 above make
-for their own logs. The tripwire firing is still observed through a direct
-spawn rather than through the subject, because post-flip no subject can
-produce one; what changed is that the direct spawn now runs inside the case
-whose emptiness claim depends on it, with that case's own executable, state
-and seam.
+for their own logs. The tripwire firing was still observed through a direct
+spawn rather than through the subject, because post-flip no subject could
+produce one; the direct spawn ran inside the case whose emptiness claim depended
+on it, with that case's own executable, state and seam.
+
+**Current retirement (Task 2, 2026-09-12).** Item 21 remains a numbered
+historical port-only record, but its live observer is retired because the
+subject cannot reach the fake adapter it observed.
 
 <!-- inventory:port-only:start -->
 
@@ -760,20 +764,11 @@ and seam.
     malformed-marketplace-entry call site (`:797-800`).
 20. `assertNoAdapterUninstall` non-vacuity guard at the
     malformed-marketplace-list call site (`:820-823`).
-21. `adapterSeam: "tripwire"` armed on a both-present uninstall: the subject's
-    own exit status is 0, the fake adapter's log holds no line at all, and a
-    direct spawn of that same case's fake adapter is then refused with exit 94
-    and the tripwire's own message, leaving in the log the one line the
-    emptiness check demanded be absent (`:965`, within `:965-994`). Appended
-    at the end of the file rather than beside the both-present case it is
-    thematically closest to, so adding it does not shift any other item's
-    pointer. Two things, not one — an exit status alone cannot distinguish
-    "refused" from "delegated, then failed" — mirroring
-    `tests/bin/lifecycle-fakes.test.ts`'s own precedent for the same subject.
-    Counted as ONE port-only item, as it was when it held three assertions:
-    the added half is this item's own non-vacuity guard, not a separate
-    claim, and splitting it would move `portOnly` for no change in what the
-    inventory maps.
+21. **Retired by the approved repository simplification.** The row-18
+    both-present uninstall case observed a fake adapter the subject could no
+    longer reach. Direct refusal remains covered by
+    `tests/bin/lifecycle-fakes.test.ts`; the production adapter provenance
+    gate remains in `tests/unit/ctx-adapter-provenance.test.ts`.
 
 <!-- inventory:port-only:end -->
 
@@ -1031,7 +1026,7 @@ rows O1-O3.
 {
   "shellOriginal": 83,
   "portOnly": 21,
-  "ports": { "tests/bin/uninstall-commands.test.ts": 19 }
+  "ports": { "tests/bin/uninstall-commands.test.ts": 18 }
 }
 ```
 
@@ -1043,12 +1038,12 @@ rows O1-O3.
   malformed-marketplace-list, 5 remove-noop, 5 verify-after-drift, 9
   marketplace-remove-fails; sum:
   2+4+3+4+4+6+12+4+4+4+3+4+3+4+3+5+5+9 = 83).
-- Port (`tests/bin/uninstall-commands.test.ts`): **19** static `test(` call
-  sites as of Task 9 (PR 11.5 slice 4b, 2026-08-11; was 18 before Task 9), one
-  per shell scenario plus one port-only case with no shell scenario at all
-  (17 `reset` call sites, the source-guard block at `:9-16` which precedes the
-  first `reset`, and Task 9's row-18 tripwire case). No call site is
-  data-driven, so the 19 static sites produce 19 runtime cases. Unchanged by
+- Port (`tests/bin/uninstall-commands.test.ts`): **18** static `test(` call
+  sites after Task 2 (2026-09-12; was 18 before Task 9, then 19), comprising
+  17 `reset` call sites and the source-guard block at `:9-16`, which precedes
+  the first `reset`. The retired Task 9 row-18 tripwire case is historical, not
+  a live site. No call site is data-driven, so the 18 static sites produce 18
+  runtime cases. Unchanged by
   Task 6 (PR 11.5 slice 4b, 2026-08-10): three cases converted in place
   (selection-independent recovery and missing-Codex to an injected double;
   both-present re-anchored onto `codex.log`, still via `runScript`), so the
@@ -1057,11 +1052,10 @@ rows O1-O3.
   place onto the inverse property when the flip removed `python3` from
   `COMMAND_REQUIREMENTS.uninstall`, so again the static count neither grew nor
   shrank. Task 9 added exactly one call site — the row-18 tripwire case,
-  port-only item 21 — and no other task besides Task 9 added or removed one.
-  The 18 pre-Task-9 sites carry **78 of the 83** shell assertions, **72 of
-  them 1:1** and **6 sharing 2** merged assertions, plus **20** of the 21
-  port-only assertions; the 21st is item 21, which lives in the 19th site
-  and is the only port-only assertion Task 9 added. Items 28 and 35 (below)
+  port-only item 21 — and Task 2 retired it. The 18 current sites carry **78
+  of the 83** shell assertions, **72 of them 1:1** and **6 sharing 2** merged
+  assertions, plus **20** live port-only assertions. Item 21 remains a
+  retired historical port-only record. Items 28 and 35 (below)
   have no port counterpart as of Task 6, and items 7, 8 and 9 are retired as
   of Task 8.
 - Reconciliation: **78 of the 83** shell items retain a port counterpart;
@@ -1105,14 +1099,18 @@ rows O1-O3.
   both-present sections changed **channel** (adapter-log read → injected
   double, or adapter-log read → codex.log re-anchor) without changing what
   they assert — each section's own note says which. None of this changes the
-  count. The 21 port-only assertions (20 before Task 9, plus item 21's
-  tripwire case) are strictly additive and are excluded from the 83-item
-  arithmetic above.
+  count. The 21 historical port-only entries (20 before Task 9, plus item
+  21's tripwire case) are excluded from the 83-item arithmetic above. Task 2
+  retires item 21's live observer while preserving its numbered record.
 
 ## Native TypeScript reconciliation (issue #113)
 
-Current ports: `tests/bin/uninstall-commands.test.ts` (19 static `test(` call sites).
+Current ports: `tests/bin/uninstall-commands.test.ts` (18 static `test(` call sites).
 The `.ts` paths identify the current native counterparts; the quoted shell
 assertions, original counts, historical dispositions, freeze header, and Git
 resolution anchors remain historical. Imports, child entry points, preloads, and
 maintained helper references follow the renamed native source paths.
+
+Task 2 retired the row-18 both-present uninstall observer because the subject
+cannot reach its fake adapter; direct fixture refusal and production adapter
+provenance remain covered by their named suites in item 21.

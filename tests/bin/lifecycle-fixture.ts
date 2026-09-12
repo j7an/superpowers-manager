@@ -576,65 +576,6 @@ export function assertOrder(
   }
 }
 
-/**
- * Invokes a case's own fake adapter directly — the executable a regressed
- * subject would have spawned, with the state and package root that case runs
- * under.
- *
- * Why a tripwire case needs it. `readLog` returns `[]` for a missing file, so
- * "the adapter log holds no line" is the same observation whether the subject
- * refused to spawn the fake or the log path was never the one the fake writes
- * to (the argument at tests/migration-inventory/install-commands.md's
- * port-only preamble). Post-flip nothing the subject does can produce a
- * positive control on that channel, because the subject calls runAdapter
- * in-process and never spawns anything. This supplies the control from the
- * other side: run the fake adapter for real, and assert it refuses with the
- * tripwire's own exit status and message and that the refusal lands in
- * caseEnv.adapterLog. A caller that asserts both halves fails if the tripwire
- * stops firing, which the emptiness assertion alone cannot do.
- *
- * The fake process reads exactly two variables as fixture inputs —
- * SPW_FIXTURE_STATE (`runFake` in lifecycle-fakes.js) and SPW_TEST_PKG_ROOT
- * (`runCodex` in install-fakes.js, the codex role only). Five of the six
- * remaining keys are not fixture inputs at all: HOME, XDG_CONFIG_HOME, TMPDIR,
- * SUPERPOWERS_CODEX and SUPERPOWERS_INSTALLED_SEARCH_ROOT contain the spawned
- * PROCESS inside the case's own scratch tree rather than the developer's
- * environment, which holds whether or not anything reads them. PATH is the
- * sixth, and the one deliberate ambient pass-through: it copies the
- * developer's PATH through verbatim and points nowhere in the scratch tree.
- * Nothing is launched through it either — writeFakeBin writes
- * `exec "<process.execPath>"`, an absolute node.
- *
- * It is spelled out here rather than shared with runScript's literal because
- * extracting a common builder renumbers lines other files cite; divergence
- * fails closed, since the caller asserts an exact status and an exact stderr
- * rather than a substring.
- *
- */
-export function spawnFakeAdapter(
-  caseEnv: CaseEnv,
-  args: string[],
-): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(caseEnv.adapterBin, args, {
-    encoding: "utf8",
-    env: {
-      PATH: process.env.PATH ?? "",
-      HOME: caseEnv.home,
-      XDG_CONFIG_HOME: join(caseEnv.home, ".config"),
-      TMPDIR: caseEnv.tmp,
-      SPW_FIXTURE_STATE: caseEnv.state,
-      SPW_TEST_PKG_ROOT: caseEnv.pkg,
-      SUPERPOWERS_CODEX: caseEnv.codexBin,
-      SUPERPOWERS_INSTALLED_SEARCH_ROOT: join(caseEnv.state, "codex-home"),
-    },
-  });
-  return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
-}
-
 export type ByteSnapshotEntry =
   | readonly [relative: string, kind: "directory", mode: number]
   | readonly [relative: string, kind: "file", mode: number, bytes: string]

@@ -39,9 +39,10 @@ function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
 
 function runAdapter(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
   ctx.log("adapter.log", ctx.args.join(" "));
-  // In-process probe calls runAdapter as a function. Reaching the adapter
-  // executable means the port regressed to spawning, so the tripwire fails
-  // loudly rather than quietly succeeding.
+  // In-process probe dispatches through the typed Codex engine and
+  // `runCodexOperation`. Reaching the adapter executable means the port
+  // regressed to spawning, so the tripwire fails loudly rather than quietly
+  // succeeding.
   //
   // The return value is discarded because this call is the last statement in
   // the function, so there is nothing here to fall through into. Add any

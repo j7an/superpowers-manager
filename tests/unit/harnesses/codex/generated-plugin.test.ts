@@ -24,6 +24,8 @@ import * as generated from "../../../../src/harnesses/codex/generated-plugin.ts"
 
 import { isAcceptedSplitValue } from "../../../../src/validate-generated-plugin-cli.ts";
 
+const execFileAsync = promisify(execFile);
+
 /** An `OSError`-shaped rejection whose errno is not absence-like. */
 function permissionDenied() {
   const error = new Error("permission denied");
@@ -116,7 +118,7 @@ function options(pluginRoot: string) {
   };
 }
 
-void test("pythonStrip matches CPython str.strip and not JavaScript trim", () => {
+void test("pythonStrip matches CPython str.strip and not JavaScript trim", async () => {
   assert.equal(pythonStrip("  value  "), "value");
   assert.equal(pythonStrip("\t\n\v\f\r value \r\f\v\n\t"), "value");
   // Python-only: the C0 separators and NEL.
@@ -128,6 +130,33 @@ void test("pythonStrip matches CPython str.strip and not JavaScript trim", () =>
   // Neither runtime strips these.
   assert.equal(pythonStrip("᠎value​"), "᠎value​");
   assert.equal(pythonStrip("   "), "");
+  for (const code of [
+    0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0,
+    0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007,
+    0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+  ]) {
+    const character = String.fromCharCode(code);
+    assert.equal(pythonStrip(character + "value" + character), "value");
+  }
+  assert.equal(pythonStrip("a\u001fb"), "a\u001fb");
+  assert.equal(pythonStrip("\ufeff"), "\ufeff");
+  const helperUrl = new URL("../../../../src/python-text.ts", import.meta.url)
+    .href;
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      [
+        "import { pythonStrip } from " + JSON.stringify(helperUrl) + ";",
+        "const input = 'x' + ' '.repeat(1_000_000) + 'y';",
+        "if (pythonStrip(input) !== input) process.exit(1);",
+      ].join("\n"),
+    ],
+    { timeout: 10_000 },
+  );
+  assert.equal(stdout, "");
+  assert.equal(stderr, "");
 });
 
 void test("pythonSplitlines matches CPython str.splitlines", () => {
@@ -147,6 +176,18 @@ void test("pythonSplitlines matches CPython str.splitlines", () => {
     "name: x",
     "---",
   ]);
+  for (const code of [
+    0x0a, 0x0d, 0x0b, 0x0c, 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029,
+  ]) {
+    assert.deepEqual(pythonSplitlines("a" + String.fromCharCode(code) + "b"), [
+      "a",
+      "b",
+    ]);
+  }
+  assert.deepEqual(pythonSplitlines("\n\n"), ["", ""]);
+  assert.deepEqual(pythonSplitlines("a\r\n\r\n"), ["a", ""]);
+  assert.deepEqual(pythonSplitlines("a\u001fb"), ["a\u001fb"]);
+  assert.deepEqual(pythonSplitlines("\ufeff"), ["\ufeff"]);
 });
 
 void test("FS-GENERATED-RESOLVE-01 filesystem boundary: resolution, cycles, pathname codec, inspection failures", async (t) => {
@@ -929,7 +970,6 @@ void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", asy
   );
 });
 
-const execFileAsync = promisify(execFile);
 const CLI = fileURLToPath(
   new URL("../../../../src/validate-generated-plugin-cli.ts", import.meta.url),
 );

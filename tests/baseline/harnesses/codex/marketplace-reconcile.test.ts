@@ -12,12 +12,18 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { runAdapter } from "../../../../src/harnesses/codex/adapter.ts";
+import {
+  codexInspect,
+  codexInstall,
+  codexRemove,
+} from "../../../../src/harnesses/codex/adapter.ts";
 
 import {
-  verifyInstalledFingerprint,
-  verifyUninstalledResources,
-} from "../../../../src/harnesses/codex/lifecycle.ts";
+  normalizeCodexInstall,
+  normalizeCodexInstalled,
+  normalizeCodexOwnership,
+} from "../../../../src/harnesses/codex/harness.ts";
+import { codexPresentation } from "../../../../src/harnesses/codex/presentation.ts";
 
 const ROOT = resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
 const PACKAGE_ROOT = ROOT;
@@ -83,7 +89,7 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     "utf8",
   );
 
-  const inspect = await runAdapter(["inspect", "--view", "fingerprint"], {
+  const inspect = await codexInspect("fingerprint", {
     root: PACKAGE_ROOT,
     env: sandbox.env({
       FAKE_CODEX_PLUGIN_LIST:
@@ -96,18 +102,21 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     fingerprint: desired,
   });
 
-  const matched = verifyInstalledFingerprint(
-    desired,
+  const matchedReceipt = normalizeCodexInstall(
     ok({
       verification_hints: {
         mismatch: "adapter mismatch hint",
         missing: "adapter missing hint",
       },
     }),
-    inspect,
+  );
+  const matchedInspection = normalizeCodexInstalled(inspect, desired);
+  const matched = codexPresentation.renderInstallVerification(
+    desired,
+    matchedReceipt,
+    matchedInspection,
   );
   assert.deepEqual(matched, {
-    ok: true,
     stdout: [
       `desired_commit=${desired}`,
       `installed_commit=${desired}`,
@@ -115,14 +124,22 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     ],
     stderr: [],
   });
+  assert.equal(matchedInspection.outcome.ok, true);
+  if (!matchedInspection.outcome.ok)
+    assert.fail("expected normalized inspection");
+  assert.equal(matchedInspection.outcome.result.kind, "current");
 
-  const short = verifyInstalledFingerprint(
-    desired,
-    ok({}),
+  const shortReceipt = normalizeCodexInstall(ok({}));
+  const shortInspection = normalizeCodexInstalled(
     ok({ view: "fingerprint", fingerprint: desired.slice(0, 7) }),
+    desired,
+  );
+  const short = codexPresentation.renderInstallVerification(
+    desired,
+    shortReceipt,
+    shortInspection,
   );
   assert.deepEqual(short, {
-    ok: true,
     stdout: [
       `desired_commit=${desired}`,
       `installed_commit=${desired.slice(0, 7)}`,
@@ -130,31 +147,55 @@ void test("INSTALL-VERIFY-01 installed fingerprint proof and hints", async (t) =
     ],
     stderr: [],
   });
+  assert.equal(shortInspection.outcome.ok, true);
+  if (!shortInspection.outcome.ok)
+    assert.fail("expected normalized inspection");
+  assert.equal(shortInspection.outcome.result.kind, "current");
 
-  const mismatch = verifyInstalledFingerprint(
-    "1111111111111111111111111111111111111111",
+  const mismatchDesired = "1111111111111111111111111111111111111111";
+  const mismatchReceipt = normalizeCodexInstall(
     ok({ verification_hints: { mismatch: "adapter mismatch hint" } }),
+  );
+  const mismatchInspection = normalizeCodexInstalled(
     ok({ view: "fingerprint", fingerprint: desired }),
+    mismatchDesired,
+  );
+  const mismatch = codexPresentation.renderInstallVerification(
+    mismatchDesired,
+    mismatchReceipt,
+    mismatchInspection,
   );
   assert.deepEqual(mismatch.stderr, [
     "error: installed manager fingerprint does not match the prepared plugin after install.",
     "hint: adapter mismatch hint",
   ]);
 
-  const missing = verifyInstalledFingerprint(
-    desired,
+  const missingReceipt = normalizeCodexInstall(
     ok({ verification_hints: { missing: "adapter missing hint" } }),
+  );
+  const missingInspection = normalizeCodexInstalled(
     ok({ view: "fingerprint", fingerprint: null }),
+    desired,
+  );
+  const missing = codexPresentation.renderInstallVerification(
+    desired,
+    missingReceipt,
+    missingInspection,
   );
   assert.deepEqual(missing.stderr, [
     "error: installed manager fingerprint is not detectable after install.",
     "hint: adapter missing hint",
   ]);
 
-  const malformed = verifyInstalledFingerprint(
-    desired,
-    ok({}),
+  const malformedReceipt = normalizeCodexInstall(ok({}));
+  const malformedInspection = normalizeCodexInstalled(
     ok("not-an-object"),
+    desired,
+  );
+  const malformed = codexPresentation.renderInstallVerification(
+    desired,
+    malformedReceipt,
+    malformedInspection,
   );
   assert.deepEqual(malformed.stderr, [
     "error: cannot parse installed manager fingerprint inspection result after install.",
@@ -166,7 +207,7 @@ void test("a marketplace-list command failure fails without mutation", async (t)
   const packageRoot = join(sandbox.base, "requested");
   await mkdir(packageRoot);
 
-  const result = await runAdapter(["install", "--package-root", packageRoot], {
+  const result = await codexInstall(packageRoot, {
     root: PACKAGE_ROOT,
     env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: "" }),
   });
@@ -192,13 +233,10 @@ void test("unrelated marketplace roots do not block manager registration", async
       const packageRoot = join(sandbox.base, "requested");
       await mkdir(packageRoot);
 
-      const result = await runAdapter(
-        ["install", "--package-root", packageRoot],
-        {
-          root: PACKAGE_ROOT,
-          env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: marketplaces }),
-        },
-      );
+      const result = await codexInstall(packageRoot, {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({ FAKE_CODEX_MARKETPLACE_LIST: marketplaces }),
+      });
 
       assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
       assert.deepEqual(
@@ -244,7 +282,7 @@ esac
   );
   await chmod(failingCodex, 0o755);
 
-  const result = await runAdapter(["install", "--package-root", packageRoot], {
+  const result = await codexInstall(packageRoot, {
     root: PACKAGE_ROOT,
     env: sandbox.env({
       SUPERPOWERS_CODEX: failingCodex,
@@ -280,8 +318,8 @@ esac
 
 void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await runAdapter(
-    ["uninstall", "--plugin-present", "true", "--marketplace-present", "true"],
+  const result = await codexRemove(
+    { pluginPresent: true, marketplacePresent: true },
     { root: PACKAGE_ROOT, env: sandbox.env() },
   );
   assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
@@ -292,27 +330,58 @@ void test("UNINSTALL-TARGETS-01 adapter removes only manager resources", async (
 });
 
 void test("UNINSTALL-VERIFY-01 both manager resources must be absent", () => {
-  const remainingPlugin = verifyUninstalledResources(
-    ok({ resources: { plugin: true, marketplace: false } }),
+  const remainingPlugin = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: true, marketplace: false },
+    }),
   );
-  assert.deepEqual(remainingPlugin, {
-    ok: false,
-    message: "owned plugin resource is still installed after removal",
+  assert.equal(remainingPlugin.outcome.ok, true);
+  if (!remainingPlugin.outcome.ok) assert.fail("expected normalized ownership");
+  assert.deepEqual(remainingPlugin.outcome.result.removalVerification, {
+    kind: "blocked",
+    output: {
+      stdout: [],
+      stderr: ["error: owned plugin resource is still installed after removal"],
+    },
   });
 
-  const remainingMarketplace = verifyUninstalledResources(
-    ok({ resources: { plugin: false, marketplace: true } }),
+  const remainingMarketplace = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: true },
+    }),
   );
-  assert.deepEqual(remainingMarketplace, {
-    ok: false,
-    message: "owned marketplace resource is still registered after removal",
+  assert.equal(remainingMarketplace.outcome.ok, true);
+  if (!remainingMarketplace.outcome.ok)
+    assert.fail("expected normalized ownership");
+  assert.deepEqual(remainingMarketplace.outcome.result.removalVerification, {
+    kind: "blocked",
+    output: {
+      stdout: [],
+      stderr: [
+        "error: owned marketplace resource is still registered after removal",
+      ],
+    },
   });
 
-  assert.deepEqual(
-    verifyUninstalledResources(
-      ok({ resources: { plugin: false, marketplace: false } }),
-    ),
-    { ok: true },
+  const absent = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: false },
+    }),
   );
-  assert.equal(verifyUninstalledResources(ok({})).ok, false);
+  assert.equal(absent.outcome.ok, true);
+  if (!absent.outcome.ok) assert.fail("expected normalized ownership");
+  assert.deepEqual(absent.outcome.result.removalVerification, {
+    kind: "allowed",
+  });
+
+  const missing = normalizeCodexOwnership(ok({ identity_state: "manager" }));
+  assert.equal(missing.outcome.ok, false);
+  if (missing.outcome.ok) assert.fail("expected malformed ownership");
+  assert.equal(
+    missing.outcome.error.message,
+    "expected a Boolean adapter result at resources.plugin",
+  );
 });

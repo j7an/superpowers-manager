@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { withWorkspace, workspaceRemovalFailure } from "../../src/workspace.ts";
 
-import { runAdapter } from "../../src/harnesses/codex/adapter.ts";
+import { codexRemove } from "../../src/harnesses/codex/adapter.ts";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const FAKE_CODEX = fileURLToPath(
@@ -255,15 +255,9 @@ void test("withWorkspace preserves the callback error when a reported cleanup al
   );
 });
 
-// The capability tests above prove `onCleanupFailure` works. This one proves
-// the adapter wires it: `src/harnesses/codex/adapter.ts` passes a reporter at every operation
-// (five call sites;
-// `grep -n "onCleanupFailure: reportOrphanedWorkspace" src/harnesses/codex/adapter.ts`),
-// because a workspace it never wrote to failing to be removed must not discard
-// an otherwise successful result — but must not vanish silently either. The
-// fake Codex makes the temporary directory's parent read-only while it runs, so
-// the adapter's own cleanup really fails; this is the only end-to-end cleanup
-// failure in the repo.
+// The shared Codex workspace policy supplies the cleanup reporter for each
+// operation. This test exercises real cleanup failure through a typed operation,
+// preserving its successful result and the exact orphan warning.
 void test("an adapter operation keeps its result when workspace cleanup fails", async (t) => {
   const base = await mkdtemp(join(tmpdir(), "spw-adapter-cleanup-"));
   const temporary = join(base, "tmp");
@@ -279,8 +273,8 @@ void test("an adapter operation keeps its result when workspace cleanup fails", 
     await rm(base, { recursive: true, force: true });
   });
 
-  const result = await runAdapter(
-    ["uninstall", "--plugin-present", "true", "--marketplace-present", "false"],
+  const result = await codexRemove(
+    { pluginPresent: true, marketplacePresent: false },
     {
       root: PACKAGE_ROOT,
       env: {

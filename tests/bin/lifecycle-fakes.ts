@@ -133,8 +133,8 @@ export function respondToListing(request: {
  *   inspect installed recheck  -> plugin list --json,
  *                                 plugin marketplace list --json
  *
- * They are separate runAdapter calls, so this fake is a fresh PROCESS each
- * time and the argv is byte-identical -- there is nothing to branch on. A
+ * They are separate native CLI processes with identical listing argv, so this
+ * fake is a fresh PROCESS each time and there is nothing to branch on. A
  * single fixed plugin_list.json therefore makes whole scenarios
  * unconstructible: a listing carrying a manager version to populate
  * installed_commit also forces identity_state to `manager`, so
@@ -143,8 +143,8 @@ export function respondToListing(request: {
  * ADAPTER, giving fingerprint and ownership independent inputs.
  *
  * The counter therefore lives on disk, not in memory. Read-increment-write is
- * safe without locking: probe awaits each runAdapter before starting the
- * next, so invocations are strictly sequential.
+ * safe without locking: probe awaits each native CLI process before starting
+ * the next, so invocations are strictly sequential.
  *
  * Exhausting the sequence FAILS CLOSED rather than repeating the last entry.
  * Repeating would let a fixture that miscounted its invocations pass while
@@ -282,14 +282,14 @@ export function injectSpuriousMutation(
 
 /**
  * The adapter role's tripwire. Slice 4b is its first genuine consumer (matrix
- * row 18): once install/update/uninstall dispatch in-process, runAdapter is a
- * function call and this executable must never be reached.
+ * row 18): once install/update/uninstall dispatch through the typed Codex
+ * engine and `runCodexOperation`, this executable must never be reached.
  *
  * It fires unconditionally, and there is no mode that switches it off.
- * Post-flip every command dispatches in-process, so `runAdapter` is a plain
- * function call and no role — install, uninstall or probe — can legitimately
- * reach this executable. Nothing is left for a gate to select on, which is why
- * all three adapter-role fakes call this the same way.
+ * Post-flip every command dispatches through the typed Codex engine, so no
+ * role — install, uninstall or probe — can legitimately reach this executable.
+ * Nothing is left for a gate to select on, which is why all three adapter-role
+ * fakes call this the same way.
  *
  * A caller with anything after this call MUST `return` on true. Setting
  * `process.exitCode` does not halt execution, so a missing return falls

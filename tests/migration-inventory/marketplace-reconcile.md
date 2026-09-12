@@ -134,3 +134,9 @@ The `.ts` paths identify the current native counterparts; the quoted shell
 assertions, original counts, historical dispositions, freeze header, and Git
 resolution anchors remain historical. Imports, child entry points, preloads, and
 maintained helper references follow the renamed native source paths.
+
+**Present-day disposition (I3).** `INSTALL-VERIFY-01` now binds
+`normalizeCodexInstall`, `normalizeCodexInstalled`, and
+`codexPresentation.renderInstallVerification`. `UNINSTALL-VERIFY-01` binds
+`normalizeCodexOwnership` and its normalized removal decision. The six static
+cases and all 31 historical rows are unchanged.

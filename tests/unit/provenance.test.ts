@@ -15,6 +15,7 @@ import {
   generatedCommitOrEmpty,
 } from "../../src/provenance.ts";
 
+import { escapePythonJsonString } from "../../src/python-json.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 
 const commit = "0123456789abcdef0123456789abcdef01234567";
@@ -226,6 +227,15 @@ const unicodeRecord: import("../../src/provenance.ts").ProvenanceRecord = {
 
 void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
   const directory = await sandbox(t);
+
+  assert.equal(escapePythonJsonString("\ud800"), "\\ud800");
+  assert.equal(escapePythonJsonString("\udfff"), "\\udfff");
+  assert.equal(escapePythonJsonString("\ud83d\ude00"), "\\ud83d\\ude00");
+  assert.equal(
+    escapePythonJsonString('"\\/\b\t\n\f\r\u0001\u007f'),
+    '\\"\\\\/\\b\\t\\n\\f\\r\\u0001\\u007f',
+  );
+  assert.equal(escapePythonJsonString(""), "");
 
   const fixtures: [
     string,

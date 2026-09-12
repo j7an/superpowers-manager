@@ -10,9 +10,9 @@ interface is internal TypeScript, not an external protocol. There is no
 adapter-process exit or independent operation/response validation on the
 product path.
 
-`runAdapter` remains a compatibility parser for the native Codex operation
-shape. It delegates to the same typed Codex engines used by the concrete
-harness; it is not the product CLI binding.
+The concrete Codex harness calls the typed Codex operation engines directly.
+Their results are normalized at the harness boundary before shared commands
+consume them. There is no argv-based compatibility dispatcher.
 
 ## Messages and errors
 
@@ -27,17 +27,18 @@ every install verification hint. Three constructs enforce it, one per
 population: `writeAdapterFailure` (`src/adapter-result.ts`) refuses the error
 `code`, `message`, and hints before the first write; `AdapterMessageLog`
 escapes message `text` on ingress; and `normalizeCodexInstall`
-(`src/harnesses/codex/harness.ts`) omits an unsafe verification hint before presentation.
+(`src/harnesses/codex/harness.ts`) omits an unsafe verification hint before
+`codexPresentation.renderInstallVerification` renders it.
 
 Messages are replayed in array order to their declared streams.
 
-## Native compatibility operation results
+## Codex operation results
 
-The table below labels the retained `runAdapter` compatibility shape. The
-generic envelope preserves each typed result for in-process harness consumers;
-it does not require another integration to reproduce these Codex-native fields.
+The table below describes the typed Codex engine result shapes. The generic
+envelope preserves each engine result for in-process harness consumers; it does
+not require another integration to reproduce these Codex-native fields.
 
-| Compatibility operation/view | Exact native result contract |
+| Codex operation/view | Exact engine result contract |
 |---|---|
 | `install` | Exact key `verification_hints`; its object carries `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only`. Each hint satisfies the terminal-facing string rule. |
 | `inspect/fingerprint` | Exact keys `view` and `fingerprint`; view is `fingerprint`; `fingerprint` is `null` or a 7- or 40-character hexadecimal string. |

@@ -1,5 +1,3 @@
-import type { AdapterResult } from "../../adapter-result.ts";
-import { normalizeCodexInstall, normalizeCodexInstalled } from "./harness.ts";
 import { displaySource } from "../../selection.ts";
 import type {
   FailureSite,
@@ -147,18 +145,6 @@ export function formatHuman(f: ProbeFacts): string {
   return text;
 }
 
-export type FingerprintVerdict =
-  | {
-      readonly ok: true;
-      readonly stdout: readonly string[];
-      readonly stderr: readonly string[];
-    }
-  | {
-      readonly ok: false;
-      readonly stdout: readonly string[];
-      readonly stderr: readonly string[];
-    };
-
 function verificationOutput(
   kind: "missing" | "mismatch",
   hint: string,
@@ -180,27 +166,6 @@ export function codexInstallReceipt(
     missingVerificationOutput: verificationOutput("missing", missingHint),
     mismatchVerificationOutput: verificationOutput("mismatch", mismatchHint),
   };
-}
-
-// Compatibility export target for src/harnesses/codex/lifecycle.ts. Delegate to the production
-// normalizers and renderer so the retained verdict cannot drift from commands.
-export function verifyInstalledFingerprint(
-  desiredCommit: string,
-  installResult: AdapterResult,
-  inspectResult: AdapterResult,
-): FingerprintVerdict {
-  const receipt = normalizeCodexInstall(installResult);
-  const inspection = normalizeCodexInstalled(inspectResult, desiredCommit);
-  const output = codexPresentation.renderInstallVerification(
-    desiredCommit,
-    receipt,
-    inspection,
-  );
-  const ok =
-    inspection.status === 0 &&
-    inspection.outcome.ok &&
-    inspection.outcome.result.kind === "current";
-  return { ok, stdout: output.stdout, stderr: output.stderr };
 }
 
 function probeFacts(facts: ProbeSnapshot<CodexRemovalInput>): ProbeFacts {

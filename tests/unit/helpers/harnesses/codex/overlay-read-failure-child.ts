@@ -96,7 +96,7 @@ void test("overlay read failure child", async (t) => {
   });
 
   const {
-    runAdapter,
+    codexBuild,
   }: typeof import("../../../../../src/harnesses/codex/adapter.ts") =
     await import(
       new URL(
@@ -104,26 +104,19 @@ void test("overlay read failure child", async (t) => {
         import.meta.url,
       ).href
     );
-  const argv = [
-    "build",
-    "--upstream-root",
-    upstream,
-    "--candidate-root",
-    candidate,
-    "--requested-ref",
-    "latest-release",
-    "--resolved-ref",
-    "v6.1.1",
-    "--commit",
-    COMMIT,
-    "--manager-version",
-    "6.1.1+manager.d884ae0",
-    "--upstream-manifest-version",
-    "6.1.1",
-    "--fallback-manifest",
-    fallback,
-  ];
-  const result = await runAdapter(argv, { root: PACKAGE_ROOT });
+  const result = await codexBuild(
+    {
+      upstreamRoot: upstream,
+      candidateRoot: candidate,
+      requestedRef: "latest-release",
+      resolvedRef: "v6.1.1",
+      commit: COMMIT,
+      managerVersion: "6.1.1+manager." + COMMIT.slice(0, 7),
+      upstreamManifestVersion: "6.1.1",
+      fallbackManifest: fallback,
+    },
+    { root: PACKAGE_ROOT },
+  );
   // Sanity check inside the child too, so a broken mock fails loudly here
   // rather than producing a confusing assertion in the parent.
   assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));

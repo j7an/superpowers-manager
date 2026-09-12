@@ -30,7 +30,6 @@ import {
   lastIndex,
   readLog,
   runScript,
-  spawnFakeAdapter,
 } from "./lifecycle-fixture.ts";
 import { caseContext, recordingAdapter } from "./command-context.ts";
 
@@ -143,7 +142,7 @@ function assertNoRemoves(log: string[]) {
  * How many ownership inspections reached Codex.
  *
  * `inspect --view ownership` issues exactly one `codex plugin list --json` and
- * then one `codex plugin marketplace list --json` (`src/harnesses/codex/adapter.ts:904::if (view === "ownership") {`).
+ * then one `codex plugin marketplace list --json` (`src/harnesses/codex/adapter.ts:829::if (view === "ownership") {`).
  * Counting the plugin listing alone is unambiguous: `plugin marketplace list
  * --json` does not contain it as a substring, and nothing else in
  * `src/commands/uninstall.ts`'s ownership-inspect / adapter-uninstall /
@@ -172,7 +171,7 @@ function ownershipInspections(codex: string[]): number {
  *
  * WHAT IT DOES NOT CATCH: an adapter uninstall that was invoked and then failed
  * before issuing any Codex command — `requireCodex` or the workspace creation
- * failing inside `runUninstall` (`src/harnesses/codex/adapter.ts:769::superpowers-manager.adapter-uninstall.`). That leaves one
+ * failing inside `runUninstall` (`src/harnesses/codex/adapter.ts::async function withCodexWorkspace(`). That leaves one
  * inspection and no removes, and passes here where the shell's
  * `grep -Fq "uninstall --"` would have failed. The gap is narrow rather than
  * theoretical, and it is accepted only because in all six call sites the abort
@@ -207,7 +206,7 @@ function assertNoAdapterUninstall(codex: string[], message: string) {
  * Which flags the operation carried — and, for the both-`false` pair, that it
  * was called at all — is pinned separately at each call site, by the Codex
  * removes that appeared or by the operation's own skip lines on stdout
- * (`src/harnesses/codex/adapter.ts:787::plugin not installed; skipping`, :761).
+ * (`src/harnesses/codex/adapter.ts:734::plugin not installed; skipping`, :708).
  *
  * No emptiness guard: this is a positive with an exact count, so an empty log
  * fails it rather than satisfying it.
@@ -333,8 +332,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
         ownershipCalls += 1;
         // First call is pre-removal (both present); second is verify-after,
         // post-removal (src/commands/uninstall.ts's own second inspection) --
-        // both flipped to false is what lets `verifyUninstalledResources`
-        // succeed.
+        // both flipped to false are the validated removal-success state.
         const present = ownershipCalls === 1;
         return successResult(
           "inspect",
@@ -502,7 +500,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // inspections whether or not :27 runs, so deleting spw_adapter_uninstall
     // outright would leave that count at 2. These two lines are emitted by the
     // uninstall operation itself, one per flag, and only on the `false` branch
-    // of each (`src/harnesses/codex/adapter.ts:787::plugin not installed; skipping`, :761) — so together they pin both the call
+    // of each (`src/harnesses/codex/adapter.ts:734::plugin not installed; skipping`, :708) — so together they pin both the call
     // and the both-false pair. The completion check is kept beneath them as the
     // ordering witness it actually is.
     assert.ok(
@@ -576,7 +574,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
-    // `plugin list --json` (`src/harnesses/codex/adapter.ts:904::if (view === "ownership") {`) and one
+    // `plugin list --json` (`src/harnesses/codex/adapter.ts:829::if (view === "ownership") {`) and one
     // `plugin marketplace list --json` (:883); `ownershipInspections` (below)
     // already counts the former. The adapter uninstall op itself issues no
     // listing, only the two removes asserted at :277-281 further down, so
@@ -897,7 +895,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // which would be false here: the marketplace remove fails, so the flow dies
     // before `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`'s verify-after inspection. The true/true flag
     // pair is witnessed instead by the two removes at :437-438, which the
-    // adapter issues only when both flags are true (`src/harnesses/codex/adapter.ts:762::const { pluginPresent, marketplacePresent } = input;`).
+    // adapter issues only when both flags are true (`src/harnesses/codex/adapter.ts:711::const { pluginPresent, marketplacePresent } = input;`).
     // :437-438
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
@@ -924,70 +922,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assert.ok(
       !has(codex, "openai-curated"),
       "marketplace failure must not mutate unrelated providers",
-    );
-  });
-
-  // Port-only (no shell original): row 18's first genuine consumer. The shell
-  // had no in-process subject to guard, so this case has nothing to port —
-  // see tests/migration-inventory/uninstall-commands.md's port-only section.
-  // Appended at the end of the file, rather than beside the both-present case
-  // it is thematically closest to, so it does not shift the line number of
-  // any existing item — most of this inventory's `Port:` pointers are already
-  // stale (see the file's own POINTER PROVENANCE note) and inserting in the
-  // middle would silently break the ones that are not.
-  //
-  // The subject must not reach the fake adapter at all. uninstall-fakes.js's
-  // adapter role refuses unconditionally (tests/bin/lifecycle-fakes.js's
-  // tripwireTriggered). The subject itself dispatches in-process, and the
-  // SPW_ADAPTER seam runScript once defaulted was retired together with the
-  // fixture machinery that selected the fake's behaviour.
-  //
-  // Read the emptiness half for what it now is. With the seam retired, no
-  // channel points the subject at c.adapterBin: runScript's env allowlist no
-  // longer carries SPW_ADAPTER, the case's bin/ directory is never on the
-  // subject's PATH, and nothing under src/ reads an environment variable
-  // naming an adapter executable. A spawn is therefore unreachable, not merely
-  // unobserved, so an empty c.adapterLog is a residual structural check rather
-  // than a spawn detector. The live guarantee that SPW_ADAPTER cannot re-enter
-  // src/ is tests/unit/ctx-adapter-provenance.test.js (registered in
-  // tests/suites.json), not this case.
-  //
-  // The armed-witness half below is what still carries weight, and what it
-  // proves is bounded: run this case's own fake adapter for real and it
-  // refuses with the tripwire's exact status and message, and the refusal
-  // lands in c.adapterLog. That is a claim about the FIXTURE. It is what keeps
-  // c.adapterLog a path something writes to, so the emptiness half above is
-  // not vacuous — and it is the property the seam-retirement mutation gate
-  // measured. Neither half detects a regressed spawn any more.
-  void test("both-present uninstall leaves the fake adapter log empty; the tripwire refuses a direct spawn (row 18)", async () => {
-    const c = uninstallCase();
-    const result = await runScript(c, "uninstall");
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(
-      readLog(c.adapterLog),
-      [],
-      "the in-process port must never reach the fake adapter executable",
-    );
-    assert.ok(
-      !result.stderr.includes("must not spawn the adapter"),
-      `the tripwire's own message leaked onto the subject's stderr:\n${result.stderr}`,
-    );
-    // Armed witness, after the emptiness assertion above and never before it:
-    // this call is the one thing in the case that writes to c.adapterLog.
-    const witness = spawnFakeAdapter(c, ["inspect", "--view", "ownership"]);
-    assert.equal(
-      witness.status,
-      94,
-      `the armed tripwire did not refuse a real spawn of this case's fake adapter:\n${witness.stderr}`,
-    );
-    assert.equal(
-      witness.stderr,
-      "fixture: uninstall must not spawn the adapter\n",
-    );
-    assert.deepEqual(
-      readLog(c.adapterLog),
-      ["inspect --view ownership"],
-      "c.adapterLog is not the path this case's fake adapter records to, so the emptiness assertion above proves nothing",
     );
   });
 });

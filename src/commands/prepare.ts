@@ -502,7 +502,7 @@ async function performPrepare<R>(
     // only, so it bounds how much of that text lands, not what it may
     // contain.
     //
-    // runAdapter's closing `throw cause` (src/harnesses/codex/adapter.ts) does NOT arrive
+    // runCodexOperation's closing `throw cause` (src/harnesses/codex/adapter.ts) does NOT arrive
     // here -- the call site catches it and converts it to a hand-written
     // message per AGENTS.md's reader-diagnostics rule.
     //
@@ -536,7 +536,7 @@ async function performPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:562-570::if (cleanupWarning`.
+    // `src/commands/install.ts:561-570::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

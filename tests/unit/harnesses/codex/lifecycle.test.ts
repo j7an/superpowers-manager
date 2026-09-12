@@ -7,9 +7,13 @@ import {
   requireNoLegacyState,
   reportLegacyState,
   requireManagedUpdateControl,
-  verifyInstalledFingerprint,
-  verifyUninstalledResources,
 } from "../../../../src/harnesses/codex/lifecycle.ts";
+import {
+  normalizeCodexInstall,
+  normalizeCodexInstalled,
+  normalizeCodexOwnership,
+} from "../../../../src/harnesses/codex/harness.ts";
+import { codexPresentation } from "../../../../src/harnesses/codex/presentation.ts";
 
 // Frozen operator text. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
@@ -132,101 +136,160 @@ void test("requireManagedUpdateControl rejects an unrecognised capability", () =
   });
 });
 
-void test("verifyInstalledFingerprint accepts an exact commit match", () => {
+void test("install verification accepts an exact commit match", () => {
   const desired = "a".repeat(40);
-  const verdict = verifyInstalledFingerprint(
-    desired,
-    ok({}),
+  const receipt = normalizeCodexInstall(ok({}));
+  const inspection = normalizeCodexInstalled(
     ok({ view: "fingerprint", fingerprint: desired }),
+    desired,
   );
-  assert.equal(verdict.ok, true);
-  assert.deepEqual(verdict.stdout, [
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "current");
+  assert.deepEqual(output.stdout, [
     `desired_commit=${desired}`,
     `installed_commit=${desired}`,
     "manager updated",
   ]);
-  assert.deepEqual(verdict.stderr, []);
+  assert.deepEqual(output.stderr, []);
 });
 
-void test("verifyInstalledFingerprint accepts the seven-character short form", () => {
+void test("install verification accepts the seven-character short form", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and commitMatches
   // in src/status.ts keeps that rule. This case is what pins the two together.
   const desired = "b".repeat(40);
-  const verdict = verifyInstalledFingerprint(
-    desired,
-    ok({}),
+  const receipt = normalizeCodexInstall(ok({}));
+  const inspection = normalizeCodexInstalled(
     ok({ view: "fingerprint", fingerprint: desired.slice(0, 7) }),
+    desired,
   );
-  assert.equal(verdict.ok, true);
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "current");
+  assert.deepEqual(output.stderr, []);
 });
 
-void test("verifyInstalledFingerprint reports a failed inspection", () => {
-  const verdict = verifyInstalledFingerprint("c".repeat(40), ok({}), failed());
-  assert.equal(verdict.ok, false);
-  assert.deepEqual(verdict.stdout, []);
-  assert.deepEqual(verdict.stderr, [
+void test("install verification reports a failed inspection", () => {
+  const desired = "c".repeat(40);
+  const receipt = normalizeCodexInstall(ok({}));
+  const inspection = normalizeCodexInstalled(failed(), desired);
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, false);
+  assert.deepEqual(output.stdout, []);
+  assert.deepEqual(output.stderr, [
     "error: installed manager fingerprint inspection failed after install.",
   ]);
 });
 
-void test("verifyInstalledFingerprint reports a mismatch and surfaces its hint", () => {
+void test("install verification reports a mismatch and surfaces its hint", () => {
   const desired = "d".repeat(40);
-  const verdict = verifyInstalledFingerprint(
-    desired,
+  const receipt = normalizeCodexInstall(
     ok({ verification_hints: { mismatch: "try reinstalling" } }),
-    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
   );
-  assert.equal(verdict.ok, false);
-  assert.deepEqual(verdict.stderr, [
+  const inspection = normalizeCodexInstalled(
+    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
+    desired,
+  );
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "mismatch");
+  assert.deepEqual(output.stderr, [
     "error: installed manager fingerprint does not match the prepared plugin after install.",
     "hint: try reinstalling",
   ]);
 });
 
-void test("verifyInstalledFingerprint reports an undetectable fingerprint and its own hint", () => {
+void test("install verification reports an undetectable fingerprint and its own hint", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
   // the production normalizer's behaviour for JSON null
-  // (`src/harnesses/codex/harness.ts:92::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
-  const verdict = verifyInstalledFingerprint(
-    "f".repeat(40),
+  // (`src/harnesses/codex/harness.ts:91::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
+  const desired = "f".repeat(40);
+  const receipt = normalizeCodexInstall(
     ok({ verification_hints: { missing: "codex reported nothing" } }),
-    ok({ view: "fingerprint", fingerprint: null }),
   );
-  assert.equal(verdict.ok, false);
-  assert.deepEqual(verdict.stderr, [
+  const inspection = normalizeCodexInstalled(
+    ok({ view: "fingerprint", fingerprint: null }),
+    desired,
+  );
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "absent");
+  assert.deepEqual(output.stderr, [
     "error: installed manager fingerprint is not detectable after install.",
     "hint: codex reported nothing",
   ]);
 });
 
-void test("verifyInstalledFingerprint omits the hint line when no hint is present", () => {
-  const verdict = verifyInstalledFingerprint(
-    "0".repeat(40),
-    ok({}),
+void test("install verification omits the hint line when no hint is present", () => {
+  const desired = "0".repeat(40);
+  const receipt = normalizeCodexInstall(ok({}));
+  const inspection = normalizeCodexInstalled(
     ok({ view: "fingerprint", fingerprint: "1".repeat(40) }),
+    desired,
   );
-  assert.equal(verdict.ok, false);
-  assert.equal(verdict.stderr.length, 1);
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "mismatch");
+  assert.equal(output.stderr.length, 1);
 });
 
-void test("ADAPTER-TERMINAL-01 verifyInstalledFingerprint omits a hint carrying a terminal control", () => {
+void test("ADAPTER-TERMINAL-01 install verification omits a hint carrying a terminal control", () => {
   const esc = String.fromCharCode(0x1b);
-  const verdict = verifyInstalledFingerprint(
-    "d".repeat(40),
+  const desired = "d".repeat(40);
+  const receipt = normalizeCodexInstall(
     ok({ verification_hints: { mismatch: `try ${esc}]0;title` } }),
-    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
   );
-  assert.equal(verdict.ok, false);
+  const inspection = normalizeCodexInstalled(
+    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
+    desired,
+  );
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "mismatch");
   // The error line stands; only the hint line is dropped.
-  assert.deepEqual(verdict.stderr, [
+  assert.deepEqual(output.stderr, [
     "error: installed manager fingerprint does not match the prepared plugin after install.",
   ]);
 });
 
-void test("ADAPTER-SURROGATE-01 verifyInstalledFingerprint omits a hint carrying a lone surrogate", () => {
+void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lone surrogate", () => {
   // BOTH halves of the surrogate range, in one test() rather than two:
-  // tests/migration-inventory/codex-state-units.md pins this file at 28 static
+  // tests/migration-inventory/codex-state-units.md pins this file at 26 static
   // `test(` call sites, so the second value is a row here rather than a case
   // of its own.
   //
@@ -242,71 +305,98 @@ void test("ADAPTER-SURROGATE-01 verifyInstalledFingerprint omits a hint carrying
   // surrogate is not representable as a byte at all.
   for (const code of [0xd800, 0xdc9b]) {
     const lone = String.fromCharCode(code);
-    const verdict = verifyInstalledFingerprint(
-      "f".repeat(40),
+    const desired = "f".repeat(40);
+    const receipt = normalizeCodexInstall(
       ok({ verification_hints: { missing: `codex said ${lone}` } }),
-      ok({ view: "fingerprint", fingerprint: null }),
     );
-    assert.equal(verdict.ok, false, code.toString(16));
+    const inspection = normalizeCodexInstalled(
+      ok({ view: "fingerprint", fingerprint: null }),
+      desired,
+    );
+    const output = codexPresentation.renderInstallVerification(
+      desired,
+      receipt,
+      inspection,
+    );
+    assert.equal(inspection.outcome.ok, true, code.toString(16));
+    if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+    assert.equal(inspection.outcome.result.kind, "absent", code.toString(16));
     assert.deepEqual(
-      verdict.stderr,
+      output.stderr,
       ["error: installed manager fingerprint is not detectable after install."],
       code.toString(16),
     );
   }
 });
 
-void test("verifyUninstalledResources accepts both resources absent", () => {
-  assert.deepEqual(
-    verifyUninstalledResources(
-      ok({ resources: { plugin: false, marketplace: false } }),
-    ),
-    { ok: true },
+void test("removal verification accepts both resources absent", () => {
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: false },
+    }),
   );
+  assert.equal(normalized.outcome.ok, true);
+  if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
+  assert.deepEqual(normalized.outcome.result.removalVerification, {
+    kind: "allowed",
+  });
 });
 
-void test("verifyUninstalledResources rejects a surviving plugin", () => {
-  assert.deepEqual(
-    verifyUninstalledResources(
-      ok({ resources: { plugin: true, marketplace: false } }),
-    ),
-    {
-      ok: false,
-      message: "owned plugin resource is still installed after removal",
+void test("removal verification rejects a surviving plugin", () => {
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: true, marketplace: false },
+    }),
+  );
+  assert.equal(normalized.outcome.ok, true);
+  if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
+  assert.deepEqual(normalized.outcome.result.removalVerification, {
+    kind: "blocked",
+    output: {
+      stdout: [],
+      stderr: ["error: owned plugin resource is still installed after removal"],
     },
-  );
+  });
 });
 
-void test("verifyUninstalledResources rejects a surviving marketplace", () => {
-  assert.deepEqual(
-    verifyUninstalledResources(
-      ok({ resources: { plugin: false, marketplace: true } }),
-    ),
-    {
-      ok: false,
-      message: "owned marketplace resource is still registered after removal",
+void test("removal verification rejects a surviving marketplace", () => {
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: true },
+    }),
+  );
+  assert.equal(normalized.outcome.ok, true);
+  if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
+  assert.deepEqual(normalized.outcome.result.removalVerification, {
+    kind: "blocked",
+    output: {
+      stdout: [],
+      stderr: [
+        "error: owned marketplace resource is still registered after removal",
+      ],
     },
-  );
+  });
 });
 
-void test("verifyUninstalledResources fails closed on a non-Boolean resource", () => {
+void test("removal verification fails closed on a non-Boolean resource", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean` died with `expected Boolean adapter result`
   // rather than treating an unparseable value as absent. Unparseable state is
   // never success — spec §4.3 rule 4.
-  assert.deepEqual(
-    verifyUninstalledResources(
-      ok({ resources: { plugin: "false", marketplace: false } }),
-    ),
-    {
-      ok: false,
-      message: "expected a Boolean adapter result at resources.plugin",
-    },
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: "false", marketplace: false },
+    }),
   );
-});
-
-void test("verifyUninstalledResources fails closed on a failed inspection", () => {
-  const verdict = verifyUninstalledResources(failed());
-  assert.equal(verdict.ok, false);
+  assert.equal(normalized.outcome.ok, false);
+  if (normalized.outcome.ok) assert.fail("expected malformed ownership");
+  assert.equal(
+    normalized.outcome.error.message,
+    "expected a Boolean adapter result at resources.plugin",
+  );
 });
 
 void test("an unparseable fingerprint result names parsing, not inspection", () => {
@@ -314,20 +404,21 @@ void test("an unparseable fingerprint result names parsing, not inspection", () 
   // (spec §6.2.3 item 3b): the outcome is well-formed, the result is not an
   // object. This is the branch that makes the shell's `grep -Fq "parse"`
   // satisfiable.
-  const verdict = verifyInstalledFingerprint(
-    "abcdef1234567890abcdef1234567890abcdef12",
-    ok({}),
-    ok("not-an-object"),
+  const desired = "abcdef1234567890abcdef1234567890abcdef12";
+  const receipt = normalizeCodexInstall(ok({}));
+  const inspection = normalizeCodexInstalled(ok("not-an-object"), desired);
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
   );
-  assert.equal(verdict.ok, false);
-  assert.deepEqual(verdict.stderr, [
+  assert.equal(inspection.outcome.ok, false);
+  assert.deepEqual(output.stderr, [
     "error: cannot parse installed manager fingerprint inspection result after install.",
   ]);
-  assert.deepEqual(verdict.stdout, []);
+  assert.deepEqual(output.stdout, []);
 
-  const normalizedFailure = verifyInstalledFingerprint(
-    "abcdef1234567890abcdef1234567890abcdef12",
-    ok({}),
+  const normalizedFailure = normalizeCodexInstalled(
     {
       status: 1,
       outcome: {
@@ -338,48 +429,50 @@ void test("an unparseable fingerprint result names parsing, not inspection", () 
         error: { code: "malformed-result", message: "controlled", hints: [] },
       },
     },
+    desired,
   );
-  assert.equal(normalizedFailure.ok, false);
-  assert.deepEqual(normalizedFailure.stderr, [
+  const failureOutput = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    normalizedFailure,
+  );
+  assert.equal(normalizedFailure.outcome.ok, false);
+  assert.deepEqual(failureOutput.stderr, [
     "error: cannot parse installed manager fingerprint inspection result after install.",
   ]);
-  assert.deepEqual(normalizedFailure.stdout, []);
+  assert.deepEqual(failureOutput.stdout, []);
 });
 
 void test("a non-string fingerprint is unparseable, not empty", () => {
   // PORT-ONLY. The shell cannot construct this: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value` stringifies
   // any non-null scalar. Pinned so the branch cannot be deleted as dead.
-  const verdict = verifyInstalledFingerprint(
-    "abcdef1234567890abcdef1234567890abcdef12",
-    ok({}),
-    ok({ fingerprint: 42 }),
+  const desired = "abcdef1234567890abcdef1234567890abcdef12";
+  const receipt = normalizeCodexInstall(ok({}));
+  const inspection = normalizeCodexInstalled(ok({ fingerprint: 42 }), desired);
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
   );
-  assert.equal(verdict.ok, false);
-  assert.deepEqual(verdict.stderr, [
+  assert.equal(inspection.outcome.ok, false);
+  assert.deepEqual(output.stderr, [
     "error: cannot parse installed manager fingerprint inspection result after install.",
   ]);
-});
-
-void test("an unreadable ownership inspection names reading, with its text", () => {
-  // Reached today, but the existing case asserts only ok === false, so the
-  // operator string was unpinned.
-  const verdict = verifyUninstalledResources(failed());
-  assert.equal(verdict.ok, false);
-  assert.equal(
-    verdict.ok === false ? verdict.message : "",
-    "cannot read the adapter ownership inspection after removal",
-  );
 });
 
 void test("the marketplace Boolean check names its own key", () => {
   // The loop covers both keys but only the `plugin` interpolation was
   // asserted, so a template that hardcoded "plugin" would have passed.
-  const verdict = verifyUninstalledResources(
-    ok({ resources: { plugin: false, marketplace: "yes" } }),
+  const normalized = normalizeCodexOwnership(
+    ok({
+      identity_state: "manager",
+      resources: { plugin: false, marketplace: "yes" },
+    }),
   );
-  assert.equal(verdict.ok, false);
+  assert.equal(normalized.outcome.ok, false);
+  if (normalized.outcome.ok) assert.fail("expected malformed ownership");
   assert.equal(
-    verdict.ok === false ? verdict.message : "",
+    normalized.outcome.error.message,
     "expected a Boolean adapter result at resources.marketplace",
   );
 });
@@ -389,10 +482,11 @@ void test("a non-object resources falls through to the Boolean message", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_marketplace_reconcile.sh:224::printf '%s\n' '{}` writes. The distinct
   // "expected an object adapter result at resources" message was DELETED by
   // spec §6.2.3 item 3a; this case is what stops it coming back.
-  const verdict = verifyUninstalledResources(ok({}));
-  assert.equal(verdict.ok, false);
+  const normalized = normalizeCodexOwnership(ok({ identity_state: "manager" }));
+  assert.equal(normalized.outcome.ok, false);
+  if (normalized.outcome.ok) assert.fail("expected malformed ownership");
   assert.equal(
-    verdict.ok === false ? verdict.message : "",
+    normalized.outcome.error.message,
     "expected a Boolean adapter result at resources.plugin",
   );
 });

@@ -43,9 +43,9 @@ export function selectionStatePath(env: NodeJS.ProcessEnv): string {
   return `${selectionConfigDir(env)}/selection.json`;
 }
 
-// Composes exactly what `src/selection-state-cli.ts:39::const normalized`
-// composes. The shell wrote a normalized document to a mktemp file and read
-// five fields back with five python3 invocations; in-process this is one call.
+// Normalizes the record returned by readSelectionState directly. The shell
+// wrote a normalized document to a mktemp file and read five fields back with
+// five python3 invocations; in-process this is one call.
 export async function loadSavedSelection(
   env: NodeJS.ProcessEnv,
 ): Promise<NormalizedSavedSelection> {

@@ -33,7 +33,6 @@ import {
   reportLegacyState,
   requireManagedUpdateControl,
   requireNoLegacyState,
-  verifyUninstalledResources,
 } from "./lifecycle.ts";
 import { commitMatches } from "../../status.ts";
 import { codexHome, codexPaths } from "./paths.ts";
@@ -224,13 +223,15 @@ export function normalizeCodexOwnership(
           },
         };
 
-  const verification = verifyUninstalledResources(result);
   const legacyReport = reportLegacyState(identityState);
   let removalVerification: Decision;
-  if (!verification.ok) {
+  if (pluginPresent || marketplacePresent) {
+    const message = pluginPresent
+      ? "owned plugin resource is still installed after removal"
+      : "owned marketplace resource is still registered after removal";
     removalVerification = {
       kind: "blocked",
-      output: { stdout: [], stderr: [`error: ${verification.message}`] },
+      output: { stdout: [], stderr: ["error: " + message] },
     };
   } else if (legacyReport.kind === "unknown") {
     removalVerification = {
