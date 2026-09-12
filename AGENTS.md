@@ -238,11 +238,11 @@ required agent harness.
   second argument as the failure _label_ and an absent one as no constraint,
   so either form passes on any error. One such call left PR 10's entire
   rejection corpus asserting nothing through several reviews.
-- `tests/bin/citations.test.ts` validates every anchored citation in `src/` and
-  `tests/` against its target's text, and holds the
-  not-yet-anchored population in `tests/citation-ledger.json`. The ledger only
-  shrinks: a citation absent from it must validate. Run
-  `node tests/tools/citations.ts --report` for the buckets without the suite.
+- `tests/bin/citations.test.ts` validates every citation in `src/` and `tests/`
+  against its target's text. Every citation recognized in source and test
+  comments must validate. Unanchored references are rejected directly; there
+  is no exception ledger. Use `node tests/tools/citations.ts --report` to
+  inspect validation results.
   **Why:** a stale citation is invisible to every other check here, and one
   reference moved three times inside a single fix wave before anything noticed.
 - Run `git diff --check` before completion.

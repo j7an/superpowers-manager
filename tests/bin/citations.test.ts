@@ -8,7 +8,6 @@ import {
   mkdirSync,
   readFileSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -18,20 +17,14 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { registerScratch } from "./fixture-scratch.ts";
 import {
-  buildLedger,
   classify,
   commentText,
   CORPUS_DIRS,
   displayPath,
   fixEdits,
   applyFixEdits,
-  anchorRespectsBoundaries,
-  ledgerDrift,
   listSources,
-  readLedger,
   scan,
-  suggest,
-  suggestAnchor,
   targetExists,
   validate,
 } from "../lib/citations.ts";
@@ -191,10 +184,7 @@ void test("an invalid extensionless anchored near-miss is retained", () => {
   const verdict = validate(citation, root);
   assert.equal(verdict.ok, false);
   assert.equal(verdict.code, "ANCHOR_MISSING");
-  assert.deepEqual(buildLedger([citation], root), {
-    unanchored: {},
-    deadReferent: {},
-  });
+  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan does not read a citation out of a string literal", () => {
@@ -266,10 +256,7 @@ void test("scan retains a colon-separated line part as malformed", () => {
   const [citation] = found;
   assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
   assert.equal(validate(citation, root).ok, false);
-  assert.deepEqual(buildLedger(found, root), {
-    unanchored: {},
-    deadReferent: {},
-  });
+  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan retains a point continuation as checked malformed debt exclusion", () => {
@@ -283,10 +270,6 @@ void test("scan retains a point continuation as checked malformed debt exclusion
   const verdict = validate(citation, root);
   assert.equal(verdict.ok, false);
   assert.equal(verdict.code, "ANCHOR_MISSING");
-  assert.deepEqual(buildLedger([citation], root), {
-    unanchored: {},
-    deadReferent: {},
-  });
 });
 
 void test("scan retains a range continuation as malformed", () => {
@@ -312,10 +295,7 @@ void test("scan retains an absolute anchored path as malformed", () => {
   const [citation] = found;
   assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
   assert.equal(validate(citation, root).ok, false);
-  assert.deepEqual(buildLedger(found, root), {
-    unanchored: {},
-    deadReferent: {},
-  });
+  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan retains an invalid-character anchored path as malformed", () => {
@@ -327,10 +307,7 @@ void test("scan retains an invalid-character anchored path as malformed", () => 
   const [citation] = found;
   assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
   assert.equal(validate(citation, root).ok, false);
-  assert.deepEqual(buildLedger(found, root), {
-    unanchored: {},
-    deadReferent: {},
-  });
+  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan retains a whitespace-bearing file-like anchored path as malformed", () => {
@@ -342,10 +319,7 @@ void test("scan retains a whitespace-bearing file-like anchored path as malforme
   const [citation] = found;
   assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
   assert.equal(validate(citation, root).ok, false);
-  assert.deepEqual(buildLedger(found, root), {
-    unanchored: {},
-    deadReferent: {},
-  });
+  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan retains a colon-bearing absolute anchored path as malformed", () => {
@@ -357,10 +331,7 @@ void test("scan retains a colon-bearing absolute anchored path as malformed", ()
   const [citation] = found;
   assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
   assert.equal(validate(citation, root).ok, false);
-  assert.deepEqual(buildLedger(found, root), {
-    unanchored: {},
-    deadReferent: {},
-  });
+  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan ignores a backticked git show that names only a commit", () => {
@@ -377,6 +348,43 @@ void test("scan does not treat a backticked legacy citation as malformed", () =>
     found.map((c) => c.kind),
     ["legacy"],
   );
+});
+
+void test("legacy citations fail validation whether their targets exist or not", () => {
+  const root = fixture({
+    "src/x.ts": "export const target = 1;\n",
+    "tests/a.ts": "// src/x.ts:1\n// src/missing.ts:8\n",
+  });
+  const citations = scan([join(root, "tests/a.ts")]);
+  assert.equal(citations.length, 2);
+  for (const citation of citations) {
+    assert.deepEqual(validate(citation, root), {
+      ok: false,
+      code: "UNANCHORED_CITATION",
+      message:
+        citation.path +
+        " requires an anchored citation or a Git history reference",
+    });
+  }
+});
+
+void test("report rejects legacy citations instead of silently skipping them", () => {
+  const root = fixture({
+    "src/x.ts": "export const target = 1;\n",
+    "tests/a.ts": "// src/x.ts:1\n// src/missing.ts:8\n",
+  });
+  const result = spawnSync(process.execPath, [TOOL, "--report"], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, SPW_CITATIONS_ROOT: root },
+    timeout: 30000,
+  });
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /unanchored=1 deadReferent=1/);
+  assert.match(result.stdout, /failing=2/);
+  assert.match(result.stdout, /src\/x\.ts requires an anchored citation/);
+  assert.match(result.stdout, /src\/missing\.ts requires an anchored citation/);
 });
 
 void test("scan records the column of the raw token", () => {
@@ -597,10 +605,6 @@ void test("a resolution citation is checked, never ledgered", () => {
   const [found] = scan([join(root, "a.js")]);
   assert.equal(found.kind, "resolution");
   assert.equal(classify(found, root), "checked");
-  assert.deepEqual(buildLedger([found], root), {
-    unanchored: {},
-    deadReferent: {},
-  });
 });
 
 void test("a resolution citation whose path exists at that object validates", () => {
@@ -733,155 +737,6 @@ void test("the bare resolution form still parses and still has no anchor", () =>
   assert.equal(citation.kind, "resolution");
   assert.equal(citation.anchor, undefined);
   assert.equal(citation.line, undefined);
-});
-
-void test("a malformed citation is never ledgered", () => {
-  const root = fixture({ "a.js": "// `src/x.ts:abc::const seen`\n" });
-  const ledger = buildLedger(scan([join(root, "a.js")]), root);
-  assert.deepEqual(ledger, { unanchored: {}, deadReferent: {} });
-});
-
-void test("buildLedger keys by citing file and token, counting duplicates", () => {
-  const root = fixture({
-    "a.js": [
-      "// src/x.ts:2 twice",
-      "// again src/x.ts:2 and scripts/gone.sh:5",
-    ].join("\n"),
-    "src/x.ts": TARGET,
-  });
-  const ledger = buildLedger(scan([join(root, "a.js")]), root);
-  assert.deepEqual(ledger.unanchored, { "a.js": { "src/x.ts:2": 2 } });
-  assert.deepEqual(ledger.deadReferent, { "a.js": { "scripts/gone.sh:5": 1 } });
-});
-
-void test("buildLedger never records an anchored citation", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:2::export function go`\n",
-    "src/x.ts": TARGET,
-  });
-  const ledger = buildLedger(scan([join(root, "a.js")]), root);
-  assert.deepEqual(ledger, { unanchored: {}, deadReferent: {} });
-});
-
-void test("ledgerDrift reports an unledgered citation", () => {
-  const observed = {
-    unanchored: { "a.js": { "src/x.ts:2": 1 } },
-    deadReferent: {},
-  };
-  const drift = ledgerDrift(observed, { unanchored: {}, deadReferent: {} });
-  assert.deepEqual(drift, [
-    "unanchored a.js `src/x.ts:2`: ledger declares 0, tree has 1",
-  ]);
-});
-
-void test("ledgerDrift reports an orphan ledger entry", () => {
-  const declared = {
-    unanchored: { "gone.js": { "src/x.ts:2": 1 } },
-    deadReferent: {},
-  };
-  const drift = ledgerDrift({ unanchored: {}, deadReferent: {} }, declared);
-  assert.deepEqual(drift, [
-    "unanchored gone.js `src/x.ts:2`: ledger declares 1, tree has 0",
-  ]);
-});
-
-void test("ledgerDrift reports a count mismatch in either direction", () => {
-  const one = { unanchored: { "a.js": { "src/x.ts:2": 1 } }, deadReferent: {} };
-  const two = { unanchored: { "a.js": { "src/x.ts:2": 2 } }, deadReferent: {} };
-  assert.equal(ledgerDrift(one, two).length, 1);
-  assert.equal(ledgerDrift(two, one).length, 1);
-});
-
-void test("ledgerDrift reports a bucket mismatch", () => {
-  const observed = {
-    unanchored: {},
-    deadReferent: { "a.js": { "src/x.ts:2": 1 } },
-  };
-  const declared = {
-    unanchored: { "a.js": { "src/x.ts:2": 1 } },
-    deadReferent: {},
-  };
-  assert.deepEqual(ledgerDrift(observed, declared), [
-    "deadReferent a.js `src/x.ts:2`: ledger declares 0, tree has 1",
-    "unanchored a.js `src/x.ts:2`: ledger declares 1, tree has 0",
-  ]);
-});
-
-void test("readLedger fails closed on malformed JSON", () => {
-  const root = fixture({ "ledger.json": "{ not json" });
-  assert.throws(
-    () => readLedger(join(root, "ledger.json")),
-    /is not valid JSON$/,
-    "a malformed ledger must fail, never read as empty",
-  );
-});
-
-void test("readLedger refuses a missing bucket", () => {
-  const root = fixture({ "ledger.json": '{"unanchored":{}}' });
-  assert.throws(
-    () => readLedger(join(root, "ledger.json")),
-    /exactly the buckets deadReferent and unanchored/,
-    "a truncated ledger must fail, never default the missing bucket to empty",
-  );
-});
-
-void test("readLedger refuses an extra bucket", () => {
-  const root = fixture({
-    "ledger.json": '{"unanchored":{},"deadReferent":{},"waived":{}}',
-  });
-  assert.throws(
-    () => readLedger(join(root, "ledger.json")),
-    /exactly the buckets deadReferent and unanchored/,
-    "debt must not be parkable in a bucket the drift comparison never reads",
-  );
-});
-
-void test("readLedger refuses a non-object bucket", () => {
-  const root = fixture({
-    "ledger.json": '{"unanchored":[],"deadReferent":{}}',
-  });
-  assert.throws(
-    () => readLedger(join(root, "ledger.json")),
-    /bucket unanchored must be an object/,
-    "an array bucket must fail rather than iterate as empty",
-  );
-});
-
-void test("readLedger refuses a count that is not a positive integer", () => {
-  const root = fixture({
-    "ledger.json": '{"unanchored":{"a.js":{"src/x.ts:2":0}},"deadReferent":{}}',
-  });
-  assert.throws(
-    () => readLedger(join(root, "ledger.json")),
-    /must be a positive integer/,
-    "a zero count would silently cancel a real citation in the drift comparison",
-  );
-});
-
-void test("readLedger preserves a __proto__ citing-file key as own debt", () => {
-  const root = fixture({
-    "ledger.json":
-      '{"unanchored":{"__proto__":{"src/x.ts:2":1}},"deadReferent":{}}',
-  });
-  const ledger = readLedger(join(root, "ledger.json"));
-  assert.deepEqual(ledgerDrift({ unanchored: {}, deadReferent: {} }, ledger), [
-    "unanchored __proto__ `src/x.ts:2`: ledger declares 1, tree has 0",
-  ]);
-  assert.equal(Object.getPrototypeOf(ledger.unanchored), Object.prototype);
-  assert.equal(Object.hasOwn(ledger.unanchored, "__proto__"), true);
-});
-
-void test("readLedger preserves a __proto__ token key as own debt", () => {
-  const root = fixture({
-    "ledger.json": '{"unanchored":{"a.js":{"__proto__":1}},"deadReferent":{}}',
-  });
-  const ledger = readLedger(join(root, "ledger.json"));
-  const counts = ledger.unanchored["a.js"];
-  assert.deepEqual(ledgerDrift({ unanchored: {}, deadReferent: {} }, ledger), [
-    "unanchored a.js `__proto__`: ledger declares 1, tree has 0",
-  ]);
-  assert.equal(Object.getPrototypeOf(counts), Object.prototype);
-  assert.equal(Object.hasOwn(counts, "__proto__"), true);
 });
 
 void test("fixEdits rewrites a single-line citation to its anchor's line", () => {
@@ -1035,130 +890,6 @@ void test("fixEdits is empty on a correct citation, so a second run is a no-op",
   assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
 });
 
-const SUGGEST_TARGET = [
-  "export function begin() {",
-  "  const value = compute();",
-  "  return value;",
-  "}",
-  "",
-  "export function finish() {",
-  "  const value = compute();",
-  "  return value;",
-  "}",
-  "",
-].join("\n");
-
-// `begin` and `finish` are five and six characters. A two-character declared
-// name would be filtered by MIN_ANCHOR before it could be proposed, which is
-// correct behavior and a confusing fixture.
-
-void test("suggestAnchor prefers the declared name", () => {
-  const lines = SUGGEST_TARGET.split("\n");
-  assert.deepEqual(suggestAnchor(lines, 1, 1), {
-    anchor: "begin",
-    line: 1,
-    endLine: 1,
-  });
-});
-
-void test("suggestAnchor prefers a unique identifier over a line prefix", () => {
-  const lines = ["const value = 1;", "compute(distinctIdentifier);", ""];
-  assert.deepEqual(suggestAnchor(lines, 2, 2), {
-    anchor: "distinctIdentifier",
-    line: 2,
-    endLine: 2,
-  });
-});
-
-void test("suggestAnchor never proposes an inner fragment", () => {
-  const lines = ["const hookError = 1;", "call(hookError);", ""];
-  const picked = suggestAnchor(lines, 2, 2);
-  assert.notEqual(picked, null);
-  const anchor = (picked as { anchor: string }).anchor;
-  assert.ok(
-    anchorRespectsBoundaries(lines[1], anchor),
-    `suggested ${JSON.stringify(anchor)} begins or ends inside an identifier`,
-  );
-});
-
-void test("suggestAnchor widens outward when the span is not unique", () => {
-  const lines = SUGGEST_TARGET.split("\n");
-  const picked = suggestAnchor(lines, 3, 3);
-  assert.notEqual(picked, null);
-  const span = picked as { line: number; endLine: number };
-  assert.ok(
-    span.line < 3 || span.endLine > 3,
-    "line 3 is duplicated at line 8, so the span must widen",
-  );
-  assert.equal((picked as { anchor: string }).anchor, "begin");
-});
-
-void test("suggestAnchor returns null rather than proposing a duplicate", () => {
-  const lines = ["dup", "dup", "dup", "dup", "dup", "dup", "dup", "dup", ""];
-  assert.equal(suggestAnchor(lines, 4, 4), null);
-});
-
-void test("suggest proposes an anchored form for a live target", () => {
-  const root = fixture({
-    "src/x.ts": SUGGEST_TARGET,
-    "tests/bin/a.js": "// see src/x.ts:1 for the entry point\n",
-    "tests/baseline/.keep": "",
-    "tests/unit/.keep": "",
-    "tests/lib/.keep": "",
-  });
-  const lines = suggest(scan(listSources(CORPUS_DIRS, root)), root);
-  assert.equal(lines.length, 1);
-  assert.match(lines[0], /\tsrc\/x\.ts:1\tsrc\/x\.ts:1::begin$/);
-});
-
-void test("suggest reports a dead referent as dead when no object is given", () => {
-  const root = fixture({
-    "src/.keep": "",
-    "tests/bin/a.js": "// ported from scripts/core/gone.sh:4\n",
-    "tests/baseline/.keep": "",
-    "tests/unit/.keep": "",
-    "tests/lib/.keep": "",
-  });
-  const lines = suggest(scan(listSources(CORPUS_DIRS, root)), root);
-  assert.equal(lines.length, 1);
-  assert.match(lines[0], /\tDEAD\b/);
-});
-
-void test("suggest proposes a resolution form against a historical object", () => {
-  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
-  unlinkSync(join(root, "old.sh"));
-  mkdirSync(join(root, "tests", "bin"), { recursive: true });
-  writeFileSync(
-    join(root, "tests", "bin", "a.js"),
-    "// ported from old.sh:1\n",
-  );
-  const lines = suggest(scan([join(root, "tests", "bin", "a.js")]), root, {
-    sha,
-    path: "old.sh",
-  });
-  assert.equal(lines.length, 1);
-  assert.equal(
-    lines[0].endsWith(`git show ${sha}:old.sh:1::begin`),
-    true,
-    lines[0],
-  );
-});
-
-void test("an --at object applies only to citations naming that path", () => {
-  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
-  mkdirSync(join(root, "tests", "bin"), { recursive: true });
-  writeFileSync(
-    join(root, "tests", "bin", "a.js"),
-    "// ported from other.sh:1\n",
-  );
-  const lines = suggest(scan([join(root, "tests", "bin", "a.js")]), root, {
-    sha,
-    path: "old.sh",
-  });
-  assert.equal(lines.length, 1);
-  assert.match(lines[0], /\tDEAD\b/);
-});
-
 void test("the --report CLI dispatch prints the unverified count", () => {
   const root = fixture({
     "src/x.ts": TARGET,
@@ -1193,58 +924,32 @@ void test("the --report CLI dispatch counts an unverified historical citation", 
   );
 });
 
-void test("the --suggest CLI dispatch proposes without writing", () => {
-  const root = fixture({
-    "src/x.ts": TARGET,
-    "tests/bin/a.js": "// see src/x.ts:2 for the entry point\n",
-    "tests/baseline/.keep": "",
-    "tests/unit/.keep": "",
-    "tests/lib/.keep": "",
+for (const mode of ["--suggest", "--write-ledger"]) {
+  void test(`${mode} is rejected without changing the fixture`, () => {
+    const root = fixture({
+      "src/x.ts": TARGET,
+      "tests/bin/a.js": "// `src/x.ts:2::export function go`\n",
+      "tests/baseline/.keep": "",
+      "tests/unit/.keep": "",
+      "tests/lib/.keep": "",
+    });
+    const path = join(root, "tests", "bin", "a.js");
+    const before = readFileSync(path, "utf8");
+    const result = spawnSync(process.execPath, [TOOL, mode], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, SPW_CITATIONS_ROOT: root },
+      timeout: 30000,
+    });
+    assert.equal(result.signal, null);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /unknown mode/);
+    assert.equal(readFileSync(path, "utf8"), before);
   });
-  const before = readFileSync(join(root, "tests", "bin", "a.js"), "utf8");
-  const result = runCitationTool(root, ["--suggest"]);
-  assert.match(result.stdout, /src\/x\.ts:2::/);
-  assert.equal(
-    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
-    before,
-    "--suggest proposes; it never writes",
-  );
-});
-
-void test("the --suggest CLI dispatch keeps --at separate from the optional prefix", () => {
-  const { root, sha } = gitFixture("old.sh", SUGGEST_TARGET);
-  unlinkSync(join(root, "old.sh"));
-  mkdirSync(join(root, "tests", "bin"), { recursive: true });
-  writeFileSync(
-    join(root, "tests", "bin", "a.js"),
-    "// ported from old.sh:1\n",
-  );
-  mkdirSync(join(root, "src"), { recursive: true });
-  for (const directory of ["baseline", "unit", "lib"])
-    mkdirSync(join(root, "tests", directory), { recursive: true });
-  const before = readFileSync(join(root, "tests", "bin", "a.js"), "utf8");
-  const at = `${sha}:old.sh`;
-  for (const args of [
-    ["--at", at],
-    ["tests/bin", "--at", at],
-    ["--at", at, "tests/bin"],
-  ]) {
-    const result = runCitationTool(root, ["--suggest", ...args]);
-    assert.match(
-      result.stdout,
-      new RegExp(`git show ${sha}:old\\.sh:1::begin`),
-    );
-  }
-  assert.equal(
-    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
-    before,
-    "historical --suggest proposals never write",
-  );
-});
+}
 
 // ---- the two live gates -------------------------------------------------
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const LEDGER_PATH = join(ROOT, "tests", "citation-ledger.json");
 
 // The container is a copy of a checkout, not a checkout, so the historical leg
 // cannot run there. That scope is DECLARED, not silent: the count below must be
@@ -1268,13 +973,12 @@ void test("the corpus reaches every committed JavaScript file under tests/", () 
   }
 });
 
-void test("CITATION-01 every anchored citation in the corpus validates", () => {
+void test("CITATION-01 every citation in the corpus validates", () => {
   const citations = scan(listSources(CORPUS_DIRS, ROOT));
 
   const failures: string[] = [];
   let unverified = 0;
   for (const c of citations) {
-    if (c.kind === "legacy") continue;
     const verdict = validate(c, ROOT);
     if (!verdict.ok) {
       failures.push(
@@ -1286,7 +990,7 @@ void test("CITATION-01 every anchored citation in the corpus validates", () => {
   assert.deepEqual(
     failures,
     [],
-    `anchored citations must validate:\n${failures.join("\n")}`,
+    `citations must validate:\n${failures.join("\n")}`,
   );
   const resolutions = citations.filter((c) => c.kind === "resolution").length;
   assert.equal(
@@ -1296,11 +1000,4 @@ void test("CITATION-01 every anchored citation in the corpus validates", () => {
       ? `declared scope covers resolution citations only; ${unverified} of ${citations.length} went unverified`
       : "a repository exists here, so every resolution citation must be verified against the object database",
   );
-});
-
-void test("CITATION-02 the ledger matches the tree exactly", () => {
-  const declared = readLedger(LEDGER_PATH);
-  const observed = buildLedger(scan(listSources(CORPUS_DIRS, ROOT)), ROOT);
-  const drift = ledgerDrift(observed, declared);
-  assert.deepEqual(drift, [], `citation ledger drift:\n${drift.join("\n")}`);
 });
