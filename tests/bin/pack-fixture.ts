@@ -53,6 +53,7 @@ export function makePackFixture(t: TestContext): PackFixture {
     join(f.root, "tests", "tools"),
     join(f.root, "node_modules", ".bin"),
     join(f.root, "node_modules", "smol-toml"),
+    join(f.root, "node_modules", "jsonc-parser"),
   ]) {
     mkdirSync(path, { recursive: true });
   }
@@ -76,8 +77,11 @@ export function makePackFixture(t: TestContext): PackFixture {
       type: "module",
       bin: { "superpowers-manager": "dist/cli.js" },
       files: ["dist/", ...Object.keys(assets)],
-      dependencies: { "smol-toml": "1.0.0-fixture" },
-      bundleDependencies: ["smol-toml"],
+      dependencies: {
+        "smol-toml": "1.0.0-fixture",
+        "jsonc-parser": "1.0.0-fixture",
+      },
+      bundleDependencies: ["smol-toml", "jsonc-parser"],
       scripts: { prepack: 'node -e "process.exit(9)"' },
     }),
   );
@@ -101,6 +105,18 @@ export function makePackFixture(t: TestContext): PackFixture {
     join(f.root, "node_modules", "smol-toml", "LICENSE"),
     "fixture parser license\n",
   );
+  writeFileSync(
+    join(f.root, "node_modules", "jsonc-parser", "package.json"),
+    '{ "name": "jsonc-parser", "type": "module" }\n',
+  );
+  writeFileSync(
+    join(f.root, "node_modules", "jsonc-parser", "index.js"),
+    "export function parse() {}\n",
+  );
+  writeFileSync(
+    join(f.root, "node_modules", "jsonc-parser", "LICENSE"),
+    "fixture JSONC parser license\n",
+  );
   copyFileSync(
     join(REPO, "tests", "assert_pack_contents.sh"),
     join(f.root, "tests", "assert_pack_contents.sh"),
@@ -121,6 +137,9 @@ export function makePackFixture(t: TestContext): PackFixture {
       "node_modules/smol-toml/LICENSE",
       "node_modules/smol-toml/index.js",
       "node_modules/smol-toml/package.json",
+      "node_modules/jsonc-parser/LICENSE",
+      "node_modules/jsonc-parser/index.js",
+      "node_modules/jsonc-parser/package.json",
       "package.json",
     ]
       .sort()
