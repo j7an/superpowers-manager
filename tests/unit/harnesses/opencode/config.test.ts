@@ -3,6 +3,7 @@ import {
   chmod,
   lstat,
   mkdtemp,
+  open,
   readFile,
   rename,
   rm,
@@ -199,6 +200,50 @@ void test("rejects directories, invalid UTF-8, and oversized files as unreadable
   await assert.rejects(readOpenCodeConfig(oversized), CANNOT_READ);
 });
 
+void test("descriptor observation handles short bounded reads without readFile", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "spw-opencode-config-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const path = join(root, "opencode.json");
+  await writeFile(path, '{"plugin":["owned"]}\n');
+
+  const probe = await open(path, "r");
+  const prototype = Object.getPrototypeOf(probe) as {
+    read: typeof probe.read;
+    readFile: typeof probe.readFile;
+  };
+  await probe.close();
+  const originalRead = prototype.read;
+  const originalReadFile = prototype.readFile;
+  prototype.read = async function (
+    this: typeof probe,
+    buffer: Buffer,
+    offset: number,
+    length: number,
+    position: number | null,
+  ) {
+    return Reflect.apply(originalRead, this, [
+      buffer,
+      offset,
+      Math.min(length, 3),
+      position,
+    ]) as Promise<{ bytesRead: number; buffer: Buffer }>;
+  } as typeof probe.read;
+  prototype.readFile = async () => {
+    throw new Error("unbounded descriptor read attempted");
+  };
+  try {
+    const observation = await readOpenCodeConfig(path);
+    assert.ok(observation);
+    assert.deepEqual(
+      observation.document.entries.map((entry) => entry.spec),
+      ["owned"],
+    );
+  } finally {
+    prototype.read = originalRead;
+    prototype.readFile = originalReadFile;
+  }
+});
+
 void test("checked removal preserves mode and publishes only the intended edit", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "spw-opencode-config-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -253,4 +298,22 @@ void test("checked removal refuses a same-byte concurrent replacement", async (t
     CANNOT_REMOVE,
   );
   assert.equal(await readFile(path, "utf8"), bytes);
+});
+
+void test("checked removal refuses a mode change and preserves the newer policy", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "spw-opencode-config-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const path = join(root, "opencode.json");
+  const bytes = '{"plugin":["owned"],"future":1}\n';
+  await writeFile(path, bytes, { mode: 0o644 });
+  const observation = await readOpenCodeConfig(path);
+  assert.ok(observation);
+  await chmod(path, 0o600);
+
+  await assert.rejects(
+    removeObservedOpenCodeEntry(observation, 0),
+    CANNOT_REMOVE,
+  );
+  assert.equal(await readFile(path, "utf8"), bytes);
+  assert.equal((await lstat(path)).mode & 0o777, 0o600);
 });

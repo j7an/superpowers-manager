@@ -57,6 +57,27 @@ interface FileBytesObservation {
   readonly identity: ConfigFileObservation["identity"];
 }
 
+async function readBoundedConfigBytes(
+  handle: Awaited<ReturnType<typeof open>>,
+): Promise<Buffer> {
+  const budget = Buffer.allocUnsafe(MAX_CONFIG_BYTES + 1);
+  let length = 0;
+  while (length < budget.length) {
+    const { bytesRead } = await handle.read(
+      budget,
+      length,
+      budget.length - length,
+      null,
+    );
+    if (bytesRead === 0) break;
+    length += bytesRead;
+  }
+  if (length > MAX_CONFIG_BYTES) {
+    throw new Error("configuration grew past the byte limit");
+  }
+  return Buffer.from(budget.subarray(0, length));
+}
+
 function invalidConfig(path: string, cause?: unknown): SafetyError {
   return new SafetyError(
     "opencode-config",
@@ -273,10 +294,7 @@ async function readConfigBytes(
     if (!details.isFile() || details.size > MAX_CONFIG_BYTES) {
       throw new Error("configuration is not a bounded regular file");
     }
-    const bytes = await handle.readFile();
-    if (bytes.length > MAX_CONFIG_BYTES) {
-      throw new Error("configuration grew past the byte limit");
-    }
+    const bytes = await readBoundedConfigBytes(handle);
     return {
       bytes,
       identity: {
@@ -325,6 +343,13 @@ function sameIdentity(
   return left.dev === right.dev && left.ino === right.ino;
 }
 
+function sameObservedState(
+  left: ConfigFileObservation["identity"],
+  right: ConfigFileObservation["identity"],
+): boolean {
+  return sameIdentity(left, right) && left.mode === right.mode;
+}
+
 export async function removeObservedOpenCodeEntry(
   observation: ConfigFileObservation,
   index: number,
@@ -343,7 +368,7 @@ export async function removeObservedOpenCodeEntry(
         const current = await readConfigBytes(path);
         if (
           current === null ||
-          !sameIdentity(current.identity, observation.identity) ||
+          !sameObservedState(current.identity, observation.identity) ||
           !current.bytes.equals(observation.bytes)
         ) {
           throw new Error("OpenCode configuration changed concurrently");
@@ -355,6 +380,7 @@ export async function removeObservedOpenCodeEntry(
     if (
       after === null ||
       !after.bytes.equals(outputBytes) ||
+      after.identity.mode !== observation.identity.mode ||
       !sameEntries(after.document.entries, expected)
     ) {
       throw new Error("published OpenCode configuration could not be verified");
