@@ -504,7 +504,7 @@ function assertNoCodexMutation(log: string[]) {
 
 void test("CLI-MODE-HELP-01 help modes", () => {
   withSandbox((sandbox) => {
-    for (const tool of ["git", "python3", "codex", "sh"]) {
+    for (const tool of ["git", "codex", "sh"]) {
       removeTool(sandbox, tool);
     }
     for (const mode of ["--help", "-h"]) {

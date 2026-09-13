@@ -370,7 +370,7 @@ function readHooks(path: string): Record<string, unknown>[] {
   if (!isObject(response) || response.id !== 1)
     fail("hooks/list response is missing id 1");
   if (Object.hasOwn(response, "error"))
-    fail("hooks/list returned an RPC error");
+    fail(`hooks/list returned an RPC error: ${JSON.stringify(response.error)}`);
   if (!isObject(response.result))
     fail("hooks/list response has no result object");
   if (!Array.isArray(response.result.data))
@@ -507,9 +507,13 @@ function marketplaceNames(data: unknown): string[] {
   return names as string[];
 }
 
-function assertManagerAbsent(plugins: string, pluginMessage: string): void {
+function assertManagerAbsent(
+  plugins: string,
+  pluginMessage: string,
+  shapeMessage: string,
+): void {
   if (
-    installed(plugins, pluginMessage).some(
+    installed(plugins, shapeMessage).some(
       (item) => item.pluginId === MANAGER_ID,
     )
   )
@@ -520,6 +524,7 @@ function uninstallLegacy(plugins: string, marketplaces: string): void {
   assertManagerAbsent(
     plugins,
     "legacy uninstall left the manager plugin registered",
+    "legacy Codex plugin listing does not contain an installed array",
   );
   const data = jsonText(marketplaces, "marketplace listing");
   if (
@@ -536,6 +541,7 @@ function uninstallMissingSource(plugins: string, marketplaces: string): void {
   assertManagerAbsent(
     plugins,
     "missing-source uninstall left the manager plugin registered",
+    "missing-source Codex plugin listing does not contain an installed array",
   );
   const data = jsonText(marketplaces, "marketplace listing");
   const names =
@@ -552,6 +558,7 @@ function uninstallFinal(plugins: string, before: string, after: string): void {
   assertManagerAbsent(
     plugins,
     "manager plugin remains installed after uninstall",
+    "final Codex plugin listing does not contain an installed array",
   );
   const beforeNames = marketplaceNames(
     jsonText(before, "before marketplace listing"),

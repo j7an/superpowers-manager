@@ -414,6 +414,12 @@ void test("container Codex assertion helpers", async (t) => {
         ["hooks-absent", badHooks],
         /data entry is malformed/,
       );
+      writeJson(badHooks, hooksResponse(true));
+      expectFailure(
+        STATE,
+        ["hooks-absent", badHooks],
+        /unexpectedly exposes a hook/,
+      );
       writeJson(badHooks, hooksResponse(false));
       expectFailure(STATE, ["hook-active", badHooks], /exactly one hook/);
       expectFailure(
@@ -453,6 +459,56 @@ void test("container Codex assertion helpers", async (t) => {
       );
     },
   );
+
+  await t.test("uninstall diagnostics distinguish shape from presence", () => {
+    for (const [verb, shapeMessage, presenceMessage] of [
+      [
+        "legacy-uninstall",
+        "legacy Codex plugin listing does not contain an installed array",
+        "legacy uninstall left the manager plugin registered",
+      ],
+      [
+        "missing-source-uninstall",
+        "missing-source Codex plugin listing does not contain an installed array",
+        "missing-source uninstall left the manager plugin registered",
+      ],
+      [
+        "final-uninstall",
+        "final Codex plugin listing does not contain an installed array",
+        "manager plugin remains installed after uninstall",
+      ],
+    ]) {
+      for (const malformed of [null, {}, { installed: {} }]) {
+        const result = invoke(STATE, [
+          verb,
+          JSON.stringify(malformed),
+          "{}",
+          "{}",
+        ]);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.stderr, `${shapeMessage}\n`);
+      }
+      const result = invoke(STATE, [verb, pluginsWithManager(), "{}", "{}"]);
+      assert.notEqual(result.status, 0);
+      assert.equal(result.stderr, `${presenceMessage}\n`);
+    }
+  });
+
+  await t.test("hook RPC errors retain escaped response details", () => {
+    const response = join(scratch, "rpc-error.json");
+    writeJson(response, {
+      id: 1,
+      error: { code: -32000, message: "denied\nretry" },
+    });
+    for (const verb of ["hooks-absent", "hook-active"]) {
+      const result = invoke(STATE, [verb, response]);
+      assert.notEqual(result.status, 0);
+      assert.equal(
+        result.stderr,
+        'hooks/list returned an RPC error: {"code":-32000,"message":"denied\\nretry"}\n',
+      );
+    }
+  });
 
   await t.test(
     "schema checker accepts compatible schemas and rejects protocol drift",

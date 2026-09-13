@@ -1,11 +1,7 @@
 // Package-content contract tests.
 //
-// The shell driver never inspects `npm pack`'s JSON report itself — it
-// always delegates to the shared `tests/assert_pack_contents.sh` (also used
-// by the publish workflow; out of scope here and left untouched) and
-// treats that script's exit code and combined stdout+stderr as the oracle.
-// This port reproduces that exactly via spawnSync, rather than
-// reimplementing the shared script's Python comparison logic in JS.
+// Most cases invoke the shell wrapper, which delegates to the TypeScript
+// checker; direct checker cases exercise allowlist decoding and line handling.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
