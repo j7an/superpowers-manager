@@ -5,6 +5,7 @@
   "version": "0.0.0",
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
-    "@openai/codex": "0.144.6"
+    "@openai/codex": "0.144.6",
+    "opencode-ai": "1.18.30"
   }
 }

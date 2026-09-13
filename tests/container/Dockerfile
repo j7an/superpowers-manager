@@ -13,9 +13,35 @@ RUN apt-get update \
 
 WORKDIR /opt/spw-test-tools
 COPY tests/container/package.json tests/container/package-lock.json ./
-RUN npm ci --ignore-scripts \
+RUN npm ci --ignore-scripts
+RUN --network=none node node_modules/opencode-ai/postinstall.mjs \
+    && ./node_modules/.bin/opencode --version \
     && ./node_modules/.bin/codex --version >/dev/null \
     && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 ./node_modules/.bin/pi --version
+RUN opencode_version=$(./node_modules/.bin/opencode --version) \
+    && mkdir -p /opt/spw-opencode-config-seed \
+    && npm install --prefix /opt/spw-opencode-config-seed \
+       --package-lock-only --ignore-scripts --save-exact \
+       "@opencode-ai/plugin@$opencode_version" \
+    && npm ci --prefix /opt/spw-opencode-config-seed --ignore-scripts \
+    && node -e 'const expected=process.argv[1]; const actual=require("/opt/spw-opencode-config-seed/node_modules/@opencode-ai/plugin/package.json").version; if(actual!==expected) process.exit(1)' "$opencode_version"
+RUN if command -v rg >/dev/null 2>&1; then \
+      mkdir -p /opt/spw-opencode-cache-seed/opencode/bin \
+      && cp "$(command -v rg)" /opt/spw-opencode-cache-seed/opencode/bin/rg; \
+    else \
+      spw_rg_root=$(mktemp -d) \
+      && HOME="$spw_rg_root/home" \
+         XDG_CONFIG_HOME="$spw_rg_root/config" \
+         XDG_DATA_HOME="$spw_rg_root/data" \
+         XDG_CACHE_HOME=/opt/spw-opencode-cache-seed \
+         XDG_STATE_HOME="$spw_rg_root/state" \
+         OPENCODE_DISABLE_AUTOUPDATE=1 \
+         OPENCODE_DISABLE_MODELS_FETCH=1 \
+         ./node_modules/.bin/opencode debug rg files --limit 1 \
+      && rm -rf "$spw_rg_root"; \
+    fi \
+    && test -x /opt/spw-opencode-cache-seed/opencode/bin/rg \
+    && /opt/spw-opencode-cache-seed/opencode/bin/rg --version >/dev/null
 
 RUN useradd --create-home --uid 10001 spw
 WORKDIR /workspace

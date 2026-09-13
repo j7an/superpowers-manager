@@ -108,6 +108,7 @@ void test("container contract", async (t) => {
       assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
         "@earendil-works/pi-coding-agent",
         "@openai/codex",
+        "opencode-ai",
       ]);
       for (const name of Object.keys(pkg.dependencies)) {
         assert.match(pkg.dependencies[name], /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/);
@@ -120,6 +121,32 @@ void test("container contract", async (t) => {
           pkg.dependencies[name],
         );
       }
+      const docker = readFileSync(dockerfile, "utf8").replace(/\\\n\s*/g, " ");
+      const install = docker.indexOf("npm ci --ignore-scripts");
+      const link = docker.indexOf(
+        "RUN --network=none node node_modules/opencode-ai/postinstall.mjs",
+      );
+      const version = docker.indexOf("./node_modules/.bin/opencode --version");
+      const seed = docker.indexOf("/opt/spw-opencode-config-seed");
+      assert.ok(install !== -1, "container must install tools without scripts");
+      assert.ok(
+        link > install,
+        "container must run only OpenCode's reviewed postinstall after npm ci",
+      );
+      assert.ok(
+        version > link,
+        "container must verify OpenCode after its offline postinstall",
+      );
+      assert.ok(
+        seed > version,
+        "container must provision native config dependencies after verifying OpenCode",
+      );
+      assert.ok(
+        docker.includes(
+          "npm ci --prefix /opt/spw-opencode-config-seed --ignore-scripts",
+        ),
+        "native config dependencies must install without lifecycle scripts",
+      );
     },
   );
   await t.test(
