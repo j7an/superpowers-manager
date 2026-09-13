@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { hasTerminalControl } from "../../../../src/adapter-result.ts";
 import {
   mkdirSync,
   readFileSync,
@@ -10,6 +11,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
 import { openCodeReceiptBinding } from "../../../../src/harnesses/opencode/package.ts";
+import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
 import {
   inspectOpenCodeControl,
   inspectOpenCodeInstalled,
@@ -168,6 +170,210 @@ void test("missing preparation, wrong selection, changed binding, duplicate regi
     JSON.stringify({ ...receipt, binding: "0".repeat(64) }),
   );
   assert.equal((await inspectOpenCodeOwnership(state.ctx)).outcome.ok, false);
+});
+
+void test("installed bytes remain current while a retained journal blocks control", async (t) => {
+  const state = openCodeSandbox(t);
+  const selection = openCodeSelection();
+  const digest = await writeOpenCodeArtifact(
+    t,
+    state.paths.preparedRoot,
+    selection,
+  );
+  await writeOpenCodeArtifact(t, state.paths.installedRoot, selection);
+  config(join(state.paths.configRoot, "opencode.json"), [
+    state.paths.installedRoot,
+  ]);
+  mkdirSync(state.paths.recoveryRoot, { recursive: true });
+  writeFileSync(join(state.paths.recoveryRoot, "transaction.json"), "pending");
+
+  const installed = await inspectOpenCodeInstalled(selection, state.ctx);
+  assert.deepEqual(installed.outcome.ok && installed.outcome.result, {
+    kind: "current",
+    observedIdentity: digest,
+  });
+  const control = await inspectOpenCodeControl(state.ctx);
+  assert.equal(
+    control.outcome.ok && control.outcome.result.mutationEligibility.kind,
+    "blocked",
+  );
+});
+
+void test("only native XDG writer origins can authorize a Manager registration edit", async (t) => {
+  for (const origin of [
+    "config-json",
+    "project",
+    "custom",
+    "managed",
+    "inline",
+  ] as const) {
+    await t.test(origin, async (t) => {
+      const state = openCodeSandbox(t);
+      const plugins = [state.paths.installedRoot];
+      let ctx = state.ctx;
+      const originalCwd = process.cwd();
+      try {
+        if (origin === "config-json") {
+          config(join(state.paths.configRoot, "config.json"), plugins);
+        } else if (origin === "project") {
+          process.chdir(state.root);
+          config(join(state.root, "opencode.json"), plugins);
+        } else if (origin === "custom") {
+          const path = join(state.root, "custom.json");
+          config(path, plugins);
+          ctx = {
+            ...ctx,
+            env: { ...state.env, OPENCODE_CONFIG: path },
+          };
+        } else if (origin === "managed") {
+          config(
+            join(state.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!, "opencode.json"),
+            plugins,
+          );
+        } else {
+          ctx = {
+            ...ctx,
+            env: {
+              ...state.env,
+              MANAGER_ALIAS: state.paths.installedRoot,
+              OPENCODE_CONFIG_CONTENT: JSON.stringify({
+                plugin: ["{env:MANAGER_ALIAS}"],
+              }),
+            },
+          };
+        }
+        const ownership = await inspectOpenCodeOwnership(ctx);
+        assert.equal(ownership.outcome.ok, true);
+        if (!ownership.outcome.ok) assert.fail("expected ownership facts");
+        assert.equal(
+          ownership.outcome.result.installEligibility.kind,
+          "blocked",
+        );
+        assert.equal(ownership.outcome.result.removalInput.registration, null);
+        assert.equal(
+          ownership.outcome.result.removalVerification.kind,
+          "blocked",
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  }
+});
+
+void test("an owned global registration remains removable beside unrelated known conflicts", async (t) => {
+  const state = openCodeSandbox(t);
+  await writeOpenCodeArtifact(t, state.paths.installedRoot);
+  config(join(state.paths.configRoot, "opencode.json"), [
+    state.paths.installedRoot,
+    "superpowers@git+https://github.com/obra/superpowers.git",
+  ]);
+  const ownership = await inspectOpenCodeOwnership(state.ctx);
+  assert.equal(ownership.outcome.ok, true);
+  if (!ownership.outcome.ok) assert.fail("expected owned removal facts");
+  assert.equal(ownership.outcome.result.installEligibility.kind, "blocked");
+  assert.equal(
+    ownership.outcome.result.removalInput.registration?.entryIndex,
+    0,
+  );
+  assert.equal(
+    ownership.outcome.result.removalInput.receiptDigest !== null,
+    true,
+  );
+});
+
+void test("pure mode is the qualified disable flag and tuple options do not invent disable semantics", async (t) => {
+  const state = openCodeSandbox(t);
+  const selection = openCodeSelection();
+  const digest = await writeOpenCodeArtifact(
+    t,
+    state.paths.preparedRoot,
+    selection,
+  );
+  await writeOpenCodeArtifact(t, state.paths.installedRoot, selection);
+  config(join(state.paths.configRoot, "opencode.json"), [
+    [state.paths.installedRoot, { enabled: false }],
+  ]);
+  const tuple = await inspectOpenCodeInstalled(selection, state.ctx);
+  assert.deepEqual(tuple.outcome.ok && tuple.outcome.result, {
+    kind: "current",
+    observedIdentity: digest,
+  });
+
+  const pureCtx = {
+    ...state.ctx,
+    env: { ...state.env, OPENCODE_PURE: "1" },
+  };
+  const pure = await inspectOpenCodeInstalled(selection, pureCtx);
+  assert.equal(pure.outcome.ok && pure.outcome.result.kind, "mismatch");
+  const ownership = await inspectOpenCodeOwnership(pureCtx);
+  assert.equal(ownership.outcome.ok, true);
+  if (!ownership.outcome.ok) assert.fail("expected pure-mode ownership facts");
+  assert.equal(ownership.outcome.result.installEligibility.kind, "blocked");
+  assert.equal(
+    ownership.outcome.result.removalInput.registration?.entryIndex,
+    0,
+  );
+
+  rmSync(join(state.paths.configRoot, "opencode.json"));
+  rmSync(state.paths.installedRoot, { recursive: true });
+  const removed = await inspectOpenCodeOwnership(pureCtx);
+  assert.equal(removed.outcome.ok, true);
+  if (!removed.outcome.ok) assert.fail("expected removed pure-mode facts");
+  assert.equal(removed.outcome.result.removalVerification.kind, "allowed");
+  assert.equal(removed.outcome.result.presentationValue, "absent");
+});
+
+void test("installed source and commit must each independently match intended evidence", async (t) => {
+  for (const mismatch of ["source", "commit"] as const) {
+    await t.test(mismatch, async (t) => {
+      const state = openCodeSandbox(t);
+      const desired = openCodeSelection();
+      const installedSelection =
+        mismatch === "source"
+          ? openCodeSelection(
+              desired.desiredCommit,
+              "https://example.test/custom-superpowers.git",
+            )
+          : openCodeSelection("2".repeat(40), desired.effectiveSource);
+      await writeOpenCodeArtifact(t, state.paths.preparedRoot, desired);
+      await writeOpenCodeArtifact(
+        t,
+        state.paths.installedRoot,
+        installedSelection,
+      );
+      config(join(state.paths.configRoot, "opencode.json"), [
+        state.paths.installedRoot,
+      ]);
+      const result = await inspectOpenCodeInstalled(desired, state.ctx);
+      assert.equal(result.outcome.ok && result.outcome.result.kind, "mismatch");
+    });
+  }
+});
+
+void test("path-bearing control diagnostics escape newline and ANSI bytes", async (t) => {
+  const state = openCodeSandbox(t);
+  const env = {
+    ...state.env,
+    XDG_CONFIG_HOME: join(state.root, "config\n\u001b[31m"),
+  };
+  const paths = openCodePaths(env, state.root);
+  mkdirSync(paths.recoveryRoot, { recursive: true });
+  const result = await inspectOpenCodeControl({ root: state.root, env });
+  assert.equal(result.outcome.ok, true);
+  if (!result.outcome.ok) assert.fail("expected escaped control facts");
+  assert.equal(result.outcome.result.mutationEligibility.kind, "blocked");
+  if (result.outcome.result.mutationEligibility.kind !== "blocked")
+    assert.fail("expected recovery decision");
+  const lines = result.outcome.result.mutationEligibility.output.stderr;
+  assert.equal(
+    lines.every((line) => !hasTerminalControl(line)),
+    true,
+  );
+  assert.equal(
+    lines.some((line) => line.includes("\\n\\x1b")),
+    true,
+  );
 });
 
 void test("an uninspectable configuration origin fails every ownership claim closed", async (t) => {

@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findNodeAtLocation, type Node as JsonNode } from "jsonc-parser";
 import { readArtifactObject } from "../../artifact-tree.ts";
+import { runGit } from "../../git.ts";
 import { parseStrictJson, type JsonValue } from "../../strict-json.ts";
 import {
   canonicalizeProspectivePath,
@@ -32,6 +33,10 @@ const ACCOUNT_QUERY_POLICY: ValidatorPolicy = {
 };
 const ACCOUNT_QUERY =
   "const{DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const row=db.prepare(\"SELECT 1 AS found FROM account_state s JOIN account a ON a.id=s.active_account_id WHERE s.id=1 AND s.active_account_id<>'' AND s.active_org_id<>'' LIMIT 1\").get();db.close();process.stdout.write(row?.found===1?'active':'absent')";
+export const OPEN_CODE_UNOWNED_MANAGER_INPUT =
+  "OpenCode Manager registration outside native global writer";
+export const OPEN_CODE_PURE_MODE_INPUT =
+  "OPENCODE_PURE disables OpenCode plugin activation";
 
 export interface OpenCodeDiscovery {
   readonly documents: readonly ConfigFileObservation[];
@@ -105,7 +110,7 @@ function addBlocked(state: DiscoveryState, label: string): void {
   state.blockedInputs.add(label);
 }
 
-function projectAncestors(cwd: string): readonly string[] {
+function filesystemAncestors(cwd: string): readonly string[] {
   const result: string[] = [];
   let cursor = resolve(cwd);
   for (;;) {
@@ -115,6 +120,58 @@ function projectAncestors(cwd: string): readonly string[] {
     cursor = parent;
   }
   return result;
+}
+
+async function projectAncestors(cwd: string): Promise<readonly string[]> {
+  const ancestors = filesystemAncestors(cwd);
+  let markerRoot: string | undefined;
+  for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+    const candidate = ancestors[index]!;
+    try {
+      if ((await classifyPathNoFollow(join(candidate, ".git"))) !== "missing") {
+        markerRoot = candidate;
+        break;
+      }
+    } catch {
+      return ancestors;
+    }
+  }
+  if (markerRoot === undefined) return ancestors;
+  try {
+    const [topLevel, gitDirectory, commonDirectory] = await Promise.all([
+      runGit(["rev-parse", "--show-toplevel"], { cwd: markerRoot }),
+      runGit(["rev-parse", "--git-dir"], { cwd: markerRoot }),
+      runGit(["rev-parse", "--git-common-dir"], { cwd: markerRoot }),
+    ]);
+    if (gitDirectory.status !== 0 || commonDirectory.status !== 0)
+      return ancestors;
+    const boundary =
+      topLevel.status === 0 && topLevel.stdout.trim().length > 0
+        ? resolve(markerRoot, topLevel.stdout.trim())
+        : markerRoot;
+    const canonicalBoundary = await canonicalizeProspectivePath(boundary);
+    for (let index = 0; index < ancestors.length; index += 1) {
+      if (
+        (await canonicalizeProspectivePath(ancestors[index]!)) ===
+        canonicalBoundary
+      )
+        return ancestors.slice(index);
+    }
+    return ancestors;
+  } catch {
+    return ancestors;
+  }
+}
+
+function isNativeWriterOrigin(
+  observation: ConfigFileObservation,
+  state: DiscoveryState,
+): boolean {
+  const source = resolve(observation.document.path);
+  return (
+    source === resolve(state.paths.configRoot, "opencode.json") ||
+    source === resolve(state.paths.configRoot, "opencode.jsonc")
+  );
 }
 
 function localPluginPath(
@@ -168,6 +225,7 @@ async function inspectPluginEntry(
   entry: ConfigEntry,
   state: DiscoveryState,
   allowManaged = true,
+  active = true,
 ): Promise<void> {
   if (entry.spec.trim().length === 0) {
     addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
@@ -177,27 +235,30 @@ async function inspectPluginEntry(
     addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
     return;
   }
+  const local = localPluginPath(entry.spec, observation.document.path, state);
+  if (local !== null) {
+    const canonical = await canonicalizeProspectivePath(local);
+    if (canonical === state.installedRoot) {
+      if (allowManaged)
+        state.managedEntries.push({
+          observation,
+          entry,
+          canonicalRoot: canonical,
+        });
+      else
+        addBlocked(
+          state,
+          `${OPEN_CODE_UNOWNED_MANAGER_INPUT}: ${observation.document.path}`,
+        );
+      return;
+    }
+  }
+  if (!active) return;
   if (isKnownUpstream(entry.spec)) {
     state.conflicts.add("registered OpenCode package for obra/superpowers");
     return;
   }
-  const local = localPluginPath(entry.spec, observation.document.path, state);
   if (local === null) return;
-  const canonical = await canonicalizeProspectivePath(local);
-  if (canonical === state.installedRoot) {
-    if (allowManaged)
-      state.managedEntries.push({
-        observation,
-        entry,
-        canonicalRoot: canonical,
-      });
-    else
-      addBlocked(
-        state,
-        `${observation.document.path} dynamic Manager registration`,
-      );
-    return;
-  }
   const kind = await classifyPathNoFollow(local);
   if (kind === "missing") {
     if (/^superpowers(?:\.(?:js|ts))?$/u.test(basename(local)))
@@ -300,7 +361,7 @@ async function inspectDocument(
     }
   }
   await inspectConfigFields(effective.root, source, state);
-  if (truthy(state.env.OPENCODE_PURE)) return;
+  const active = !truthy(state.env.OPENCODE_PURE);
   for (const entry of effective.entries) {
     const original = observation.document.entries[entry.index];
     const stable = original !== undefined && original.spec === entry.spec;
@@ -308,7 +369,8 @@ async function inspectDocument(
       observation,
       stable ? original : entry,
       state,
-      stable,
+      stable && isNativeWriterOrigin(observation, state),
+      active,
     );
   }
 }
@@ -581,6 +643,7 @@ export async function inspectOpenCodeDiscovery(
     env,
     cwd: resolve(cwd),
   };
+  if (truthy(env.OPENCODE_PURE)) addBlocked(state, OPEN_CODE_PURE_MODE_INPUT);
   for (const name of ["config.json", "opencode.json", "opencode.jsonc"])
     await inspectConfigPath(join(paths.configRoot, name), state);
 
@@ -591,7 +654,7 @@ export async function inspectOpenCodeDiscovery(
     await inspectConfigPath(path, state);
   }
 
-  const ancestors = projectAncestors(cwd);
+  const ancestors = await projectAncestors(cwd);
   if (!truthy(env.OPENCODE_DISABLE_PROJECT_CONFIG)) {
     for (const dir of ancestors)
       for (const name of ["opencode.jsonc", "opencode.json"])
@@ -639,8 +702,20 @@ export async function inspectOpenCodeDiscovery(
           else if (
             localPluginPath(entry.spec, join(cwd, "opencode.json"), state) !==
             null
-          )
-            addBlocked(state, `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`);
+          ) {
+            const local = localPluginPath(
+              entry.spec,
+              join(cwd, "opencode.json"),
+              state,
+            )!;
+            const canonical = await canonicalizeProspectivePath(local);
+            addBlocked(
+              state,
+              canonical === state.installedRoot
+                ? `${OPEN_CODE_UNOWNED_MANAGER_INPUT}: OPENCODE_CONFIG_CONTENT`
+                : `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`,
+            );
+          }
         }
       }
     } catch {

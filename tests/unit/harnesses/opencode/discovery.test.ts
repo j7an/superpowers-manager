@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -12,6 +12,7 @@ import {
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { once } from "node:events";
 import { inspectOpenCodeDiscovery } from "../../../../src/harnesses/opencode/discovery.ts";
 import {
   nativeOpenCodeFixture,
@@ -274,20 +275,38 @@ void test("account database movement during bounded capture is reported as unkno
     ],
     { stdio: ["ignore", "pipe", "ignore"] },
   );
-  t.after(() => child.kill("SIGKILL"));
   await new Promise<void>((resolveReady, rejectReady) => {
     child.stdout.once("data", () => resolveReady());
     child.once("error", rejectReady);
   });
-  const result = await inspectOpenCodeDiscovery(
-    state.paths,
-    state.env,
-    state.root,
-  );
+  let result;
+  try {
+    result = await inspectOpenCodeDiscovery(state.paths, state.env, state.root);
+  } finally {
+    child.kill("SIGKILL");
+    await once(child, "close");
+  }
   assert.equal(
     result.blockedInputs.some((item) =>
       item.startsWith("OpenCode account database "),
     ),
     true,
+  );
+});
+
+void test("project discovery stops at the qualified Git worktree boundary", async (t) => {
+  const state = openCodeSandbox(t);
+  const outside = join(state.root, "outside");
+  const worktree = join(outside, "repository");
+  const cwd = join(worktree, "nested");
+  writeSkill(join(outside, ".agents/skills/superpowers/SKILL.md"));
+  mkdirSync(cwd, { recursive: true });
+  execFileSync("git", ["init", "--quiet", worktree]);
+
+  const result = await inspectOpenCodeDiscovery(state.paths, state.env, cwd);
+  assert.equal(
+    result.conflicts.some((item) => item.includes(`${outside}/.agents`)),
+    false,
+    JSON.stringify(result.conflicts),
   );
 });

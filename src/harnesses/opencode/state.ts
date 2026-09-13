@@ -13,7 +13,9 @@ import type {
   UpdateControlInspection,
 } from "../../harness.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
+import { displayPath } from "../../validator.ts";
 import {
+  OPEN_CODE_PURE_MODE_INPUT,
   inspectOpenCodeDiscovery,
   type OpenCodeDiscovery,
 } from "./discovery.ts";
@@ -53,7 +55,10 @@ interface Facts {
 }
 
 function blocked(...stderr: string[]): Decision {
-  return { kind: "blocked", output: { stdout: [], stderr } };
+  return {
+    kind: "blocked",
+    output: { stdout: [], stderr: stderr.map((line) => displayPath(line)) },
+  };
 }
 
 function pathsFor(ctx: AdapterContext): OpenCodePaths {
@@ -141,6 +146,16 @@ function registrationFor(facts: Facts): OpenCodeRemovalInput["registration"] {
       };
 }
 
+function hasUnresolvedInput(facts: Facts): boolean {
+  return facts.discovery.blockedInputs.length > 0;
+}
+
+function hasUnresolvedRemovalInput(facts: Facts): boolean {
+  return facts.discovery.blockedInputs.some(
+    (input) => input !== OPEN_CODE_PURE_MODE_INPUT,
+  );
+}
+
 export async function inspectOpenCodeOwnership(
   ctx: AdapterContext,
 ): Promise<AdapterResult<OwnershipInspection<OpenCodeRemovalInput>>> {
@@ -157,7 +172,12 @@ export async function inspectOpenCodeOwnership(
           ? blocked(
               "error: the Manager-owned OpenCode snapshot is still present after removal",
             )
-          : { kind: "allowed" };
+          : hasUnresolvedRemovalInput(facts)
+            ? blocked(
+                "error: unresolved OpenCode configuration remains after removal",
+                ...facts.discovery.blockedInputs.map((input) => `- ${input}`),
+              )
+            : { kind: "allowed" };
     const conflicts = [
       ...facts.discovery.conflicts,
       ...facts.discovery.blockedInputs.map((input) => `${input} is unresolved`),
@@ -167,7 +187,9 @@ export async function inspectOpenCodeOwnership(
         ? registration === null
           ? `managed snapshot ${facts.snapshot.digest}`
           : `managed ${facts.snapshot.digest}`
-        : "absent";
+        : hasUnresolvedRemovalInput(facts)
+          ? "unresolved configuration"
+          : "absent";
     return successResult(
       operation,
       {
@@ -222,9 +244,11 @@ export async function inspectOpenCodeInstalled(
     return inspectionFailure(operation, "OpenCode installed state");
   }
   if (facts.snapshot.kind === "absent") {
-    return facts.discovery.managedEntries.length === 0
-      ? successResult(operation, { kind: "absent", observedIdentity: "" }, [])
-      : mismatch(operation, "registered without an installed snapshot");
+    if (facts.discovery.managedEntries.length > 0)
+      return mismatch(operation, "registered without an installed snapshot");
+    return hasUnresolvedInput(facts)
+      ? mismatch(operation, "unresolved OpenCode configuration")
+      : successResult(operation, { kind: "absent", observedIdentity: "" }, []);
   }
   if (facts.snapshot.kind === "unverified")
     return mismatch(operation, "unverified installed snapshot");
@@ -234,8 +258,7 @@ export async function inspectOpenCodeInstalled(
   if (
     facts.discovery.managedEntries.length !== 1 ||
     facts.discovery.conflicts.length > 0 ||
-    facts.discovery.blockedInputs.length > 0 ||
-    facts.recovery === "required"
+    facts.discovery.blockedInputs.length > 0
   )
     return mismatch(operation, observed);
   try {
