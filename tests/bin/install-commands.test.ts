@@ -792,7 +792,7 @@ void describe("install commands", { concurrency: true }, () => {
   // Its subject -- an adapter transport emitting non-JSON bytes across a
   // process boundary -- cannot occur through `ctx.adapter`, an in-process
   // function call that returns an already-typed AdapterResult with no
-  // serialization step to corrupt. See the inventory for the full reasoning.
+  // serialization step to corrupt.
 
   void test("failed update-control inspection exits exactly 1 (:366-375)", async () => {
     // Converted (Task 6, D4): calls `runUpdate` in-process. `updateControl:
