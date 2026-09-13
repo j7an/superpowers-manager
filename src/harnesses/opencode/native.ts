@@ -23,6 +23,11 @@ export interface OpenCodeCommandOutput {
   readonly stdout: string;
 }
 
+const OPEN_CODE_EXECUTABLE = {
+  ...BOUNDED_EXECUTABLE,
+  inheritEnvironment: false,
+} as const;
+
 function selectedExecutable(
   env: NodeJS.ProcessEnv,
   invocationCwd: string,
@@ -75,7 +80,7 @@ export async function runOpenCode(
         );
         const result = await execute(
           [executable, ...args],
-          BOUNDED_EXECUTABLE,
+          OPEN_CODE_EXECUTABLE,
           {
             PATH: env.PATH,
             HOME: home,
@@ -92,7 +97,7 @@ export async function runOpenCode(
             GIT_CONFIG_GLOBAL: "/dev/null",
             GIT_CONFIG_NOSYSTEM: "1",
           },
-          workspace,
+          temporary,
           workspace,
         );
         if (result.kind === "launchFailed") {

@@ -33,6 +33,7 @@ import {
 import { removeObservedOpenCodeEntry } from "./config.ts";
 import {
   inspectOpenCodeDiscovery,
+  OPEN_CODE_PURE_MODE_INPUT,
   type OpenCodeDiscovery,
 } from "./discovery.ts";
 import { normalizeOpenCodeRuntimeVersion, runOpenCode } from "./native.ts";
@@ -283,20 +284,15 @@ function requireSafeActivationDiscovery(observed: OpenCodeDiscovery): void {
     throw new Error("OpenCode configuration changed");
 }
 
-function requireNoOwnedActivation(
-  observed: OpenCodeDiscovery,
-  paths: OpenCodePaths,
-  canonicalRoot: string,
-): void {
-  const ownsConflict = observed.conflicts.some(
-    (conflict) =>
-      conflict.includes(paths.installedRoot) ||
-      conflict.includes(canonicalRoot),
+function requireNoOwnedActivation(observed: OpenCodeDiscovery): void {
+  const unresolvedSkillInput = observed.blockedInputs.some(
+    (input) => input !== OPEN_CODE_PURE_MODE_INPUT,
   );
   if (
     observed.managedEntries.length !== 0 ||
     observed.registrationUncertain ||
-    ownsConflict
+    observed.ownedActivationAliases.length !== 0 ||
+    unresolvedSkillInput
   )
     throw new Error("OpenCode registration removal is uncertain");
 }
@@ -531,7 +527,7 @@ async function rollbackOpenCodePublication(
         current.entry.index,
       );
       observed = await discovery(pending.paths, pending.ctx);
-      requireNoOwnedActivation(observed, pending.paths, pending.canonicalRoot);
+      requireNoOwnedActivation(observed);
     }
     await requirePublication(pending);
     await publication.rollback();
@@ -545,7 +541,7 @@ async function rollbackOpenCodePublication(
     )
       throw new Error("OpenCode registration restoration unverified");
     if (pending.journal.priorRegistration === null)
-      requireNoOwnedActivation(after, pending.paths, pending.canonicalRoot);
+      requireNoOwnedActivation(after);
     await phase(pending, "restored");
     restored = true;
     await retireJournal(pending);
@@ -795,16 +791,16 @@ export async function removeOpenCode(
         registered.entry.index,
       );
       observed = await discovery(paths, ctx);
-      requireNoOwnedActivation(observed, paths, pending.canonicalRoot);
+      requireNoOwnedActivation(observed);
       deregistered = true;
     } else {
-      requireNoOwnedActivation(observed, paths, pending.canonicalRoot);
+      requireNoOwnedActivation(observed);
     }
     await phase(pending, "deregistered");
     await requireIdentity(paths.installedRoot, installedIdentity);
     await requireSnapshot(paths.installedRoot, previous);
     observed = await discovery(paths, ctx);
-    requireNoOwnedActivation(observed, paths, pending.canonicalRoot);
+    requireNoOwnedActivation(observed);
     await rm(paths.installedRoot, { recursive: true });
     await requireSnapshot(paths.installedRoot, null);
     await retireJournal(pending);

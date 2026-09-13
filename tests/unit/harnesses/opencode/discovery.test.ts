@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -104,6 +105,93 @@ void test("plugin paths resolve from their origin while configured skill paths r
     ),
     true,
   );
+});
+
+void test("discovery records canonical owned skill aliases without prefix matches", async (t) => {
+  const state = openCodeSandbox(t);
+  const ownedSkill = join(
+    state.paths.installedRoot,
+    "skills/using-superpowers/SKILL.md",
+  );
+  writeSkill(ownedSkill);
+  const alias = join(state.root, "aliased-skills");
+  symlinkSync(join(state.paths.installedRoot, "skills"), alias, "dir");
+  writeJson(join(state.paths.configRoot, "opencode.json"), {
+    skills: { paths: [alias] },
+  });
+  const owned = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(owned.ownedActivationAliases, [realpathSync(ownedSkill)]);
+
+  const directAlias = join(state.root, "direct-skill");
+  symlinkSync(dirname(ownedSkill), directAlias, "dir");
+  writeJson(join(state.paths.configRoot, "opencode.json"), {
+    skills: { paths: [directAlias] },
+  });
+  const direct = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(direct.ownedActivationAliases, [realpathSync(ownedSkill)]);
+
+  const unrelatedRoot = `${state.paths.installedRoot}-copy`;
+  const unrelatedSkill = join(
+    unrelatedRoot,
+    "skills/using-superpowers/SKILL.md",
+  );
+  writeSkill(unrelatedSkill);
+  writeJson(join(state.paths.configRoot, "opencode.json"), {
+    skills: { paths: [join(unrelatedRoot, "skills")] },
+  });
+  const unrelated = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(unrelated.ownedActivationAliases, []);
+  assert.equal(
+    unrelated.conflicts.includes(
+      `configured OpenCode skill using-superpowers at ${unrelatedSkill}`,
+    ),
+    true,
+  );
+
+  const arbitrary = join(state.root, "ordinary-custom-skill");
+  writeSkill(join(arbitrary, "SKILL.md"));
+  writeJson(join(state.paths.configRoot, "opencode.json"), {
+    skills: { paths: [arbitrary] },
+  });
+  const ordinary = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(ordinary.ownedActivationAliases, []);
+  assert.deepEqual(ordinary.conflicts, []);
+});
+
+void test("discovery records native plugin symlinks by canonical owned target", async (t) => {
+  const state = openCodeSandbox(t);
+  const ownedPlugin = join(
+    state.paths.installedRoot,
+    ".opencode/plugins/superpowers.js",
+  );
+  mkdirSync(dirname(ownedPlugin), { recursive: true });
+  writeFileSync(ownedPlugin, "export default {}\n");
+  const alias = join(state.paths.homeDir, ".opencode/plugin/superpowers.js");
+  mkdirSync(dirname(alias), { recursive: true });
+  symlinkSync(ownedPlugin, alias);
+
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(result.ownedActivationAliases, [realpathSync(ownedPlugin)]);
 });
 
 void test("qualified native and shared skill routes follow the released disable flags", async (t) => {

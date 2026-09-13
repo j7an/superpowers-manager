@@ -2,7 +2,16 @@ import { Buffer } from "node:buffer";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
-import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 import { findNodeAtLocation, type Node as JsonNode } from "jsonc-parser";
 import { readArtifactObject } from "../../artifact-tree.ts";
@@ -43,6 +52,7 @@ export interface OpenCodeDiscovery {
   readonly conflicts: readonly string[];
   readonly blockedInputs: readonly string[];
   readonly registrationUncertain: boolean;
+  readonly ownedActivationAliases: readonly string[];
   readonly managedEntries: readonly {
     readonly observation: ConfigFileObservation;
     readonly entry: ConfigEntry;
@@ -55,6 +65,7 @@ interface DiscoveryState {
   readonly conflicts: Set<string>;
   readonly blockedInputs: Set<string>;
   registrationUncertain: boolean;
+  readonly ownedActivationAliases: Set<string>;
   readonly managedEntries: Array<OpenCodeDiscovery["managedEntries"][number]>;
   readonly installedRoot: string;
   readonly paths: OpenCodePaths;
@@ -298,9 +309,25 @@ async function inspectSkillFile(
   path: string,
   label: string,
   state: DiscoveryState,
+  requireKnownIdentity = false,
 ): Promise<void> {
-  if ((await classifyPathNoFollow(path)) !== "missing")
+  if ((await classifyPathNoFollow(path)) !== "missing") {
+    const canonical = await canonicalizeProspectivePath(path);
+    const suffix = relative(state.installedRoot, canonical);
+    const owned =
+      suffix === "" ||
+      (!isAbsolute(suffix) &&
+        suffix !== ".." &&
+        !suffix.startsWith(`..${sep}`));
+    if (
+      requireKnownIdentity &&
+      !owned &&
+      !/^(?:superpowers|using-superpowers)$/u.test(basename(dirname(path)))
+    )
+      return;
+    if (owned) state.ownedActivationAliases.add(canonical);
     state.conflicts.add(`${label} ${basename(dirname(path))} at ${path}`);
+  }
 }
 
 async function inspectSkillRoot(
@@ -308,6 +335,7 @@ async function inspectSkillRoot(
   label: string,
   state: DiscoveryState,
 ): Promise<void> {
+  await inspectSkillFile(join(root, "SKILL.md"), label, state, true);
   for (const leaf of ["superpowers/SKILL.md", "using-superpowers/SKILL.md"])
     await inspectSkillFile(join(root, leaf), label, state);
 }
@@ -645,6 +673,7 @@ export async function inspectOpenCodeDiscovery(
     conflicts: new Set(),
     blockedInputs: new Set(),
     registrationUncertain: false,
+    ownedActivationAliases: new Set(),
     managedEntries: [],
     installedRoot: await canonicalizeProspectivePath(paths.installedRoot),
     paths,
@@ -769,6 +798,7 @@ export async function inspectOpenCodeDiscovery(
     conflicts: [...state.conflicts],
     blockedInputs: [...state.blockedInputs].sort(),
     registrationUncertain: state.registrationUncertain,
+    ownedActivationAliases: [...state.ownedActivationAliases].sort(),
     managedEntries: state.managedEntries,
   };
 }

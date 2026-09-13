@@ -77,24 +77,24 @@ void test("runOpenCode binds one bounded global invocation to the selected XDG h
         paths.installedRoot,
         "--global",
       ]);
-      assert.equal(policy, BOUNDED_EXECUTABLE);
+      assert.deepEqual(policy, {
+        ...BOUNDED_EXECUTABLE,
+        inheritEnvironment: false,
+      });
       assert.equal(env.PATH, "/selected/path");
-      assert.equal(env.HOME, join(receivedWorkspace, "home"));
+      assert.equal(env.HOME, join(cwd!, "home"));
       assert.equal(env.XDG_CONFIG_HOME, join(paths.configRoot, ".."));
-      assert.equal(env.XDG_DATA_HOME, join(receivedWorkspace, "data"));
-      assert.equal(env.XDG_CACHE_HOME, join(receivedWorkspace, "cache"));
-      assert.equal(env.XDG_STATE_HOME, join(receivedWorkspace, "state"));
-      assert.equal(env.TMPDIR, join(receivedWorkspace, "tmp"));
+      assert.equal(env.XDG_DATA_HOME, join(cwd!, "data"));
+      assert.equal(env.XDG_CACHE_HOME, join(cwd!, "cache"));
+      assert.equal(env.XDG_STATE_HOME, join(cwd!, "state"));
+      assert.equal(env.TMPDIR, receivedWorkspace);
       assert.equal(env.OPENCODE_DISABLE_AUTOUPDATE, "1");
       assert.equal(env.OPENCODE_DISABLE_MODELS_FETCH, "1");
       assert.equal(env.OPENCODE_DISABLE_PROJECT_CONFIG, "1");
       assert.equal(env.OPENCODE_PURE, "1");
       assert.equal(env.GIT_CONFIG_GLOBAL, "/dev/null");
       assert.equal(env.GIT_CONFIG_NOSYSTEM, "1");
-      assert.equal(
-        env.OPENCODE_TEST_MANAGED_CONFIG_DIR,
-        join(receivedWorkspace, "managed"),
-      );
+      assert.equal(env.OPENCODE_TEST_MANAGED_CONFIG_DIR, join(cwd!, "managed"));
       for (const name of [
         "OPENCODE_CONFIG",
         "OPENCODE_CONFIG_DIR",
@@ -104,9 +104,9 @@ void test("runOpenCode binds one bounded global invocation to the selected XDG h
         "SUPERPOWERS_OPENCODE",
       ])
         assert.equal(env[name], undefined, name);
-      assert.equal(receivedWorkspace, cwd);
+      assert.equal(receivedWorkspace, join(cwd!, "tmp"));
       assert.equal(isAbsolute(receivedWorkspace), true);
-      assert.deepEqual(readdirSync(receivedWorkspace).sort(), [
+      assert.deepEqual(readdirSync(cwd!).sort(), [
         "cache",
         "data",
         "home",
@@ -140,6 +140,48 @@ void test("runOpenCode binds one bounded global invocation to the selected XDG h
       },
     );
     assert.equal(selected.outcome.ok, true);
+  }
+});
+
+void test("runOpenCode excludes ambient configuration from an actual bounded child", async (t) => {
+  const { root, paths } = sandbox(t);
+  const forbidden = [
+    "OPENCODE_CONFIG",
+    "OPENCODE_CONFIG_DIR",
+    "OPENCODE_CONFIG_CONTENT",
+    "OPENCODE_DB",
+    "OPENCODE_AUTH_CONTENT",
+    "OPENCODE_TEST_HOME",
+  ] as const;
+  const saved = forbidden.map((name) => [name, process.env[name]] as const);
+  for (const name of forbidden) process.env[name] = `ambient-${name}`;
+  try {
+    const result = await runOpenCode(
+      [
+        "-e",
+        `process.stdout.write(JSON.stringify(${JSON.stringify(forbidden)}.map((name)=>[name,process.env[name]??null])))`,
+      ],
+      paths,
+      {
+        root,
+        env: {
+          PATH: process.env.PATH,
+          SUPERPOWERS_OPENCODE: process.execPath,
+          TMPDIR: root,
+        },
+      },
+    );
+    assert.equal(result.status, 0);
+    if (!result.outcome.ok) assert.fail(result.outcome.error.message);
+    assert.deepEqual(
+      JSON.parse(result.outcome.result.stdout),
+      forbidden.map((name) => [name, null]),
+    );
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   }
 });
 

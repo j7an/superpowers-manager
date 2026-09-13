@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import test, { type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import {
   failureResult,
@@ -337,6 +338,27 @@ void test("OpenCode removal does not use registration certainty as proof against
   assert.equal(existsSync(f.paths.recoveryRoot), true);
 });
 
+void test("OpenCode removal retains a snapshot while skill activation is unresolved", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const config = JSON.parse(readFileSync(f.configFile, "utf8")) as {
+    plugin: string[];
+    theme: string;
+    skills?: { urls: string[] };
+  };
+  config.skills = { urls: ["https://example.test/unknown-skill"] };
+  writeFileSync(f.configFile, JSON.stringify(config));
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.equal(result.outcome.ok, false);
+  assert.equal(existsSync(f.paths.installedRoot), true);
+  assert.equal(existsSync(f.paths.recoveryRoot), true);
+});
+
 void test("OpenCode removal refuses retained recovery and registration without a snapshot", async (t) => {
   await t.test("retained recovery", async (t) => {
     const f = await fixture(t);
@@ -394,7 +416,7 @@ void test("OpenCode removal no-op and cleanup failure are explicit", async (t) =
       process.execPath,
       [
         "-e",
-        "const fs=require('node:fs');const [file,installed,manager]=process.argv.slice(1);process.stdout.write('ready\\n');for(;;){const value=JSON.parse(fs.readFileSync(file,'utf8'));if(!value.plugin.includes(installed)){fs.chmodSync(manager,0o500);break}}",
+        "const fs=require('node:fs');const [file,installed,manager]=process.argv.slice(1);const deadline=Date.now()+5000;process.stdout.write('ready\\n');function poll(){try{const value=JSON.parse(fs.readFileSync(file,'utf8'));if(!value.plugin.includes(installed)){fs.chmodSync(manager,0o500);process.exit(0)}}catch{}if(Date.now()>=deadline){process.stderr.write('observer deadline exceeded\\n');process.exit(2)}setTimeout(poll,5)}poll()",
         f.configFile,
         f.canonicalRoot,
         f.paths.managerRoot,
@@ -402,15 +424,51 @@ void test("OpenCode removal no-op and cleanup failure are explicit", async (t) =
       { stdio: ["ignore", "pipe", "ignore"] },
     );
     const exited = once(observer, "exit");
-    await once(observer.stdout!, "data");
+    const closed = once(observer, "close");
     let result: Awaited<ReturnType<typeof removeOpenCode>>;
     try {
+      await new Promise<void>((resolveReady, rejectReady) => {
+        const timer = setTimeout(() => {
+          cleanup();
+          rejectReady(
+            new Error("cleanup observer readiness deadline exceeded"),
+          );
+        }, 2_000);
+        const onData = () => {
+          cleanup();
+          resolveReady();
+        };
+        const onExit = (status: number | null) => {
+          cleanup();
+          rejectReady(
+            new Error(`cleanup observer exited before readiness: ${status}`),
+          );
+        };
+        const cleanup = () => {
+          clearTimeout(timer);
+          observer.stdout!.off("data", onData);
+          observer.off("exit", onExit);
+        };
+        observer.stdout!.once("data", onData);
+        observer.once("exit", onExit);
+      });
       result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
-      const [status] = await exited;
+      const [status] = await Promise.race([
+        exited,
+        delay(7_000, undefined, { ref: false }).then(() => {
+          throw new Error("cleanup observer exit deadline exceeded");
+        }),
+      ]);
       assert.equal(status, 0);
     } finally {
-      observer.kill();
+      if (observer.exitCode === null && observer.signalCode === null)
+        observer.kill("SIGKILL");
+      const closedInTime = await Promise.race([
+        closed.then(() => true),
+        delay(2_000, false, { ref: false }),
+      ]);
       chmodSync(f.paths.managerRoot, 0o700);
+      assert.equal(closedInTime, true, "cleanup observer did not close");
     }
     assert.equal(result.outcome.ok, false);
     assert.equal(existsSync(f.paths.installedRoot), true);
