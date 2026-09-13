@@ -199,6 +199,87 @@ void test("installed bytes remain current while a retained journal blocks contro
   );
 });
 
+void test("a verified snapshot without registration stays removable but is not installed current", async (t) => {
+  const state = openCodeSandbox(t);
+  const selection = openCodeSelection();
+  const digest = await writeOpenCodeArtifact(
+    t,
+    state.paths.installedRoot,
+    selection,
+  );
+
+  const installed = await inspectOpenCodeInstalled(selection, state.ctx);
+  assert.deepEqual(installed.outcome.ok && installed.outcome.result, {
+    kind: "mismatch",
+    observedIdentity: digest,
+  });
+  const ownership = await inspectOpenCodeOwnership(state.ctx);
+  assert.equal(ownership.outcome.ok, true);
+  if (!ownership.outcome.ok) assert.fail("expected snapshot ownership facts");
+  assert.equal(ownership.outcome.result.installEligibility.kind, "allowed");
+  assert.deepEqual(ownership.outcome.result.removalInput, {
+    installedRoot: state.paths.installedRoot,
+    registration: null,
+    receiptDigest: digest,
+  });
+  assert.equal(ownership.outcome.result.removalVerification.kind, "blocked");
+  const control = await inspectOpenCodeControl(state.ctx);
+  assert.equal(
+    control.outcome.ok && control.outcome.result.mutationEligibility.kind,
+    "allowed",
+  );
+});
+
+void test("skill-only uncertainty permits an absent removal postcondition but still blocks mutation", async (t) => {
+  const state = openCodeSandbox(t);
+  mkdirSync(state.paths.configRoot, { recursive: true });
+  writeFileSync(
+    join(state.paths.configRoot, "opencode.json"),
+    JSON.stringify({ skills: { urls: ["https://example.test/skills"] } }),
+  );
+
+  const installed = await inspectOpenCodeInstalled(
+    openCodeSelection(),
+    state.ctx,
+  );
+  assert.deepEqual(installed.outcome.ok && installed.outcome.result, {
+    kind: "absent",
+    observedIdentity: "",
+  });
+  const ownership = await inspectOpenCodeOwnership(state.ctx);
+  assert.equal(ownership.outcome.ok, true);
+  if (!ownership.outcome.ok) assert.fail("expected absent ownership facts");
+  assert.equal(ownership.outcome.result.installEligibility.kind, "blocked");
+  assert.equal(ownership.outcome.result.removalVerification.kind, "allowed");
+  assert.equal(ownership.outcome.result.presentationValue, "absent");
+  const control = await inspectOpenCodeControl(state.ctx);
+  assert.equal(
+    control.outcome.ok && control.outcome.result.mutationEligibility.kind,
+    "blocked",
+  );
+});
+
+void test("whole-config uncertainty still refuses an absent removal postcondition", async (t) => {
+  const state = openCodeSandbox(t);
+  const ctx = {
+    ...state.ctx,
+    env: { ...state.env, OPENCODE_CONFIG_CONTENT: "{" },
+  };
+  const installed = await inspectOpenCodeInstalled(openCodeSelection(), ctx);
+  assert.equal(
+    installed.outcome.ok && installed.outcome.result.kind,
+    "mismatch",
+  );
+  const ownership = await inspectOpenCodeOwnership(ctx);
+  assert.equal(ownership.outcome.ok, true);
+  if (!ownership.outcome.ok) assert.fail("expected uncertain ownership facts");
+  assert.equal(ownership.outcome.result.removalVerification.kind, "blocked");
+  assert.equal(
+    ownership.outcome.result.presentationValue,
+    "unresolved configuration",
+  );
+});
+
 void test("only native XDG writer origins can authorize a Manager registration edit", async (t) => {
   for (const origin of [
     "config-json",

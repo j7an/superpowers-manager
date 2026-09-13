@@ -42,6 +42,7 @@ export interface OpenCodeDiscovery {
   readonly documents: readonly ConfigFileObservation[];
   readonly conflicts: readonly string[];
   readonly blockedInputs: readonly string[];
+  readonly registrationUncertain: boolean;
   readonly managedEntries: readonly {
     readonly observation: ConfigFileObservation;
     readonly entry: ConfigEntry;
@@ -53,6 +54,7 @@ interface DiscoveryState {
   readonly documents: ConfigFileObservation[];
   readonly conflicts: Set<string>;
   readonly blockedInputs: Set<string>;
+  registrationUncertain: boolean;
   readonly managedEntries: Array<OpenCodeDiscovery["managedEntries"][number]>;
   readonly installedRoot: string;
   readonly paths: OpenCodePaths;
@@ -106,8 +108,13 @@ function expandEnvironment(value: string, env: NodeJS.ProcessEnv): string {
   });
 }
 
-function addBlocked(state: DiscoveryState, label: string): void {
+function addBlocked(
+  state: DiscoveryState,
+  label: string,
+  registrationUncertain = true,
+): void {
   state.blockedInputs.add(label);
+  if (registrationUncertain) state.registrationUncertain = true;
 }
 
 function filesystemAncestors(cwd: string): readonly string[] {
@@ -316,11 +323,11 @@ async function inspectConfigFields(
       !Array.isArray(paths) ||
       paths.some((item) => typeof item !== "string")
     ) {
-      addBlocked(state, `${source} skills.paths`);
+      addBlocked(state, `${source} skills.paths`, false);
     } else {
       for (const item of paths) {
         if (containsSubstitution(item as string)) {
-          addBlocked(state, `${source} skills.paths`);
+          addBlocked(state, `${source} skills.paths`, false);
           continue;
         }
         const raw = item as string;
@@ -336,7 +343,7 @@ async function inspectConfigFields(
   const urls = at(root, ["skills", "urls"]);
   if (urls !== undefined) {
     if (!Array.isArray(urls) || urls.length > 0)
-      addBlocked(state, "OpenCode remote skill configuration");
+      addBlocked(state, "OpenCode remote skill configuration", false);
   }
 }
 
@@ -637,13 +644,15 @@ export async function inspectOpenCodeDiscovery(
     documents: [],
     conflicts: new Set(),
     blockedInputs: new Set(),
+    registrationUncertain: false,
     managedEntries: [],
     installedRoot: await canonicalizeProspectivePath(paths.installedRoot),
     paths,
     env,
     cwd: resolve(cwd),
   };
-  if (truthy(env.OPENCODE_PURE)) addBlocked(state, OPEN_CODE_PURE_MODE_INPUT);
+  if (truthy(env.OPENCODE_PURE))
+    addBlocked(state, OPEN_CODE_PURE_MODE_INPUT, false);
   for (const name of ["config.json", "opencode.json", "opencode.jsonc"])
     await inspectConfigPath(join(paths.configRoot, name), state);
 
@@ -759,6 +768,7 @@ export async function inspectOpenCodeDiscovery(
     documents: state.documents,
     conflicts: [...state.conflicts],
     blockedInputs: [...state.blockedInputs].sort(),
+    registrationUncertain: state.registrationUncertain,
     managedEntries: state.managedEntries,
   };
 }

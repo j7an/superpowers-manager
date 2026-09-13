@@ -15,7 +15,6 @@ import type {
 import { classifyPathNoFollow } from "../../safe-path.ts";
 import { displayPath } from "../../validator.ts";
 import {
-  OPEN_CODE_PURE_MODE_INPUT,
   inspectOpenCodeDiscovery,
   type OpenCodeDiscovery,
 } from "./discovery.ts";
@@ -146,14 +145,8 @@ function registrationFor(facts: Facts): OpenCodeRemovalInput["registration"] {
       };
 }
 
-function hasUnresolvedInput(facts: Facts): boolean {
-  return facts.discovery.blockedInputs.length > 0;
-}
-
 function hasUnresolvedRemovalInput(facts: Facts): boolean {
-  return facts.discovery.blockedInputs.some(
-    (input) => input !== OPEN_CODE_PURE_MODE_INPUT,
-  );
+  return facts.discovery.registrationUncertain;
 }
 
 export async function inspectOpenCodeOwnership(
@@ -246,7 +239,7 @@ export async function inspectOpenCodeInstalled(
   if (facts.snapshot.kind === "absent") {
     if (facts.discovery.managedEntries.length > 0)
       return mismatch(operation, "registered without an installed snapshot");
-    return hasUnresolvedInput(facts)
+    return hasUnresolvedRemovalInput(facts)
       ? mismatch(operation, "unresolved OpenCode configuration")
       : successResult(operation, { kind: "absent", observedIdentity: "" }, []);
   }
