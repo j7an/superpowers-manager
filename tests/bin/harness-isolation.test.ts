@@ -630,7 +630,7 @@ for (const selected of HARNESSES) {
         ? /Codex native removal failed; preserve the marketplace and recovery material at /
         : selected === "pi"
           ? /cannot verify Pi removal at .*; preserve the snapshot and any recovery material at /
-          : /cannot verify OpenCode removal at .*; preserve the snapshot and any recovery material at /,
+          : /cannot determine harness mutation resources/,
     );
     assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
