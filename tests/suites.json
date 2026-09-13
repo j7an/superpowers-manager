@@ -62,6 +62,7 @@
     { "path": "tests/bin/units.test.ts", "group": "unit" },
     { "path": "tests/bin/workflows.test.ts", "group": "repository" },
     { "path": "tests/unit/adapter-result.test.ts", "group": "integration" },
+    { "path": "tests/unit/git-tree.test.ts", "group": "integration" },
     {
       "path": "tests/unit/harnesses/codex/adapter.test.ts",
       "group": "integration"
@@ -147,6 +148,18 @@
       "group": "integration"
     },
     { "path": "tests/unit/harnesses/pi/state.test.ts", "group": "unit" },
+    {
+      "path": "tests/unit/harnesses/opencode/paths.test.ts",
+      "group": "unit"
+    },
+    {
+      "path": "tests/unit/harnesses/opencode/package.test.ts",
+      "group": "unit"
+    },
+    {
+      "path": "tests/unit/harnesses/opencode/prepare.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/upstream-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/pi/settings.test.ts", "group": "unit" },
     { "path": "tests/unit/provenance.test.ts", "group": "unit" },

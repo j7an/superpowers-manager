@@ -6,35 +6,53 @@ import {
   type AdapterContext,
   type AdapterResult,
 } from "../../adapter-result.ts";
+import { ARTIFACT_RECEIPT, digestArtifactTree } from "../../artifact-tree.ts";
 import type { EffectiveSelection } from "../../effective-selection.ts";
+import { materializeGitTree } from "../../git-tree.ts";
 import type {
   PreparationLocation,
   PrepareCandidateInput,
   PreparedArtifact,
   PreparedState,
 } from "../../harness.ts";
-import { ARTIFACT_RECEIPT } from "../../artifact-tree.ts";
-import { piPaths } from "./paths.ts";
-import { assessPiCompatibility, samePiSource } from "./compatibility.ts";
-import {
-  digestPiTree,
-  readPiPackageAssessment,
-  piReceiptBinding,
-  type PiReceipt,
-} from "./package.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
-import { materializeGitTree } from "../../git-tree.ts";
+import { assertOpenCodePreparationSeparate, openCodePaths } from "./paths.ts";
+import {
+  assessOpenCodeCompatibility,
+  openCodeReceiptBinding,
+  readOpenCodePackageAssessment,
+  sameOpenCodeSource,
+  type OpenCodeReceipt,
+} from "./package.ts";
 
-export function piPreparationLocation(
+export function openCodePreparationLocation(
   ctx: AdapterContext,
 ): PreparationLocation {
   return {
-    destinationRoot: piPaths(ctx.env ?? {}, process.cwd()).preparedRoot,
+    destinationRoot: openCodePaths(ctx.env ?? {}, process.cwd()).preparedRoot,
     stagingLeaf: "superpowers",
   };
 }
 
-export async function preparePiCandidate(
+export async function validateOpenCodePreparationBeforeFetch(
+  ctx: AdapterContext,
+): Promise<AdapterResult<null>> {
+  try {
+    const paths = openCodePaths(ctx.env ?? {}, process.cwd());
+    await assertOpenCodePreparationSeparate(paths);
+    return successResult("prepare", null, []);
+  } catch {
+    return failureResult(
+      "prepare",
+      "invalid-package",
+      "cannot validate OpenCode artifact storage",
+      [],
+      [],
+    );
+  }
+}
+
+export async function prepareOpenCodeCandidate(
   input: PrepareCandidateInput,
   _ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedArtifact>> {
@@ -44,7 +62,7 @@ export async function preparePiCandidate(
       input.selection.desiredCommit,
       input.candidateRoot,
     );
-    const compatibility = await assessPiCompatibility(
+    const compatibility = await assessOpenCodeCompatibility(
       input.candidateRoot,
       input.selection,
     );
@@ -59,18 +77,18 @@ export async function preparePiCandidate(
         [],
         [],
       );
-    const digest = await digestPiTree(input.candidateRoot);
+    const digest = await digestArtifactTree(input.candidateRoot);
     const identity = {
       schema: 1,
       manager: "superpowers-manager",
-      harness: "pi",
+      harness: "opencode",
       source: input.selection.effectiveSource,
       commit: input.selection.desiredCommit,
       digest,
     } as const;
-    const receipt: PiReceipt = {
+    const receipt: OpenCodeReceipt = {
       ...identity,
-      binding: piReceiptBinding(identity),
+      binding: openCodeReceiptBinding(identity),
       compatibility,
     };
     await writeFile(
@@ -92,49 +110,45 @@ export async function preparePiCandidate(
     return failureResult(
       "prepare",
       "invalid-package",
-      `cannot prepare Pi artifact: ${input.candidateRoot}`,
+      `cannot prepare OpenCode artifact: ${input.candidateRoot}`,
       [],
       [],
     );
   }
 }
 
-async function readArtifactAssessment(root: string): Promise<{
-  readonly artifact: PreparedArtifact;
-  readonly receipt: PiReceipt;
-}> {
-  const { receipt, compatibility } = await readPiPackageAssessment(root);
-  return {
-    receipt,
-    artifact: {
-      root,
-      commit: receipt.commit,
-      identity: receipt.digest,
-      compatibility,
-    },
-  };
-}
-
-async function readArtifact(root: string): Promise<PreparedArtifact> {
-  const { artifact } = await readArtifactAssessment(root);
-  const { compatibility } = artifact;
+function artifactFromAssessment(
+  root: string,
+  assessment: Awaited<ReturnType<typeof readOpenCodePackageAssessment>>,
+): PreparedArtifact {
+  const { receipt, compatibility } = assessment;
   if (
     compatibility.kind !== "supported" &&
     compatibility.kind !== "experimental"
   )
     throw new Error("unsupported profile");
-  return artifact;
+  return {
+    root,
+    commit: receipt.commit,
+    identity: receipt.digest,
+    compatibility,
+  };
 }
-
-export async function inspectPiPrepared(
+async function readArtifact(root: string): Promise<PreparedArtifact> {
+  return artifactFromAssessment(
+    root,
+    await readOpenCodePackageAssessment(root),
+  );
+}
+export async function inspectOpenCodePrepared(
   selection: EffectiveSelection,
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedState>> {
-  const root = piPreparationLocation(ctx).destinationRoot;
-  const unknown = {
-    kind: "unknown",
-    reason: "Pi prepared compatibility evidence is missing",
-  } as const;
+  const root = openCodePreparationLocation(ctx).destinationRoot,
+    unknown = {
+      kind: "unknown",
+      reason: "OpenCode prepared compatibility evidence is missing",
+    } as const;
   try {
     if (
       (await classifyPathNoFollow(join(root, ARTIFACT_RECEIPT))) === "missing"
@@ -144,10 +158,12 @@ export async function inspectPiPrepared(
         { kind: "needs-prepare", observedIdentity: "", compatibility: unknown },
         [],
       );
-    const { artifact, receipt } = await readArtifactAssessment(root);
+    const assessment = await readOpenCodePackageAssessment(root);
+    const artifact = artifactFromAssessment(root, assessment);
+    const { receipt } = assessment;
     if (
       artifact.commit !== selection.desiredCommit ||
-      !samePiSource(receipt.source, selection.effectiveSource)
+      !sameOpenCodeSource(receipt.source, selection.effectiveSource)
     )
       return successResult(
         "inspect-prepared",
@@ -155,19 +171,6 @@ export async function inspectPiPrepared(
           kind: "needs-prepare",
           observedIdentity: artifact.identity,
           compatibility: unknown,
-        },
-        [],
-      );
-    if (
-      artifact.compatibility.kind !== "supported" &&
-      artifact.compatibility.kind !== "experimental"
-    )
-      return successResult(
-        "inspect-prepared",
-        {
-          kind: "needs-prepare",
-          observedIdentity: artifact.identity,
-          compatibility: artifact.compatibility,
         },
         [],
       );
@@ -185,24 +188,23 @@ export async function inspectPiPrepared(
     return failureResult(
       "inspect-prepared",
       "invalid-package",
-      `cannot inspect Pi prepared artifact: ${root}`,
+      `cannot inspect OpenCode prepared artifact: ${root}`,
       [],
       [],
     );
   }
 }
-
-export async function readPiPrepared(
+export async function readOpenCodePrepared(
   ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedArtifact>> {
-  const root = piPreparationLocation(ctx).destinationRoot;
+  const root = openCodePreparationLocation(ctx).destinationRoot;
   try {
     return successResult("read-prepared", await readArtifact(root), []);
   } catch {
     return failureResult(
       "read-prepared",
       "invalid-package",
-      `cannot read Pi prepared artifact: ${root}`,
+      `cannot read OpenCode prepared artifact: ${root}`,
       [],
       [],
     );

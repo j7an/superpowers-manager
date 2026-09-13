@@ -33,6 +33,7 @@ dist/domain/fingerprint.js
 dist/domain/refs.js
 dist/effective-selection.js
 dist/harnesses/codex/generated-plugin.js
+dist/git-tree.js
 dist/git.js
 dist/harness-compatibility.js
 dist/harness.js
@@ -54,6 +55,9 @@ dist/harnesses/pi/presentation.js
 dist/harnesses/pi/settings.js
 dist/harnesses/pi/shared-skills.js
 dist/harnesses/pi/state.js
+dist/harnesses/opencode/package.js
+dist/harnesses/opencode/paths.js
+dist/harnesses/opencode/prepare.js
 dist/provenance.js
 dist/python-json-format.js
 dist/python-json.js
