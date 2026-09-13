@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   mkdirSync,
@@ -23,47 +23,29 @@ import {
   writeAdapterFailure,
 } from "../../src/adapter-result.ts";
 
-function pythonOracle(bytes: Uint8Array) {
-  return execFileSync(
-    "python3",
-    [
-      "-S",
-      "-c",
-      [
-        "import sys",
-        "value = bytes.fromhex(sys.argv[1])",
-        'print(value.decode("utf-8", errors="backslashreplace")',
-        '      .encode("unicode_escape").decode("ascii"))',
-      ].join("\n"),
-      Buffer.from(bytes).toString("hex"),
-    ],
-    { encoding: "utf8" },
-  ).replace(/\n$/, "");
-}
-
-void test("command byte escaping matches Python over malformed UTF-8", () => {
+void test("command byte escaping matches the captured malformed UTF-8 corpus", () => {
   const corpus = [
-    Uint8Array.from([]),
-    Uint8Array.from([0x61, 0x09, 0x62, 0x0d]),
-    Uint8Array.from([0x5c, 0x22, 0xc3, 0xa9]),
-    Uint8Array.from([0xe4, 0xb8, 0xad]),
-    Uint8Array.from([0xf0, 0x9f, 0x98, 0x80]),
-    Uint8Array.from([0xff, 0x61]),
-    Uint8Array.from([0xfe, 0x61]),
-    Uint8Array.from([0xc2]),
-    Uint8Array.from([0xe2, 0x82]),
-    Uint8Array.from([0xf0, 0x9f, 0x98]),
-    Uint8Array.from([0xc0, 0xaf]),
-    Uint8Array.from([0xe0, 0x80, 0xaf]),
-    Uint8Array.from([0xf0, 0x80, 0x80, 0xaf]),
-    Uint8Array.from([0x80]),
-    Uint8Array.from([0xe2, 0x28, 0xa1]),
-  ];
-  for (const bytes of corpus) {
+    ["", ""],
+    ["6109620d", "a\\tb\\r"],
+    ["5c22c3a9", '\\\\"\\xe9'],
+    ["e4b8ad", "\\u4e2d"],
+    ["f09f9880", "\\U0001f600"],
+    ["ff61", "\\\\xffa"],
+    ["fe61", "\\\\xfea"],
+    ["c2", "\\\\xc2"],
+    ["e282", "\\\\xe2\\\\x82"],
+    ["f09f98", "\\\\xf0\\\\x9f\\\\x98"],
+    ["c0af", "\\\\xc0\\\\xaf"],
+    ["e080af", "\\\\xe0\\\\x80\\\\xaf"],
+    ["f08080af", "\\\\xf0\\\\x80\\\\x80\\\\xaf"],
+    ["80", "\\\\x80"],
+    ["e228a1", "\\\\xe2(\\\\xa1"],
+  ] as const;
+  for (const [hex, expected] of corpus) {
     assert.equal(
-      pythonUnicodeEscapeBytes(bytes),
-      pythonOracle(bytes),
-      Buffer.from(bytes).toString("hex"),
+      pythonUnicodeEscapeBytes(Buffer.from(hex, "hex")),
+      expected,
+      hex,
     );
   }
 });

@@ -44,33 +44,8 @@ fixture_git() {
 }
 
 # Materialize only the inert, licensed source fixture into this invocation's tmpfs.
-python3 -S - "$SUPERPOWERS_UPSTREAM_URL" "$HOME" <<'PY'
-import json
-from pathlib import Path
-import shutil
-import sys
-
-upstream, home = map(Path, sys.argv[1:])
-fixtures = Path('/workspace/tests/fixtures/pi-native')
-for source, destination in [
-    ('bootstrap.ts.txt', '.pi/extensions/superpowers.ts'),
-    ('package.json.txt', 'package.json'),
-    ('SKILL.md.txt', 'skills/using-superpowers/SKILL.md'),
-    ('LICENSE.txt', 'LICENSE'),
-]:
-    target = upstream / destination
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(fixtures / source, target)
-skill = upstream / 'skills/snapshot-probe/SKILL.md'
-skill.parent.mkdir(parents=True)
-skill.write_text('---\nname: snapshot-probe\ndescription: Observe snapshot lifecycle\n---\nSnapshot phase A.\n')
-survivor = home / 'unrelated-provider'
-survivor.mkdir()
-(survivor / 'package.json').write_text(json.dumps({'name': 'unrelated-provider', 'version': '1.0.0', 'pi': {'skills': []}}))
-(survivor / 'preserved.txt').write_text('unrelated package bytes\n')
-settings = {'packages': [str(survivor)], 'theme': 'dark', 'spwProbeSetting': {'retained': True}}
-(home / '.pi/agent/settings.json').write_text(json.dumps(settings))
-PY
+node /workspace/tests/container/pi/fixture.ts create "$SUPERPOWERS_UPSTREAM_URL" "$HOME" \
+  /workspace/tests/fixtures/pi-native
 
 fixture_git init -q
 fixture_git add .
@@ -94,12 +69,8 @@ observe events "$installed" "$commit_a" A
 timeout 60 env PI_OFFLINE=0 pi update --extensions --no-approve
 test "$(observe installed "$installed" "$commit_a" A)" = "$digest_a"
 
-python3 -S - "$SUPERPOWERS_UPSTREAM_URL/skills/snapshot-probe/SKILL.md" <<'PY'
-from pathlib import Path
-import sys
-path = Path(sys.argv[1])
-path.write_text(path.read_text().replace('Snapshot phase A.', 'Snapshot phase B.'))
-PY
+node /workspace/tests/container/pi/fixture.ts phase-b \
+  "$SUPERPOWERS_UPSTREAM_URL/skills/snapshot-probe/SKILL.md"
 fixture_git add .
 fixture_git commit -qm 'native fixture B'
 commit_b=$(fixture_git rev-parse HEAD)

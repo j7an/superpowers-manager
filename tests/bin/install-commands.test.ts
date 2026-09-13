@@ -999,12 +999,8 @@ void describe("install commands", { concurrency: true }, () => {
   void test("executable-validator failure leaves Codex untouched (:478-487)", async () => {
     const c = installCase();
     // :84-89 — the failing additional-validator fixture.
-    const validator = join(c.dir, "failing_validator.py");
-    writeFileSync(
-      validator,
-      "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
-      { mode: 0o755 },
-    );
+    const validator = join(c.dir, "failing_validator.sh");
+    writeFileSync(validator, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
 
     const result = await runScript(c, "install", {
       env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },

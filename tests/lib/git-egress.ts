@@ -7,8 +7,8 @@
 // 4b adds three more consumers to.
 //
 // Takes the resolved git path rather than resolving it. Each caller keeps its
-// own resolver on purpose: support.js's hostExecutable special-cases python3
-// and dispatch-fixture.js's deliberately does not.
+// own resolver on purpose: support.js's hostExecutable has sandbox-specific
+// behavior and dispatch-fixture.js's deliberately does not.
 //
 // Best-effort, not a containment boundary. Slice 3 built this alongside
 // GIT_CONFIG_NOSYSTEM, the private HOME, and the private TMPDIR, after

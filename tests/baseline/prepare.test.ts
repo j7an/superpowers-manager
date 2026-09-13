@@ -536,10 +536,10 @@ void test("prepare runs the executable validator inside the staging workspace", 
   // (a) A validator that succeeds. Its stdout reaches result.stdout, and it
   // prints the TMPDIR it actually ran under.
   const ok = createCase({ fakes: "probe" });
-  const okValidator = join(ok.dir, "validator-ok.py");
+  const okValidator = join(ok.dir, "validator-ok.cjs");
   writeFileSync(
     okValidator,
-    '#!/usr/bin/env python3\nimport os\nimport sys\nprint("validator saw " + sys.argv[1])\nprint("TMPDIR=" + os.environ["TMPDIR"])\n',
+    '#!/usr/bin/env node\nconsole.log("validator saw " + process.argv[2]);\nconsole.log("TMPDIR=" + process.env.TMPDIR);\n',
     { mode: 0o755 },
   );
   const passed = await prepare(ok, {
@@ -567,12 +567,8 @@ void test("prepare runs the executable validator inside the staging workspace", 
   // (b) A validator that fails.
   const failing = createCase({ fakes: "probe" });
   const before = seedSentinel(failing);
-  const failValidator = join(failing.dir, "validator-fail.py");
-  writeFileSync(
-    failValidator,
-    "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
-    { mode: 0o755 },
-  );
+  const failValidator = join(failing.dir, "validator-fail.sh");
+  writeFileSync(failValidator, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
   const rejected = await prepare(failing, {
     SUPERPOWERS_REF: REFS.fallback,
     SUPERPOWERS_VALIDATOR_EXECUTABLE: failValidator,
@@ -584,7 +580,7 @@ void test("prepare runs the executable validator inside the staging workspace", 
 
   // (c) A validator path that does not exist.
   const absent = createCase({ fakes: "probe" });
-  const missing = join(absent.dir, "validator-missing.py");
+  const missing = join(absent.dir, "validator-missing.cjs");
   const notFound = await prepare(absent, {
     SUPERPOWERS_REF: REFS.fallback,
     SUPERPOWERS_VALIDATOR_EXECUTABLE: missing,
@@ -617,23 +613,21 @@ void test("prepare runs the executable validator inside the staging workspace", 
  *
  */
 function poisoningValidator(c: CaseEnv, exitCode: number): string {
-  const path = join(c.dir, `validator-poison-${exitCode}.py`);
+  const path = join(c.dir, `validator-poison-${exitCode}.cjs`);
   writeFileSync(
     path,
     [
-      "#!/usr/bin/env python3",
-      "import os",
-      "import sys",
-      'workspace = os.environ["TMPDIR"]',
-      'poison = os.path.join(workspace, "poison")',
-      "os.mkdir(poison)",
-      'with open(os.path.join(poison, "held"), "w") as handle:',
-      '    handle.write("held\\n")',
-      "os.chmod(poison, 0o500)",
-      'print("validator-stdout TMPDIR=" + workspace)',
-      'sys.stderr.write("validator-stderr sentinel\\n")',
-      "sys.stderr.flush()",
-      `sys.exit(${exitCode})`,
+      "#!/usr/bin/env node",
+      'const fs = require("node:fs");',
+      'const path = require("node:path");',
+      "const workspace = process.env.TMPDIR;",
+      'const poison = path.join(workspace, "poison");',
+      "fs.mkdirSync(poison);",
+      'fs.writeFileSync(path.join(poison, "held"), "held\\n");',
+      "fs.chmodSync(poison, 0o500);",
+      'console.log("validator-stdout TMPDIR=" + workspace);',
+      'process.stderr.write("validator-stderr sentinel\\n");',
+      `process.exitCode = ${exitCode};`,
       "",
     ].join("\n"),
     { mode: 0o755 },

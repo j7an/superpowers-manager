@@ -276,8 +276,8 @@ function commitB(upstream: string): string {
 }
 
 function writeFailingValidator(c: CaseEnv): string {
-  const path = join(c.dir, "bin", "reject-candidate.py");
-  writeFileSync(path, "#!/usr/bin/env python3\nraise SystemExit(1)\n", {
+  const path = join(c.dir, "bin", "reject-candidate.sh");
+  writeFileSync(path, "#!/bin/sh\nexit 1\n", {
     mode: 0o755,
   });
   return path;

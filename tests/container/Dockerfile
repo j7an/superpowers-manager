@@ -8,7 +8,7 @@ ENV SPW_PACKAGE_NODE_VERSION=24.0.0
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       ca-certificates git python3 procps \
+       ca-certificates git procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/spw-test-tools

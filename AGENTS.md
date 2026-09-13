@@ -118,8 +118,8 @@ required agent harness.
   directly to `main`.
 - Use Conventional Commit subjects; automatic release bump inference depends
   on their user-visible intent.
-- Keep test shell code compatible with POSIX `sh`. Preserve installed Node >=24, native source/tooling/tests
-  Node >=24.12.0, and Python-standard-library boundaries.
+- Keep test shell code compatible with POSIX `sh`. Preserve installed Node >=24 and native source/tooling/tests
+  Node >=24.12.0.
 - Ask before adding a runtime dependency.
 - Update documentation and contract tests when observable behavior changes.
   For test consolidation or removal, preserve each surviving behavioral

@@ -1,7 +1,7 @@
 // Executable, never imported. A two-line sh wrapper written by
 // lifecycle-fixture.js execs this as either `codex` or `adapter`.
 // Replaces the shell fake codex at `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:28-84::cat > "$fake_codex` and
-// the recording adapter at :87-98, including their two python3 heredocs.
+// the recording adapter at :87-98.
 //
 // PR 11.5 slice 2 extracted only the read side (config load + the two
 // listings) into lifecycle-fakes.js. Slice 4 converted the mutation branches
@@ -28,7 +28,7 @@ function waitForRelease() {
   const dir = process.env.SPW_FIXTURE_BARRIER_DIR;
   if (!dir) return true;
   // ONCE PER PARTICIPANT, not once per codex call. A successful `uninstall`
-  // invokes the fake SIX times (`tests/bin/uninstall-commands.test.ts:419-432::assert.deepEqual(readLog`:
+  // invokes the fake SIX times (`tests/bin/uninstall-commands.test.ts:399-412::assert.deepEqual(readLog`:
   // plugin list, marketplace list, plugin remove, marketplace remove, then both
   // listings again). Each call is a separate process, so a module-level flag
   // cannot carry the fact -- the identity has to live on disk, keyed on the

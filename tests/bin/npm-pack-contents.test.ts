@@ -1,11 +1,7 @@
 // Package-content contract tests.
 //
-// The shell driver never inspects `npm pack`'s JSON report itself — it
-// always delegates to the shared `tests/assert_pack_contents.sh` (also used
-// by the publish workflow; out of scope here and left untouched) and
-// treats that script's exit code and combined stdout+stderr as the oracle.
-// This port reproduces that exactly via spawnSync, rather than
-// reimplementing the shared script's Python comparison logic in JS.
+// Most cases invoke the shell wrapper, which delegates to the TypeScript
+// checker; direct checker cases exercise allowlist decoding and line handling.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -15,6 +11,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,15 +21,17 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const ASSERT_SCRIPT = join(ROOT, "tests", "assert_pack_contents.sh");
+const ASSERT_CHECKER = join(ROOT, "tests", "tools", "assert-pack-contents.ts");
 
 function runSh(
   scriptPath: string,
   args: readonly string[],
-  options: { cwd?: string } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ) {
   const result = spawnSync("sh", [scriptPath, ...args], {
     encoding: "utf8",
     cwd: options.cwd,
+    env: options.env,
   });
   return {
     status: result.status,
@@ -42,6 +41,16 @@ function runSh(
 
 function writeJson(jsonPath: string, value: unknown) {
   writeFileSync(jsonPath, JSON.stringify(value), "utf8");
+}
+
+function runChecker(args: readonly string[]) {
+  const result = spawnSync(process.execPath, [ASSERT_CHECKER, ...args], {
+    encoding: "utf8",
+  });
+  return {
+    status: result.status,
+    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+  };
 }
 
 /**
@@ -169,6 +178,32 @@ void test("npm-pack-contents", async (t) => {
     },
   );
 
+  await t.test(
+    "the shell entry point succeeds without python3 and from an unrelated directory",
+    () => {
+      const noPythonBin = join(scratch, "no-python-bin");
+      mkdirSync(noPythonBin);
+      symlinkSync("/bin/sh", join(noPythonBin, "sh"));
+      symlinkSync(process.execPath, join(noPythonBin, "node"));
+      symlinkSync("/usr/bin/dirname", join(noPythonBin, "dirname"));
+      const path = noPythonBin;
+      const noPython = spawnSync("/bin/sh", ["-c", "command -v python3"], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: path },
+      });
+      assert.notEqual(
+        noPython.status,
+        0,
+        "fixture: python3 unexpectedly remains on the wrapper PATH",
+      );
+      const { status, output } = runSh(ASSERT_SCRIPT, [rawPath], {
+        cwd: scratch,
+        env: { ...process.env, PATH: path },
+      });
+      assert.equal(status, 0, output);
+    },
+  );
+
   // --- malformed shapes are rejected -----------------------------------
 
   const SHAPE_DIAGNOSTIC =
@@ -199,6 +234,66 @@ void test("npm-pack-contents", async (t) => {
     await t.test(`malformed shape ${name} reports the shape diagnostic`, () => {
       assert.match(output, new RegExp(escapeRegExp(SHAPE_DIAGNOSTIC)));
     });
+  }
+
+  await t.test("a malformed files entry is rejected", () => {
+    const fixturePath = join(scratch, "files-entry-not-a-path.json");
+    writeJson(fixturePath, [{ ...packed, files: [{ path: 1 }] }]);
+    const { status, output } = runSh(ASSERT_SCRIPT, [fixturePath]);
+    assert.notEqual(status, 0);
+    assert.match(
+      output,
+      /pack report files must be an array of objects with string paths/,
+    );
+  });
+
+  await t.test("a duplicated packed path is rejected", () => {
+    const fixturePath = join(scratch, "duplicate-path.json");
+    const duplicated = structuredClone(packed) as {
+      files: { path: string }[];
+    };
+    duplicated.files.push({ ...duplicated.files[0] });
+    writeJson(fixturePath, [duplicated]);
+    assert.notEqual(runSh(ASSERT_SCRIPT, [fixturePath]).status, 0);
+  });
+
+  await t.test("an invalid UTF-8 expected allowlist is rejected", () => {
+    const reportPath = join(scratch, "replacement-character-report.json");
+    const expectedPath = join(scratch, "invalid-expected-contents.txt");
+    writeJson(reportPath, [{ ...packed, files: [{ path: "\ufffd" }] }]);
+    writeFileSync(expectedPath, Buffer.from([0xff]));
+    const { status, output } = runChecker([
+      reportPath,
+      join(ROOT, "package.json"),
+      expectedPath,
+    ]);
+    assert.notEqual(status, 0);
+    assert.match(output, new RegExp(escapeRegExp(expectedPath)));
+  });
+
+  for (const [name, expectedText, path] of [
+    ["LF", "first\nsecond\n", ["first", "second"]],
+    ["CRLF", "first\r\nsecond\r\n", ["first", "second"]],
+    ["CR", "first\rsecond\r", ["first", "second"]],
+    ["U+2028", "first\u2028second\n", ["first\u2028second"]],
+  ] as const) {
+    await t.test(
+      `expected allowlist preserves ${name} text-file boundaries`,
+      () => {
+        const reportPath = join(scratch, `expected-boundary-${name}.json`);
+        const expectedPath = join(scratch, `expected-boundary-${name}.txt`);
+        writeJson(reportPath, [
+          { ...packed, files: path.map((path) => ({ path })) },
+        ]);
+        writeFileSync(expectedPath, expectedText, "utf8");
+        const { status, output } = runChecker([
+          reportPath,
+          join(ROOT, "package.json"),
+          expectedPath,
+        ]);
+        assert.equal(status, 0, output);
+      },
+    );
   }
 
   // --- forbidden packed paths -------------------------------------------
