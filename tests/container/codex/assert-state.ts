@@ -5,6 +5,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -63,7 +64,11 @@ function strictRoot(path: string, input: string): string {
   }
 }
 
-function regularFiles(root: string, failure: string): string[] {
+function regularFiles(
+  root: string,
+  failure: string,
+  includeFileSymlinks = false,
+): string[] {
   let rootStat;
   try {
     rootStat = lstatSync(root);
@@ -76,7 +81,15 @@ function regularFiles(root: string, failure: string): string[] {
   const visit = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (entry.isSymbolicLink()) continue;
+      if (entry.isSymbolicLink()) {
+        try {
+          if (includeFileSymlinks && statSync(path).isFile())
+            found.push(relative(root, path));
+        } catch {
+          // A dangling or uninspectable symlink is not a file.
+        }
+        continue;
+      }
       if (entry.isDirectory()) visit(path);
       else if (entry.isFile()) found.push(relative(root, path));
     }
@@ -230,20 +243,29 @@ function damageSkill(
 }
 
 function hookState(path: string): void {
+  let stat: ReturnType<typeof lstatSync>;
   try {
-    const stat = lstatSync(path);
-    if (stat.isSymbolicLink() || !stat.isFile())
-      fail("Codex hooks.state must remain absent or a regular file");
+    stat = lstatSync(path);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      process.stdout.write("absent\n");
+      return;
+    }
+    fail(`could not inspect Codex hooks.state: ${path}`);
+  }
+  if (stat.isSymbolicLink() || !stat.isFile())
+    fail("Codex hooks.state must remain absent or a regular file");
+  try {
     process.stdout.write(
       `file:${createHash("sha256").update(readFileSync(path)).digest("hex")}\n`,
     );
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "Codex hooks.state must remain absent or a regular file"
-    )
-      throw error;
-    process.stdout.write("absent\n");
+  } catch {
+    fail(`could not read Codex hooks.state: ${path}`);
   }
 }
 
@@ -301,7 +323,11 @@ function assertActiveHooks(listingJson: string, root: string): void {
   if (!isObject(manifest) || manifest.hooks !== "./hooks/hooks-codex.json")
     fail("installed active hook manifest has the wrong hooks path");
   const hooks = join(active, "hooks");
-  const files = regularFiles(hooks, "installed active hook subtree mismatch");
+  const files = regularFiles(
+    hooks,
+    "installed active hook subtree mismatch",
+    true,
+  );
   assert.deepEqual(
     files,
     ["hooks-codex.json", "session-start-codex", "support/helper.txt"],

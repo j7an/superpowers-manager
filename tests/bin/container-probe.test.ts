@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -321,6 +323,17 @@ void test("container Codex assertion helpers", async (t) => {
       const hookState = join(scratch, "bad-hooks.state");
       mkdirSync(hookState, { recursive: true });
       expectFailure(STATE, ["hook-state", hookState], /regular file/);
+      const unreadableHookState = join(scratch, "unreadable-hooks.state");
+      writeFileSync(unreadableHookState, "unreadable\n");
+      chmodSync(unreadableHookState, 0);
+      const unreadable = invoke(STATE, ["hook-state", unreadableHookState]);
+      chmodSync(unreadableHookState, 0o600);
+      assert.notEqual(unreadable.status, 0);
+      assert.match(
+        unreadable.stderr,
+        /could not (?:inspect|read) Codex hooks.state/,
+      );
+      assert.doesNotMatch(unreadable.stdout, /absent/);
       const requirements = join(scratch, "requirements.toml");
       expectFailure(
         STATE,
@@ -352,6 +365,33 @@ void test("container Codex assertion helpers", async (t) => {
         STATE,
         ["active-hooks", listingJson, fixture.active],
         /hook config/,
+      );
+      writeJson(join(fixture.active, "hooks/hooks-codex.json"), {
+        hooks: {
+          SessionStart: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: 'sh "${PLUGIN_ROOT}/hooks/session-start-codex"',
+                },
+              ],
+            },
+          ],
+        },
+      });
+      writeFileSync(
+        join(fixture.active, "hooks/session-start-codex"),
+        "/tmp/superpowers-manager-hook-sentinel\n",
+      );
+      symlinkSync(
+        "session-start-codex",
+        join(fixture.active, "hooks/unexpected-link"),
+      );
+      expectFailure(
+        STATE,
+        ["active-hooks", listingJson, fixture.active],
+        /hook subtree mismatch/,
       );
       const badSkills = join(scratch, "bad-skills.json");
       const badRequestedCwd = join(scratch, "bad-requested-cwd");
