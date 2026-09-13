@@ -1348,8 +1348,13 @@ void test("package.json carries stable manager and harness discovery metadata", 
   parseStableSemver(manifest.version, "package.json version");
   assert.match(manifest.description, /\bCodex\b/);
   assert.match(manifest.description, /\bPi\b/);
+  assert.match(manifest.description, /\bOpenCode\b/);
 
   const keywords = manifest.keywords;
+  assert.ok(
+    keywords.includes("opencode"),
+    "missing discovery keyword: opencode",
+  );
   assert.ok(Array.isArray(keywords), "package.json keywords must be an array");
   assert.equal(
     new Set(keywords).size,

@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.6.0",
-  "description": "Install obra/superpowers directly from upstream for Codex and Pi. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
+  "description": "Install obra/superpowers directly from upstream for Codex, Pi, and OpenCode. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -17,6 +17,7 @@
     "updater",
     "pi",
     "pi-coding-agent",
+    "opencode",
     "version-pinning"
   ],
   "license": "MIT",

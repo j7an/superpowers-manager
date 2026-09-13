@@ -9,10 +9,11 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 import * as cli from "../../src/cli.ts";
 import { piHarness } from "../../src/harnesses/pi/harness.ts";
+import { openCodeHarness } from "../../src/harnesses/opencode/harness.ts";
 
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
-type HarnessName = "codex" | "pi";
+type HarnessName = "codex" | "pi" | "opencode";
 type Subcommand = keyof ReturnType<typeof cli.commandRequirements>;
 
 // Column heading -> selected harness and production requirement token.
@@ -20,6 +21,7 @@ const TOOL_COLUMNS = [
   ["git", "codex", "git"],
   ["Codex CLI (default)", "codex", "codex"],
   ["Pi CLI (`--harness pi`)", "pi", "pi"],
+  ["OpenCode CLI (`--harness opencode`)", "opencode", "opencode"],
 ] as const satisfies readonly (readonly [string, HarnessName, string])[];
 const COLUMNS = TOOL_COLUMNS.map(([column]) => column);
 
@@ -34,7 +36,15 @@ function requirements(
       ],
     ),
   ) as Record<Subcommand, string[]>;
-  return { codex: cli.commandRequirements(env), pi };
+  const opencode = Object.fromEntries(
+    Object.entries(cli.commandRequirementsFor(env, openCodeHarness)).map(
+      ([command, tools]) => [
+        command,
+        tools.map((requirement) => requirement.name),
+      ],
+    ),
+  ) as Record<Subcommand, string[]>;
+  return { codex: cli.commandRequirements(env), pi, opencode };
 }
 
 function derive(): Record<string, string>[] {

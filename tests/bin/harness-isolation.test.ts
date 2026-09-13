@@ -16,6 +16,7 @@ import {
   snapshotTree,
   type CaseEnv,
   writePiExecutable,
+  writeOpenCodeExecutable,
 } from "./lifecycle-fixture.ts";
 import {
   commitFixture,
@@ -24,14 +25,17 @@ import {
 } from "../lib/harnesses/pi/package-fixture.ts";
 import { piPaths } from "../../src/harnesses/pi/paths.ts";
 import { readPiReceipt } from "../../src/harnesses/pi/package.ts";
+import { openCodePaths } from "../../src/harnesses/opencode/paths.ts";
+import { readOpenCodeReceipt } from "../../src/harnesses/opencode/package.ts";
 
-type Harness = "codex" | "pi";
+type Harness = "codex" | "pi" | "opencode";
 type Command = "prepare" | "probe" | "install" | "update" | "uninstall";
 function commandArgs(command: Command, harness: Harness): string[] {
   return [
     "--harness",
     harness,
-    ...(harness === "pi" && (command === "install" || command === "update")
+    ...((harness === "pi" || harness === "opencode") &&
+    (command === "install" || command === "update")
       ? ["--allow-experimental"]
       : []),
   ];
@@ -41,6 +45,7 @@ function clearNativeLogs(c: CaseEnv, piLog: string): void {
   writeFileSync(c.codexLog, "");
   writeFileSync(c.adapterLog, "");
   writeFileSync(piLog, "");
+  writeFileSync(join(c.state, "opencode.log"), "");
 }
 
 function harnessEnv(
@@ -54,6 +59,7 @@ function harnessEnv(
     CODEX_HOME: join(c.dir, "codex-home"),
     SPW_PI_LOG: piLog,
     SUPERPOWERS_PI: pi,
+    SUPERPOWERS_OPENCODE: join(c.dir, "opencode"),
     SUPERPOWERS_REF: commit,
     SUPERPOWERS_UPSTREAM_URL: upstream,
   };
@@ -110,7 +116,8 @@ function snapshotHarness(c: CaseEnv, harness: Harness): unknown {
       ),
     };
   }
-  return snapshotTree(join(c.home, ".pi", "agent"));
+  if (harness === "pi") return snapshotTree(join(c.home, ".pi", "agent"));
+  return snapshotTree(join(c.home, ".config", "opencode"));
 }
 
 function assertNoUnselectedCalls(
@@ -118,12 +125,15 @@ function assertNoUnselectedCalls(
   selected: Harness,
   piLog: string,
 ): void {
-  const calls = selected === "codex" ? readLog(piLog) : readLog(c.codexLog);
-  assert.deepEqual(
-    calls,
-    [],
-    `unselected ${selected === "codex" ? "Pi" : "Codex"} CLI was called`,
-  );
+  const logs: Record<Harness, string[]> = {
+    codex: readLog(c.codexLog),
+    pi: readLog(piLog),
+    opencode: readLog(join(c.state, "opencode.log")),
+  };
+  for (const harness of ["codex", "pi", "opencode"] as const) {
+    if (harness === selected) continue;
+    assert.deepEqual(logs[harness], [], `unselected ${harness} CLI was called`);
+  }
   assert.deepEqual(
     readLog(c.adapterLog),
     [],
@@ -149,6 +159,15 @@ function assertInstalled(c: CaseEnv, harness: Harness): void {
     );
     return;
   }
+  if (harness === "opencode") {
+    const paths = openCodePaths(
+      { HOME: c.home, XDG_CONFIG_HOME: join(c.home, ".config") },
+      process.cwd(),
+    );
+    assert.equal(existsSync(paths.preparedRoot), true);
+    assert.equal(existsSync(paths.installedRoot), true);
+    return;
+  }
   const paths = piPaths({ HOME: c.home }, process.cwd());
   assert.equal(existsSync(paths.preparedRoot), true);
   assert.equal(existsSync(paths.installedRoot), true);
@@ -168,6 +187,17 @@ async function assertPrepared(
       ),
     ) as { commit?: unknown };
     assert.equal(provenance.commit, commit);
+    return;
+  }
+  if (harness === "opencode") {
+    const paths = openCodePaths(
+      { HOME: c.home, XDG_CONFIG_HOME: join(c.home, ".config") },
+      process.cwd(),
+    );
+    assert.equal(
+      (await readOpenCodeReceipt(paths.preparedRoot)).commit,
+      commit,
+    );
     return;
   }
   const paths = piPaths({ HOME: c.home }, process.cwd());
@@ -198,6 +228,17 @@ async function assertInstalledCommit(
     assert.equal(receipt.commit, commit);
     return;
   }
+  if (harness === "opencode") {
+    const paths = openCodePaths(
+      { HOME: c.home, XDG_CONFIG_HOME: join(c.home, ".config") },
+      process.cwd(),
+    );
+    assert.equal(
+      (await readOpenCodeReceipt(paths.installedRoot)).commit,
+      commit,
+    );
+    return;
+  }
   const paths = piPaths({ HOME: c.home }, process.cwd());
   assert.equal((await readPiReceipt(paths.installedRoot)).commit, commit);
 }
@@ -207,6 +248,15 @@ function assertNoSelectedUpdateMutation(
   selected: Harness,
   piLog: string,
 ): void {
+  if (selected === "opencode") {
+    assert.deepEqual(
+      readLog(join(c.state, "opencode.log")).filter((call) =>
+        call.startsWith("plugin "),
+      ),
+      [],
+    );
+    return;
+  }
   const calls = selected === "codex" ? readLog(c.codexLog) : readLog(piLog);
   const mutation =
     selected === "codex"
@@ -228,6 +278,14 @@ function assertAbsent(c: CaseEnv, harness: Harness): void {
       readFileSync(join(c.state, "marketplace_list.json"), "utf8"),
       /superpowers-manager/,
     );
+    return;
+  }
+  if (harness === "opencode") {
+    const paths = openCodePaths(
+      { HOME: c.home, XDG_CONFIG_HOME: join(c.home, ".config") },
+      process.cwd(),
+    );
+    assert.equal(existsSync(paths.installedRoot), false);
     return;
   }
   const paths = piPaths({ HOME: c.home }, process.cwd());
@@ -264,7 +322,8 @@ function isolationCase(
   const commitA = commitFixture(upstream);
   const piLog = join(c.state, "pi.log");
   const pi = writePiExecutable(c);
-  return { c, commitA, pi, piLog, upstream };
+  const opencode = writeOpenCodeExecutable(c);
+  return { c, commitA, pi, piLog, opencode, upstream };
 }
 
 function commitB(upstream: string): string {
@@ -283,10 +342,13 @@ function writeFailingValidator(c: CaseEnv): string {
   return path;
 }
 
-for (const selected of ["codex", "pi"] as const) {
-  const other: Harness = selected === "codex" ? "pi" : "codex";
+for (const selected of ["codex", "pi", "opencode"] as const) {
+  const unselected = (["codex", "pi", "opencode"] as const).filter(
+    (harness) => harness !== selected,
+  );
+  const other = unselected[0]!;
 
-  void test(`${selected}: every maintained lifecycle command leaves ${other} state unchanged`, async (t) => {
+  void test(`${selected}: every maintained lifecycle command leaves unselected state unchanged`, async (t) => {
     for (const command of [
       "prepare",
       "probe",
@@ -304,12 +366,14 @@ for (const selected of ["codex", "pi"] as const) {
           fixture.piLog,
         );
         if (command === "install" || command === "prepare")
-          await seed(fixture.c, other, env);
+          for (const other of unselected) await seed(fixture.c, other, env);
         else {
-          await seed(fixture.c, "codex", env);
-          await seed(fixture.c, "pi", env);
+          for (const harness of ["codex", "pi", "opencode"] as const)
+            await seed(fixture.c, harness, env);
         }
-        const before = snapshotHarness(fixture.c, other);
+        const before = unselected.map(
+          (other) => [other, snapshotHarness(fixture.c, other)] as const,
+        );
         clearNativeLogs(fixture.c, fixture.piLog);
         const result = await invoke(fixture.c, command, selected, env);
         assert.equal(
@@ -333,19 +397,23 @@ for (const selected of ["codex", "pi"] as const) {
             result.stdout,
             selected === "codex"
               ? /manager is current/
-              : /Superpowers Pi snapshot is current/,
+              : selected === "pi"
+                ? /Superpowers Pi snapshot is current/
+                : /Superpowers OpenCode snapshot is current/,
           );
           assertInstalled(fixture.c, selected);
           assertNoSelectedUpdateMutation(fixture.c, selected, fixture.piLog);
         }
         if (command === "uninstall") assertAbsent(fixture.c, selected);
-        assert.deepEqual(snapshotHarness(fixture.c, other), before);
+        for (const [other, snapshot] of before)
+          assert.deepEqual(snapshotHarness(fixture.c, other), snapshot);
         assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
       });
     }
   });
 
   void test(`${selected}: update publishes B without changing ${other}`, async (t) => {
+    if (selected === "opencode") return;
     const fixture = isolationCase(t);
     const envA = harnessEnv(
       fixture.c,
@@ -385,6 +453,7 @@ for (const selected of ["codex", "pi"] as const) {
   });
 
   void test(`${selected}: invalid preparation preserves ${other}`, async (t) => {
+    if (selected === "opencode") return;
     const fixture = isolationCase(t);
     const valid = harnessEnv(
       fixture.c,
@@ -411,6 +480,7 @@ for (const selected of ["codex", "pi"] as const) {
   });
 
   void test(`${selected}: native installation failure preserves ${other}`, async (t) => {
+    if (selected === "opencode") return;
     const config = selected === "codex" ? { pluginAdd: "fail" } : {};
     const fixture = isolationCase(t, config);
     const pi =
@@ -452,6 +522,7 @@ for (const selected of ["codex", "pi"] as const) {
   });
 
   void test(`${selected}: native removal failure preserves ${other}`, async (t) => {
+    if (selected === "opencode") return;
     const config = selected === "codex" ? { marketplaceRemove: "fail" } : {};
     const fixture = isolationCase(t, config);
     const pi =

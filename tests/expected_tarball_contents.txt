@@ -63,6 +63,8 @@ dist/harnesses/opencode/discovery.js
 dist/harnesses/opencode/install.js
 dist/harnesses/opencode/native.js
 dist/harnesses/opencode/state.js
+dist/harnesses/opencode/harness.js
+dist/harnesses/opencode/presentation.js
 dist/provenance.js
 dist/python-json-format.js
 dist/python-json.js

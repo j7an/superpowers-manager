@@ -1,11 +1,11 @@
 # Internal harness interface
 
-Codex and Pi are supported production integrations behind the same internal
+Codex, Pi, and OpenCode are supported production integrations behind the same internal
 TypeScript interface. It is not a public plugin protocol or a promise of support
 for additional harnesses.
 
 The [CLI composition point](../src/cli.ts) selects one concrete adapter per
-invocation using `--harness codex` or `--harness pi`; omission defaults to Codex.
+invocation using `--harness codex`, `--harness pi`, or `--harness opencode`; omission defaults to Codex.
 Upstream selection is shared, while preparation and activation target the chosen
 harness independently.
 
@@ -13,6 +13,8 @@ harness independently.
   and its marketplace/plugin registration.
 - The [Pi adapter](../src/harnesses/pi/harness.ts) manages a Pi package and its registration,
   with a durable Manager-owned installed snapshot separate from prepared output.
+- The [OpenCode adapter](../src/harnesses/opencode/harness.ts) manages a global registration
+  and a durable Manager-owned installed snapshot separate from prepared output.
 
 Implement `HarnessAdapter<R>` for an additional integration and supply it at
 the CLI composition point. Shared commands must not import concrete adapters.

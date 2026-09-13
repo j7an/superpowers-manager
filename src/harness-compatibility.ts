@@ -1,4 +1,4 @@
-export type HarnessId = "codex" | "pi";
+export type HarnessId = "codex" | "pi" | "opencode";
 
 export type Compatibility =
   | { readonly kind: "unknown"; readonly reason: string }

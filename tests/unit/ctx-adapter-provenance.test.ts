@@ -182,7 +182,7 @@ void test("harness ownership resolves only directory-owned modules", () => {
   );
 });
 
-type ConcreteHarnessBinding = "codexHarness" | "piHarness";
+type ConcreteHarnessBinding = "codexHarness" | "piHarness" | "openCodeHarness";
 
 function concreteHarnessBinding(
   node: import("typescript/unstable/ast").Node | undefined,
@@ -190,6 +190,7 @@ function concreteHarnessBinding(
   if (node === undefined || !isIdentifier(node)) return undefined;
   if (node.text === "codexHarness") return "codexHarness";
   if (node.text === "piHarness") return "piHarness";
+  if (node.text === "openCodeHarness") return "openCodeHarness";
   return undefined;
 }
 
@@ -234,6 +235,7 @@ void test("the CLI is the only production concrete harness binding", () => {
   snapshot.dispose();
   api.close();
   assert.deepEqual(bindings, [
+    "src/cli.ts:openCodeHarness",
     "src/cli.ts:piHarness",
     "src/cli.ts:codexHarness",
   ]);

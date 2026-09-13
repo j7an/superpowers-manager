@@ -2,26 +2,26 @@
 
 ## Shared selection
 
-| Command | Harness side effects | Purpose |
-|---|---|---|
-| `npx superpowers-manager pin REF` | None | Resolve and save an exact tag or full commit |
-| `npx superpowers-manager track-latest` | None | Save latest-stable policy |
-| `npx superpowers-manager unpin` | None | Restore the packaged fallback policy |
+| Command                                | Harness side effects | Purpose                                      |
+| -------------------------------------- | -------------------- | -------------------------------------------- |
+| `npx superpowers-manager pin REF`      | None                 | Resolve and save an exact tag or full commit |
+| `npx superpowers-manager track-latest` | None                 | Save latest-stable policy                    |
+| `npx superpowers-manager unpin`        | None                 | Restore the packaged fallback policy         |
 
 Selection commands are shared and accept no harness target. They save intent for
-both adapters without preparing or activating either one.
+all adapters without preparing or activating any one.
 
 ## Targeted lifecycle
 
-Set `HARNESS` to `codex` or `pi`. Omitting `--harness` selects Codex.
+Set `HARNESS` to `codex`, `pi`, or `opencode`. Omitting `--harness` selects Codex.
 
-| Command | Selected-harness side effects | Purpose |
-|---|---|---|
-| `npx superpowers-manager prepare --harness HARNESS` | None | Resolve, stage, validate, and replace prepared output |
-| `npx superpowers-manager probe --harness HARNESS` | None | Report selected state and status |
-| `npx superpowers-manager install --harness HARNESS` | Owned target state | Prepare, activate, and verify |
-| `npx superpowers-manager update --harness HARNESS` | Owned target state when stale | Probe, refresh when needed, and verify |
-| `npx superpowers-manager uninstall --harness HARNESS` | Owned target state | Remove only Manager-owned state and verify removal |
+| Command                                               | Selected-harness side effects | Purpose                                               |
+| ----------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
+| `npx superpowers-manager prepare --harness HARNESS`   | None                          | Resolve, stage, validate, and replace prepared output |
+| `npx superpowers-manager probe --harness HARNESS`     | None                          | Report selected state and status                      |
+| `npx superpowers-manager install --harness HARNESS`   | Owned target state            | Prepare, activate, and verify                         |
+| `npx superpowers-manager update --harness HARNESS`    | Owned target state when stale | Probe, refresh when needed, and verify                |
+| `npx superpowers-manager uninstall --harness HARNESS` | Owned target state            | Remove only Manager-owned state and verify removal    |
 
 `npx superpowers-manager` alone means default Codex `update`.
 
