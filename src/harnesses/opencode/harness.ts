@@ -4,7 +4,7 @@ import type {
   ToolRequirement,
 } from "../../harness.ts";
 import { installOpenCode, removeOpenCode } from "./install.ts";
-import { openCodePaths } from "./paths.ts";
+import { assertOpenCodePreparationSeparate, openCodePaths } from "./paths.ts";
 import {
   inspectOpenCodePrepared,
   openCodePreparationLocation,
@@ -39,9 +39,11 @@ function requirements(
 
 export const openCodeHarness: HarnessAdapter<OpenCodeRemovalInput> = {
   preparationLocation: openCodePreparationLocation,
-  mutationRoots: async (ctx) => [
-    openCodePaths(ctx.env ?? {}, process.cwd()).configRoot,
-  ],
+  mutationRoots: async (ctx) => {
+    const paths = openCodePaths(ctx.env ?? {}, process.cwd());
+    await assertOpenCodePreparationSeparate(paths);
+    return [paths.configRoot];
+  },
   validatePreparationBeforeFetch: validateOpenCodePreparationBeforeFetch,
   prepareCandidate: prepareOpenCodeCandidate,
   inspectPrepared: inspectOpenCodePrepared,

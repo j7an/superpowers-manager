@@ -661,6 +661,30 @@ void test("preparation rejects unsafe locations before allocating a workspace", 
   }
 });
 
+void test("preparation runs adapter prefetch validation before creating its workspace parent", async (t) => {
+  const fixture = await createHarnessFixture(t);
+  const parent = join(fixture.ctx.root, "must-not-create");
+  const adapter = {
+    ...fixture.adapter,
+    preparationLocation() {
+      fixture.calls.push("location");
+      return { destinationRoot: join(parent, "prepared"), stagingLeaf: "item" };
+    },
+    async validatePreparationBeforeFetch() {
+      fixture.calls.push("prefetch");
+      return failureResult("prefetch", "unsafe", "unsafe storage", [], []);
+    },
+  };
+  assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
+  assert.deepEqual(fixture.calls, [
+    "location",
+    "mutation-roots",
+    "location",
+    "prefetch",
+  ]);
+  assert.equal(existsSync(parent), false);
+});
+
 void test("preparation hides a location resolver's thrown diagnostic", async (t) => {
   const fixture = await createHarnessFixture(t);
   const adapter = {

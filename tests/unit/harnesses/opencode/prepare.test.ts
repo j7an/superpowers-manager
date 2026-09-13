@@ -91,7 +91,12 @@ void test("preparing a replacement leaves an installed snapshot unchanged", asyn
 });
 
 void test("prefetch validation rejects aliases and non-directory storage roots", async (t) => {
-  for (const kind of ["alias", "regular-file"] as const)
+  for (const kind of [
+    "alias",
+    "regular-file",
+    "config-parent-alias",
+    "manager-parent-alias",
+  ] as const)
     await t.test(kind, async (t) => {
       const root = nativeOpenCodeFixture(t);
       const env = {
@@ -99,10 +104,23 @@ void test("prefetch validation rejects aliases and non-directory storage roots",
         XDG_CONFIG_HOME: join(root, "config"),
       };
       const paths = openCodePaths(env, process.cwd());
-      mkdirSync(paths.managerRoot, { recursive: true });
+      if (kind === "config-parent-alias") {
+        const target = join(root, "outside-config");
+        mkdirSync(target);
+        mkdirSync(join(paths.configRoot, ".."), { recursive: true });
+        symlinkSync(target, paths.configRoot, "dir");
+      } else if (kind === "manager-parent-alias") {
+        const target = join(root, "outside-manager");
+        mkdirSync(target);
+        mkdirSync(paths.configRoot, { recursive: true });
+        symlinkSync(target, paths.managerRoot, "dir");
+      } else {
+        mkdirSync(paths.managerRoot, { recursive: true });
+      }
       if (kind === "alias")
         symlinkSync(paths.installedRoot, paths.preparedRoot);
-      else writeFileSync(paths.recoveryRoot, "preserve\n");
+      else if (kind === "regular-file")
+        writeFileSync(paths.recoveryRoot, "preserve\n");
       const result = await validateOpenCodePreparationBeforeFetch({
         root,
         env,

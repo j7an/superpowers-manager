@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { rm as removePath } from "node:fs/promises";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -29,7 +31,11 @@ import {
   removeOpenCode,
   type OpenCodeInstallDependencies,
 } from "../../../../src/harnesses/opencode/install.ts";
-import { readOpenCodeReceipt } from "../../../../src/harnesses/opencode/package.ts";
+import { readOpenCodeConfig } from "../../../../src/harnesses/opencode/config.ts";
+import {
+  readOpenCodePackageAssessment,
+  readOpenCodeReceipt,
+} from "../../../../src/harnesses/opencode/package.ts";
 import { inspectOpenCodeOwnership } from "../../../../src/harnesses/opencode/state.ts";
 import {
   openCodeSandbox,
@@ -479,4 +485,101 @@ void test("OpenCode removal no-op and cleanup failure are explicit", async (t) =
       ["npm:unrelated"],
     );
   });
+});
+
+void test("OpenCode partial snapshot deletion retains a complete backup and exact tuple entry", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const largeInteger = "9".repeat(360);
+  const rawEntry = `[
+      "${f.canonicalRoot}",
+      {
+        // exact tuple recovery evidence
+        "limit": ${largeInteger},
+        "label": "preserve exactly",
+      },
+    ]`;
+  writeFileSync(
+    f.configFile,
+    `{
+  "plugin": [
+    "npm:unrelated",
+    ${rawEntry}
+  ],
+  "theme": "light",
+}\n`,
+  );
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  let injected = false;
+  const result = await removeOpenCode(ownership.removalInput, f.ctx, {
+    ...f.deps,
+    rm: async (path, options) => {
+      if (path === f.paths.installedRoot) {
+        injected = true;
+        await removePath(join(path, "skills"), {
+          recursive: true,
+          force: true,
+        });
+        throw new Error("injected original snapshot deletion failure");
+      }
+      await removePath(path, options);
+    },
+  });
+  assert.equal(injected, true);
+  assert.equal(result.outcome.ok, false);
+  const backups = readdirSync(f.paths.managerRoot).filter((name) =>
+    name.startsWith(".installed.bak."),
+  );
+  assert.equal(backups.length, 1);
+  const backup = join(f.paths.managerRoot, backups[0]!);
+  assert.equal(
+    (await readOpenCodePackageAssessment(backup)).receipt.digest,
+    ownership.removalInput.receiptDigest,
+  );
+  assert.equal(existsSync(join(f.paths.installedRoot, "skills")), false);
+  const journal = JSON.parse(
+    readFileSync(join(f.paths.recoveryRoot, "transaction.json"), "utf8"),
+  ) as { priorRegistration: { rawEntry: string } };
+  assert.equal(journal.priorRegistration.rawEntry, rawEntry);
+  assert.deepEqual(
+    (await readOpenCodeConfig(f.configFile))?.document.entries.map(
+      (entry) => entry.spec,
+    ),
+    ["npm:unrelated"],
+  );
+});
+
+void test("OpenCode reports verified removal separately when only backup cleanup remains", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const result = await removeOpenCode(ownership.removalInput, f.ctx, {
+    ...f.deps,
+    rm: async (path, options) => {
+      if (String(path).includes(".installed.bak."))
+        throw new Error("injected backup cleanup failure");
+      await removePath(path, options);
+    },
+  });
+  assert.equal(result.outcome.ok, false);
+  if (!result.outcome.ok) {
+    assert.equal(result.outcome.error.code, "cleanup-required");
+    assert.match(result.outcome.error.message, /removal was verified/);
+  }
+  assert.equal(existsSync(f.paths.installedRoot), false);
+  assert.equal(existsSync(f.paths.recoveryRoot), true);
+  assert.equal(
+    readdirSync(f.paths.managerRoot).some((name) =>
+      name.startsWith(".installed.bak."),
+    ),
+    true,
+  );
 });

@@ -11,6 +11,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { findNodeAtLocation } from "jsonc-parser";
 
 import {
   failureResult,
@@ -57,6 +58,7 @@ import { displayPath } from "../../validator.ts";
 export interface OpenCodeInstallDependencies {
   readonly run: typeof runOpenCode;
   readonly beginPublication: typeof beginDirectoryPublication;
+  readonly rm?: typeof rm;
 }
 
 const DEFAULTS: OpenCodeInstallDependencies = {
@@ -65,6 +67,10 @@ const DEFAULTS: OpenCodeInstallDependencies = {
 };
 
 type Identity = { readonly dev: number; readonly ino: number };
+// One bounded 1 MiB config entry may nearly double when JSON escaping preserves
+// its exact source text. Leave receipt/path headroom without admitting an
+// unbounded recovery record.
+const MAX_JOURNAL_BYTES = 3 * 1024 * 1024;
 type Phase =
   | "staging"
   | "publishing"
@@ -86,6 +92,7 @@ interface RegistrationRecord {
   readonly observedDev: number;
   readonly observedIno: number;
   readonly observedMode: number;
+  readonly rawEntry: string;
 }
 interface Journal {
   readonly schema: 1;
@@ -109,6 +116,7 @@ interface Pending {
   journalIdentity: Identity;
   stageIdentity?: Identity;
   publishedIdentity?: Identity;
+  removalBackupIdentity?: Identity;
   settled: boolean;
 }
 
@@ -152,7 +160,10 @@ function journalPath(pending: Pending): string {
 }
 
 function journalBytes(journal: Journal): Buffer {
-  return Buffer.from(`${JSON.stringify(journal)}\n`);
+  const bytes = Buffer.from(`${JSON.stringify(journal)}\n`);
+  if (bytes.length > MAX_JOURNAL_BYTES)
+    throw new Error("OpenCode recovery journal exceeds its byte limit");
+  return bytes;
 }
 
 async function validatePaths(paths: OpenCodePaths): Promise<string> {
@@ -233,6 +244,12 @@ function registrationRecord(
 ): RegistrationRecord | null {
   if (registration === undefined) return null;
   const observation = registration.observation;
+  const node = findNodeAtLocation(observation.document.root, [
+    "plugin",
+    registration.entry.index,
+  ]);
+  if (node === undefined)
+    throw new Error("OpenCode registration syntax changed");
   return {
     configPath: observation.document.path,
     entryIndex: registration.entry.index,
@@ -246,6 +263,10 @@ function registrationRecord(
     observedDev: observation.identity.dev,
     observedIno: observation.identity.ino,
     observedMode: observation.identity.mode,
+    rawEntry: observation.document.text.slice(
+      node.offset,
+      node.offset + node.length,
+    ),
   };
 }
 
@@ -322,7 +343,7 @@ async function requireJournal(pending: Pending): Promise<void> {
   const observed = await lstat(path);
   if (
     !sameIdentity(observed, pending.journalIdentity) ||
-    observed.size > 64 * 1024 ||
+    observed.size > MAX_JOURNAL_BYTES ||
     !(await readFile(path)).equals(journalBytes(pending.journal))
   )
     throw new Error("OpenCode recovery journal changed");
@@ -743,6 +764,8 @@ export async function removeOpenCode(
   const paths = openCodePaths(ctx.env ?? {}, process.cwd());
   let pending: Pending | undefined;
   let deregistered = false;
+  let backupVerified = false;
+  let removalVerified = false;
   try {
     await validatePaths(paths);
     await requireNoRecovery(paths);
@@ -785,6 +808,16 @@ export async function removeOpenCode(
       deps,
     );
     const installedIdentity = await identity(paths.installedRoot);
+    await assertNoFollowType(pending.backup, ["missing"]);
+    await cp(paths.installedRoot, pending.backup, {
+      recursive: true,
+      verbatimSymlinks: true,
+      force: false,
+      errorOnExist: true,
+    });
+    pending.removalBackupIdentity = await identity(pending.backup);
+    await requireSnapshot(pending.backup, previous);
+    backupVerified = true;
     if (registered !== undefined) {
       await removeObservedOpenCodeEntry(
         registered.observation,
@@ -799,20 +832,51 @@ export async function removeOpenCode(
     await phase(pending, "deregistered");
     await requireIdentity(paths.installedRoot, installedIdentity);
     await requireSnapshot(paths.installedRoot, previous);
+    await requireIdentity(pending.backup, pending.removalBackupIdentity);
+    await requireSnapshot(pending.backup, previous);
     observed = await discovery(paths, ctx);
     requireNoOwnedActivation(observed);
-    await rm(paths.installedRoot, { recursive: true });
+    await (deps.rm ?? rm)(paths.installedRoot, { recursive: true });
     await requireSnapshot(paths.installedRoot, null);
+    const verification = accepted(await inspectOpenCodeOwnership(ctx));
+    if (verification.removalVerification.kind !== "allowed")
+      throw new Error("OpenCode desired removal state could not be verified");
+    removalVerified = true;
+    await requireIdentity(pending.backup, pending.removalBackupIdentity);
+    await requireSnapshot(pending.backup, previous);
+    await (deps.rm ?? rm)(pending.backup, { recursive: true });
+    await requireSnapshot(pending.backup, null);
     await retireJournal(pending);
     return successResult("remove-opencode", null, []);
   } catch {
+    let intactBackup = false;
+    if (
+      pending !== undefined &&
+      backupVerified &&
+      pending.removalBackupIdentity !== undefined
+    ) {
+      try {
+        await requireIdentity(pending.backup, pending.removalBackupIdentity);
+        await requireSnapshot(pending.backup, pending.journal.oldArtifact);
+        intactBackup = true;
+      } catch {
+        // The controlled failure below never claims unverified recovery bytes.
+      }
+    }
+    if (removalVerified)
+      return fail(
+        "cleanup-required",
+        `OpenCode removal was verified, but backup or journal cleanup remains at ${paths.managerRoot}`,
+      );
     return fail(
       pending !== undefined || (await hasRecovery(paths))
         ? "recovery-required"
         : "removal-refused",
-      deregistered
-        ? `OpenCode registration was removed but snapshot cleanup failed; preserve recovery material at ${paths.recoveryRoot}`
-        : `cannot verify OpenCode removal at ${paths.installedRoot}; preserve the snapshot and any recovery material at ${paths.recoveryRoot}`,
+      intactBackup
+        ? `OpenCode removal did not complete; preserve the verified prior snapshot backup at ${pending!.backup} and recovery journal at ${paths.recoveryRoot}`
+        : deregistered
+          ? `OpenCode registration was removed but snapshot cleanup failed; preserve recovery material at ${paths.recoveryRoot}`
+          : `cannot verify OpenCode removal at ${paths.installedRoot}; preserve the snapshot and any recovery material at ${paths.recoveryRoot}`,
     );
   }
 }

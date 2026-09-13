@@ -1919,7 +1919,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   const err = capture();
   const status = await runProbe(["--porcelain"], {
     root: c.pkg,
-    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:140::tag.gpgsign=false` creates on
+    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:148::tag.gpgsign=false` creates on
     // UPSTREAM; both values come from the fixture, neither is invented.
     env: caseEnv(c, {
       SUPERPOWERS_REF: "v1.0.0",
@@ -2697,7 +2697,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:521::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
+  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:522::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2769,8 +2769,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1286::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1332::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1287::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1333::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

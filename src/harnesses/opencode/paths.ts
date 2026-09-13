@@ -28,6 +28,8 @@ function overlaps(left: string, right: string): boolean {
 export async function assertOpenCodePreparationSeparate(
   paths: OpenCodePaths,
 ): Promise<void> {
+  await assertNoFollowType(paths.configRoot, ["directory", "missing"]);
+  await assertNoFollowType(paths.managerRoot, ["directory", "missing"]);
   const roots = [paths.preparedRoot, paths.installedRoot, paths.recoveryRoot];
   const canonical = await Promise.all(
     roots.map(async (root) => {

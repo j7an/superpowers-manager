@@ -22,7 +22,13 @@ admit an unknown or changed bootstrap profile.
 Conflicting unmanaged Superpowers registrations, project sources, remote
 configuration, or managed sources require manual resolution. The manager removes
 only a verified Manager-owned registration and snapshot. Preserve reported
-recovery material whenever a transaction cannot be completed safely.
+recovery material whenever a transaction cannot be completed safely. During
+removal, that material can include both a journal and a verified sibling backup
+of the prior snapshot; do not alter either while the manager reports recovery is
+required. If the manager instead reports that removal was verified but cleanup
+is pending, the registration and installed snapshot are already absent and the
+remaining backup or journal is cleanup evidence, not a promise that the removed
+state can be rolled back. Recovery is never applied automatically.
 
 Discovery uses the original process context. The native writer runs in a
 contained disposable context with its global XDG configuration root pinned to
