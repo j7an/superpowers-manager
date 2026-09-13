@@ -152,6 +152,14 @@ void test("npm-pack-contents", async (t) => {
     () => {
       const { status, output } = runSh(ASSERT_SCRIPT, [rawPath]);
       assert.equal(status, 0, output);
+      const paths = new Set(
+        (packed.files as { path: string }[]).map((entry) => entry.path),
+      );
+      assert.equal(paths.has("dist/harnesses/opencode/config.js"), true);
+      assert.equal(
+        paths.has("node_modules/jsonc-parser/lib/umd/main.js"),
+        true,
+      );
     },
   );
 
@@ -434,22 +442,25 @@ void test("npm-pack-contents", async (t) => {
 });
 
 // --- port-only assertion (outside the 1:1 shell mapping) ----------------
-// The published package declares only its bundled TOML parser as a runtime
-// dependency. This is about the ROOT manifest;
+// The published package declares only its two approved bundled parsers as
+// runtime dependencies. This is about the ROOT manifest;
 // tests/container/package.json has its own, different dependency contract
 // asserted in container-contract.test.ts. See
 // docs/superpowers/specs/2026-08-02-pr11.1-workflow-driver-migration-design.md
 // section 3.7 — PR 11.1 added the first devDependency that is a library
 // rather than a tool, and this keeps unrelated libraries out of runtime.
-void test("package.json declares only the bundled TOML parser at runtime", () => {
+void test("package.json declares exactly the approved bundled parsers at runtime", () => {
   const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   const runtimeDependencies = Object.keys(manifest.dependencies ?? {});
   assert.deepEqual(
     runtimeDependencies,
-    ["smol-toml"],
-    "package.json runtime dependencies must remain limited to the TOML parser",
+    ["jsonc-parser", "smol-toml"],
+    "package.json runtime dependencies must remain limited to the approved parsers",
   );
-  assert.equal(manifest.bundleDependencies?.includes("smol-toml"), true);
+  assert.deepEqual(
+    new Set(manifest.bundleDependencies ?? []),
+    new Set(["jsonc-parser", "smol-toml"]),
+  );
 });
 
 function escapeRegExp(value: string) {

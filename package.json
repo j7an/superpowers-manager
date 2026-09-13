@@ -69,9 +69,11 @@
     "README.md"
   ],
   "dependencies": {
+    "jsonc-parser": "3.3.1",
     "smol-toml": "1.8.0"
   },
   "bundleDependencies": [
+    "jsonc-parser",
     "smol-toml"
   ]
 }
