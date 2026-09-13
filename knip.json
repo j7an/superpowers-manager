@@ -11,6 +11,8 @@
     "tests/baseline/selection-writer-child.ts",
     "tests/baseline/record-codex-environment.ts",
     "tests/container/codex/hooks-list-rpc.ts",
+    "tests/container/codex/assert-state.ts",
+    "tests/container/codex/assert-schema.ts",
     "tests/container/pi/resource-probe.ts",
     "tests/unit/helpers/rpc-server-child.ts",
     "tests/unit/helpers/workspace-signal{,-failure}-child.ts"

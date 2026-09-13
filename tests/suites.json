@@ -47,6 +47,7 @@
     { "path": "tests/bin/citations.test.ts", "group": "repository" },
     { "path": "tests/bin/container-contract.test.ts", "group": "repository" },
     { "path": "tests/bin/container-rpc.test.ts", "group": "repository" },
+    { "path": "tests/bin/container-probe.test.ts", "group": "repository" },
     { "path": "tests/bin/error-assertions.test.ts", "group": "repository" },
     { "path": "tests/bin/install-commands.test.ts", "group": "integration" },
     { "path": "tests/bin/harness-isolation.test.ts", "group": "integration" },
