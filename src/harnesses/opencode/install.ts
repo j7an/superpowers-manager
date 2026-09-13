@@ -67,10 +67,17 @@ const DEFAULTS: OpenCodeInstallDependencies = {
 };
 
 type Identity = { readonly dev: number; readonly ino: number };
-// One bounded 1 MiB config entry may nearly double when JSON escaping preserves
-// its exact source text. Leave receipt/path headroom without admitting an
-// unbounded recovery record.
-const MAX_JOURNAL_BYTES = 3 * 1024 * 1024;
+// The journal can contain data from two independently bounded 1 MiB receipts
+// plus one bounded 1 MiB config. Six bytes of JSON output per input byte covers
+// control escaping; counting the registration spec independently brings that
+// conservative subtotal to 24 MiB. The remaining 8 MiB bounds the actual
+// filesystem paths and fixed hashes/metadata without admitting an unbounded
+// recovery record.
+const MAX_JOURNAL_BYTES = 32 * 1024 * 1024;
+type SnapshotEvidence = Pick<
+  OpenCodeReceipt,
+  "binding" | "digest" | "commit" | "source"
+>;
 type Phase =
   | "staging"
   | "publishing"
@@ -99,8 +106,8 @@ interface Journal {
   readonly token: string;
   readonly phase: Phase;
   readonly installedRoot: string;
-  readonly oldArtifact: OpenCodeReceipt | null;
-  readonly newArtifact: OpenCodeReceipt | null;
+  readonly oldArtifact: SnapshotEvidence | null;
+  readonly newArtifact: SnapshotEvidence | null;
   readonly priorRegistration: RegistrationRecord | null;
   readonly createdRegistration: RegistrationRecord | null;
 }
@@ -196,8 +203,8 @@ async function syncDirectoryStrict(path: string): Promise<void> {
 }
 
 function artifactSame(
-  left: OpenCodeReceipt | null,
-  right: OpenCodeReceipt | null,
+  left: SnapshotEvidence | null,
+  right: SnapshotEvidence | null,
 ): boolean {
   return left === null
     ? right === null
@@ -206,6 +213,19 @@ function artifactSame(
         left.digest === right.digest &&
         left.commit === right.commit &&
         left.source === right.source;
+}
+
+function snapshotEvidence(
+  receipt: OpenCodeReceipt | null,
+): SnapshotEvidence | null {
+  return receipt === null
+    ? null
+    : {
+        binding: receipt.binding,
+        digest: receipt.digest,
+        commit: receipt.commit,
+        source: receipt.source,
+      };
 }
 
 async function snapshot(root: string): Promise<OpenCodeReceipt | null> {
@@ -219,7 +239,7 @@ async function snapshot(root: string): Promise<OpenCodeReceipt | null> {
 
 async function requireSnapshot(
   root: string,
-  expected: OpenCodeReceipt | null,
+  expected: SnapshotEvidence | null,
 ): Promise<void> {
   if (!artifactSame(await snapshot(root), expected))
     throw new Error("OpenCode artifact changed");
@@ -390,25 +410,28 @@ async function beginJournal(
   deps: OpenCodeInstallDependencies,
 ): Promise<Pending> {
   const canonicalRoot = await validatePaths(paths);
-  await mkdir(paths.managerRoot, { recursive: true });
   await requireNoRecovery(paths);
-  await mkdir(paths.recoveryRoot, { mode: 0o700 });
-  const recoveryIdentity = await identity(paths.recoveryRoot);
   const token = randomBytes(16).toString("hex");
   const journal: Journal = {
     schema: 1,
     token,
     phase: newArtifact === null ? "removing" : "staging",
     installedRoot: canonicalRoot,
-    oldArtifact,
-    newArtifact,
+    oldArtifact: snapshotEvidence(oldArtifact),
+    newArtifact: snapshotEvidence(newArtifact),
     priorRegistration,
     createdRegistration: null,
   };
+  // Serialization and its byte bound are validated before this function
+  // creates any Manager or recovery path.
+  const bytes = journalBytes(journal);
+  await mkdir(paths.managerRoot, { recursive: true });
+  await mkdir(paths.recoveryRoot, { mode: 0o700 });
+  const recoveryIdentity = await identity(paths.recoveryRoot);
   const path = join(paths.recoveryRoot, "transaction.json");
   const handle = await open(path, "wx", 0o600);
   try {
-    await handle.writeFile(journalBytes(journal));
+    await handle.writeFile(bytes);
     await handle.sync();
   } finally {
     await handle.close();

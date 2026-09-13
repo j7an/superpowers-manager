@@ -583,3 +583,64 @@ void test("OpenCode reports verified removal separately when only backup cleanup
     true,
   );
 });
+
+void test("OpenCode journals a control-heavy bounded JSONC registration", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const controls = "\u0001".repeat(700_000);
+  writeFileSync(
+    f.configFile,
+    `{"plugin":[["${f.canonicalRoot}",{/*${controls}*/"enabled":true}]]}`,
+  );
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.equal(result.outcome.ok, true);
+  assert.equal(existsSync(f.paths.installedRoot), false);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
+});
+
+void test("OpenCode journal serialization failure creates no recovery directory", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const originalStringify = JSON.stringify;
+  Object.defineProperty(JSON, "stringify", {
+    configurable: true,
+    value: ((value: unknown, ...args: unknown[]) => {
+      if (
+        value !== null &&
+        typeof value === "object" &&
+        "phase" in value &&
+        "oldArtifact" in value
+      )
+        throw new Error("injected journal serialization failure");
+      return (originalStringify as (...input: unknown[]) => string | undefined)(
+        value,
+        ...args,
+      );
+    }) as typeof JSON.stringify,
+  });
+  let result: Awaited<ReturnType<typeof removeOpenCode>>;
+  try {
+    result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  } finally {
+    Object.defineProperty(JSON, "stringify", {
+      configurable: true,
+      value: originalStringify,
+    });
+  }
+  assert.equal(result.outcome.ok, false);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
+  assert.deepEqual(readdirSync(f.paths.managerRoot).sort(), [
+    "installed",
+    "prepared",
+  ]);
+});
