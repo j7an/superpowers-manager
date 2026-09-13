@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// A TOOL, not a registered test suite -- the same status float-differential
-// declares for itself. The suite is the gate; this exists so a contributor can
-// see the buckets in under a second, and so PR 12.3 has a mechanically safe
-// way to rewrite a line number.
+// A TOOL, not a registered test suite. The suite is the gate; this exists so a
+// contributor can see the buckets in under a second, and so PR 12.3 has a
+// mechanically safe way to rewrite a line number.
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {

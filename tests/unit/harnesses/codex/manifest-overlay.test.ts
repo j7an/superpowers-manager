@@ -53,6 +53,22 @@ void test("an integer beyond 2^53 survives byte-exactly", () => {
   );
 });
 
+void test("overlay preserves validated numeric source tokens", () => {
+  for (const token of [
+    "1e2",
+    "1.50",
+    "-0",
+    "-0.0",
+    "1E+02",
+    "1e-400",
+    "9007199254740993",
+    "1888570120608320.2",
+    "9".repeat(5000),
+  ]) {
+    assert.ok(overlay(`{"n":${token}}`).includes(`"n": ${token}`), token);
+  }
+});
+
 void test("duplicate keys resolve last-wins at the first key's position", () => {
   const out = overlay('{"name":"first","z":1,"name":"renamed"}');
   assert.match(out, /"name": "renamed",\n  "z": 1,/);
@@ -107,23 +123,21 @@ void test("nesting beyond 256 is rejected with the complete message", () => {
   );
 });
 
-void test("an out-of-range numeric literal is rejected with the complete message, naming the path", () => {
-  // Only the numeric-overflow guard in src/python-json-format.ts (roughly
-  // :33) is reachable through applyManifestOverlay: the sibling literal
-  // guard for NaN/Infinity/-Infinity (roughly :24) can only fire when a
-  // caller parses with `nonStandardConstants: "accept"`, and
-  // OVERLAY_PROFILE rejects those tokens at the parser before they ever
-  // become a raw number source — see src/strict-json.ts's
-  // parseNonStandardConstant. That case is covered directly against
-  // formatPythonNumber in tests/unit/python-json-format.test.js instead.
-  assert.throws(
-    () => overlay('{"a":2e308}'),
-    (error) => {
-      assert.ok(error instanceof Error, "expected an Error");
-      assert.equal(error.message, `JSON number out of range in ${PATH}: 2e308`);
-      return true;
-    },
-  );
+void test("out-of-range numeric literals are rejected with complete messages naming the path", () => {
+  for (const token of ["2e308", "-2e308"]) {
+    assert.throws(
+      () => overlay(`{"a":${token}}`),
+      (error) => {
+        assert.ok(error instanceof Error, "expected an Error");
+        assert.equal(
+          error.message,
+          `JSON number out of range in ${PATH}: ${token}`,
+        );
+        return true;
+      },
+      token,
+    );
+  }
 });
 
 void test("a malformed manifest reports line and column", () => {

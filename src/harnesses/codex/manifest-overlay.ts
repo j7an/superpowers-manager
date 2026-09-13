@@ -1,7 +1,4 @@
-import {
-  escapeNonAscii,
-  formatPythonNumber,
-} from "../../python-json-format.ts";
+import { escapeNonAscii } from "../../python-json-format.ts";
 import { SafetyError } from "../../safety-error.ts";
 import {
   isRawNumber,
@@ -20,13 +17,17 @@ const OVERLAY_PROFILE: StrictJsonProfile = {
 /**
  * Apply the manager's manifest overlay to a Codex plugin manifest.
  *
- * Byte-for-byte equivalent to the CPython implementation this replaces:
- * `json.dump(data, f, indent=2, allow_nan=False)` plus a trailing newline.
- * The byte-parity evidence lives in
+ * Preserves validated JSON numeric source tokens while applying the manager's
+ * manifest fields, with a trailing newline. The baseline contract lives in
  * `tests/baseline/harnesses/codex/manifest-overlay-parity.test.ts` against the
- * fixtures under `tests/fixtures/baseline/overlay-parity/`. Known,
- * deliberate divergences from strict byte parity are recorded in
+ * fixtures under `tests/fixtures/baseline/overlay-parity/`. The 5,000-digit
+ * integer widening is recorded in
  * `tests/fixtures/baseline/overlay-parity/divergent/README.md`.
+ *
+ * Decimal and exponent tokens are range-checked before emission. The strict
+ * parser rejects non-standard constants before they reach the emitter. Object
+ * member order, string escaping, and unknown fields remain part of this
+ * overlay contract.
  */
 export function applyManifestOverlay(
   source: string,
@@ -61,14 +62,10 @@ export function applyManifestOverlay(
   }
 }
 
-// formatPythonNumber (src/python-json-format.ts) has no notion of a manifest
-// path — it is a general CPython-`json.dump`-equivalent number formatter,
-// exercised on its own in tests/unit/python-json-format.test.js — so it
-// throws a bare `JSON number out of range: ${raw}`. That left the operator
-// with no indication of which manifest produced the diagnostic, unlike every
-// other overlay failure. This rewrap adds the path without touching
-// formatPythonNumber's own contract, and is scoped to exactly this message so
-// it cannot swallow or reword any other overlay throw.
+// emitNumber has no manifest path, so it throws a bare
+// `JSON number out of range: ${raw}`. This rewrap adds the path without
+// touching the local emitter's own contract, and is scoped to exactly this
+// message so it cannot swallow or reword any other overlay throw.
 const NUMBER_OUT_OF_RANGE_PREFIX = "JSON number out of range: ";
 
 function rewrapNumberOutOfRange(cause: unknown, path: string): unknown {
@@ -84,6 +81,16 @@ function rewrapNumberOutOfRange(cause: unknown, path: string): unknown {
     );
   }
   return cause;
+}
+
+function emitNumber(raw: string): string {
+  if (/[.eE]/.test(raw) && !Number.isFinite(Number(raw))) {
+    throw new SafetyError(
+      "manifest-overlay",
+      `JSON number out of range: ${raw}`,
+    );
+  }
+  return raw;
 }
 
 function setMember(
@@ -143,7 +150,7 @@ function emit(value: RawJsonValue, depth: number): string {
   if (typeof value === "string") return escapeNonAscii(JSON.stringify(value));
   // Order matters: isRawNumber before isRawObject, and both before Array —
   // the branded records are objects too.
-  if (isRawNumber(value)) return formatPythonNumber(value.source);
+  if (isRawNumber(value)) return emitNumber(value.source);
   if (isRawObject(value)) return emitObject(value.entries, depth);
 
   const inner = "  ".repeat(depth + 1);
