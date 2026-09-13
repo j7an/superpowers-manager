@@ -164,6 +164,14 @@
       "path": "tests/unit/harnesses/opencode/config.test.ts",
       "group": "unit"
     },
+    {
+      "path": "tests/unit/harnesses/opencode/discovery.test.ts",
+      "group": "integration"
+    },
+    {
+      "path": "tests/unit/harnesses/opencode/state.test.ts",
+      "group": "integration"
+    },
     { "path": "tests/unit/upstream-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/pi/settings.test.ts", "group": "unit" },
     { "path": "tests/unit/provenance.test.ts", "group": "unit" },

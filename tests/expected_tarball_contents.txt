@@ -59,6 +59,8 @@ dist/harnesses/opencode/package.js
 dist/harnesses/opencode/paths.js
 dist/harnesses/opencode/prepare.js
 dist/harnesses/opencode/config.js
+dist/harnesses/opencode/discovery.js
+dist/harnesses/opencode/state.js
 dist/provenance.js
 dist/python-json-format.js
 dist/python-json.js
