@@ -14,6 +14,31 @@ import {
 class ExpectedError extends Error {}
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
+function auditProject(source: string): { root: string; tsconfigPath: string } {
+  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-"));
+  registerScratch(root);
+  mkdirSync(join(root, "tests", "unit"), { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
+  const tsconfigPath = join(root, "tests", "tsconfig.json");
+  writeFileSync(
+    tsconfigPath,
+    JSON.stringify({
+      compilerOptions: {
+        noEmit: true,
+        strict: true,
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        types: ["node"],
+        typeRoots: [join(PACKAGE_ROOT, "node_modules", "@types")],
+      },
+      include: ["unit/**/*.ts"],
+    }),
+  );
+  writeFileSync(join(root, "tests", "unit", "subject.test.ts"), source);
+  return { root, tsconfigPath };
+}
+
 void test("repository has no unreviewed constructor-only error matcher", () => {
   assert.deepEqual(
     auditConstructorMatchers({
@@ -53,27 +78,7 @@ void test("matchingError anchors the allowed variable field", () => {
 });
 
 void test("constructor audit sees aliases, unexecuted paths, and custom subclasses", () => {
-  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-"));
-  registerScratch(root);
-  mkdirSync(join(root, "tests", "unit"), { recursive: true });
-  writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
-  writeFileSync(
-    join(root, "tests", "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        noEmit: true,
-        strict: true,
-        module: "NodeNext",
-        moduleResolution: "NodeNext",
-        target: "ES2024",
-        types: ["node"],
-        typeRoots: [join(PACKAGE_ROOT, "node_modules", "@types")],
-      },
-      include: ["unit/**/*.ts"],
-    }),
-  );
-  writeFileSync(
-    join(root, "tests", "unit", "subject.test.ts"),
+  const { root, tsconfigPath } = auditProject(
     `import assert, { throws as namedThrows } from "node:assert/strict";
 import * as loose from "node:assert";
 import test from "node:test";
@@ -99,7 +104,7 @@ void test("fixture", async () => {
   assert.deepEqual(
     auditConstructorMatchers({
       root,
-      tsconfigPath: join(root, "tests", "tsconfig.json"),
+      tsconfigPath,
     }).map(({ path, test: name, matcher }) => ({ path, test: name, matcher })),
     [
       { path: "tests/unit/subject.test.ts", test: "fixture", matcher: "Alias" },
@@ -123,27 +128,7 @@ void test("fixture", async () => {
 });
 
 void test("constructor audit excludes shadowed user-defined assertion methods", () => {
-  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-shadow-"));
-  registerScratch(root);
-  mkdirSync(join(root, "tests", "unit"), { recursive: true });
-  writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
-  writeFileSync(
-    join(root, "tests", "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        noEmit: true,
-        strict: true,
-        module: "NodeNext",
-        moduleResolution: "NodeNext",
-        target: "ES2024",
-        types: ["node"],
-        typeRoots: [join(PACKAGE_ROOT, "node_modules", "@types")],
-      },
-      include: ["unit/**/*.ts"],
-    }),
-  );
-  writeFileSync(
-    join(root, "tests", "unit", "shadowed.test.ts"),
+  const { root, tsconfigPath } = auditProject(
     `import assert from "node:assert/strict";
 class CustomError extends Error {}
 async function exercise(assert: {
@@ -159,7 +144,7 @@ void exercise;
   assert.deepEqual(
     auditConstructorMatchers({
       root,
-      tsconfigPath: join(root, "tests", "tsconfig.json"),
+      tsconfigPath,
     }),
     [],
   );
@@ -179,27 +164,7 @@ void test("constructor audit fails closed when the configured project is missing
 });
 
 void test("constructor audit fails closed on a dynamically destructured Node assert", () => {
-  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-shape-"));
-  registerScratch(root);
-  mkdirSync(join(root, "tests", "unit"), { recursive: true });
-  writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
-  writeFileSync(
-    join(root, "tests", "tsconfig.json"),
-    JSON.stringify({
-      compilerOptions: {
-        noEmit: true,
-        strict: true,
-        module: "NodeNext",
-        moduleResolution: "NodeNext",
-        target: "ES2024",
-        types: ["node"],
-        typeRoots: [join(PACKAGE_ROOT, "node_modules", "@types")],
-      },
-      include: ["unit/**/*.ts"],
-    }),
-  );
-  writeFileSync(
-    join(root, "tests", "unit", "dynamic.test.ts"),
+  const { root, tsconfigPath } = auditProject(
     `const { throws: dynamicThrows } = await import("node:assert/strict");
 class DynamicError extends Error {}
 dynamicThrows(() => { throw new DynamicError("dynamic"); }, DynamicError);
@@ -209,11 +174,11 @@ dynamicThrows(() => { throw new DynamicError("dynamic"); }, DynamicError);
     () =>
       auditConstructorMatchers({
         root,
-        tsconfigPath: join(root, "tests", "tsconfig.json"),
+        tsconfigPath,
       }),
     {
       message:
-        /unresolved node:assert call shape: tests\/unit\/dynamic\.test\.ts:3/,
+        /unresolved node:assert call shape: tests\/unit\/subject\.test\.ts:3/,
     },
   );
 });

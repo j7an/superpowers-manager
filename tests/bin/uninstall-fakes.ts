@@ -12,7 +12,7 @@
 // what must NOT be shared: this fake's own command branches.
 
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   injectSpuriousMutation,
@@ -21,36 +21,30 @@ import {
   tripwireTriggered,
 } from "./lifecycle-fakes.ts";
 
-// Each participant marks itself present, then waits until it sees `expect`
-// live markers or the arrival bound elapses. Arrival quorum is acknowledged by
-// a persistent `.ready` marker. A participant keeps its `.here` marker live
-// until it sees `expect` ready markers or a distinct release bound elapses, so
-// the first observer cannot make quorum disappear before peers observe it.
-// Each participant records the highest live count it observed, how many
-// blocking waits it made, and why it left. Both phases are bounded.
-function rendezvous() {
-  const dir = process.env.SPW_RENDEZVOUS_DIR;
-  const expect = Number(process.env.SPW_RENDEZVOUS_EXPECT);
-  if (!dir || !Number.isInteger(expect) || expect < 1) return true;
+// The first Codex process for each case publishes durable process identity and
+// readiness, then waits for the test-owned shared release file. Later Codex
+// calls in the same lifecycle run pass through the once-per-case claim.
+function waitForRelease() {
+  const dir = process.env.SPW_FIXTURE_BARRIER_DIR;
+  if (!dir) return true;
   // ONCE PER PARTICIPANT, not once per codex call. A successful `uninstall`
   // invokes the fake SIX times (`tests/bin/uninstall-commands.test.ts:419-432::assert.deepEqual(readLog`:
   // plugin list, marketplace list, plugin remove, marketplace remove, then both
   // listings again). Each call is a separate process, so a module-level flag
   // cannot carry the fact -- the identity has to live on disk, keyed on the
-  // case. Without this the four-participant case produces TWENTY-FOUR peak
-  // files, and with an unreachable quorum each of the twenty-four waits out the
-  // full bound.
+  // case. Without this the four-participant case would make all twenty-four
+  // fake processes wait at the barrier instead of one process per case.
   const caseId = process.env.SPW_FIXTURE_STATE;
   if (!caseId) return true;
   const tag = createHash("sha256").update(caseId).digest("hex").slice(0, 16);
   const claimed = join(dir, `${tag}.claimed`);
   if (existsSync(claimed)) return true;
   writeFileSync(claimed, "");
-  const pidDelayRaw = process.env.SPW_RENDEZVOUS_PID_DELAY_MS;
+  const pidDelayRaw = process.env.SPW_FIXTURE_PID_DELAY_MS;
   if (pidDelayRaw !== undefined) {
     if (!/^[1-9][0-9]*$/.test(pidDelayRaw)) {
       process.stderr.write(
-        "fixture: SPW_RENDEZVOUS_PID_DELAY_MS must be an integer from 1 to 5000\n",
+        "fixture: SPW_FIXTURE_PID_DELAY_MS must be an integer from 1 to 5000\n",
       );
       process.exitCode = 90;
       return false;
@@ -58,7 +52,7 @@ function rendezvous() {
     const pidDelayMs = Number(pidDelayRaw);
     if (!Number.isSafeInteger(pidDelayMs) || pidDelayMs > 5000) {
       process.stderr.write(
-        "fixture: SPW_RENDEZVOUS_PID_DELAY_MS must be an integer from 1 to 5000\n",
+        "fixture: SPW_FIXTURE_PID_DELAY_MS must be an integer from 1 to 5000\n",
       );
       process.exitCode = 90;
       return false;
@@ -72,64 +66,24 @@ function rendezvous() {
   // leader. Persist both meanings so the test never guesses a kill target.
   writeFileSync(join(dir, `${tag}.manager-pid`), `${process.ppid}\n`);
   writeFileSync(join(dir, `${tag}.group-pid`), `${process.ppid}\n`);
-  const me = join(dir, `${tag}.here`);
-  writeFileSync(me, "");
-  // Final pre-HOLD publication barrier. This is NOT rendezvous `.ready`.
-  // PID, manager/group IDs and `.here` are all durable before it appears.
+  // PID and manager/group IDs are durable before readiness appears.
   writeFileSync(join(dir, `${tag}.watchdog-ready`), "");
-  // Opt-in watchdog fixture only. Default overlap/bound behavior never enters
-  // this branch. PID and live-marker readiness are durable before the hold.
-  if (process.env.SPW_RENDEZVOUS_HOLD_AFTER_PID === "1") {
-    const hold = new Int32Array(new SharedArrayBuffer(4));
-    for (;;) Atomics.wait(hold, 0, 0);
-  }
+  const release = join(dir, "release");
   const deadline = Date.now() + 10000;
-  let peak = 0;
-  let waitCalls = 0;
-  let reason = "expired";
-  for (;;) {
-    const seen = readdirSync(dir).filter((f) => f.endsWith(".here")).length;
-    if (seen > peak) peak = seen;
-    if (peak >= expect) {
-      // ACKNOWLEDGE before releasing the live marker. `.ready` deliberately
-      // survives until the test's scratch-directory cleanup.
-      writeFileSync(join(dir, `${tag}.ready`), "");
-      // Distinct name on purpose: M2 mutates the unique arrival-deadline line
-      // above and must not also collapse this release barrier.
-      const releaseDeadline = Date.now() + 10000;
-      for (;;) {
-        const ready = readdirSync(dir).filter((f) =>
-          f.endsWith(".ready"),
-        ).length;
-        if (ready >= expect) {
-          reason = "quorum";
-          break;
-        }
-        if (Date.now() >= releaseDeadline) {
-          reason = "release-expired";
-          break;
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
-        waitCalls += 1;
-      }
-      break;
-    }
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  while (!existsSync(release)) {
     if (Date.now() >= deadline) {
-      reason = "expired";
-      break;
+      process.stderr.write("fixture: release barrier timed out\n");
+      process.exitCode = 90;
+      return false;
     }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
-    waitCalls += 1;
+    Atomics.wait(sleeper, 0, 0, 25);
   }
-  writeFileSync(join(dir, `${tag}.peak`), `${peak}\n`);
-  writeFileSync(join(dir, `${tag}.waits`), `${waitCalls}\n`);
-  writeFileSync(join(dir, `${tag}.reason`), `${reason}\n`);
-  rmSync(me, { force: true });
   return true;
 }
 
 function runCodex(ctx: import("./lifecycle-fakes.ts").FakeContext): void {
-  if (!rendezvous()) return;
+  if (!waitForRelease()) return;
   ctx.log("codex.log", ctx.args.join(" "));
   injectSpuriousMutation(ctx, "plugin remove superpowers@spurious");
 

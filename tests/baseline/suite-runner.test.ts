@@ -520,41 +520,91 @@ void test("the runner exits promptly rather than lingering on a live handle", (t
   assert.equal(r.status, 0);
 });
 
-void test("declared but absent", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts", "tests/unit/missing.test.ts"],
+const invalidManifestRows: {
+  name: string;
+  suites: unknown[];
+  files?: Record<string, string>;
+  diagnostic: RegExp;
+}[] = [
+  {
+    name: "declared but absent",
+    suites: [
+      { path: "tests/unit/a.test.ts", group: "unit" },
+      { path: "tests/unit/missing.test.ts", group: "unit" },
+    ],
     files: { "tests/unit/a.test.ts": PASSING_SUITE },
-  });
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /tests\/unit\/missing\.test\.ts/);
-  assertNoRawFailure(r);
-});
-
-void test("present but unregistered", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
+    diagnostic: /tests\/unit\/missing\.test\.ts/,
+  },
+  {
+    name: "present but unregistered",
+    suites: [{ path: "tests/unit/a.test.ts", group: "unit" }],
     files: {
       "tests/unit/a.test.ts": PASSING_SUITE,
       "tests/unit/extra.test.ts": PASSING_SUITE,
     },
-  });
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /tests\/unit\/extra\.test\.ts/);
-  assertNoRawFailure(r);
-});
-
-void test("empty manifest", (t) => {
-  const root = fakeRoot(t, {
+    diagnostic: /tests\/unit\/extra\.test\.ts/,
+  },
+  {
+    name: "empty manifest",
     suites: [],
     files: {},
+    diagnostic: /tests\/suites\.json declares no suites/,
+  },
+  {
+    name: "a legacy string manifest entry",
+    suites: ["tests/unit/a.test.ts"],
+    diagnostic: /entry must be an object with exactly `path` and `group`/,
+  },
+  {
+    name: "an unknown manifest group",
+    suites: [{ path: "tests/unit/a.test.ts", group: "smoke" }],
+    diagnostic: /entry group must be unit, integration, or repository/,
+  },
+  {
+    name: "a non-string manifest path",
+    suites: [{ path: 7, group: "unit" }],
+    diagnostic: /entry path must be a nonempty string/,
+  },
+  {
+    name: "an empty manifest path",
+    suites: [{ path: "", group: "unit" }],
+    diagnostic: /entry path must be a nonempty string/,
+  },
+  {
+    name: "an extra manifest record key",
+    suites: [{ path: "tests/unit/a.test.ts", group: "unit", enabled: true }],
+    diagnostic: /entry must be an object with exactly `path` and `group`/,
+  },
+  {
+    name: "a duplicate same-group manifest path",
+    suites: [
+      { path: "tests/unit/a.test.ts", group: "unit" },
+      { path: "tests/unit/a.test.ts", group: "unit" },
+    ],
+    diagnostic:
+      /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.ts/,
+  },
+  {
+    name: "a duplicate cross-group manifest path",
+    suites: [
+      { path: "tests/unit/a.test.ts", group: "unit" },
+      { path: "tests/unit/a.test.ts", group: "integration" },
+    ],
+    diagnostic:
+      /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.ts/,
+  },
+];
+
+for (const row of invalidManifestRows) {
+  void test(`${row.name} is rejected before execution`, (t) => {
+    const root = fakeRoot(t, {
+      suites: ["tests/unit/a.test.ts"],
+      files: row.files ?? { "tests/unit/a.test.ts": EXECUTED_SUITE },
+    });
+    writeManifest(root, row.suites);
+    assertRejectedWithoutExecution(runIn(root), row.diagnostic);
   });
-  const r = runIn(root);
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /tests\/suites\.json declares no suites/);
-  assertNoRawFailure(r);
-});
+}
 
 void test("malformed manifest: not JSON", (t) => {
   const root = fakeRoot(t, {
@@ -585,68 +635,6 @@ void test("malformed manifest: suites is not an array", (t) => {
     /tests\/suites\.json must be an object with a `suites` array/,
   );
   assertNoRawFailure(r);
-});
-
-void test("a legacy string manifest entry is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  writeManifest(root, ["tests/unit/a.test.ts"]);
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /entry must be an object with exactly `path` and `group`/,
-  );
-});
-
-void test("an unknown manifest group is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  writeManifest(root, [{ path: "tests/unit/a.test.ts", group: "smoke" }]);
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /entry group must be unit, integration, or repository/,
-  );
-});
-
-void test("a non-string manifest path is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  writeManifest(root, [{ path: 7, group: "unit" }]);
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /entry path must be a nonempty string/,
-  );
-});
-
-void test("an empty manifest path is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  writeManifest(root, [{ path: "", group: "unit" }]);
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /entry path must be a nonempty string/,
-  );
-});
-
-void test("an extra manifest record key is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  writeManifest(root, [
-    { path: "tests/unit/a.test.ts", group: "unit", enabled: true },
-  ]);
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /entry must be an object with exactly `path` and `group`/,
-  );
 });
 
 void test("an unknown requested group is rejected before execution", (t) => {
@@ -836,31 +824,6 @@ void test("nested non-test helper accepted", (t) => {
   const r = runIn(root);
   assert.equal(r.status, 0);
   assertNoRawFailure(r);
-});
-
-void test("a duplicate same-group manifest path is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts", "tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.ts/,
-  );
-});
-
-void test("a duplicate cross-group manifest path is rejected before execution", (t) => {
-  const root = fakeRoot(t, {
-    suites: [
-      { path: "tests/unit/a.test.ts", group: "unit" },
-      { path: "tests/unit/a.test.ts", group: "integration" },
-    ],
-    files: { "tests/unit/a.test.ts": EXECUTED_SUITE },
-  });
-  assertRejectedWithoutExecution(
-    runIn(root),
-    /tests\/suites\.json lists a suite more than once: tests\/unit\/a\.test\.ts/,
-  );
 });
 
 void test("a symlinked suite file is rejected", (t) => {

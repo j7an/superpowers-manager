@@ -12,7 +12,7 @@
 // The former selection-state wrapper cluster closes structurally in slice 4c:
 // src/selection-store.ts reads selection state in-process, so there is no
 // child Node process for NODE_OPTIONS to reach and no helper file left to be
-// missing. The inventory records the retirement of that shell-only shape.
+// missing.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -259,12 +259,11 @@ function assertEffective(
   assert.equal(selection.resolutionKind, expected.resolutionKind);
 }
 
-// Ports `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_state.sh:22-40::BUILDER-PERMISSION-01`. BUILDER-PERMISSION-01 is not a
-// registered behavior ID (see `tests/baseline/traceability.test.js`'s
-// `ID_PATTERN`) and mints no traceability row; the shell's own setup never
-// uses permission_target/permission_root/permission_parent again after this
-// block, so this ports the builder's own guarantee (a deterministically
-// unreadable target) rather than any selection.sh behavior.
+// Ports `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_state.sh:22-40::BUILDER-PERMISSION-01`.
+// The shell's own setup never uses
+// permission_target/permission_root/permission_parent again after this block,
+// so this ports the builder's own guarantee (a deterministically unreadable
+// target) rather than any selection.sh behavior.
 void test("the permission-denied builder produces a deterministically unreadable target", (t) => {
   const base = mkdtempSync(join(tmpdir(), "spw-sel-builder-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));
@@ -610,9 +609,6 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
   }); // :252-253
 });
 
-// SEL-REF-GENERIC-01 is not a registered behavior ID (see
-// `tests/baseline/traceability.test.js`'s `ID_PATTERN`) and mints no
-// traceability row.
 void test("an arbitrary environment ref and a raw-commit pin resolve without shell-quoting surprises", async (t) => {
   const pkgRoot = makePackageRoot(t);
   const { dir: gitDir, log } = fakeResolverGitDir(t);

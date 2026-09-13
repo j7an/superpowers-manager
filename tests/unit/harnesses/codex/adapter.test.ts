@@ -62,7 +62,7 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     })}\n`,
   );
   // The fallback IS the manifest under validation. The overlay adds only
-  // `version` and `skills` (`src/harnesses/codex/manifest-overlay.ts:56-60::setMember(entries, "version", version)`), so `name` and
+  // `version` and `skills` (`src/harnesses/codex/manifest-overlay.ts:55-60::setMember(entries, "version", version)`), so `name` and
   // `description` must be valid here or the "success" case cannot succeed.
   // `hooks` must be ABSENT: its absence is what forbids `hooks/` for a
   // fallback manifest. Declaring it — even as `{}` — is rejected by

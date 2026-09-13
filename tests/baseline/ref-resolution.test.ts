@@ -188,10 +188,9 @@ async function waitForMarker(
   return true;
 }
 
-// BUILDER-GIT-01 is a builder marker, not a registered behavior ID (see
-// `tests/baseline/traceability.test.js`'s `ID_PATTERN`), and mints no
-// traceability row. It exercises tests/builders/baseline-scenario.sh's
-// git-release-repo scenario, not scripts/core/upstream.sh.
+// BUILDER-GIT-01 is a builder marker. It exercises
+// tests/builders/baseline-scenario.sh's git-release-repo scenario, not
+// scripts/core/upstream.sh.
 void test("the git-release-repo builder produces a deterministic tagged repository", (t) => {
   const base = mkdtempSync(join(tmpdir(), "spw-ref-builder-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));

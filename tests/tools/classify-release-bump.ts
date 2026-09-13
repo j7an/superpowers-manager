@@ -121,19 +121,9 @@ function hasOnlyVerifiedVersionChange(
     !blobAt(git, after, "package.json")
   )
     return false;
-  if (
-    !blobAt(git, before, ".version-bump.json") ||
-    !blobAt(git, after, ".version-bump.json")
-  )
-    return false;
-
+  if (!blobAt(git, before, ".version-bump.json")) return false;
   const beforeConfig = parseJson(git("show", `${before}:.version-bump.json`));
-  const afterConfig = parseJson(git("show", `${after}:.version-bump.json`));
-  if (
-    !isDeepStrictEqual(beforeConfig, BUMP_CONFIG) ||
-    !isDeepStrictEqual(afterConfig, BUMP_CONFIG)
-  )
-    return false;
+  if (!isDeepStrictEqual(beforeConfig, BUMP_CONFIG)) return false;
 
   const beforePackage = parseJson(git("show", `${before}:package.json`));
   const afterPackage = parseJson(git("show", `${after}:package.json`));

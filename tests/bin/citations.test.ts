@@ -1,4 +1,4 @@
-// The citation gate. PR 12.2 builds the mechanism and repairs nothing.
+// The citation gate.
 // Fixture trees are scratch directories; the live corpus gate at the bottom reads
 // the real corpus.
 
@@ -83,52 +83,57 @@ void test("commentText accepts the three comment-leading forms", () => {
   assert.equal(commentText("  /* a */")?.text, "  /* a */");
 });
 
-void test("commentText finds a trailing comment outside string delimiters", () => {
-  const found = commentText("run(); // see it");
-  assert.equal(found?.text, "// see it");
-  assert.equal(found?.offset, 7);
-});
+for (const [name, source, expected] of [
+  [
+    "finds a trailing comment outside string delimiters",
+    "run(); // see it",
+    ["// see it", 7],
+  ],
+  [
+    "finds a trailing comment after a quote-bearing block comment",
+    "x /* ' */ // see src/x.ts:44",
+    ["// see src/x.ts:44", 10],
+  ],
+  [
+    "finds a trailing comment after a quote-bearing regex literal",
+    "const re = /'/; // see src/x.ts:44",
+    ["// see src/x.ts:44", 16],
+  ],
+  [
+    "finds a trailing comment after a control-condition regex",
+    "if (ok) /'/.test(value); // see src/x.ts:44",
+    ["// see src/x.ts:44", 25],
+  ],
+  [
+    "finds a trailing comment after postfix increment division",
+    "count++ / divisor; // see src/x.ts:44",
+    ["// see src/x.ts:44", 19],
+  ],
+  [
+    "treats ordinary identifier of before slash as division",
+    "of / divisor; // see src/x.ts:44",
+    ["// see src/x.ts:44", 14],
+  ],
+  [
+    "allows a regex expression after for-of",
+    "for (x of /'/) run(); // see src/x.ts:44",
+    ["// see src/x.ts:44", 22],
+  ],
+] as const) {
+  void test(`commentText ${name}`, () => {
+    const found = commentText(source);
+    assert.deepEqual([found?.text, found?.offset], expected);
+  });
+}
 
-void test("commentText ignores a slash pair inside a string literal", () => {
-  assert.equal(commentText('const u = "http://example.test";'), undefined);
-  assert.equal(commentText("const u = 'a//b';"), undefined);
-});
-
-void test("commentText finds a trailing comment after a quote-bearing block comment", () => {
-  const found = commentText("x /* ' */ // see src/x.ts:44");
-  assert.equal(found?.text, "// see src/x.ts:44");
-  assert.equal(found?.offset, 10);
-});
-
-void test("commentText finds a trailing comment after a quote-bearing regex literal", () => {
-  const found = commentText("const re = /'/; // see src/x.ts:44");
-  assert.equal(found?.text, "// see src/x.ts:44");
-  assert.equal(found?.offset, 16);
-});
-
-void test("commentText finds a trailing comment after a control-condition regex", () => {
-  const found = commentText("if (ok) /'/.test(value); // see src/x.ts:44");
-  assert.equal(found?.text, "// see src/x.ts:44");
-  assert.equal(found?.offset, 25);
-});
-
-void test("commentText finds a trailing comment after postfix increment division", () => {
-  const found = commentText("count++ / divisor; // see src/x.ts:44");
-  assert.equal(found?.text, "// see src/x.ts:44");
-  assert.equal(found?.offset, 19);
-});
-
-void test("commentText treats ordinary identifier of before slash as division", () => {
-  const found = commentText("of / divisor; // see src/x.ts:44");
-  assert.equal(found?.text, "// see src/x.ts:44");
-  assert.equal(found?.offset, 14);
-});
-
-void test("commentText allows a regex expression after for-of", () => {
-  const found = commentText("for (x of /'/) run(); // see src/x.ts:44");
-  assert.equal(found?.text, "// see src/x.ts:44");
-  assert.equal(found?.offset, 22);
-});
+for (const source of [
+  'const u = "http://example.test";',
+  "const u = 'a//b';",
+]) {
+  void test(`commentText ignores a slash pair inside ${JSON.stringify(source)}`, () => {
+    assert.equal(commentText(source), undefined);
+  });
+}
 
 void test("scan parses all four citation forms", () => {
   const root = fixture({
@@ -202,63 +207,49 @@ void test("scan does not count an anchored citation's own line as legacy", () =>
   );
 });
 
-void test("scan retains a malformed anchored citation rather than dropping it", () => {
-  const root = fixture({ "a.js": "// `src/x.ts:12::`\n" });
-  const found = scan([join(root, "a.js")]);
-  assert.deepEqual(
-    found.map((c) => [c.kind, c.shape]),
-    [["malformed", "anchored"]],
-  );
-});
-
-void test("scan retains a malformed resolution citation", () => {
-  const root = fixture({ "a.js": "// `git show 0123:scripts/gone.sh`\n" });
-  const found = scan([join(root, "a.js")]);
-  assert.deepEqual(
-    found.map((c) => [c.kind, c.shape]),
-    [["malformed", "resolution"]],
-  );
-});
-
-void test("scan retains a citation whose line part is not a number", () => {
-  const root = fixture({ "a.js": "// `src/x.ts:abc::const seen`\n" });
-  const found = scan([join(root, "a.js")]);
-  assert.deepEqual(
-    found.map((c) => [c.kind, c.shape]),
-    [["malformed", "anchored"]],
-    "a non-numeric line part must be retained, not vanish",
-  );
-});
-
-void test("scan retains a citation whose line part contains whitespace", () => {
-  const root = fixture({ "a.js": "// `src/x.ts:abc def::const seen`\n" });
-  const found = scan([join(root, "a.js")]);
-  assert.deepEqual(
-    found.map((c) => c.kind),
-    ["malformed"],
-    "whitespace in the line part must not make the citation disappear",
-  );
-});
-
-void test("scan retains a citation whose range part is truncated", () => {
-  const root = fixture({ "a.js": "// `src/x.ts:1-::const seen`\n" });
-  const found = scan([join(root, "a.js")]);
-  assert.deepEqual(
-    found.map((c) => c.kind),
-    ["malformed"],
-    "a truncated range must not decay into legacy debt",
-  );
-});
-
-void test("scan retains a colon-separated line part as malformed", () => {
-  const root = fixture({ "a.js": "// `src/x.ts:12:18::const seen`\n" });
-  const found = scan([join(root, "a.js")]);
-  assert.equal(found.length, 1);
-  const [citation] = found;
-  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
-  assert.equal(validate(citation, root).ok, false);
-  assert.equal(classify(citation, root), "checked");
-});
+for (const [name, source, shape] of [
+  [
+    "a malformed anchored citation rather than dropping it",
+    "// `src/x.ts:12::`\n",
+    "anchored",
+  ],
+  [
+    "a malformed resolution citation",
+    "// `git show 0123:scripts/gone.sh`\n",
+    "resolution",
+  ],
+  [
+    "a citation whose line part is not a number",
+    "// `src/x.ts:abc::const seen`\n",
+    "anchored",
+  ],
+  [
+    "a citation whose line part contains whitespace",
+    "// `src/x.ts:abc def::const seen`\n",
+    "anchored",
+  ],
+  [
+    "a citation whose range part is truncated",
+    "// `src/x.ts:1-::const seen`\n",
+    "anchored",
+  ],
+  [
+    "a colon-separated line part",
+    "// `src/x.ts:12:18::const seen`\n",
+    "anchored",
+  ],
+] as const) {
+  void test(`scan retains ${name} as malformed`, () => {
+    const root = fixture({ "a.js": source });
+    const found = scan([join(root, "a.js")]);
+    assert.deepEqual(
+      found.map((citation) => [citation.kind, citation.shape]),
+      [["malformed", shape]],
+    );
+    assert.equal(validate(found[0], root).ok, false);
+    assert.equal(classify(found[0], root), "checked");
+  });
+}
 
 void test("scan retains a point continuation as checked malformed debt exclusion", () => {
   const root = fixture({ "a.js": "// `:12`\n" });
@@ -287,53 +278,26 @@ void test("scan ignores a nonnumeric colon token", () => {
   assert.deepEqual(scan([join(root, "a.js")]), []);
 });
 
-void test("scan retains an absolute anchored path as malformed", () => {
-  const root = fixture({
-    "a.js": "// `/src/x.ts::export function go`\n",
+for (const [name, source] of [
+  ["an absolute", "// `/src/x.ts::export function go`\n"],
+  ["an invalid-character", "// `src/x@.ts::export function go`\n"],
+  [
+    "a whitespace-bearing file-like",
+    "// `src/my file.ts::export function go`\n",
+  ],
+  ["a colon-bearing absolute", "// `C:/src/x.ts::export function go`\n"],
+] as const) {
+  void test(`scan retains ${name} anchored path as malformed`, () => {
+    const root = fixture({ "a.js": source });
+    const found = scan([join(root, "a.js")]);
+    assert.deepEqual(
+      found.map((citation) => [citation.kind, citation.shape]),
+      [["malformed", "anchored"]],
+    );
+    assert.equal(validate(found[0], root).ok, false);
+    assert.equal(classify(found[0], root), "checked");
   });
-  const found = scan([join(root, "a.js")]);
-  assert.equal(found.length, 1);
-  const [citation] = found;
-  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
-  assert.equal(validate(citation, root).ok, false);
-  assert.equal(classify(citation, root), "checked");
-});
-
-void test("scan retains an invalid-character anchored path as malformed", () => {
-  const root = fixture({
-    "a.js": "// `src/x@.ts::export function go`\n",
-  });
-  const found = scan([join(root, "a.js")]);
-  assert.equal(found.length, 1);
-  const [citation] = found;
-  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
-  assert.equal(validate(citation, root).ok, false);
-  assert.equal(classify(citation, root), "checked");
-});
-
-void test("scan retains a whitespace-bearing file-like anchored path as malformed", () => {
-  const root = fixture({
-    "a.js": "// `src/my file.ts::export function go`\n",
-  });
-  const found = scan([join(root, "a.js")]);
-  assert.equal(found.length, 1);
-  const [citation] = found;
-  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
-  assert.equal(validate(citation, root).ok, false);
-  assert.equal(classify(citation, root), "checked");
-});
-
-void test("scan retains a colon-bearing absolute anchored path as malformed", () => {
-  const root = fixture({
-    "a.js": "// `C:/src/x.ts::export function go`\n",
-  });
-  const found = scan([join(root, "a.js")]);
-  assert.equal(found.length, 1);
-  const [citation] = found;
-  assert.deepEqual([citation.kind, citation.shape], ["malformed", "anchored"]);
-  assert.equal(validate(citation, root).ok, false);
-  assert.equal(classify(citation, root), "checked");
-});
+}
 
 void test("scan ignores a backticked git show that names only a commit", () => {
   // Prose, not a citation: no OBJECT:PATH, so nothing is being pointed at.
@@ -374,14 +338,7 @@ void test("report rejects legacy citations instead of silently skipping them", (
     "src/x.ts": "export const target = 1;\n",
     "tests/a.ts": "// src/x.ts:1\n// src/missing.ts:8\n",
   });
-  const result = spawnSync(process.execPath, [TOOL, "--report"], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, SPW_CITATIONS_ROOT: root },
-    timeout: 30000,
-  });
-  assert.equal(result.signal, null);
-  assert.equal(result.status, 1);
+  const result = runCitationTool(root, ["--report"], 1);
   assert.match(result.stdout, /unanchored=1 deadReferent=1/);
   assert.match(result.stdout, /failing=2/);
   assert.match(result.stdout, /src\/x\.ts requires an anchored citation/);
@@ -608,45 +565,82 @@ void test("a resolution citation is checked, never ledgered", () => {
   assert.equal(classify(found, root), "checked");
 });
 
-void test("a resolution citation whose path exists at that object validates", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta\n");
-  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh`\n");
-  const [citation] = scan([join(root, "a.js")]);
-  assert.equal(citation.kind, "resolution");
-  assert.deepEqual(validate(citation, root), { ok: true });
-});
+function historicalCitation(
+  name: string,
+  body: string,
+  token: string,
+): {
+  root: string;
+  citation: ReturnType<typeof scan>[number];
+} {
+  const { root, sha } = gitFixture(name, body);
+  writeFileSync(join(root, "a.js"), `// ${token.replace("{sha}", sha)}\n`);
+  return { root, citation: scan([join(root, "a.js")])[0] };
+}
 
-void test("resolution citations accept a slash-bearing extensionless path", () => {
-  const { root, sha } = gitFixture(
+for (const [name, path, body, token, expected] of [
+  [
+    "a resolution citation whose path exists at that object validates",
+    "gone.sh",
+    "alpha\nbeta\n",
+    "`git show {sha}:gone.sh`",
+    { ok: true },
+  ],
+  [
+    "resolution citations accept a slash-bearing extensionless path",
     "scripts/install",
     "spw_main() {\n  return 0\n}\n",
-  );
-  writeFileSync(
-    join(root, "a.js"),
-    "// `git show " + sha + ":scripts/install:1::spw_main`\n",
-  );
-  const [citation] = scan([join(root, "a.js")]);
-  assert.equal(citation.kind, "resolution");
-  assert.equal(citation.path, "scripts/install");
-  assert.deepEqual(validate(citation, root), { ok: true, line: 1 });
-});
-
-void test("a resolution citation whose path is absent at that object fails", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta\n");
-  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":other.sh`\n");
-  const [citation] = scan([join(root, "a.js")]);
-  const verdict = validate(citation, root);
-  assert.equal(verdict.ok, false);
-  assert.equal(verdict.code, "MISSING_HISTORICAL_TARGET");
-});
+    "`git show {sha}:scripts/install:1::spw_main`",
+    { ok: true, line: 1 },
+  ],
+  [
+    "a resolution citation whose path is absent at that object fails",
+    "gone.sh",
+    "alpha\nbeta\n",
+    "`git show {sha}:other.sh`",
+    "MISSING_HISTORICAL_TARGET",
+  ],
+  [
+    "a resolution anchor that is not in the historical blob fails",
+    "gone.sh",
+    "alpha\nbeta gamma\ndelta\n",
+    "`git show {sha}:gone.sh::no such text`",
+    "ANCHOR_NOT_FOUND",
+  ],
+  [
+    "a resolution anchor on the wrong line fails",
+    "gone.sh",
+    "alpha\nbeta gamma\ndelta\n",
+    "`git show {sha}:gone.sh:3::beta gamma`",
+    "LINE_MISMATCH",
+  ],
+  [
+    "a resolution range that does not contain the anchor fails",
+    "gone.sh",
+    "alpha\nbeta gamma\ndelta\n",
+    "`git show {sha}:gone.sh:3-4::beta gamma`",
+    "RANGE_MISS",
+  ],
+] as const) {
+  void test(name, () => {
+    const { root, citation } = historicalCitation(path, body, token);
+    assert.equal(citation.kind, "resolution");
+    const verdict = validate(citation, root);
+    if (typeof expected === "string") {
+      assert.equal(verdict.ok, false);
+      assert.equal(verdict.code, expected);
+      return;
+    }
+    assert.deepEqual(verdict, expected);
+  });
+}
 
 void test("a resolution citation naming an object not in the repository fails", () => {
-  const { root } = gitFixture("gone.sh", "alpha\nbeta\n");
-  writeFileSync(
-    join(root, "a.js"),
-    "// `git show " + "0".repeat(40) + ":gone.sh`\n",
+  const { root, citation } = historicalCitation(
+    "gone.sh",
+    "alpha\nbeta\n",
+    "`git show " + "0".repeat(40) + ":gone.sh`",
   );
-  const [citation] = scan([join(root, "a.js")]);
   const verdict = validate(citation, root);
   assert.equal(verdict.ok, false);
   assert.equal(verdict.code, "MISSING_HISTORICAL_TARGET");
@@ -664,64 +658,31 @@ void test("the historical leg is unverified where there is no repository", () =>
 });
 
 void test("the historical leg is verified where a repository exists", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta\n");
-  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh`\n");
-  const [citation] = scan([join(root, "a.js")]);
+  const { root, citation } = historicalCitation(
+    "gone.sh",
+    "alpha\nbeta\n",
+    "`git show {sha}:gone.sh`",
+  );
   assert.deepEqual(validate(citation, root), { ok: true });
 });
 
 void test("a resolution citation carries a line and an anchor", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
-  writeFileSync(
-    join(root, "a.js"),
-    "// `git show " + sha + ":gone.sh:2::beta gamma`\n",
+  const { root, citation } = historicalCitation(
+    "gone.sh",
+    "alpha\nbeta gamma\ndelta\n",
+    "`git show {sha}:gone.sh:2::beta gamma`",
   );
-  const [citation] = scan([join(root, "a.js")]);
   assert.equal(citation.kind, "resolution");
   assert.equal(citation.anchor, "beta gamma");
   assert.deepEqual(validate(citation, root), { ok: true, line: 2 });
 });
 
-void test("a resolution anchor that is not in the historical blob fails", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
-  writeFileSync(
-    join(root, "a.js"),
-    "// `git show " + sha + ":gone.sh::no such text`\n",
-  );
-  const [citation] = scan([join(root, "a.js")]);
-  const verdict = validate(citation, root);
-  assert.equal(verdict.ok, false);
-  assert.equal(verdict.code, "ANCHOR_NOT_FOUND");
-});
-
-void test("a resolution anchor on the wrong line fails", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
-  writeFileSync(
-    join(root, "a.js"),
-    "// `git show " + sha + ":gone.sh:3::beta gamma`\n",
-  );
-  const [citation] = scan([join(root, "a.js")]);
-  const verdict = validate(citation, root);
-  assert.equal(verdict.ok, false);
-  assert.equal(verdict.code, "LINE_MISMATCH");
-});
-
-void test("a resolution range that does not contain the anchor fails", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
-  writeFileSync(
-    join(root, "a.js"),
-    "// `git show " + sha + ":gone.sh:3-4::beta gamma`\n",
-  );
-  const [citation] = scan([join(root, "a.js")]);
-  const verdict = validate(citation, root);
-  assert.equal(verdict.ok, false);
-  assert.equal(verdict.code, "RANGE_MISS");
-});
-
 void test("a resolution citation with a line but no anchor is malformed", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
-  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh:2`\n");
-  const [citation] = scan([join(root, "a.js")]);
+  const { root, citation } = historicalCitation(
+    "gone.sh",
+    "alpha\nbeta gamma\ndelta\n",
+    "`git show {sha}:gone.sh:2`",
+  );
   assert.deepEqual(
     [citation.kind, citation.shape],
     ["malformed", "resolution"],
@@ -732,9 +693,11 @@ void test("a resolution citation with a line but no anchor is malformed", () => 
 });
 
 void test("the bare resolution form still parses and still has no anchor", () => {
-  const { root, sha } = gitFixture("gone.sh", "alpha\nbeta gamma\ndelta\n");
-  writeFileSync(join(root, "a.js"), "// `git show " + sha + ":gone.sh`\n");
-  const [citation] = scan([join(root, "a.js")]);
+  const { citation } = historicalCitation(
+    "gone.sh",
+    "alpha\nbeta gamma\ndelta\n",
+    "`git show {sha}:gone.sh`",
+  );
   assert.equal(citation.kind, "resolution");
   assert.equal(citation.anchor, undefined);
   assert.equal(citation.line, undefined);
@@ -752,31 +715,29 @@ void test("fixEdits rewrites a single-line citation to its anchor's line", () =>
   assert.equal(edits[0].column, 3);
 });
 
-void test("fixEdits refuses a range, because shifting one is applying an offset", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:8-9::export function go`\n",
-    "src/x.ts": TARGET,
+for (const [name, files] of [
+  [
+    "refuses a range, because shifting one is applying an offset",
+    { "a.js": "// `src/x.ts:8-9::export function go`\n", "src/x.ts": TARGET },
+  ],
+  [
+    "never adds an anchor to a legacy citation",
+    { "a.js": "// src/x.ts:9\n", "src/x.ts": TARGET },
+  ],
+  [
+    "never touches a dead referent",
+    { "a.js": "// `scripts/gone.sh:9::anything`\n" },
+  ],
+  [
+    "leaves an ambiguous anchor alone rather than guessing",
+    { "a.js": "// `src/x.ts:9::return`\n", "src/x.ts": "return\nreturn\n" },
+  ],
+] as const) {
+  void test(`fixEdits ${name}`, () => {
+    const root = fixture(files);
+    assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
   });
-  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
-});
-
-void test("fixEdits never adds an anchor to a legacy citation", () => {
-  const root = fixture({ "a.js": "// src/x.ts:9\n", "src/x.ts": TARGET });
-  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
-});
-
-void test("fixEdits never touches a dead referent", () => {
-  const root = fixture({ "a.js": "// `scripts/gone.sh:9::anything`\n" });
-  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
-});
-
-void test("fixEdits leaves an ambiguous anchor alone rather than guessing", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:9::return`\n",
-    "src/x.ts": "return\nreturn\n",
-  });
-  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
-});
+}
 
 void test("applyFixEdits rewrites the file's bytes", () => {
   const root = fixture({
@@ -847,7 +808,7 @@ void test("applyFixEdits canonicalizes an accepted leading-zero citation in one 
 
 const TOOL = fileURLToPath(new URL("../tools/citations.ts", import.meta.url));
 
-function runCitationTool(root: string, args: string[]) {
+function runCitationTool(root: string, args: string[], expectedStatus = 0) {
   const result = spawnSync(process.execPath, [TOOL, ...args], {
     cwd: root,
     encoding: "utf8",
@@ -855,7 +816,7 @@ function runCitationTool(root: string, args: string[]) {
     timeout: 30000,
   });
   assert.equal(result.signal, null, "the tool was killed at the harness bound");
-  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.status, expectedStatus, result.stderr);
   return result;
 }
 
@@ -879,7 +840,7 @@ void test("CITATION-03 --fix proposes nothing against this repository", () => {
   assert.deepEqual(
     fixEdits(scan(listSources(CORPUS_DIRS, ROOT)), ROOT),
     [],
-    "PR 12.2 sweeps nothing: there must be no citation here for --fix to rewrite",
+    "there must be no repository citation for --fix to rewrite",
   );
 });
 
@@ -891,39 +852,34 @@ void test("fixEdits is empty on a correct citation, so a second run is a no-op",
   assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
 });
 
-void test("the --report CLI dispatch prints the unverified count", () => {
-  const root = fixture({
-    "src/x.ts": TARGET,
-    "tests/bin/a.js": "// `src/x.ts:2::export function go`\n",
-    "tests/baseline/.keep": "",
-    "tests/unit/.keep": "",
-    "tests/lib/.keep": "",
-  });
-  const result = runCitationTool(root, ["--report"]);
-  assert.match(
-    result.stdout,
-    /^citations=1 unanchored=0 deadReferent=0 unverified=0 failing=0\n/,
-  );
-});
-
-void test("the --report CLI dispatch counts an unverified historical citation", () => {
+for (const [name, source, expected] of [
+  [
+    "prints the unverified count",
+    "// `src/x.ts:2::export function go`\n",
+    "citations=1 unanchored=0 deadReferent=0 unverified=0 failing=0",
+  ],
   // No `.git` under a scratch root, so the historical leg cannot run and the
-  // object name is never resolved -- the all-zero name is a fixture literal,
-  // not a claim that such an object exists.
-  const root = fixture({
-    "src/.keep": "",
-    "tests/bin/a.js":
-      "// `git show 0000000000000000000000000000000000000000:old.sh::begin`\n",
-    "tests/baseline/.keep": "",
-    "tests/unit/.keep": "",
-    "tests/lib/.keep": "",
+  // all-zero object name is a fixture literal, not a claim that it exists.
+  [
+    "counts an unverified historical citation",
+    "// `git show 0000000000000000000000000000000000000000:old.sh::begin`\n",
+    "citations=1 unanchored=0 deadReferent=0 unverified=1 failing=0",
+  ],
+] as const) {
+  void test(`the --report CLI dispatch ${name}`, () => {
+    const root = fixture({
+      "src/x.ts": TARGET,
+      "tests/bin/a.js": source,
+      "tests/baseline/.keep": "",
+      "tests/unit/.keep": "",
+      "tests/lib/.keep": "",
+    });
+    assert.match(
+      runCitationTool(root, ["--report"]).stdout,
+      new RegExp(`^${expected}\\n`),
+    );
   });
-  const result = runCitationTool(root, ["--report"]);
-  assert.match(
-    result.stdout,
-    /^citations=1 unanchored=0 deadReferent=0 unverified=1 failing=0\n/,
-  );
-});
+}
 
 for (const mode of ["--suggest", "--write-ledger"]) {
   void test(`${mode} is rejected without changing the fixture`, () => {
@@ -936,14 +892,7 @@ for (const mode of ["--suggest", "--write-ledger"]) {
     });
     const path = join(root, "tests", "bin", "a.js");
     const before = readFileSync(path, "utf8");
-    const result = spawnSync(process.execPath, [TOOL, mode], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, SPW_CITATIONS_ROOT: root },
-      timeout: 30000,
-    });
-    assert.equal(result.signal, null);
-    assert.equal(result.status, 1);
+    const result = runCitationTool(root, [mode], 1);
     assert.match(result.stderr, /unknown mode/);
     assert.equal(readFileSync(path, "utf8"), before);
     assert.equal(

@@ -1,32 +1,8 @@
 // Support module for the workflow-contract suites. Ported from
 // tests/test_workflows.sh's embedded Ruby checker and from
 // tests/lib/action-pin-assertions.sh.
-//
-// This is the only file in the repository that imports `yaml`.
 
 import { readFileSync } from "node:fs";
-import { parse } from "yaml";
-
-/**
- * Parse a GitHub Actions workflow document from its YAML source text.
- *
- * This is the only function in the repository that calls `yaml`'s `parse`
- * directly. Callers that need to construct a document from a string (rather
- * than reading it from a file) go through this wrapper instead of importing
- * `yaml` themselves, so `yaml` stays imported in exactly one file.
- *
- */
-export function parseWorkflow(source: string): any {
-  return parse(source);
-}
-
-/**
- * Parse a GitHub Actions workflow file.
- *
- */
-export function loadWorkflow(path: string): any {
-  return parseWorkflow(readFileSync(path, "utf8"));
-}
 
 const PIN_SHA = /^[0-9a-f]{40}$/;
 const PIN_VERSION_COMMENT = /^v[0-9]+\.[0-9]+\.[0-9]+$/;

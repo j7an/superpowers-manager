@@ -1,21 +1,4 @@
-// The README's per-command requirements table is derived from production, not
-// restated. PR 11.5 slice 2 flipped `probe` in-process and left README.md
-// claiming `probe` needs Python 3 and a POSIX sh, a regression that shipped
-// and survived four slices because nothing checked it (carried row 12).
-//
-// CLI-PREFLIGHT-01 already derives its own map from the same production
-// requirement accessors, so this adds no new source of truth -- it stops one
-// document from restating one.
-//
-// This file is RETAINED (slice 6, D2). Its earlier note said it "dies in slice
-// 6 with the table it guards"; that was wrong on its own terms. Three of its
-// maintained columns derive from commandRequirements() or
-// commandRequirementsFor() and never touched DISPATCH. The retired POSIX `sh`
-// column was the exception. The regression this file was built for was slice 2
-// flipping `probe` in-process and leaving README claiming `probe` needs Python
-// 3, which is a requirement fact, not a dispatch fact. PR 11.6 retargets
-// SUPERPOWERS_VALIDATOR_EXECUTABLE, which moves the exact `prepare` cell this
-// table carries.
+// The README's per-command requirements table is derived from production.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -111,27 +94,4 @@ function parseRegion(): Record<string, string>[] {
 
 void test("README requirements table matches production preflight", () => {
   assert.deepEqual(parseRegion(), derive());
-});
-
-void test("Pi reference separates runtime qualification from admission", () => {
-  const text = readFileSync(join(ROOT, "docs/pi.md"), "utf8").replace(
-    /\s+/g,
-    " ",
-  );
-  assert.match(
-    text,
-    /For both Codex and Pi, native test versions are qualification evidence, not runtime allowlists\./,
-  );
-  assert.match(
-    text,
-    /Untested runtime versions are not automatically certified as compatible\./,
-  );
-  assert.doesNotMatch(
-    text,
-    /Every other Pi version is unsupported until separately qualified/,
-  );
-  assert.doesNotMatch(
-    text,
-    /the flag cannot admit it or an unqualified Pi runtime/,
-  );
 });

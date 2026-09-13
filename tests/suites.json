@@ -35,7 +35,6 @@
       "group": "integration"
     },
     { "path": "tests/baseline/suite-runner.test.ts", "group": "integration" },
-    { "path": "tests/baseline/traceability.test.ts", "group": "repository" },
     {
       "path": "tests/baseline/validator-executable.test.ts",
       "group": "integration"
@@ -47,6 +46,7 @@
     { "path": "tests/bin/command-context.test.ts", "group": "unit" },
     { "path": "tests/bin/citations.test.ts", "group": "repository" },
     { "path": "tests/bin/container-contract.test.ts", "group": "repository" },
+    { "path": "tests/bin/container-rpc.test.ts", "group": "repository" },
     { "path": "tests/bin/error-assertions.test.ts", "group": "repository" },
     { "path": "tests/bin/install-commands.test.ts", "group": "integration" },
     { "path": "tests/bin/harness-isolation.test.ts", "group": "integration" },

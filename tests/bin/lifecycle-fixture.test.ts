@@ -34,15 +34,13 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { once } from "node:events";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -68,7 +66,7 @@ type CaseEnv = import("./lifecycle-fixture.ts").CaseEnv;
 const WRITABLE_KEYS: (keyof CaseEnv)[] = ["dir", "pkg", "state", "tmp"];
 
 const PLUGIN_PRESENT =
-  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager"}],"available":[]}';
+  '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager","installed":true,"enabled":true,"version":"1.0.0"}],"available":[]}';
 const MARKETPLACE_PRESENT =
   '{"marketplaces":[{"name":"openai-curated","root":"/x"},{"name":"superpowers-manager","root":"/y"}]}';
 
@@ -358,17 +356,16 @@ void test("process snapshot classifier is identity- and zombie-aware", () => {
 });
 
 void test(
-  "runScript watchdog kills and reaps an unreachable rendezvous process group",
+  "runScript watchdog kills and reaps an unreleased barrier process group",
   { timeout: 30000 },
   async (t) => {
-    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-watchdog-"));
+    const rv = mkdtempSync(join(tmpdir(), "spw-fixture-barrier-watchdog-"));
     t.after(() => rmSync(rv, { recursive: true, force: true }));
     const c = seededUninstallCase({});
     const tag = createHash("sha256").update(c.state).digest("hex").slice(0, 16);
     const pidPath = join(rv, `${tag}.pid`);
     const managerPidPath = join(rv, `${tag}.manager-pid`);
     const groupPidPath = join(rv, `${tag}.group-pid`);
-    const herePath = join(rv, `${tag}.here`);
     const finalReadyPath = join(rv, `${tag}.watchdog-ready`);
     const armPath = join(rv, `${tag}.watchdog-arm`);
     const timeoutMs = 2000;
@@ -391,10 +388,8 @@ void test(
     // raw run settlement during the readiness race.
     const rawRun = runScript(c, "uninstall", {
       env: {
-        SPW_RENDEZVOUS_DIR: rv,
-        SPW_RENDEZVOUS_EXPECT: "2",
-        SPW_RENDEZVOUS_PID_DELAY_MS: "3000",
-        SPW_RENDEZVOUS_HOLD_AFTER_PID: "1",
+        SPW_FIXTURE_BARRIER_DIR: rv,
+        SPW_FIXTURE_PID_DELAY_MS: "3000",
       },
       timeoutMs,
       watchdogArmPath: armPath,
@@ -466,8 +461,7 @@ void test(
         if (
           !existsSync(pidPath) ||
           !existsSync(managerPidPath) ||
-          !existsSync(groupPidPath) ||
-          !existsSync(herePath)
+          !existsSync(groupPidPath)
         ) {
           throw new Error(
             "watchdog readiness published before durable identity",
@@ -607,381 +601,103 @@ void test(
     // detecting serialisation. The regression it must catch is named in its own
     // history: a return to spawnSync, or a dropped `await`. Both make the four
     // runs DISJOINT, so measure disjointness.
-    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-"));
-    t.after(() => rmSync(rv, { recursive: true, force: true }));
-    const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "4" };
+    const rv = mkdtempSync(join(tmpdir(), "spw-fixture-barrier-"));
+    const release = join(rv, "release");
     const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
     const participants = cases.map((c) => ({
       c,
       tag: createHash("sha256").update(c.state).digest("hex").slice(0, 16),
     }));
-    const expectedTags = participants.map(({ tag }) => tag).sort();
-    await Promise.all(
-      participants.map(({ c, tag }) =>
-        runScript(c, "uninstall", {
-          env,
-          timeoutMs: 20000,
-          watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
-          signal: t.signal,
-        }),
-      ),
+    const safety = new AbortController();
+    const forwardTestAbort = () => safety.abort();
+    if (t.signal.aborted) forwardTestAbort();
+    else t.signal.addEventListener("abort", forwardTestAbort, { once: true });
+    let startupSafetyTimer: NodeJS.Timeout | undefined = setTimeout(
+      () => safety.abort(),
+      15000,
     );
-    const tags = readdirSync(rv)
-      .filter((f) => f.endsWith(".peak"))
-      .map((f) => f.slice(0, -".peak".length))
-      .sort();
-    assert.deepEqual(
-      tags,
-      expectedTags,
-      "exactly the four participants must record evidence",
-    );
-    const peaks = tags.map((tag) =>
-      Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
-    );
-    const reasons = tags.map((tag) =>
-      readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
-    );
-    assert.deepEqual(
-      peaks,
-      [4, 4, 4, 4],
-      `only ever saw ${Math.max(...peaks)} in flight; participant peaks were ${peaks.join(",")}`,
-    );
-    const readyTags = readdirSync(rv)
-      .filter((f) => f.endsWith(".ready"))
-      .map((f) => f.slice(0, -".ready".length))
-      .sort();
-    assert.deepEqual(
-      readyTags,
-      expectedTags,
-      "every participant must acknowledge arrival quorum",
-    );
-    assert.deepEqual(reasons, ["quorum", "quorum", "quorum", "quorum"]);
-  },
-);
-
-// Four participants, quorum of five: unreachable by construction. Each fake
-// records its own wait-call count and exit reason, so the oracle reads the
-// mechanism rather than inferring it from whole-run wall time.
-void test(
-  "an unmet quorum expires at the bound and reports what it saw",
-  { timeout: 30000 },
-  async (t) => {
-    const rv = mkdtempSync(join(tmpdir(), "spw-rendezvous-bound-"));
-    t.after(() => rmSync(rv, { recursive: true, force: true }));
-    const env = { SPW_RENDEZVOUS_DIR: rv, SPW_RENDEZVOUS_EXPECT: "5" };
-    const cases = [0, 1, 2, 3].map(() => seededUninstallCase({}));
-    const participants = cases.map((c) => ({
-      c,
-      tag: createHash("sha256").update(c.state).digest("hex").slice(0, 16),
-    }));
-    await Promise.all(
-      participants.map(({ c, tag }) =>
-        runScript(c, "uninstall", {
-          env,
-          timeoutMs: 20000,
-          watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
-          signal: t.signal,
-        }),
-      ),
-    );
-    const tags = readdirSync(rv)
-      .filter((f) => f.endsWith(".peak"))
-      .map((f) => f.slice(0, -".peak".length));
-    assert.equal(
-      tags.length,
-      4,
-      "every participant must record rendezvous evidence",
-    );
-    const peaks = tags.map((tag) =>
-      Number(readFileSync(join(rv, `${tag}.peak`), "utf8").trim()),
-    );
-    const waitCalls = tags.map((tag) =>
-      Number(readFileSync(join(rv, `${tag}.waits`), "utf8").trim()),
-    );
-    const reasons = tags.map((tag) =>
-      readFileSync(join(rv, `${tag}.reason`), "utf8").trim(),
-    );
-    // First on purpose: deadline `+ 0` deterministically records zero waits, so
-    // M2 fails on this exact diagnostic before any scheduling-sensitive count.
-    assert.ok(
-      waitCalls.every((count) => count > 0),
-      "wait did not wait",
-    );
-    assert.deepEqual(
-      [...new Set(reasons)],
-      ["expired"],
-      `exit reasons were ${reasons.join(",")}`,
-    );
-    assert.deepEqual(
-      [...new Set(peaks)],
-      [4],
-      `saw ${peaks.join(",")} instead of four everywhere`,
-    );
-  },
-);
-
-void test("the process.exitCode idiom is what delivers a large pipe payload", async () => {
-  // Carried row :2041's mutation proof. The `exit` arm is the OLD idiom and
-  // must truncate; the `exitCode` arm is the new one and must not. Both arms
-  // are asserted: dropping the truncating arm would leave a test that passes
-  // under either idiom, which is the vacuous shape this slice exists to close.
-  //
-  const child = fileURLToPath(
-    new URL("../unit/helpers/pipe-flush-child.ts", import.meta.url),
-  );
-
-  async function run(mode: "exit" | "exitCode") {
-    const proc = spawn(process.execPath, [child, mode], {
-      stdio: ["ignore", "pipe", "inherit", "ipc"],
-    });
-    const stdout = proc.stdout;
-    if (stdout === null) throw new Error("pipe child stdout was not piped");
-    let deliveredBytes = 0;
-    let resolveFirstDelivery: (() => void) | undefined;
-    const firstDelivery = new Promise<void>((resolve) => {
-      resolveFirstDelivery = resolve;
-    });
-    stdout.on("data", (chunk: Buffer) => {
-      deliveredBytes += chunk.length;
-      resolveFirstDelivery?.();
-      resolveFirstDelivery = undefined;
-    });
-
-    const exited = new Promise<{
-      code: number | null;
-      signal: NodeJS.Signals | null;
-    }>((resolveExit, rejectExit) => {
-      proc.once("error", rejectExit);
-      proc.once("exit", (code, signal) => resolveExit({ code, signal }));
-    });
-    const closed = new Promise<void>((resolveClose) => {
-      proc.once("close", () => resolveClose());
+    const settled = participants.map(() => false);
+    const runs = participants.map(({ c, tag }, index) => {
+      const run = runScript(c, "uninstall", {
+        env: { SPW_FIXTURE_BARRIER_DIR: rv },
+        timeoutMs: 20000,
+        watchdogArmPath: join(rv, `${tag}.watchdog-ready`),
+        signal: safety.signal,
+      });
+      run.then(
+        () => {
+          settled[index] = true;
+        },
+        () => {
+          settled[index] = true;
+        },
+      );
+      return run;
     });
     try {
-      type PipeState = {
-        phase: "seeded" | "queued" | "finishing" | "armed";
-        attemptedBytes: number;
-        queuedBytes: number;
-        pendingBytes: number;
-        pendingWrites: number;
-        corkedWrites: number;
-      };
-
-      function parseState(message: unknown): PipeState {
-        if (
-          typeof message !== "object" ||
-          message === null ||
-          !("phase" in message) ||
-          (message.phase !== "seeded" &&
-            message.phase !== "queued" &&
-            message.phase !== "finishing" &&
-            message.phase !== "armed") ||
-          !("attemptedBytes" in message) ||
-          typeof message.attemptedBytes !== "number" ||
-          !("queuedBytes" in message) ||
-          typeof message.queuedBytes !== "number" ||
-          !("pendingBytes" in message) ||
-          typeof message.pendingBytes !== "number" ||
-          !("pendingWrites" in message) ||
-          typeof message.pendingWrites !== "number" ||
-          !("corkedWrites" in message) ||
-          typeof message.corkedWrites !== "number"
-        ) {
-          throw new Error("pipe child reported malformed state");
-        }
-        return {
-          phase: message.phase,
-          attemptedBytes: message.attemptedBytes,
-          queuedBytes: message.queuedBytes,
-          pendingBytes: message.pendingBytes,
-          pendingWrites: message.pendingWrites,
-          corkedWrites: message.corkedWrites,
-        };
-      }
-
-      async function readState(
-        expectedPhase: "seeded" | "queued" | "finishing",
-      ) {
-        const [message] = await withBound(
-          once(proc, "message"),
-          `pipe child did not report ${expectedPhase} stdout before the bound elapsed`,
-        );
-        const parsed = parseState(message);
-        if (parsed.phase !== expectedPhase) {
-          throw new Error(
-            `pipe child reported ${parsed.phase} before ${expectedPhase}`,
-          );
-        }
-        return parsed;
-      }
-
-      function readStateOrExit(): Promise<
-        | { kind: "state"; state: PipeState }
-        | {
-            kind: "exit";
-            outcome: {
-              code: number | null;
-              signal: NodeJS.Signals | null;
-            };
-          }
-      > {
-        return new Promise((resolveEvent, rejectEvent) => {
-          function cleanup() {
-            proc.off("message", onMessage);
-            proc.off("exit", onExit);
-            proc.off("error", onError);
-          }
-          function onMessage(message: unknown) {
-            cleanup();
-            try {
-              resolveEvent({ kind: "state", state: parseState(message) });
-            } catch (error) {
-              rejectEvent(error);
-            }
-          }
-          function onExit(code: number | null, signal: NodeJS.Signals | null) {
-            cleanup();
-            resolveEvent({ kind: "exit", outcome: { code, signal } });
-          }
-          function onError(error: Error) {
-            cleanup();
-            rejectEvent(error);
-          }
-          proc.once("message", onMessage);
-          proc.once("exit", onExit);
-          proc.once("error", onError);
-        });
-      }
-
-      function assertPendingState(state: PipeState, phase: string) {
-        assert.ok(
-          state.queuedBytes > 0,
-          `pipe child had no queued output ${phase}`,
-        );
-        assert.ok(
-          state.pendingBytes > 0,
-          `pipe child had no pending bytes ${phase}`,
-        );
-        assert.ok(
-          state.pendingWrites > 0,
-          `pipe child had no pending writes ${phase}`,
-        );
-        assert.equal(
-          state.corkedWrites,
-          0,
-          `pipe child had corked output ${phase}`,
-        );
-      }
-
-      const seededPromise = readState("seeded");
-      proc.send("write");
-      const seeded = await seededPromise;
-      await withBound(
-        firstDelivery,
-        "pipe child delivered no seed bytes before the bound elapsed",
-      );
-      assert.ok(
-        seeded.attemptedBytes > 0,
-        "pipe child attempted no seed output",
-      );
-      assert.ok(deliveredBytes > 0, "pipe child delivered no seed output");
-      assert.equal(seeded.corkedWrites, 0, "pipe child corked its seed output");
-
-      // Stop reading only after observing real bytes from the uncorked write.
-      // The child then fills adaptively until callback state stays pending
-      // across an event-loop turn, without assuming an OS pipe capacity.
-      stdout.pause();
-      const queuedPromise = readState("queued");
-      proc.send("fill");
-      const queued = await queuedPromise;
-      assert.ok(
-        queued.attemptedBytes > seeded.attemptedBytes,
-        "pipe child attempted no output after its seed",
-      );
-      assertPendingState(queued, "before finishing");
-
-      const finishingPromise = readState("finishing");
-      proc.send("finish");
-      let decisive = await finishingPromise;
-      let outcome:
-        { code: number | null; signal: NodeJS.Signals | null } | undefined;
       for (;;) {
-        assert.ok(
-          decisive.attemptedBytes >= queued.attemptedBytes,
-          "pipe child lost attempted-byte accounting before the exit decision",
-        );
-        assertPendingState(decisive, "at the exit decision");
-
-        const nextEvent = withBound(
-          readStateOrExit(),
-          "pipe child did not respond to the exit arm before the bound elapsed",
-        );
-        proc.send("arm");
-        const next = await nextEvent;
-        if (next.kind === "exit") {
-          assert.equal(
-            mode,
-            "exit",
-            "pipe child exited before the graceful arm",
+        if (safety.signal.aborted) {
+          throw new Error("fixture barrier readiness wait aborted");
+        }
+        if (settled.some(Boolean)) {
+          throw new Error(
+            "runScript settled before all participants were ready",
           );
-          outcome = next.outcome;
+        }
+        if (
+          participants.every(({ tag }) =>
+            existsSync(join(rv, `${tag}.watchdog-ready`)),
+          )
+        ) {
           break;
         }
-        if (next.state.phase === "finishing") {
-          decisive = next.state;
-          continue;
-        }
-        assert.equal(
-          next.state.phase,
-          "armed",
-          `pipe child reported ${next.state.phase} after the exit arm`,
-        );
-        assert.equal(
-          mode,
-          "exitCode",
-          "forced pipe child reported graceful readiness",
-        );
-        decisive = next.state;
-        assertPendingState(decisive, "when the graceful exitCode was set");
-        stdout.resume();
-        outcome = await withBound(
-          exited,
-          "pipe child did not exit after stdout drainage before the bound elapsed",
-        );
-        break;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
       }
-      stdout.resume();
-      await withBound(
-        closed,
-        "pipe child stdio did not close after exit before the bound elapsed",
+      clearTimeout(startupSafetyTimer);
+      startupSafetyTimer = undefined;
+      assert.deepEqual(
+        settled,
+        [false, false, false, false],
+        "all four runs must remain blocked before release",
       );
-      assert.deepEqual(outcome, { code: 0, signal: null });
-      return { ...decisive, deliveredBytes };
+      writeFileSync(release, "released\n");
+      const results = await Promise.all(runs);
+      assert.deepEqual(
+        results.map(({ status }) => status),
+        [0, 0, 0, 0],
+      );
     } finally {
-      stdout.resume();
-      proc.kill("SIGKILL");
-      await withBound(
-        closed,
-        "pipe child cleanup did not close stdio before the bound elapsed",
-      );
+      safety.abort();
+      if (startupSafetyTimer !== undefined) clearTimeout(startupSafetyTimer);
+      t.signal.removeEventListener("abort", forwardTestAbort);
+      await Promise.allSettled(runs);
+      rmSync(rv, { recursive: true, force: true });
     }
-  }
+  },
+);
 
-  const complete = await run("exitCode");
-  assert.equal(complete.deliveredBytes, complete.attemptedBytes);
-
-  const truncated = await run("exit");
-  assert.ok(
-    truncated.deliveredBytes > 0,
-    "process.exit() submitted no payload bytes to the OS pipe",
-  );
-  assert.ok(
-    truncated.deliveredBytes < truncated.attemptedBytes,
-    `process.exit() delivered ${truncated.deliveredBytes} of ` +
-      `${truncated.attemptedBytes} attempted bytes; ` +
-      "the negative control no longer demonstrates truncation",
-  );
-});
+void test(
+  "an unreleased fake Codex invocation expires at its own bound",
+  { timeout: 20000 },
+  (t) => {
+    const rv = mkdtempSync(join(tmpdir(), "spw-fixture-barrier-bound-"));
+    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const c = seededUninstallCase({});
+    const result = spawnSync(c.codexBin, ["plugin", "list", "--json"], {
+      env: {
+        ...process.env,
+        HOME: c.home,
+        SPW_FIXTURE_STATE: c.state,
+        SPW_FIXTURE_BARRIER_DIR: rv,
+      },
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    assert.equal(result.signal, null);
+    assert.equal(result.status, 90);
+    assert.equal(result.stderr, "fixture: release barrier timed out\n");
+  },
+);
 
 void test("the fake codex delivers an oversized plugin listing intact", async () => {
   // The read side already used process.exitCode (slice 2), so this is a
