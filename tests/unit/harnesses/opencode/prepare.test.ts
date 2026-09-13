@@ -80,9 +80,13 @@ void test("preparing a replacement leaves an installed snapshot unchanged", asyn
     readFileSync(join(installed, ".superpowers-manager.json"), "utf8"),
     installedReceipt,
   );
+  assert.throws(
+    () => readFileSync(join(installed, "replacement-marker")),
+    /ENOENT/,
+  );
   assert.equal(
-    readFileSync(join(installed, "LICENSE"), "utf8").length > 0,
-    true,
+    readFileSync(join(root, "replacement", "replacement-marker"), "utf8"),
+    "B\n",
   );
 });
 
