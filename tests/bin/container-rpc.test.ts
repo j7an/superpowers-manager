@@ -19,7 +19,7 @@ import { shQuote } from "../lib/git-egress.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const HELPER = join(ROOT, "tests/container/codex/hooks-list-rpc.py");
-const CHILD = join(ROOT, "tests/unit/helpers/rpc-server-child.py");
+const CHILD = join(ROOT, "tests/unit/helpers/rpc-server-child.ts");
 
 function python(): string {
   const result = spawnSync(
@@ -72,7 +72,7 @@ async function invoke(
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, "codex"),
-    `#!/bin/sh\nexec ${shQuote(PYTHON)} -S ${shQuote(CHILD)} ${shQuote(scenario)}\n`,
+    `#!/bin/sh\nexec ${shQuote(process.execPath)} ${shQuote(CHILD)} ${shQuote(scenario)}\n`,
   );
   chmodSync(join(bin, "codex"), 0o755);
   const child = spawn(
@@ -148,7 +148,6 @@ void test("container RPC helper", async (t) => {
     ["rpc-error", /RPC error for id 1/],
     ["no-result", /response id 1 has no result/],
     ["eof", /EOF before the required response/],
-    ["missing-initialization", /EOF before the required response/],
     ["timeout", /timed out waiting for app-server output/],
   ] as const) {
     await t.test(`${scenario} fails without writing a response`, async (t) => {
@@ -157,16 +156,18 @@ void test("container RPC helper", async (t) => {
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, diagnostic);
       assert.ok(!existsSync(result.response));
-      assert.doesNotMatch(result.appServerStderr, /AssertionError/);
+      assert.equal(result.appServerStderr, "");
     });
   }
   await t.test(
     "missing initialization response stops before the list request",
     async (t) => {
       const result = await invoke(t, "missing-initialization", "hooks/list");
+      assert.equal(result.signal, null);
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, /EOF before the required response/);
-      assert.doesNotMatch(result.appServerStderr, /AssertionError/);
+      assert.ok(!existsSync(result.response));
+      assert.equal(result.appServerStderr, "");
     },
   );
 });

@@ -944,11 +944,12 @@ void test("pnpm packageManager updates delegate on the weekly and manual trigger
   );
   const triggers = requireMapping(workflow.on, "on");
 
+  assert.deepEqual(Object.keys(triggers).sort(), [
+    "schedule",
+    "workflow_dispatch",
+  ]);
   assert.deepEqual(triggers.schedule, [{ cron: "0 6 * * 1" }]);
-  assert.ok(
-    Object.hasOwn(triggers, "workflow_dispatch"),
-    "updater must allow manual dispatch",
-  );
+  assert.deepEqual(triggers.workflow_dispatch ?? {}, {});
   assert.deepEqual(workflow.permissions, {});
 
   const jobs = requireMapping(workflow.jobs, "jobs");
@@ -962,11 +963,9 @@ void test("pnpm packageManager updates delegate on the weekly and manual trigger
     usesTarget(update.uses, "jobs.update.uses"),
     "j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml",
   );
-  assert.equal(
-    requireMapping(update.secrets, "jobs.update.secrets")
-      .RELEASE_BOT_PRIVATE_KEY,
-    "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}",
-  );
+  assert.deepEqual(requireMapping(update.secrets, "jobs.update.secrets"), {
+    RELEASE_BOT_PRIVATE_KEY: "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}",
+  });
   assert.equal(
     requireMapping(update.with, "jobs.update.with").minimum_release_age_days,
     5,
