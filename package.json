@@ -33,6 +33,7 @@
     "test:integration": "node tests/run-node-suites.ts --group integration",
     "test:harness:codex": "sh tests/container.sh harness-codex",
     "test:harness:pi": "sh tests/container.sh harness-pi",
+    "test:harness:opencode": "sh tests/container.sh harness-opencode",
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "check": "pnpm run check:static && pnpm run test",

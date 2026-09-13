@@ -22,6 +22,7 @@ const runner = join(ROOT, "tests/container.sh");
 const toolPackage = join(ROOT, "tests/container/package.json");
 const lockfile = join(ROOT, "tests/container/package-lock.json");
 const tsconfig = join(ROOT, "tests/tsconfig.json");
+const openCodeProbe = join(ROOT, "tests/container/opencode/offline-probe.sh");
 
 function executable(path: string): boolean {
   try {
@@ -177,6 +178,22 @@ void test("container contract", async (t) => {
       }
     },
   );
+  await t.test(
+    "OpenCode probe rejects host execution before lifecycle work",
+    () => {
+      assert.ok(executable(openCodeProbe));
+      const result = spawnSync("/bin/sh", [openCodeProbe], {
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          SPW_CONTAINER: "0",
+          OPENCODE_DB: "/forbidden/ambient.db",
+        },
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /isolated UID 10001 container/);
+    },
+  );
   await t.test("test tsconfig resolves NodeNext", () => {
     const config = effectiveTsconfig();
     assert.equal(String(config.module).toLowerCase(), "nodenext");
@@ -230,14 +247,16 @@ void test("container contract", async (t) => {
         '#!/bin/sh\n[ "${1:-}" = "-u" ] || exit 99\nprintf "%s\\n" "${SPW_FIXTURE_UID:-10001}"\n',
       );
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
-      const child = `#!/bin/sh\nset -eu\ncase "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; *) name=shared ;; esac\nprintf '%s\\n' "$name" >> "$SPW_RUNNER_LOG"\n[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n`;
+      const child = `#!/bin/sh\nset -eu\ncase "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac\nprintf '%s\\n' "$name" >> "$SPW_RUNNER_LOG"\n[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n`;
       const paths = [
         join(scratch, "tests/run.sh"),
         join(container, "codex/offline-probe.sh"),
         join(container, "pi/offline-probe.sh"),
+        join(container, "opencode/offline-probe.sh"),
       ];
       mkdirSync(join(container, "codex"), { recursive: true });
       mkdirSync(join(container, "pi"), { recursive: true });
+      mkdirSync(join(container, "opencode"), { recursive: true });
       for (const path of paths) writeFileSync(path, child);
       for (const path of [join(bin, "id"), join(bin, "docker"), ...paths])
         chmodSync(path, 0o755);
@@ -259,9 +278,10 @@ void test("container contract", async (t) => {
         );
       };
       for (const [mode, logText] of [
-        ["suite", "shared\ncodex\npi\n"],
+        ["suite", "shared\ncodex\npi\nopencode\n"],
         ["harness-codex", "codex\n"],
         ["harness-pi", "pi\n"],
+        ["harness-opencode", "opencode\n"],
       ] as const) {
         const result = run(mode);
         assert.equal(result.status, 0, result.stderr);
@@ -275,6 +295,7 @@ void test("container contract", async (t) => {
             "container suite: shared checks: complete status=0",
             "container suite: Codex harness integration: complete status=0",
             "container suite: Pi harness integration: complete status=0",
+            "container suite: OpenCode harness integration: complete status=0",
           ],
         ],
         [
@@ -283,12 +304,21 @@ void test("container contract", async (t) => {
           [
             "container suite: Codex harness integration: complete status=0",
             "container suite: Pi harness integration: complete status=0",
+            "container suite: OpenCode harness integration: complete status=0",
           ],
         ],
         [
           "pi",
           "shared\ncodex\npi\n",
-          ["container suite: Pi harness integration: complete status=0"],
+          [
+            "container suite: Pi harness integration: complete status=0",
+            "container suite: OpenCode harness integration: complete status=0",
+          ],
+        ],
+        [
+          "opencode",
+          "shared\ncodex\npi\nopencode\n",
+          ["container suite: OpenCode harness integration: complete status=0"],
         ],
       ] as const) {
         const result = run("suite", { SPW_FAIL_CHILD: failedChild });

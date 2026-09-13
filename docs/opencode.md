@@ -41,3 +41,13 @@ removal. End-to-end native lifecycle qualification runs offline in an isolated
 Linux container and covers registration, bootstrap and skill loading, snapshot
 refresh, and removal. macOS evidence covers the released command surface and
 focused unit behavior; it does not establish the same end-to-end lifecycle.
+
+The shipping qualification uses OpenCode 1.18.30 as UID 10001 in a read-only,
+network-disabled Linux container. The real manager and native OpenCode command
+proved experimental-source refusal before mutation, install of snapshot A,
+continued activation of A after preparing B, update to B in a fresh native
+process, a byte-stable probe with no native invocation, exact registration and
+snapshot removal, and an idempotent second removal. Each active observation
+loaded the upstream bootstrap and returned the installed snapshot marker through
+OpenCode's native skill tool. The packaged OpenCode JSONC read/removal path and
+its bundled parser also execute under the declared minimum Node 24.0.0 runtime.

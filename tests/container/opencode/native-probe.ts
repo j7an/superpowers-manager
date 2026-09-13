@@ -15,6 +15,7 @@ import {
 import { createServer, type Server } from "node:http";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parse, type ParseError } from "jsonc-parser";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const FIXTURES = join(ROOT, "tests/fixtures/opencode-native");
@@ -142,11 +143,11 @@ async function runNative(
 }
 
 function parseConfig(file: string): Record<string, unknown> {
-  const text = readFileSync(file, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/,\s*([}\]])/g, "$1");
-  const value: unknown = JSON.parse(text);
+  const errors: ParseError[] = [];
+  const value: unknown = parse(readFileSync(file, "utf8"), errors, {
+    allowTrailingComma: true,
+  });
+  check(errors.length === 0, "native config is not valid JSONC");
   check(
     value !== null && typeof value === "object" && !Array.isArray(value),
     "native config root is not an object",
@@ -508,6 +509,12 @@ function materialize(packageRoot: string, marker: "A" | "B"): void {
     join(packageRoot, "skills/snapshot-probe/SKILL.md"),
     `---\nname: snapshot-probe\ndescription: Inert native qualification marker\n---\n\n${markers[marker]}\n`,
   );
+}
+
+function phaseB(skill: string): void {
+  const original = readFileSync(skill, "utf8");
+  check(original.includes(markers.A), "fixture phase A marker is missing");
+  writeFileSync(skill, original.replaceAll(markers.A, markers.B));
 }
 
 async function resolvedConfig(
@@ -890,11 +897,15 @@ async function qualification(): Promise<void> {
 try {
   const [mode, installed, expected] = process.argv.slice(2);
   if (mode === "qualification") await qualification();
+  else if (mode === "fixture-create" && installed && expected === undefined)
+    materialize(installed, "A");
+  else if (mode === "fixture-phase-b" && installed && expected === undefined)
+    phaseB(installed);
   else if (mode === "observe" && installed && expected)
     await observe(installed, expected as Marker);
   else
     throw new Error(
-      "usage: native-probe.ts qualification | observe <absolute-root> <A|B|absent>",
+      "usage: native-probe.ts qualification | fixture-create <root> | fixture-phase-b <skill> | observe <absolute-root> <A|B|absent>",
     );
 } catch (error) {
   const message =

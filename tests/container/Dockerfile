@@ -50,7 +50,7 @@ RUN corepack enable \
     && pnpm install --frozen-lockfile \
     && chown -R root:root /workspace /opt/spw-test-tools /opt/node-min \
     && chmod a+r node_modules/.pnpm-workspace-state-v1.json \
-    && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh
+    && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh tests/container/opencode/offline-probe.sh
 RUN mkdir -p /opt/spw-package \
     && node tests/tools/pack.ts --out-dir /opt/spw-package \
     && chmod -R a+rX /opt/spw-package
