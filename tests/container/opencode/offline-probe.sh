@@ -109,11 +109,13 @@ fixture_git add .
 fixture_git commit -qm 'native fixture A'
 commit_a=$(fixture_git rev-parse HEAD)
 guarded_manager pin "$commit_a"
+cp "$XDG_CONFIG_HOME/opencode/opencode.jsonc" "$root/target.before.jsonc"
 guarded_manager prepare --harness opencode
+cmp "$XDG_CONFIG_HOME/opencode/opencode.jsonc" "$root/target.before.jsonc"
+echo "opencode prepare target config: unchanged"
 test -d "$prepared"
 test ! -e "$installed"
 snapshot_non_target "$root/non-target.before.tar"
-cp "$XDG_CONFIG_HOME/opencode/opencode.jsonc" "$root/target.before.jsonc"
 if run_manager install --harness opencode >"$root/refused.stdout" 2>"$root/refused.stderr"; then
   echo "error: custom OpenCode fixture installed without experimental opt-in" >&2
   exit 1
