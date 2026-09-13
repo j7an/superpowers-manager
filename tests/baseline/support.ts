@@ -54,7 +54,6 @@ const SANDBOX_TOOLS = [
   "node",
   "sh",
   "git",
-  "python3",
   "awk",
   "basename",
   "cat",
@@ -137,27 +136,6 @@ function hostExecutable(name: string) {
     } catch {
       // Keep looking through the host PATH used only during sandbox setup.
       continue;
-    }
-    if (name === "python3") {
-      const result = spawnSync(
-        candidate,
-        ["-c", "import os,sys; print(os.path.realpath(sys.executable))"],
-        { env: process.env, encoding: "utf8" },
-      );
-      const executable = result.status === 0 ? result.stdout.trim() : "";
-      if (!isAbsolute(executable)) {
-        throw new Error(
-          `unable to resolve an absolute Python executable from host command: ${candidate}`,
-        );
-      }
-      try {
-        accessSync(executable, constants.X_OK);
-        return realpathSync(executable);
-      } catch {
-        throw new Error(
-          `resolved Python executable is not runnable: ${executable}`,
-        );
-      }
     }
     try {
       return realpathSync(candidate);
@@ -350,8 +328,7 @@ const CODEX_LOG_MARKER = "spw-baseline-codex-log";
 /**
  * A `codex` that records every invocation instead of swallowing it.
  *
- * POSIX sh rather than python3 on purpose: PR 11.5 slice 3.4 is the slice that
- * stops requiring Python for `prepare`. Emptiness is the assertion; the
+ * POSIX sh keeps this fixture dependency-free. Emptiness is the assertion; the
  * recorded argv is for diagnosis when it is not empty.
  *
  */
@@ -453,7 +430,7 @@ function createSandbox(): Sandbox {
       }
       linkHostTool(sandbox.bin, tool);
     }
-    for (const tool of ["node", "python3", "git"]) {
+    for (const tool of ["node", "git"]) {
       assertSandboxHostTool(sandbox.bin, tool);
     }
   } catch (error) {

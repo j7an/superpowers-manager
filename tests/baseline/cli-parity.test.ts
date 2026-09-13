@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, join, relative } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   COMMANDS,
@@ -58,6 +59,8 @@ import { successResult } from "../../src/adapter-result.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 
 type Sandbox = import("./support.ts").Sandbox;
+
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 const USAGE = `usage: superpowers-manager [command] [args...]
 
@@ -306,26 +309,34 @@ function runSandboxGit(sandbox: Sandbox, args: string[]) {
 
 function writeFailingValidator(
   sandbox: Sandbox,
-  name: string = "reject-candidate.py",
+  name: string = "reject-candidate.cjs",
   candidateRecord: string | null = null,
 ) {
   const validator = join(sandbox.work, name);
   const recordCandidate =
     candidateRecord === null
       ? ""
-      : `Path(${JSON.stringify(candidateRecord)}).write_text(str(candidate) + "\\n", encoding="utf-8")\n`;
+      : `fs.writeFileSync(${JSON.stringify(candidateRecord)}, candidate + "\\n");\n`;
   writeFileSync(
     validator,
-    `#!/usr/bin/env python3
-from pathlib import Path
-import sys
-
-candidate = Path(sys.argv[1])
-${recordCandidate}if not (candidate / ".codex-plugin" / "plugin.template.json").is_file():
-    print("candidate template missing before additional validation", file=sys.stderr)
-    raise SystemExit(9)
-print("baseline additional validator rejection", file=sys.stderr)
-raise SystemExit(7)
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const candidate = process.argv[2];
+const template = path.join(candidate, ".codex-plugin", "plugin.template.json");
+let templateIsFile = false;
+try {
+  templateIsFile = fs.statSync(template).isFile();
+} catch {
+  templateIsFile = false;
+}
+${recordCandidate}if (!templateIsFile) {
+  process.stderr.write("candidate template missing before additional validation\\n");
+  process.exitCode = 9;
+} else {
+  process.stderr.write("baseline additional validator rejection\\n");
+  process.exitCode = 7;
+}
 `,
     { encoding: "utf8", mode: 0o755 },
   );
@@ -505,50 +516,6 @@ void test("CLI-MODE-HELP-01 help modes", () => {
       assert.equal(result.stderr, "");
     }
   });
-});
-
-void test("CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim before sandboxing", () => {
-  const originalPath = process.env.PATH;
-  const hostPython = spawnSync(
-    "python3",
-    ["-c", "import os,sys; print(os.path.realpath(sys.executable))"],
-    {
-      env: { ...process.env, PATH: originalPath },
-      encoding: "utf8",
-    },
-  );
-  assertCleanResult(hostPython);
-  const resolvedPython = hostPython.stdout.trim();
-  assert.ok(resolvedPython.startsWith("/"));
-
-  const hostSandbox = createSandbox();
-  let sandbox;
-  try {
-    const shimDirectory = join(hostSandbox.root, "pyenv-shims");
-    mkdirSync(shimDirectory);
-    const shim = join(shimDirectory, "python3");
-    writeFileSync(
-      shim,
-      `#!/usr/bin/env bash\nexec ${JSON.stringify(resolvedPython)} "$@"\n`,
-      "utf8",
-    );
-    chmodSync(shim, 0o755);
-    process.env.PATH = `${shimDirectory}${delimiter}${originalPath || ""}`;
-
-    sandbox = createSandbox();
-    const result = runCli(sandbox, ["track-latest"]);
-    assertCleanResult(result);
-    assert.equal(
-      result.stdout,
-      "saved upstream selection: latest stable release\n",
-    );
-    assert.equal(result.stderr, "");
-  } finally {
-    if (sandbox) destroySandbox(sandbox);
-    if (originalPath === undefined) delete process.env.PATH;
-    else process.env.PATH = originalPath;
-    destroySandbox(hostSandbox);
-  }
 });
 
 void test("CLI-HOST-TOOLS-02 removes an unregistered root after a smoke-check failure", () => {
@@ -1205,9 +1172,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       customCodex,
       [
         "#!/bin/sh",
-        // python3 is a SANDBOX_TOOLS member (tests/baseline/support.js) and is
-        // how support.js's own dispatchStub produced this same JSON shape.
-        `exec python3 -c 'import json,os,sys; json.dump({"passthrough": {n: os.environ.get(n) for n in json.loads(sys.argv[1])}, "superpowers_env": {n: v for n, v in os.environ.items() if n.startswith("SUPERPOWERS_")}, "xdg_env": {n: v for n, v in os.environ.items() if n.startswith("XDG_")}, "npm_env": {n: v for n, v in os.environ.items() if n.upper().startswith("NPM_CONFIG_")}, "codex_env": {n: v for n, v in os.environ.items() if n.startswith("CODEX_")}, "node_env": {n: v for n, v in os.environ.items() if n in ("NODE_OPTIONS", "NODE_PATH")}}, open(sys.argv[2], "w"))' ${shQuote(JSON.stringify(PASSTHROUGH_VARIABLES))} ${shQuote(dumped)}`,
+        `exec ${shQuote(process.execPath)} ${shQuote(join(ROOT, "tests", "baseline", "record-codex-environment.ts"))} ${shQuote(JSON.stringify(PASSTHROUGH_VARIABLES))} ${shQuote(dumped)}`,
         "",
       ].join("\n"),
       "utf8",
@@ -1411,12 +1376,11 @@ void test("CLI-ENV-PREPARE-01 public prepare path defaults and overrides", () =>
     writeCodexLogTool(sandbox);
     const customCache = join(sandbox.root, "custom-cache");
     const customPlugin = join(sandbox.root, "custom-plugin");
-    const customValidator = join(sandbox.root, "custom-validator.py");
+    const customValidator = join(sandbox.root, "custom-validator.cjs");
     const validatorMarker = join(sandbox.root, "validator-ran");
     writeFileSync(
       customValidator,
-      "#!/usr/bin/env python3\nfrom pathlib import Path\nimport os\n" +
-        'Path(os.environ["SPW_BASELINE_VALIDATOR_MARKER"]).write_text("ran\\n")\n',
+      '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.SPW_BASELINE_VALIDATOR_MARKER, "ran\\n");\n',
       { encoding: "utf8", mode: 0o755 },
     );
     const result = runCli(sandbox, ["prepare"], {
@@ -1841,7 +1805,7 @@ void test("FS-ATOMIC-01 failed prepare preserves the previous generated tree", (
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(
         sandbox,
-        "reject-atomic-candidate.py",
+        "reject-atomic-candidate.cjs",
         candidateRecord,
       ),
     });
@@ -1881,7 +1845,7 @@ void test("FS-CLEANUP-01 interrupted state cleanup is invocation-scoped", () => 
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(
         sandbox,
-        "reject-interrupted-candidate.py",
+        "reject-interrupted-candidate.cjs",
       ),
     });
     assertCleanResult(result, 1);
@@ -2129,12 +2093,8 @@ function updateControlAdapter(response: "unsupported" | "malformed") {
 void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", async () => {
   {
     const c = lifecycleCodexCase({ fakes: "install" });
-    const validator = join(c.dir, "reject-install-candidate.py");
-    writeFileSync(
-      validator,
-      "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
-      { mode: 0o755 },
-    );
+    const validator = join(c.dir, "reject-install-candidate.sh");
+    writeFileSync(validator, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
     const result = await runScript(c, "install", {
       env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
     });
@@ -2736,7 +2696,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-01/02 (`tests/baseline/cli-parity.test.ts:510::CLI-HOST-TOOLS-01 resolves a pyenv-style Python shim`, `tests/baseline/cli-parity.test.ts:554::CLI-HOST-TOOLS-02 removes an unregistered root`) restore it.
+  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:521::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2808,8 +2768,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1321::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1367::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1286::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1332::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

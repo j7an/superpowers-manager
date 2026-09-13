@@ -52,8 +52,8 @@ registerScratch(SCRATCH);
 // own (ambient, unrestricted) PATH — never a case's fakeBin, which only ever
 // contains "exit 0" stubs. Mirrors tests/baseline/support.js's
 // hostExecutable, kept as its own small copy here rather than imported: that
-// module's version also special-cases `python3`, which nothing in this file
-// needs.
+// module's version has additional sandbox-specific behavior, which nothing in
+// this file needs.
 
 function hostExecutable(name: string) {
   for (const dir of (process.env.PATH || "").split(delimiter)) {

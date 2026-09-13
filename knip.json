@@ -9,6 +9,7 @@
     "tests/bin/helpers/pack-driver.ts",
     "tests/bin/{install,probe,uninstall}-fakes.ts",
     "tests/baseline/selection-writer-child.ts",
+    "tests/baseline/record-codex-environment.ts",
     "tests/container/pi/resource-probe.ts",
     "tests/unit/helpers/rpc-server-child.ts",
     "tests/unit/helpers/workspace-signal{,-failure}-child.ts"

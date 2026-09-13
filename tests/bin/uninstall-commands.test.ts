@@ -57,8 +57,7 @@ const BOTH_MARKETPLACES_PRESENT =
   '{"marketplaces":[{"name":"superpowers-manager","root":"/manager"},{"name":"superpowers-wrapper","root":"/legacy"}]}';
 
 // Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:176::mktemp`. `git` is deliberately
-// absent; `python3` and `node` are appended separately below, exactly as the
-// shell did at :180-181.
+// absent; `node` is appended separately below.
 const NO_GIT_TOOLS = [
   "awk",
   "cat",
@@ -245,24 +244,6 @@ function resolveOnPath(tool: string): string {
   return resolved;
 }
 
-/**
- * The shell resolved python3 through its own `sys.executable` realpath rather
- * than `command -v` (:174), because the PATH entry is often a shim.
- */
-function realPython3(): string {
-  const found = spawnSync(
-    "python3",
-    ["-c", "import os, sys; print(os.path.realpath(sys.executable))"],
-    { encoding: "utf8" },
-  );
-  assert.equal(
-    found.status,
-    0,
-    "fixture: python3 is required to build the no-git PATH",
-  );
-  return found.stdout.trim();
-}
-
 // `void` for the same reason every `test(` call site carries it: oxlint's
 // typescript(no-floating-promises) rule treats the runner's returned promise as
 // floating otherwise.
@@ -319,7 +300,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     for (const tool of NO_GIT_TOOLS) {
       symlinkSync(resolveOnPath(tool), join(noGit, tool));
     }
-    symlinkSync(realPython3(), join(noGit, "python3"));
     symlinkSync(realpathSync(process.execPath), join(noGit, "node"));
 
     let ownershipCalls = 0;
