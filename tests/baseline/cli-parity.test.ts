@@ -594,11 +594,9 @@ void test("CLI-MODE-VERSION-01 version mode routes through native source", () =>
 
 // Rewritten, not re-pointed (PR 11.5 slice 4b, Task 8): `update` dispatches
 // in-process now, so the dispatch record this used to read (an empty-dispatch
-// assertion on `update`) can never be written. The ID, the test name and the
-// traceability row are unchanged, and so is the contract —
-// docs/baseline/behavioral-inventory.md states it as "No arguments is the
-// third distinct mode and is exactly equivalent to dispatching `update` with
-// no arguments", which is what the equivalence below asserts literally.
+// assertion on `update`) can never be written. The contract remains: no
+// arguments is the third distinct mode and is exactly equivalent to dispatching
+// `update` with no arguments, which the equivalence below asserts literally.
 //
 // Two halves, because no single observable carries both directions of it.
 //
@@ -1100,17 +1098,15 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
 // comment above them said of their five scenarios, "Vehicle only … they die
 // with buildSpawn in slice 4." That obligation is discharged as follows.
 //
-// `CLI-ENV-CODEX-PREFLIGHT-01` — ID, test name, contract and traceability row
-// all RETAINED. It is not a child-handling property: a custom
+// `CLI-ENV-CODEX-PREFLIGHT-01` is not a child-handling property: a custom
 // `SUPERPOWERS_CODEX` satisfying launcher preflight with `codex` absent from
 // PATH is a requirement-checking contract the flip does not touch. Only the
 // body changed, because it ended in an empty-dispatch assertion on `install`
 // and there is no dispatch record to read any more. See the case below.
 //
-// `CLI-CHILD-STATUS-01` and all FOUR of its scenarios — RETIRED at the gap,
-// with its rows removed from docs/baseline/traceability.md and
-// docs/baseline/behavioral-inventory.md in this same commit. The subject is
-// gone, not relocated: after the flip the CLI spawns no delegated child, so
+// `CLI-CHILD-STATUS-01` and all FOUR of its scenarios are retired at the gap.
+// The subject is gone, not relocated: after the flip the CLI spawns no
+// delegated child, so
 // inherited stdio, a propagated raw child status (the ID drove
 // `SPW_BASELINE_DELEGATE_EXIT: "42"`), signal-death normalisation, and the
 // `spawnSync … ENOENT` diagnostic have no referent at all. Post-flip a Codex
@@ -1185,11 +1181,9 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
   withSandbox((sandbox) => {
     // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
     // spawns `scripts/update`, so the dispatch stub that used to record the
-    // child's environment is never invoked. The ID, the test name, and the
-    // traceability row are unchanged. CLI-ENV-PASSTHROUGH-01
-    // (docs/baseline/behavioral-inventory.md) still asserts the same
-    // contract: the CLI inherits its controlled invocation environment
-    // wholesale, and it does not synthesize unrelated XDG_*, npm, or Codex
+    // child's environment is never invoked. CLI-ENV-PASSTHROUGH-01 still
+    // asserts the same contract: the CLI inherits its controlled invocation
+    // environment wholesale, and it does not synthesize unrelated XDG_*, npm, or Codex
     // variables — and there is still exactly one child to observe it on:
     // the `codex` process a typed Codex engine spawns (src/harnesses/codex/adapter.ts's runCommand). The
     // recording shim below is that child, so the claim is asserted against a
@@ -2814,8 +2808,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1327::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1373::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1321::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1367::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

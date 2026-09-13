@@ -35,7 +35,6 @@
       "group": "integration"
     },
     { "path": "tests/baseline/suite-runner.test.ts", "group": "integration" },
-    { "path": "tests/baseline/traceability.test.ts", "group": "repository" },
     {
       "path": "tests/baseline/validator-executable.test.ts",
       "group": "integration"

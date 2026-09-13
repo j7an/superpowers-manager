@@ -215,6 +215,9 @@ void test("GENERATED-FALLBACK-01 manifest-less upstream uses the manager fallbac
   assert.equal(existsSync(c.codexLog), false);
 });
 
+// Exact-empty upstream hooks are covered by GENERATED-HOOKS-FORBID-01;
+// manifest-less fallback is separately covered by GENERATED-FALLBACK-01.
+
 void test("MANIFEST-READER-UPSTREAM-01 upstream manifest version reaches provenance", async () => {
   const c = createCase({ fakes: "probe" });
   const result = await prepare(c, { SUPERPOWERS_REF: REFS.noHooksManifest });
