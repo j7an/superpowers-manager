@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
-import { closeSync } from "node:fs";
+import { closeSync, realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
 
 const scenario = process.argv[2];
 assert.ok(scenario, "expected scenario argument");
+assert.equal(
+  realpathSync(process.cwd()),
+  realpathSync(process.argv[3]),
+  "unexpected app-server cwd",
+);
+const requestedCwd = process.argv[4];
+assert.ok(requestedCwd, "expected requested cwd argument");
 
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 const requests = input[Symbol.asyncIterator]();
@@ -50,11 +57,20 @@ async function main(): Promise<void> {
   const params = asObject(list.params);
   assert.ok(Array.isArray(params.cwds));
   assert.equal(params.cwds.length, 1);
+  assert.equal(params.cwds[0], requestedCwd);
   if (list.method === "skills/list") assert.equal(params.forceReload, true);
 
-  if (scenario === "malformed-json") emit("{\n");
+  if (scenario === "bom-prefixed") {
+    emit(
+      Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from('{"id":1,"result":{"data":[]}}\n'),
+      ]),
+    );
+  } else if (scenario === "malformed-json") emit("{\n");
   else if (scenario === "invalid-utf8") emit(new Uint8Array([0xff, 0x0a]));
   else if (scenario === "nan") emit('{"id":1,"result":NaN}\n');
+  else if (scenario === "overflow") emit('{"id":1,"result":{"value":1e400}}\n');
   else if (scenario === "non-object") emit("[]\n");
   else if (scenario === "rpc-error") emit('{"id":1,"error":{"code":1}}\n');
   else if (scenario === "no-result") emit('{"id":1}\n');
@@ -62,6 +78,33 @@ async function main(): Promise<void> {
     emit(
       '{"method":"notice"}\n{"id":true,"result":{"data":["wrong"]}}\n{"id":2,"result":{"data":["wrong"]}}\n{"id":1,"result":{"data":[]}}\n',
     );
+  } else if (scenario === "numeric-id-spellings") {
+    emit('{"id":1.0,"result":{"data":["wrong"]}}\n');
+    emit('{"id":1e0,"result":{"data":["wrong"]}}\n');
+    emit('{"id":1,"result":{"data":[],"nested":{"id":2}}}\n');
+  } else if (scenario === "split-chunks") {
+    const bytes = Buffer.from(
+      '{"id":1,"result":{"label":"split 😀"}}\n',
+      "utf8",
+    );
+    const emoji = Buffer.from("😀");
+    const splitAt = bytes.indexOf(emoji) + 2;
+    emit(bytes.subarray(0, splitAt));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    emit(bytes.subarray(splitAt, bytes.length - 1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    emit(bytes.subarray(bytes.length - 1));
+  } else if (scenario === "large-integer") {
+    emit('{"id":1,"result":{"value":123456789012345678901234567890}}\n');
+  } else if (scenario === "stderr") {
+    process.stderr.write("app-server diagnostic\n");
+    emit('{"id":1,"result":{"data":[]}}\n');
+  } else if (scenario === "cleanup-kill") {
+    process.stderr.write("cleanup child ready\n");
+    process.on("SIGTERM", () => {
+      process.stderr.write("terminate received\n");
+    });
+    emit('{"id":1,"result":{"data":[]}}\n');
   } else if (scenario === "eof") {
     input.close();
     return;
@@ -75,6 +118,7 @@ async function main(): Promise<void> {
   }
 
   await assertNoExtraRequestBytes();
+  if (scenario === "cleanup-kill") setInterval(() => {}, 1_000);
 }
 
 await main();

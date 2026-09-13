@@ -475,8 +475,8 @@ PY
 
 capture_hooks_response() {
   probe_cwd=$(pwd -P)
-  if ! "$timeout_bin" 30 python3 -S \
-    "$package/tests/container/codex/hooks-list-rpc.py" \
+  if ! "$timeout_bin" 30 node \
+    "$package/tests/container/codex/hooks-list-rpc.ts" \
     "$probe_cwd" "$hooks_response" "$hooks_stderr"; then
     cat "$hooks_stderr" >&2
     return 1
@@ -487,8 +487,8 @@ capture_manager_skills() {
   skills_capture=$((skills_capture + 1))
   skills_response="$root/skills-list-$skills_capture.response.json"
   skills_stderr="$root/skills-list-$skills_capture.stderr"
-  if ! "$timeout_bin" 30 python3 -S \
-    "$package/tests/container/codex/hooks-list-rpc.py" \
+  if ! "$timeout_bin" 30 node \
+    "$package/tests/container/codex/hooks-list-rpc.ts" \
     "$package" "$skills_response" "$skills_stderr" skills/list; then
     cat "$skills_stderr" >&2
     return 1
@@ -974,7 +974,7 @@ const result = await installCodexMarketplace(
             observed = true;
             const readers = await Promise.allSettled([
               run("codex", ["plugin", "list", "--json"], { timeout: 10_000 }),
-              run("python3", ["-S", helper, packageRoot, response, stderr, "skills/list"], { timeout: 10_000 }),
+              run(process.execPath, [helper, packageRoot, response, stderr, "skills/list"], { timeout: 10_000 }),
             ]);
             for (const reader of readers) {
               if (reader.status === "rejected") {
@@ -1007,7 +1007,7 @@ EOF
 boundary_response="$root/boundary-skills.response.json"
 boundary_stderr="$root/boundary-skills.stderr"
 SUPERPOWERS_CONFIG_DIR="$state/config" SUPERPOWERS_UPSTREAM_URL="$upstream" SUPERPOWERS_CACHE_DIR="$state/cache" SUPERPOWERS_INSTALLED_SEARCH_ROOT="$HOME/.codex" \
-  node "$driver" "$package" "$package/tests/container/codex/hooks-list-rpc.py" "$boundary_response" "$boundary_stderr"
+  node "$driver" "$package" "$package/tests/container/codex/hooks-list-rpc.ts" "$boundary_response" "$boundary_stderr"
 capture_manager_skills
 
 printf '%s\n' '# Probe B' >> "$upstream/skills/probe/SKILL.md"
