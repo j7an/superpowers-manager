@@ -14,6 +14,7 @@ plugin_id="${plugin_name}@${marketplace_name}"
 probe_root="${TMPDIR:-/tmp}/superpowers-manager-codex-probe"
 
 codex_bin="${CODEX_BIN:-codex}"
+spw_repo_root=$(CDPATH= cd -- "$(dirname "$0")/../../.." && pwd)
 
 cleanup() {
   "$codex_bin" plugin remove "$plugin_id" >/dev/null 2>&1 || true
@@ -100,11 +101,7 @@ find_installed_metadata() {
 
 metadata_commit() {
   file="$1"
-  python3 - "$file" <<'PY'
-import json, sys
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    print(json.load(f).get("commit", ""))
-PY
+  node "$spw_repo_root/tests/tools/read-metadata-commit.ts" "$file"
 }
 
 cleanup

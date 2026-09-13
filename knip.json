@@ -6,6 +6,7 @@
     "tests/tools/pack.ts",
     "tests/tools/citations.ts",
     "tests/tools/assert-pack-contents.ts",
+    "tests/tools/read-metadata-commit.ts",
     "tests/bin/helpers/pack-driver.ts",
     "tests/bin/{install,probe,uninstall}-fakes.ts",
     "tests/baseline/selection-writer-child.ts",
@@ -14,6 +15,7 @@
     "tests/container/codex/assert-state.ts",
     "tests/container/codex/assert-schema.ts",
     "tests/container/pi/resource-probe.ts",
+    "tests/container/pi/fixture.ts",
     "tests/unit/helpers/rpc-server-child.ts",
     "tests/unit/helpers/workspace-signal{,-failure}-child.ts"
   ],
