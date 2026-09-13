@@ -298,7 +298,6 @@ for (const args of [
 ]) {
   void test(`CLI rejects invalid arguments before compiling: ${JSON.stringify(args)}`, (t) => {
     const f = makePackFixture(t);
-    mkdirSync(join(f.root, "tests", "tools"));
     copyFileSync(
       join(REPO, "tests", "tools", "pack.ts"),
       join(f.root, "tests", "tools", "pack.ts"),
@@ -324,7 +323,6 @@ for (const mode of [
 ]) {
   void test(`rejects ${mode} paths before compiling`, (t) => {
     const f = makePackFixture(t);
-    mkdirSync(join(f.root, "tests", "tools"));
     const cli = join(f.root, "tests", "tools", "pack.ts");
     copyFileSync(join(REPO, "tests", "tools", "pack.ts"), cli);
     const marker = join(f.events, "compiled");

@@ -5,6 +5,7 @@
     "tests/**/*.test.ts",
     "tests/tools/pack.ts",
     "tests/tools/citations.ts",
+    "tests/tools/assert-pack-contents.ts",
     "tests/bin/helpers/pack-driver.ts",
     "tests/bin/{install,probe,uninstall}-fakes.ts",
     "tests/baseline/selection-writer-child.ts",
