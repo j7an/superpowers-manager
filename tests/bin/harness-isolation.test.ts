@@ -30,6 +30,7 @@ import { readOpenCodeReceipt } from "../../src/harnesses/opencode/package.ts";
 
 type Harness = "codex" | "pi" | "opencode";
 type Command = "prepare" | "probe" | "install" | "update" | "uninstall";
+const HARNESSES = ["codex", "pi", "opencode"] as const;
 function commandArgs(command: Command, harness: Harness): string[] {
   return [
     "--harness",
@@ -139,6 +140,20 @@ function assertNoUnselectedCalls(
     [],
     "maintained CLI must not spawn the retired adapter executable",
   );
+}
+
+function snapshotHarnesses(c: CaseEnv, harnesses: readonly Harness[]) {
+  return harnesses.map(
+    (harness) => [harness, snapshotHarness(c, harness)] as const,
+  );
+}
+
+function assertHarnessesUnchanged(
+  c: CaseEnv,
+  snapshots: ReturnType<typeof snapshotHarnesses>,
+): void {
+  for (const [harness, snapshot] of snapshots)
+    assert.deepEqual(snapshotHarness(c, harness), snapshot);
 }
 
 function assertInstalled(c: CaseEnv, harness: Harness): void {
@@ -309,6 +324,7 @@ function isolationCase(
     join(c.state, "marketplace_list.json"),
     '{"marketplaces":[]}\n',
   );
+  mkdirSync(join(c.state, "codex-home"), { recursive: true });
   const codexHome = join(c.dir, "codex-home");
   mkdirSync(join(codexHome, "trust"), { recursive: true });
   writeFileSync(join(codexHome, "config.toml"), 'model = "fixture"\n');
@@ -318,6 +334,7 @@ function isolationCase(
   mkdirSync(piSentinel, { recursive: true });
   writeFileSync(join(piSentinel, "sentinel"), "preserve\n", { mode: 0o640 });
   symlinkSync("sentinel", join(piSentinel, "config-link"));
+  mkdirSync(join(c.home, ".config", "opencode"), { recursive: true });
   const upstream = crossHarnessUpstream(t);
   const commitA = commitFixture(upstream);
   const piLog = join(c.state, "pi.log");
@@ -334,6 +351,16 @@ function commitB(upstream: string): string {
   return fixtureGit(upstream, "rev-parse", "HEAD");
 }
 
+function invalidOpenCodeCommit(upstream: string): string {
+  writeFileSync(
+    join(upstream, ".opencode", "plugins", "superpowers.js"),
+    "export default {};\n",
+  );
+  fixtureGit(upstream, "add", ".");
+  fixtureGit(upstream, "commit", "-qm", "invalidate OpenCode profile");
+  return fixtureGit(upstream, "rev-parse", "HEAD");
+}
+
 function writeFailingValidator(c: CaseEnv): string {
   const path = join(c.dir, "bin", "reject-candidate.sh");
   writeFileSync(path, "#!/bin/sh\nexit 1\n", {
@@ -342,11 +369,8 @@ function writeFailingValidator(c: CaseEnv): string {
   return path;
 }
 
-for (const selected of ["codex", "pi", "opencode"] as const) {
-  const unselected = (["codex", "pi", "opencode"] as const).filter(
-    (harness) => harness !== selected,
-  );
-  const other = unselected[0]!;
+for (const selected of HARNESSES) {
+  const unselected = HARNESSES.filter((harness) => harness !== selected);
 
   void test(`${selected}: every maintained lifecycle command leaves unselected state unchanged`, async (t) => {
     for (const command of [
@@ -374,6 +398,10 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
         const before = unselected.map(
           (other) => [other, snapshotHarness(fixture.c, other)] as const,
         );
+        const selectedBefore =
+          command === "probe" ? snapshotHarness(fixture.c, selected) : null;
+        if (command === "probe" && selected === "opencode")
+          writeOpenCodeExecutable(fixture.c, { failOnCall: true });
         clearNativeLogs(fixture.c, fixture.piLog);
         const result = await invoke(fixture.c, command, selected, env);
         assert.equal(
@@ -391,6 +419,16 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
             new RegExp(`^harness: ${selected}$`, "m"),
           );
           assert.match(result.stdout, /^installation state: current$/m);
+          assert.deepEqual(
+            snapshotHarness(fixture.c, selected),
+            selectedBefore,
+          );
+          if (selected === "opencode")
+            assert.deepEqual(
+              readLog(join(fixture.c.state, "opencode.log")),
+              [],
+              "OpenCode probe invoked its fail-on-call native double",
+            );
         }
         if (command === "update") {
           assert.match(
@@ -412,8 +450,7 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
     }
   });
 
-  void test(`${selected}: update publishes B without changing ${other}`, async (t) => {
-    if (selected === "opencode") return;
+  void test(`${selected}: update publishes B without changing either unselected harness`, async (t) => {
     const fixture = isolationCase(t);
     const envA = harnessEnv(
       fixture.c,
@@ -422,9 +459,8 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       fixture.pi,
       fixture.piLog,
     );
-    await seed(fixture.c, "codex", envA);
-    await seed(fixture.c, "pi", envA);
-    const before = snapshotHarness(fixture.c, other);
+    for (const harness of HARNESSES) await seed(fixture.c, harness, envA);
+    const before = snapshotHarnesses(fixture.c, unselected);
     const next = commitB(fixture.upstream);
     const envB = harnessEnv(
       fixture.c,
@@ -444,16 +480,17 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       result.stdout,
       selected === "codex"
         ? /manager updated/
-        : /Installed the frozen Superpowers Pi snapshot/,
+        : selected === "pi"
+          ? /Installed the frozen Superpowers Pi snapshot/
+          : /Installed the frozen Superpowers OpenCode snapshot/,
     );
     await assertPrepared(fixture.c, selected, next);
     await assertInstalledCommit(fixture.c, selected, next);
-    assert.deepEqual(snapshotHarness(fixture.c, other), before);
+    assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
   });
 
-  void test(`${selected}: invalid preparation preserves ${other}`, async (t) => {
-    if (selected === "opencode") return;
+  void test(`${selected}: invalid preparation preserves both unselected harnesses`, async (t) => {
     const fixture = isolationCase(t);
     const valid = harnessEnv(
       fixture.c,
@@ -462,31 +499,48 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       fixture.pi,
       fixture.piLog,
     );
-    await seed(fixture.c, other, valid);
-    const before = snapshotHarness(fixture.c, other);
+    for (const harness of unselected) await seed(fixture.c, harness, valid);
+    const before = snapshotHarnesses(fixture.c, unselected);
+    const invalidCommit =
+      selected === "opencode"
+        ? invalidOpenCodeCommit(fixture.upstream)
+        : fixture.commitA;
     clearNativeLogs(fixture.c, fixture.piLog);
-    const result = await invoke(fixture.c, "prepare", selected, {
-      ...valid,
-      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(fixture.c),
-    });
+    const result = await invoke(
+      fixture.c,
+      "prepare",
+      selected,
+      selected === "opencode"
+        ? { ...valid, SUPERPOWERS_REF: invalidCommit }
+        : {
+            ...valid,
+            SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(fixture.c),
+          },
+    );
     assert.equal(
       result.status,
       1,
       `${selected} invalid preparation unexpectedly succeeded`,
     );
-    assert.match(result.stderr, /external plugin validation failed/);
-    assert.deepEqual(snapshotHarness(fixture.c, other), before);
+    assert.match(
+      result.stderr,
+      selected === "opencode"
+        ? /does not match the qualified native bootstrap profile/
+        : /external plugin validation failed/,
+    );
+    assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
   });
 
-  void test(`${selected}: native installation failure preserves ${other}`, async (t) => {
-    if (selected === "opencode") return;
+  void test(`${selected}: native installation failure preserves both unselected harnesses`, async (t) => {
     const config = selected === "codex" ? { pluginAdd: "fail" } : {};
     const fixture = isolationCase(t, config);
     const pi =
       selected === "pi"
         ? writePiExecutable(fixture.c, { failure: "install" })
         : fixture.pi;
+    if (selected === "opencode")
+      writeOpenCodeExecutable(fixture.c, { failure: "install" });
     const env = harnessEnv(
       fixture.c,
       fixture.upstream,
@@ -494,8 +548,8 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       pi,
       fixture.piLog,
     );
-    await seed(fixture.c, other, env);
-    const before = snapshotHarness(fixture.c, other);
+    for (const harness of unselected) await seed(fixture.c, harness, env);
+    const before = snapshotHarnesses(fixture.c, unselected);
     clearNativeLogs(fixture.c, fixture.piLog);
     const result = await invoke(fixture.c, "install", selected, env);
     assert.notEqual(
@@ -506,23 +560,26 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
     const calls =
       selected === "codex"
         ? readLog(fixture.c.codexLog)
-        : readLog(fixture.piLog);
+        : selected === "pi"
+          ? readLog(fixture.piLog)
+          : readLog(join(fixture.c.state, "opencode.log"));
     assert.ok(
-      calls.some((call) => /^(?:plugin add |install )/.test(call)),
+      calls.some((call) => /^(?:plugin add |install |plugin \/)/.test(call)),
       "native install injection was not reached",
     );
     assert.match(
       result.stderr,
       selected === "codex"
         ? /Codex activation may have changed native state; preserve recovery material at /
-        : /Pi activation failed; the previous snapshot and registration were restored/,
+        : selected === "pi"
+          ? /Pi activation failed; the previous snapshot and registration were restored/
+          : /OpenCode activation failed; the previous snapshot and registration were restored/,
     );
-    assert.deepEqual(snapshotHarness(fixture.c, other), before);
+    assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
   });
 
-  void test(`${selected}: native removal failure preserves ${other}`, async (t) => {
-    if (selected === "opencode") return;
+  void test(`${selected}: removal failure preserves both unselected harnesses`, async (t) => {
     const config = selected === "codex" ? { marketplaceRemove: "fail" } : {};
     const fixture = isolationCase(t, config);
     const pi =
@@ -536,9 +593,18 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       pi,
       fixture.piLog,
     );
-    await seed(fixture.c, "codex", env);
-    await seed(fixture.c, "pi", env);
-    const before = snapshotHarness(fixture.c, other);
+    for (const harness of HARNESSES) await seed(fixture.c, harness, env);
+    const before = snapshotHarnesses(fixture.c, unselected);
+    if (selected === "opencode") {
+      const paths = openCodePaths(
+        {
+          HOME: fixture.c.home,
+          XDG_CONFIG_HOME: join(fixture.c.home, ".config"),
+        },
+        process.cwd(),
+      );
+      writeFileSync(paths.recoveryRoot, "unresolved recovery material\n");
+    }
     clearNativeLogs(fixture.c, fixture.piLog);
     const result = await invoke(fixture.c, "uninstall", selected, env);
     assert.notEqual(
@@ -546,27 +612,31 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       0,
       `${selected} failed native removal unexpectedly succeeded`,
     );
-    const calls =
-      selected === "codex"
-        ? readLog(fixture.c.codexLog)
-        : readLog(fixture.piLog);
-    assert.ok(
-      calls.some((call) =>
-        /^(?:plugin marketplace remove |remove )/.test(call),
-      ),
-      "native removal injection was not reached",
-    );
+    if (selected !== "opencode") {
+      const calls =
+        selected === "codex"
+          ? readLog(fixture.c.codexLog)
+          : readLog(fixture.piLog);
+      assert.ok(
+        calls.some((call) =>
+          /^(?:plugin marketplace remove |remove )/.test(call),
+        ),
+        "native removal injection was not reached",
+      );
+    }
     assert.match(
       result.stderr,
       selected === "codex"
         ? /Codex native removal failed; preserve the marketplace and recovery material at /
-        : /cannot verify Pi removal at .*; preserve the snapshot and any recovery material at /,
+        : selected === "pi"
+          ? /cannot verify Pi removal at .*; preserve the snapshot and any recovery material at /
+          : /cannot verify OpenCode removal at .*; preserve the snapshot and any recovery material at /,
     );
-    assert.deepEqual(snapshotHarness(fixture.c, other), before);
+    assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
   });
 
-  void test(`${selected}: absent uninstall is a no-op for ${other}`, async (t) => {
+  void test(`${selected}: absent uninstall is a no-op for both unselected harnesses`, async (t) => {
     const fixture = isolationCase(t);
     const env = harnessEnv(
       fixture.c,
@@ -575,8 +645,8 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       fixture.pi,
       fixture.piLog,
     );
-    await seed(fixture.c, other, env);
-    const before = snapshotHarness(fixture.c, other);
+    for (const harness of unselected) await seed(fixture.c, harness, env);
+    const before = snapshotHarnesses(fixture.c, unselected);
     clearNativeLogs(fixture.c, fixture.piLog);
     const result = await invoke(fixture.c, "uninstall", selected, env);
     assert.equal(
@@ -585,7 +655,33 @@ for (const selected of ["codex", "pi", "opencode"] as const) {
       `${selected} absent uninstall failed:\n${result.stdout}${result.stderr}`,
     );
     assertAbsent(fixture.c, selected);
-    assert.deepEqual(snapshotHarness(fixture.c, other), before);
+    assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
+  });
+
+  void test(`${selected}: invalid saved selection preserves every harness and invokes no native CLI`, async (t) => {
+    const fixture = isolationCase(t);
+    const env = harnessEnv(
+      fixture.c,
+      fixture.upstream,
+      fixture.commitA,
+      fixture.pi,
+      fixture.piLog,
+    );
+    const selectionDir = join(fixture.c.home, ".config", "superpowers-manager");
+    mkdirSync(selectionDir, { recursive: true });
+    writeFileSync(join(selectionDir, "selection.json"), "{");
+    const before = snapshotHarnesses(fixture.c, HARNESSES);
+    clearNativeLogs(fixture.c, fixture.piLog);
+
+    const result = await invoke(fixture.c, "probe", selected, env);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /invalid JSON/);
+    assertHarnessesUnchanged(fixture.c, before);
+    assert.deepEqual(readLog(fixture.c.codexLog), []);
+    assert.deepEqual(readLog(fixture.piLog), []);
+    assert.deepEqual(readLog(join(fixture.c.state, "opencode.log")), []);
+    assert.deepEqual(readLog(fixture.c.adapterLog), []);
   });
 }

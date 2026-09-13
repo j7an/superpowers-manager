@@ -12,6 +12,13 @@ OpenCode's native global installer and verifies configuration and snapshot
 identity afterward. `probe` is read-only: it neither invokes OpenCode nor writes
 configuration or repairs state.
 
+Admission requires the exact qualified upstream-native package profile: the
+expected package metadata, OpenCode bootstrap bytes, required skills, and no
+upstream runtime dependencies. The qualified profile from the official
+`obra/superpowers` source is supported. Matching mechanics from a custom source
+remain experimental and require `--allow-experimental`; the opt-in does not
+admit an unknown or changed bootstrap profile.
+
 Conflicting unmanaged Superpowers registrations, project sources, remote
 configuration, or managed sources require manual resolution. The manager removes
 only a verified Manager-owned registration and snapshot. Preserve reported
@@ -30,4 +37,7 @@ after it is stable or resolve it manually. Reassess the ceiling when measured
 usage requires it.
 
 Restart OpenCode after a successful install, an activating update, or a verified
-removal. Native qualification covers macOS and isolated Linux, not Windows.
+removal. End-to-end native lifecycle qualification runs offline in an isolated
+Linux container and covers registration, bootstrap and skill loading, snapshot
+refresh, and removal. macOS evidence covers the released command surface and
+focused unit behavior; it does not establish the same end-to-end lifecycle.

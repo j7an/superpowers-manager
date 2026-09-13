@@ -657,7 +657,10 @@ export function writePiExecutable(
   return executable;
 }
 
-export function writeOpenCodeExecutable(c: CaseEnv): string {
+export function writeOpenCodeExecutable(
+  c: CaseEnv,
+  options: { failure?: "install"; failOnCall?: boolean } = {},
+): string {
   const module = join(c.dir, "fake-opencode.mjs");
   const executable = join(c.dir, "opencode");
   const log = join(c.state, "opencode.log");
@@ -667,6 +670,7 @@ export function writeOpenCodeExecutable(c: CaseEnv): string {
       `import { join } from "node:path";\n` +
       `const args = process.argv.slice(2);\n` +
       `writeFileSync(${JSON.stringify(log)}, args.join(" ") + "\\n", { flag: "a" });\n` +
+      `if (${JSON.stringify(options.failOnCall === true)}) process.exit(97);\n` +
       `if (args[0] === "--version") process.stdout.write("1.18.30\\n");\n` +
       `else if (args[0] === "plugin" && args[2] === "--global") {\n` +
       `  const file = join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.jsonc");\n` +
@@ -675,6 +679,7 @@ export function writeOpenCodeExecutable(c: CaseEnv): string {
       `  const plugin = Array.isArray(current.plugin) ? current.plugin : [];\n` +
       `  if (!plugin.includes(args[1])) plugin.push(args[1]);\n` +
       `  writeFileSync(file, JSON.stringify({ ...current, plugin }) + "\\n");\n` +
+      `  if (${JSON.stringify(options.failure === "install")}) process.exitCode = 7;\n` +
       `} else process.exitCode = 99;\n`,
   );
   writeFileSync(

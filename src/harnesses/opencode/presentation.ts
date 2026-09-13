@@ -1,4 +1,6 @@
 import type { HarnessPresentation } from "../../harness.ts";
+import { displaySource } from "../../selection.ts";
+import { displayPath } from "../../validator.ts";
 import type { OpenCodeRemovalInput } from "./state.ts";
 
 export const openCodePresentation: HarnessPresentation<OpenCodeRemovalInput> = {
@@ -8,6 +10,8 @@ export const openCodePresentation: HarnessPresentation<OpenCodeRemovalInput> = {
     const fields = [
       ["harness", "opencode"],
       ["desired_commit", facts.selection.desiredCommit],
+      ["upstream_source_origin", facts.selection.upstreamSourceOrigin],
+      ["effective_source", displaySource(facts.selection.effectiveSource)],
       ["prepared_identity", facts.prepared.observedIdentity],
       ["installed_identity", facts.installed.observedIdentity],
       ["installation_state", facts.installed.kind],
@@ -18,7 +22,7 @@ export const openCodePresentation: HarnessPresentation<OpenCodeRemovalInput> = {
       ["compatibility", facts.compatibility.kind],
       ["compatibility_reason", facts.compatibility.reason],
       ["status", facts.status],
-    ] as const;
+    ].map(([key, value]) => [key, displayPath(value)] as const);
     return {
       human: fields
         .map(
