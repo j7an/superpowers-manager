@@ -1,6 +1,4 @@
-// Ported from tests/test_bootstrap.sh (see
-// tests/migration-inventory/bootstrap.md for the numbered assertion
-// inventory this file maps to 1:1).
+// Bootstrap contract tests.
 
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -36,7 +34,7 @@ function isRegularFile(relPath: string) {
   }
 }
 
-// --- inventory items 1-7, 9: file-presence assertions -----------------
+// --- file-presence assertions -------------------------------------------
 
 const EXPECTED_FILES = [
   ".gitignore",
@@ -49,7 +47,7 @@ const EXPECTED_FILES = [
 assert.equal(
   EXPECTED_FILES.length,
   6,
-  "EXPECTED_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "EXPECTED_FILES lost or gained a case; review the expected file contract",
 );
 
 void test("bootstrap: expected repository files are present", () => {
@@ -66,7 +64,7 @@ const ABSENT_FILES = [
 assert.equal(
   ABSENT_FILES.length,
   2,
-  "ABSENT_FILES lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "ABSENT_FILES lost or gained a case; review the absent file contract",
 );
 
 void test("bootstrap: deleted repository files stay absent", () => {
@@ -79,7 +77,7 @@ void test("bootstrap: deleted repository files stay absent", () => {
   }
 });
 
-// --- inventory items 10-85: text-content assertions --------------------
+// --- text-content assertions --------------------------------------------
 
 const textContentCases: Array<[string, string, boolean]> = [
   ["package.json", '"type": "module"', true],
@@ -238,7 +236,7 @@ const textContentCases: Array<[string, string, boolean]> = [
 assert.equal(
   textContentCases.length,
   67,
-  "textContentCases lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "textContentCases lost or gained a case; review the text content contract",
 );
 
 void test("bootstrap: text-content assertions", () => {
@@ -276,7 +274,7 @@ void test("bootstrap: an unreadable path is reported by name, without errno or a
   );
 });
 
-// --- inventory items 86-99: structural release-section assertions ------
+// --- structural release-section assertions ------------------------------
 // Re-implements tests/test_bootstrap.sh's embedded Python
 // extract_section/assert_release_verification_sections logic in JS, so no
 // python3 invocation is needed for this check.
@@ -319,7 +317,7 @@ const REQUIRED_PRE = [
 assert.equal(
   REQUIRED_PRE.length,
   5,
-  "REQUIRED_PRE lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "REQUIRED_PRE lost or gained a case; review the pre-bootstrap contract",
 );
 
 const REQUIRED_POST = [
@@ -331,7 +329,7 @@ const REQUIRED_POST = [
 assert.equal(
   REQUIRED_POST.length,
   4,
-  "REQUIRED_POST lost or gained a case — update tests/migration-inventory/bootstrap.md",
+  "REQUIRED_POST lost or gained a case; review the post-bootstrap contract",
 );
 
 function assertReleaseVerificationSections(document: string) {

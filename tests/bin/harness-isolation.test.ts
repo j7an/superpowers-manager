@@ -277,7 +277,9 @@ function commitB(upstream: string): string {
 
 function writeFailingValidator(c: CaseEnv): string {
   const path = join(c.dir, "bin", "reject-candidate.py");
-  writeFileSync(path, "raise SystemExit(1)\n");
+  writeFileSync(path, "#!/usr/bin/env python3\nraise SystemExit(1)\n", {
+    mode: 0o755,
+  });
   return path;
 }
 
@@ -396,14 +398,14 @@ for (const selected of ["codex", "pi"] as const) {
     clearNativeLogs(fixture.c, fixture.piLog);
     const result = await invoke(fixture.c, "prepare", selected, {
       ...valid,
-      SUPERPOWERS_VALIDATOR: writeFailingValidator(fixture.c),
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: writeFailingValidator(fixture.c),
     });
     assert.equal(
       result.status,
       1,
       `${selected} invalid preparation unexpectedly succeeded`,
     );
-    assert.match(result.stderr, /additional plugin validation failed/);
+    assert.match(result.stderr, /external plugin validation failed/);
     assert.deepEqual(snapshotHarness(fixture.c, other), before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
   });

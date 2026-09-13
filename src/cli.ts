@@ -87,8 +87,8 @@ const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
 // required because `spw_invoke_adapter` ran validate-adapter-response.py once
 // per adapter call
 // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:37-44::--response "$response_file" --result "$result_file" \`);
-// the in-process path has no validator process. It remains CONDITIONAL for
-// `prepare` through commandRequirements(env) below, unchanged from slice 3.4.
+// the in-process path no longer uses that adapter-response validator.
+// No command has a Python requirement in commandRequirements(env).
 // No command requires a POSIX shell any more.
 const SHARED_COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
   pin: ["git"],
@@ -220,13 +220,6 @@ function findTool(
   return null;
 }
 
-// python3 is required by `prepare` only when SUPERPOWERS_VALIDATOR names one:
-// after the port, that optional spawn (runValidator, in src/validator.ts,
-// called from src/commands/prepare.ts) is Python's only remaining consumer
-// on the prepare path. The conditional lives here, in the accessor preflight reads,
-// rather than inside preflight — an accessor that under-reports what
-// preflight enforces is the blind spot slice 2 closed when it made
-// CLI-PREFLIGHT-01 derive its map from production.
 function sharedRequirement(name: string): ToolRequirement {
   return {
     name,
@@ -242,9 +235,6 @@ function commandRequirementsFor<R>(
 ): Record<Subcommand, readonly ToolRequirement[]> {
   const forCommand = (command: Subcommand): readonly ToolRequirement[] => {
     const shared = SHARED_COMMAND_REQUIREMENTS[command].map(sharedRequirement);
-    if (command === "prepare" && env.SUPERPOWERS_VALIDATOR) {
-      shared.push(sharedRequirement("python3"));
-    }
     return [...shared, ...adapter.requirements(command as HarnessCommand, env)];
   };
   return {
@@ -284,6 +274,7 @@ function preflightFor<R>(
   adapter: HarnessAdapter<R>,
 ): PreflightResult {
   const errors: string[] = [...configurationErrors(cmd, env)];
+  if (errors.length > 0) return { ok: false, errors };
   for (const requirement of commandRequirementsFor(env, adapter)[cmd]) {
     const found =
       requirement.lookup === "explicit-path-or-path" &&
@@ -332,8 +323,11 @@ function usage(): string {
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",
     "SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,",
     "SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,",
-    "SUPERPOWERS_VALIDATOR, SUPERPOWERS_VALIDATOR_EXECUTABLE,",
+    "SUPERPOWERS_VALIDATOR_EXECUTABLE,",
     "SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE",
+    "",
+    "SUPERPOWERS_VALIDATOR is removed; unset it and use",
+    "SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.",
     "",
     "Selection state uses SUPERPOWERS_CONFIG_DIR when set; otherwise it uses",
     "$XDG_CONFIG_HOME/superpowers-manager, then $HOME/.config/superpowers-manager.",

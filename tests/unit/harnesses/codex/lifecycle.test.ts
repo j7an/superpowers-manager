@@ -4,16 +4,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  codexControlInspection,
+  codexOwnershipInspection,
   requireNoLegacyState,
   reportLegacyState,
   requireManagedUpdateControl,
 } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
-  normalizeCodexInstall,
-  normalizeCodexInstalled,
-  normalizeCodexOwnership,
-} from "../../../../src/harnesses/codex/harness.ts";
-import { codexPresentation } from "../../../../src/harnesses/codex/presentation.ts";
+  codexInstallReceipt,
+  codexPresentation,
+} from "../../../../src/harnesses/codex/presentation.ts";
 
 // Frozen operator text. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is` and :75-77 print these
 // verbatim; tests/test_codex_state_units.sh matched them with `grep -Fxq`, so
@@ -27,6 +27,66 @@ const REPORT_LINES = [
   "Legacy superpowers-wrapper Codex state remains installed.",
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
 ];
+
+void test("typed Codex policy builders retain ownership and control decisions", () => {
+  const clean = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: true, marketplacePresent: true },
+    [],
+  );
+  assert.equal(clean.installEligibility.kind, "allowed");
+  assert.equal(clean.removalVerification.kind, "blocked");
+  assert.deepEqual(clean.removalInput, {
+    pluginPresent: true,
+    marketplacePresent: true,
+  });
+  const conflict = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: true, marketplacePresent: true },
+    ["active Codex plugin superpowers@another-provider"],
+  );
+  assert.equal(conflict.installEligibility.kind, "blocked");
+  assert.equal(
+    codexOwnershipInspection(
+      "legacy",
+      { pluginPresent: false, marketplacePresent: false },
+      [],
+    ).installEligibility.kind,
+    "blocked",
+  );
+  assert.equal(
+    codexControlInspection("managed").mutationEligibility.kind,
+    "allowed",
+  );
+  assert.equal(
+    codexControlInspection("unsupported").mutationEligibility.kind,
+    "blocked",
+  );
+  assert.equal(
+    codexControlInspection("unrecognized").mutationEligibility.kind,
+    "blocked",
+  );
+});
+
+void test("receipt construction omits unsafe verification hints", () => {
+  for (const hint of ["unsafe\nline", "\u001b[31munsafe", "\ud800"]) {
+    const receipt = codexInstallReceipt(hint, hint);
+    assert.equal(receipt.missingVerificationOutput.stderr.length, 1);
+    assert.equal(receipt.mismatchVerificationOutput.stderr.length, 1);
+  }
+  const receipt = codexInstallReceipt(
+    "verify installation",
+    "retry installation",
+  );
+  assert.equal(
+    receipt.missingVerificationOutput.stderr.at(-1),
+    "hint: verify installation",
+  );
+  assert.equal(
+    receipt.mismatchVerificationOutput.stderr.at(-1),
+    "hint: retry installation",
+  );
+});
 
 void test("requireNoLegacyState admits the two clean identity states", () => {
   for (const state of ["neither", "manager"]) {
@@ -62,9 +122,7 @@ void test("reportLegacyState reports legacy and both with the frozen text", () =
 
 // PORT-ONLY. tests/test_codex_state_units.sh never exercised the `*)` arms of
 // either case statement (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:56-58::spw_die "unknown adapter identity state: $identity_state` and :81-83), so the
-// spw_die path was unwitnessed on the shell side. Recorded as port-only items
-// 1-4 in tests/migration-inventory/codex-state-units.md — the port-only region
-// restarts at 1 rather than continuing the mapped region's numbering.
+// spw_die path was unwitnessed on the shell side.
 void test("both predicates reject an unrecognised identity state", () => {
   assert.deepEqual(requireNoLegacyState("garbage"), {
     kind: "unknown",
@@ -138,11 +196,8 @@ void test("requireManagedUpdateControl rejects an unrecognised capability", () =
 
 void test("install verification accepts an exact commit match", () => {
   const desired = "a".repeat(40);
-  const receipt = normalizeCodexInstall(ok({}));
-  const inspection = normalizeCodexInstalled(
-    ok({ view: "fingerprint", fingerprint: desired }),
-    desired,
-  );
+  const receipt = ok(codexInstallReceipt("", ""));
+  const inspection = ok({ kind: "current", observedIdentity: desired });
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -163,11 +218,11 @@ void test("install verification accepts the seven-character short form", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and commitMatches
   // in src/status.ts keeps that rule. This case is what pins the two together.
   const desired = "b".repeat(40);
-  const receipt = normalizeCodexInstall(ok({}));
-  const inspection = normalizeCodexInstalled(
-    ok({ view: "fingerprint", fingerprint: desired.slice(0, 7) }),
-    desired,
-  );
+  const receipt = ok(codexInstallReceipt("", ""));
+  const inspection = ok({
+    kind: "current",
+    observedIdentity: desired.slice(0, 7),
+  });
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -181,8 +236,8 @@ void test("install verification accepts the seven-character short form", () => {
 
 void test("install verification reports a failed inspection", () => {
   const desired = "c".repeat(40);
-  const receipt = normalizeCodexInstall(ok({}));
-  const inspection = normalizeCodexInstalled(failed(), desired);
+  const receipt = ok(codexInstallReceipt("", ""));
+  const inspection = failed();
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -197,13 +252,11 @@ void test("install verification reports a failed inspection", () => {
 
 void test("install verification reports a mismatch and surfaces its hint", () => {
   const desired = "d".repeat(40);
-  const receipt = normalizeCodexInstall(
-    ok({ verification_hints: { mismatch: "try reinstalling" } }),
-  );
-  const inspection = normalizeCodexInstalled(
-    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
-    desired,
-  );
+  const receipt = ok(codexInstallReceipt("", "try reinstalling"));
+  const inspection = ok({
+    kind: "mismatch",
+    observedIdentity: "e".repeat(40),
+  });
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -221,16 +274,11 @@ void test("install verification reports a mismatch and surfaces its hint", () =>
 void test("install verification reports an undetectable fingerprint and its own hint", () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
-  // the production normalizer's behaviour for JSON null
-  // (`src/harnesses/codex/harness.ts:91::if (raw === null || raw === undefined) return { ok: true, value: "" };`).
+  // the typed installed-state absence contract
+  // (`src/harness.ts:58::| { readonly kind: "absent"; readonly observedIdentity: "" }`).
   const desired = "f".repeat(40);
-  const receipt = normalizeCodexInstall(
-    ok({ verification_hints: { missing: "codex reported nothing" } }),
-  );
-  const inspection = normalizeCodexInstalled(
-    ok({ view: "fingerprint", fingerprint: null }),
-    desired,
-  );
+  const receipt = ok(codexInstallReceipt("codex reported nothing", ""));
+  const inspection = ok({ kind: "absent", observedIdentity: "" });
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -247,11 +295,11 @@ void test("install verification reports an undetectable fingerprint and its own 
 
 void test("install verification omits the hint line when no hint is present", () => {
   const desired = "0".repeat(40);
-  const receipt = normalizeCodexInstall(ok({}));
-  const inspection = normalizeCodexInstalled(
-    ok({ view: "fingerprint", fingerprint: "1".repeat(40) }),
-    desired,
-  );
+  const receipt = ok(codexInstallReceipt("", ""));
+  const inspection = ok({
+    kind: "mismatch",
+    observedIdentity: "1".repeat(40),
+  });
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -266,13 +314,11 @@ void test("install verification omits the hint line when no hint is present", ()
 void test("ADAPTER-TERMINAL-01 install verification omits a hint carrying a terminal control", () => {
   const esc = String.fromCharCode(0x1b);
   const desired = "d".repeat(40);
-  const receipt = normalizeCodexInstall(
-    ok({ verification_hints: { mismatch: `try ${esc}]0;title` } }),
-  );
-  const inspection = normalizeCodexInstalled(
-    ok({ view: "fingerprint", fingerprint: "e".repeat(40) }),
-    desired,
-  );
+  const receipt = ok(codexInstallReceipt("", `try ${esc}]0;title`));
+  const inspection = ok({
+    kind: "mismatch",
+    observedIdentity: "e".repeat(40),
+  });
   const output = codexPresentation.renderInstallVerification(
     desired,
     receipt,
@@ -289,9 +335,7 @@ void test("ADAPTER-TERMINAL-01 install verification omits a hint carrying a term
 
 void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lone surrogate", () => {
   // BOTH halves of the surrogate range, in one test() rather than two:
-  // tests/migration-inventory/codex-state-units.md pins this file at 26 static
-  // `test(` call sites, so the second value is a row here rather than a case
-  // of its own.
+  // The second value is a row here rather than a case of its own.
   //
   // hasTerminalControl covers 0xd800-0xdfff (`src/adapter-result.ts:199::(code >= 0xd800`).
   // U+D800 alone leaves that clause under-constrained: narrowing it to
@@ -306,13 +350,8 @@ void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lon
   for (const code of [0xd800, 0xdc9b]) {
     const lone = String.fromCharCode(code);
     const desired = "f".repeat(40);
-    const receipt = normalizeCodexInstall(
-      ok({ verification_hints: { missing: `codex said ${lone}` } }),
-    );
-    const inspection = normalizeCodexInstalled(
-      ok({ view: "fingerprint", fingerprint: null }),
-      desired,
-    );
+    const receipt = ok(codexInstallReceipt(`codex said ${lone}`, ""));
+    const inspection = ok({ kind: "absent", observedIdentity: "" });
     const output = codexPresentation.renderInstallVerification(
       desired,
       receipt,
@@ -330,29 +369,23 @@ void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lon
 });
 
 void test("removal verification accepts both resources absent", () => {
-  const normalized = normalizeCodexOwnership(
-    ok({
-      identity_state: "manager",
-      resources: { plugin: false, marketplace: false },
-    }),
+  const normalized = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: false, marketplacePresent: false },
+    [],
   );
-  assert.equal(normalized.outcome.ok, true);
-  if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
-  assert.deepEqual(normalized.outcome.result.removalVerification, {
+  assert.deepEqual(normalized.removalVerification, {
     kind: "allowed",
   });
 });
 
 void test("removal verification rejects a surviving plugin", () => {
-  const normalized = normalizeCodexOwnership(
-    ok({
-      identity_state: "manager",
-      resources: { plugin: true, marketplace: false },
-    }),
+  const normalized = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: true, marketplacePresent: false },
+    [],
   );
-  assert.equal(normalized.outcome.ok, true);
-  if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
-  assert.deepEqual(normalized.outcome.result.removalVerification, {
+  assert.deepEqual(normalized.removalVerification, {
     kind: "blocked",
     output: {
       stdout: [],
@@ -362,15 +395,12 @@ void test("removal verification rejects a surviving plugin", () => {
 });
 
 void test("removal verification rejects a surviving marketplace", () => {
-  const normalized = normalizeCodexOwnership(
-    ok({
-      identity_state: "manager",
-      resources: { plugin: false, marketplace: true },
-    }),
+  const normalized = codexOwnershipInspection(
+    "manager",
+    { pluginPresent: false, marketplacePresent: true },
+    [],
   );
-  assert.equal(normalized.outcome.ok, true);
-  if (!normalized.outcome.ok) assert.fail("expected normalized ownership");
-  assert.deepEqual(normalized.outcome.result.removalVerification, {
+  assert.deepEqual(normalized.removalVerification, {
     kind: "blocked",
     output: {
       stdout: [],
@@ -379,116 +409,6 @@ void test("removal verification rejects a surviving marketplace", () => {
       ],
     },
   });
-});
-
-void test("removal verification fails closed on a non-Boolean resource", () => {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:58-73::spw_adapter_result_boolean` died with `expected Boolean adapter result`
-  // rather than treating an unparseable value as absent. Unparseable state is
-  // never success — spec §4.3 rule 4.
-  const normalized = normalizeCodexOwnership(
-    ok({
-      identity_state: "manager",
-      resources: { plugin: "false", marketplace: false },
-    }),
-  );
-  assert.equal(normalized.outcome.ok, false);
-  if (normalized.outcome.ok) assert.fail("expected malformed ownership");
-  assert.equal(
-    normalized.outcome.error.message,
-    "expected a Boolean adapter result at resources.plugin",
-  );
-});
-
-void test("an unparseable fingerprint result names parsing, not inspection", () => {
-  // Previously unreached by any test. Reachable since the resultObject split
-  // (spec §6.2.3 item 3b): the outcome is well-formed, the result is not an
-  // object. This is the branch that makes the shell's `grep -Fq "parse"`
-  // satisfiable.
-  const desired = "abcdef1234567890abcdef1234567890abcdef12";
-  const receipt = normalizeCodexInstall(ok({}));
-  const inspection = normalizeCodexInstalled(ok("not-an-object"), desired);
-  const output = codexPresentation.renderInstallVerification(
-    desired,
-    receipt,
-    inspection,
-  );
-  assert.equal(inspection.outcome.ok, false);
-  assert.deepEqual(output.stderr, [
-    "error: cannot parse installed manager fingerprint inspection result after install.",
-  ]);
-  assert.deepEqual(output.stdout, []);
-
-  const normalizedFailure = normalizeCodexInstalled(
-    {
-      status: 1,
-      outcome: {
-        operation: "inspect",
-        ok: false,
-        messages: [],
-        result: null,
-        error: { code: "malformed-result", message: "controlled", hints: [] },
-      },
-    },
-    desired,
-  );
-  const failureOutput = codexPresentation.renderInstallVerification(
-    desired,
-    receipt,
-    normalizedFailure,
-  );
-  assert.equal(normalizedFailure.outcome.ok, false);
-  assert.deepEqual(failureOutput.stderr, [
-    "error: cannot parse installed manager fingerprint inspection result after install.",
-  ]);
-  assert.deepEqual(failureOutput.stdout, []);
-});
-
-void test("a non-string fingerprint is unparseable, not empty", () => {
-  // PORT-ONLY. The shell cannot construct this: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/provenance.sh:62::print(value` stringifies
-  // any non-null scalar. Pinned so the branch cannot be deleted as dead.
-  const desired = "abcdef1234567890abcdef1234567890abcdef12";
-  const receipt = normalizeCodexInstall(ok({}));
-  const inspection = normalizeCodexInstalled(ok({ fingerprint: 42 }), desired);
-  const output = codexPresentation.renderInstallVerification(
-    desired,
-    receipt,
-    inspection,
-  );
-  assert.equal(inspection.outcome.ok, false);
-  assert.deepEqual(output.stderr, [
-    "error: cannot parse installed manager fingerprint inspection result after install.",
-  ]);
-});
-
-void test("the marketplace Boolean check names its own key", () => {
-  // The loop covers both keys but only the `plugin` interpolation was
-  // asserted, so a template that hardcoded "plugin" would have passed.
-  const normalized = normalizeCodexOwnership(
-    ok({
-      identity_state: "manager",
-      resources: { plugin: false, marketplace: "yes" },
-    }),
-  );
-  assert.equal(normalized.outcome.ok, false);
-  if (normalized.outcome.ok) assert.fail("expected malformed ownership");
-  assert.equal(
-    normalized.outcome.error.message,
-    "expected a Boolean adapter result at resources.marketplace",
-  );
-});
-
-void test("a non-object resources falls through to the Boolean message", () => {
-  // Parity with `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:70::expected` for input {} — the input
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_marketplace_reconcile.sh:224::printf '%s\n' '{}` writes. The distinct
-  // "expected an object adapter result at resources" message was DELETED by
-  // spec §6.2.3 item 3a; this case is what stops it coming back.
-  const normalized = normalizeCodexOwnership(ok({ identity_state: "manager" }));
-  assert.equal(normalized.outcome.ok, false);
-  if (normalized.outcome.ok) assert.fail("expected malformed ownership");
-  assert.equal(
-    normalized.outcome.error.message,
-    "expected a Boolean adapter result at resources.plugin",
-  );
 });
 
 // ADAPTER-UPDATE-CONTROL-01 was owned by tests/test_adapter_protocol.py until
@@ -501,9 +421,8 @@ void test("a non-object resources falls through to the Boolean message", () => {
 // retires with the transport. src/harnesses/codex/adapter.ts's update-control view returns
 // the literal `managed`; the old witness at
 // `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:102-104::run_adapter update` ran a fixture SHELL adapter emitting
-// a canned outcome, and no shell adapters remain. tests/migration-inventory/
-// probe.md item 92 instructs slice 5 to port that witness; it cannot be
-// ported, because there is nothing in-process that produces the value.
+// a canned outcome, and no shell adapters remain. It cannot be ported because
+// nothing in-process produces the value.
 
 void test("ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value", () => {
   assert.deepEqual(requireManagedUpdateControl("managed"), { ok: true });

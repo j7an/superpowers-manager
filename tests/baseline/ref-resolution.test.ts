@@ -13,19 +13,18 @@
 //     retired outright: tests/unit/upstream.test.js's "manifestVersionForRef
 //     reproduces the shell derivation table" (:159-257) already exercises the
 //     exact same (requestedRef, resolutionKind, resolvedRef, commit) tuples
-//     with the exact same expected strings — see the retirement notes at
-//     inventory items 6-7 in tests/migration-inventory/ref-resolution.md.
+//     with the exact same expected strings.
 //   - Two spw_config_ref checks (shell :30-31) are retired: they exist only
 //     because a POSIX shell function without an explicit `()` subshell would
 //     leak/clobber its caller's `root`/`config_root` locals — which is why
 //     `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/upstream.sh:6::spw_config_ref` wraps spw_config_ref in one. Calling a
 //     TypeScript function (readConfigRef) cannot rebind a caller's local
 //     bindings; that hazard class does not exist in the port, so there is no
-//     runtime property left to assert. See inventory items 3-4.
+//     runtime property left to assert.
 //   - The former shell seam's Node-environment scrub is re-expressed by
 //     tests/unit/harnesses/codex/adapter.test.ts over src/harnesses/codex/adapter.ts's child process. The git
 //     child diverges: src/git.ts pins LC_ALL and GIT_TERMINAL_PROMPT but does
-//     not scrub NODE_OPTIONS/NODE_PATH. The inventory records that difference.
+//     not scrub NODE_OPTIONS/NODE_PATH. Git history records that difference.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -292,8 +291,8 @@ void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", asy
 
   await fetchExactCommit(repo, releaseCommit, exactCache, exactWorkspace); // :90
   // The persistent cache must actually hold the requested commit object.
-  // Extends the bare-check-relied-on-by-set-e rule tests/migration-inventory
-  // `tests/migration-inventory/bin-dispatch.md:19-21::contributes` already applies to `[ ... ]` and `grep -q` to a
+  // Extends the bare-check-relied-on-by-set-e rule that already applies to
+  // `[ ... ]` and `grep -q` to a
   // third shape: a verification-only `git ... cat-file -e` invocation with no
   // other purpose. :91
   const catFile = spawnSync(

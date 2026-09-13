@@ -8,8 +8,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   codexBuild,
-  codexInspect,
+  codexInspectOwnership,
   codexInstall,
+  codexReadNativeState,
   codexRemove,
   mapCodexLaunchFailure,
   runCommandForTest,
@@ -44,8 +45,8 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:388::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
-  // `src/harnesses/codex/adapter.ts:478::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:355::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
+  // `src/harnesses/codex/adapter.ts:442::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -108,61 +109,35 @@ void test("the adapter replays the validator success line as one stdout record",
   ]);
 
   await t.test(
-    "workspace creation failures keep each operation diagnostic",
+    "adapter operations do not require an unused temporary directory",
     async () => {
       const sandbox = await codexSandbox(t);
-      const context = { root: PACKAGE_ROOT, env: sandbox.env({}) };
-      const missingParent = join(workspace.base, "missing-temp-parent");
+      const context = {
+        root: PACKAGE_ROOT,
+        env: sandbox.env({
+          HOME: sandbox.base,
+          CODEX_HOME: join(sandbox.base, "codex"),
+          FAKE_CODEX_PLUGIN_LIST: '{"installed":[]}',
+          FAKE_CODEX_MARKETPLACE_LIST: '{"marketplaces":[]}',
+        }),
+      };
       const previous = process.env.TMPDIR;
-      process.env.TMPDIR = missingParent;
+      process.env.TMPDIR = join(workspace.base, "missing-temp-parent");
       try {
         const operations = [
-          [
-            "build",
-            "build-failed",
-            () => codexBuild(buildInput(workspace), context),
-          ],
-          [
-            "install",
-            "install-failed",
-            () => codexInstall(sandbox.packageRoot, context),
-          ],
-          [
-            "uninstall",
-            "uninstall-failed",
-            () =>
-              codexRemove(
-                {
-                  pluginPresent: false,
-                  marketplacePresent: false,
-                },
-                context,
-              ),
-          ],
-          [
-            "fingerprint",
-            "inspect-failed",
-            () => codexInspect("fingerprint", context),
-          ],
-          [
-            "inspect",
-            "inspect-failed",
-            () => codexInspect("ownership", context),
-          ],
-        ] as const;
-        for (const [label, code, run] of operations) {
+          () => codexBuild(buildInput(workspace), context),
+          () => codexInstall(sandbox.packageRoot, context),
+          () =>
+            codexRemove(
+              { pluginPresent: false, marketplacePresent: false },
+              context,
+            ),
+          () => codexInspectOwnership(context),
+        ];
+        for (const run of operations) {
           const result = await run();
-          assert.equal(result.outcome.ok, false);
-          if (result.outcome.ok)
-            assert.fail("expected workspace creation failure");
-          assert.equal(result.outcome.error.code, code);
-          assert.equal(
-            result.outcome.error.message,
-            "cannot create adapter " +
-              label +
-              " workspace under " +
-              missingParent,
-          );
+          assert.equal(result.status, 0, JSON.stringify(result));
+          assert.equal(result.outcome.ok, true);
         }
       } finally {
         if (previous === undefined) delete process.env.TMPDIR;
@@ -196,7 +171,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/harnesses/codex/adapter.ts:425::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
+// call (`src/harnesses/codex/adapter.ts:389::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/harnesses/codex/hooks.ts) must keep succeeding, so this exercises the read at
@@ -500,9 +475,9 @@ async function codexSandbox(t: import("node:test").TestContext) {
 // sandbox `searchRoot` being empty: under a lossy decode the outcome is still
 // ok:false / inspect-failed, and differs only because the fabricated version
 // resolves to no directory. Pre-populating `searchRoot` would defeat it.
-void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async (t) => {
+void test("native state rejects an invalid-UTF-8 plugin listing", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await codexInspect("fingerprint", {
+  const result = await codexReadNativeState({
     root: PACKAGE_ROOT,
     env: sandbox.env({
       FAKE_CODEX_PLUGIN_LIST:
@@ -523,7 +498,7 @@ void test("the fingerprint view rejects an invalid-UTF-8 plugin listing", async 
 // every resource `false`. The assertion therefore requires a rejection.
 void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t) => {
   const sandbox = await codexSandbox(t);
-  const result = await codexInspect("ownership", {
+  const result = await codexInspectOwnership({
     root: PACKAGE_ROOT,
     env: sandbox.env({
       FAKE_CODEX_PLUGIN_LIST:
@@ -539,7 +514,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/harnesses/codex/adapter.ts:616::registeredRoot = marketplaceRootFromJson(`) is the destructive
+// The install reconciliation read (`src/harnesses/codex/adapter.ts:574::registeredRoot = marketplaceRootFromJson(`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -655,117 +630,7 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
   });
 });
 
-// ADAPTER-FINGERPRINT-01 / -REJECT-01 / -OWNERSHIP-01 were owned by
-// tests/test_adapter_protocol.py until PR 11.5 slice 5. The protocol carried
-// these results; it never produced them. `runInspect` does, so the contracts
-// are asserted here directly over `codexInspect`.
-//
-// The fingerprint vocabulary itself lives in src/harnesses/codex/state.ts
-// (`codexMetadataCommit` accepts 40-hex or 7-hex; `manifestShortSha` returns
-// "" for anything else), reached through this view.
-//
-// The contract's "accepts null" clause IS asserted. An earlier draft dropped
-// it, claiming an unresolvable fingerprint is always "" and therefore always
-// inspect-failed. That conflated two distinct states. runInspect's fingerprint
-// view returns `fingerprint: null` as a SUCCESS result when no superpowers
-// plugin is active at all; only the case where a plugin IS active but its
-// commit cannot be resolved reaches the empty-fingerprint `fail` in
-// `runInspect` and fails closed. Both are live.
-
-/**
- * Seed the installed-plugin cache the fingerprint view reads.
- */
-async function seedInstalledCommit(
-  sandbox: { base: string },
-  version: string,
-  commit: string,
-) {
-  const root = join(
-    sandbox.base,
-    "codex",
-    "plugins",
-    "cache",
-    "superpowers-manager",
-    "superpowers",
-    version,
-  );
-  await mkdir(root, { recursive: true });
-  await writeFile(
-    join(root, ".superpowers-upstream.json"),
-    `${JSON.stringify({ commit })}\n`,
-  );
-  return root;
-}
-
-const pluginListFor = (version: string) =>
-  JSON.stringify({
-    installed: [{ pluginId: "superpowers@superpowers-manager", version }],
-  });
-
-void test("ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-hex commits in its exact result shape", async (t) => {
-  for (const fingerprint of [COMMIT, "d884ae0"]) {
-    const sandbox = await codexSandbox(t);
-    const version = "6.1.1+manager.d884ae0";
-    await seedInstalledCommit(sandbox, version, fingerprint);
-    const result = await codexInspect("fingerprint", {
-      root: PACKAGE_ROOT,
-      env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
-    });
-    assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
-    // deepStrictEqual, not a field probe: "exact result shape" is the
-    // contract, so an extra key must fail.
-    assert.deepStrictEqual(result.outcome.result, {
-      view: "fingerprint",
-      fingerprint,
-    });
-  }
-
-  // Third state: the listing parses and reports no superpowers plugin. This is
-  // `ok`, not a failure, and reports null -- see runInspect's fingerprint view.
-  // Nothing is seeded under the search root, proving the view returns before it
-  // reads one.
-  const empty = await codexSandbox(t);
-  const nullResult = await codexInspect("fingerprint", {
-    root: PACKAGE_ROOT,
-    env: empty.env({
-      FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed: [] }),
-    }),
-  });
-  assert.equal(nullResult.outcome.ok, true, JSON.stringify(nullResult.outcome));
-  assert.deepStrictEqual(nullResult.outcome.result, {
-    view: "fingerprint",
-    fingerprint: null,
-  });
-});
-
-void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint", async (t) => {
-  // Two lengths, both valid hex. `d884ae0123` is ten characters; `123456` is
-  // six -- one below the seven-character bound, which is what makes the
-  // rejection specific to the bound rather than to "some wrong length". The
-  // retiring `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.py:817::{"view": "fingerprint", "fingerprint": "` drove the six-character case
-  // and this witness did not; dropping it would have retired a strictly
-  // stronger input set. For both: codexMetadataCommit rejects the value,
-  // manifestShortSha finds no plugin.json, installedCommitFromRoot returns "",
-  // and the view fails closed rather than reporting the value.
-  for (const commit of ["d884ae0123", "123456"]) {
-    const sandbox = await codexSandbox(t);
-    const version = "6.1.1+manager.d884ae0";
-    const activeRoot = await seedInstalledCommit(sandbox, version, commit);
-    const result = await codexInspect("fingerprint", {
-      root: PACKAGE_ROOT,
-      env: sandbox.env({ FAKE_CODEX_PLUGIN_LIST: pluginListFor(version) }),
-    });
-    assert.equal(result.outcome.ok, false, JSON.stringify(result.outcome));
-    assert.equal(result.outcome.error?.code, "inspect-failed");
-    assert.equal(
-      result.outcome.error?.message,
-      `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
-      commit,
-    );
-  }
-});
-
-// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:964::const managerPresent = managerPlugin || managerMarketplace;` computes
+// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:707::const managerPresent = pluginPresent || marketplacePresent;` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -773,7 +638,7 @@ void test("ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex c
 // distinguishable, so an `&&` mutation is caught -- but replacing
 // `managerMarketplace` with a constant is NOT, because the case where it is
 // the only true input never runs. The 16-case cross product closes that.
-void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans", async (t) => {
+void test("ADAPTER-OWNERSHIP-01 typed policy is derived from all four manager and legacy resource booleans", async (t) => {
   const bits = [false, true];
   for (const managerPlugin of bits) {
     for (const managerMarketplace of bits) {
@@ -815,7 +680,7 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
             legacyPlugin,
             legacyMarketplace,
           });
-          const result = await codexInspect("ownership", {
+          const result = await codexInspectOwnership({
             root: PACKAGE_ROOT,
             env: sandbox.env({
               FAKE_CODEX_PLUGIN_LIST: JSON.stringify({ installed }),
@@ -823,21 +688,28 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
             }),
           });
           assert.equal(result.outcome.ok, true, label);
+          if (!result.outcome.ok) assert.fail(label);
           assert.deepStrictEqual(
-            result.outcome.result,
+            result.outcome.result.removalInput,
             {
-              view: "ownership",
-              resources: {
-                plugin: managerPlugin,
-                marketplace: managerMarketplace,
-              },
-              legacy_resources: {
-                plugin: legacyPlugin,
-                marketplace: legacyMarketplace,
-              },
-              identity_state: identity,
-              conflicts: [],
+              pluginPresent: managerPlugin,
+              marketplacePresent: managerMarketplace,
             },
+            label,
+          );
+          assert.equal(
+            result.outcome.result.presentationValue,
+            identity,
+            label,
+          );
+          assert.deepStrictEqual(
+            result.outcome.result.presentationConflicts,
+            [],
+            label,
+          );
+          assert.equal(
+            result.outcome.result.installEligibility.kind,
+            legacyPresent ? "blocked" : "allowed",
             label,
           );
         }
@@ -849,7 +721,7 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
     "reuses one native plugin listing for unmanaged conflicts",
     async () => {
       const sandbox = await codexSandbox(t);
-      const result = await codexInspect("ownership", {
+      const result = await codexInspectOwnership({
         root: PACKAGE_ROOT,
         env: sandbox.env({
           FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
@@ -865,13 +737,50 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
         }),
       });
       assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
-      assert.deepEqual(result.outcome.result, {
-        view: "ownership",
-        resources: { plugin: false, marketplace: false },
-        legacy_resources: { plugin: false, marketplace: false },
-        identity_state: "neither",
-        conflicts: ["active Codex plugin superpowers@another-provider"],
+      if (!result.outcome.ok) assert.fail("expected ownership inspection");
+      assert.deepEqual(result.outcome.result.removalInput, {
+        pluginPresent: false,
+        marketplacePresent: false,
       });
+      assert.equal(result.outcome.result.presentationValue, "neither");
+      assert.deepEqual(result.outcome.result.presentationConflicts, [
+        "active Codex plugin superpowers@another-provider",
+      ]);
+      assert.equal(result.outcome.result.installEligibility.kind, "blocked");
+      assert.deepEqual(await sandbox.commands(), [
+        "plugin list --json",
+        "plugin marketplace list --json",
+      ]);
+    },
+  );
+
+  await t.test(
+    "sanitizes unsafe unmanaged plugin identities before presentation",
+    async () => {
+      const sandbox = await codexSandbox(t);
+      const result = await codexInspectOwnership({
+        root: PACKAGE_ROOT,
+        env: sandbox.env({
+          HOME: sandbox.base,
+          CODEX_HOME: join(sandbox.base, "codex"),
+          FAKE_CODEX_PLUGIN_LIST: JSON.stringify({
+            installed: [
+              {
+                pluginId: "superpowers@unsafe\n",
+                installed: true,
+                enabled: true,
+              },
+            ],
+          }),
+          FAKE_CODEX_MARKETPLACE_LIST: JSON.stringify({ marketplaces: [] }),
+        }),
+      });
+      assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
+      if (!result.outcome.ok) assert.fail("expected ownership inspection");
+      assert.deepEqual(result.outcome.result.presentationConflicts, [
+        "active Codex plugin with a non-displayable Superpowers identity",
+      ]);
+      assert.equal(result.outcome.result.installEligibility.kind, "blocked");
       assert.deepEqual(await sandbox.commands(), [
         "plugin list --json",
         "plugin marketplace list --json",
@@ -890,18 +799,12 @@ void test("ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager 
 // and `mismatch` exactly when the refresh mode is add-only, so two of those
 // four shapes are reachable and those two are what this asserts.
 
-void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode", async (t) => {
-  const cases: [string, Record<string, string>][] = [
-    [
-      "add-only",
-      {
-        mismatch: "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add",
-        missing: "verify with 'codex plugin list --json'.",
-      },
-    ],
-    ["remove-add", { missing: "verify with 'codex plugin list --json'." }],
-  ];
-  for (const [refreshMode, hints] of cases) {
+void test("ADAPTER-INSTALL-RESULT-01 typed receipt reports the missing hint always and the mismatch hint only in add-only refresh mode", async (t) => {
+  const cases = [
+    ["add-only", "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"],
+    ["remove-add", ""],
+  ] as const;
+  for (const [refreshMode, mismatchHint] of cases) {
     const sandbox = await codexSandbox(t);
     const result = await codexInstall(sandbox.packageRoot, {
       root: PACKAGE_ROOT,
@@ -917,14 +820,29 @@ void test("ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and
     assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
     assert.deepStrictEqual(
       result.outcome.result,
-      { verification_hints: hints },
+      {
+        missingVerificationOutput: {
+          stdout: [],
+          stderr: [
+            "error: installed manager fingerprint is not detectable after install.",
+            "hint: verify with 'codex plugin list --json'.",
+          ],
+        },
+        mismatchVerificationOutput: {
+          stdout: [],
+          stderr: [
+            "error: installed manager fingerprint does not match the prepared plugin after install.",
+            ...(mismatchHint.length > 0 ? [`hint: ${mismatchHint}`] : []),
+          ],
+        },
+      },
       refreshMode,
     );
   }
 });
 
 /**
- * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:666::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
+ * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:621::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -962,13 +880,13 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: `src/harnesses/codex/adapter.ts:585::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
+      // executor's shell: `src/harnesses/codex/adapter.ts:548::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:640::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
+      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:595::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/harnesses/codex/adapter.ts:585::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
+      // the default (`src/harnesses/codex/adapter.ts:548::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -999,7 +917,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. `src/harnesses/codex/adapter.ts:666::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
+  // witness that. `src/harnesses/codex/adapter.ts:621::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);

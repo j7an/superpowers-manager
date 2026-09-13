@@ -9,29 +9,24 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   failureResult,
   successResult,
-  type AdapterResult,
 } from "../../../../src/adapter-result.ts";
 import type { CodexRemovalInput } from "../../../../src/harnesses/codex/adapter.ts";
 import {
   codexHarness,
-  normalizeCodexControl,
-  normalizeCodexInstall,
-  normalizeCodexInstallForContext,
-  normalizeCodexInstalled,
-  normalizeCodexOwnership,
+  rejectSuccessfulNonzeroStatus,
 } from "../../../../src/harnesses/codex/harness.ts";
 import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "../../../../src/harnesses/codex/lifecycle.ts";
+import {
+  codexInstallReceipt,
   codexPresentation,
   formatHuman,
   formatPorcelain,
 } from "../../../../src/harnesses/codex/presentation.ts";
 import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
-import type {
-  HarnessAdapter,
-  InstalledState,
-  ProbeSnapshot,
-} from "../../../../src/harness.ts";
-import type { JsonValue } from "../../../../src/strict-json.ts";
+import type { HarnessAdapter, ProbeSnapshot } from "../../../../src/harness.ts";
 import { codexPaths } from "../../../../src/harnesses/codex/paths.ts";
 import { readCodexMarketplace } from "../../../../src/harnesses/codex/marketplace.ts";
 import { writeQualifiedCodexFixture } from "../../../lib/harnesses/codex/prepared-fixture.ts";
@@ -56,30 +51,6 @@ function assertOtherRemovalType(adapter: HarnessAdapter<OtherRemoval>) {
   );
 }
 void assertOtherRemovalType;
-
-function unwrap<T>(result: AdapterResult<T>): T {
-  assert.equal(result.status, 0);
-  assert.equal(result.outcome.ok, true);
-  if (!result.outcome.ok) assert.fail("expected successful adapter result");
-  return result.outcome.result;
-}
-
-function ownershipResult(
-  identityState: string | number | null | undefined,
-  pluginPresent: boolean | string = false,
-  marketplacePresent: boolean | string = false,
-  conflicts?: unknown,
-): AdapterResult {
-  const payload: Record<string, JsonValue> = {
-    resources: {
-      plugin: pluginPresent,
-      marketplace: marketplacePresent,
-    },
-  };
-  if (identityState !== undefined) payload.identity_state = identityState;
-  if (conflicts !== undefined) payload.conflicts = conflicts as JsonValue;
-  return successResult("inspect", payload, []);
-}
 
 void test("Codex verification modules are safe in every supported entry order", () => {
   const urls = {
@@ -109,12 +80,8 @@ void test("Codex verification modules are safe in every supported entry order", 
         status: 0,
         outcome: { operation: "inspect", ok: true, messages: [], result, error: null },
       });
-      const receipt = loaded.harness.normalizeCodexInstall(
-        ok({ verification_hints: {} }),
-      );
-      const inspection = loaded.harness.normalizeCodexInstalled(
-        ok({ view: "fingerprint", fingerprint: desired }), desired,
-      );
+      const receipt = ok(loaded.presentation.codexInstallReceipt("", ""));
+      const inspection = ok({ kind: "current", observedIdentity: desired });
       const output = loaded.presentation.codexPresentation.renderInstallVerification(
         desired, receipt, inspection,
       );
@@ -136,7 +103,7 @@ void test("Codex verification modules are safe in every supported entry order", 
   }
 });
 
-void test("ownership normalization preserves every Codex removal flag combination", () => {
+void test("ownership policy preserves every Codex removal flag combination", () => {
   const cases = [
     [false, false, { kind: "allowed" }],
     [
@@ -180,10 +147,10 @@ void test("ownership normalization preserves every Codex removal flag combinatio
     ],
   ] as const;
   for (const [pluginPresent, marketplacePresent, expected] of cases) {
-    const normalized = unwrap(
-      normalizeCodexOwnership(
-        ownershipResult("manager", pluginPresent, marketplacePresent),
-      ),
+    const normalized = codexOwnershipInspection(
+      "manager",
+      { pluginPresent, marketplacePresent },
+      [],
     );
     assert.deepEqual(normalized.removalInput, {
       pluginPresent,
@@ -193,9 +160,11 @@ void test("ownership normalization preserves every Codex removal flag combinatio
   }
 });
 
-void test("ownership normalization reuses legacy install and removal policy", async (t) => {
-  const legacy = unwrap(
-    normalizeCodexOwnership(ownershipResult("legacy", false, false)),
+void test("ownership policy reuses legacy install and removal policy", async (t) => {
+  const legacy = codexOwnershipInspection(
+    "legacy",
+    { pluginPresent: false, marketplacePresent: false },
+    [],
   );
   assert.deepEqual(legacy.installEligibility, {
     kind: "blocked",
@@ -217,8 +186,10 @@ void test("ownership normalization reuses legacy install and removal policy", as
     stderr: [],
   });
 
-  const unknown = unwrap(
-    normalizeCodexOwnership(ownershipResult("unexpected", false, false)),
+  const unknown = codexOwnershipInspection(
+    "unexpected",
+    { pluginPresent: false, marketplacePresent: false },
+    [],
   );
   assert.deepEqual(unknown.installEligibility, {
     kind: "blocked",
@@ -236,13 +207,13 @@ void test("ownership normalization reuses legacy install and removal policy", as
   });
 
   await t.test("blocks unmanaged conflicts with manual guidance", () => {
-    const normalized = unwrap(
-      normalizeCodexOwnership(
-        ownershipResult("manager", false, false, [
-          "active Codex plugin superpowers@another-provider",
-          "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
-        ]),
-      ),
+    const normalized = codexOwnershipInspection(
+      "manager",
+      { pluginPresent: false, marketplacePresent: false },
+      [
+        "active Codex plugin superpowers@another-provider",
+        "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ],
     );
     assert.deepEqual(normalized.installEligibility, {
       kind: "blocked",
@@ -269,12 +240,10 @@ void test("ownership normalization reuses legacy install and removal policy", as
   await t.test(
     "legacy diagnostics remain authoritative when conflicts coexist",
     () => {
-      const normalized = unwrap(
-        normalizeCodexOwnership(
-          ownershipResult("legacy", false, false, [
-            "active Codex plugin superpowers@another-provider",
-          ]),
-        ),
+      const normalized = codexOwnershipInspection(
+        "legacy",
+        { pluginPresent: false, marketplacePresent: false },
+        ["active Codex plugin superpowers@another-provider"],
       );
       assert.deepEqual(
         normalized.installEligibility,
@@ -284,265 +253,26 @@ void test("ownership normalization reuses legacy install and removal policy", as
   );
 });
 
-void test("missing, null, and empty ownership identity use the probe diagnostic", () => {
-  for (const identityState of [undefined, null, ""]) {
-    const normalized = unwrap(
-      normalizeCodexOwnership(ownershipResult(identityState, false, false)),
-    );
-    assert.equal(normalized.presentationValue, "");
-    assert.deepEqual(normalized.installEligibility, {
-      kind: "blocked",
-      output: {
-        stdout: [],
-        stderr: ["error: probe did not report adapter identity state"],
-      },
-    });
-  }
-});
-
-void test("ownership normalization rejects malformed native fields at the reader boundary", () => {
-  const malformedFlag = normalizeCodexOwnership(
-    ownershipResult("manager", "yes", false),
+void test("empty ownership identity uses the probe diagnostic", () => {
+  const normalized = codexOwnershipInspection(
+    "",
+    { pluginPresent: false, marketplacePresent: false },
+    [],
   );
-  assert.equal(malformedFlag.outcome.ok, false);
-  if (malformedFlag.outcome.ok)
-    assert.fail("expected malformed flag rejection");
-  assert.equal(
-    malformedFlag.outcome.error.message,
-    "expected a Boolean adapter result at resources.plugin",
-  );
-
-  const malformedIdentity = normalizeCodexOwnership(
-    ownershipResult(3, false, false),
-  );
-  assert.equal(malformedIdentity.outcome.ok, false);
-  if (malformedIdentity.outcome.ok) {
-    assert.fail("expected malformed identity rejection");
-  }
-  assert.equal(
-    malformedIdentity.outcome.error.message,
-    "adapter returned a non-string identity_state for inspect --view ownership",
-  );
-
-  for (const conflicts of ["conflict", ["valid", 7], ["unsafe\ntext"]]) {
-    const malformedConflicts = normalizeCodexOwnership(
-      ownershipResult("manager", false, false, conflicts),
-    );
-    assert.equal(malformedConflicts.outcome.ok, false);
-    if (malformedConflicts.outcome.ok) {
-      assert.fail("expected malformed conflicts rejection");
-    }
-    assert.equal(
-      malformedConflicts.outcome.error.message,
-      "expected an array of strings at conflicts",
-    );
-  }
-});
-
-void test("normalizers preserve controlled native failure outcomes unchanged", () => {
-  const failure = failureResult(
-    "inspect",
-    "inspect-failed",
-    "controlled failure",
-    ["controlled hint"],
-    [{ channel: "stderr", text: "context" }],
-  );
-  for (const normalized of [
-    normalizeCodexOwnership(failure),
-    normalizeCodexControl(failure),
-    normalizeCodexInstalled(failure, DESIRED),
-    normalizeCodexInstall(failure),
-  ]) {
-    assert.deepEqual(normalized, failure);
-  }
-});
-
-void test("normalizers reject scalar, null, and array successful payloads before field defaults", () => {
-  const messages = [{ channel: "stdout" as const, text: "captured context" }];
-  const cases = [
-    {
-      operation: "inspect",
-      normalize: (result: AdapterResult) => normalizeCodexOwnership(result),
-      message:
-        "adapter returned a non-object result for inspect --view ownership",
-    },
-    {
-      operation: "inspect",
-      normalize: (result: AdapterResult) => normalizeCodexControl(result),
-      message:
-        "adapter returned a non-object result for inspect --view update-control",
-    },
-    {
-      operation: "inspect",
-      normalize: (result: AdapterResult) =>
-        normalizeCodexInstalled(result, DESIRED),
-      message:
-        "adapter returned a non-object result for inspect --view fingerprint",
-    },
-    {
-      operation: "install",
-      normalize: (result: AdapterResult) => normalizeCodexInstall(result),
-      message: "adapter returned a non-object result for install",
-    },
-  ] as const;
-  const invalidPayloads: JsonValue[] = ["scalar", null, []];
-  for (const each of cases) {
-    for (const payload of invalidPayloads) {
-      const normalized = each.normalize(
-        successResult(each.operation, payload, messages),
-      );
-      assert.equal(normalized.outcome.ok, false);
-      if (normalized.outcome.ok) {
-        assert.fail("expected non-object payload rejection");
-      }
-      assert.equal(normalized.outcome.error.code, "malformed-result");
-      assert.equal(normalized.outcome.error.message, each.message);
-      assert.deepEqual(normalized.outcome.messages, messages);
-    }
-  }
-});
-
-void test("nonzero successful statuses take precedence over top-level payload validation", () => {
-  const outcome = successResult("inspect", null, []).outcome;
-  const inconsistent: AdapterResult = { status: 1, outcome };
-  const cases = [
-    [
-      normalizeCodexOwnership(inconsistent),
-      "adapter reported a failure status for inspect --view ownership",
-    ],
-    [
-      normalizeCodexControl(inconsistent),
-      "adapter reported a failure status for inspect --view update-control",
-    ],
-    [
-      normalizeCodexInstalled(inconsistent, DESIRED),
-      "adapter reported a failure status for inspect --view fingerprint",
-    ],
-  ] as const;
-  for (const [normalized, message] of cases) {
-    assert.equal(normalized.outcome.ok, false);
-    if (normalized.outcome.ok) assert.fail("expected invalid status rejection");
-    assert.equal(normalized.outcome.error.code, "invalid-status");
-    assert.equal(normalized.outcome.error.message, message);
-  }
-});
-
-void test("control normalization separates probe completeness from mutation policy", () => {
-  const managed = unwrap(
-    normalizeCodexControl(
-      successResult("inspect", { update_control: "managed" }, []),
-    ),
-  );
-  assert.deepEqual(managed, {
-    probeEligibility: { kind: "allowed" },
-    mutationEligibility: { kind: "allowed" },
-    presentationValue: "managed",
-  });
-
-  const unsupported = unwrap(
-    normalizeCodexControl(
-      successResult("inspect", { update_control: "unsupported" }, []),
-    ),
-  );
-  assert.deepEqual(unsupported.probeEligibility, { kind: "allowed" });
-  assert.deepEqual(unsupported.mutationEligibility, {
+  assert.equal(normalized.presentationValue, "");
+  assert.deepEqual(normalized.installEligibility, {
     kind: "blocked",
     output: {
       stdout: [],
-      stderr: ["error: adapter cannot guarantee manager-controlled updates"],
+      stderr: ["error: probe did not report adapter identity state"],
     },
   });
 });
 
-void test("missing, null, and empty control block both probe and mutation", () => {
-  for (const updateControl of [undefined, null, ""]) {
-    const payload: Record<string, JsonValue> = {};
-    if (updateControl !== undefined) payload.update_control = updateControl;
-    const normalized = unwrap(
-      normalizeCodexControl(successResult("inspect", payload, [])),
-    );
-    const blocked = {
-      kind: "blocked" as const,
-      output: {
-        stdout: [],
-        stderr: [
-          "error: probe did not report adapter update-control capability",
-        ],
-      },
-    };
-    assert.deepEqual(normalized.probeEligibility, blocked);
-    assert.deepEqual(normalized.mutationEligibility, blocked);
-    assert.equal(normalized.presentationValue, "");
-  }
-});
-
-void test("control normalization rejects non-string, non-null control", () => {
-  const normalized = normalizeCodexControl(
-    successResult("inspect", { update_control: false }, []),
-  );
-  assert.equal(normalized.outcome.ok, false);
-  if (normalized.outcome.ok)
-    assert.fail("expected malformed control rejection");
-  assert.equal(
-    normalized.outcome.error.message,
-    "adapter returned a non-string update_control for inspect --view update-control",
-  );
-});
-
-void test("installed normalization distinguishes absent, mismatch, and current identity", () => {
-  const cases: readonly [unknown, InstalledState][] = [
-    [undefined, { kind: "absent", observedIdentity: "" }],
-    [null, { kind: "absent", observedIdentity: "" }],
-    ["", { kind: "absent", observedIdentity: "" }],
-    [OTHER, { kind: "mismatch", observedIdentity: OTHER }],
-    [DESIRED, { kind: "current", observedIdentity: DESIRED }],
-    [
-      DESIRED.slice(0, 7),
-      { kind: "current", observedIdentity: DESIRED.slice(0, 7) },
-    ],
-  ];
-  for (const [fingerprint, expected] of cases) {
-    const payload: Record<string, JsonValue> = {};
-    if (fingerprint !== undefined)
-      payload.fingerprint = fingerprint as JsonValue;
-    assert.deepEqual(
-      unwrap(
-        normalizeCodexInstalled(successResult("inspect", payload, []), DESIRED),
-      ),
-      expected,
-    );
-  }
-});
-
-void test("installed normalization rejects a malformed fingerprint", () => {
-  const normalized = normalizeCodexInstalled(
-    successResult("inspect", { fingerprint: 7 }, []),
-    DESIRED,
-  );
-  assert.equal(normalized.outcome.ok, false);
-  if (normalized.outcome.ok) {
-    assert.fail("expected malformed fingerprint rejection");
-  }
-  assert.equal(
-    normalized.outcome.error.message,
-    "adapter returned a non-string fingerprint for inspect --view fingerprint",
-  );
-});
-
-void test("install normalization converts only safe verification hints into output", () => {
-  const receipt = unwrap(
-    normalizeCodexInstall(
-      successResult(
-        "install",
-        {
-          verification_hints: {
-            missing: "verify the installed plugin",
-            mismatch: "retry the installation",
-          },
-        },
-        [],
-      ),
-    ),
+void test("install receipt converts only safe verification hints into output", () => {
+  const receipt = codexInstallReceipt(
+    "verify the installed plugin",
+    "retry the installation",
   );
   assert.deepEqual(receipt.missingVerificationOutput, {
     stdout: [],
@@ -559,33 +289,64 @@ void test("install normalization converts only safe verification hints into outp
     ],
   });
 
-  const unsafe = unwrap(
-    normalizeCodexInstall(
-      successResult(
-        "install",
-        { verification_hints: { missing: "unsafe\nline", mismatch: 4 } },
-        [],
-      ),
-    ),
-  );
+  const unsafe = codexInstallReceipt("unsafe\nline", 4);
   assert.equal(unsafe.missingVerificationOutput.stderr.length, 1);
   assert.equal(unsafe.mismatchVerificationOutput.stderr.length, 1);
 });
 
-void test("the concrete install status guard retains the context-dependent diagnostic", () => {
-  const succeeded = successResult("install", { verification_hints: {} }, []);
-  const inconsistent: AdapterResult = {
-    status: 1,
-    outcome: succeeded.outcome,
-  };
-  const normalized = normalizeCodexInstallForContext(inconsistent, {
-    root: "/package root",
-  });
-  assert.equal(normalized.outcome.ok, false);
-  if (normalized.outcome.ok) assert.fail("expected invalid status rejection");
-  assert.equal(
-    normalized.outcome.error.message,
-    "adapter reported a failure status for install --package-root /package root",
+void test("Codex boundaries reject successful nonzero statuses before reading typed results", () => {
+  const messages = [
+    { channel: "stderr" as const, text: "captured adapter context" },
+  ];
+  const cases = [
+    {
+      operation: "inspect",
+      message:
+        "adapter reported a failure status for inspect --view update-control",
+    },
+    {
+      operation: "install",
+      message:
+        "adapter reported a failure status for install --package-root /package root",
+    },
+  ] as const;
+  for (const { operation, message } of cases) {
+    const succeeded = successResult(operation, null, messages);
+    const guarded = rejectSuccessfulNonzeroStatus(
+      { status: 1, outcome: succeeded.outcome },
+      message,
+    );
+    assert.equal(guarded.status, 1);
+    assert.equal(guarded.outcome.ok, false);
+    if (guarded.outcome.ok) assert.fail("expected invalid status rejection");
+    assert.equal(guarded.outcome.operation, operation);
+    assert.equal(guarded.outcome.error.code, "invalid-status");
+    assert.equal(guarded.outcome.error.message, message);
+    assert.deepEqual(guarded.outcome.error.hints, []);
+    assert.deepEqual(guarded.outcome.messages, messages);
+  }
+});
+
+void test("Codex status guard passes zero successes and controlled failures through unchanged", () => {
+  const succeeded = successResult(
+    "inspect",
+    codexControlInspection("managed"),
+    [],
+  );
+  const failed = failureResult(
+    "install",
+    "controlled-failure",
+    "controlled failure",
+    ["controlled hint"],
+    [{ channel: "stdout", text: "captured context" }],
+  );
+  assert.strictEqual(
+    rejectSuccessfulNonzeroStatus(succeeded, "unused status diagnostic"),
+    succeeded,
+  );
+  assert.strictEqual(
+    rejectSuccessfulNonzeroStatus(failed, "unused status diagnostic"),
+    failed,
   );
 });
 
@@ -632,14 +393,12 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
       },
     },
     installed: { kind: "current", observedIdentity: DESIRED.slice(0, 7) },
-    ownership: unwrap(
-      normalizeCodexOwnership(ownershipResult("manager", true, true)),
+    ownership: codexOwnershipInspection(
+      "manager",
+      { pluginPresent: true, marketplacePresent: true },
+      [],
     ),
-    control: unwrap(
-      normalizeCodexControl(
-        successResult("inspect", { update_control: "managed" }, []),
-      ),
-    ),
+    control: codexControlInspection("managed"),
     compatibility: {
       kind: "supported",
       generation: "codex-native",
@@ -726,9 +485,7 @@ void test("Codex probe presentation preserves legacy fields and appends independ
 });
 
 void test("verification presentation keeps desired and observed identity separate from success", () => {
-  const receipt = normalizeCodexInstall(
-    successResult("install", { verification_hints: {} }, []),
-  );
+  const receipt = successResult("install", codexInstallReceipt("", ""), []);
   assert.deepEqual(
     codexPresentation.renderInstallVerification(
       DESIRED,
@@ -751,17 +508,13 @@ void test("verification presentation keeps desired and observed identity separat
 });
 
 void test("verification presentation preserves missing, mismatch, and inspection-failure distinctions", () => {
-  const receipt = normalizeCodexInstall(
-    successResult(
-      "install",
-      {
-        verification_hints: {
-          missing: "verify the installed plugin",
-          mismatch: "retry the installation",
-        },
-      },
-      [],
+  const receipt = successResult(
+    "install",
+    codexInstallReceipt(
+      "verify the installed plugin",
+      "retry the installation",
     ),
+    [],
   );
   assert.deepEqual(
     codexPresentation.renderInstallVerification(
@@ -822,27 +575,13 @@ void test("verification presentation preserves missing, mismatch, and inspection
       ],
     },
   );
-  assert.deepEqual(
-    codexPresentation.renderInstallVerification(
-      DESIRED,
-      receipt,
-      normalizeCodexInstalled(
-        successResult("inspect", { fingerprint: 7 }, []),
-        DESIRED,
-      ),
-    ),
-    {
-      stdout: [],
-      stderr: [
-        "error: cannot parse installed manager fingerprint inspection result after install.",
-      ],
-    },
-  );
 });
 
 void test("removal completion appends the frozen completion text after a legacy report", () => {
-  const ownership = unwrap(
-    normalizeCodexOwnership(ownershipResult("legacy", false, false)),
+  const ownership = codexOwnershipInspection(
+    "legacy",
+    { pluginPresent: false, marketplacePresent: false },
+    [],
   );
   assert.deepEqual(
     codexPresentation.renderRemovalCompletion(
@@ -993,7 +732,10 @@ async function codexSandbox(t: import("node:test").TestContext) {
 void test("Codex harness inspection and removal stay inside the isolated fake Codex fixture", async (t) => {
   const sandbox = await codexSandbox(t);
   const ctx = { root: PACKAGE_ROOT, env: sandbox.env };
-  const ownership = unwrap(await codexHarness.inspectOwnership(ctx));
+  const inspected = await codexHarness.inspectOwnership(ctx);
+  assert.equal(inspected.outcome.ok, true, JSON.stringify(inspected));
+  if (!inspected.outcome.ok) assert.fail("expected ownership inspection");
+  const ownership = inspected.outcome.result;
   assert.deepEqual(ownership.removalInput, {
     pluginPresent: false,
     marketplacePresent: false,

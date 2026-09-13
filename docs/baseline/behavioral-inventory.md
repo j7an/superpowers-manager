@@ -18,36 +18,37 @@ compatibility facts, not a recommendation to make every parser identical.
 | `CLI-MODE-DEFAULT-01` | No arguments is the third distinct mode and is exactly equivalent to dispatching `update` with no arguments. |
 | `CLI-COMMANDS-01` | The eight named subcommands are `pin`, `track-latest`, `unpin`, `prepare`, `probe`, `install`, `update`, and `uninstall`. All eight run in-process; none is spawned as a script. Except for CLI-owned arity and pin-ref checks, remaining arguments pass through unchanged to the in-process handler. |
 | `CLI-USAGE-01` | Unknown commands, stray top-level flags, invalid `pin` arity/ref syntax, extra arguments to `track-latest` or `unpin`, and any `probe` argument other than a single `--porcelain` are usage errors. They do not dispatch, print `error: ...` followed by usage, and exit 2. |
-| `CLI-PREFLIGHT-01` | Preflight is command-specific and completes before dispatch: `pin` needs Git; `track-latest` and `unpin` have no extra tool; `prepare` needs Git, and Python only when `SUPERPOWERS_VALIDATOR` names a validator; `probe`, `install`, and `update` need Git and Codex; `uninstall` needs Codex. No command requires a POSIX shell: all eight run in-process. Missing requirements exit 1 without dispatch. |
+| `CLI-PREFLIGHT-01` | Preflight is command-specific and completes before dispatch: `pin` and `prepare` need Git; `track-latest` and `unpin` have no extra tool; `probe`, `install`, and `update` need Git and Codex; `uninstall` needs Codex. For `prepare`, `install`, and `update`, non-empty `SUPERPOWERS_VALIDATOR` fails before requirement or harness access. No command requires a POSIX shell: all eight run in-process. Missing requirements exit 1 without dispatch. |
 
 ## Environment and location
 
-The eleven `SUPERPOWERS_*` variables below are the complete public override set.
-The CLI inherits the environment wholesale. “Unset” means the consumer uses
-the source-derived default shown here. `SUPERPOWERS_CODEX` appears three times
-to separate launcher preflight, listing, and mutation use.
+The table below records the public overrides and the rejected legacy
+`SUPERPOWERS_VALIDATOR` input. The CLI inherits the environment wholesale.
+“Unset” means the consumer uses the source-derived default shown here.
+`SUPERPOWERS_CODEX` appears three times to separate launcher preflight, listing,
+and mutation use.
 
 | Behavior ID | Variable | Current default | Production consumer and effect |
 |---|---|---|---|
 | `SEL-PRECEDENCE-REF-01` | `SUPERPOWERS_REF` | Saved pinned/track-latest intent, then `config/upstream-ref` (`latest-release`) | Selection/ref computation. Ref precedence is independent: non-empty `SUPERPOWERS_REF` > saved pinned ref or saved track-latest intent > packaged `config/upstream-ref`. Generic runtime resolution is frozen separately under `REF-GENERIC-FALLBACK-01`. |
 | `SEL-PRECEDENCE-SOURCE-01` | `SUPERPOWERS_UPSTREAM_URL` | `https://github.com/obra/superpowers` unless saved selection supplies a source | Selection/source computation plus `pin` and `track-latest`. Source precedence is independent: non-empty `SUPERPOWERS_UPSTREAM_URL` > source saved with either selection mode > `https://github.com/obra/superpowers`. A ref and source may therefore have different origins. |
 | `CLI-ENV-CODEX-PREFLIGHT-01` | `SUPERPOWERS_CODEX` | `codex` | Public CLI preflight accepts an executable path override in place of the default `codex` command before dispatching Codex-dependent commands. |
-| `CLI-ENV-CODEX-LISTING-01` | `SUPERPOWERS_CODEX` | `codex` | Codex adapter fingerprint listing uses the executable override; when unset, it resolves `codex` from `PATH`. |
+| `CLI-ENV-CODEX-LISTING-01` | `SUPERPOWERS_CODEX` | `codex` | Codex native-state listing uses the executable override; when unset, it resolves `codex` from `PATH`. |
 | `CLI-ENV-CODEX-MUTATION-01` | `SUPERPOWERS_CODEX` | `codex` | Codex adapter install mutation uses the explicit executable override. |
 | `CLI-ENV-CACHE-DIR-01` | `SUPERPOWERS_CACHE_DIR` | Package-root `.cache/upstream` | `prepare`; the upstream repository is beneath `superpowers/`. |
 | `SEL-LOCATION-01` | `SUPERPOWERS_CONFIG_DIR` | `SUPERPOWERS_CONFIG_DIR/selection.json`, otherwise the XDG/HOME chain below | Selection-state readers and writers. Selection state is exactly `SUPERPOWERS_CONFIG_DIR/selection.json` when that variable is set; otherwise `$XDG_CONFIG_HOME/superpowers-manager/selection.json` when XDG is non-empty; otherwise `$HOME/.config/superpowers-manager/selection.json`. Relative or unavailable required bases fail closed. An explicitly set value, including empty, must be absolute. |
 | `CLI-ENV-PLUGIN-ROOT-01` | `SUPERPOWERS_PLUGIN_ROOT` | Package-root `plugins/superpowers` | `prepare`; the selected path becomes the generated live tree. |
 | `CLI-ENV-MANIFEST-TEMPLATE-01` | `SUPERPOWERS_MANIFEST_TEMPLATE` | Package-root `plugins/superpowers/.codex-plugin/plugin.template.json` | `prepare` passes the selected fallback bytes through adapter build into generated `.codex-plugin/plugin.template.json`. A non-file path fails before adapter build or mutation. |
-| `CLI-ENV-VALIDATOR-01` | `SUPERPOWERS_VALIDATOR` | Empty, meaning no additional validator | `prepare`; a non-empty path runs after built-in validation and before activation. |
-| `CLI-ENV-VALIDATOR-EXECUTABLE-01` | `SUPERPOWERS_VALIDATOR_EXECUTABLE` | Empty, meaning no external validator | `prepare`; a non-empty path names an executable invoked directly with the candidate root as its sole argument, after built-in validation and before activation, bounded by a 30s timeout and a 64 KiB per-stream output cap. Setting both this and `SUPERPOWERS_VALIDATOR` is rejected at preflight. |
-| `CLI-ENV-INSTALLED-ROOT-01` | `SUPERPOWERS_INSTALLED_SEARCH_ROOT` | `$HOME/.codex` | Codex fingerprint inspection; the active version selects the exact plugin cache path below this root. |
+| `CLI-ENV-VALIDATOR-01` | `SUPERPOWERS_VALIDATOR` | Empty, meaning unset | `prepare`, `install`, and `update`; a non-empty value is rejected before requirement or harness access. |
+| `CLI-ENV-VALIDATOR-EXECUTABLE-01` | `SUPERPOWERS_VALIDATOR_EXECUTABLE` | Empty, meaning no external validator | `prepare`; a non-empty path names an executable invoked directly with the candidate root as its sole argument, after built-in validation and before activation, bounded by a 30s timeout and a 64 KiB per-stream output cap. |
+| `CLI-ENV-INSTALLED-ROOT-01` | `SUPERPOWERS_INSTALLED_SEARCH_ROOT` | `$HOME/.codex` | Codex installation inspection; the active version selects the exact plugin cache path below this root. |
 | `CLI-ENV-REFRESH-MODE-01` | `SUPERPOWERS_INSTALL_REFRESH_MODE` | `add-only` | Codex adapter install; allowed values are `add-only` and `remove-add`. |
 
 | Behavior ID | Contract |
 |---|---|
 | `CLI-ENV-PASSTHROUGH-01` | The CLI inherits its controlled invocation environment wholesale, including the public `SUPERPOWERS_*` overrides verified by `PASSTHROUGH_VARIABLES` (`tests/baseline/support.ts`); it does not synthesize unrelated `XDG_*`, npm, or Codex variables. |
 | `CLI-ENV-PREPARE-PATHS-01` | Relative `SUPERPOWERS_CACHE_DIR` and `SUPERPOWERS_PLUGIN_ROOT` values are resolved from the invocation directory. |
-| `CLI-ENV-INSTALLED-DEFAULTS-01` | Without explicit overrides, Codex adapter fingerprint listing uses `codex` from `PATH` and installed fingerprint lookup uses `$HOME/.codex`. |
+| `CLI-ENV-INSTALLED-DEFAULTS-01` | Without explicit overrides, Codex native-state listing uses `codex` from `PATH` and installed-state lookup uses `$HOME/.codex`. |
 | `SEL-PRECEDENCE-VALIDATE-01` | Saved selection and the resulting source are validated before ref resolution. Invalid saved state cannot be bypassed by environment ref/source overrides. |
 
 ## Selection schema, refs, and canonical bytes
@@ -195,11 +196,9 @@ rather than restating or redefining it.
 
 | Behavior ID | Contract |
 |---|---|
-| `ADAPTER-FINGERPRINT-01` | Fingerprint inspection accepts null and exact 7- or 40-hex fingerprints in its exact result shape. |
-| `ADAPTER-FINGERPRINT-REJECT-01` | Fingerprint inspection rejects a non-null fingerprint whose length is neither 7 nor 40 hexadecimal characters. |
-| `ADAPTER-UPDATE-CONTROL-01` | Update-control inspection accepts only `managed` or `unsupported` in its exact result shape. |
-| `ADAPTER-OWNERSHIP-01` | Ownership inspection accepts all internally consistent manager/legacy resource Boolean combinations and derived identity states. |
-| `ADAPTER-INSTALL-RESULT-01` | Install success accepts exact `verification_hints` carrying `missing` unconditionally, and `mismatch` exactly when the refresh mode is `add-only` — two of the four combinations the retired response schema admitted. Narrowed 2026-08-15; authorized by the repository owner in the pull request thread as a baseline contract change. |
+| `ADAPTER-UPDATE-CONTROL-01` | The typed update-control policy recognizes `managed` and `unsupported`, rejects unknown capability values, and reports managed capability from the native producer. |
+| `ADAPTER-OWNERSHIP-01` | Typed ownership policy is derived from every manager/legacy resource Boolean combination and preserves manager removal inputs, presentation identity, conflicts, and eligibility. |
+| `ADAPTER-INSTALL-RESULT-01` | Install success returns a typed receipt whose missing verification output always carries the safe listing hint and whose mismatch output carries the safe remove-add retry hint only in `add-only` mode. |
 | `ADAPTER-CONTROLLED-FAILURE-01` | A valid controlled failure carries its error and its hints in order, yields no result, and returns status 1. Narrowed 2026-08-20; authorized by the repository owner as a baseline contract change. |
 | `ADAPTER-TERMINAL-01` | Terminal-facing protocol strings reject C0, DEL, and C1 controls. |
 | `ADAPTER-SURROGATE-01` | Terminal-facing protocol strings reject surrogate code points without leaking a traceback. |
@@ -279,9 +278,9 @@ hooks/support/helper.txt
 | `PREPARE-DETERMINISTIC-01` | Given the same selected source/ref and inputs, `prepare` emits the canonical generated layout, manager overlay, provenance bytes, and ref-aware version deterministically. |
 | `PROBE-READONLY-01` | `probe` computes desired/generated/installed state and reports human or porcelain fields without changing selection, generated, cache, adapter, or Codex state. The in-process command creates no temporary workspace of its own. |
 | `PROBE-FAIL-CLOSED-01` | Invalid selection/source and malformed required adapter evidence are operational failures, never reported as current or absent, and validation precedes Git or adapter access. |
-| `INSTALL-ORDER-01` | `install` probes, prepares and validates when needed, then re-inspects ownership/update control, mutates manager state, and finally inspects the installed fingerprint. No adapter mutation precedes successful preparation/validation. |
+| `INSTALL-ORDER-01` | `install` probes, prepares and validates when needed, then re-inspects ownership/update control, mutates manager state, and finally inspects full installed state. No adapter mutation precedes successful preparation/validation. |
 | `INSTALL-LEGACY-01` | Fresh legacy ownership evidence blocks installation before preparation or mutation, preserves the interrupted state, and emits no success report. |
-| `INSTALL-VERIFY-01` | Install succeeds only when the final 7- or 40-hex installed fingerprint matches the prepared 40-hex commit; missing or mismatched proof fails with the validated adapter hint when available. |
+| `INSTALL-VERIFY-01` | Install succeeds only when full installed-state inspection reports the prepared commit current; missing or mismatched proof fails with the producer-built safe receipt hint when available. |
 | `UPDATE-CONTROL-01` | `update` requires fresh validated `managed` update-control evidence before treating current state as success or allowing installation/refresh mutation. Unsupported, unknown, or malformed evidence fails without mutation. |
 | `UNINSTALL-OWNERSHIP-01` | Public `uninstall` inspects manager ownership, leaves legacy resources in place with a report, and leaves generated/cache artifacts in place. |
 | `UNINSTALL-TARGETS-01` | The Codex adapter removes only plugin `superpowers@superpowers-manager` and marketplace `superpowers-manager`; unrelated providers are never named by removal commands. |

@@ -136,7 +136,7 @@ function duplicates(values: string[]) {
   ].sort();
 }
 
-const EXPECTED_BEHAVIOR_ID_COUNT = 107;
+const EXPECTED_BEHAVIOR_ID_COUNT = 105;
 
 function assertBehaviorIdCardinality(
   inventory: string[],
@@ -202,14 +202,14 @@ void test("TRACEABILITY-CARDINALITY-01 coordinated non-protocol deletion is reje
       ),
     {
       name: "AssertionError",
-      message: /behavioral inventory must contain exactly 107 behavior IDs/,
+      message: /behavioral inventory must contain exactly 105 behavior IDs/,
     },
   );
   assert.throws(
     () => assertBehaviorIdCardinality(inventory, traceabilityAfterDeletion),
     {
       name: "AssertionError",
-      message: /traceability must contain exactly 107 behavior IDs/,
+      message: /traceability must contain exactly 105 behavior IDs/,
     },
   );
 });

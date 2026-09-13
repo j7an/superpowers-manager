@@ -1,4 +1,4 @@
-// Citation scanner, resolver, ledger builder and bounded fixer. No assertions
+// Citation scanner, resolver and bounded fixer. No assertions
 // or process exit; applyFixEdits is the only writer. The suite asserts over it
 // and the tool drives it, so both compute line numbers through exactly one
 // implementation.
@@ -7,7 +7,7 @@
 // enforced corpus was measured comment-leading at the plan's base, with none
 // in a string literal, so no tokenizer is required. Known blind spot: a
 // citation-shaped token inside a multi-line template literal can be read as a
-// comment citation. That yields a false positive, which the ledger absorbs.
+// comment citation.
 
 import {
   existsSync,
@@ -18,10 +18,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { basename, isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 const MIN_ANCHOR = 3;
-const WIDEN_LIMIT = 5;
 
 /** The enforced corpus, declared and never globbed. */
 export const CORPUS_DIRS = ["src", "tests"] as const;
@@ -44,8 +43,7 @@ const LEGACY = new RegExp(String.raw`(${PATH}):(\d+)(?:-(\d+))?`, "g");
 const BACKTICKED = /`([^`\n]+)`/g;
 // A backticked token that LOOKS like a citation but does not parse is retained
 // as MALFORMED rather than dropped. Dropping it is fail-open: a near-miss
-// anchored citation would be invisible to the gate AND absent from the ledger,
-// which is a bypass, not a gap. Plain `path:N` is deliberately excluded --
+// anchored citation would be invisible to the gate. Plain `path:N` is deliberately excluded --
 // that is a legitimate legacy citation and the legacy pass owns it.
 // The file-like fallback is intentionally broader than PATH only for candidate
 // retention: either a plausible dotted filename or a slash-bearing path before
@@ -445,10 +443,7 @@ const WORD = /[A-Za-z0-9_$]/;
  * "tion h" (the middle of "function hookError"), which satisfy the gate and
  * tell a reader nothing.
  */
-export function anchorRespectsBoundaries(
-  line: string,
-  anchor: string,
-): boolean {
+function anchorRespectsBoundaries(line: string, anchor: string): boolean {
   if (anchor.length === 0) return false;
   const first = anchor[0];
   const last = anchor[anchor.length - 1];
@@ -466,159 +461,6 @@ export function anchorRespectsBoundaries(
     if (!startsInside && !endsInside) return true;
   }
   return false;
-}
-
-const DECLARATION =
-  /^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z_$][\w$]*)|^\s*([A-Za-z_$][\w$]*)\s*\(\)\s*\{|^\s*def\s+([A-Za-z_$]\w*)/;
-const IDENTIFIER = /[A-Za-z_$][A-Za-z0-9_$]*/g;
-
-/**
- * Anchor candidates for one line in the order spec §5.1 requires: the declared
- * name, then full identifiers longest-first, then the shortest prefix of the
- * trimmed line that ends on a token boundary. The prefix tier is the "shortest
- * boundary-respecting clause" of that sentence and stays last.
- */
-function anchorCandidates(line: string): string[] {
-  const out: string[] = [];
-  const declared = DECLARATION.exec(line);
-  if (declared !== null) out.push(declared[1] ?? declared[2] ?? declared[3]);
-  const identifiers = [...line.matchAll(IDENTIFIER)]
-    .map((m) => m[0])
-    .filter((s) => s.length >= MIN_ANCHOR)
-    .sort((a, b) => b.length - a.length);
-  out.push(...identifiers);
-  const trimmed = line.trim();
-  for (let length = MIN_ANCHOR; length <= trimmed.length; length += 1) {
-    if (
-      length < trimmed.length &&
-      WORD.test(trimmed[length - 1]) &&
-      WORD.test(trimmed[length])
-    )
-      continue;
-    out.push(trimmed.slice(0, length));
-  }
-  return out.filter(
-    (c) => c !== undefined && c.length >= MIN_ANCHOR && c === c.trim(),
-  );
-}
-
-function occursOnce(lines: string[], candidate: string): boolean {
-  let seen = 0;
-  for (const line of lines) {
-    if (!line.includes(candidate)) continue;
-    seen += 1;
-    if (seen > 1) return false;
-  }
-  return seen === 1;
-}
-
-function anchorForLine(lines: string[], index: number): string | null {
-  const line = lines[index];
-  if (line === undefined) return null;
-  for (const candidate of anchorCandidates(line))
-    if (
-      occursOnce(lines, candidate) &&
-      anchorRespectsBoundaries(line, candidate)
-    )
-      return candidate;
-  return null;
-}
-
-/**
- * The first legible unique anchor for the inclusive 1-based span, widening
- * outward by up to WIDEN_LIMIT lines when the span itself yields none. Widening
- * changes what is cited, so the caller is told the span it must write.
- */
-export function suggestAnchor(
-  lines: string[],
-  start: number,
-  end: number,
-): { anchor: string; line: number; endLine: number } | null {
-  for (let n = start; n <= end; n += 1) {
-    const anchor = anchorForLine(lines, n - 1);
-    if (anchor !== null) return { anchor, line: start, endLine: end };
-  }
-  for (let distance = 1; distance <= WIDEN_LIMIT; distance += 1) {
-    const above = anchorForLine(lines, start - distance - 1);
-    if (above !== null)
-      return {
-        anchor: above,
-        line: Math.max(1, start - distance),
-        endLine: end,
-      };
-    const below = anchorForLine(lines, end + distance - 1);
-    if (below !== null)
-      return { anchor: below, line: start, endLine: end + distance };
-  }
-  return null;
-}
-
-/**
- * One proposal line per legacy citation. A proposal is a citation body ready to
- * paste between backticks; it is never applied. `at` resolves dead referents
- * against one historical object, and applies ONLY to citations whose token path
- * is that path or its basename -- an object override that matched every dead
- * path would silently resolve one file's line numbers against another's text.
- */
-export function suggest(
-  citations: Citation[],
-  root: string,
-  at?: { sha: string; path: string },
-): string[] {
-  const out: string[] = [];
-
-  const cache: Map<string, string[] | null> = new Map();
-  for (const citation of citations) {
-    if (citation.kind !== "legacy") continue;
-    const line = citation.line as number;
-    const where = `${displayPath(citation.file, root)}:${citation.lineNumber}`;
-    const token = `${citation.path}:${line}${
-      citation.endLine === undefined ? "" : `-${citation.endLine}`
-    }`;
-    const live = classify(citation, root) === "unanchored";
-    const named =
-      at !== undefined &&
-      (citation.path === at.path || citation.path === basename(at.path));
-    if (!live && !named) {
-      out.push(`${where}\t${token}\tDEAD (rerun with --at <sha>:<path>)`);
-      continue;
-    }
-    const key = live ? `live:${citation.path}` : `hist:${at?.sha}:${at?.path}`;
-    if (!cache.has(key))
-      cache.set(
-        key,
-        live
-          ? readLines(join(root, citation.path))
-          : historicalLines(
-              (at as { sha: string }).sha,
-              (at as { path: string }).path,
-              root,
-            ),
-      );
-    const lines = cache.get(key) ?? null;
-    if (lines === null) {
-      out.push(`${where}\t${token}\tNO SOURCE`);
-      continue;
-    }
-    const picked = suggestAnchor(lines, line, citation.endLine ?? line);
-    if (picked === null) {
-      out.push(`${where}\t${token}\tNO ANCHOR`);
-      continue;
-    }
-    const span =
-      picked.line === picked.endLine
-        ? `${picked.line}`
-        : `${picked.line}-${picked.endLine}`;
-    const body = live
-      ? `${citation.path}:${span}::${picked.anchor}`
-      : `git show ${(at as { sha: string }).sha}:${
-          (at as { path: string }).path
-        }:${span}::${picked.anchor}`;
-    const widened =
-      picked.line !== line || picked.endLine !== (citation.endLine ?? line);
-    out.push(`${where}\t${token}\t${body}${widened ? "  [WIDENED]" : ""}`);
-  }
-  return out;
 }
 
 /**
@@ -684,11 +526,9 @@ function checkAnchor(
 
 /**
  * Anchored and resolution citations are always checked -- an anchored citation
- * must validate and can never be ledgered, or the ledger becomes the escape
- * hatch for the check this gate exists to add.
+ * must validate.
  * A malformed citation is "checked" for the same reason an anchored one is:
- * it must be fixed, never ledgered. Ledgering it would let a near-miss anchored
- * citation buy permanent silence.
+ * it must be fixed.
  */
 export function classify(
   citation: Citation,
@@ -771,7 +611,15 @@ export function validate(
     }
     return checkAnchor(lines, citation, `${citation.path} at ${sha}`);
   }
-  if (citation.kind === "legacy") return { ok: true };
+  if (citation.kind === "legacy") {
+    return {
+      ok: false,
+      code: "UNANCHORED_CITATION",
+      message:
+        citation.path +
+        " requires an anchored citation or a Git history reference",
+    };
+  }
   if (citation.kind === "malformed") {
     return citation.shape === "resolution"
       ? {
@@ -805,151 +653,6 @@ export function validate(
   const target = join(root, citation.path);
   const lines = withoutCitationEcho(readLines(target), citation, target);
   return checkAnchor(lines, citation, citation.path);
-}
-
-export type Ledger = {
-  unanchored: Record<string, Record<string, number>>;
-  deadReferent: Record<string, Record<string, number>>;
-};
-
-/**
- * Preserve arbitrary string keys on an ordinary object, including keys handled
- * specially by legacy object accessors.
- */
-function setOwn<T>(record: Record<string, T>, key: string, value: T): void {
-  Object.defineProperty(record, key, {
-    value,
-    writable: true,
-    enumerable: true,
-    configurable: true,
-  });
-}
-
-function ownValue<T>(record: Record<string, T>, key: string): T | undefined {
-  return Object.hasOwn(record, key) ? record[key] : undefined;
-}
-
-export function buildLedger(citations: Citation[], root: string): Ledger {
-  const ledger: Ledger = { unanchored: {}, deadReferent: {} };
-  for (const citation of citations) {
-    const bucket = classify(citation, root);
-    if (bucket === "checked") continue;
-    const key = bucket === "unanchored" ? "unanchored" : "deadReferent";
-    const from = displayPath(citation.file, root);
-    let byFile = ownValue(ledger[key], from);
-    if (byFile === undefined) {
-      byFile = {};
-      setOwn(ledger[key], from, byFile);
-    }
-    setOwn(byFile, citation.raw, (ownValue(byFile, citation.raw) ?? 0) + 1);
-  }
-  return ledger;
-}
-
-/**
- * Fail closed: an absent or malformed ledger is a failure, never an empty one.
- */
-export function readLedger(path: string): Ledger {
-  let raw;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch {
-    throw new Error(`cannot read ${path}`);
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`${path} is not valid JSON`);
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`${path} must be an object`);
-  }
-  // Exact schema, not a tolerant read. Defaulting a missing bucket to {} makes
-  // a truncated ledger look like a clean one, and ignoring an extra bucket lets
-  // debt be parked somewhere the drift comparison never looks. Both are the
-  // fail-open shape the design forbids.
-  const shaped = parsed as Record<string, unknown>;
-  const keys = Object.keys(shaped).sort();
-  if (
-    keys.length !== 2 ||
-    keys[0] !== "deadReferent" ||
-    keys[1] !== "unanchored"
-  ) {
-    throw new Error(
-      `${path} must declare exactly the buckets deadReferent and unanchored, found: ${keys.join(", ")}`,
-    );
-  }
-
-  const ledger: Ledger = { unanchored: {}, deadReferent: {} };
-  for (const bucket of ["deadReferent", "unanchored"] as const) {
-    const byFile = shaped[bucket];
-    if (
-      typeof byFile !== "object" ||
-      byFile === null ||
-      Array.isArray(byFile)
-    ) {
-      throw new Error(`${path}: bucket ${bucket} must be an object`);
-    }
-    for (const [file, tokens] of Object.entries(byFile)) {
-      if (
-        typeof tokens !== "object" ||
-        tokens === null ||
-        Array.isArray(tokens)
-      ) {
-        throw new Error(`${path}: ${bucket} entry ${file} must be an object`);
-      }
-
-      const counts: Record<string, number> = {};
-      for (const [token, count] of Object.entries(tokens)) {
-        if (
-          typeof count !== "number" ||
-          !Number.isInteger(count) ||
-          count < 1
-        ) {
-          throw new Error(
-            `${path}: ${bucket} ${file} ${token} must be a positive integer`,
-          );
-        }
-        setOwn(counts, token, count);
-      }
-      setOwn(ledger[bucket], file, counts);
-    }
-  }
-  return ledger;
-}
-
-/**
- * One line per disagreement, in either direction, in either bucket. A single
- * empty-array assertion over this covers all four symmetry rules at once, with
- * a message that names each disagreement rather than diffing two large objects.
- */
-export function ledgerDrift(observed: Ledger, declared: Ledger): string[] {
-  const drift: string[] = [];
-  for (const bucket of ["deadReferent", "unanchored"] as const) {
-    const seen = observed[bucket] ?? {};
-    const said = declared[bucket] ?? {};
-    const files = new Set([...Object.keys(seen), ...Object.keys(said)]);
-    for (const file of files) {
-      const seenFile = ownValue(seen, file) ?? {};
-      const saidFile = ownValue(said, file) ?? {};
-      const tokens = new Set([
-        ...Object.keys(seenFile),
-        ...Object.keys(saidFile),
-      ]);
-      for (const token of tokens) {
-        const seenCount = ownValue(seenFile, token) ?? 0;
-        const saidCount = ownValue(saidFile, token) ?? 0;
-        if (seenCount !== saidCount) {
-          drift.push(
-            `${bucket} ${file} \`${token}\`: ledger declares ${saidCount}, tree has ${seenCount}`,
-          );
-        }
-      }
-    }
-  }
-  return drift.sort();
 }
 
 /**

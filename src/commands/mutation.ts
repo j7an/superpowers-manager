@@ -4,6 +4,7 @@ import type { CommandContext } from "./context.ts";
 import { SafetyError } from "../safety-error.ts";
 import { isAbsolute } from "node:path";
 import { oneLine } from "../cli-arguments.ts";
+import { configurationErrors } from "../validator.ts";
 
 export type MutationCommand = "prepare" | "install" | "update" | "uninstall";
 
@@ -82,6 +83,11 @@ export async function runWithMutation<R>(
   ctx: CommandContext<R>,
   action: (scoped: CommandContext<R>) => Promise<number>,
 ): Promise<number> {
+  const errors = configurationErrors(command, ctx.env);
+  if (errors.length > 0) {
+    for (const message of errors) ctx.stderr.write(`error: ${message}\n`);
+    return 1;
+  }
   let actionThrew = false;
   try {
     return await withMutation(command, ctx, async (scoped) => {

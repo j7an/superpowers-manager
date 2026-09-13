@@ -331,13 +331,13 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:409::hook classification failed`). Ported from
+// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:376::hook classification failed`). Ported from
 // `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:1001-1022::"hooks-mixed-array" "out-hooks-mixed-array"`, which held the only
 // witness of this prefix anywhere in the repository. The eight inner causes
 // those shell lines also asserted are already message-exact in
 // tests/unit/harnesses/codex/hooks.test.ts and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
-// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:417::hook materialization failed`) is
+// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:382::hook materialization failed`) is
 // asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
 void test("a classification failure reaches stderr through the adapter wrapper", async () => {
   const c = createCase({ fakes: "probe" });
@@ -357,7 +357,7 @@ void test("a classification failure reaches stderr through the adapter wrapper",
 });
 
 // P2a — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the SOURCE-side call at :358. Ports the
-// retired driver's :1041 and :1044 cases (inventory items 127 and 128).
+// retired driver's :1041 and :1044 cases.
 //
 // The PATH is the assertion, not the message. Three different failures print
 // `hook subtree escapes or is broken`: this one names the hooks root under the
@@ -383,7 +383,7 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
 });
 
 // P2b — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the CANDIDATE-side call at :367. Ports
-// the retired driver's :1035 case (inventory item 125), which is the only
+// the retired driver's :1035 case, which is the only
 // root-specific witness that post-copy validation runs.
 //
 // The discriminator is which root the emitted path names. Both P2a and this
@@ -529,18 +529,19 @@ void test("prepare rejects an upstream missing any required path", async () => {
   }
 });
 
-void test("prepare runs the additional plugin validator inside the staging workspace", async () => {
+void test("prepare runs the executable validator inside the staging workspace", async () => {
   // (a) A validator that succeeds. Its stdout reaches result.stdout, and it
   // prints the TMPDIR it actually ran under.
   const ok = createCase({ fakes: "probe" });
   const okValidator = join(ok.dir, "validator-ok.py");
   writeFileSync(
     okValidator,
-    'import os\nimport sys\nprint("validator saw " + sys.argv[1])\nprint("TMPDIR=" + os.environ["TMPDIR"])\n',
+    '#!/usr/bin/env python3\nimport os\nimport sys\nprint("validator saw " + sys.argv[1])\nprint("TMPDIR=" + os.environ["TMPDIR"])\n',
+    { mode: 0o755 },
   );
   const passed = await prepare(ok, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: okValidator,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: okValidator,
   });
   assert.equal(passed.status, 0, passed.stderr);
   assert.match(passed.stdout, /^validator saw .*\/superpowers$/m);
@@ -564,13 +565,17 @@ void test("prepare runs the additional plugin validator inside the staging works
   const failing = createCase({ fakes: "probe" });
   const before = seedSentinel(failing);
   const failValidator = join(failing.dir, "validator-fail.py");
-  writeFileSync(failValidator, "import sys\nsys.exit(1)\n");
+  writeFileSync(
+    failValidator,
+    "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
+    { mode: 0o755 },
+  );
   const rejected = await prepare(failing, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: failValidator,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: failValidator,
   });
   assert.equal(rejected.status, 1, rejected.stdout);
-  assert.equal(rejected.stderr, "error: additional plugin validation failed\n");
+  assert.equal(rejected.stderr, "error: external plugin validation failed\n");
   assertNoLeakedInternals(rejected.stderr);
   assert.deepEqual(snapshotTree(generated(failing)), before);
 
@@ -579,12 +584,12 @@ void test("prepare runs the additional plugin validator inside the staging works
   const missing = join(absent.dir, "validator-missing.py");
   const notFound = await prepare(absent, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: missing,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: missing,
   });
   assert.equal(notFound.status, 1, notFound.stdout);
   assert.equal(
     notFound.stderr,
-    `error: additional plugin validator not found: ${missing}\n`,
+    `error: external plugin validator not found: ${missing}\n`,
   );
   assertNoLeakedInternals(notFound.stderr);
 });
@@ -613,6 +618,7 @@ function poisoningValidator(c: CaseEnv, exitCode: number): string {
   writeFileSync(
     path,
     [
+      "#!/usr/bin/env python3",
       "import os",
       "import sys",
       'workspace = os.environ["TMPDIR"]',
@@ -627,6 +633,7 @@ function poisoningValidator(c: CaseEnv, exitCode: number): string {
       `sys.exit(${exitCode})`,
       "",
     ].join("\n"),
+    { mode: 0o755 },
   );
   return path;
 }
@@ -679,7 +686,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
   try {
     const result = await prepare(c, {
       SUPERPOWERS_REF: REFS.fallback,
-      SUPERPOWERS_VALIDATOR: validator,
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
     });
 
     const printed = result.stdout.match(/^validator-stdout TMPDIR=(.*)$/m)?.[1];
@@ -693,7 +700,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
     assert.ok(existsSync(join(generated(c), ".superpowers-upstream.json")));
 
     // 2. stdout, in order: the REPLAYED ADAPTER OUTCOME (an adapter build
-    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:565::generated plugin validation passed` --
+    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:529::generated plugin validation passed` --
     //    outcome loss is the first thing this slice fixes, so it is asserted
     //    directly), then the validator's stdout, then the domain result.
     assertOrder(result.stdout, [
@@ -732,7 +739,7 @@ void test("a cleanup failure after a FAILED prepare still replays the outcome be
   try {
     const result = await prepare(c, {
       SUPERPOWERS_REF: REFS.fallback,
-      SUPERPOWERS_VALIDATOR: validator,
+      SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
     });
 
     const printed = result.stdout.match(/^validator-stdout TMPDIR=(.*)$/m)?.[1];
@@ -754,7 +761,7 @@ void test("a cleanup failure after a FAILED prepare still replays the outcome be
     //    leaked-workspace warning.
     assert.equal(
       result.stderr,
-      `validator-stderr sentinel\nerror: additional plugin validation failed\n${`error: ${workspaceRemovalFailure(workspace)}\n`}`,
+      `validator-stderr sentinel\nerror: external plugin validation failed\n${`error: ${workspaceRemovalFailure(workspace)}\n`}`,
     );
     assertNoLeakedInternals(result.stderr);
 
@@ -943,7 +950,7 @@ void test("prepare rejects a directory as the fallback manifest template before 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-void test("prepare rejects a directory as the additional plugin validator", async () => {
+void test("prepare rejects a directory as the executable validator", async () => {
   const c = createCase({ fakes: "probe" });
   const before = seedSentinel(c);
   const validator = join(c.dir, "validator-directory");
@@ -951,12 +958,12 @@ void test("prepare rejects a directory as the additional plugin validator", asyn
 
   const result = await prepare(c, {
     SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_VALIDATOR: validator,
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: validator,
   });
   assert.equal(result.status, 1, result.stdout);
   assert.equal(
     result.stderr,
-    `error: additional plugin validator not found: ${validator}\n`,
+    `error: external plugin validator is a directory: ${validator}\n`,
   );
   assertNoLeakedInternals(result.stderr);
   assert.deepEqual(snapshotTree(generated(c)), before);
@@ -1131,9 +1138,7 @@ void test(
 );
 
 // P4 — `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the ACCEPTING side of the hooks-root symlink
-// policy, covering both halves the retired shell driver held alone (items
-// 83-85 in tests/migration-inventory/prepare.md, whose entry for item 83 ends
-// "Slice 3.5, read this before deleting the shell file").
+// policy, covering both halves the retired shell driver held alone.
 //
 // Every other root-symlink case in the repository asserts rejection:
 // `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:772-840::the hook subtree rejects unsafe symlinks` is twelve cases of

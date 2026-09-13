@@ -12,8 +12,8 @@
 // computeEffectiveSelection runs.
 // Every `prepare` case that clears preflight therefore leaves an empty
 // `<PACKAGE_ROOT>/plugins/` behind -- three of the four. The exception is the
-// `SUPERPOWERS_VALIDATOR` case, which withholds `python3` so that preflight
-// rejects the command and gatherPrepare never runs; its exact-equality stderr
+// `SUPERPOWERS_VALIDATOR` case, which preflight rejects before command
+// requirements or gatherPrepare run; its exact-equality stderr
 // assertion admits only the preflight diagnostic, which is what pins that
 // ordering down. That residue is inert: nothing in this file or in
 // bin-dispatch.test.js reads the path, withWorkspace removes its own

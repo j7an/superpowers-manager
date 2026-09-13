@@ -6,8 +6,8 @@ Every behavior ID in
 committed shell `BASELINE CASE` marker. A supporting artifact is optional; it
 never substitutes for the named test.
 
-Later migration pull requests must cite the affected IDs and preserve their
-selectors or intentionally update the inventory, test, and this map together.
+Later pull requests must cite affected IDs and preserve their selectors or
+intentionally update the behavior, test, and this map together.
 
 | Behavior ID | Exact test case | Fixture / builder |
 |---|---|---|
@@ -18,12 +18,12 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CLI-USAGE-01` | `tests/baseline/cli-parity.test.ts::CLI-USAGE-01 invalid command and stray flag fail with exit 2` | — |
 | `CLI-PREFLIGHT-01` | `tests/baseline/cli-parity.test.ts::CLI-PREFLIGHT-01 missing tools fail before dispatch` | — |
 | `CLI-ENV-CODEX-PREFLIGHT-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight` | — |
-| `CLI-ENV-CODEX-LISTING-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-CODEX-LISTING-01 the fingerprint listing uses the SUPERPOWERS_CODEX override, and resolves codex from PATH when it is unset` | — |
+| `CLI-ENV-CODEX-LISTING-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CODEX override, and resolves codex from PATH when it is unset` | — |
 | `CLI-ENV-CODEX-MUTATION-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_CODEX override` | — |
 | `CLI-ENV-CACHE-DIR-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
 | `CLI-ENV-PLUGIN-ROOT-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
 | `CLI-ENV-MANIFEST-TEMPLATE-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rejection` | — |
-| `CLI-ENV-VALIDATOR-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-PREPARE-01 public prepare path defaults and overrides` | — |
+| `CLI-ENV-VALIDATOR-01` | `tests/baseline/validator-executable.test.ts::retired validator rejects both harness routes without external calls` | — |
 | `CLI-ENV-VALIDATOR-EXECUTABLE-01` | `tests/baseline/validator-executable.test.ts::prepare accepts a tree when the executable validator exits 0` | `tests/bin/lifecycle-fixture.ts` |
 | `CLI-ENV-INSTALLED-ROOT-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin cache path below SUPERPOWERS_INSTALLED_SEARCH_ROOT` | — |
 | `CLI-ENV-REFRESH-MODE-01` | `tests/baseline/cli-parity.test.ts::CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation` | — |
@@ -70,11 +70,9 @@ selectors or intentionally update the inventory, test, and this map together.
 | `CODEX-JSON-ARRAY-01` | `tests/unit/harnesses/codex/json.test.ts::CODEX-JSON-ARRAY-01 installed listing reader complete matrix` | — |
 | `CODEX-JSON-MARKETPLACE-01` | `tests/unit/harnesses/codex/json.test.ts::CODEX-JSON-MARKETPLACE-01 marketplace reader complete matrix` | — |
 | `CODEX-JSON-VERSION-01` | `tests/unit/harnesses/codex/json.test.ts::CODEX-JSON-VERSION-01 active version reader complete matrix` | — |
-| `ADAPTER-FINGERPRINT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-FINGERPRINT-01 fingerprint inspection reports 40-hex and 7-hex commits in its exact result shape` | — |
-| `ADAPTER-FINGERPRINT-REJECT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-FINGERPRINT-REJECT-01 a commit that is neither 7 nor 40 hex characters is never reported as a fingerprint` | — |
 | `ADAPTER-UPDATE-CONTROL-01` | `tests/unit/harnesses/codex/lifecycle.test.ts::ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value` | — |
-| `ADAPTER-OWNERSHIP-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-OWNERSHIP-01 identity_state is derived from all four manager and legacy resource booleans` | — |
-| `ADAPTER-INSTALL-RESULT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-INSTALL-RESULT-01 install reports the missing hint always and the mismatch hint only in add-only refresh mode` | — |
+| `ADAPTER-OWNERSHIP-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-OWNERSHIP-01 typed policy is derived from all four manager and legacy resource booleans` | — |
+| `ADAPTER-INSTALL-RESULT-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-INSTALL-RESULT-01 typed receipt reports the missing hint always and the mismatch hint only in add-only refresh mode` | — |
 | `ADAPTER-CONTROLLED-FAILURE-01` | `tests/unit/harnesses/codex/adapter.test.ts::ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error and its hints in order, yields no result, and returns status 1` | — |
 | `ADAPTER-TERMINAL-01` | `tests/unit/adapter-result.test.ts::ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing failure string is refused` | — |
 | `ADAPTER-SURROGATE-01` | `tests/unit/adapter-result.test.ts::ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback` | — |
@@ -104,7 +102,7 @@ selectors or intentionally update the inventory, test, and this map together.
 | `PROBE-FAIL-CLOSED-01` | `tests/baseline/probe.test.ts::PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail closed` | — |
 | `INSTALL-ORDER-01` | `tests/baseline/cli-parity.test.ts::INSTALL-ORDER-01 install prepares and validates before adapter mutation` | `tests/bin/lifecycle-fixture.ts` |
 | `INSTALL-LEGACY-01` | `tests/baseline/cli-parity.test.ts::LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed` | `tests/bin/lifecycle-fixture.ts` |
-| `INSTALL-VERIFY-01` | `tests/baseline/harnesses/codex/marketplace-reconcile.test.ts::INSTALL-VERIFY-01 installed fingerprint proof and hints` | — |
+| `INSTALL-VERIFY-01` | `tests/baseline/harnesses/codex/marketplace-reconcile.test.ts::INSTALL-VERIFY-01 typed installed state and hints` | — |
 | `UPDATE-CONTROL-01` | `tests/baseline/cli-parity.test.ts::UPDATE-CONTROL-01 update requires current managed control evidence` | — |
 | `UNINSTALL-OWNERSHIP-01` | `tests/baseline/cli-parity.test.ts::UNINSTALL-OWNERSHIP-01 uninstall removes only manager-owned resources` | — |
 | `UNINSTALL-TARGETS-01` | `tests/baseline/harnesses/codex/marketplace-reconcile.test.ts::UNINSTALL-TARGETS-01 adapter removes only manager resources` | — |
@@ -138,7 +136,7 @@ purpose: a line pointer into a file under edit goes stale silently, and nothing
 gates it. The claim is therefore co-owned by the two IDs, not orphaned:
 broadening the `GENERATED-HOOKS-FORBID-01` case would duplicate an assertion
 already made a few lines away in the same file, and would cost a case rename
-that both this table and `tests/migration-inventory/prepare.md` cite by name.
+that this table cites by name.
 
 Before PR 11.5 slice 3.5 the row anchored a single retired shell case that
 carried both halves; the split is a consequence of that case's deletion, not of

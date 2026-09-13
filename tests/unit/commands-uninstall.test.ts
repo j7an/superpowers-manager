@@ -14,10 +14,15 @@ import {
 import { runUninstall } from "../../src/commands/uninstall.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
+import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
 
-const CLEAN: Record<string, unknown> = {
-  resources: { plugin: false, marketplace: false },
-};
+function ownership(identityState: string, plugin = false, marketplace = false) {
+  return codexOwnershipInspection(
+    identityState,
+    { pluginPresent: plugin, marketplacePresent: marketplace },
+    [],
+  );
+}
 
 void test("a remaining legacy state is REPORTED on stdout, not stderr", async () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:75-77::remains` has no `>&2`, unlike :53. The retired
@@ -27,9 +32,9 @@ void test("a remaining legacy state is REPORTED on stdout, not stderr", async ()
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "both" }, []),
+    successResult("inspect", ownership("both"), []),
     successResult("uninstall", {}, []),
-    successResult("inspect", { ...CLEAN, identity_state: "both" }, []),
+    successResult("inspect", ownership("both"), []),
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
@@ -67,9 +72,9 @@ void test("the two closing lines port verbatim except for the prepare invocation
   const out = capture();
   const err = capture();
   const { adapter } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
     successResult("uninstall", {}, []),
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
@@ -95,16 +100,9 @@ void test("the adapter calls are issued in order with the FIRST inspection's rea
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult(
-      "inspect",
-      {
-        resources: { plugin: true, marketplace: false },
-        identity_state: "neither",
-      },
-      [],
-    ),
+    successResult("inspect", ownership("neither", true, false), []),
     successResult("uninstall", {}, []),
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
@@ -133,16 +131,9 @@ void test("a plugin resource still installed after removal is a distinct, named 
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
     successResult("uninstall", {}, []),
-    successResult(
-      "inspect",
-      {
-        resources: { plugin: true, marketplace: false },
-        identity_state: "neither",
-      },
-      [],
-    ),
+    successResult("inspect", ownership("neither", true, false), []),
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
@@ -166,9 +157,9 @@ void test("an unrecognised identity state after removal is a distinct, named fai
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
     successResult("uninstall", {}, []),
-    successResult("inspect", { ...CLEAN, identity_state: "wat" }, []),
+    successResult("inspect", ownership("wat"), []),
   ]);
   const status = await runUninstall([], {
     root: "/nowhere",
@@ -184,48 +175,6 @@ void test("an unrecognised identity state after removal is a distinct, named fai
   assert.equal(out.text(), "");
   assert.equal(calls.length, 5);
 });
-
-void test("a non-string identity_state after removal fails closed with its own diagnostic", async () => {
-  // src/commands/uninstall.ts's identity_state read distinguishes three
-  // inputs: null/undefined -> "" (parity with spw_json_get's null/missing
-  // coercion), a string -> used as-is, and any other present, non-null value
-  // -> a dedicated fail-closed message, never silently stringified and never
-  // collapsed into the "unknown adapter identity state: " (empty) text a
-  // stringify-then-compare reading would produce for this same input.
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
-    successResult("uninstall", {}, []),
-    successResult("inspect", { ...CLEAN, identity_state: 42 }, []),
-  ]);
-  const status = await runUninstall([], {
-    root: "/nowhere",
-    env: { HOME: "/nowhere" },
-    stdout: out.stream,
-    stderr: err.stream,
-    options: { harness: "codex", allowExperimental: false },
-    coordination: observingCoordinator(),
-    adapter,
-  });
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: adapter returned a non-string identity_state for inspect --view ownership\n",
-  );
-  assert.equal(out.text(), "");
-  assert.equal(calls.length, 5);
-});
-
-// Spec §4.2a's closing requirement: every lifecycle adapter stage gets a
-// deterministic failure case AND an ordering case, since a stage with
-// neither is a stage whose stop clause is unproven. `uninstall` has three
-// stages -- inspect, uninstall, inspect -- so six cases below, plus a
-// malformed case for the two stages that parse content (stages 1 and 3;
-// stage 2's result content is never read). The failure and malformed cases
-// for a given stage are the pair that must NOT be collapsed: if they ever
-// produce identical stderr text, the collapse spec §4.2a exists to forbid
-// has reappeared.
 
 void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diagnostic", async () => {
   const out = capture();
@@ -254,41 +203,6 @@ void test("stage 1 (inspect ownership) failure stops with ONLY the replayed diag
   assert.equal(
     err.text(),
     "error: cannot inspect ownership\nhint: check codex is installed\n",
-  );
-  assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), [
-    "preparation-location",
-    "mutation-roots",
-    "inspect-ownership",
-  ]);
-});
-
-void test("stage 1 malformed presence content is a DIFFERENT failure than stage 1's adapter failure", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult(
-      "inspect",
-      {
-        resources: { plugin: "yes", marketplace: false },
-        identity_state: "neither",
-      },
-      [],
-    ),
-  ]);
-  const status = await runUninstall([], {
-    root: "/nowhere",
-    env: { HOME: "/nowhere" },
-    stdout: out.stream,
-    stderr: err.stream,
-    options: { harness: "codex", allowExperimental: false },
-    coordination: observingCoordinator(),
-    adapter,
-  });
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: expected a Boolean adapter result at resources.plugin\n",
   );
   assert.equal(out.text(), "");
   assert.deepEqual(operationNames(calls), [
@@ -348,14 +262,7 @@ void test("stage 2 (uninstall) failure stops before the post-removal inspection"
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult(
-      "inspect",
-      {
-        resources: { plugin: true, marketplace: true },
-        identity_state: "neither",
-      },
-      [],
-    ),
+    successResult("inspect", ownership("neither", true, true), []),
     failureResult(
       "uninstall",
       "E_ADAPTER",
@@ -392,7 +299,7 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
     successResult("uninstall", {}, []),
     failureResult(
       "inspect",
@@ -423,52 +330,13 @@ void test("stage 3 (post-removal inspect ownership) failure stops with ONLY the 
   ]);
 });
 
-void test("stage 3 malformed presence content is a DIFFERENT failure than stage 3's adapter failure", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
-    successResult("uninstall", {}, []),
-    successResult(
-      "inspect",
-      {
-        resources: { plugin: "no", marketplace: false },
-        identity_state: "neither",
-      },
-      [],
-    ),
-  ]);
-  const status = await runUninstall([], {
-    root: "/nowhere",
-    env: { HOME: "/nowhere" },
-    stdout: out.stream,
-    stderr: err.stream,
-    options: { harness: "codex", allowExperimental: false },
-    coordination: observingCoordinator(),
-    adapter,
-  });
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: expected a Boolean adapter result at resources.plugin\n",
-  );
-  assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), [
-    "preparation-location",
-    "mutation-roots",
-    "inspect-ownership",
-    "remove",
-    "inspect-ownership",
-  ]);
-});
-
 void test("argv is ignored by src/commands/uninstall.ts", async () => {
   const out = capture();
   const err = capture();
   const { adapter } = scriptedAdapter([
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
     successResult("uninstall", {}, []),
-    successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+    successResult("inspect", ownership("neither"), []),
   ]);
   const status = await runUninstall(["--bogus", "extra"], {
     root: "/nowhere",
@@ -507,11 +375,11 @@ void test("a post-success withWorkspace cleanup failure keeps the computed outco
     const out = capture();
     const err = capture();
     const responses = [
-      successResult("inspect", { ...CLEAN, identity_state: "neither" }, [
+      successResult("inspect", ownership("neither"), [
         { channel: "stdout", text: "note: first inspection ran" },
       ]),
       successResult("uninstall", {}, []),
-      successResult("inspect", { ...CLEAN, identity_state: "neither" }, []),
+      successResult("inspect", ownership("neither"), []),
     ];
     const { adapter: scripted, calls } = scriptedAdapter(responses);
     // No test double for the filesystem: the THIRD (and final) call chmods

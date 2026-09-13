@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import * as bin from "../../src/cli.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 
 assert.strictEqual(typeof bin.main, "function");
 
@@ -65,8 +66,8 @@ for (const argv of [
   ["unpin", "x"],
   // PR 11.5 slice 2: probe's arity is CLI-owned, so a typo'd flag, a stray
   // positional, and a repeated flag are all usage errors here rather than
-  // reaching runProbe. `tests/bin/units.test.ts:92::const cmd of ["prepare", "probe"`'s loop below still asserts that bare `probe`
-  // parses as a run, and `tests/bin/units.test.ts:19::bin.parseArgs(["probe", "--porcelain"])` that `probe --porcelain` does.
+  // reaching runProbe. `tests/bin/units.test.ts:93::const cmd of ["prepare", "probe"`'s loop below still asserts that bare `probe`
+  // parses as a run, and `tests/bin/units.test.ts:20::bin.parseArgs(["probe", "--porcelain"])` that `probe --porcelain` does.
   ["probe", "--porcelaine"],
   ["probe", "extra"],
   ["probe", "--porcelain", "extra"],
@@ -103,19 +104,10 @@ const requirements = bin.commandRequirements({});
 assert.deepStrictEqual(requirements.pin, ["git"]);
 assert.deepStrictEqual(requirements["track-latest"], []);
 assert.deepStrictEqual(requirements.unpin, []);
-// `python3` left uninstall at slice 4b's flip: it was required only because
-// every adapter call ran validate-adapter-response.py (scripts/core/adapter.sh),
-// and the in-process path has no validator process. `codex` stays.
+// Uninstall requires Codex but not Python; it has no validator process.
 assert.deepStrictEqual(requirements.uninstall, ["codex"]);
-// Independent coverage of the conditional, which CLI-PREFLIGHT-01 cannot
-// provide: it derives from this same accessor, so it follows the conditional
-// automatically and can never detect a wrong one (slice 3, D5).
 assert.deepStrictEqual(requirements.prepare, ["git"]);
-assert.deepStrictEqual(
-  bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "/validator.py" }).prepare,
-  ["git", "python3"],
-);
-// An empty value is not a configured validator.
+// An empty legacy-validator value leaves tool requirements unchanged.
 assert.deepStrictEqual(
   bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
   ["git"],
@@ -126,7 +118,7 @@ assert.ok(
   !bin
     .commandRequirements({ SUPERPOWERS_VALIDATOR_EXECUTABLE: "/validator" })
     .prepare.includes("python3"),
-  "python3 must stay keyed to the legacy variable alone",
+  "executable validators must not require python3",
 );
 
 // --- vehicleCommand's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ------
@@ -205,20 +197,41 @@ assert.ok(installPf.errors.join("\n").includes("git"));
 // which keeps the clean-environment case from failing for an unrelated
 // tooling reason on a host without codex installed.
 const realPathEnv = { PATH: process.env.PATH || "" };
-const bothSetPreflightEnv = {
+const retiredPreflightEnv = {
   ...realPathEnv,
   SUPERPOWERS_VALIDATOR: "/a",
-  SUPERPOWERS_VALIDATOR_EXECUTABLE: "/b",
 };
-const bothSetPreflight = bin.preflight("prepare", bothSetPreflightEnv, "linux");
-assert.strictEqual(
-  bothSetPreflight.ok,
-  false,
-  "preflight must reject a both-set validator configuration",
+const savedRequirements = Object.getOwnPropertyDescriptor(
+  codexHarness,
+  "requirements",
 );
+let requirementCalls = 0;
+let retiredPreflight: ReturnType<typeof bin.preflight>;
+try {
+  codexHarness.requirements = () => {
+    requirementCalls += 1;
+    throw new Error("requirements must not be enumerated");
+  };
+  retiredPreflight = bin.preflight(
+    "prepare",
+    { ...retiredPreflightEnv, PATH: "" },
+    process.platform,
+  );
+} finally {
+  if (savedRequirements !== undefined)
+    Object.defineProperty(codexHarness, "requirements", savedRequirements);
+}
+assert.strictEqual(
+  retiredPreflight!.ok,
+  false,
+  "preflight must reject retired validator configuration",
+);
+assert.strictEqual(requirementCalls, 0);
 assert.ok(
-  bothSetPreflight.errors.join("\n").includes("both set"),
-  "preflight's errors must surface configurationErrors's conflict message",
+  retiredPreflight!.errors
+    .join("\n")
+    .includes("SUPERPOWERS_VALIDATOR has been removed"),
+  "preflight's errors must surface configurationErrors's retirement message",
 );
 // Positive control: the same command, real PATH, no validator variables set
 // at all -- must stay ok. Without this, a preflight that rejected EVERY

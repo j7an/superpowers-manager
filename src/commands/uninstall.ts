@@ -252,7 +252,7 @@ async function performUninstall<R>(
     // blindly.
     //
     // A cause outside ctx.adapter's AdapterFailure guard
-    // (`src/harnesses/codex/adapter.ts:992::async function runCodexOperation<T = JsonValue>(`) does NOT
+    // (`src/harnesses/codex/adapter.ts:829::async function runCodexOperation<T = JsonValue>(`) does NOT
     // reach here: invoke() catches it inside gatherUninstall and converts it
     // to a hand-written message carried as UninstallOutcome data, exactly as
     // src/commands/probe.ts's inspect() does for the same cause.

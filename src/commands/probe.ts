@@ -27,7 +27,7 @@ export const PROBE_USAGE =
 // response, so adapter messages reached the operator on their declared streams
 // in array order, and a controlled failure printed `error:` plus one `hint:`
 // per hint. DIAG-ADAPTER-01 retains that contract
-// (docs/baseline/protocol-disposition.md); dropping it here would be a
+// (docs/adapter-result-contract.md); dropping it here would be a
 // silent diagnostics regression, not a simplification.
 //
 // Interpolating error.message and each hint is the sanctioned form (AGENTS.md):
@@ -439,8 +439,7 @@ export async function runProbe<R>(
 ): Promise<number> {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/probe:42::porcelain` tested only `[ "${1:-}" = "--porcelain" ]`, so a typo'd
   // flag silently produced human output. Rejecting it is a deliberate
-  // narrowing, recorded as a port-only entry in
-  // tests/migration-inventory/probe.md.
+  // narrowing from the historical shell behavior.
   //
   // This guard is NOT the production path. src/cli.ts's parseArgs rejects the
   // same inputs first, before preflight, with the usage block the CLI's other

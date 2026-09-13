@@ -122,11 +122,9 @@ required agent harness.
   Node >=24.12.0, and Python-standard-library boundaries.
 - Ask before adding a runtime dependency.
 - Update documentation and contract tests when observable behavior changes.
-  Routine behavior changes do not rewrite the frozen migration inventories. A
-  historical correction or mapped-suite topology change updates the affected
-  inventory and digest entry in the same commit; its commit or PR names the
-  affected file, reason, and supporting evidence. Reviewers authorize a
-  re-freeze; a matching digest alone does not.
+  For test consolidation or removal, preserve each surviving behavioral
+  requirement at a named runnable test. Historical migration accounting is
+  retired; its records remain in Git history.
 
 ## Testing
 
@@ -230,26 +228,20 @@ required agent harness.
   position. This is enforced by `tests/assert-matcher-gate.ts`, which the
   suite runner loads into every suite, so a violation fails the test that
   contains it. A bare error class passes that runtime check because it constrains the error
-  type, but it does not constrain the message. Repository tests must also pin the
-  message with a RegExp, object matcher, or validation function, unless a
-  class-only contract is listed by stable path, test name, matcher, and rationale
-  in `CONSTRUCTOR_MATCHER_EXEMPTIONS`. This static rule is enforced by
-  `tests/bin/error-assertions.test.ts` through
-  `tests/lib/error-assertions.ts`; the registry is empty unless a reviewed
-  class-only contract requires otherwise. **Why:** `node:assert` reads a string
+  type, but it does not constrain the message. Repository rejection tests must
+  constrain the message with a RegExp, object matcher, or validation function.
+  The static constructor-only matcher audit and runtime matcher gate remain
+  required. There is no class-only exemption registry. This static rule is
+  enforced by `tests/bin/error-assertions.test.ts` through
+  `tests/lib/error-assertions.ts`. **Why:** `node:assert` reads a string
   second argument as the failure _label_ and an absent one as no constraint,
   so either form passes on any error. One such call left PR 10's entire
   rejection corpus asserting nothing through several reviews.
-- Each migration inventory under `tests/migration-inventory/` carries region
-  markers and a machine-readable `json inventory` declaration block, enforced
-  by `tests/bin/migration-inventory.test.ts`. **Why:** prose reconciliation let
-  a duplicate-looking item number and an undocumented numbering gap survive two
-  reviews.
-- `tests/bin/citations.test.ts` validates every anchored citation in `src/` and
-  `tests/` against its target's text, and holds the
-  not-yet-anchored population in `tests/citation-ledger.json`. The ledger only
-  shrinks: a citation absent from it must validate. Run
-  `node tests/tools/citations.ts --report` for the buckets without the suite.
+- `tests/bin/citations.test.ts` validates every citation in `src/` and `tests/`
+  against its target's text. Every citation recognized in source and test
+  comments must validate. Unanchored references are rejected directly; there
+  is no exception ledger. Use `node tests/tools/citations.ts --report` to
+  inspect validation results.
   **Why:** a stale citation is invisible to every other check here, and one
   reference moved three times inside a single fix wave before anything noticed.
 - Run `git diff --check` before completion.

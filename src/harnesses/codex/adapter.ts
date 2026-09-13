@@ -10,11 +10,11 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import {
   AdapterMessageLog,
   failureResult,
+  hasTerminalControl,
   successResult,
   type AdapterContext,
   type AdapterResult,
@@ -31,11 +31,7 @@ import {
   inspectCodexConflicts,
 } from "./conflicts.ts";
 import { oneLine } from "../../cli-arguments.ts";
-import {
-  installedCommitFromRoot,
-  installedRootForVersion,
-  pathsEqual,
-} from "./state.ts";
+import { installedRootForVersion, pathsEqual } from "./state.ts";
 import { codexHome } from "./paths.ts";
 import { readCodexStoredState, type CodexStoredState } from "./stored-state.ts";
 import { validateGeneratedPlugin } from "./generated-plugin.ts";
@@ -49,7 +45,16 @@ import { applyManifestOverlay } from "./manifest-overlay.ts";
 import { readCodexBuildSource } from "../../provenance.ts";
 import type { JsonValue } from "../../strict-json.ts";
 import { isAcceptedSplitValue } from "../../validate-generated-plugin-cli.ts";
-import { withWorkspace, workspaceRemovalFailure } from "../../workspace.ts";
+import type {
+  InstallReceipt,
+  OwnershipInspection,
+  UpdateControlInspection,
+} from "../../harness.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "./lifecycle.ts";
+import { codexInstallReceipt } from "./presentation.ts";
 
 const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
 const MARKETPLACE_NAME = "superpowers-manager";
@@ -241,43 +246,6 @@ async function runCodexCommand(
   }
 }
 
-function reportOrphanedWorkspace(
-  log: AdapterMessageLog,
-): (path: string) => void {
-  return (path) => {
-    log.appendText("stderr", workspaceRemovalFailure(path));
-  };
-}
-
-async function withCodexWorkspace(
-  label: "build" | "install" | "uninstall" | "fingerprint" | "inspect",
-  failureCode:
-    "build-failed" | "install-failed" | "uninstall-failed" | "inspect-failed",
-  log: AdapterMessageLog,
-  execute: () => Promise<JsonValue>,
-): Promise<JsonValue> {
-  let entered = false;
-  try {
-    return await withWorkspace(
-      tmpdir(),
-      "superpowers-manager.adapter-" + label + ".",
-      async () => {
-        entered = true;
-        return await execute();
-      },
-      { onCleanupFailure: reportOrphanedWorkspace(log) },
-    );
-  } catch (cause) {
-    if (!entered) {
-      fail(
-        failureCode,
-        "cannot create adapter " + label + " workspace under " + tmpdir(),
-      );
-    }
-    throw cause;
-  }
-}
-
 async function mutationCommand(
   log: AdapterMessageLog,
   codexBin: string,
@@ -374,207 +342,202 @@ async function runBuild(
     );
   }
 
-  return await withCodexWorkspace("build", "build-failed", log, async () => {
-    const candidateManifest = join(candidateRoot, ".codex-plugin/plugin.json");
-    const upstreamManifest = join(upstreamRoot, ".codex-plugin/plugin.json");
-    const manifestSource: ManifestSource = (await fileExists(upstreamManifest))
-      ? "upstream"
-      : "fallback";
-    try {
-      await mkdir(join(candidateRoot, ".codex-plugin"), {
-        recursive: true,
-      });
-      await copyFile(
-        manifestSource === "upstream" ? upstreamManifest : fallbackManifest,
-        candidateManifest,
-      );
-    } catch {
-      fail(
-        "build-failed",
-        manifestSource === "upstream"
-          ? "cannot copy upstream manifest into candidate"
-          : "cannot copy fallback manifest into candidate",
-      );
-    }
-
-    let plan;
-    let sourceRoot: string;
-    let realCandidateRoot: string;
-    try {
-      sourceRoot = await realpath(upstreamRoot);
-      realCandidateRoot = await realpath(candidateRoot);
-      const manifest = await readManifest(candidateManifest);
-      plan = await classifyHooks(manifest, manifestSource, sourceRoot);
-    } catch (cause) {
-      log.appendText("stderr", `hook classification failed: ${oneLine(cause)}`);
-      fail("build-failed", "failed to prepare upstream Codex hooks");
-    }
-    try {
-      await materializeHooks(plan, sourceRoot, realCandidateRoot);
-    } catch (cause) {
-      log.appendText(
-        "stderr",
-        `hook materialization failed: ${oneLine(cause)}`,
-      );
-      fail("build-failed", "failed to prepare upstream Codex hooks");
-    }
-
-    let source: string;
-    try {
-      // Decoded fatally, not leniently: the file can change between this read and `readManifest`'s read above.
-      const rawManifestBytes = await readFile(candidateManifest);
-      source = new TextDecoder("utf-8", {
-        fatal: true,
-        ignoreBOM: true,
-      }).decode(rawManifestBytes);
-    } catch {
-      // Deliberately drops the cause. The Python interpolated the raw OSError here:
-      // `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:scripts/adapters/codex/apply-manifest-overlay.py:42::read`,
-      // putting "[Errno 2] No such file or directory" on the operator's stream.
-      // The prefix is preserved; the errno leak is not.
-      log.appendText(
-        "stderr",
-        `cannot read manifest JSON in ${candidateManifest}`,
-      );
-      fail("build-failed", "failed to apply manager manifest overlay");
-    }
-
-    let overlaid: string;
-    try {
-      overlaid = applyManifestOverlay(
-        source,
-        input.managerVersion,
-        candidateManifest,
-      );
-    } catch (cause) {
-      // applyManifestOverlay's own messages already name the manifest
-      // path — three are the frozen CPython wording, and the fourth (the
-      // numeric-overflow diagnostic, which has no CPython oracle wording
-      // to match) now carries the path via its own rewrap in
-      // src/harnesses/codex/manifest-overlay.ts. Emit as-is, with no added prefix — a
-      // prefix here would double up the path these messages already
-      // name.
-      log.appendText("stderr", oneLine(cause));
-      fail("build-failed", "failed to apply manager manifest overlay");
-    }
-
-    try {
-      await writeFile(candidateManifest, overlaid, "utf8");
-    } catch {
-      log.appendText(
-        "stderr",
-        `cannot write manifest JSON in ${candidateManifest}`,
-      );
-      fail("build-failed", "failed to apply manager manifest overlay");
-    }
-    try {
-      await copyFile(
-        fallbackManifest,
-        join(candidateRoot, ".codex-plugin/plugin.template.json"),
-      );
-    } catch {
-      fail(
-        "build-failed",
-        "cannot copy fallback manifest template into candidate",
-      );
-    }
-
-    let upstreamSource: string;
-    try {
-      upstreamSource = await readCodexBuildSource(
-        join(candidateRoot, ".superpowers-upstream.json"),
-      );
-    } catch {
-      fail("invalid-provenance", "candidate provenance is missing or invalid");
-    }
-    // The seven values the validator CLI would receive in split form:
-    // --plugin-root, --requested-ref, --resolved-ref, --commit,
-    // --manifest-version, --manifest-source, --upstream-manifest-version.
-    // The eighth, --source, is passed attached, where argparse accepts any
-    // dash-leading value, so it is deliberately absent here. Each value is
-    // paired with the ADAPTER-facing flag name to report: --manager-version
-    // (the CLI calls it --manifest-version) and --plugin-root /
-    // --manifest-source (derived, not user-supplied) deliberately differ
-    // from the validator CLI's own names, since the operator can only act
-    // on the adapter's surface.
-    const splitValues: ReadonlyArray<{
-      readonly value: string;
-      readonly name: string;
-    }> = [
-      { value: candidateRoot, name: "--plugin-root" },
-      { value: input.requestedRef, name: "--requested-ref" },
-      { value: input.resolvedRef, name: "--resolved-ref" },
-      { value: input.commit, name: "--commit" },
-      { value: input.managerVersion, name: "--manager-version" },
-      { value: manifestSource, name: "--manifest-source" },
-      {
-        value: input.upstreamManifestVersion,
-        name: "--upstream-manifest-version",
-      },
-    ];
-    const firstRejected = splitValues.find(
-      ({ value }) => !isAcceptedSplitValue(value),
+  const candidateManifest = join(candidateRoot, ".codex-plugin/plugin.json");
+  const upstreamManifest = join(upstreamRoot, ".codex-plugin/plugin.json");
+  const manifestSource: ManifestSource = (await fileExists(upstreamManifest))
+    ? "upstream"
+    : "fallback";
+  try {
+    await mkdir(join(candidateRoot, ".codex-plugin"), {
+      recursive: true,
+    });
+    await copyFile(
+      manifestSource === "upstream" ? upstreamManifest : fallbackManifest,
+      candidateManifest,
     );
-    if (firstRejected !== undefined) {
-      // Declared exception to message-record parity: argparse wrote usage
-      // records here; this guard precedes the call and writes a
-      // differently-worded record naming the rejected flag instead. The
-      // failure code and message are unchanged.
-      const text =
-        "Generated plugin validation failed:\n" +
-        `- validator argument \`${firstRejected.name}\` has a dash-leading value the argument parser rejects\n`;
-      log.appendBytes("stderr", Buffer.from(text, "utf8"));
-      fail(
-        "generated-plugin-validation-failed",
-        "built-in generated plugin validation failed",
-      );
-    }
-    let errors: readonly string[];
-    try {
-      errors = await validateGeneratedPlugin({
-        pluginRoot: candidateRoot,
-        source: upstreamSource,
-        requestedRef: input.requestedRef,
-        resolvedRef: input.resolvedRef,
-        commit: input.commit,
-        manifestVersion: input.managerVersion,
-        manifestSource,
-        upstreamManifestVersion: input.upstreamManifestVersion,
-      });
-    } catch {
-      fail(
-        "generated-plugin-validation-failed",
-        "built-in generated plugin validation failed",
-      );
-    }
-    if (errors.length > 0) {
-      // appendBytes, not appendText: one record per line, matching what
-      // mutationCommand writes from the subprocess streams.
-      const text =
-        "Generated plugin validation failed:\n" +
-        errors.map((error) => `- ${error}\n`).join("");
-      log.appendBytes("stderr", Buffer.from(text, "utf8"));
-      fail(
-        "generated-plugin-validation-failed",
-        "built-in generated plugin validation failed",
-      );
-    }
-    log.appendBytes(
-      "stdout",
-      Buffer.from(
-        `generated plugin validation passed: ${candidateRoot}\n`,
-        "utf8",
-      ),
+  } catch {
+    fail(
+      "build-failed",
+      manifestSource === "upstream"
+        ? "cannot copy upstream manifest into candidate"
+        : "cannot copy fallback manifest into candidate",
     );
-    return {};
-  });
+  }
+
+  let plan;
+  let sourceRoot: string;
+  let realCandidateRoot: string;
+  try {
+    sourceRoot = await realpath(upstreamRoot);
+    realCandidateRoot = await realpath(candidateRoot);
+    const manifest = await readManifest(candidateManifest);
+    plan = await classifyHooks(manifest, manifestSource, sourceRoot);
+  } catch (cause) {
+    log.appendText("stderr", `hook classification failed: ${oneLine(cause)}`);
+    fail("build-failed", "failed to prepare upstream Codex hooks");
+  }
+  try {
+    await materializeHooks(plan, sourceRoot, realCandidateRoot);
+  } catch (cause) {
+    log.appendText("stderr", `hook materialization failed: ${oneLine(cause)}`);
+    fail("build-failed", "failed to prepare upstream Codex hooks");
+  }
+
+  let source: string;
+  try {
+    // Decoded fatally, not leniently: the file can change between this read and `readManifest`'s read above.
+    const rawManifestBytes = await readFile(candidateManifest);
+    source = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(rawManifestBytes);
+  } catch {
+    // Deliberately drops the cause. The Python interpolated the raw OSError here:
+    // `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:scripts/adapters/codex/apply-manifest-overlay.py:42::read`,
+    // putting "[Errno 2] No such file or directory" on the operator's stream.
+    // The prefix is preserved; the errno leak is not.
+    log.appendText(
+      "stderr",
+      `cannot read manifest JSON in ${candidateManifest}`,
+    );
+    fail("build-failed", "failed to apply manager manifest overlay");
+  }
+
+  let overlaid: string;
+  try {
+    overlaid = applyManifestOverlay(
+      source,
+      input.managerVersion,
+      candidateManifest,
+    );
+  } catch (cause) {
+    // applyManifestOverlay's own messages already name the manifest
+    // path — three are the frozen CPython wording, and the fourth (the
+    // numeric-overflow diagnostic, which has no CPython oracle wording
+    // to match) now carries the path via its own rewrap in
+    // src/harnesses/codex/manifest-overlay.ts. Emit as-is, with no added prefix — a
+    // prefix here would double up the path these messages already
+    // name.
+    log.appendText("stderr", oneLine(cause));
+    fail("build-failed", "failed to apply manager manifest overlay");
+  }
+
+  try {
+    await writeFile(candidateManifest, overlaid, "utf8");
+  } catch {
+    log.appendText(
+      "stderr",
+      `cannot write manifest JSON in ${candidateManifest}`,
+    );
+    fail("build-failed", "failed to apply manager manifest overlay");
+  }
+  try {
+    await copyFile(
+      fallbackManifest,
+      join(candidateRoot, ".codex-plugin/plugin.template.json"),
+    );
+  } catch {
+    fail(
+      "build-failed",
+      "cannot copy fallback manifest template into candidate",
+    );
+  }
+
+  let upstreamSource: string;
+  try {
+    upstreamSource = await readCodexBuildSource(
+      join(candidateRoot, ".superpowers-upstream.json"),
+    );
+  } catch {
+    fail("invalid-provenance", "candidate provenance is missing or invalid");
+  }
+  // The seven values the validator CLI would receive in split form:
+  // --plugin-root, --requested-ref, --resolved-ref, --commit,
+  // --manifest-version, --manifest-source, --upstream-manifest-version.
+  // The eighth, --source, is passed attached, where argparse accepts any
+  // dash-leading value, so it is deliberately absent here. Each value is
+  // paired with the ADAPTER-facing flag name to report: --manager-version
+  // (the CLI calls it --manifest-version) and --plugin-root /
+  // --manifest-source (derived, not user-supplied) deliberately differ
+  // from the validator CLI's own names, since the operator can only act
+  // on the adapter's surface.
+  const splitValues: ReadonlyArray<{
+    readonly value: string;
+    readonly name: string;
+  }> = [
+    { value: candidateRoot, name: "--plugin-root" },
+    { value: input.requestedRef, name: "--requested-ref" },
+    { value: input.resolvedRef, name: "--resolved-ref" },
+    { value: input.commit, name: "--commit" },
+    { value: input.managerVersion, name: "--manager-version" },
+    { value: manifestSource, name: "--manifest-source" },
+    {
+      value: input.upstreamManifestVersion,
+      name: "--upstream-manifest-version",
+    },
+  ];
+  const firstRejected = splitValues.find(
+    ({ value }) => !isAcceptedSplitValue(value),
+  );
+  if (firstRejected !== undefined) {
+    // Declared exception to message-record parity: argparse wrote usage
+    // records here; this guard precedes the call and writes a
+    // differently-worded record naming the rejected flag instead. The
+    // failure code and message are unchanged.
+    const text =
+      "Generated plugin validation failed:\n" +
+      `- validator argument \`${firstRejected.name}\` has a dash-leading value the argument parser rejects\n`;
+    log.appendBytes("stderr", Buffer.from(text, "utf8"));
+    fail(
+      "generated-plugin-validation-failed",
+      "built-in generated plugin validation failed",
+    );
+  }
+  let errors: readonly string[];
+  try {
+    errors = await validateGeneratedPlugin({
+      pluginRoot: candidateRoot,
+      source: upstreamSource,
+      requestedRef: input.requestedRef,
+      resolvedRef: input.resolvedRef,
+      commit: input.commit,
+      manifestVersion: input.managerVersion,
+      manifestSource,
+      upstreamManifestVersion: input.upstreamManifestVersion,
+    });
+  } catch {
+    fail(
+      "generated-plugin-validation-failed",
+      "built-in generated plugin validation failed",
+    );
+  }
+  if (errors.length > 0) {
+    // appendBytes, not appendText: one record per line, matching what
+    // mutationCommand writes from the subprocess streams.
+    const text =
+      "Generated plugin validation failed:\n" +
+      errors.map((error) => `- ${error}\n`).join("");
+    log.appendBytes("stderr", Buffer.from(text, "utf8"));
+    fail(
+      "generated-plugin-validation-failed",
+      "built-in generated plugin validation failed",
+    );
+  }
+  log.appendBytes(
+    "stdout",
+    Buffer.from(
+      `generated plugin validation passed: ${candidateRoot}\n`,
+      "utf8",
+    ),
+  );
+  return {};
 }
 
 async function runInstall(
   packageRoot: string,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
-): Promise<JsonValue> {
+): Promise<InstallReceipt> {
   if (!isAbsolute(packageRoot)) {
     fail("invalid-arguments", "--package-root must be an absolute path");
   }
@@ -591,115 +554,95 @@ async function runInstall(
     );
   }
 
-  return await withCodexWorkspace(
-    "install",
-    "install-failed",
+  const marketplaceList = await listingCommand(
     log,
-    async () => {
-      const marketplaceList = await listingCommand(
-        log,
-        codexBin,
-        ["plugin", "marketplace", "list", "--json"],
+    codexBin,
+    ["plugin", "marketplace", "list", "--json"],
+    env,
+  );
+  let registeredRoot: string;
+  if (commandFailed(marketplaceList)) {
+    registeredRoot = (
+      await storedStateAfterListingFailure(
         env,
+        "install-failed",
+        `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+      )
+    ).managerMarketplaceRoot;
+  } else {
+    try {
+      registeredRoot = marketplaceRootFromJson(
+        marketplaceList.stdout,
+        MARKETPLACE_NAME,
       );
-      let registeredRoot: string;
-      if (commandFailed(marketplaceList)) {
-        registeredRoot = (
-          await storedStateAfterListingFailure(
-            env,
-            "install-failed",
-            `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
-          )
-        ).managerMarketplaceRoot;
-      } else {
-        try {
-          registeredRoot = marketplaceRootFromJson(
-            marketplaceList.stdout,
-            MARKETPLACE_NAME,
-          );
-        } catch {
-          fail(
-            "install-failed",
-            `cannot parse output of '${codexBin} plugin marketplace list --json'`,
-          );
-        }
-      }
-      if (registeredRoot.length === 0) {
-        const added = await mutationCommand(
-          log,
-          codexBin,
-          ["plugin", "marketplace", "add", packageRoot],
-          env,
-        );
-        if (commandFailed(added)) {
-          fail(
-            "install-failed",
-            `codex marketplace add failed for ${packageRoot}`,
-          );
-        }
-      } else if (!(await pathsEqual(packageRoot, registeredRoot))) {
-        log.appendText(
-          "stdout",
-          `marketplace ${MARKETPLACE_NAME} registered at ${registeredRoot}; re-registering at ${packageRoot}`,
-        );
-        const removed = await mutationCommand(
-          log,
-          codexBin,
-          ["plugin", "marketplace", "remove", MARKETPLACE_NAME],
-          env,
-        );
-        if (commandFailed(removed)) {
-          fail(
-            "install-failed",
-            `codex marketplace remove failed for ${MARKETPLACE_NAME} (registered at ${registeredRoot})`,
-          );
-        }
-        const added = await mutationCommand(
-          log,
-          codexBin,
-          ["plugin", "marketplace", "add", packageRoot],
-          env,
-        );
-        if (commandFailed(added)) {
-          fail(
-            "install-failed",
-            `marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`,
-            [
-              `recover with: ${codexBin} plugin marketplace add ${packageRoot}`,
-              `previous root (last known good): ${registeredRoot}`,
-            ],
-          );
-        }
-      }
-      if (refreshMode === "remove-add") {
-        await mutationCommand(
-          log,
-          codexBin,
-          ["plugin", "remove", PLUGIN_ID],
-          env,
-        );
-      }
-      const pluginAdded = await mutationCommand(
-        log,
-        codexBin,
-        ["plugin", "add", PLUGIN_ID],
-        env,
+    } catch {
+      fail(
+        "install-failed",
+        `cannot parse output of '${codexBin} plugin marketplace list --json'`,
       );
-      if (commandFailed(pluginAdded)) {
-        fail("install-failed", `codex plugin add failed for ${PLUGIN_ID}`);
-      }
-      return {
-        verification_hints: {
-          ...(refreshMode === "add-only"
-            ? {
-                mismatch:
-                  "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add",
-              }
-            : {}),
-          missing: "verify with 'codex plugin list --json'.",
-        },
-      };
-    },
+    }
+  }
+  if (registeredRoot.length === 0) {
+    const added = await mutationCommand(
+      log,
+      codexBin,
+      ["plugin", "marketplace", "add", packageRoot],
+      env,
+    );
+    if (commandFailed(added)) {
+      fail("install-failed", `codex marketplace add failed for ${packageRoot}`);
+    }
+  } else if (!(await pathsEqual(packageRoot, registeredRoot))) {
+    log.appendText(
+      "stdout",
+      `marketplace ${MARKETPLACE_NAME} registered at ${registeredRoot}; re-registering at ${packageRoot}`,
+    );
+    const removed = await mutationCommand(
+      log,
+      codexBin,
+      ["plugin", "marketplace", "remove", MARKETPLACE_NAME],
+      env,
+    );
+    if (commandFailed(removed)) {
+      fail(
+        "install-failed",
+        `codex marketplace remove failed for ${MARKETPLACE_NAME} (registered at ${registeredRoot})`,
+      );
+    }
+    const added = await mutationCommand(
+      log,
+      codexBin,
+      ["plugin", "marketplace", "add", packageRoot],
+      env,
+    );
+    if (commandFailed(added)) {
+      fail(
+        "install-failed",
+        `marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`,
+        [
+          `recover with: ${codexBin} plugin marketplace add ${packageRoot}`,
+          `previous root (last known good): ${registeredRoot}`,
+        ],
+      );
+    }
+  }
+  if (refreshMode === "remove-add") {
+    await mutationCommand(log, codexBin, ["plugin", "remove", PLUGIN_ID], env);
+  }
+  const pluginAdded = await mutationCommand(
+    log,
+    codexBin,
+    ["plugin", "add", PLUGIN_ID],
+    env,
+  );
+  if (commandFailed(pluginAdded)) {
+    fail("install-failed", `codex plugin add failed for ${PLUGIN_ID}`);
+  }
+  return codexInstallReceipt(
+    "verify with 'codex plugin list --json'.",
+    refreshMode === "add-only"
+      ? "retry with SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add"
+      : "",
   );
 }
 
@@ -711,284 +654,178 @@ async function runUninstall(
   const { pluginPresent, marketplacePresent } = input;
   const codexBin = env.SUPERPOWERS_CODEX || "codex";
   await requireCodex(codexBin, env);
-  return await withCodexWorkspace(
-    "uninstall",
-    "uninstall-failed",
-    log,
-    async () => {
-      if (pluginPresent) {
-        const result = await mutationCommand(
-          log,
-          codexBin,
-          ["plugin", "remove", PLUGIN_ID],
-          env,
-        );
-        if (commandFailed(result)) {
-          fail(
-            "uninstall-failed",
-            `codex plugin remove failed for ${PLUGIN_ID}`,
-          );
-        }
-        log.appendText("stdout", `removed plugin ${PLUGIN_ID}`);
-      } else {
-        log.appendText("stdout", "plugin not installed; skipping");
-      }
-      if (marketplacePresent) {
-        const result = await mutationCommand(
-          log,
-          codexBin,
-          ["plugin", "marketplace", "remove", MARKETPLACE_NAME],
-          env,
-        );
-        if (commandFailed(result)) {
-          fail(
-            "uninstall-failed",
-            `codex plugin marketplace remove failed for ${MARKETPLACE_NAME}`,
-          );
-        }
-        log.appendText("stdout", `removed marketplace ${MARKETPLACE_NAME}`);
-      } else {
-        log.appendText("stdout", "marketplace not registered; skipping");
-      }
-      return {};
-    },
+  if (pluginPresent) {
+    const result = await mutationCommand(
+      log,
+      codexBin,
+      ["plugin", "remove", PLUGIN_ID],
+      env,
+    );
+    if (commandFailed(result)) {
+      fail("uninstall-failed", `codex plugin remove failed for ${PLUGIN_ID}`);
+    }
+    log.appendText("stdout", `removed plugin ${PLUGIN_ID}`);
+  } else {
+    log.appendText("stdout", "plugin not installed; skipping");
+  }
+  if (marketplacePresent) {
+    const result = await mutationCommand(
+      log,
+      codexBin,
+      ["plugin", "marketplace", "remove", MARKETPLACE_NAME],
+      env,
+    );
+    if (commandFailed(result)) {
+      fail(
+        "uninstall-failed",
+        `codex plugin marketplace remove failed for ${MARKETPLACE_NAME}`,
+      );
+    }
+    log.appendText("stdout", `removed marketplace ${MARKETPLACE_NAME}`);
+  } else {
+    log.appendText("stdout", "marketplace not registered; skipping");
+  }
+  return {};
+}
+
+function ownershipFromResources(
+  pluginPresent: boolean,
+  marketplacePresent: boolean,
+  legacyPresent: boolean,
+  conflicts: readonly string[],
+): OwnershipInspection<CodexRemovalInput> {
+  if (
+    conflicts.some(
+      (item) =>
+        typeof item !== "string" ||
+        item.length === 0 ||
+        hasTerminalControl(item),
+    )
+  ) {
+    fail("malformed-result", "expected an array of strings at conflicts");
+  }
+  const managerPresent = pluginPresent || marketplacePresent;
+  const identityState = managerPresent
+    ? legacyPresent
+      ? "both"
+      : "manager"
+    : legacyPresent
+      ? "legacy"
+      : "neither";
+  return codexOwnershipInspection(
+    identityState,
+    { pluginPresent, marketplacePresent },
+    conflicts,
   );
 }
 
-async function runInspect(
-  view: "ownership" | "update-control" | "fingerprint",
+async function runOwnership(
   context: AdapterContext,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
-): Promise<JsonValue> {
-  if (view === "update-control") {
-    return { view: "update-control", update_control: "managed" };
-  }
-  if (view === "fingerprint") {
-    const codexBin = env.SUPERPOWERS_CODEX || "codex";
-    await requireCodex(codexBin, env);
-    return await withCodexWorkspace(
-      "fingerprint",
+): Promise<OwnershipInspection<CodexRemovalInput>> {
+  const codexBin = env.SUPERPOWERS_CODEX || "codex";
+  await requireCodex(codexBin, env);
+  const plugins = await listingCommand(
+    log,
+    codexBin,
+    ["plugin", "list", "--json"],
+    env,
+  );
+  if (commandFailed(plugins)) {
+    const stored = await storedStateAfterListingFailure(
+      env,
       "inspect-failed",
-      log,
-      async () => {
-        const listing = await listingCommand(
-          log,
-          codexBin,
-          ["plugin", "list", "--json"],
-          env,
-        );
-        if (commandFailed(listing)) {
-          fail(
-            "inspect-failed",
-            `cannot list Codex plugins via '${codexBin} plugin list --json'`,
-          );
-        }
-        let activeVersion: string;
-        try {
-          activeVersion = activePluginVersionFromJson(
-            listing.stdout,
-            PLUGIN_ID,
-          );
-        } catch {
-          fail(
-            "inspect-failed",
-            `cannot parse output of '${codexBin} plugin list --json'`,
-          );
-        }
-        if (activeVersion.length === 0) {
-          return { view: "fingerprint", fingerprint: null };
-        }
-        let searchRoot = env.SUPERPOWERS_INSTALLED_SEARCH_ROOT;
-        if (!searchRoot) {
-          if (env.HOME === undefined) {
-            fail(
-              "inspect-failed",
-              "cannot inspect active Codex plugin fingerprint without HOME",
-            );
-          }
-          searchRoot = join(env.HOME || "/", ".codex");
-        }
-        const activeRoot = installedRootForVersion(
-          searchRoot,
-          MARKETPLACE_NAME,
-          "superpowers",
-          activeVersion,
-        );
-        const fingerprint = await installedCommitFromRoot(activeRoot);
-        if (fingerprint.length === 0) {
-          fail(
-            "inspect-failed",
-            `cannot inspect active Codex plugin fingerprint under ${activeRoot}`,
-          );
-        }
-        return { view: "fingerprint", fingerprint };
-      },
+      `cannot list Codex plugins via '${codexBin} plugin list --json'`,
+    );
+    const conflicts = await inspectCodexConflicts(
+      { root: context.root, env },
+      stored.installedListingJson,
+    );
+    return ownershipFromResources(
+      stored.managerPluginPresent,
+      true,
+      stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
+      conflicts,
     );
   }
-  if (view === "ownership") {
-    const codexBin = env.SUPERPOWERS_CODEX || "codex";
-    await requireCodex(codexBin, env);
-    return await withCodexWorkspace(
-      "inspect",
+  let managerPlugin: boolean;
+  let legacyPlugin: boolean;
+  let conflicts: readonly string[];
+  try {
+    managerPlugin = installedListingHas(
+      plugins.stdout,
+      "installed",
+      "pluginId",
+      PLUGIN_ID,
+    );
+    legacyPlugin = installedListingHas(
+      plugins.stdout,
+      "installed",
+      "pluginId",
+      LEGACY_PLUGIN_ID,
+    );
+    conflicts = await inspectCodexConflicts(
+      { root: context.root, env },
+      plugins.stdout.toString("utf8"),
+    );
+  } catch {
+    fail(
       "inspect-failed",
-      log,
-      async () => {
-        const plugins = await listingCommand(
-          log,
-          codexBin,
-          ["plugin", "list", "--json"],
-          env,
-        );
-        if (commandFailed(plugins)) {
-          const stored = await storedStateAfterListingFailure(
-            env,
-            "inspect-failed",
-            `cannot list Codex plugins via '${codexBin} plugin list --json'`,
-          );
-          const conflicts = await inspectCodexConflicts(
-            { root: context.root, env },
-            stored.installedListingJson,
-          );
-          const managerPresent =
-            stored.managerPluginPresent ||
-            stored.managerMarketplaceRoot.length > 0;
-          const legacyPresent =
-            stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null;
-          return {
-            view: "ownership",
-            resources: {
-              plugin: stored.managerPluginPresent,
-              marketplace: true,
-            },
-            legacy_resources: {
-              plugin: stored.legacyPluginPresent,
-              marketplace: stored.legacyMarketplaceRoot !== null,
-            },
-            identity_state: managerPresent
-              ? legacyPresent
-                ? "both"
-                : "manager"
-              : legacyPresent
-                ? "legacy"
-                : "neither",
-            conflicts: [...conflicts],
-          };
-        }
-        let managerPlugin: boolean;
-        let legacyPlugin: boolean;
-        let conflicts: readonly string[];
-        try {
-          managerPlugin = installedListingHas(
-            plugins.stdout,
-            "installed",
-            "pluginId",
-            PLUGIN_ID,
-          );
-          legacyPlugin = installedListingHas(
-            plugins.stdout,
-            "installed",
-            "pluginId",
-            LEGACY_PLUGIN_ID,
-          );
-          conflicts = await inspectCodexConflicts(
-            { root: context.root, env },
-            plugins.stdout.toString("utf8"),
-          );
-        } catch {
-          fail(
-            "inspect-failed",
-            `cannot parse output of '${codexBin} plugin list --json'`,
-          );
-        }
-        const marketplaces = await listingCommand(
-          log,
-          codexBin,
-          ["plugin", "marketplace", "list", "--json"],
-          env,
-        );
-        if (commandFailed(marketplaces)) {
-          const stored = await storedStateAfterListingFailure(
-            env,
-            "inspect-failed",
-            `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
-          );
-          const conflicts = await inspectCodexConflicts(
-            { root: context.root, env },
-            stored.installedListingJson,
-          );
-          const managerPresent = true;
-          const legacyPresent =
-            stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null;
-          return {
-            view: "ownership",
-            resources: {
-              plugin: stored.managerPluginPresent,
-              marketplace: true,
-            },
-            legacy_resources: {
-              plugin: stored.legacyPluginPresent,
-              marketplace: stored.legacyMarketplaceRoot !== null,
-            },
-            identity_state: managerPresent
-              ? legacyPresent
-                ? "both"
-                : "manager"
-              : legacyPresent
-                ? "legacy"
-                : "neither",
-            conflicts: [...conflicts],
-          };
-        }
-        let managerMarketplace: boolean;
-        let legacyMarketplace: boolean;
-        try {
-          managerMarketplace = installedListingHas(
-            marketplaces.stdout,
-            "marketplaces",
-            "name",
-            MARKETPLACE_NAME,
-          );
-          legacyMarketplace = installedListingHas(
-            marketplaces.stdout,
-            "marketplaces",
-            "name",
-            LEGACY_MARKETPLACE_NAME,
-          );
-        } catch {
-          fail(
-            "inspect-failed",
-            `cannot parse output of '${codexBin} plugin marketplace list --json'`,
-          );
-        }
-        const managerPresent = managerPlugin || managerMarketplace;
-        const legacyPresent = legacyPlugin || legacyMarketplace;
-        return {
-          view: "ownership",
-          resources: {
-            plugin: managerPlugin,
-            marketplace: managerMarketplace,
-          },
-          legacy_resources: {
-            plugin: legacyPlugin,
-            marketplace: legacyMarketplace,
-          },
-          identity_state: managerPresent
-            ? legacyPresent
-              ? "both"
-              : "manager"
-            : legacyPresent
-              ? "legacy"
-              : "neither",
-          conflicts: [...conflicts],
-        };
-      },
+      `cannot parse output of '${codexBin} plugin list --json'`,
     );
   }
-  const unsupportedView: string = view;
-  fail("invalid-arguments", `unsupported inspect view: ${unsupportedView}`);
+  const marketplaces = await listingCommand(
+    log,
+    codexBin,
+    ["plugin", "marketplace", "list", "--json"],
+    env,
+  );
+  if (commandFailed(marketplaces)) {
+    const stored = await storedStateAfterListingFailure(
+      env,
+      "inspect-failed",
+      `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
+    );
+    const conflicts = await inspectCodexConflicts(
+      { root: context.root, env },
+      stored.installedListingJson,
+    );
+    return ownershipFromResources(
+      stored.managerPluginPresent,
+      true,
+      stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
+      conflicts,
+    );
+  }
+  let managerMarketplace: boolean;
+  let legacyMarketplace: boolean;
+  try {
+    managerMarketplace = installedListingHas(
+      marketplaces.stdout,
+      "marketplaces",
+      "name",
+      MARKETPLACE_NAME,
+    );
+    legacyMarketplace = installedListingHas(
+      marketplaces.stdout,
+      "marketplaces",
+      "name",
+      LEGACY_MARKETPLACE_NAME,
+    );
+  } catch {
+    fail(
+      "inspect-failed",
+      `cannot parse output of '${codexBin} plugin marketplace list --json'`,
+    );
+  }
+  return ownershipFromResources(
+    managerPlugin,
+    managerMarketplace,
+    legacyPlugin || legacyMarketplace,
+    conflicts,
+  );
 }
-
 async function runCodexOperation<T = JsonValue>(
   operation: string,
   context: AdapterContext,
@@ -1026,7 +863,7 @@ export function codexBuild(
 export function codexInstall(
   packageRoot: string,
   context: AdapterContext,
-): Promise<AdapterResult> {
+): Promise<AdapterResult<InstallReceipt>> {
   return runCodexOperation("install", context, (env, log) =>
     runInstall(packageRoot, env, log),
   );
@@ -1041,12 +878,19 @@ export function codexRemove(
   );
 }
 
-export function codexInspect(
-  view: "ownership" | "update-control" | "fingerprint",
+export function codexInspectOwnership(
   context: AdapterContext,
-): Promise<AdapterResult> {
+): Promise<AdapterResult<OwnershipInspection<CodexRemovalInput>>> {
   return runCodexOperation("inspect", context, (env, log) =>
-    runInspect(view, context, env, log),
+    runOwnership(context, env, log),
+  );
+}
+
+export function codexInspectControl(
+  context: AdapterContext,
+): Promise<AdapterResult<UpdateControlInspection>> {
+  return runCodexOperation("inspect", context, async () =>
+    codexControlInspection("managed"),
   );
 }
 

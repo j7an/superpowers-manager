@@ -57,22 +57,12 @@ function requirements(
 
 function derive(): Record<string, string>[] {
   const unset = requirements({});
-  const withValidator = requirements({
-    SUPERPOWERS_VALIDATOR: "/validator.py",
-  });
   return Object.keys(unset.codex).map((command) => {
     const key = command as Subcommand;
 
     const row: Record<string, string> = { Command: command };
     for (const [column, harness, tool] of TOOL_COLUMNS) {
-      // Required with no validator configured -> plainly required. Required
-      // only once one is -> conditional. The README must say which; a boolean
-      // cell would be a lie in one direction or the other.
-      row[column] = unset[harness][key].includes(tool)
-        ? "yes"
-        : withValidator[harness][key].includes(tool)
-          ? "only with SUPERPOWERS_VALIDATOR"
-          : "no";
+      row[column] = unset[harness][key].includes(tool) ? "yes" : "no";
     }
     return row;
   });

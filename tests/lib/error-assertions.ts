@@ -16,10 +16,6 @@ import {
   isStringLiteral,
 } from "typescript/unstable/ast/is";
 
-export const CONSTRUCTOR_MATCHER_EXEMPTIONS: readonly never[] = Object.freeze(
-  [],
-);
-
 export function exactError(
   ErrorType: { new (...args: any[]): Error; name: string },
   expectedMessage: string,
@@ -48,13 +44,6 @@ export type ConstructorMatcherFinding = {
   test: string;
   matcher: string;
 };
-export type ConstructorMatcherExemption = {
-  path: string;
-  test: string;
-  matcher: string;
-  rationale: string;
-};
-
 function relativePath(root: string, path: string): string {
   return relative(root, path).split(sep).join("/");
 }
@@ -218,11 +207,9 @@ function enclosingTestName(
 export function auditConstructorMatchers({
   root,
   tsconfigPath,
-  exemptions,
 }: {
   root: string;
   tsconfigPath: string;
-  exemptions: readonly ConstructorMatcherExemption[];
 }): ConstructorMatcherFinding[] {
   const api = new API({ cwd: root });
 
@@ -318,29 +305,7 @@ export function auditConstructorMatchers({
         left.line - right.line ||
         left.matcher.localeCompare(right.matcher),
     );
-    const keys = new Set<string>();
-    for (const exemption of exemptions) {
-      if (!exemption.rationale.trim()) {
-        throw new Error("constructor matcher exemption requires a rationale");
-      }
-      const key = `${exemption.path}\u0000${exemption.test}\u0000${exemption.matcher}`;
-      if (keys.has(key))
-        throw new Error(`duplicate constructor matcher exemption: ${key}`);
-      keys.add(key);
-    }
-    const exempted = new Set<string>();
-    const retained = findings.filter((finding) => {
-      const key = `${finding.path}\u0000${finding.test}\u0000${finding.matcher}`;
-      if (!keys.has(key)) return true;
-      exempted.add(key);
-      return false;
-    });
-    for (const key of keys) {
-      if (!exempted.has(key)) {
-        throw new Error(`unused constructor matcher exemption: ${key}`);
-      }
-    }
-    return retained;
+    return findings;
   } finally {
     try {
       snapshot?.dispose();

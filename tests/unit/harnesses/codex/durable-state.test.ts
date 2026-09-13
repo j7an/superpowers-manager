@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { successResult } from "../../../../src/adapter-result.ts";
 import {
-  codexInspect,
+  codexInspectOwnership,
   codexInstall,
   codexReadNativeState,
   type CodexNativeState,
@@ -384,7 +384,7 @@ void test("ownership inspection falls back after native failure and preserves st
     ),
     { recursive: true },
   );
-  const result = await codexInspect("ownership", {
+  const result = await codexInspectOwnership({
     root: PACKAGE_ROOT,
     env: fixture.env({
       CODEX_HOME: fixture.codexHome,
@@ -395,22 +395,23 @@ void test("ownership inspection falls back after native failure and preserves st
     }),
   });
   assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
-  assert.deepEqual(result.outcome.result, {
-    view: "ownership",
-    resources: { plugin: true, marketplace: true },
-    legacy_resources: { plugin: false, marketplace: true },
-    identity_state: "both",
-    conflicts: [
-      "Codex plugin superpowers@another-provider has indeterminate activity",
-    ],
+  if (!result.outcome.ok) assert.fail("expected ownership inspection");
+  assert.deepEqual(result.outcome.result.removalInput, {
+    pluginPresent: true,
+    marketplacePresent: true,
   });
+  assert.equal(result.outcome.result.presentationValue, "both");
+  assert.deepEqual(result.outcome.result.presentationConflicts, [
+    "Codex plugin superpowers@another-provider has indeterminate activity",
+  ]);
+  assert.equal(result.outcome.result.installEligibility.kind, "blocked");
   assert.deepEqual(await fixture.commands(), ["plugin list --json"]);
 });
 
 void test("ownership validates successful malformed plugin output before a later marketplace failure can fall back", async (t) => {
   const fixture = await adapterSandbox(t);
   await seedMissingStoredState(fixture);
-  const result = await codexInspect("ownership", {
+  const result = await codexInspectOwnership({
     root: PACKAGE_ROOT,
     env: fixture.env({
       CODEX_HOME: fixture.codexHome,

@@ -1,29 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync } from "node:fs";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { withWorkspace, workspaceRemovalFailure } from "../../src/workspace.ts";
-
-import { codexRemove } from "../../src/harnesses/codex/adapter.ts";
-
-const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-const FAKE_CODEX = fileURLToPath(
-  new URL("helpers/harnesses/codex/fake.sh", import.meta.url),
-);
 
 async function sandbox(t: import("node:test").TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "spw-workspace-"));
@@ -253,56 +236,4 @@ void test("withWorkspace preserves the callback error when a reported cleanup al
     ),
     (error) => error === callbackFailure,
   );
-});
-
-// The shared Codex workspace policy supplies the cleanup reporter for each
-// operation. This test exercises real cleanup failure through a typed operation,
-// preserving its successful result and the exact orphan warning.
-void test("an adapter operation keeps its result when workspace cleanup fails", async (t) => {
-  const base = await mkdtemp(join(tmpdir(), "spw-adapter-cleanup-"));
-  const temporary = join(base, "tmp");
-  await mkdir(temporary);
-  const log = join(base, "commands.log");
-  await writeFile(log, "");
-  const originalTmpdir = process.env.TMPDIR;
-  process.env.TMPDIR = temporary;
-  t.after(async () => {
-    if (originalTmpdir === undefined) delete process.env.TMPDIR;
-    else process.env.TMPDIR = originalTmpdir;
-    await chmod(temporary, 0o700);
-    await rm(base, { recursive: true, force: true });
-  });
-
-  const result = await codexRemove(
-    { pluginPresent: true, marketplacePresent: false },
-    {
-      root: PACKAGE_ROOT,
-      env: {
-        SUPERPOWERS_CODEX: FAKE_CODEX,
-        FAKE_CODEX_LOG: log,
-        FAKE_CODEX_LOCK_DIR: temporary,
-      },
-    },
-  );
-
-  // Read the orphan first: its path is what the report must name, so knowing it
-  // here makes the message an exact equality rather than a pattern. This also
-  // remains the guard against a vacuous pass — if the read-only parent had not
-  // actually blocked removal there would be nothing left to find.
-  const leftover = await readdir(temporary);
-  assert.deepStrictEqual(leftover.length, 1, leftover.join(", "));
-  assert.match(leftover[0] ?? "", /^superpowers-manager\.adapter-uninstall\./);
-
-  assert.equal(result.outcome.ok, true, JSON.stringify(result.outcome));
-  assert.deepStrictEqual(result.outcome.messages, [
-    {
-      channel: "stdout",
-      text: "removed plugin superpowers@superpowers-manager",
-    },
-    { channel: "stdout", text: "marketplace not registered; skipping" },
-    {
-      channel: "stderr",
-      text: `cannot remove workspace ${join(temporary, leftover[0] ?? "")}`,
-    },
-  ]);
 });

@@ -11,11 +11,53 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { capture, observingCoordinator } from "./helpers/command-harness.ts";
+import {
+  capture,
+  notCalledAdapter,
+  observingCoordinator,
+} from "./helpers/command-harness.ts";
 
+import type { CommandContext } from "../../src/commands/context.ts";
+import { runInstall } from "../../src/commands/install.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
+import { runUpdate } from "../../src/commands/update.ts";
+import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
 import { readUpstreamManifestVersion } from "../../src/harnesses/codex/prepare.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+
+void test("retired validator rejects direct handlers before selection or adapter access", async () => {
+  for (const run of [runPrepare, runInstall, runUpdate]) {
+    const stdout = capture();
+    const stderr = capture();
+    const locks: string[][] = [];
+    let selectionReads = 0;
+    const ctx: CommandContext<CodexRemovalInput> = {
+      root: "/retired-validator-must-not-read",
+      env: { SUPERPOWERS_VALIDATOR: "/retired" },
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      options: { harness: "codex", allowExperimental: false },
+      adapter: notCalledAdapter,
+      coordination: observingCoordinator(locks),
+      get selection(): never {
+        selectionReads += 1;
+        throw new Error("selection must not be read");
+      },
+    };
+    assert.equal(await run([], ctx), 1);
+    assert.equal(selectionReads, 0);
+    assert.deepEqual(locks, []);
+    assert.equal(
+      stdout.text(),
+      run === runInstall ? `${codexHarness.presentation.installNotice}\n` : "",
+    );
+    assert.equal(
+      stderr.text(),
+      "error: SUPERPOWERS_VALIDATOR has been removed; unset it and configure " +
+        "SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.\n",
+    );
+  }
+});
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-prepare-"));
 process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
@@ -91,13 +133,7 @@ void test("readUpstreamManifestVersion delegates every read and parse failure to
   await assert.rejects(readUpstreamManifestVersion(unreadable), (error) => {
     assert.ok(error instanceof Error);
     assert.equal(error.message, `cannot read manifest JSON in ${unreadable}`);
-    // No errno vocabulary reaches the message. The apostrophe in Node's
-    // `open '<path>'` prose is written as \x27, not literally: this file is an
-    // inventoried port file, and tests/bin/migration-inventory.test.js's
-    // stripInert does not track regex-literal context, so an unpaired quote
-    // here starts a phantom string that swallows the next two `void test(`
-    // call sites and silently undercounts the suite (measured: 4 instead of
-    // 6). Identical pattern, no unpaired quote.
+    // No errno vocabulary reaches the message.
     assert.doesNotMatch(error.message, /EACCES|EPERM|errno|open \x27/);
     return true;
   });
@@ -162,22 +198,15 @@ void test("runPrepare rejects a directory as the fallback manifest template", as
   );
 });
 
-void test("runPrepare emits no errno or multi-line git text when the clone fails before reaching the additional validator", async () => {
+void test("runPrepare emits no errno or multi-line git text when the clone fails", async () => {
   const dir = mkdtempSync(join(SCRATCH, "case-"));
   const template = join(dir, "template.json");
   writeFileSync(template, '{"name":"superpowers"}\n');
-  const validator = join(dir, "validator-directory");
-  mkdirSync(validator, { recursive: true });
   const { err, ctx } = unitContext(dir, {
     SUPERPOWERS_MANIFEST_TEMPLATE: template,
-    SUPERPOWERS_VALIDATOR: validator,
   });
   const status = await runPrepare([], ctx);
   assert.equal(status, 1);
-  // The clone of a nonexistent upstream fails first, so the validator's own
-  // -f branch (a directory at SUPERPOWERS_VALIDATOR) is never reached here --
-  // that predicate is exercised end-to-end in tests/baseline/prepare.test.js.
-  //
   // Exact equality, not just doesNotMatch(/ENOENT|errno|Error:|\n.*\n.*\n/):
   // notCalledAdapter's throw is caught by gatherPrepare's own `catch`
   // following the adapter build argv construction and turned into a

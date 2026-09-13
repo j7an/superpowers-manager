@@ -12,7 +12,6 @@ import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
 import { upstreamCacheRoot } from "../upstream-workspace.ts";
 import {
   BOUNDED_EXECUTABLE,
-  UNBOUNDED_LEGACY,
   launchFailureMessage,
   resolveValidator,
   runValidator,
@@ -31,18 +30,6 @@ import { runWithMutation } from "./mutation.ts";
 // (`src/harnesses/codex/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
-}
-
-// `[ -f ]` — regular file. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` uses -f, and
-// tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
-// template bytes and non-file rejection" also covers the separately extracted
-// fallback check.
-async function regularFileExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
 }
 
 // `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
@@ -128,17 +115,9 @@ type PrepareOutcome =
 // Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
 // StageRun documents a precondition that its callback never throws, so it has
 // no "callback also failed" case to lose the cleanup message to. That
-// precondition does NOT hold here: the additional-validator branch below
-// itself throws prepareError when the shared runner (src/validator.ts)
-// settles a launchFailed result from a legacy-validator spawn failure, and
-// withWorkspace THROWS the callback error on that path
-// (`src/workspace.ts:136-137::} catch (cleanupError`, :141) without ever
-// consulting the reporter below.
-// The outcomes the callback below collected into its `outcomes` array are
-// lost there. That is a separate, unassigned defect -- the callback-throw
-// path discards them -- and it is out of scope here: this type fixes only
-// the post-success cleanup case, and its existence should not be read as
-// covering the other.
+// precondition does not hold here: a callback throw makes withWorkspace throw
+// without consulting the reporter below. This type covers only the
+// post-success cleanup case.
 interface PrepareRun {
   readonly outcome: PrepareOutcome;
   readonly cleanupWarning: string | null;
@@ -178,7 +157,6 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
     throw prepareError("adapter returned an invalid preparation staging leaf");
   }
   const pluginRoot = location.destinationRoot;
-  const additionalValidator = env.SUPERPOWERS_VALIDATOR || "";
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const tmpParent = dirname(pluginRoot);
   await owned(`cannot create directory: ${tmpParent}`, () =>
@@ -309,44 +287,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         return failed(prepared.outcome.result.compatibility.reason);
       }
       let validator = NO_VALIDATOR_OUTPUT;
-      if (additionalValidator.length > 0) {
-        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:108::[ -f "$additional_validator` — `[ -f ]`.
-        if (!(await regularFileExists(additionalValidator))) {
-          return {
-            kind: "failed",
-            outcomes,
-            validator,
-            message: `additional plugin validator not found: ${additionalValidator}`,
-          };
-        }
-        const ran = await runValidator(
-          ["python3", additionalValidator, candidate],
-          UNBOUNDED_LEGACY,
-          env,
-          workspace,
-        );
-        if (ran.kind === "launchFailed") {
-          // PARITY, and it must stay a THROW. The legacy path rejects the workspace
-          // callback on a spawn failure; withWorkspace returns the callback error
-          // and the `outcomes` collected above are LOST. That loss is a recorded,
-          // deliberately unassigned defect. Returning a failed outcome here would
-          // replay those outcomes instead -- observably different control flow for
-          // CLI-ENV-VALIDATOR-01, which this PR is not authorized to change.
-          throw prepareError(
-            `cannot execute additional plugin validator: ${additionalValidator}`,
-            ran.cause,
-          );
-        }
-        validator = { stdout: ran.stdout.text, stderr: ran.stderr.text };
-        if (ran.kind !== "exited" || ran.code !== 0) {
-          return {
-            kind: "failed",
-            outcomes,
-            validator,
-            message: "additional plugin validation failed",
-          };
-        }
-      } else if (executableValidator.length > 0) {
+      if (executableValidator.length > 0) {
         const resolution = await resolveValidator(executableValidator);
         const ran = await runValidator(
           [executableValidator, candidate],
@@ -456,10 +397,7 @@ async function performPrepare<R>(
   } catch (cause) {
     // Hand-written messages, per AGENTS.md's reader-diagnostics rule.
     // Reachable here: prepareError(), from this module's owned() wrappers,
-    // its two manifest-version checks, asResolutionKind, and the
-    // additional-validator branch's own throw on a legacy-validator launch
-    // failure (its cause is the shared runner's (src/validator.ts) captured
-    // spawn error, which oneLine never reads -- it takes .message only);
+    // its two manifest-version checks, and asResolutionKind;
     // readManifest's three hookError messages
     // (`src/harnesses/codex/hooks.ts:113-138::readManifest`), pinned by
     // `tests/unit/harnesses/codex/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or

@@ -5,7 +5,7 @@
 //
 // PR 11.5 slice 2 extracted only the read side (config load + the two
 // listings) into lifecycle-fakes.js. Slice 4 converted the mutation branches
-// below to process.exitCode too; see tests/migration-inventory/probe.md.
+// below to process.exitCode too.
 //
 // Slice 4a also moved the outer shell — state guard, config load, role
 // dispatch and tripwire — into runFake. What stays here is exactly

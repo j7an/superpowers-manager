@@ -1,17 +1,13 @@
 // Port of tests/test_install_commands.sh (782 lines, deleted in this commit).
-// Reconciliation: tests/migration-inventory/install-commands.md
+// The retained install-command contract follows.
 //
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup — which is
 // why the driver's corrupt-and-restore dance (:418-423, :458-467, :475-476)
 // has no counterpart here, and why each case must state the preconditions the
-// shell inherited from the scenario above it. See the inventory for those.
+// shell inherited from the scenario above it.
 
-// Two statements, not one. `tests/bin/migration-inventory.test.ts:66::const TEST_IMPORT` matches
-// /^import test from "node:test";$/m and asserts it at `tests/bin/migration-inventory.test.ts:692-695::TEST_IMPORT.test(portSource)`, because the
-// static call-site counter recognises exactly one binding form and fails closed
-// rather than miscount. Both `import { describe, test } from "node:test";` and
-// `import test, { describe } from "node:test";` FAIL that regex.
+// Two statements, not one: the explicit imports keep the test binding clear.
 import test from "node:test";
 import { describe } from "node:test";
 import assert from "node:assert/strict";
@@ -77,6 +73,11 @@ import { runInstall } from "../../src/commands/install.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
+import {
+  codexControlInspection,
+  codexOwnershipInspection,
+} from "../../src/harnesses/codex/lifecycle.ts";
+import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 // Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:16-21::forbidden_literals =`.
 const FORBIDDEN_LITERALS = [
@@ -214,7 +215,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:473::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:437::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -457,17 +458,17 @@ function readGeneratedCommit(
  */
 function scenarioAdapter(
   scenario: {
-    fingerprint?: (string | null) | ((call: number) => string | null);
+    installedIdentity?: (string | null) | ((call: number) => string | null);
     identityState?: string | ((call: number) => string);
     updateControl?: string | ((call: number) => string);
     install?: (argv: readonly string[]) => unknown;
     build?: (argv: readonly string[]) => unknown;
   } = {},
 ) {
-  const counters = { fingerprint: 0, identityState: 0, updateControl: 0 };
+  const counters = { installedIdentity: 0, identityState: 0, updateControl: 0 };
 
   const resolve = (
-    field: "fingerprint" | "identityState" | "updateControl",
+    field: "installedIdentity" | "identityState" | "updateControl",
     fallback: string | null,
   ): string | null => {
     counters[field] += 1;
@@ -479,19 +480,27 @@ function scenarioAdapter(
   };
   return recordingAdapter((argv) => {
     const joined = argv.join(" ");
-    if (joined === "inspect --view fingerprint") {
-      const fingerprint = resolve("fingerprint", null);
-      return successResult("inspect", { view: "fingerprint", fingerprint }, []);
-    }
-    if (joined === "inspect --view ownership") {
-      const identity_state = resolve("identityState", "neither");
+    if (joined === "inspect-installed") {
+      const observedIdentity = resolve("installedIdentity", null);
       return successResult(
         "inspect",
-        {
-          view: "ownership",
-          resources: { plugin: false, marketplace: false },
-          identity_state,
-        },
+        observedIdentity === null
+          ? { kind: "absent", observedIdentity: "" }
+          : { kind: "current", observedIdentity },
+        [],
+      );
+    }
+    if (joined === "inspect --view ownership") {
+      const identityState = resolve("identityState", "neither");
+      if (identityState === null)
+        assert.fail("identity state must be a string");
+      return successResult(
+        "inspect",
+        codexOwnershipInspection(
+          identityState,
+          { pluginPresent: false, marketplacePresent: false },
+          [],
+        ),
         [],
       );
     }
@@ -506,16 +515,13 @@ function scenarioAdapter(
           [],
         );
       }
-      return successResult(
-        "inspect",
-        { view: "update-control", update_control: value },
-        [],
-      );
+      if (value === null) assert.fail("update control must be a string");
+      return successResult("inspect", codexControlInspection(value), []);
     }
     if (argv[0] === "install") {
       return scenario.install
         ? scenario.install(argv)
-        : successResult("install", {}, []);
+        : successResult("install", codexInstallReceipt("", ""), []);
     }
     if (argv[0] === "build") {
       if (!scenario.build) copyFallbackManifestIntoCandidate(argv);
@@ -714,7 +720,7 @@ void describe("install commands", { concurrency: true }, () => {
       // "current": the installed fingerprint matches the generated commit.
       // Replaces `seedInstalledCurrent(c)`, which drove the same precondition
       // through a real fake Codex cache this case no longer spawns.
-      fingerprint: commit,
+      installedIdentity: commit,
       updateControl: "unsupported",
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
@@ -782,11 +788,11 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   // "malformed update-control output exits exactly 1" (:354-364) is RETIRED
-  // at the gap: tests/migration-inventory/install-commands.md items 22-24.
+  // at the historical migration boundary.
   // Its subject -- an adapter transport emitting non-JSON bytes across a
   // process boundary -- cannot occur through `ctx.adapter`, an in-process
   // function call that returns an already-typed AdapterResult with no
-  // serialization step to corrupt. See the inventory for the full reasoning.
+  // serialization step to corrupt.
 
   void test("failed update-control inspection exits exactly 1 (:366-375)", async () => {
     // Converted (Task 6, D4): calls `runUpdate` in-process. `updateControl:
@@ -876,7 +882,7 @@ void describe("install commands", { concurrency: true }, () => {
     const commit = readGeneratedCommit(c);
     let fingerprintCalls = 0;
     const adapter = scenarioAdapter({
-      fingerprint: () => {
+      installedIdentity: () => {
         fingerprintCalls += 1;
         // First call is probe's own, before any mutation: null (nothing
         // installed yet, the needs-install precondition). Second is
@@ -990,24 +996,28 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoCodexMutation(readLog(c.codexLog));
   });
 
-  void test("additional-validator failure leaves Codex untouched (:478-487)", async () => {
+  void test("executable-validator failure leaves Codex untouched (:478-487)", async () => {
     const c = installCase();
     // :84-89 — the failing additional-validator fixture.
     const validator = join(c.dir, "failing_validator.py");
-    writeFileSync(validator, "import sys\nsys.exit(1)\n");
+    writeFileSync(
+      validator,
+      "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
+      { mode: 0o755 },
+    );
 
     const result = await runScript(c, "install", {
-      env: { SUPERPOWERS_VALIDATOR: validator },
+      env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
     });
     const out = result.stdout + result.stderr;
     // :481-485
     assert.notEqual(
       result.status,
       0,
-      `expected install to fail on additional validation:\n${out}`,
+      `expected install to fail on external validation:\n${out}`,
     );
     // :486
-    assert.ok(out.includes("additional plugin validation failed"), out);
+    assert.ok(out.includes("external plugin validation failed"), out);
     // :487
     assertNoCodexMutation(readLog(c.codexLog));
   });
@@ -1091,7 +1101,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (`src/harnesses/codex/adapter.ts:590-672::const marketplaceList`), and the second of them
+    // the three commands below (`src/harnesses/codex/adapter.ts:557-562::const marketplaceList`), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     // :524-532
@@ -1140,7 +1150,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/harnesses/codex/adapter.ts:640::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:595::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1238,7 +1248,7 @@ void describe("install commands", { concurrency: true }, () => {
       // "current", even though this case never reaches the branch that would
       // report it as such -- the legacy check runs first, which is the
       // property "even when the fingerprint is current" names.
-      fingerprint: commit,
+      installedIdentity: commit,
       identityState: "both",
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
@@ -1289,7 +1299,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/harnesses/codex/adapter.ts:666::adding`).
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:621::adding`).
     assert.ok(
       out.includes(`plugin marketplace add ${durableMarketplace(c)}`) ||
         out.includes("Codex activation may have changed native state"),
@@ -1418,9 +1428,7 @@ void describe("install commands", { concurrency: true }, () => {
     // its claim. The shell fixture made the FAKE adapter print
     // "fingerprint inspection failed in adapter fixture" and exit 99, so :695's
     // `out.includes("fingerprint inspection")` matched the fixture's own stderr
-    // line — `tests/migration-inventory/install-commands.md:598::104. Output` records this
-    // as item 104: it proves the string appears, not that the subject produced
-    // it.
+    // line: it proves the string appears, not that the subject produced it.
     //
     // The lower lever is the fake CODEX plus a real unsafe active-cache shape.
     // `pluginAdd: "orphan"` reports an enabled plugin at 1.0.0 without
@@ -1472,8 +1480,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   // "malformed fingerprint output is rejected by response validation"
-  // (:702-716) is RETIRED at the gap: tests/migration-inventory/
-  // install-commands.md items 107-111. Same as items 22-24 above: a bare `{`
+  // (:702-716) is RETIRED at the historical migration boundary. Same as above: a bare `{`
   // on stdout is a transport-level fault with no analogue through
   // `ctx.adapter`, which returns an already-typed AdapterResult with nothing
   // to garble in between.
@@ -1551,7 +1558,7 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
-    // (`src/harnesses/codex/adapter.ts:590-672::const marketplaceList`): the marketplace add carries the same package
+    // (`src/harnesses/codex/adapter.ts:557-562::const marketplaceList`): the marketplace add carries the same package
     // root the original needle pinned, and the plugin add is unconditional.
     // clearLogs above means both lines can only have come from this run.
     assertOrder(

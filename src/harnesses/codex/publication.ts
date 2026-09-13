@@ -12,10 +12,16 @@ import {
   type DirectoryPublication,
 } from "../../atomic.ts";
 import { digestArtifactTree } from "../../artifact-tree.ts";
-import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
+import type {
+  InstallReceipt,
+  OwnershipInspection,
+  PreparedArtifact,
+  UpdateControlInspection,
+} from "../../harness.ts";
 import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
 import {
-  codexInspect,
+  codexInspectControl,
+  codexInspectOwnership,
   codexInstallRefreshMode,
   codexRemove,
   codexReadNativeState,
@@ -23,10 +29,6 @@ import {
   type CodexRemovalInput,
 } from "./adapter.ts";
 import { readCodexAssessment } from "./compatibility.ts";
-import {
-  requireManagedUpdateControl,
-  requireNoLegacyState,
-} from "./lifecycle.ts";
 import {
   readCodexMarketplace,
   stageCodexMarketplace,
@@ -50,7 +52,8 @@ import { hasFilesystemAccessFailure, pathsEqual } from "./state.ts";
 
 export interface CodexPublicationDependencies {
   readonly readNative: typeof codexReadNativeState;
-  readonly inspectNative: typeof codexInspect;
+  readonly inspectOwnership: typeof codexInspectOwnership;
+  readonly inspectControl: typeof codexInspectControl;
   readonly beginPublication: typeof beginDirectoryPublication;
 }
 
@@ -66,7 +69,8 @@ export type ActivateCodex = (
 
 const DEFAULTS: CodexPublicationDependencies = {
   readNative: codexReadNativeState,
-  inspectNative: codexInspect,
+  inspectOwnership: codexInspectOwnership,
+  inspectControl: codexInspectControl,
   beginPublication: beginDirectoryPublication,
 };
 
@@ -89,19 +93,6 @@ function removalFailure(
   messages: readonly AdapterMessage[],
 ): AdapterResult<null> {
   return failureResult("uninstall-codex", code, message, [], messages);
-}
-
-function objectResult(result: AdapterResult): Record<string, unknown> {
-  if (
-    result.status !== 0 ||
-    !result.outcome.ok ||
-    result.outcome.result === null ||
-    typeof result.outcome.result !== "object" ||
-    Array.isArray(result.outcome.result)
-  ) {
-    throw new Error("Codex inspection failed");
-  }
-  return result.outcome.result as Record<string, unknown>;
 }
 
 function acceptedNative(
@@ -128,34 +119,22 @@ function acceptedNative(
   return value;
 }
 
-function requireOwnership(result: AdapterResult): void {
-  const value = objectResult(result);
-  if (
-    typeof value.identity_state !== "string" ||
-    requireNoLegacyState(value.identity_state).kind !== "ok" ||
-    !Array.isArray(value.conflicts) ||
-    value.conflicts.length !== 0
-  ) {
-    throw new Error("Codex ownership blocks publication");
+function requireOwnership(
+  result: AdapterResult<OwnershipInspection<CodexRemovalInput>>,
+): void {
+  if (result.status !== 0 || !result.outcome.ok) {
+    throw new Error("Codex inspection failed");
   }
-  const resources = value.resources;
-  if (
-    typeof resources !== "object" ||
-    resources === null ||
-    Array.isArray(resources) ||
-    typeof (resources as Record<string, unknown>).plugin !== "boolean" ||
-    typeof (resources as Record<string, unknown>).marketplace !== "boolean"
-  ) {
-    throw new Error("Codex ownership inspection is malformed");
+  if (result.outcome.result?.installEligibility?.kind !== "allowed") {
+    throw new Error("Codex ownership blocks publication");
   }
 }
 
-function requireControl(result: AdapterResult): void {
-  const value = objectResult(result);
-  if (
-    typeof value.update_control !== "string" ||
-    !requireManagedUpdateControl(value.update_control).ok
-  ) {
+function requireControl(result: AdapterResult<UpdateControlInspection>): void {
+  if (result.status !== 0 || !result.outcome.ok) {
+    throw new Error("Codex inspection failed");
+  }
+  if (result.outcome.result?.mutationEligibility?.kind !== "allowed") {
     throw new Error("Codex update control blocks publication");
   }
 }
@@ -429,10 +408,10 @@ async function requireEligibility(
   dependencies: CodexPublicationDependencies,
   messages: AdapterMessage[],
 ): Promise<void> {
-  const ownership = await dependencies.inspectNative("ownership", ctx);
+  const ownership = await dependencies.inspectOwnership(ctx);
   messages.push(...ownership.outcome.messages);
   requireOwnership(ownership);
-  const control = await dependencies.inspectNative("update-control", ctx);
+  const control = await dependencies.inspectControl(ctx);
   messages.push(...control.outcome.messages);
   requireControl(control);
 }
