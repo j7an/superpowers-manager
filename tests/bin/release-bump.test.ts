@@ -149,6 +149,34 @@ function classify(t: test.TestContext, options?: FixtureOptions) {
   return { current, result: classifyReleaseBump(current.input) };
 }
 
+function runCli(
+  cwd: string,
+  event: unknown,
+  options: Partial<
+    Pick<ClassificationInput, "eventName" | "actor" | "actorId">
+  > = {},
+) {
+  const scratch = mkdtempSync(join(cwd, ".release-bump-cli-"));
+  const eventPath = join(scratch, "event.json");
+  const outputPath = join(scratch, "output.txt");
+  const summaryPath = join(scratch, "summary.txt");
+  writeFileSync(eventPath, JSON.stringify(event));
+  const child = spawnSync(process.execPath, [TOOL], {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_EVENT_NAME: options.eventName ?? "push",
+      GITHUB_ACTOR: options.actor ?? BOT_LOGIN,
+      GITHUB_ACTOR_ID: options.actorId ?? BOT_ID,
+      GITHUB_OUTPUT: outputPath,
+      GITHUB_STEP_SUMMARY: summaryPath,
+    },
+  });
+  return { child, outputPath, summaryPath };
+}
+
 void test("verified bot release bump skips tests", (t) => {
   const { result } = classify(t);
   assert.deepEqual(result, {
@@ -164,62 +192,48 @@ void test("formatting-only package changes and multi-digit increases skip tests"
     afterPackage:
       '{\n  "name": "release-fixture",\n  "private": true,\n  "version": "12.34.57"\n}\n',
   });
-  assert.equal(result.skipTests, true);
+  assert.deepEqual(result, {
+    skipTests: true,
+    reason: "verified-release-bump",
+  });
 });
 
-void test("event and identity mismatches do not skip tests", (t) => {
+void test("ordinary events keep ordinary CI", (t) => {
   const { current } = classify(t);
-  const invalid: Array<Partial<ClassificationInput>> = [
-    { eventName: "pull_request" },
-    { eventName: "workflow_dispatch" },
-    { actor: "human" },
-    { actorId: "0" },
-    { actorId: "" },
-    { event: null },
-    {
-      event: { ...(current.input.event as object), ref: "refs/heads/feature" },
-    },
-    {
-      event: {
-        ...(current.input.event as object),
-        sender: { login: "human", id: Number(BOT_ID), type: "Bot" },
-      },
-    },
-    {
-      event: {
-        ...(current.input.event as object),
-        sender: { id: Number(BOT_ID), type: "Bot" },
-      },
-    },
-    {
-      event: {
-        ...(current.input.event as object),
-        sender: { login: BOT_LOGIN, id: 0, type: "Bot" },
-      },
-    },
-    {
-      event: {
-        ...(current.input.event as object),
-        sender: { login: BOT_LOGIN, type: "Bot" },
-      },
-    },
-    {
-      event: {
-        ...(current.input.event as object),
-        sender: { login: BOT_LOGIN, id: Number(BOT_ID), type: "User" },
-      },
-    },
-    {
-      event: {
-        ...(current.input.event as object),
-        sender: { login: BOT_LOGIN, id: Number(BOT_ID) },
-      },
-    },
-  ];
-  for (const change of invalid) {
-    assert.equal(
-      classifyReleaseBump({ ...current.input, ...change }).skipTests,
-      false,
+  for (const eventName of ["pull_request", "workflow_dispatch"]) {
+    assert.deepEqual(classifyReleaseBump({ ...current.input, eventName }), {
+      skipTests: false,
+      reason: "ordinary-event",
+    });
+  }
+});
+
+void test("actor identity mismatches keep ordinary CI", (t) => {
+  const { current } = classify(t);
+  for (const patch of [{ actor: "human" }, { actorId: "0" }, { actorId: "" }]) {
+    assert.deepEqual(classifyReleaseBump({ ...current.input, ...patch }), {
+      skipTests: false,
+      reason: "identity-mismatch",
+    });
+  }
+});
+
+void test("sender identity mismatches keep ordinary CI", (t) => {
+  const { current } = classify(t);
+  for (const sender of [
+    { login: "human", id: Number(BOT_ID), type: "Bot" },
+    { id: Number(BOT_ID), type: "Bot" },
+    { login: BOT_LOGIN, id: 0, type: "Bot" },
+    { login: BOT_LOGIN, type: "Bot" },
+    { login: BOT_LOGIN, id: Number(BOT_ID), type: "User" },
+    { login: BOT_LOGIN, id: Number(BOT_ID) },
+  ]) {
+    assert.deepEqual(
+      classifyReleaseBump({
+        ...current.input,
+        event: { ...(current.input.event as object), sender },
+      }),
+      { skipTests: false, reason: "identity-mismatch" },
     );
   }
 });
@@ -231,15 +245,15 @@ void test("push flags must all be explicitly false", (t) => {
       ...(current.input.event as Record<string, unknown>),
       [flag]: true,
     };
-    assert.equal(
-      classifyReleaseBump({ ...current.input, event }).skipTests,
-      false,
-    );
+    assert.deepEqual(classifyReleaseBump({ ...current.input, event }), {
+      skipTests: false,
+      reason: "unverified-change",
+    });
     delete event[flag];
-    assert.equal(
-      classifyReleaseBump({ ...current.input, event }).skipTests,
-      false,
-    );
+    assert.deepEqual(classifyReleaseBump({ ...current.input, event }), {
+      skipTests: false,
+      reason: "unverified-change",
+    });
   }
 });
 
@@ -256,32 +270,38 @@ void test("invalid push revisions do not skip tests", (t) => {
       ...(current.input.event as Record<string, unknown>),
       [field]: value,
     };
-    assert.equal(
-      classifyReleaseBump({ ...current.input, event }).skipTests,
-      false,
-    );
+    assert.deepEqual(classifyReleaseBump({ ...current.input, event }), {
+      skipTests: false,
+      reason: "unverified-change",
+    });
   }
 });
 
-for (const [name, options] of [
-  ["a two-commit push", { topology: "two-commit" }],
-  ["an additional changed file", { extraAfter: { "README.md": "changed\n" } }],
-  ["a deleted package", { afterPackage: null }],
+for (const [name, options, reason] of [
+  ["a two-commit push", { topology: "two-commit" }, "unverified-change"],
+  [
+    "an additional changed file",
+    { extraAfter: { "README.md": "changed\n" } },
+    "unverified-change",
+  ],
+  ["a deleted package", { afterPackage: null }, "unverified-change"],
   [
     "a renamed package",
     {
       afterPackage: null,
       extraAfter: { "renamed-package.json": packageText("1.2.4") },
     },
+    "unverified-change",
   ],
-  ["an executable package", { packageMode: 0o755 }],
-  ["a symlink package", { packageSymlink: true }],
+  ["an executable package", { packageMode: 0o755 }, "unverified-change"],
+  ["a symlink package", { packageSymlink: true }, "unverified-change"],
   [
     "an additional package field",
     { afterPackage: packageText("1.2.4", { description: "changed" }) },
+    "unverified-change",
   ],
-  ["a missing bump config", { afterConfig: null }],
-  ["an invalid base bump config", { beforeConfig: "{}" }],
+  ["a missing bump config", { afterConfig: null }, "unverified-change"],
+  ["an invalid base bump config", { beforeConfig: "{}" }, "unverified-change"],
   [
     "an expanded bump config",
     {
@@ -292,6 +312,7 @@ for (const [name, options] of [
         ],
       }),
     },
+    "unverified-change",
   ],
   [
     "a changed bump config",
@@ -300,25 +321,43 @@ for (const [name, options] of [
         files: [{ path: "package.json", field: "name" }],
       }),
     },
+    "unverified-change",
   ],
-  ["a malformed bump config", { afterConfig: "{" }],
-  ["malformed package json", { afterPackage: "{" }],
-  ["non-object package json", { afterPackage: "[]" }],
+  ["a malformed bump config", { afterConfig: "{" }, "unverified-change"],
+  ["malformed package json", { afterPackage: "{" }, "unverified-change"],
+  ["non-object package json", { afterPackage: "[]" }, "unverified-change"],
   [
     "an equal version",
     {
       afterPackage:
         '{\n  "name": "release-fixture",\n  "private": true,\n  "version": "1.2.3"\n}\n',
     },
+    "unverified-change",
   ],
-  ["a decreasing version", { afterPackage: packageText("1.2.2") }],
-  ["a prerelease version", { afterPackage: packageText("1.2.4-beta.1") }],
-  ["a leading-zero version", { afterPackage: packageText("01.2.4") }],
-  ["an invalid version", { afterPackage: packageText("nope") }],
+  [
+    "a decreasing version",
+    { afterPackage: packageText("1.2.2") },
+    "unverified-change",
+  ],
+  [
+    "a prerelease version",
+    { afterPackage: packageText("1.2.4-beta.1") },
+    "unverified-change",
+  ],
+  [
+    "a leading-zero version",
+    { afterPackage: packageText("01.2.4") },
+    "unverified-change",
+  ],
+  [
+    "an invalid version",
+    { afterPackage: packageText("nope") },
+    "unverified-change",
+  ],
 ] as const) {
   void test(`unverified change: ${name} does not skip tests`, (t) => {
     const { result } = classify(t, options);
-    assert.equal(result.skipTests, false);
+    assert.deepEqual(result, { skipTests: false, reason });
   });
 }
 
@@ -395,7 +434,10 @@ void test("a checkout mismatch does not skip tests", (t) => {
     "-m",
     "advance checkout",
   );
-  assert.equal(classifyReleaseBump(current.input).skipTests, false);
+  assert.deepEqual(classifyReleaseBump(current.input), {
+    skipTests: false,
+    reason: "unverified-change",
+  });
 });
 
 void test("the classifier reports an inspection failure for a missing commit", (t) => {
@@ -412,25 +454,13 @@ void test("the classifier reports an inspection failure for a missing commit", (
 
 void test("the cli writes a verified true output and summary", (t) => {
   const current = fixture(t);
-  const eventPath = join(current.cwd, "event.json");
-  const outputPath = join(current.cwd, "output.txt");
-  const summaryPath = join(current.cwd, "summary.txt");
-  writeFileSync(eventPath, JSON.stringify(current.input.event));
-  const invocation = execFileSync(process.execPath, [TOOL], {
-    cwd: current.cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GITHUB_EVENT_PATH: eventPath,
-      GITHUB_EVENT_NAME: "push",
-      GITHUB_ACTOR: BOT_LOGIN,
-      GITHUB_ACTOR_ID: BOT_ID,
-      GITHUB_OUTPUT: outputPath,
-      GITHUB_STEP_SUMMARY: summaryPath,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  assert.equal(invocation, "");
+  const { child, outputPath, summaryPath } = runCli(
+    current.cwd,
+    current.input.event,
+  );
+  assert.equal(child.status, 0);
+  assert.equal(child.stdout, "");
+  assert.equal(child.stderr, "");
   assert.equal(readFileSync(outputPath, "utf8"), "skip_tests=true\n");
   assert.match(
     readFileSync(summaryPath, "utf8"),
@@ -488,23 +518,12 @@ void test("the cli names the validation owner for every classification reason", 
       /^Release-bump test skip enabled: Release owns validation/,
     ],
   ] as const) {
-    const eventPath = join(current.cwd, `${name}.json`);
-    const outputPath = join(current.cwd, `${name}-output.txt`);
-    const summaryPath = join(current.cwd, `${name}-summary.txt`);
-    writeFileSync(eventPath, JSON.stringify(event));
-    execFileSync(process.execPath, [TOOL], {
-      cwd: current.cwd,
-      env: {
-        ...process.env,
-        GITHUB_EVENT_PATH: eventPath,
-        GITHUB_EVENT_NAME: eventName,
-        GITHUB_ACTOR: actor,
-        GITHUB_ACTOR_ID: actorId,
-        GITHUB_OUTPUT: outputPath,
-        GITHUB_STEP_SUMMARY: summaryPath,
-      },
-      stdio: "pipe",
+    const { child, outputPath, summaryPath } = runCli(current.cwd, event, {
+      eventName,
+      actor,
+      actorId,
     });
+    assert.equal(child.status, 0);
     assert.equal(
       readFileSync(outputPath, "utf8"),
       name === "verified release bump"
