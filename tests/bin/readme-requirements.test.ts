@@ -18,7 +18,6 @@ type Subcommand = keyof ReturnType<typeof cli.commandRequirements>;
 // Column heading -> selected harness and production requirement token.
 const TOOL_COLUMNS = [
   ["git", "codex", "git"],
-  ["Python 3", "codex", "python3"],
   ["Codex CLI (default)", "codex", "codex"],
   ["Pi CLI (`--harness pi`)", "pi", "pi"],
 ] as const satisfies readonly (readonly [string, HarnessName, string])[];

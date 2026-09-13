@@ -113,17 +113,19 @@ The [usage reference](https://github.com/j7an/superpowers-manager/blob/main/docs
 The installed package requires Node >=24. Native source, tests, and packaging tooling require Node >=24.12.0. Every other requirement is command-specific and is checked before dispatch. This table is derived from production by `tests/bin/readme-requirements.test.ts`.
 
 <!-- requirements:begin -->
-| Command | git | Python 3 | Codex CLI (default) | Pi CLI (`--harness pi`) |
-|---|---|---|---|---|
-| `pin` | yes | no | no | no |
-| `track-latest` | no | no | no | no |
-| `unpin` | no | no | no | no |
-| `prepare` | yes | no | no | no |
-| `probe` | yes | no | yes | no |
-| `install` | yes | no | yes | yes |
-| `update` | yes | no | yes | yes |
-| `uninstall` | no | no | yes | yes |
+| Command | git | Codex CLI (default) | Pi CLI (`--harness pi`) |
+|---|---|---|---|
+| `pin` | yes | no | no |
+| `track-latest` | no | no | no |
+| `unpin` | no | no | no |
+| `prepare` | yes | no | no |
+| `probe` | yes | yes | no |
+| `install` | yes | yes | yes |
+| `update` | yes | yes | yes |
+| `uninstall` | no | yes | yes |
 <!-- requirements:end -->
+
+Generated Codex manifests preserve upstream JSON number tokens while rejecting non-finite decimal or exponent values.
 
 macOS and Linux are tested. WSL2 is supported for the established Codex path; Pi in WSL2 and native Windows remain untested. The manager runs in-process and does not require Git Bash. The [Pi reference](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md#runtime-compatibility) explains its runtime qualification and admission checks.
 

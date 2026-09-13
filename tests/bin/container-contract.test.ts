@@ -96,7 +96,7 @@ void test("container contract", async (t) => {
           .split(/\s+/)
           .filter((token) => token !== "\\")
           .sort(),
-        ["ca-certificates", "git", "procps", "python3"],
+        ["ca-certificates", "git", "procps"],
       );
     },
   );
