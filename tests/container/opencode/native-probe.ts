@@ -21,12 +21,22 @@ const FIXTURES = join(ROOT, "tests/fixtures/opencode-native");
 const MAX_BODY = 1024 * 1024;
 const MAX_OUTPUT = 256 * 1024;
 const MAX_REQUESTS = 8;
-const BOOTSTRAP = "<EXTREMELY_IMPORTANT>";
 const SKILL = "snapshot-probe";
+const FIXTURE_PROMPT = "Complete the qualification.";
+const TOOL_CALL_ID = "fixture-skill";
 const CONFIG_SEED = "/opt/spw-opencode-config-seed";
 const CACHE_SEED = "/opt/spw-opencode-cache-seed";
 const markers = { A: "SNAPSHOT_A", B: "SNAPSHOT_B" } as const;
 type Marker = keyof typeof markers | "absent";
+
+function stripFrontmatter(content: string): string {
+  const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
+  return (match?.[1] ?? content).trim();
+}
+
+const BOOTSTRAP_SKILL_BODY = stripFrontmatter(
+  readFileSync(join(FIXTURES, "SKILL.md.txt"), "utf8"),
+);
 
 function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message);
@@ -163,7 +173,12 @@ function registrations(env: NodeJS.ProcessEnv): {
   const values = plugin.map((entry) => {
     if (typeof entry === "string") return entry;
     check(
-      Array.isArray(entry) && typeof entry[0] === "string",
+      Array.isArray(entry) &&
+        entry.length === 2 &&
+        typeof entry[0] === "string" &&
+        entry[1] !== null &&
+        typeof entry[1] === "object" &&
+        !Array.isArray(entry[1]),
       "unsupported native plugin entry",
     );
     return entry[0];
@@ -173,6 +188,14 @@ function registrations(env: NodeJS.ProcessEnv): {
 
 function allText(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function stringValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(stringValues);
+  if (value && typeof value === "object")
+    return Object.values(value).flatMap(stringValues);
+  return [];
 }
 
 function responseChunk(delta: unknown, finish: string | null) {
@@ -203,7 +226,22 @@ async function listen(server: Server): Promise<number> {
 }
 
 async function close(server: Server): Promise<void> {
-  await new Promise<void>((done) => server.close(() => done()));
+  let timer: NodeJS.Timeout | undefined;
+  const closed = new Promise<void>((done, reject) => {
+    server.close((error) => (error ? reject(error) : done()));
+    server.closeAllConnections();
+  });
+  const bounded = new Promise<never>((_done, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("fixture server close timed out")),
+      1_000,
+    );
+  });
+  try {
+    await Promise.race([closed, bounded]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function observe(installedRoot: string, expected: Marker): Promise<void> {
@@ -229,11 +267,17 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
 
   const observations = {
     requests: 0,
+    incidentalRequests: 0,
+    mainInitialRequests: 0,
+    mainResultRequests: 0,
+    correlatedToolMessages: 0,
+    resultAfterEmittedCall: false,
     bootstrap: false,
     advertisedSkillTool: false,
     advertisedSnapshot: false,
     toolResult: null as "A" | "B" | null,
   };
+  let emittedToolCall = false;
   const server = createServer((request, response) => {
     observations.requests += 1;
     if (observations.requests > MAX_REQUESTS) {
@@ -254,41 +298,77 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
         "unexpected fixture request path",
       );
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      const text = allText(body);
-      observations.bootstrap ||= text.includes(BOOTSTRAP);
-      observations.advertisedSnapshot ||= text.includes(SKILL);
       const tools =
         (body as { tools?: Array<{ function?: { name?: string } }> }).tools ??
         [];
-      observations.advertisedSkillTool ||= tools.some(
-        (tool) => tool.function?.name === "skill",
-      );
       const messages =
-        (body as { messages?: Array<{ role?: string; content?: unknown }> })
-          .messages ?? [];
-      const toolText = allText(
-        messages.filter((message) => message.role === "tool"),
+        (
+          body as {
+            messages?: Array<{
+              role?: string;
+              content?: unknown;
+              tool_call_id?: string;
+            }>;
+          }
+        ).messages ?? [];
+      const messageText = stringValues(messages).join("\n");
+      const main = messages.some(
+        (message) =>
+          message.role === "user" &&
+          stringValues(message.content).some((text) =>
+            text.includes(FIXTURE_PROMPT),
+          ),
       );
-      if (toolText.includes(markers.A)) observations.toolResult = "A";
-      if (toolText.includes(markers.B)) observations.toolResult = "B";
+      const correlated = messages.filter(
+        (message) =>
+          message.role === "tool" && message.tool_call_id === TOOL_CALL_ID,
+      );
       response.writeHead(200, { "content-type": "text/event-stream" });
-      if (expected !== "absent" && observations.toolResult === null) {
-        const toolCall = {
-          tool_calls: [
-            {
-              index: 0,
-              id: "fixture-skill",
-              type: "function",
-              function: {
-                name: "skill",
-                arguments: JSON.stringify({ name: SKILL }),
+      if (!main) {
+        observations.incidentalRequests += 1;
+        response.write(
+          frame(responseChunk({ content: "fixture complete" }, null)),
+        );
+        response.write(frame(responseChunk({}, "stop")));
+      } else if (correlated.length === 0) {
+        observations.mainInitialRequests += 1;
+        observations.bootstrap = messageText.includes(BOOTSTRAP_SKILL_BODY);
+        observations.advertisedSnapshot = messageText.includes(SKILL);
+        observations.advertisedSkillTool = tools.some(
+          (tool) => tool.function?.name === "skill",
+        );
+        if (expected === "absent" || emittedToolCall) {
+          response.write(
+            frame(responseChunk({ content: "fixture complete" }, null)),
+          );
+          response.write(frame(responseChunk({}, "stop")));
+        } else {
+          emittedToolCall = true;
+          const toolCall = {
+            tool_calls: [
+              {
+                index: 0,
+                id: TOOL_CALL_ID,
+                type: "function",
+                function: {
+                  name: "skill",
+                  arguments: JSON.stringify({ name: SKILL }),
+                },
               },
-            },
-          ],
-        };
-        response.write(frame(responseChunk(toolCall, null)));
-        response.write(frame(responseChunk({}, "tool_calls")));
+            ],
+          };
+          response.write(frame(responseChunk(toolCall, null)));
+          response.write(frame(responseChunk({}, "tool_calls")));
+        }
       } else {
+        observations.mainResultRequests += 1;
+        observations.correlatedToolMessages = correlated.length;
+        observations.resultAfterEmittedCall = emittedToolCall;
+        const toolText = stringValues(
+          correlated.map((message) => message.content),
+        ).join("\n");
+        if (toolText.includes(markers.A)) observations.toolResult = "A";
+        if (toolText.includes(markers.B)) observations.toolResult = "B";
         response.write(
           frame(responseChunk({ content: "fixture complete" }, null)),
         );
@@ -331,7 +411,7 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
           "fixture/probe",
           "--title",
           "native qualification",
-          "Complete the qualification.",
+          FIXTURE_PROMPT,
         ],
         {
           cwd: join(root, "project"),
@@ -353,6 +433,10 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
     observations.requests >= 1,
     "native OpenCode did not reach the fixture provider",
   );
+  check(
+    observations.mainInitialRequests === 1,
+    "fixture did not observe exactly one initial main request",
+  );
   if (expected === "absent") {
     check(!observations.bootstrap, "bootstrap loaded without registration");
     check(
@@ -362,6 +446,10 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
     check(
       observations.toolResult === null,
       "snapshot skill ran without registration",
+    );
+    check(
+      observations.mainResultRequests === 0,
+      "unregistered request returned a tool result",
     );
   } else {
     check(observations.bootstrap, "registered bootstrap was not loaded");
@@ -376,6 +464,15 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
     check(
       observations.toolResult === expected,
       "native skill result returned the wrong snapshot marker",
+    );
+    check(
+      observations.mainResultRequests === 1,
+      "fixture did not observe one correlated tool result request",
+    );
+    check(
+      observations.correlatedToolMessages === 1 &&
+        observations.resultAfterEmittedCall,
+      "tool result did not correlate to the emitted call",
     );
     check(
       allText(observations).length < 1024,
@@ -618,7 +715,7 @@ async function runObserver(
   root: string,
   installed: string,
   expected: Marker,
-  shouldPass: boolean,
+  expectedFailure?: string,
 ) {
   const child = spawn(
     process.execPath,
@@ -634,26 +731,53 @@ async function runObserver(
           : {}),
       },
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
     },
   );
   let bytes = 0;
   let stderr = "";
-  child.stdout.on("data", (chunk: Buffer) => (bytes += chunk.length));
-  child.stderr.on("data", (chunk: Buffer) => {
+  let termination: "timeout" | "overflow" | undefined;
+  const terminate = () => {
+    if (!child.pid) return;
+    try {
+      if (process.platform !== "win32") process.kill(-child.pid, "SIGKILL");
+      else child.kill("SIGKILL");
+    } catch {
+      child.kill("SIGKILL");
+    }
+  };
+  const account = (chunk: Buffer) => {
     bytes += chunk.length;
+    if (bytes <= MAX_OUTPUT || termination) return;
+    termination = "overflow";
+    terminate();
+  };
+  child.stdout.on("data", account);
+  child.stderr.on("data", (chunk: Buffer) => {
+    account(chunk);
     if (stderr.length < 500) stderr += chunk.toString("utf8");
   });
+  const timer = setTimeout(() => {
+    if (termination) return;
+    termination = "timeout";
+    terminate();
+  }, 35_000);
   const code = await new Promise<number | null>((done, reject) => {
     child.once("error", reject);
     child.once("exit", done);
-  });
-  check(bytes <= MAX_OUTPUT, "observer output exceeded limit");
-  check(
-    shouldPass ? code === 0 : code !== 0,
-    shouldPass
-      ? `observer unexpectedly failed: ${stderr.replace(/[\r\n]/g, " ").slice(0, 300)}`
-      : "negative control passed",
-  );
+  }).finally(() => clearTimeout(timer));
+  check(termination !== "timeout", "observer timed out");
+  check(termination !== "overflow", "observer output exceeded limit");
+  const diagnostic = stderr.replace(/[\r\n]/g, " ").slice(0, 300);
+  if (expectedFailure) {
+    check(code !== 0, "negative control passed");
+    check(
+      stderr.includes(expectedFailure),
+      `negative control failed unexpectedly: ${diagnostic}`,
+    );
+    return;
+  }
+  check(code === 0, `observer unexpectedly failed: ${diagnostic}`);
 }
 
 async function qualification(): Promise<void> {
@@ -672,8 +796,14 @@ async function qualification(): Promise<void> {
     materialize(installed, "A");
     materialize(prepared, "A");
     provisionConfig(root);
-    await runObserver(script, root, installed, "absent", true);
-    await runObserver(script, root, installed, "A", false);
+    await runObserver(script, root, installed, "absent");
+    await runObserver(
+      script,
+      root,
+      installed,
+      "A",
+      "installed root is not registered exactly once",
+    );
     await runNative(["plugin", installed, "--global"], {
       cwd: join(root, "project"),
       env,
@@ -681,12 +811,46 @@ async function qualification(): Promise<void> {
     const registration = registrations(env);
     check(registration.file, "native installer did not write a global config");
     assert.deepEqual(registration.values, [installed]);
-    await runObserver(script, root, installed, "A", true);
-    await runObserver(script, root, installed, "B", false);
+    await runObserver(script, root, installed, "A");
+    const stringRegistration = readFileSync(registration.file, "utf8");
+    const tupleRegistration = parseConfig(registration.file);
+    tupleRegistration.plugin = [[installed, { qualification: "tuple" }]];
+    writeFileSync(
+      registration.file,
+      `${JSON.stringify(tupleRegistration, null, 2)}\n`,
+    );
+    assert.deepEqual(registrations(env).values, [installed]);
+    await runObserver(script, root, installed, "A");
+    tupleRegistration.plugin = [[installed, {}, "extra"]];
+    writeFileSync(
+      registration.file,
+      `${JSON.stringify(tupleRegistration, null, 2)}\n`,
+    );
+    await runObserver(
+      script,
+      root,
+      installed,
+      "A",
+      "unsupported native plugin entry",
+    );
+    writeFileSync(registration.file, stringRegistration);
+    await runObserver(
+      script,
+      root,
+      installed,
+      "B",
+      "native skill result returned the wrong snapshot marker",
+    );
 
     const original = readFileSync(registration.file, "utf8");
     writeFileSync(registration.file, original.replace(installed, prepared));
-    await runObserver(script, root, installed, "A", false);
+    await runObserver(
+      script,
+      root,
+      installed,
+      "A",
+      "installed root is not registered exactly once",
+    );
     writeFileSync(registration.file, original);
 
     const skill = join(installed, "skills/snapshot-probe/SKILL.md");
@@ -694,14 +858,20 @@ async function qualification(): Promise<void> {
       skill,
       readFileSync(skill, "utf8").replace(markers.A, markers.B),
     );
-    await runObserver(script, root, installed, "B", true);
+    await runObserver(script, root, installed, "B");
 
     const config = parseConfig(registration.file);
     check(Array.isArray(config.plugin), "native plugin config disappeared");
     config.plugin = config.plugin.filter((entry) => entry !== installed);
     writeFileSync(registration.file, `${JSON.stringify(config, null, 2)}\n`);
-    await runObserver(script, root, installed, "absent", true);
-    await runObserver(script, root, installed, "B", false);
+    await runObserver(script, root, installed, "absent");
+    await runObserver(
+      script,
+      root,
+      installed,
+      "B",
+      "installed root is not registered exactly once",
+    );
     const matrix = await configurationMatrix(root);
     console.log(
       JSON.stringify({
