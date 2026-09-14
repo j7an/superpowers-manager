@@ -47,149 +47,73 @@ function run(script: string) {
   });
 }
 
-void test("local acceptance runs shared suites before all native harnesses", (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
-    mode: 0o755,
+const phases = [
+  "shared checks",
+  "Codex harness integration",
+  "Pi harness integration",
+  "OpenCode harness integration",
+] as const;
+const calls = [
+  "shared:--require-package-node --concurrency 2",
+  "container:harness-codex",
+  "container:harness-pi",
+  "container:harness-opencode",
+];
+const cases = [
+  {
+    name: "runs shared suites before all native harnesses",
+    failed: -1,
+    code: 0,
+  },
+  { name: "stops when the shared suite fails", failed: 0, code: 7 },
+  { name: "stops when the Codex harness fails", failed: 1, code: 9 },
+  { name: "stops when the Pi harness fails", failed: 2, code: 11 },
+  {
+    name: "propagates an OpenCode harness failure last",
+    failed: 3,
+    code: 13,
+  },
+];
+
+for (const row of cases) {
+  void test(`local acceptance ${row.name}`, (t) => {
+    const f = fixture(t);
+    writeFileSync(
+      join(f.tests, "run.sh"),
+      recorder(f.record, "shared", row.failed === 0 ? row.code : 0),
+      { mode: 0o755 },
+    );
+    writeFileSync(
+      join(f.tests, "container.sh"),
+      harnessRecorder(
+        f.record,
+        row.failed === 1 ? row.code : 0,
+        row.failed === 2 ? row.code : 0,
+        row.failed === 3 ? row.code : 0,
+      ),
+      { mode: 0o755 },
+    );
+
+    const result = run(f.script);
+    const reached = row.failed < 0 ? phases.length : row.failed + 1;
+    const records = phases
+      .slice(0, reached)
+      .flatMap((phase, index) => [
+        `acceptance: ${phase}: start`,
+        ...(index === row.failed
+          ? []
+          : [`acceptance: ${phase}: complete status=0`]),
+      ]);
+
+    assert.equal(result.signal, null);
+    assert.equal(result.status, row.code, result.stderr);
+    assert.equal(
+      readFileSync(f.record, "utf8"),
+      calls.slice(0, reached).join("\n") + "\n",
+    );
+    assert.equal(result.stdout, records.join("\n") + "\n");
   });
-  writeFileSync(
-    join(f.tests, "container.sh"),
-    recorder(f.record, "container"),
-    { mode: 0o755 },
-  );
-
-  const result = run(f.script);
-
-  assert.equal(result.signal, null);
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(
-    readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\n" +
-      "container:harness-codex\n" +
-      "container:harness-pi\n" +
-      "container:harness-opencode\n",
-  );
-  assert.equal(
-    result.stdout,
-    "acceptance: shared checks: start\n" +
-      "acceptance: shared checks: complete status=0\n" +
-      "acceptance: Codex harness integration: start\n" +
-      "acceptance: Codex harness integration: complete status=0\n" +
-      "acceptance: Pi harness integration: start\n" +
-      "acceptance: Pi harness integration: complete status=0\n" +
-      "acceptance: OpenCode harness integration: start\n" +
-      "acceptance: OpenCode harness integration: complete status=0\n",
-  );
-});
-
-void test("local acceptance stops when the shared suite fails", (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared", 7), {
-    mode: 0o755,
-  });
-  writeFileSync(
-    join(f.tests, "container.sh"),
-    recorder(f.record, "container"),
-    { mode: 0o755 },
-  );
-
-  const result = run(f.script);
-
-  assert.equal(result.signal, null);
-  assert.equal(result.status, 7);
-  assert.equal(
-    readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\n",
-  );
-  assert.equal(result.stdout, "acceptance: shared checks: start\n");
-});
-
-void test("local acceptance stops when the Codex harness fails", (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
-    mode: 0o755,
-  });
-  writeFileSync(
-    join(f.tests, "container.sh"),
-    recorder(f.record, "container", 9),
-    { mode: 0o755 },
-  );
-
-  const result = run(f.script);
-
-  assert.equal(result.signal, null);
-  assert.equal(result.status, 9);
-  assert.equal(
-    readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\ncontainer:harness-codex\n",
-  );
-  assert.equal(
-    result.stdout,
-    "acceptance: shared checks: start\n" +
-      "acceptance: shared checks: complete status=0\n" +
-      "acceptance: Codex harness integration: start\n",
-  );
-});
-
-void test("local acceptance propagates a Pi harness failure last", (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
-    mode: 0o755,
-  });
-  writeFileSync(
-    join(f.tests, "container.sh"),
-    harnessRecorder(f.record, 0, 11),
-    { mode: 0o755 },
-  );
-
-  const result = run(f.script);
-
-  assert.equal(result.signal, null);
-  assert.equal(result.status, 11);
-  assert.equal(
-    readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\n" +
-      "container:harness-codex\n" +
-      "container:harness-pi\n",
-  );
-  assert.equal(
-    result.stdout,
-    "acceptance: shared checks: start\n" +
-      "acceptance: shared checks: complete status=0\n" +
-      "acceptance: Codex harness integration: start\n" +
-      "acceptance: Codex harness integration: complete status=0\n" +
-      "acceptance: Pi harness integration: start\n",
-  );
-});
-
-void test("local acceptance propagates an OpenCode harness failure last", (t) => {
-  const f = fixture(t);
-  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
-    mode: 0o755,
-  });
-  writeFileSync(
-    join(f.tests, "container.sh"),
-    harnessRecorder(f.record, 0, 0, 13),
-    { mode: 0o755 },
-  );
-
-  const result = run(f.script);
-
-  assert.equal(result.signal, null);
-  assert.equal(result.status, 13);
-  assert.equal(
-    readFileSync(f.record, "utf8"),
-    "shared:--require-package-node --concurrency 2\n" +
-      "container:harness-codex\n" +
-      "container:harness-pi\n" +
-      "container:harness-opencode\n",
-  );
-  assert.match(
-    result.stdout,
-    /acceptance: OpenCode harness integration: start/,
-  );
-  assert.doesNotMatch(result.stdout, /OpenCode harness integration: complete/);
-});
+}
 
 void test("local acceptance stops after a signalled shared child", (t) => {
   const f = fixture(t);
