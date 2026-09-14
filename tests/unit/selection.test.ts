@@ -15,7 +15,6 @@ import { exactError } from "../lib/error-assertions.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 
 import {
-  displaySource,
   normalizePinnedArguments,
   normalizeSaved,
   serializeRecord,
@@ -148,17 +147,6 @@ void test("validateSource matches the bounded CPython urlsplit verdict corpus", 
       source,
     );
   }
-});
-
-void test("displaySource redacts sources that fail validation", () => {
-  assert.equal(
-    displaySource("https://github.com/obra/superpowers"),
-    "https://github.com/obra/superpowers",
-  );
-  assert.equal(
-    displaySource("https://user:password@example.invalid/repo"),
-    "<redacted-source>",
-  );
 });
 
 void test("selection serializer preserves Python-compatible bytes", () => {

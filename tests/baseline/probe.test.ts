@@ -195,7 +195,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     ],
     manifestVersion: ACTIVE_VERSION,
   });
-  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:122-134::if (usesSavedPin)`),
+  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:120-132::if (usesSavedPin)`),
   // so an unreachable source is the proof that Git was never consulted: any
   // ls-remote against this path would fail once it is renamed away.
   renameSync(source, `${source}-offline`);
@@ -517,8 +517,8 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
   // The credential case points SUPERPOWERS_UPSTREAM_URL at a source that would
   // fail loudly if resolveRef were reached -- `v1.0.0` is not a commit, so
   // reaching resolveRef means an ls-remote against an unreachable host and a
-  // different diagnostic. This is the same technique
-  // `tests/unit/effective-selection.test.ts:137-159::source validation precedes ref resolution` uses.
+  // different diagnostic. A direct resolver-log check also lives in
+  // `tests/baseline/selection-location.test.ts::SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution`.
   for (const { name, seed, env, expected } of [
     {
       name: "malformed selection.json",

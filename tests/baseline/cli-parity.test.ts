@@ -1479,8 +1479,10 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
     const nonFileTemplate = join(sandbox.root, "non-file-template");
     mkdirSync(nonFileTemplate);
     const previous = snapshotTree(sandbox.plugin);
+    const cache = join(sandbox.root, "uncreated-template-cache");
     const result = runCli(sandbox, ["prepare"], {
       SUPERPOWERS_MANIFEST_TEMPLATE: nonFileTemplate,
+      SUPERPOWERS_CACHE_DIR: cache,
       SUPERPOWERS_REF: "v1.1.0",
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
     });
@@ -1490,6 +1492,7 @@ void test("CLI-ENV-MANIFEST-TEMPLATE-01 fallback template bytes and non-file rej
       result.stderr,
       `error: missing fallback manifest template: ${nonFileTemplate}\n`,
     );
+    assert.equal(existsSync(cache), false);
     assert.deepEqual(snapshotTree(sandbox.plugin), previous);
     assertNoInvocationPrepareWorkspace(dirname(sandbox.plugin));
     assertNoCodexContact(sandbox);
@@ -1513,31 +1516,7 @@ void test("SEL-REF-GENERIC-01 public prepare resolves arbitrary environment refs
   });
 });
 
-void test("SEL-PRECEDENCE-REF-01 ref precedence and validate-first ordering", () => {
-  withSandbox((sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    writeCodexLogTool(sandbox);
-    const pin = runCli(sandbox, ["pin", "v1.0.0"], {
-      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-    });
-    assertCleanResult(pin);
-
-    const prepare = runCli(sandbox, ["prepare"], {
-      SUPERPOWERS_REF: "v1.1.0",
-    });
-    assertCleanResult(prepare);
-    assert.deepEqual(generatedProvenance(sandbox), {
-      source: upstream.REPO,
-      requested_ref: "v1.1.0",
-      resolved_ref: "v1.1.0",
-      commit: upstream.STABLE_COMMIT,
-      upstream_manifest_version: "1.0.0",
-    });
-    assertNoCodexContact(sandbox);
-  });
-});
-
-void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
+void test("SEL-PRECEDENCE-REF-01 / SEL-PRECEDENCE-SOURCE-01 ref and source precedence are independent", () => {
   withSandbox((sandbox) => {
     const official = runCli(sandbox, ["track-latest"]);
     assertCleanResult(official);
@@ -1559,8 +1538,13 @@ void test("SEL-PRECEDENCE-SOURCE-01 source precedence is independent", () => {
       SUPERPOWERS_REF: "v1.1.0",
     });
     assertCleanResult(prepare);
-    assert.equal(generatedProvenance(sandbox).source, upstream.REPO);
-    assert.equal(generatedProvenance(sandbox).requested_ref, "v1.1.0");
+    assert.deepEqual(generatedProvenance(sandbox), {
+      source: upstream.REPO,
+      requested_ref: "v1.1.0",
+      resolved_ref: "v1.1.0",
+      commit: upstream.STABLE_COMMIT,
+      upstream_manifest_version: "1.0.0",
+    });
 
     prepare = runCli(sandbox, ["prepare"], {
       SUPERPOWERS_UPSTREAM_URL: alternate,

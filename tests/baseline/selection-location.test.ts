@@ -322,6 +322,15 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () =
     selectionConfigDir({ HOME: "/home" }),
     "/home/.config/superpowers-manager",
   );
+  // An explicitly empty override is still present, so it fails its own
+  // absolute-path requirement instead of falling through to HOME.
+  assert.throws(
+    () => selectionConfigDir({ SUPERPOWERS_CONFIG_DIR: "", HOME: "/home" }),
+    {
+      module: "selection",
+      message: "SUPERPOWERS_CONFIG_DIR must be absolute",
+    },
+  );
   // :47-51 a relative SUPERPOWERS_CONFIG_DIR fails closed with its own
   // diagnostic (the if-guard at :47, "unexpectedly succeeded", is subsumed
   // by assert.throws itself: a thrown error is strictly "did not succeed").
@@ -337,6 +346,10 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () =
     () => selectionConfigDir({ XDG_CONFIG_HOME: "relative", HOME: "/home" }),
     { module: "selection", message: "XDG_CONFIG_HOME must be absolute" },
   );
+  assert.throws(() => selectionConfigDir({ HOME: "relative" }), {
+    module: "selection",
+    message: "HOME must be absolute",
+  });
   // :57-61 with every base absent, resolution fails closed rather than
   // defaulting to a cwd-relative path.
   assert.throws(() => selectionConfigDir({}), {

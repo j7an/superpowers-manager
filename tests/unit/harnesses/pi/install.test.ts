@@ -14,6 +14,7 @@ import fs, {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { readFile as readFilePromise } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -48,6 +49,19 @@ import {
 } from "../../../lib/harnesses/pi/package-fixture.ts";
 
 const RUNTIME_RESPONSE = "99.2.3";
+
+async function withFsMock<T>(
+  mocked: { mock: { restore: () => void } },
+  operation: () => Promise<T>,
+): Promise<T> {
+  syncBuiltinESMExports();
+  try {
+    return await operation();
+  } finally {
+    mocked.mock.restore();
+    syncBuiltinESMExports();
+  }
+}
 
 function value<T>(result: AdapterResult<T>): T {
   assert.equal(result.status, 0, JSON.stringify(result));
@@ -143,6 +157,24 @@ async function fixture(
   };
   return { root, ctx, paths, artifact, prepare, deps, calls };
 }
+
+void test("Pi filesystem mock restores CommonJS and named ESM bindings after a callback failure", async (t) => {
+  const originalReadFile = fs.promises.readFile;
+  const mockedReadFile = t.mock.method(fs.promises, "readFile", async () =>
+    Buffer.from("mocked"),
+  );
+
+  await assert.rejects(
+    withFsMock(mockedReadFile, async () => {
+      assert.strictEqual(fs.promises.readFile, mockedReadFile);
+      assert.strictEqual(readFilePromise, mockedReadFile);
+      throw new Error("callback failure");
+    }),
+    { name: "Error", message: "callback failure" },
+  );
+  assert.strictEqual(fs.promises.readFile, originalReadFile);
+  assert.strictEqual(readFilePromise, originalReadFile);
+});
 
 void test("Pi lifecycle uses one canonical native target through a symlinked agent directory", async (t) => {
   const f = await fixture(t, { symlinkedAgent: true });
@@ -640,14 +672,9 @@ void test("Pi strict registered-phase flush failure preserves the created regist
     "open",
     failRegisteredPhaseSync,
   );
-  syncBuiltinESMExports();
-  let result: AdapterResult<InstallReceipt>;
-  try {
-    result = await installPi(f.artifact, f.ctx, f.deps);
-  } finally {
-    mockedOpen.mock.restore();
-    syncBuiltinESMExports();
-  }
+  const result = await withFsMock(mockedOpen, () =>
+    installPi(f.artifact, f.ctx, f.deps),
+  );
 
   assert.equal(result.outcome.ok, false);
   if (!result.outcome.ok) {
@@ -764,14 +791,7 @@ void test("Pi journal retirement failure after backup cleanup reports the retain
     "unlink",
     failJournalRetirement,
   );
-  syncBuiltinESMExports();
-  let result: AdapterResult<null>;
-  try {
-    result = await tx.finalize();
-  } finally {
-    mockedUnlink.mock.restore();
-    syncBuiltinESMExports();
-  }
+  const result = await withFsMock(mockedUnlink, () => tx.finalize());
 
   assert.equal(result.outcome.ok, false);
   if (!result.outcome.ok) {
@@ -850,14 +870,7 @@ void test("Pi post-unlink retirement failure reports the absent journal and obse
     return realRmdir(path, options);
   };
   const mockedRmdir = t.mock.method(fs.promises, "rmdir", failRecoveryRemoval);
-  syncBuiltinESMExports();
-  let result: AdapterResult<null>;
-  try {
-    result = await tx.finalize();
-  } finally {
-    mockedRmdir.mock.restore();
-    syncBuiltinESMExports();
-  }
+  const result = await withFsMock(mockedRmdir, () => tx.finalize());
 
   assert.equal(result.outcome.ok, false);
   if (!result.outcome.ok) {
@@ -912,14 +925,7 @@ void test("Pi retirement guidance refuses Manager cleanup advice for a replaced 
         "unlink",
         replaceRecoveryAfterUnlink,
       );
-      syncBuiltinESMExports();
-      let result: AdapterResult<null>;
-      try {
-        result = await tx.finalize();
-      } finally {
-        mockedUnlink.mock.restore();
-        syncBuiltinESMExports();
-      }
+      const result = await withFsMock(mockedUnlink, () => tx.finalize());
 
       assert.equal(result.outcome.ok, false);
       if (!result.outcome.ok) {
@@ -967,14 +973,7 @@ void test("Pi rollback retirement failure reports the verified restoration witho
     "unlink",
     failJournalRetirement,
   );
-  syncBuiltinESMExports();
-  let result: AdapterResult<null>;
-  try {
-    result = await tx.rollback();
-  } finally {
-    mockedUnlink.mock.restore();
-    syncBuiltinESMExports();
-  }
+  const result = await withFsMock(mockedUnlink, () => tx.rollback());
 
   assert.equal(result.outcome.ok, false);
   if (!result.outcome.ok) {
@@ -1105,20 +1104,11 @@ void test("Pi uninstall distinguishes deregistration from unverifiable snapshot 
     return realRm(path, options);
   };
   const mockedRm = t.mock.method(fs.promises, "rm", failSnapshotRemoval);
-  syncBuiltinESMExports();
-  let unregisteredResult: AdapterResult<null>;
-  try {
-    unregisteredResult = await removePi(
-      unregisteredInput,
-      unregistered.ctx,
-      unregistered.deps,
-    );
-  } finally {
-    mockedRm.mock.restore();
-    syncBuiltinESMExports();
-  }
-  assert.equal(unregisteredResult!.outcome.ok, false);
-  if (!unregisteredResult!.outcome.ok) {
+  const unregisteredResult = await withFsMock(mockedRm, () =>
+    removePi(unregisteredInput, unregistered.ctx, unregistered.deps),
+  );
+  assert.equal(unregisteredResult.outcome.ok, false);
+  if (!unregisteredResult.outcome.ok) {
     assert.match(
       unregisteredResult!.outcome.error.message,
       /cannot verify Pi removal/,

@@ -244,26 +244,6 @@ function unitContext(dir: string, extra: Record<string, string> = {}) {
   };
 }
 
-void test("runPrepare rejects a directory as the fallback manifest template", async () => {
-  const dir = mkdtempSync(join(SCRATCH, "case-"));
-  const template = join(dir, "template-directory");
-  mkdirSync(template, { recursive: true });
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:42::missing` is `[ -f ]`, not `[ -e ]`. A stat-only predicate would
-  // accept this directory and hand it to the adapter as --fallback-manifest;
-  // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
-  // template bytes and non-file rejection" test already forbids that.
-  const { out, err, ctx } = unitContext(dir, {
-    SUPERPOWERS_MANIFEST_TEMPLATE: template,
-  });
-  const status = await runPrepare([], ctx);
-  assert.equal(status, 1);
-  assert.equal(out.text(), "");
-  assert.equal(
-    err.text(),
-    `error: missing fallback manifest template: ${template}\n`,
-  );
-});
-
 void test("runPrepare emits no errno or multi-line git text when the clone fails", async () => {
   const dir = mkdtempSync(join(SCRATCH, "case-"));
   const template = join(dir, "template.json");

@@ -910,43 +910,6 @@ void test("prepare rejects a non-string upstream manifest version", async () => 
   );
 });
 
-void test("prepare rejects a directory as the fallback manifest template before building", async () => {
-  const c = createCase({ fakes: "probe" });
-  const before = seedSentinel(c);
-  const template = join(c.dir, "template-directory");
-  mkdirSync(template, { recursive: true });
-
-  const result = await prepare(c, {
-    SUPERPOWERS_REF: REFS.fallback,
-    SUPERPOWERS_MANIFEST_TEMPLATE: template,
-  });
-  assert.equal(result.status, 1, result.stdout);
-  assert.equal(
-    result.stderr,
-    `error: missing fallback manifest template: ${template}\n`,
-  );
-  assertNoLeakedInternals(result.stderr);
-
-  // No adapter build ran: the same contract
-  // tests/baseline/cli-parity.test.js's "CLI-ENV-MANIFEST-TEMPLATE-01 fallback
-  // template bytes and non-file rejection" test asserts for the spawned path.
-  // An adapter build always replays `generated plugin validation passed: …`
-  // onto stdout, and the template check precedes the cache mkdir
-  // (the `missing fallback manifest template` guard), so neither is present.
-  assert.equal(result.stdout, "");
-  assert.equal(existsSync(join(c.dir, "cache")), false);
-
-  // And no staging tree was left behind under the plugin root's parent.
-  const plugins = dirname(caseEnv(c).SUPERPOWERS_PLUGIN_ROOT);
-  assert.deepEqual(
-    readdirSync(plugins).filter((name) =>
-      name.startsWith(".superpowers.prepare."),
-    ),
-    [],
-  );
-  assert.deepEqual(snapshotTree(generated(c)), before);
-});
-
 void test("prepare rejects a directory as the executable validator", async () => {
   const c = createCase({ fakes: "probe" });
   const before = seedSentinel(c);
