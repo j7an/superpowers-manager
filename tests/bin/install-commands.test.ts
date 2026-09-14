@@ -1547,7 +1547,7 @@ void describe("install commands", { concurrency: true }, () => {
     const result = await runScript(c, "install");
     // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:148::tag.gpgsign=false`),
+    // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:141::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     // :757

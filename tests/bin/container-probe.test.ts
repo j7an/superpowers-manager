@@ -21,8 +21,8 @@ const SCHEMA = join(ROOT, "tests/container/codex/assert-schema.ts");
 const PI_FIXTURE = join(ROOT, "tests/container/pi/fixture.ts");
 const METADATA_COMMIT = join(ROOT, "tests/tools/read-metadata-commit.ts");
 const PI_FIXTURE_SOURCE = join(ROOT, "tests/fixtures/pi-native");
-const OPENCODE_PROBE = join(ROOT, "tests/container/opencode/native-probe.ts");
 const OPENCODE_FIXTURE_SOURCE = join(ROOT, "tests/fixtures/opencode-native");
+const OPENCODE_PROBE = join(ROOT, "tests/container/opencode/native-probe.ts");
 const scratch = mkdtempSync(join(tmpdir(), "spw-container-probe-"));
 const fixtureHome = join(scratch, "home");
 
@@ -739,15 +739,19 @@ void test("OpenCode native fixture helper materializes licensed phases", (t) => 
   const created = invoke(OPENCODE_PROBE, ["fixture-create", upstream]);
   assert.equal(created.status, 0, created.stderr);
   assert.equal(created.stdout, "");
-  for (const [source, target] of [
-    ["bootstrap.js.txt", ".opencode/plugins/superpowers.js"],
-    ["package.json.txt", "package.json"],
-    ["SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
-    ["LICENSE.txt", "LICENSE"],
+  for (const [sourceRoot, source, target] of [
+    [
+      OPENCODE_FIXTURE_SOURCE,
+      "bootstrap.js.txt",
+      ".opencode/plugins/superpowers.js",
+    ],
+    [PI_FIXTURE_SOURCE, "package.json.txt", "package.json"],
+    [PI_FIXTURE_SOURCE, "SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
+    [PI_FIXTURE_SOURCE, "LICENSE.txt", "LICENSE"],
   ]) {
     assert.deepEqual(
       readFileSync(join(upstream, target)),
-      readFileSync(join(OPENCODE_FIXTURE_SOURCE, source)),
+      readFileSync(join(sourceRoot, source)),
     );
   }
   const skill = join(upstream, "skills/snapshot-probe/SKILL.md");

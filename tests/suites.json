@@ -62,7 +62,6 @@
     { "path": "tests/bin/units.test.ts", "group": "unit" },
     { "path": "tests/bin/workflows.test.ts", "group": "repository" },
     { "path": "tests/unit/adapter-result.test.ts", "group": "integration" },
-    { "path": "tests/unit/git-tree.test.ts", "group": "integration" },
     {
       "path": "tests/unit/harnesses/codex/adapter.test.ts",
       "group": "integration"

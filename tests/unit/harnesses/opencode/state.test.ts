@@ -19,9 +19,9 @@ import {
 } from "../../../../src/harnesses/opencode/state.ts";
 import {
   openCodeSandbox,
-  openCodeSelection,
   writeOpenCodeArtifact,
 } from "../../../lib/harnesses/opencode/package-fixture.ts";
+import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
 function config(path: string, plugins: readonly unknown[]): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -30,7 +30,7 @@ function config(path: string, plugins: readonly unknown[]): void {
 
 void test("current state requires one registration and matching desired, prepared, receipt, and installed bytes", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   const prepared = await writeOpenCodeArtifact(
     t,
     state.paths.preparedRoot,
@@ -82,7 +82,7 @@ void test("an unmanaged upstream registration blocks install without editing it"
 
 void test("foreign or changed Manager state fails closed while retired owned bytes remain removable", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   const retired = {
     kind: "unsupported" as const,
     reason: "retired fixture profile",
@@ -113,7 +113,7 @@ void test("a Manager-path registration without verified bytes cannot authorize r
   ]);
   assert.equal((await inspectOpenCodeOwnership(state.ctx)).outcome.ok, false);
   const installed = await inspectOpenCodeInstalled(
-    openCodeSelection(),
+    nativeSelection(),
     state.ctx,
   );
   assert.deepEqual(installed.outcome.ok && installed.outcome.result, {
@@ -124,7 +124,7 @@ void test("a Manager-path registration without verified bytes cannot authorize r
 
 void test("missing preparation, wrong selection, changed binding, duplicate registration, and recovery never report current", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   await writeOpenCodeArtifact(t, state.paths.installedRoot, selection);
   const file = join(state.paths.configRoot, "opencode.json");
   config(file, [state.paths.installedRoot]);
@@ -135,7 +135,7 @@ void test("missing preparation, wrong selection, changed binding, duplicate regi
   );
   await writeOpenCodeArtifact(t, state.paths.preparedRoot, selection);
   const wrongSelection = await inspectOpenCodeInstalled(
-    openCodeSelection("2".repeat(40)),
+    nativeSelection("2".repeat(40)),
     state.ctx,
   );
   assert.equal(
@@ -174,7 +174,7 @@ void test("missing preparation, wrong selection, changed binding, duplicate regi
 
 void test("installed bytes remain current while a retained journal blocks control", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   const digest = await writeOpenCodeArtifact(
     t,
     state.paths.preparedRoot,
@@ -201,7 +201,7 @@ void test("installed bytes remain current while a retained journal blocks contro
 
 void test("a verified snapshot without registration stays removable but is not installed current", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   const digest = await writeOpenCodeArtifact(
     t,
     state.paths.installedRoot,
@@ -239,7 +239,7 @@ void test("skill-only uncertainty permits an absent removal postcondition but st
   );
 
   const installed = await inspectOpenCodeInstalled(
-    openCodeSelection(),
+    nativeSelection(),
     state.ctx,
   );
   assert.deepEqual(installed.outcome.ok && installed.outcome.result, {
@@ -265,7 +265,7 @@ void test("whole-config uncertainty still refuses an absent removal postconditio
     ...state.ctx,
     env: { ...state.env, OPENCODE_CONFIG_CONTENT: "{" },
   };
-  const installed = await inspectOpenCodeInstalled(openCodeSelection(), ctx);
+  const installed = await inspectOpenCodeInstalled(nativeSelection(), ctx);
   assert.equal(
     installed.outcome.ok && installed.outcome.result.kind,
     "mismatch",
@@ -365,7 +365,7 @@ void test("an owned global registration remains removable beside unrelated known
 
 void test("pure mode is the qualified disable flag and tuple options do not invent disable semantics", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   const digest = await writeOpenCodeArtifact(
     t,
     state.paths.preparedRoot,
@@ -409,14 +409,14 @@ void test("installed source and commit must each independently match intended ev
   for (const mismatch of ["source", "commit"] as const) {
     await t.test(mismatch, async (t) => {
       const state = openCodeSandbox(t);
-      const desired = openCodeSelection();
+      const desired = nativeSelection();
       const installedSelection =
         mismatch === "source"
-          ? openCodeSelection(
+          ? nativeSelection(
               desired.desiredCommit,
               "https://example.test/custom-superpowers.git",
             )
-          : openCodeSelection("2".repeat(40), desired.effectiveSource);
+          : nativeSelection("2".repeat(40), desired.effectiveSource);
       await writeOpenCodeArtifact(t, state.paths.preparedRoot, desired);
       await writeOpenCodeArtifact(
         t,
@@ -466,7 +466,7 @@ void test("an uninspectable configuration origin fails every ownership claim clo
   assert.equal((await inspectOpenCodeOwnership(state.ctx)).outcome.ok, false);
   assert.equal((await inspectOpenCodeControl(state.ctx)).outcome.ok, false);
   assert.equal(
-    (await inspectOpenCodeInstalled(openCodeSelection(), state.ctx)).outcome.ok,
+    (await inspectOpenCodeInstalled(nativeSelection(), state.ctx)).outcome.ok,
     false,
   );
 });
@@ -481,7 +481,7 @@ void test("probe inspection never launches a configured OpenCode executable", as
     { mode: 0o755 },
   );
   const ctx = { ...state.ctx, env: { ...state.env, OPENCODE_BIN: executable } };
-  await inspectOpenCodeInstalled(openCodeSelection(), ctx);
+  await inspectOpenCodeInstalled(nativeSelection(), ctx);
   await inspectOpenCodeOwnership(ctx);
   await inspectOpenCodeControl(ctx);
   assert.throws(() => readFileSync(callLog), { code: "ENOENT" });
@@ -489,7 +489,7 @@ void test("probe inspection never launches a configured OpenCode executable", as
 
 void test("receipt digest remains bound to actual artifact bytes", async (t) => {
   const state = openCodeSandbox(t);
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   await writeOpenCodeArtifact(t, state.paths.installedRoot, selection);
   const receiptPath = join(
     state.paths.installedRoot,

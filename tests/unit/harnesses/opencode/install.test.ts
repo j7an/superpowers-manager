@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { rm as removePath } from "node:fs/promises";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -14,7 +11,6 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import test, { type TestContext } from "node:test";
-import { setTimeout as delay } from "node:timers/promises";
 
 import {
   failureResult,
@@ -39,9 +35,9 @@ import {
 import { inspectOpenCodeOwnership } from "../../../../src/harnesses/opencode/state.ts";
 import {
   openCodeSandbox,
-  openCodeSelection,
   writeOpenCodeArtifact,
 } from "../../../lib/harnesses/opencode/package-fixture.ts";
+import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
 function value<T>(result: AdapterResult<T>): T {
   assert.equal(result.status, 0);
@@ -63,7 +59,7 @@ async function fixture(t: TestContext) {
     configFile,
     JSON.stringify({ plugin: ["npm:unrelated"], theme: "light" }),
   );
-  const selection = openCodeSelection();
+  const selection = nativeSelection();
   const digest = await writeOpenCodeArtifact(
     t,
     state.paths.preparedRoot,
@@ -138,7 +134,7 @@ void test("OpenCode stable registration updates by snapshot swap and can roll ba
     ).finalize(),
   );
   rmSync(f.paths.preparedRoot, { recursive: true });
-  const nextSelection = openCodeSelection("2".repeat(40));
+  const nextSelection = nativeSelection("2".repeat(40));
   const nextDigest = await writeOpenCodeArtifact(
     t,
     f.paths.preparedRoot,
@@ -418,64 +414,14 @@ void test("OpenCode removal no-op and cleanup failure are explicit", async (t) =
       ).finalize(),
     );
     const ownership = value(await inspectOpenCodeOwnership(f.ctx));
-    const observer = spawn(
-      process.execPath,
-      [
-        "-e",
-        "const fs=require('node:fs');const [file,installed,manager]=process.argv.slice(1);const deadline=Date.now()+5000;process.stdout.write('ready\\n');function poll(){try{const value=JSON.parse(fs.readFileSync(file,'utf8'));if(!value.plugin.includes(installed)){fs.chmodSync(manager,0o500);process.exit(0)}}catch{}if(Date.now()>=deadline){process.stderr.write('observer deadline exceeded\\n');process.exit(2)}setTimeout(poll,5)}poll()",
-        f.configFile,
-        f.canonicalRoot,
-        f.paths.managerRoot,
-      ],
-      { stdio: ["ignore", "pipe", "ignore"] },
-    );
-    const exited = once(observer, "exit");
-    const closed = once(observer, "close");
-    let result: Awaited<ReturnType<typeof removeOpenCode>>;
-    try {
-      await new Promise<void>((resolveReady, rejectReady) => {
-        const timer = setTimeout(() => {
-          cleanup();
-          rejectReady(
-            new Error("cleanup observer readiness deadline exceeded"),
-          );
-        }, 2_000);
-        const onData = () => {
-          cleanup();
-          resolveReady();
-        };
-        const onExit = (status: number | null) => {
-          cleanup();
-          rejectReady(
-            new Error(`cleanup observer exited before readiness: ${status}`),
-          );
-        };
-        const cleanup = () => {
-          clearTimeout(timer);
-          observer.stdout!.off("data", onData);
-          observer.off("exit", onExit);
-        };
-        observer.stdout!.once("data", onData);
-        observer.once("exit", onExit);
-      });
-      result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
-      const [status] = await Promise.race([
-        exited,
-        delay(7_000, undefined, { ref: false }).then(() => {
-          throw new Error("cleanup observer exit deadline exceeded");
-        }),
-      ]);
-      assert.equal(status, 0);
-    } finally {
-      if (observer.exitCode === null && observer.signalCode === null)
-        observer.kill("SIGKILL");
-      const closedInTime = await Promise.race([
-        closed.then(() => true),
-        delay(2_000, false, { ref: false }),
-      ]);
-      chmodSync(f.paths.managerRoot, 0o700);
-      assert.equal(closedInTime, true, "cleanup observer did not close");
-    }
+    const result = await removeOpenCode(ownership.removalInput, f.ctx, {
+      ...f.deps,
+      rm: async (path, options) => {
+        if (path === f.paths.installedRoot)
+          throw new Error("injected original snapshot deletion failure");
+        await removePath(path, options);
+      },
+    });
     assert.equal(result.outcome.ok, false);
     assert.equal(existsSync(f.paths.installedRoot), true);
     assert.equal(existsSync(f.paths.recoveryRoot), true);

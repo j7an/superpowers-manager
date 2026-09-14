@@ -65,7 +65,7 @@ export function caseEnv(
     // Fixture plumbing, not a production name, so it is deliberately absent
     // from REQUIRED_ENV: the fake codex reads it to find its per-case JSON
     // (`tests/bin/lifecycle-fakes.ts:238::const state = process.env.SPW_FIXTURE_STATE`) exactly as runScript supplies it for
-    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:500::const env = {`).
+    // the spawned lifecycle ports (`tests/bin/lifecycle-fixture.ts:493::const env = {`).
     // runCodexOperation execs the fake with `{...process.env, ...ctx.env}`
     // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so this is the only channel that reaches it.
     // Omitting it is loud, not silent -- the fake exits 90 with

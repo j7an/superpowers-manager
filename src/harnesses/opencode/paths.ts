@@ -1,8 +1,9 @@
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   assertNoFollowType,
   canonicalizeProspectivePath,
+  isContained,
 } from "../../safe-path.ts";
 
 export interface OpenCodePaths {
@@ -15,14 +16,7 @@ export interface OpenCodePaths {
 }
 
 function overlaps(left: string, right: string): boolean {
-  const contains = (root: string, leaf: string): boolean => {
-    const suffix = relative(root, leaf);
-    return (
-      suffix === "" ||
-      (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
-    );
-  };
-  return contains(left, right) || contains(right, left);
+  return isContained(left, right) || isContained(right, left);
 }
 
 export async function assertOpenCodePreparationSeparate(

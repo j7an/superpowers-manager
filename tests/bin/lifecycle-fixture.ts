@@ -53,22 +53,15 @@ function buildSnapshot(): string {
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
   const dependencies = join(snapshot, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  cpSync(
-    join(ROOT, "node_modules", "smol-toml"),
-    join(dependencies, "smol-toml"),
-    {
-      recursive: true,
-      dereference: true,
-    },
-  );
-  cpSync(
-    join(ROOT, "node_modules", "jsonc-parser"),
-    join(dependencies, "jsonc-parser"),
-    {
-      recursive: true,
-      dereference: true,
-    },
-  );
+  for (const dependency of ["smol-toml", "jsonc-parser"])
+    cpSync(
+      join(ROOT, "node_modules", dependency),
+      join(dependencies, dependency),
+      {
+        recursive: true,
+        dereference: true,
+      },
+    );
   const pluginDir = join(snapshot, "plugins", "superpowers", ".codex-plugin");
   mkdirSync(pluginDir, { recursive: true });
   cpSync(

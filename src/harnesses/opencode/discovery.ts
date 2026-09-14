@@ -2,24 +2,21 @@ import { Buffer } from "node:buffer";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  parse,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findNodeAtLocation, type Node as JsonNode } from "jsonc-parser";
+import {
+  findNodeAtLocation,
+  getNodeValue,
+  type Node as JsonNode,
+} from "jsonc-parser";
 import { readArtifactObject } from "../../artifact-tree.ts";
 import { runGit } from "../../git.ts";
 import { parseStrictJson, type JsonValue } from "../../strict-json.ts";
 import {
   canonicalizeProspectivePath,
   classifyPathNoFollow,
+  isContained,
+  isErrno,
 } from "../../safe-path.ts";
 import { runValidator, type ValidatorPolicy } from "../../validator.ts";
 import { withWorkspace } from "../../workspace.ts";
@@ -84,28 +81,9 @@ function truthy(value: string | undefined): boolean {
   return value?.toLowerCase() === "true" || value === "1";
 }
 
-function decode(node: JsonNode | undefined): unknown {
-  if (node === undefined) return undefined;
-  if (node.type === "array") return (node.children ?? []).map(decode);
-  if (node.type === "object") {
-    const result: Record<string, unknown> = {};
-    for (const property of node.children ?? []) {
-      const [key, value] = property.children ?? [];
-      if (key?.type !== "string" || typeof key.value !== "string") continue;
-      Object.defineProperty(result, key.value, {
-        value: decode(value),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    }
-    return result;
-  }
-  return node.value ?? null;
-}
-
 function at(root: JsonNode, path: readonly (string | number)[]): unknown {
-  return decode(findNodeAtLocation(root, [...path]));
+  const node = findNodeAtLocation(root, [...path]);
+  return node === undefined ? undefined : getNodeValue(node);
 }
 
 function containsSubstitution(value: string): boolean {
@@ -313,12 +291,7 @@ async function inspectSkillFile(
 ): Promise<void> {
   if ((await classifyPathNoFollow(path)) !== "missing") {
     const canonical = await canonicalizeProspectivePath(path);
-    const suffix = relative(state.installedRoot, canonical);
-    const owned =
-      suffix === "" ||
-      (!isAbsolute(suffix) &&
-        suffix !== ".." &&
-        !suffix.startsWith(`..${sep}`));
+    const owned = isContained(state.installedRoot, canonical);
     if (
       requireKnownIdentity &&
       !owned &&
@@ -497,12 +470,7 @@ async function captureFile(path: string): Promise<CapturedFile | null> {
     }
     return { bytes, dev: stat.dev, ino: stat.ino, mode: stat.mode };
   } catch (cause) {
-    if (
-      cause instanceof Error &&
-      "code" in cause &&
-      (cause as NodeJS.ErrnoException).code === "ENOENT"
-    )
-      return null;
+    if (isErrno(cause, "ENOENT")) return null;
     throw cause;
   } finally {
     await handle?.close().catch(() => {});
@@ -737,22 +705,21 @@ export async function inspectOpenCodeDiscovery(
             state.conflicts.add(
               "registered OpenCode package for obra/superpowers",
             );
-          else if (
-            localPluginPath(entry.spec, join(cwd, "opencode.json"), state) !==
-            null
-          ) {
+          else {
             const local = localPluginPath(
               entry.spec,
               join(cwd, "opencode.json"),
               state,
-            )!;
-            const canonical = await canonicalizeProspectivePath(local);
-            addBlocked(
-              state,
-              canonical === state.installedRoot
-                ? `${OPEN_CODE_UNOWNED_MANAGER_INPUT}: OPENCODE_CONFIG_CONTENT`
-                : `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`,
             );
+            if (local !== null) {
+              const canonical = await canonicalizeProspectivePath(local);
+              addBlocked(
+                state,
+                canonical === state.installedRoot
+                  ? `${OPEN_CODE_UNOWNED_MANAGER_INPUT}: OPENCODE_CONFIG_CONTENT`
+                  : `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`,
+              );
+            }
           }
         }
       }

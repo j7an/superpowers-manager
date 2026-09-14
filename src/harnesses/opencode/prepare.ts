@@ -134,12 +134,6 @@ function artifactFromAssessment(
     compatibility,
   };
 }
-async function readArtifact(root: string): Promise<PreparedArtifact> {
-  return artifactFromAssessment(
-    root,
-    await readOpenCodePackageAssessment(root),
-  );
-}
 export async function inspectOpenCodePrepared(
   selection: EffectiveSelection,
   ctx: AdapterContext,
@@ -199,7 +193,11 @@ export async function readOpenCodePrepared(
 ): Promise<AdapterResult<PreparedArtifact>> {
   const root = openCodePreparationLocation(ctx).destinationRoot;
   try {
-    return successResult("read-prepared", await readArtifact(root), []);
+    return successResult(
+      "read-prepared",
+      artifactFromAssessment(root, await readOpenCodePackageAssessment(root)),
+      [],
+    );
   } catch {
     return failureResult(
       "read-prepared",

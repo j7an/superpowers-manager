@@ -14,11 +14,11 @@ import {
   validateOpenCodePreparationBeforeFetch,
 } from "../../../../src/harnesses/opencode/prepare.ts";
 import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
-import { commitFixture } from "../../../lib/harnesses/pi/package-fixture.ts";
 import {
-  nativeOpenCodeFixture,
-  openCodeSelection,
-} from "../../../lib/harnesses/opencode/package-fixture.ts";
+  commitFixture,
+  nativeSelection,
+} from "../../../lib/harnesses/pi/package-fixture.ts";
+import { nativeOpenCodeFixture } from "../../../lib/harnesses/opencode/package-fixture.ts";
 
 void test("prepares a verified OpenCode candidate", async (t) => {
   const root = nativeOpenCodeFixture(t),
@@ -29,7 +29,7 @@ void test("prepares a verified OpenCode candidate", async (t) => {
       upstreamRoot: root,
       workspaceRoot: root,
       candidateRoot: candidate,
-      selection: openCodeSelection(commit),
+      selection: nativeSelection(commit),
     },
     {
       root,
@@ -52,7 +52,7 @@ void test("preparing a replacement leaves an installed snapshot unchanged", asyn
       upstreamRoot: root,
       workspaceRoot: root,
       candidateRoot: candidate,
-      selection: openCodeSelection(first),
+      selection: nativeSelection(first),
     },
     ctx,
   );
@@ -71,7 +71,7 @@ void test("preparing a replacement leaves an installed snapshot unchanged", asyn
       upstreamRoot: next,
       workspaceRoot: root,
       candidateRoot: join(root, "replacement"),
-      selection: openCodeSelection(second),
+      selection: nativeSelection(second),
     },
     ctx,
   );
@@ -147,7 +147,7 @@ void test("a tampered receipt source cannot satisfy prepared inspection", async 
       upstreamRoot: root,
       workspaceRoot: root,
       candidateRoot: candidate,
-      selection: openCodeSelection(commit),
+      selection: nativeSelection(commit),
     },
     ctx,
   );
@@ -166,9 +166,6 @@ void test("a tampered receipt source cannot satisfy prepared inspection", async 
     "config/opencode/superpowers-manager/prepared",
   );
   cpSync(candidate, preparedRoot, { recursive: true, verbatimSymlinks: true });
-  const inspected = await inspectOpenCodePrepared(
-    openCodeSelection(commit),
-    ctx,
-  );
+  const inspected = await inspectOpenCodePrepared(nativeSelection(commit), ctx);
   assert.equal(inspected.outcome.ok, false);
 });

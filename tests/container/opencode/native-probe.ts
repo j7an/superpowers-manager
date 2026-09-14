@@ -18,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse, type ParseError } from "jsonc-parser";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const FIXTURES = join(ROOT, "tests/fixtures/opencode-native");
+const FIXTURES = join(ROOT, "tests/fixtures");
 const MAX_BODY = 1024 * 1024;
 const MAX_OUTPUT = 256 * 1024;
 const MAX_REQUESTS = 8;
@@ -36,7 +36,7 @@ function stripFrontmatter(content: string): string {
 }
 
 const BOOTSTRAP_SKILL_BODY = stripFrontmatter(
-  readFileSync(join(FIXTURES, "SKILL.md.txt"), "utf8"),
+  readFileSync(join(FIXTURES, "pi-native/SKILL.md.txt"), "utf8"),
 );
 
 function check(value: unknown, message: string): asserts value {
@@ -495,10 +495,10 @@ function materialize(packageRoot: string, marker: "A" | "B"): void {
   mkdirSync(join(packageRoot, "skills/using-superpowers"), { recursive: true });
   mkdirSync(join(packageRoot, "skills/snapshot-probe"), { recursive: true });
   for (const [source, target] of [
-    ["bootstrap.js.txt", ".opencode/plugins/superpowers.js"],
-    ["package.json.txt", "package.json"],
-    ["SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
-    ["LICENSE.txt", "LICENSE"],
+    ["opencode-native/bootstrap.js.txt", ".opencode/plugins/superpowers.js"],
+    ["pi-native/package.json.txt", "package.json"],
+    ["pi-native/SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
+    ["pi-native/LICENSE.txt", "LICENSE"],
   ] as const) {
     writeFileSync(
       join(packageRoot, target),

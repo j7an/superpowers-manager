@@ -118,7 +118,6 @@ interface Pending {
   readonly backup: string;
   readonly stage: string;
   readonly ctx: AdapterContext;
-  readonly deps: OpenCodeInstallDependencies;
   journal: Journal;
   journalIdentity: Identity;
   stageIdentity?: Identity;
@@ -407,7 +406,6 @@ async function beginJournal(
   newArtifact: OpenCodeReceipt | null,
   priorRegistration: RegistrationRecord | null,
   ctx: AdapterContext,
-  deps: OpenCodeInstallDependencies,
 ): Promise<Pending> {
   const canonicalRoot = await validatePaths(paths);
   await requireNoRecovery(paths);
@@ -450,7 +448,6 @@ async function beginJournal(
       `.${basename(canonicalRoot)}.stage.${token}`,
     ),
     ctx,
-    deps,
     journal,
     journalIdentity: await lstat(path),
     settled: false,
@@ -674,7 +671,6 @@ export async function installOpenCode(
       assessment.receipt,
       priorRegistration,
       ctx,
-      deps,
     );
     await mkdir(pending.stage);
     pending.stageIdentity = await identity(pending.stage);
@@ -828,7 +824,6 @@ export async function removeOpenCode(
       null,
       registrationRecord(registered),
       ctx,
-      deps,
     );
     const installedIdentity = await identity(paths.installedRoot);
     await assertNoFollowType(pending.backup, ["missing"]);

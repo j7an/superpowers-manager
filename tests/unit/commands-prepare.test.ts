@@ -30,7 +30,7 @@ import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import { openCodeHarness } from "../../src/harnesses/opencode/harness.ts";
 import { openCodePaths } from "../../src/harnesses/opencode/paths.ts";
 import { createResourceCoordinator } from "../../src/resource-lock.ts";
-import { openCodeSelection } from "../lib/harnesses/opencode/package-fixture.ts";
+import { nativeSelection } from "../lib/harnesses/pi/package-fixture.ts";
 
 void test("OpenCode prepare rejects symlinked storage parents before locks, workspaces, or fetch", async (t) => {
   for (const parent of ["config", "manager"] as const)
@@ -64,7 +64,7 @@ void test("OpenCode prepare rejects symlinked storage parents before locks, work
         stderr: stderr.stream,
         options: { harness: "opencode", allowExperimental: false },
         selection: {
-          ...openCodeSelection(),
+          ...nativeSelection(),
           selectionMode: "pinned",
           resolutionKind: "commit",
           effectiveSource: join(root, "upstream-must-not-fetch"),

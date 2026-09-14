@@ -28,23 +28,21 @@ const COLUMNS = TOOL_COLUMNS.map(([column]) => column);
 function requirements(
   env: NodeJS.ProcessEnv,
 ): Record<HarnessName, Record<Subcommand, string[]>> {
-  const pi = Object.fromEntries(
-    Object.entries(cli.commandRequirementsFor(env, piHarness)).map(
-      ([command, tools]) => [
-        command,
-        tools.map((requirement) => requirement.name),
-      ],
-    ),
-  ) as Record<Subcommand, string[]>;
-  const opencode = Object.fromEntries(
-    Object.entries(cli.commandRequirementsFor(env, openCodeHarness)).map(
-      ([command, tools]) => [
-        command,
-        tools.map((requirement) => requirement.name),
-      ],
-    ),
-  ) as Record<Subcommand, string[]>;
-  return { codex: cli.commandRequirements(env), pi, opencode };
+  const native = Object.fromEntries(
+    Object.entries({
+      pi: cli.commandRequirementsFor(env, piHarness),
+      opencode: cli.commandRequirementsFor(env, openCodeHarness),
+    }).map(([name, commands]) => [
+      name,
+      Object.fromEntries(
+        Object.entries(commands).map(([command, tools]) => [
+          command,
+          tools.map((requirement) => requirement.name),
+        ]),
+      ),
+    ]),
+  ) as Record<"pi" | "opencode", Record<Subcommand, string[]>>;
+  return { codex: cli.commandRequirements(env), ...native };
 }
 
 function derive(): Record<string, string>[] {

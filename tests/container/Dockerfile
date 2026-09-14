@@ -25,21 +25,16 @@ RUN opencode_version=$(./node_modules/.bin/opencode --version) \
        "@opencode-ai/plugin@$opencode_version" \
     && npm ci --prefix /opt/spw-opencode-config-seed --ignore-scripts \
     && node -e 'const expected=process.argv[1]; const actual=require("/opt/spw-opencode-config-seed/node_modules/@opencode-ai/plugin/package.json").version; if(actual!==expected) process.exit(1)' "$opencode_version"
-RUN if command -v rg >/dev/null 2>&1; then \
-      mkdir -p /opt/spw-opencode-cache-seed/opencode/bin \
-      && cp "$(command -v rg)" /opt/spw-opencode-cache-seed/opencode/bin/rg; \
-    else \
-      spw_rg_root=$(mktemp -d) \
-      && HOME="$spw_rg_root/home" \
-         XDG_CONFIG_HOME="$spw_rg_root/config" \
-         XDG_DATA_HOME="$spw_rg_root/data" \
-         XDG_CACHE_HOME=/opt/spw-opencode-cache-seed \
-         XDG_STATE_HOME="$spw_rg_root/state" \
-         OPENCODE_DISABLE_AUTOUPDATE=1 \
-         OPENCODE_DISABLE_MODELS_FETCH=1 \
-         ./node_modules/.bin/opencode debug rg files --limit 1 \
-      && rm -rf "$spw_rg_root"; \
-    fi \
+RUN spw_rg_root=$(mktemp -d) \
+    && HOME="$spw_rg_root/home" \
+       XDG_CONFIG_HOME="$spw_rg_root/config" \
+       XDG_DATA_HOME="$spw_rg_root/data" \
+       XDG_CACHE_HOME=/opt/spw-opencode-cache-seed \
+       XDG_STATE_HOME="$spw_rg_root/state" \
+       OPENCODE_DISABLE_AUTOUPDATE=1 \
+       OPENCODE_DISABLE_MODELS_FETCH=1 \
+       ./node_modules/.bin/opencode debug rg files --limit 1 \
+    && rm -rf "$spw_rg_root" \
     && test -x /opt/spw-opencode-cache-seed/opencode/bin/rg \
     && /opt/spw-opencode-cache-seed/opencode/bin/rg --version >/dev/null
 

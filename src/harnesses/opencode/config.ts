@@ -6,6 +6,7 @@ import {
   applyEdits,
   createScanner,
   findNodeAtLocation,
+  getNodeValue,
   parseTree,
   type Node as JsonNode,
   type ParseError,
@@ -13,6 +14,7 @@ import {
 import * as jsoncParserRuntime from "jsonc-parser";
 import { atomicWriteFile } from "../../atomic.ts";
 import { SafetyError } from "../../safety-error.ts";
+import { isErrno } from "../../safe-path.ts";
 
 const MAX_CONFIG_BYTES = 1024 * 1024;
 const MAX_CONFIG_DEPTH = 256;
@@ -155,29 +157,11 @@ function configEntries(root: JsonNode): readonly ConfigEntry[] {
     return {
       index,
       spec: tuple[0].value,
-      options: decodeNode(tuple[1]) as Readonly<Record<string, unknown>>,
+      options: structuredClone(getNodeValue(tuple[1])) as Readonly<
+        Record<string, unknown>
+      >,
     };
   });
-}
-
-function decodeNode(node: JsonNode): unknown {
-  if (node.type === "array") {
-    return (node.children ?? []).map(decodeNode);
-  }
-  if (node.type === "object") {
-    const value: Record<string, unknown> = {};
-    for (const property of node.children ?? []) {
-      const [key, child] = propertyParts(property);
-      Object.defineProperty(value, key.value as string, {
-        value: decodeNode(child),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    }
-    return value;
-  }
-  return node.value ?? null;
 }
 
 export function parseOpenCodeConfig(
@@ -276,14 +260,6 @@ export function removeOpenCodeEntry(
   }
 }
 
-function isErrno(cause: unknown, code: string): boolean {
-  return (
-    cause instanceof Error &&
-    "code" in cause &&
-    (cause as NodeJS.ErrnoException).code === code
-  );
-}
-
 async function readConfigBytes(
   path: string,
 ): Promise<FileBytesObservation | null> {
@@ -336,18 +312,13 @@ export async function readOpenCodeConfig(
   }
 }
 
-function sameIdentity(
-  left: ConfigFileObservation["identity"],
-  right: ConfigFileObservation["identity"],
-): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-
 function sameObservedState(
   left: ConfigFileObservation["identity"],
   right: ConfigFileObservation["identity"],
 ): boolean {
-  return sameIdentity(left, right) && left.mode === right.mode;
+  return (
+    left.dev === right.dev && left.ino === right.ino && left.mode === right.mode
+  );
 }
 
 export async function removeObservedOpenCodeEntry(

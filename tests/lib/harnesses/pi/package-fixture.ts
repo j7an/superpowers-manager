@@ -32,19 +32,15 @@ export function nativeFixture(t: TestContext): string {
 
 export function crossHarnessUpstream(t: TestContext): string {
   const upstream = nativeFixture(t);
-  for (const [fixture, target] of [
-    ["bootstrap.js.txt", ".opencode/plugins/superpowers.js"],
-    ["package.json.txt", "package.json"],
-    ["SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
-    ["LICENSE.txt", "LICENSE"],
-  ]) {
-    const destination = join(upstream, target);
-    mkdirSync(dirname(destination), { recursive: true });
-    copyFileSync(
-      new URL(`../../../fixtures/opencode-native/${fixture}`, import.meta.url),
-      destination,
-    );
-  }
+  const bootstrap = join(upstream, ".opencode/plugins/superpowers.js");
+  mkdirSync(dirname(bootstrap), { recursive: true });
+  copyFileSync(
+    new URL(
+      "../../../fixtures/opencode-native/bootstrap.js.txt",
+      import.meta.url,
+    ),
+    bootstrap,
+  );
   writeFileSync(join(upstream, "README.md"), "cross-harness fixture\n");
   writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "fixture conduct\n");
   return upstream;

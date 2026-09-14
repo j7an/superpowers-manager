@@ -1,6 +1,6 @@
 import { digestArtifactTree } from "../../artifact-tree.ts";
 import {
-  failureResult,
+  inspectionFailure,
   successResult,
   type AdapterContext,
   type AdapterResult,
@@ -64,19 +64,6 @@ function pathsFor(ctx: AdapterContext): OpenCodePaths {
   return openCodePaths(ctx.env ?? {}, process.cwd());
 }
 
-function inspectionFailure<T>(
-  operation: string,
-  subject: string,
-): AdapterResult<T> {
-  return failureResult(
-    operation,
-    "invalid-state",
-    `cannot inspect ${subject}`,
-    [],
-    [],
-  );
-}
-
 async function observeSnapshot(
   paths: OpenCodePaths,
 ): Promise<SnapshotObservation> {
@@ -101,18 +88,24 @@ async function observeFacts(ctx: AdapterContext): Promise<Facts> {
     observeSnapshot(paths),
     classifyPathNoFollow(paths.recoveryRoot),
   ]);
-  if (discovery.managedEntries.length > 1)
-    throw new Error("ambiguous Manager registration");
-  if (snapshot.kind === "unverified")
-    throw new Error("unverified Manager snapshot");
-  if (discovery.managedEntries.length === 1 && snapshot.kind === "absent")
-    throw new Error("unverified Manager registration");
   return {
     paths,
     discovery,
     snapshot,
     recovery: recoveryKind === "missing" ? "absent" : "required",
   };
+}
+
+function assertInspectableFacts(facts: Facts): void {
+  if (facts.discovery.managedEntries.length > 1)
+    throw new Error("ambiguous Manager registration");
+  if (facts.snapshot.kind === "unverified")
+    throw new Error("unverified Manager snapshot");
+  if (
+    facts.discovery.managedEntries.length === 1 &&
+    facts.snapshot.kind === "absent"
+  )
+    throw new Error("unverified Manager registration");
 }
 
 function mutationDecision(facts: Facts): Decision {
@@ -145,16 +138,13 @@ function registrationFor(facts: Facts): OpenCodeRemovalInput["registration"] {
       };
 }
 
-function hasUnresolvedRemovalInput(facts: Facts): boolean {
-  return facts.discovery.registrationUncertain;
-}
-
 export async function inspectOpenCodeOwnership(
   ctx: AdapterContext,
 ): Promise<AdapterResult<OwnershipInspection<OpenCodeRemovalInput>>> {
   const operation = "inspect-opencode-ownership";
   try {
     const facts = await observeFacts(ctx);
+    assertInspectableFacts(facts);
     const registration = registrationFor(facts);
     const removalVerification: Decision =
       registration !== null
@@ -165,7 +155,7 @@ export async function inspectOpenCodeOwnership(
           ? blocked(
               "error: the Manager-owned OpenCode snapshot is still present after removal",
             )
-          : hasUnresolvedRemovalInput(facts)
+          : facts.discovery.registrationUncertain
             ? blocked(
                 "error: unresolved OpenCode configuration remains after removal",
                 ...facts.discovery.blockedInputs.map((input) => `- ${input}`),
@@ -180,7 +170,7 @@ export async function inspectOpenCodeOwnership(
         ? registration === null
           ? `managed snapshot ${facts.snapshot.digest}`
           : `managed ${facts.snapshot.digest}`
-        : hasUnresolvedRemovalInput(facts)
+        : facts.discovery.registrationUncertain
           ? "unresolved configuration"
           : "absent";
     return successResult(
@@ -221,25 +211,14 @@ export async function inspectOpenCodeInstalled(
   const operation = "inspect-opencode-installed";
   let facts: Facts;
   try {
-    const paths = pathsFor(ctx);
-    const [discovery, snapshot, recoveryKind] = await Promise.all([
-      inspectOpenCodeDiscovery(paths, ctx.env ?? {}, process.cwd()),
-      observeSnapshot(paths),
-      classifyPathNoFollow(paths.recoveryRoot),
-    ]);
-    facts = {
-      paths,
-      discovery,
-      snapshot,
-      recovery: recoveryKind === "missing" ? "absent" : "required",
-    };
+    facts = await observeFacts(ctx);
   } catch {
     return inspectionFailure(operation, "OpenCode installed state");
   }
   if (facts.snapshot.kind === "absent") {
     if (facts.discovery.managedEntries.length > 0)
       return mismatch(operation, "registered without an installed snapshot");
-    return hasUnresolvedRemovalInput(facts)
+    return facts.discovery.registrationUncertain
       ? mismatch(operation, "unresolved OpenCode configuration")
       : successResult(operation, { kind: "absent", observedIdentity: "" }, []);
   }
@@ -293,6 +272,7 @@ export async function inspectOpenCodeControl(
   const operation = "inspect-opencode-control";
   try {
     const facts = await observeFacts(ctx);
+    assertInspectableFacts(facts);
     const mutationEligibility = mutationDecision(facts);
     return successResult(
       operation,

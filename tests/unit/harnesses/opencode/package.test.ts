@@ -7,14 +7,12 @@ import {
   openCodeReceiptBinding,
   readOpenCodeReceipt,
 } from "../../../../src/harnesses/opencode/package.ts";
-import {
-  nativeOpenCodeFixture,
-  openCodeSelection,
-} from "../../../lib/harnesses/opencode/package-fixture.ts";
+import { nativeOpenCodeFixture } from "../../../lib/harnesses/opencode/package-fixture.ts";
+import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
 void test("an unknown bootstrap is unsupported even with valid metadata", async (t) => {
   const root = nativeOpenCodeFixture(t),
-    selection = openCodeSelection();
+    selection = nativeSelection();
   assert.equal(
     (await assessOpenCodeCompatibility(root, selection)).kind,
     "supported",
@@ -34,7 +32,7 @@ void test("a custom source is experimental", async (t) => {
     (
       await assessOpenCodeCompatibility(
         nativeOpenCodeFixture(t),
-        openCodeSelection(undefined, "https://example.invalid/superpowers"),
+        nativeSelection(undefined, "https://example.invalid/superpowers"),
       )
     ).kind,
     "experimental",
@@ -54,7 +52,7 @@ void test("runtime dependencies are unsupported with an otherwise valid entrypoi
     }),
   );
   assert.equal(
-    (await assessOpenCodeCompatibility(root, openCodeSelection())).kind,
+    (await assessOpenCodeCompatibility(root, nativeSelection())).kind,
     "unsupported",
   );
 });
@@ -67,7 +65,7 @@ void test("an escaping entrypoint is unsupported without dependencies", async (t
     JSON.stringify({ ...pkg, main: "../outside.js" }),
   );
   assert.equal(
-    (await assessOpenCodeCompatibility(root, openCodeSelection())).kind,
+    (await assessOpenCodeCompatibility(root, nativeSelection())).kind,
     "unsupported",
   );
 });
@@ -79,7 +77,7 @@ void test("an invalid native skill is unsupported", async (t) => {
     "not a skill\n",
   );
   assert.equal(
-    (await assessOpenCodeCompatibility(root, openCodeSelection())).kind,
+    (await assessOpenCodeCompatibility(root, nativeSelection())).kind,
     "unsupported",
   );
 });

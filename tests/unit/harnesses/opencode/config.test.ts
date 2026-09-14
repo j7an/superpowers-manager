@@ -43,6 +43,20 @@ void test("parses the two qualified plugin entry shapes", () => {
   ]);
 });
 
+void test("preserves special option keys without prototype pollution", () => {
+  const [entry] = parseOpenCodeConfig(
+    '{"plugin":[["file:///owned",{"__proto__":{"polluted":true},"constructor":{"nested":1}}]]}',
+    "/fixture/opencode.json",
+  ).entries;
+  assert.ok(entry?.options);
+  assert.equal(Object.getPrototypeOf(entry.options), Object.prototype);
+  assert.equal(Object.hasOwn(entry.options, "__proto__"), true);
+  assert.equal(Object.hasOwn(entry.options, "constructor"), true);
+  assert.deepEqual(entry.options.__proto__, { polluted: true });
+  assert.deepEqual(entry.options.constructor, { nested: 1 });
+  assert.equal(({} as { polluted?: boolean }).polluted, undefined);
+});
+
 void test("accepts comments, trailing commas, and a missing plugin field", () => {
   assert.deepEqual(
     parseOpenCodeConfig(
