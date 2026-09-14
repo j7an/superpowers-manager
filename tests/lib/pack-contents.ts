@@ -9,7 +9,12 @@ export function expectedTarballPaths(
   if (!statSync(src).isDirectory())
     throw new Error("package source root is not a directory");
   const emitted = readdirSync(src, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && !entry.name.endsWith(".d.ts"))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith(".ts") &&
+        !entry.name.endsWith(".d.ts"),
+    )
     .map(
       (entry) =>
         "dist/" +

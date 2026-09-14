@@ -33,6 +33,7 @@ function makeExpectedPathsFixture(t: import("node:test").TestContext): string {
   writeFileSync(join(root, "src", "cli.ts"), "export {};\n");
   writeFileSync(join(root, "src", "nested", "tool.ts"), "export {};\n");
   writeFileSync(join(root, "src", "types.d.ts"), "export {};\n");
+  writeFileSync(join(root, "src", "schema.json"), "{}\n");
   writeFileSync(join(root, "outside-src.txt"), "unrelated\n");
   return root;
 }
