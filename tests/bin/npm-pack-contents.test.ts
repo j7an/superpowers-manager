@@ -6,9 +6,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -138,6 +140,44 @@ void test("package source missing is rejected", (t) => {
   assert.notEqual(result.status, 0);
   assert.match(result.output, /cannot discover package source files/);
   assert.doesNotMatch(result.output, /ENOENT|Error:|at \S+ \(/);
+});
+
+void test("unreadable package source subdirectory is rejected", (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "spw-pack-source-unreadable-"));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const packageRoot = makeCheckerPackageRoot(scratch, "unreadable", {
+    source: {},
+  });
+  const locked = join(packageRoot, "src", "locked");
+  mkdirSync(locked);
+  writeFileSync(join(locked, "hidden.ts"), "export {};\n");
+  const reportPath = join(scratch, "report.json");
+  const expectedPath = join(scratch, "expected.txt");
+  writeJson(reportPath, checkerReport(["README.md"]));
+  writeFileSync(expectedPath, "README.md\n");
+  chmodSync(locked, 0o000);
+  try {
+    let revoked = false;
+    try {
+      readdirSync(locked);
+    } catch {
+      revoked = true;
+    }
+    if (!revoked) {
+      t.skip("cannot revoke directory read access as this user");
+      return;
+    }
+    const result = runChecker([
+      reportPath,
+      join(packageRoot, "package.json"),
+      expectedPath,
+    ]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.output, /cannot discover package source files/);
+    assert.doesNotMatch(result.output, /ENOENT|EACCES|Error:|at \S+ \(/);
+  } finally {
+    chmodSync(locked, 0o755);
+  }
 });
 
 void test("missing derived output is rejected", (t) => {

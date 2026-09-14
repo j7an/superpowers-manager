@@ -1,4 +1,4 @@
-import { globSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 export function expectedTarballPaths(
@@ -8,7 +8,7 @@ export function expectedTarballPaths(
   const src = join(sourceRoot, "src");
   if (!statSync(src).isDirectory())
     throw new Error("package source root is not a directory");
-  const emitted = globSync("**/*.ts", { cwd: src, withFileTypes: true })
+  const emitted = readdirSync(src, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && !entry.name.endsWith(".d.ts"))
     .map(
       (entry) =>
