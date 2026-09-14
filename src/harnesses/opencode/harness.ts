@@ -24,8 +24,7 @@ function requirements(
   command: HarnessCommand,
   env: NodeJS.ProcessEnv,
 ): readonly ToolRequirement[] {
-  if (command !== "install" && command !== "update" && command !== "uninstall")
-    return [];
+  if (command !== "install" && command !== "update") return [];
   const executable = env.SUPERPOWERS_OPENCODE || "opencode";
   return [
     {

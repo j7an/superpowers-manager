@@ -6,6 +6,9 @@ commands do not accept a harness target. OpenCode is global-only: the manager
 uses `$XDG_CONFIG_HOME/opencode`, or `$HOME/.config/opencode`, and never installs
 into a project.
 
+The manager uses installed OpenCode and never installs, upgrades, or downgrades
+it; set `SUPERPOWERS_OPENCODE` to select a non-default executable.
+
 Prepared output, the installed snapshot, and recovery material are separate
 Manager-owned state. The manager registers the installed snapshot through
 OpenCode's native global installer and verifies configuration and snapshot

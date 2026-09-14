@@ -59,6 +59,7 @@ export interface OpenCodeDiscovery {
 
 interface DiscoveryState {
   readonly documents: ConfigFileObservation[];
+  readonly configObservations: Map<string, ConfigFileObservation>;
   readonly conflicts: Set<string>;
   readonly blockedInputs: Set<string>;
   registrationUncertain: boolean;
@@ -188,24 +189,49 @@ function localPluginPath(
   return null;
 }
 
-function isKnownUpstream(spec: string): boolean {
+function classifyUpstreamSpec(
+  spec: string,
+): "known" | "unresolved" | "unrelated" {
   const trimmed = spec.trim();
-  if (trimmed === "superpowers") return true;
+  if (trimmed === "superpowers") return "known";
   if (
-    /^superpowers@(?:git\+)?(?:https?|ssh|git):\/\/(?:git@)?github\.com\/obra\/superpowers(?:\.git)?(?:[#@].+)?$/u.test(
+    /^(?:superpowers@)?github:obra\/superpowers(?:\.git)?\/?(?:#.+)?$/iu.test(
       trimmed,
     )
   )
-    return true;
+    return "known";
   if (
-    /^(?:git\+)?(?:https?|ssh|git):\/\/(?:git@)?github\.com\/obra\/superpowers(?:\.git)?(?:[#@].+)?$/u.test(
+    /^(?:superpowers@)?(?:git\+)?(?:https?|ssh|git):\/\/(?:git@)?github\.com\/obra\/superpowers(?:\.git)?\/?(?:[#@].+)?$/iu.test(
       trimmed,
     )
   )
+    return "known";
+  if (
+    /^git@github\.com:obra\/superpowers(?:\.git)?\/?(?:[#@].+)?$/iu.test(
+      trimmed,
+    )
+  )
+    return "known";
+  return /^(?:npm:)?superpowers(?:@|$)/u.test(trimmed)
+    ? "unresolved"
+    : "unrelated";
+}
+
+function inspectUpstreamSpec(
+  spec: string,
+  origin: string,
+  state: DiscoveryState,
+): boolean {
+  const classification = classifyUpstreamSpec(spec);
+  if (classification === "known") {
+    state.conflicts.add("registered OpenCode package for obra/superpowers");
     return true;
-  return /^git@github\.com:obra\/superpowers(?:\.git)?(?:[#@].+)?$/u.test(
-    trimmed,
-  );
+  }
+  if (classification === "unresolved") {
+    addBlocked(state, origin);
+    return true;
+  }
+  return false;
 }
 
 function isKnownPluginFile(path: string): boolean {
@@ -250,10 +276,14 @@ async function inspectPluginEntry(
     }
   }
   if (!active) return;
-  if (isKnownUpstream(entry.spec)) {
-    state.conflicts.add("registered OpenCode package for obra/superpowers");
+  if (
+    inspectUpstreamSpec(
+      entry.spec,
+      `${observation.document.path} plugin[${entry.index}]`,
+      state,
+    )
+  )
     return;
-  }
   if (local === null) return;
   const kind = await classifyPathNoFollow(local);
   if (kind === "missing") {
@@ -388,7 +418,21 @@ async function inspectConfigPath(
   state: DiscoveryState,
 ): Promise<void> {
   const observation = await readOpenCodeConfig(path);
-  if (observation !== null) await inspectDocument(observation, state);
+  if (observation === null) return;
+  const canonicalPath = await canonicalizeProspectivePath(path);
+  const previous = state.configObservations.get(canonicalPath);
+  if (previous !== undefined) {
+    if (
+      previous.identity.dev !== observation.identity.dev ||
+      previous.identity.ino !== observation.identity.ino ||
+      previous.identity.mode !== observation.identity.mode ||
+      !previous.bytes.equals(observation.bytes)
+    )
+      throw new Error("OpenCode configuration changed during discovery");
+    return;
+  }
+  state.configObservations.set(canonicalPath, observation);
+  await inspectDocument(observation, state);
 }
 
 async function inspectNativeDirectory(
@@ -638,6 +682,7 @@ export async function inspectOpenCodeDiscovery(
 ): Promise<OpenCodeDiscovery> {
   const state: DiscoveryState = {
     documents: [],
+    configObservations: new Map(),
     conflicts: new Set(),
     blockedInputs: new Set(),
     registrationUncertain: false,
@@ -701,11 +746,15 @@ export async function inspectOpenCodeDiscovery(
             containsSubstitution(entry.spec)
           )
             addBlocked(state, `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`);
-          else if (isKnownUpstream(entry.spec))
-            state.conflicts.add(
-              "registered OpenCode package for obra/superpowers",
-            );
-          else {
+          else if (
+            inspectUpstreamSpec(
+              entry.spec,
+              `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`,
+              state,
+            )
+          ) {
+            continue;
+          } else {
             const local = localPluginPath(
               entry.spec,
               join(cwd, "opencode.json"),

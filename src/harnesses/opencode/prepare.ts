@@ -153,21 +153,34 @@ export async function inspectOpenCodePrepared(
         [],
       );
     const assessment = await readOpenCodePackageAssessment(root);
-    const artifact = artifactFromAssessment(root, assessment);
-    const { receipt } = assessment;
+    const { receipt, compatibility } = assessment;
     if (
-      artifact.commit !== selection.desiredCommit ||
+      receipt.commit !== selection.desiredCommit ||
       !sameOpenCodeSource(receipt.source, selection.effectiveSource)
     )
       return successResult(
         "inspect-prepared",
         {
           kind: "needs-prepare",
-          observedIdentity: artifact.identity,
+          observedIdentity: receipt.digest,
           compatibility: unknown,
         },
         [],
       );
+    if (
+      compatibility.kind !== "supported" &&
+      compatibility.kind !== "experimental"
+    )
+      return successResult(
+        "inspect-prepared",
+        {
+          kind: "needs-prepare",
+          observedIdentity: receipt.digest,
+          compatibility,
+        },
+        [],
+      );
+    const artifact = artifactFromAssessment(root, assessment);
     return successResult(
       "inspect-prepared",
       {

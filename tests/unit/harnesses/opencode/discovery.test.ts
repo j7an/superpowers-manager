@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
+  linkSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -15,9 +18,11 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { once } from "node:events";
 import { inspectOpenCodeDiscovery } from "../../../../src/harnesses/opencode/discovery.ts";
+import { inspectOpenCodeOwnership } from "../../../../src/harnesses/opencode/state.ts";
 import {
   nativeOpenCodeFixture,
   openCodeSandbox,
+  writeOpenCodeArtifact,
 } from "../../../lib/harnesses/opencode/package-fixture.ts";
 
 function writeJson(path: string, value: unknown): void {
@@ -32,6 +37,231 @@ function writeSkill(path: string): void {
     "---\nname: using-superpowers\ndescription: fixture\n---\n",
   );
 }
+
+void test("duplicate routes to one global config retain one owned registration", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, { plugin: [state.paths.installedRoot] });
+
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    {
+      ...state.env,
+      OPENCODE_CONFIG: config,
+      OPENCODE_CONFIG_DIR: state.paths.configRoot,
+    },
+    state.root,
+  );
+
+  assert.deepEqual(
+    result.documents.map((item) => item.document.path),
+    [config],
+  );
+  assert.equal(result.managedEntries.length, 1);
+  assert.deepEqual(result.blockedInputs, []);
+});
+
+void test("a canonical config-directory alias retains native-writer ownership", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  await writeOpenCodeArtifact(t, state.paths.installedRoot);
+  writeJson(config, { plugin: [state.paths.installedRoot] });
+  const alias = join(state.root, "config-alias");
+  symlinkSync(state.paths.configRoot, alias, "dir");
+  const ctx = {
+    ...state.ctx,
+    env: { ...state.env, OPENCODE_CONFIG_DIR: alias },
+  };
+
+  const ownership = await inspectOpenCodeOwnership(ctx);
+
+  assert.equal(ownership.outcome.ok, true);
+  if (!ownership.outcome.ok) assert.fail("expected inspectable ownership");
+  assert.equal(ownership.outcome.result.installEligibility.kind, "allowed");
+  assert.equal(
+    ownership.outcome.result.removalInput.registration?.observation.document
+      .path,
+    config,
+  );
+});
+
+void test("a hard-linked custom config remains an unowned origin", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  const custom = join(state.root, "custom.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, { plugin: [state.paths.installedRoot] });
+  linkSync(config, custom);
+
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    { ...state.env, OPENCODE_CONFIG: custom },
+    state.root,
+  );
+
+  assert.equal(result.managedEntries.length, 1);
+  assert.deepEqual(result.blockedInputs, [
+    `OpenCode Manager registration outside native global writer: ${custom}`,
+  ]);
+});
+
+void test("duplicate reads refuse changed config observations", async (t) => {
+  for (const change of ["bytes", "mode", "identity"] as const) {
+    await t.test(change, async (t) => {
+      const state = openCodeSandbox(t);
+      const config = join(state.paths.configRoot, "opencode.json");
+      const replaced = join(state.root, "replaced.json");
+      mkdirSync(state.paths.installedRoot, { recursive: true });
+      writeJson(config, { plugin: [state.paths.installedRoot] });
+      const env = { ...state.env };
+      Object.defineProperty(env, "OPENCODE_CONFIG", {
+        enumerable: true,
+        get() {
+          if (change === "bytes") {
+            writeJson(config, {
+              plugin: [state.paths.installedRoot],
+              theme: "changed",
+            });
+          } else if (change === "mode") {
+            chmodSync(config, 0o600);
+          } else {
+            renameSync(config, replaced);
+            writeJson(config, { plugin: [state.paths.installedRoot] });
+          }
+          return config;
+        },
+      });
+
+      await assert.rejects(
+        inspectOpenCodeDiscovery(state.paths, env, state.root),
+        /OpenCode configuration changed during discovery/u,
+      );
+    });
+  }
+});
+
+void test("duplicate registrations within one document remain ambiguous", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, {
+    plugin: [state.paths.installedRoot, state.paths.installedRoot],
+  });
+
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+
+  assert.equal(result.documents.length, 1);
+  assert.equal(result.managedEntries.length, 2);
+});
+
+void test("known upstream package forms are conflicts in files and inline config", async (t) => {
+  const forms = [
+    "superpowers@github:obra/superpowers",
+    "github:obra/superpowers",
+    "superpowers@https://GitHub.com/Obra/Superpowers/",
+    "https://GitHub.com/Obra/Superpowers.git/#v1.2.3",
+    "git@GitHub.com:Obra/Superpowers.git#main",
+  ];
+  for (const form of forms) {
+    await t.test(form, async (t) => {
+      const state = openCodeSandbox(t);
+      writeJson(join(state.paths.configRoot, "opencode.json"), {
+        plugin: [form],
+      });
+      const file = await inspectOpenCodeDiscovery(
+        state.paths,
+        state.env,
+        state.root,
+      );
+      assert.deepEqual(file.conflicts, [
+        "registered OpenCode package for obra/superpowers",
+      ]);
+
+      writeFileSync(join(state.paths.configRoot, "opencode.json"), "{}");
+      const inline = await inspectOpenCodeDiscovery(
+        state.paths,
+        {
+          ...state.env,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugin: [form] }),
+        },
+        state.root,
+      );
+      assert.deepEqual(inline.conflicts, [
+        "registered OpenCode package for obra/superpowers",
+      ]);
+    });
+  }
+});
+
+void test("unknown exact superpowers package forms fail closed on both config routes", async (t) => {
+  for (const spec of [
+    "superpowers@unknown:source",
+    "superpowers@1.2.3",
+    "superpowers@latest",
+    "npm:superpowers",
+    "npm:superpowers@1.2.3",
+  ]) {
+    await t.test(spec, async (t) => {
+      const state = openCodeSandbox(t);
+      const config = join(state.paths.configRoot, "opencode.json");
+      writeJson(config, { plugin: [spec] });
+      const file = await inspectOpenCodeDiscovery(
+        state.paths,
+        state.env,
+        state.root,
+      );
+      assert.deepEqual(file.blockedInputs, [`${config} plugin[0]`]);
+      assert.equal(file.registrationUncertain, true);
+      writeFileSync(config, "{}");
+      const inline = await inspectOpenCodeDiscovery(
+        state.paths,
+        {
+          ...state.env,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({ plugin: [spec] }),
+        },
+        state.root,
+      );
+      assert.deepEqual(inline.blockedInputs, [
+        "OPENCODE_CONFIG_CONTENT plugin[0]",
+      ]);
+      assert.equal(inline.registrationUncertain, true);
+    });
+  }
+});
+
+void test("unrelated package names and pure-mode package specs remain inactive", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  writeJson(config, {
+    plugin: [
+      "superpowers-extra@github:obra/superpowers",
+      "npm:superpowers-extra@1.2.3",
+    ],
+  });
+  const unrelated = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(unrelated.conflicts, []);
+  assert.deepEqual(unrelated.blockedInputs, []);
+
+  writeJson(config, { plugin: ["superpowers@unknown:source"] });
+  const pure = await inspectOpenCodeDiscovery(
+    state.paths,
+    { ...state.env, OPENCODE_PURE: "1" },
+    state.root,
+  );
+  assert.deepEqual(pure.conflicts, []);
+  assert.deepEqual(pure.blockedInputs, [
+    "OPENCODE_PURE disables OpenCode plugin activation",
+  ]);
+});
 
 void test("discovery retains origins and separates the Manager alias from exact unmanaged identities", async (t) => {
   const state = openCodeSandbox(t);

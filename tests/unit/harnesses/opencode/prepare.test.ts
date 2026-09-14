@@ -11,8 +11,11 @@ import test from "node:test";
 import {
   inspectOpenCodePrepared,
   prepareOpenCodeCandidate,
+  readOpenCodePrepared,
   validateOpenCodePreparationBeforeFetch,
 } from "../../../../src/harnesses/opencode/prepare.ts";
+import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
+import { openCodeReceiptBinding } from "../../../../src/harnesses/opencode/package.ts";
 import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
 import {
   commitFixture,
@@ -168,4 +171,56 @@ void test("a tampered receipt source cannot satisfy prepared inspection", async 
   cpSync(candidate, preparedRoot, { recursive: true, verbatimSymlinks: true });
   const inspected = await inspectOpenCodePrepared(nativeSelection(commit), ctx);
   assert.equal(inspected.outcome.ok, false);
+});
+
+void test("a retired prepared profile needs replacement but cannot be read as an artifact", async (t) => {
+  const root = nativeOpenCodeFixture(t),
+    commit = commitFixture(root),
+    ctx = {
+      root,
+      env: {
+        HOME: join(root, "home"),
+        XDG_CONFIG_HOME: join(root, "config"),
+      },
+    },
+    preparedRoot = openCodePaths(ctx.env, process.cwd()).preparedRoot;
+  const candidate = join(root, "candidate");
+  await prepareOpenCodeCandidate(
+    {
+      upstreamRoot: root,
+      workspaceRoot: root,
+      candidateRoot: candidate,
+      selection: nativeSelection(commit),
+    },
+    ctx,
+  );
+  cpSync(candidate, preparedRoot, { recursive: true, verbatimSymlinks: true });
+  writeFileSync(
+    join(preparedRoot, ".opencode/plugins/superpowers.js"),
+    "retired bootstrap profile\n",
+  );
+  const receiptPath = join(preparedRoot, ".superpowers-manager.json"),
+    receipt = JSON.parse(readFileSync(receiptPath, "utf8")),
+    digest = await digestArtifactTree(preparedRoot),
+    rewritten = { ...receipt, digest };
+  writeFileSync(
+    receiptPath,
+    JSON.stringify({
+      ...rewritten,
+      binding: openCodeReceiptBinding(rewritten),
+    }) + "\n",
+  );
+
+  const inspected = await inspectOpenCodePrepared(nativeSelection(commit), ctx);
+  assert.equal(inspected.outcome.ok, true);
+  if (!inspected.outcome.ok) assert.fail("expected retired inspection");
+  assert.deepEqual(inspected.outcome.result, {
+    kind: "needs-prepare",
+    observedIdentity: digest,
+    compatibility: {
+      kind: "unsupported",
+      reason: `OpenCode package does not match the qualified native bootstrap profile: ${preparedRoot}`,
+    },
+  });
+  assert.equal((await readOpenCodePrepared(ctx)).outcome.ok, false);
 });

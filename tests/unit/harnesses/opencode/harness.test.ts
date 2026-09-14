@@ -6,7 +6,7 @@ import type { ProbeSnapshot } from "../../../../src/harness.ts";
 import type { OpenCodeRemovalInput } from "../../../../src/harnesses/opencode/state.ts";
 import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
-void test("OpenCode adapter needs its native command only for mutation commands", () => {
+void test("OpenCode adapter needs its native command only for install and update", () => {
   for (const command of [
     "pin",
     "track-latest",
@@ -16,7 +16,14 @@ void test("OpenCode adapter needs its native command only for mutation commands"
   ] as const)
     assert.deepEqual(openCodeHarness.requirements(command, {}), []);
 
-  for (const command of ["install", "update", "uninstall"] as const) {
+  assert.deepEqual(
+    openCodeHarness.requirements("uninstall", {
+      SUPERPOWERS_OPENCODE: "./missing-opencode",
+    }),
+    [],
+  );
+
+  for (const command of ["install", "update"] as const) {
     assert.equal(
       openCodeHarness.requirements(command, {})[0]?.executable,
       "opencode",

@@ -140,11 +140,16 @@ guarded_manager update --harness opencode --allow-experimental
 observe B
 
 tripwire="$root/opencode-tripwire"
-printf '%s\n' '#!/bin/sh' 'touch "$SPW_OPENCODE_TRIPWIRE"' 'exit 97' >"$tripwire"
+printf '#!/bin/sh\ntouch "%s"\nexit 97\n' "$root/native-called" >"$tripwire"
 chmod +x "$tripwire"
+tripwire_status=0
+env -i PATH="$PATH" "$tripwire" || tripwire_status=$?
+test "$tripwire_status" = 97
+test -e "$root/native-called"
+rm "$root/native-called"
 probe_before="$root/probe.before.tar"
 tar -cf "$probe_before" -C "$root" config data cache state selection manager-cache explicit override home managed database
-SPW_OPENCODE_TRIPWIRE="$root/native-called" SUPERPOWERS_OPENCODE="$tripwire" \
+SUPERPOWERS_OPENCODE="$tripwire" \
   run_manager probe --harness opencode >/dev/null
 test ! -e "$root/native-called"
 tar -cf "$root/probe.after.tar" -C "$root" config data cache state selection manager-cache explicit override home managed database

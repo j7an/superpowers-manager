@@ -402,8 +402,15 @@ for (const selected of HARNESSES) {
           command === "probe" ? snapshotHarness(fixture.c, selected) : null;
         if (command === "probe" && selected === "opencode")
           writeOpenCodeExecutable(fixture.c, { failOnCall: true });
+        const commandEnv =
+          command === "uninstall" && selected === "opencode"
+            ? {
+                ...env,
+                SUPERPOWERS_OPENCODE: join(fixture.c.dir, "missing-opencode"),
+              }
+            : env;
         clearNativeLogs(fixture.c, fixture.piLog);
-        const result = await invoke(fixture.c, command, selected, env);
+        const result = await invoke(fixture.c, command, selected, commandEnv);
         assert.equal(
           result.status,
           0,
@@ -443,6 +450,12 @@ for (const selected of HARNESSES) {
           assertNoSelectedUpdateMutation(fixture.c, selected, fixture.piLog);
         }
         if (command === "uninstall") assertAbsent(fixture.c, selected);
+        if (command === "uninstall" && selected === "opencode")
+          assert.deepEqual(
+            readLog(join(fixture.c.state, "opencode.log")),
+            [],
+            "OpenCode uninstall invoked a configured missing native CLI",
+          );
         for (const [other, snapshot] of before)
           assert.deepEqual(snapshotHarness(fixture.c, other), snapshot);
         assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);

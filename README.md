@@ -143,7 +143,7 @@ The installed package requires Node >=24. Native source, tests, and packaging to
 | `probe`        | yes | yes                 | no                      | no                                  |
 | `install`      | yes | yes                 | yes                     | yes                                 |
 | `update`       | yes | yes                 | yes                     | yes                                 |
-| `uninstall`    | no  | yes                 | yes                     | yes                                 |
+| `uninstall`    | no  | yes                 | yes                     | no                                  |
 
 <!-- requirements:end -->
 

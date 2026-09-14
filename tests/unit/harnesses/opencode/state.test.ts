@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { hasTerminalControl } from "../../../../src/adapter-result.ts";
 import {
   mkdirSync,
@@ -480,11 +481,16 @@ void test("probe inspection never launches a configured OpenCode executable", as
     `#!/bin/sh\nprintf called >> '${callLog}'\nexit 99\n`,
     { mode: 0o755 },
   );
-  const ctx = { ...state.ctx, env: { ...state.env, OPENCODE_BIN: executable } };
+  const ctx = {
+    ...state.ctx,
+    env: { ...state.env, SUPERPOWERS_OPENCODE: executable },
+  };
   await inspectOpenCodeInstalled(nativeSelection(), ctx);
   await inspectOpenCodeOwnership(ctx);
   await inspectOpenCodeControl(ctx);
   assert.throws(() => readFileSync(callLog), { code: "ENOENT" });
+  assert.throws(() => execFileSync(executable), { status: 99 });
+  assert.equal(readFileSync(callLog, "utf8"), "called");
 });
 
 void test("receipt digest remains bound to actual artifact bytes", async (t) => {
