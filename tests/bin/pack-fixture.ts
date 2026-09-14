@@ -50,6 +50,7 @@ export function makePackFixture(t: TestContext): PackFixture {
     join(outer, "node-cache"),
     join(f.root, "src"),
     join(f.root, "tests"),
+    join(f.root, "tests", "lib"),
     join(f.root, "tests", "tools"),
     join(f.root, "node_modules", ".bin"),
     join(f.root, "node_modules", "smol-toml"),
@@ -126,14 +127,13 @@ export function makePackFixture(t: TestContext): PackFixture {
     join(f.root, "tests", "tools", "assert-pack-contents.ts"),
   );
   copyFileSync(
-    join(REPO, "src", "python-text.ts"),
-    join(f.root, "src", "python-text.ts"),
+    join(REPO, "tests", "lib", "pack-contents.ts"),
+    join(f.root, "tests", "lib", "pack-contents.ts"),
   );
   writeFileSync(
     join(f.root, "tests", "expected_tarball_contents.txt"),
     [
       ...Object.keys(assets),
-      "dist/cli.js",
       "node_modules/smol-toml/LICENSE",
       "node_modules/smol-toml/index.js",
       "node_modules/smol-toml/package.json",

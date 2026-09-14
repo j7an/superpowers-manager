@@ -18,10 +18,49 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { expectedTarballPaths } from "../lib/pack-contents.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const ASSERT_SCRIPT = join(ROOT, "tests", "assert_pack_contents.sh");
 const ASSERT_CHECKER = join(ROOT, "tests", "tools", "assert-pack-contents.ts");
+
+function makeExpectedPathsFixture(t: import("node:test").TestContext): string {
+  const root = mkdtempSync(join(tmpdir(), "spw-expected-tarball-paths-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "src", "nested"), { recursive: true });
+  writeFileSync(join(root, "src", "cli.ts"), "export {};\n");
+  writeFileSync(join(root, "src", "nested", "tool.ts"), "export {};\n");
+  writeFileSync(join(root, "src", "types.d.ts"), "export {};\n");
+  writeFileSync(join(root, "outside-src.txt"), "unrelated\n");
+  return root;
+}
+
+void test("expected tarball paths derive static and emitted files", (t) => {
+  const root = makeExpectedPathsFixture(t);
+  assert.deepEqual(
+    expectedTarballPaths(root, "# static\r\n README.md \r\npackage.json\n"),
+    ["README.md", "dist/cli.js", "dist/nested/tool.js", "package.json"],
+  );
+});
+
+void test("expected tarball paths preserve duplicate allowlist entries", (t) => {
+  const root = makeExpectedPathsFixture(t);
+  assert.deepEqual(expectedTarballPaths(root, "README.md\nREADME.md\n"), [
+    "README.md",
+    "README.md",
+    "dist/cli.js",
+    "dist/nested/tool.js",
+  ]);
+});
+
+void test("expected tarball paths reject a missing source directory", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "spw-expected-tarball-missing-src-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.throws(() => expectedTarballPaths(root, "README.md\n"), {
+    code: "ENOENT",
+    message: /ENOENT/,
+  });
+});
 
 function runSh(
   scriptPath: string,
@@ -52,6 +91,97 @@ function runChecker(args: readonly string[]) {
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
   };
 }
+
+function checkerReport(paths: readonly string[]) {
+  const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  return [
+    {
+      name: manifest.name,
+      version: manifest.version,
+      id: `${manifest.name}@${manifest.version}`,
+      files: paths.map((path) => ({ path })),
+    },
+  ];
+}
+
+function makeCheckerPackageRoot(
+  scratch: string,
+  name: string,
+  options: { source?: Record<string, string> } = {},
+): string {
+  const packageRoot = join(scratch, `boundary-package-${name}`);
+  mkdirSync(packageRoot, { recursive: true });
+  if (options.source !== undefined) {
+    mkdirSync(join(packageRoot, "src"), { recursive: true });
+    for (const [path, contents] of Object.entries(options.source)) {
+      writeFileSync(join(packageRoot, "src", path), contents);
+    }
+  }
+  copyFileSync(join(ROOT, "package.json"), join(packageRoot, "package.json"));
+  return packageRoot;
+}
+
+void test("package source missing is rejected", (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "spw-pack-source-missing-"));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const packageRoot = makeCheckerPackageRoot(scratch, "missing");
+  const reportPath = join(scratch, "report.json");
+  const expectedPath = join(scratch, "expected.txt");
+  writeJson(reportPath, checkerReport(["README.md"]));
+  writeFileSync(expectedPath, "README.md\n");
+
+  const result = runChecker([
+    reportPath,
+    join(packageRoot, "package.json"),
+    expectedPath,
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /cannot discover package source files/);
+  assert.doesNotMatch(result.output, /ENOENT|Error:|at \S+ \(/);
+});
+
+void test("missing derived output is rejected", (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "spw-pack-derived-missing-"));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const packageRoot = makeCheckerPackageRoot(scratch, "missing-derived", {
+    source: { "cli.ts": "export {};\n" },
+  });
+  const reportPath = join(scratch, "report.json");
+  const expectedPath = join(scratch, "expected.txt");
+  writeJson(reportPath, checkerReport(["README.md"]));
+  writeFileSync(expectedPath, "README.md\n");
+
+  const result = runChecker([
+    reportPath,
+    join(packageRoot, "package.json"),
+    expectedPath,
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /missing from tarball:\s+dist\/cli\.js/);
+});
+
+void test("extra emitted file is rejected", (t) => {
+  const scratch = mkdtempSync(join(tmpdir(), "spw-pack-derived-extra-"));
+  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const packageRoot = makeCheckerPackageRoot(scratch, "extra-derived", {
+    source: { "cli.ts": "export {};\n" },
+  });
+  const reportPath = join(scratch, "report.json");
+  const expectedPath = join(scratch, "expected.txt");
+  writeJson(
+    reportPath,
+    checkerReport(["README.md", "dist/cli.js", "dist/stale.js"]),
+  );
+  writeFileSync(expectedPath, "README.md\n");
+
+  const result = runChecker([
+    reportPath,
+    join(packageRoot, "package.json"),
+    expectedPath,
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.output, /unexpected in tarball:\s+dist\/stale\.js/);
+});
 
 /**
  * Produces the explicit native packer's real npm report for this repo, plus
@@ -91,25 +221,14 @@ function packRealReport(scratchDir: string): {
   );
   writeFileSync(rawPath, result.stdout ?? "", "utf8");
   const report = JSON.parse(readFileSync(rawPath, "utf8"));
-  // The installed npm's `pack --json` shape varies by version (a
-  // one-element array on some, a single-key keyed object on others) — the
-  // same variance assert_pack_contents.sh itself normalizes. Mirror that
-  // normalization here rather than assuming one shape.
-  let packed;
-  if (Array.isArray(report) && report.length === 1) {
-    packed = report[0];
-  } else if (
-    report !== null &&
-    typeof report === "object" &&
-    !Array.isArray(report) &&
-    Object.keys(report).length === 1
-  ) {
-    packed = Object.values(report)[0];
-  } else {
-    assert.fail(
-      `unexpected npm pack --json shape from the real npm invocation: ${JSON.stringify(report)}`,
-    );
-  }
+  assert.ok(Array.isArray(report), "manager pack output must be an array");
+  assert.equal(
+    report.length,
+    1,
+    "manager pack output must contain one artifact",
+  );
+  assert.ok(report[0] !== null && typeof report[0] === "object");
+  const packed = report[0];
   // Compare the delivered tarball itself as well as the npm report: the shared
   // validator below continues to own report-shape and identity diagnostics.
   const listed = spawnSync("tar", ["-tzf", join(pack, packed.filename)], {
@@ -121,18 +240,14 @@ function packRealReport(scratchDir: string): {
     .split("\n")
     .map((path) => path.replace(/^package\//, ""))
     .sort();
-  const expectedFiles = readFileSync(
-    join(ROOT, "tests", "expected_tarball_contents.txt"),
-    "utf8",
-  )
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("#"))
-    .sort();
+  const expectedFiles = expectedTarballPaths(
+    ROOT,
+    readFileSync(join(ROOT, "tests", "expected_tarball_contents.txt"), "utf8"),
+  );
   assert.deepEqual(
     actualFiles,
     expectedFiles,
-    "delivered tarball contents must match the maintained allowlist",
+    "delivered tarball contents must match source-derived output and the maintained allowlist",
   );
   return { rawPath, packed };
 }
@@ -266,11 +381,14 @@ void test("npm-pack-contents", async (t) => {
   await t.test("an invalid UTF-8 expected allowlist is rejected", () => {
     const reportPath = join(scratch, "replacement-character-report.json");
     const expectedPath = join(scratch, "invalid-expected-contents.txt");
+    const packageRoot = makeCheckerPackageRoot(scratch, "invalid-utf8", {
+      source: {},
+    });
     writeJson(reportPath, [{ ...packed, files: [{ path: "\ufffd" }] }]);
     writeFileSync(expectedPath, Buffer.from([0xff]));
     const { status, output } = runChecker([
       reportPath,
-      join(ROOT, "package.json"),
+      join(packageRoot, "package.json"),
       expectedPath,
     ]);
     assert.notEqual(status, 0);
@@ -282,19 +400,28 @@ void test("npm-pack-contents", async (t) => {
     ["CRLF", "first\r\nsecond\r\n", ["first", "second"]],
     ["CR", "first\rsecond\r", ["first", "second"]],
     ["U+2028", "first\u2028second\n", ["first\u2028second"]],
+    ["padded", "  first\t\n", ["first"]],
+    ["BOM-at-edge", "\ufefffirst\n", ["first"]],
   ] as const) {
     await t.test(
       `expected allowlist preserves ${name} text-file boundaries`,
       () => {
         const reportPath = join(scratch, `expected-boundary-${name}.json`);
         const expectedPath = join(scratch, `expected-boundary-${name}.txt`);
+        const packageRoot = makeCheckerPackageRoot(
+          scratch,
+          `boundary-${name}`,
+          {
+            source: {},
+          },
+        );
         writeJson(reportPath, [
           { ...packed, files: path.map((path) => ({ path })) },
         ]);
         writeFileSync(expectedPath, expectedText, "utf8");
         const { status, output } = runChecker([
           reportPath,
-          join(ROOT, "package.json"),
+          join(packageRoot, "package.json"),
           expectedPath,
         ]);
         assert.equal(status, 0, output);
