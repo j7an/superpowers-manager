@@ -32,7 +32,10 @@ import {
   readOpenCodePackageAssessment,
   readOpenCodeReceipt,
 } from "../../../../src/harnesses/opencode/package.ts";
-import { inspectOpenCodeOwnership } from "../../../../src/harnesses/opencode/state.ts";
+import {
+  inspectOpenCodeControl,
+  inspectOpenCodeOwnership,
+} from "../../../../src/harnesses/opencode/state.ts";
 import {
   openCodeSandbox,
   writeOpenCodeArtifact,
@@ -297,7 +300,102 @@ void test("OpenCode removal revalidates input and removes only a proven owned re
   assert.equal(existsSync(f.paths.installedRoot), false);
 });
 
-void test("OpenCode removal retains recovery when another origin can activate the snapshot", async (t) => {
+void test("OpenCode removal preserves unresolved package conflicts without recovery", async (t) => {
+  for (const origin of ["file", "inline"] as const) {
+    await t.test(origin, async (t) => {
+      const f = await fixture(t);
+      value(
+        await transaction(
+          await installOpenCode(f.artifact, f.ctx, f.deps),
+        ).finalize(),
+      );
+      const conflict = "superpowers@1.2.3";
+      const config = JSON.parse(readFileSync(f.configFile, "utf8"));
+      if (origin === "file") {
+        config.plugin.push(conflict);
+        writeFileSync(f.configFile, JSON.stringify(config));
+      } else {
+        f.ctx.env!.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+          plugin: [conflict],
+        });
+      }
+      const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+      assert.equal(ownership.installEligibility.kind, "blocked");
+      assert.equal(
+        value(await inspectOpenCodeControl(f.ctx)).mutationEligibility.kind,
+        "blocked",
+      );
+      value(await removeOpenCode(ownership.removalInput, f.ctx, f.deps));
+      assert.equal(existsSync(f.paths.installedRoot), false);
+      assert.equal(existsSync(f.paths.recoveryRoot), false);
+      assert.deepEqual(
+        JSON.parse(readFileSync(f.configFile, "utf8")).plugin,
+        origin === "file" ? ["npm:unrelated", conflict] : ["npm:unrelated"],
+      );
+      if (origin === "inline")
+        assert.equal(
+          f.ctx.env!.OPENCODE_CONFIG_CONTENT,
+          JSON.stringify({ plugin: [conflict] }),
+        );
+    });
+  }
+});
+
+void test("OpenCode refuses pre-existing registration uncertainty without mutating state", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const config = JSON.parse(readFileSync(f.configFile, "utf8"));
+  config.plugin.push(join(f.root, "missing", "superpowers.js"));
+  writeFileSync(f.configFile, JSON.stringify(config));
+  const before = readFileSync(f.configFile);
+  const snapshot = await readOpenCodePackageAssessment(f.paths.installedRoot);
+  const children = readdirSync(f.paths.managerRoot).sort();
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.equal(result.outcome.ok, false);
+  if (result.outcome.ok) assert.fail("expected removal refusal");
+  assert.equal(result.outcome.error.code, "removal-refused");
+  assert.deepEqual(readFileSync(f.configFile), before);
+  assert.deepEqual(
+    await readOpenCodePackageAssessment(f.paths.installedRoot),
+    snapshot,
+  );
+  assert.deepEqual(readdirSync(f.paths.managerRoot).sort(), children);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
+});
+
+void test("OpenCode rechecks uncertainty after backing up and before deregistering", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const before = readFileSync(f.configFile);
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const external = join(f.root, "external.json");
+  writeFileSync(
+    external,
+    JSON.stringify({ plugin: [join(f.root, "missing", "superpowers.js")] }),
+  );
+  Object.defineProperty(f.ctx.env, "OPENCODE_CONFIG", {
+    get: () => (existsSync(f.paths.recoveryRoot) ? external : undefined),
+  });
+  const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.equal(result.outcome.ok, false);
+  if (result.outcome.ok)
+    assert.fail("expected recovery after concurrent uncertainty");
+  assert.equal(result.outcome.error.code, "recovery-required");
+  assert.deepEqual(readFileSync(f.configFile), before);
+  assert.equal(existsSync(f.paths.installedRoot), true);
+  assert.equal(existsSync(f.paths.recoveryRoot), true);
+});
+
+void test("OpenCode removal refuses before editing when another origin can activate the snapshot", async (t) => {
   const f = await fixture(t);
   value(
     await transaction(
@@ -308,14 +406,18 @@ void test("OpenCode removal retains recovery when another origin can activate th
   const explicit = join(f.root, "explicit.json");
   writeFileSync(explicit, JSON.stringify({ plugin: [f.paths.installedRoot] }));
   f.ctx.env!.OPENCODE_CONFIG = explicit;
+  const explicitBefore = readFileSync(explicit);
+  const before = readFileSync(f.configFile);
   const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.deepEqual(readFileSync(f.configFile), before);
+  assert.deepEqual(readFileSync(explicit), explicitBefore);
   assert.equal(result.outcome.ok, false);
   assert.equal(existsSync(f.paths.installedRoot), true);
-  assert.equal(existsSync(f.paths.recoveryRoot), true);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
   assert.deepEqual(
     (JSON.parse(readFileSync(f.configFile, "utf8")) as { plugin: string[] })
       .plugin,
-    ["npm:unrelated"],
+    ["npm:unrelated", f.canonicalRoot],
   );
 });
 
@@ -334,10 +436,12 @@ void test("OpenCode removal does not use registration certainty as proof against
   config.skills = { paths: [join(f.paths.installedRoot, "skills")] };
   writeFileSync(f.configFile, JSON.stringify(config));
   const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const before = readFileSync(f.configFile);
   const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.deepEqual(readFileSync(f.configFile), before);
   assert.equal(result.outcome.ok, false);
   assert.equal(existsSync(f.paths.installedRoot), true);
-  assert.equal(existsSync(f.paths.recoveryRoot), true);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
 });
 
 void test("OpenCode removal retains a snapshot while skill activation is unresolved", async (t) => {
@@ -355,10 +459,12 @@ void test("OpenCode removal retains a snapshot while skill activation is unresol
   config.skills = { urls: ["https://example.test/unknown-skill"] };
   writeFileSync(f.configFile, JSON.stringify(config));
   const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const before = readFileSync(f.configFile);
   const result = await removeOpenCode(ownership.removalInput, f.ctx, f.deps);
+  assert.deepEqual(readFileSync(f.configFile), before);
   assert.equal(result.outcome.ok, false);
   assert.equal(existsSync(f.paths.installedRoot), true);
-  assert.equal(existsSync(f.paths.recoveryRoot), true);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
 });
 
 void test("OpenCode removal refuses retained recovery and registration without a snapshot", async (t) => {

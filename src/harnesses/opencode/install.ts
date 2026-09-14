@@ -324,16 +324,21 @@ function requireSafeActivationDiscovery(observed: OpenCodeDiscovery): void {
     throw new Error("OpenCode configuration changed");
 }
 
-function requireNoOwnedActivation(observed: OpenCodeDiscovery): void {
+function requireSafeRemovalDiscovery(observed: OpenCodeDiscovery): void {
   const unresolvedSkillInput = observed.blockedInputs.some(
     (input) => input !== OPEN_CODE_PURE_MODE_INPUT,
   );
   if (
-    observed.managedEntries.length !== 0 ||
     observed.registrationUncertain ||
     observed.ownedActivationAliases.length !== 0 ||
     unresolvedSkillInput
   )
+    throw new Error("OpenCode registration removal is uncertain");
+}
+
+function requireNoOwnedActivation(observed: OpenCodeDiscovery): void {
+  requireSafeRemovalDiscovery(observed);
+  if (observed.managedEntries.length !== 0)
     throw new Error("OpenCode registration removal is uncertain");
 }
 
@@ -818,6 +823,7 @@ export async function removeOpenCode(
       )
     )
       throw new Error("OpenCode ownership changed");
+    requireSafeRemovalDiscovery(observed);
     pending = await beginJournal(
       paths,
       previous,
@@ -836,6 +842,15 @@ export async function removeOpenCode(
     pending.removalBackupIdentity = await identity(pending.backup);
     await requireSnapshot(pending.backup, previous);
     backupVerified = true;
+    observed = await discovery(paths, ctx);
+    requireSafeRemovalDiscovery(observed);
+    if (
+      !sameRegistration(
+        observed.managedEntries[0],
+        pending.journal.priorRegistration,
+      )
+    )
+      throw new Error("OpenCode registration changed");
     if (registered !== undefined) {
       await removeObservedOpenCodeEntry(
         registered.observation,

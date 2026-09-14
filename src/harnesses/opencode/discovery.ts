@@ -228,7 +228,9 @@ function inspectUpstreamSpec(
     return true;
   }
   if (classification === "unresolved") {
-    addBlocked(state, origin);
+    state.conflicts.add(
+      `unresolved OpenCode package named superpowers at ${origin}`,
+    );
     return true;
   }
   return false;

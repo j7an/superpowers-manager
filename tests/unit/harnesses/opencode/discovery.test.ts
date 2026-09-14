@@ -198,7 +198,7 @@ void test("known upstream package forms are conflicts in files and inline config
   }
 });
 
-void test("unknown exact superpowers package forms fail closed on both config routes", async (t) => {
+void test("unknown exact superpowers package forms remain conflicts on both config routes", async (t) => {
   for (const spec of [
     "superpowers@unknown:source",
     "superpowers@1.2.3",
@@ -215,8 +215,11 @@ void test("unknown exact superpowers package forms fail closed on both config ro
         state.env,
         state.root,
       );
-      assert.deepEqual(file.blockedInputs, [`${config} plugin[0]`]);
-      assert.equal(file.registrationUncertain, true);
+      assert.deepEqual(file.conflicts, [
+        `unresolved OpenCode package named superpowers at ${config} plugin[0]`,
+      ]);
+      assert.deepEqual(file.blockedInputs, []);
+      assert.equal(file.registrationUncertain, false);
       writeFileSync(config, "{}");
       const inline = await inspectOpenCodeDiscovery(
         state.paths,
@@ -226,10 +229,11 @@ void test("unknown exact superpowers package forms fail closed on both config ro
         },
         state.root,
       );
-      assert.deepEqual(inline.blockedInputs, [
-        "OPENCODE_CONFIG_CONTENT plugin[0]",
+      assert.deepEqual(inline.conflicts, [
+        "unresolved OpenCode package named superpowers at OPENCODE_CONFIG_CONTENT plugin[0]",
       ]);
-      assert.equal(inline.registrationUncertain, true);
+      assert.deepEqual(inline.blockedInputs, []);
+      assert.equal(inline.registrationUncertain, false);
     });
   }
 });
