@@ -1015,7 +1015,15 @@ void describe("install commands", { concurrency: true }, () => {
     // :486
     assert.ok(out.includes("external plugin validation failed"), out);
     // :487
-    assertNoCodexMutation(readLog(c.codexLog));
+    // Exact observations also detect a skipped or repeated pre-mutation gate.
+    assert.deepEqual(readLog(c.codexLog), [
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin list --json",
+      "plugin marketplace list --json", // closing installed-state observation
+    ]);
   });
 
   // ==========================================================================
@@ -1040,7 +1048,9 @@ void describe("install commands", { concurrency: true }, () => {
     // No prepareGeneratedTree: :496 asserts prepare generated the tree, which
     // is only a claim about the subject if the tree is absent beforehand.
     const c = installCase();
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only" },
+    });
     // :495 — stdout captured, stderr left alone; `set -e` made a non-zero exit
     // fatal.
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -1049,24 +1059,39 @@ void describe("install commands", { concurrency: true }, () => {
       existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
       "prepare must have generated the tree",
     );
-    // :497-501 — `line_of` is `grep -Fn … | head -n1`, which assertOrder's
-    // firstIndex reproduces. Two ordering claims, one call.
+    assert.match(result.stdout, /generated plugin validation passed:/);
+    assert.match(result.stdout, /prepared v1\.0\.0 at [0-9a-f]{40}/);
+    // Repeated observations must occur at every gate, including verification
+    // after activation. Relative ordering alone cannot detect a skipped repeat.
     const codex = readLog(c.codexLog);
-    assertOrder(
-      codex,
-      [
-        "plugin marketplace list",
-        `plugin marketplace add ${durableMarketplace(c)}`,
-        "plugin add superpowers@superpowers-manager",
-      ],
-      "order must be: marketplace list, marketplace add, plugin add",
-    );
+    assert.deepEqual(codex, [
+      "plugin list --json", // fingerprint (initial probe)
+      "plugin marketplace list --json", // installed state (initial probe)
+      "plugin list --json", // ownership (initial probe)
+      "plugin marketplace list --json", // ownership (initial probe)
+      "plugin list --json",
+      "plugin marketplace list --json", // closing installed-state observation
+      "plugin list --json", // ownership (install's fresh gate, before mutation)
+      "plugin marketplace list --json", // ownership (install's fresh gate, before mutation)
+      "plugin list --json", // native state before durable publication
+      "plugin marketplace list --json",
+      "plugin list --json", // native state at the fresh eligibility gate
+      "plugin marketplace list --json",
+      "plugin list --json", // native state immediately before publication
+      "plugin marketplace list --json",
+      "plugin marketplace list --json", // adapter install's own marketplace lookup
+      `plugin marketplace add ${durableMarketplace(c)}`,
+      "plugin add superpowers@superpowers-manager",
+      "plugin list --json", // installed verification, after mutation
+      "plugin marketplace list --json",
+      "plugin list --json", // native state before finalization
+      "plugin marketplace list --json",
+    ]);
     // :502
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :503
     assertTmpEmpty(c);
-    // :504-512 — non-vacuous: assertOrder above proves all three commands
-    // reached the log, so it is neither missing nor empty.
+    // The exact log above proves the fake ran and excludes unrelated mutations.
     assert.ok(
       !has(codex, "marketplace remove"),
       `fresh install must not remove any marketplace:\n${codex.join("\n")}`,
@@ -1523,6 +1548,11 @@ void describe("install commands", { concurrency: true }, () => {
       result.status,
       0,
       `expected install to fail but it succeeded:\n${out}`,
+    );
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /^error: unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: bogus$/m,
     );
     // :745
     assertNoCodexMutation(readLog(c.codexLog));

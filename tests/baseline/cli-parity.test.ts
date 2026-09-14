@@ -2091,77 +2091,6 @@ function updateControlAdapter(response: "unsupported" | "malformed") {
   };
 }
 
-void test("INSTALL-ORDER-01 install prepares and validates before adapter mutation", async () => {
-  {
-    const c = lifecycleCodexCase({ fakes: "install" });
-    const validator = join(c.dir, "reject-install-candidate.sh");
-    writeFileSync(validator, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
-    const result = await runScript(c, "install", {
-      env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
-    });
-    const out = result.stdout + result.stderr;
-    assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
-    assert.match(out, /external plugin validation failed/);
-    // The probe triple (fingerprint: one listing; ownership: two listings)
-    // runs before prepare's `build` step rejects the candidate — build issues
-    // no Codex command of its own (`src/harnesses/codex/adapter.ts:304-558::async function runBuild`, `runBuild`), so a
-    // mutation line appearing here would prove the reject happened too late.
-    assert.deepEqual(codexOperations(c), [
-      "plugin list --json",
-      "plugin marketplace list --json",
-      "plugin list --json",
-      "plugin marketplace list --json",
-      "plugin list --json",
-      "plugin marketplace list --json", // closing installed-state observation
-    ]);
-  }
-
-  {
-    const c = lifecycleCodexCase({ fakes: "install" });
-    const result = await runScript(c, "install");
-    const out = result.stdout + result.stderr;
-    assert.equal(result.status, 0, out);
-    assert.ok(
-      existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
-    );
-    assert.match(result.stdout, /generated plugin validation passed:/);
-    assert.match(result.stdout, /prepared v1\.0\.0 at [0-9a-f]{40}/);
-    assert.match(result.stdout, /manager updated/);
-    // Exact, not merely ordered: an assertOrder-style check over these same
-    // needles passed even after a mutation trial moved the FRESH ownership
-    // and update-control re-inspect (scripts/install's own gate immediately
-    // before `spw_adapter_install`) to AFTER the mutation — the first
-    // occurrence of each needle is still the one the initial probe produces,
-    // so relative-order checks over repeated needles cannot see a dropped
-    // repeat. The exact 9-line array can, and did: with the reorder in
-    // place, line 5 below would be missing, and every following list would
-    // fail closed to a deepEqual mismatch instead of passing.
-    assert.deepEqual(codexOperations(c), [
-      "plugin list --json", // fingerprint (initial probe)
-      "plugin marketplace list --json", // installed state (initial probe)
-      "plugin list --json", // ownership (initial probe)
-      "plugin marketplace list --json", // ownership (initial probe)
-      "plugin list --json",
-      "plugin marketplace list --json", // closing installed-state observation
-      "plugin list --json", // ownership (install's fresh gate, before mutation)
-      "plugin marketplace list --json", // ownership (install's fresh gate, before mutation)
-      "plugin list --json", // native state before durable publication
-      "plugin marketplace list --json",
-      "plugin list --json", // native state at the fresh eligibility gate
-      "plugin marketplace list --json",
-      "plugin list --json", // native state immediately before publication
-      "plugin marketplace list --json",
-      "plugin marketplace list --json", // adapter install's own marketplace lookup
-      `plugin marketplace add ${join(c.home, ".codex", "superpowers-manager", "marketplace")}`,
-      "plugin add superpowers@superpowers-manager",
-      "plugin list --json", // installed verification, after mutation
-      "plugin marketplace list --json",
-      "plugin list --json", // native state before finalization
-      "plugin marketplace list --json",
-    ]);
-  }
-});
-
 void test("UPDATE-CONTROL-01 update requires current managed control evidence", async () => {
   {
     const c = lifecycleCodexCase({ fakes: "install" });
@@ -2206,11 +2135,8 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
     const out = result.stdout + result.stderr;
     assert.equal(result.status, 0, out);
     assert.match(result.stdout, /manager updated/);
-    // Exact, matching INSTALL-ORDER-01's own reasoning: `update`'s needs-prepare
-    // branch runs its OWN probe (fingerprint, ownership), then prepare's
-    // `build`, then `scripts/install` in full — which repeats the same
-    // sequence INSTALL-ORDER-01 pins (its own probe, its own fresh gate,
-    // then the mutation triple, then the final fingerprint verify).
+    // Update adds its own probe before the install flow. Pin every repeated
+    // observation so a skipped eligibility or verification gate cannot pass.
     assert.deepEqual(codexOperations(c), [
       "plugin list --json", // update's own probe: fingerprint
       "plugin marketplace list --json", // update's own installed state
@@ -2963,114 +2889,5 @@ void test("CLI-ENV-INSTALLED-ROOT-01 the active version selects its exact plugin
       result.stdout,
       new RegExp(`^installed_commit=${CACHE_COMMIT}$`, "m"),
     );
-  });
-});
-
-void test("CLI-ENV-REFRESH-MODE-01 install refuses a refresh mode outside add-only and remove-add, before any Codex mutation", () => {
-  // Half one: a third value is refused, and the refusal happens BEFORE the
-  // mutation. `src/harnesses/codex/adapter.ts:553::unsupported SUPERPOWERS_INSTALL_REFRESH_MODE` validates the enumeration three
-  // statements after requireCodex and before the marketplace lookup.
-  withSandbox((sandbox) => {
-    writeListingCodex(sandbox);
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(sandbox, ["install"], {
-      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_REF: upstream.RAW_COMMIT,
-      SUPERPOWERS_INSTALL_REFRESH_MODE: "replace",
-    });
-    assert.equal(result.error, undefined);
-    assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /^error: unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: replace$/m,
-    );
-    // The refusal is fail-closed: nothing was mutated. This filters EVERY
-    // mutation verb the install path can reach -- `plugin marketplace add`
-    // (:629), `plugin marketplace remove` (:646), `plugin remove` (:676) and
-    // `plugin add` (:683) -- not just the first one. An earlier draft named
-    // `plugin marketplace add` alone, which is the last of the four an early
-    // mutation would reach: a defect that removed the plugin, or removed the
-    // marketplace, before the enumeration check would have left this
-    // assertion green while the comment above it claimed otherwise.
-    assert.deepEqual(
-      listingCodexCalls(sandbox).filter((line) =>
-        /^plugin (marketplace )?(add|remove) /.test(line),
-      ),
-      [],
-    );
-  });
-
-  // Half two: an accepted value gets PAST that point on an otherwise
-  // identical fixture. This is what makes half one specific to the value
-  // rather than to the fixture.
-  withSandbox((sandbox) => {
-    writeListingCodex(sandbox);
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(sandbox, ["install"], {
-      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_REF: upstream.RAW_COMMIT,
-      SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
-    });
-    assert.equal(result.error, undefined);
-    assert.doesNotMatch(
-      result.stderr,
-      /unsupported SUPERPOWERS_INSTALL_REFRESH_MODE/,
-    );
-    assert.ok(
-      listingCodexCalls(sandbox).some((line) =>
-        line.startsWith("plugin marketplace add "),
-      ),
-      listingCodexCalls(sandbox).join(" | "),
-    );
-  });
-
-  // Half three: the OTHER accepted value. The contract names a closed
-  // enumeration of two, and halves one and two together only establish that
-  // `add-only` is in it and `replace` is not -- an implementation that
-  // rejected `remove-add` would leave both of them green. The retiring
-  // witness (`git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:301-311::SUPERPOWERS_INSTALL_REFRESH_MODE=remove-add`) drove `remove-add`
-  // explicitly and asserted the removal and the addition both reached Codex;
-  // dropping that half here would have narrowed the contract without saying
-  // so.
-  //
-  // This half needs a fixture the other two do not. writeListingCodex exits
-  // 99 on `plugin marketplace add`, so the run fails closed at
-  // `src/harnesses/codex/adapter.ts:593::codex marketplace add failed` and never reaches the refresh-mode branch at :631.
-  // writeVersionCodex accepts the marketplace add, so the run gets as far as
-  // the plugin mutations. `plugin remove` is deliberately NOT accepted by it
-  // and does not need to be: `src/harnesses/codex/adapter.ts:629::if (refreshMode === "remove-add") {` issues that command
-  // without checking its status, so the run continues to `plugin add`
-  // regardless -- and the stub records every invocation before dispatching on
-  // it, so the attempt is observable either way.
-  withSandbox((sandbox) => {
-    writeVersionCodex(
-      sandbox,
-      join(sandbox.bin, "codex"),
-      "",
-      sandbox.codexLog,
-    );
-    const upstream = createReleaseRepo(sandbox);
-    const result = runCli(sandbox, ["install"], {
-      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_REF: upstream.RAW_COMMIT,
-      SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add",
-    });
-    assert.equal(result.error, undefined);
-    assert.doesNotMatch(
-      result.stderr,
-      /unsupported SUPERPOWERS_INSTALL_REFRESH_MODE/,
-    );
-    const calls = listingCodexCalls(sandbox);
-    const removedAt = calls.findIndex((line) =>
-      line.startsWith("plugin remove "),
-    );
-    const addedAt = calls.findIndex((line) => line.startsWith("plugin add "));
-    // Presence AND order. `remove-add` is the mode's whole meaning: asserting
-    // only that both commands appear would pass on an implementation that
-    // added first and removed afterwards, which uninstalls what it just
-    // installed.
-    assert.notEqual(removedAt, -1, calls.join(" | "));
-    assert.notEqual(addedAt, -1, calls.join(" | "));
-    assert.ok(removedAt < addedAt, calls.join(" | "));
   });
 });
