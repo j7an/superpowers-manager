@@ -418,7 +418,8 @@ async function performPrepare<R>(
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by
     //      `tests/unit/upstream.test.ts:439-448::void test("resolveRef reports a query failure for latest`,
-    //      :471-481, and :483-501.
+    //      `tests/unit/upstream.test.ts:450-460::void test("resolveRef reports a query failure for a tag lookup`, and
+    //      `tests/unit/upstream.test.ts:462-480::void test("resolveRef reports a query failure for the generic ref lookup`.
     //   2. fetchExactCommit splices the same combined stdout+stderr into its
     //      own text on the PINNED path (both of its own splice sites in
     //      src/upstream.ts, and proveCommit's, which it calls). This is the

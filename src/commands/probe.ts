@@ -484,7 +484,8 @@ export async function runProbe<R>(
     //      before any runGit call, so a 40-hex requested ref splices nothing.
     //      Pinned by
     //      `tests/unit/upstream.test.ts:439::void test("resolveRef reports a query failure for latest`,
-    //      :471, and :483.
+    //      `tests/unit/upstream.test.ts:450::void test("resolveRef reports a query failure for a tag lookup`, and
+    //      `tests/unit/upstream.test.ts:462::void test("resolveRef reports a query failure for the generic ref lookup`.
     //   2. The
     //      `src/selection-store.ts:120-124::cause.module === "selection") {`
     //      site (same shape at :49, :86, :98) is the module AGENTS.md's
