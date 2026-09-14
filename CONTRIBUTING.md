@@ -14,6 +14,7 @@ pnpm run test:unit
 pnpm run test:integration
 pnpm run test:harness:codex
 pnpm run test:harness:pi
+pnpm run test:harness:opencode
 pnpm run test:acceptance
 ```
 
@@ -33,7 +34,7 @@ test "$("$SPW_PACKAGE_NODE" -p 'process.versions.node')" = "$SPW_PACKAGE_NODE_VE
 
 Otherwise follow the [verified package-runtime archive procedure in AGENTS.md](AGENTS.md#testing), which selects and checksum-verifies the official archive in invocation-owned temporary storage. Keep native Node on `PATH`; the package-minimum binary runs installed-package checks only. Linux CI provisions that exact runtime with `actions/setup-node`.
 
-Layers 1-3 stay offline and hermetic: they use a fake local upstream repo and perform no mutation of the developer's or runner's real Codex or Pi state. Layer 4 is the Docker acceptance path. `pnpm run test:harness:codex` and `pnpm run test:harness:pi` each run in an isolated container home with networking disabled. `pnpm run test:acceptance` runs shared checks, Codex, then Pi.
+Layers 1-3 stay offline and hermetic: they use a fake local upstream repo and perform no mutation of the developer's or runner's real Codex, Pi, or OpenCode state. Layer 4 is the Docker acceptance path. `pnpm run test:harness:codex`, `pnpm run test:harness:pi`, and `pnpm run test:harness:opencode` each run in an isolated container home with networking disabled. `pnpm run test:acceptance` runs shared checks, Codex, Pi, then OpenCode.
 
 Release validation deliberately uses both endpoints:
 
@@ -42,9 +43,9 @@ SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh
 SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
 ```
 
-The `toolchain` CI jobs cover native loading, package producer behavior, static validation, shared suites, and package-minimum runtime evidence. Independent Codex and Pi harness jobs run their isolated integrations without duplicating the shared suite.
+The `toolchain` CI jobs cover native loading, package producer behavior, static validation, shared suites, and package-minimum runtime evidence. Independent Codex, Pi, and OpenCode harness jobs run their isolated integrations without duplicating the shared suite.
 
-Use `sh tests/run.sh --concurrency 1` or `sh tests/run.sh --concurrency 2` for controlled shared-suite scheduling comparisons. `sh tests/manual/codex/behavior-probe.sh` is opt-in native-only compatibility residue, never acceptance. The Node 24.12.0 toolchain job covers native loading, the suite-runner assertion preload, and package-producer success/failure; latest Node 24.x alone runs static validation and the full shared suite. Release acceptance runs shared checks and both harnesses at both endpoints, while installed npm behavior uses Node 24.0.0.
+Use `sh tests/run.sh --concurrency 1` or `sh tests/run.sh --concurrency 2` for controlled shared-suite scheduling comparisons. `sh tests/manual/codex/behavior-probe.sh` is opt-in native-only compatibility residue, never acceptance. The Node 24.12.0 toolchain job covers native loading, the suite-runner assertion preload, and package-producer success/failure; latest Node 24.x alone runs static validation and the full shared suite. Release acceptance runs shared checks and all three harnesses at both endpoints, while installed npm behavior uses Node 24.0.0.
 
 ## Directory convention
 

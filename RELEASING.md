@@ -182,9 +182,9 @@ Loose generated JavaScript remains external. This does not create an alternate
 release or approval path.
 
 Run the two container endpoints sequentially. `SPW_NATIVE_NODE_VERSION` accepts
-only `24.12.0` and `24`, defaulting to `24`. Both run the native TypeScript suite
-and the real Codex CLI in an isolated offline home. Each image copies and
-smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
+only `24.12.0` and `24`, defaulting to `24`. Both run the native TypeScript suite,
+then the real Codex, Pi, and OpenCode CLIs in isolated offline homes. Each image
+copies and smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
 `SPW_PACKAGE_NODE_VERSION`, then runs the installed package's emitted JavaScript
 with both that binary and the native harness binary. The minimum binary never
 runs TypeScript or installs dependencies during offline acceptance.

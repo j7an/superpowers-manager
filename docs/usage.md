@@ -36,7 +36,7 @@ npx superpowers-manager track-latest
 npx superpowers-manager unpin
 ```
 
-The selection commands save intent only; they do not prepare content or change either harness. `pin` verifies an exact `vMAJOR.MINOR.PATCH` stable tag (optionally prerelease) or full 40-character commit before saving identity and source. `track-latest` resolves the highest stable `vX.Y.Z` tag when applied. `unpin` restores `config/upstream-ref`, currently `latest-release`. The saved identity is the contract, not a clone cache: clearing or moving `SUPERPOWERS_CACHE_DIR` does not change the selection.
+The selection commands save intent only; they do not prepare content or change any harness. `pin` verifies an exact `vMAJOR.MINOR.PATCH` stable tag (optionally prerelease) or full 40-character commit before saving identity and source. `track-latest` resolves the highest stable `vX.Y.Z` tag when applied. `unpin` restores `config/upstream-ref`, currently `latest-release`. The saved identity is the contract, not a clone cache: clearing or moving `SUPERPOWERS_CACHE_DIR` does not change the selection.
 
 Selection is stored in `selection.json` in the first absolute configured location: `$SUPERPOWERS_CONFIG_DIR`, then `$XDG_CONFIG_HOME/superpowers-manager`, then `$HOME/.config/superpowers-manager`.
 
@@ -60,9 +60,12 @@ HTTP(S) upstream URLs with userinfo are rejected. Use a credential helper or SSH
 
 ## Provider ownership
 
-Use one Superpowers provider in a harness at a time. The manager mutates only `superpowers@superpowers-manager` and the `superpowers-manager` marketplace in Codex, and only its registration and snapshot in Pi. It never adopts, updates, or removes another provider automatically.
+Use one Superpowers provider in a harness at a time. The manager mutates only `superpowers@superpowers-manager` and the `superpowers-manager` marketplace in Codex, and only its registration and snapshot in Pi or OpenCode. It never adopts, updates, or removes another provider automatically.
 
 ```sh
 codex plugin remove superpowers@openai-curated
 npx superpowers-manager install --harness codex
 ```
+
+OpenCode installation is global-only. See the [OpenCode reference](opencode.md)
+for configuration locations, ownership constraints, and restart requirements.
