@@ -100,9 +100,8 @@ function snapshotTree(root: string): string[] {
 }
 
 /**
- * The `python3 -S` listing the two committed layout fixtures were generated
- * from (`git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:459-479::assert_generated_tree_matches() {`): sorted relative
- * paths, one per line, directories suffixed with `/`.
+ * The committed layout fixtures contain sorted relative paths, one per line,
+ * with directories suffixed with `/`.
  */
 function listing(root: string): string {
   const entries = readdirSync(root, { recursive: true, withFileTypes: true })
@@ -334,9 +333,7 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:376::hook classification failed`). Ported from
-// `git show 8fd9e9d133e0632e13bef0a5851fa12f7b41dcd4:tests/test_prepare_with_fake_upstream.sh:1001-1022::"hooks-mixed-array" "out-hooks-mixed-array"`, which held the only
-// witness of this prefix anywhere in the repository. The eight inner causes
+// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:376::hook classification failed`). The eight inner causes
 // those shell lines also asserted are already message-exact in
 // tests/unit/harnesses/codex/hooks.test.ts and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
@@ -422,8 +419,7 @@ void test("a source-only hooks root fails closed on the candidate side", async (
 void test("CLI-ENV-PREPARE-PATHS-01 relative prepare paths use the invocation cwd", async () => {
   const c = createCase({ fakes: "probe" });
   // The package root's own generated tree must be untouched: a relative
-  // SUPERPOWERS_PLUGIN_ROOT resolves against the invocation cwd
-  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:17-24::case "$cache_parent`), never against ctx.root.
+  // SUPERPOWERS_PLUGIN_ROOT resolves against the invocation cwd, never ctx.root.
   const untouched = snapshotTree(generated(c));
   const result = await prepare(
     c,
@@ -494,8 +490,7 @@ void test("prepare clones once and then fetches into the same cache", async () =
 });
 
 void test("prepare rejects an upstream missing any required path", async () => {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:64-67::spw_require_upstream_path "$cache/skills`'s labels, in the shell's order. The label, not the
-  // path, is what the diagnostic carries.
+  // The label, not the path, is what the diagnostic carries.
   for (const [path, label] of [
     ["skills", "skills/"],
     ["LICENSE", "LICENSE"],
@@ -1012,7 +1007,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   //
   // So this half asserts the exact message, which is strictly stronger than the
   // single-line shape check the task text asked for. The same string is already
-  // pinned at `tests/unit/upstream.test.ts:397::cannot fetch requested commit from /srv/repo` and
+  // pinned at `tests/unit/upstream.test.ts:383::cannot fetch requested commit from /srv/repo` and
   // by the `cannot fetch requested commit from ${repo}` assertion in
   // tests/baseline/selection-commands.test.js.
   const pinned = createCase({ fakes: "probe" });
@@ -1097,11 +1092,10 @@ void test(
   },
 );
 
-// P4 — `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the ACCEPTING side of the hooks-root symlink
-// policy, covering both halves the retired shell driver held alone.
+// P4 — `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the accepting side of the hooks-root symlink policy.
 //
 // Every other root-symlink case in the repository asserts rejection:
-// `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:772-840::the hook subtree rejects unsafe symlinks` is twelve cases of
+// `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:769-837::the hook subtree rejects unsafe symlinks` is twelve cases of
 // status === 1, and :907 puts contained symlinks inside a REAL hooks/
 // directory rather than symlinking the root. Without this case, acceptance is
 // exercised by nothing on either the materializing or the validating side.

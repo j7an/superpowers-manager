@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { exactError } from "../../../lib/error-assertions.ts";
+import { scratch } from "../../../lib/scratch.ts";
 
 import { SafetyError } from "../../../../src/safety-error.ts";
 
@@ -15,16 +15,10 @@ import {
   pathsEqual,
 } from "../../../../src/harnesses/codex/state.ts";
 
-async function sandbox(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-codex-state-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
-
 const nested = (depth: number) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
 void test("PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-codex-state-");
   const file = join(root, "metadata.json");
   const full = "0123456789abcdef0123456789abcdef01234567";
 
@@ -67,7 +61,7 @@ void test("PROV-READER-CODEX-COMMIT-01 installed metadata complete matrix", asyn
 });
 
 void test("MANIFEST-READER-INSTALLED-01 installed manifest complete matrix", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-codex-state-");
   const file = join(root, "plugin.json");
   for (const [version, expected] of [
     ["6.0.3+manager.896224c", "896224c"],
@@ -116,7 +110,7 @@ void test("MANIFEST-READER-INSTALLED-01 installed manifest complete matrix", asy
 });
 
 void test("installed state helpers preserve path and fallback rules", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-codex-state-");
   assert.equal(
     installedRootForVersion(
       root,

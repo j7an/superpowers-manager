@@ -19,6 +19,7 @@ import {
   notCalledAdapter,
   observingCoordinator,
 } from "./helpers/command-harness.ts";
+import { scratch } from "../lib/scratch.ts";
 
 import type { CommandContext } from "../../src/commands/context.ts";
 import { runInstall } from "../../src/commands/install.ts";
@@ -35,8 +36,7 @@ import { nativeSelection } from "../lib/harnesses/pi/package-fixture.ts";
 void test("OpenCode prepare rejects symlinked storage parents before locks, workspaces, or fetch", async (t) => {
   for (const parent of ["config", "manager"] as const)
     await t.test(parent, async (t) => {
-      const root = mkdtempSync(join(tmpdir(), "spw-opencode-command-prepare-"));
-      t.after(() => rmSync(root, { recursive: true, force: true }));
+      const root = scratch(t, "spw-opencode-command-prepare-");
       const env = {
         HOME: join(root, "home"),
         XDG_CONFIG_HOME: join(root, "xdg"),

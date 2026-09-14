@@ -1,5 +1,3 @@
-// Migrated from tests/test_selection_state.py. The Python suite exercised the
-// saved-selection behavior; this native suite exercises that behavior directly.
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {

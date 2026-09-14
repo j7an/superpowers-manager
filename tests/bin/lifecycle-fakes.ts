@@ -1,13 +1,4 @@
-// Shared behaviour for the three lifecycle fake executables
-// (install-fakes.js, uninstall-fakes.js, probe-fakes.js). PR 11.5 slice 2
-// extracted the read side — loadFixtureConfig, respondToListing, logLine —
-// from the fake `codex` for probe, the "third lifecycle fake" the parent spec
-// named as this extraction's trigger. Slice 4a added the outer shell the two
-// mutating fakes also duplicated: runFake, its FakeContext, the Decision 5
-// injection toggle and the adapter tripwire.
-// Slice 4b's Task 9 gives probe-fakes.js the same outer shell (matrix row 20)
-// and widens the adapter tripwire so install and uninstall can trip
-// unconditionally too (row 18), matching the guard probe already carried.
+// Shared behavior for the three lifecycle fake executables.
 //
 // Every response-then-exit site here uses `process.exitCode` plus a normal
 // return, never `process.exit()`. `process.exit()` truncates a pending write

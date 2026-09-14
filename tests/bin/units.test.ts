@@ -64,10 +64,6 @@ for (const argv of [
   ["pin", "a", "b"],
   ["track-latest", "x"],
   ["unpin", "x"],
-  // PR 11.5 slice 2: probe's arity is CLI-owned, so a typo'd flag, a stray
-  // positional, and a repeated flag are all usage errors here rather than
-  // reaching runProbe. `tests/bin/units.test.ts:93::const cmd of ["prepare", "probe"`'s loop below still asserts that bare `probe`
-  // parses as a run, and `tests/bin/units.test.ts:20::bin.parseArgs(["probe", "--porcelain"])` that `probe --porcelain` does.
   ["probe", "--porcelaine"],
   ["probe", "extra"],
   ["probe", "--porcelain", "extra"],
@@ -121,15 +117,6 @@ assert.ok(
   "executable validators must not require python3",
 );
 
-// --- vehicleCommand's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ------
-// They asserted that vehicleCommand picks a spawned command and throws when
-// none remains. DISPATCH was 8/8 in-process (and is now deleted, slice 6), so
-// the second case was the permanent state of the world and the first could
-// only be satisfied by a hand-written table that describes nothing.
-// vehicleCommand itself is deleted with tests/bin/dispatch-mode.js, exactly
-// as its own doc comment instructed:
-// "delete it rather than re-point it". No successor.
-
 // --- usage separates saving selection intent from applying it ---
 const help = bin.usage();
 for (const text of [
@@ -144,13 +131,6 @@ for (const text of [
 assert.ok(help.includes("SUPERPOWERS_CONFIG_DIR"));
 assert.ok(help.includes("$XDG_CONFIG_HOME/superpowers-manager"));
 assert.ok(help.includes("$HOME/.config/superpowers-manager"));
-
-// --- buildSpawn's two cases are RETIRED (PR 11.5 slice 4b, Task 8) ---------
-// They asserted buildSpawn's POSIX path construction, its win32
-// shell-plus-script form, and its argv passthrough. `buildSpawn` is deleted
-// from src/cli.ts with the last spawned command, along with `discoverShell`
-// and `GIT_BASH_CANDIDATES`. There is no successor: the CLI computes no child
-// command line at all any more, so nothing inherits the contract.
 
 // --- resolvePackageRoot walks up to package.json from the bin's real path ---
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..", "..");
@@ -244,9 +224,7 @@ assert.strictEqual(
 );
 
 // --- the baseline sandbox refuses network egress through git ---
-// PR 11.5 slice 3. The in-process prepare CLONES, so any sandbox case that
-// forgets SUPERPOWERS_UPSTREAM_URL would reach the production default at
-// `src/effective-selection.ts:68::export const UPSTREAM_URL_DEFAULT`. Local paths must still pass through.
+// Local upstream paths must pass through while network URLs are refused.
 {
   const support = await import(
     new URL("../baseline/support.ts", import.meta.url).href

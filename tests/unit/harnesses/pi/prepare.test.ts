@@ -22,6 +22,7 @@ import {
 } from "../../../lib/harnesses/pi/package-fixture.ts";
 import {
   capture,
+  expectOk,
   notCalledAdapter,
   observingCoordinator,
 } from "../../../lib/command-doubles.ts";
@@ -123,10 +124,7 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
     }),
   );
   const unsupported = await inspectPiPrepared(nativeSelection(commit), ctx);
-  assert.equal(unsupported.status, 0);
-  assert.equal(unsupported.outcome.ok, true);
-  if (!unsupported.outcome.ok) assert.fail("expected unsupported inspection");
-  assert.deepEqual(unsupported.outcome.result, {
+  assert.deepEqual(expectOk(unsupported), {
     kind: "needs-prepare",
     observedIdentity: rewritten.digest,
     compatibility: {

@@ -112,8 +112,7 @@ function withSandbox<T>(callback: (sandbox: Sandbox) => T): T {
  * Runs `fn` with the process's cwd pinned to `dir`, restoring it afterward.
  * `commandAvailable` (`src/harnesses/codex/adapter.ts:281::async function commandAvailable(`) resolves a RELATIVE candidate
  * path against `process.cwd()`, which is the seam both PATH-shape halves of
- * CLI-ENV-CODEX-LISTING-01 turn on; the retired shell driver got the same
- * effect by `cd`-ing inside a subshell. Same shape as `withCwd` in
+ * CLI-ENV-CODEX-LISTING-01 turn on. Same shape as `withCwd` in
  * tests/baseline/selection-commands.test.js, and safe for the same
  * reason: node:test runs top-level tests sequentially.
  *
@@ -202,10 +201,8 @@ function writeListingCodex(sandbox: Sandbox) {
     tool,
     [
       "#!/bin/sh",
-      // Recording came in at PR 11.5 slice 4b (Task 8). Before the flip, the
-      // lifecycle commands were observed through the dispatch stub's own JSON
-      // record; in-process they reach Codex through typed Codex engines instead, so the
-      // `codex` invocation sequence is what is left to observe them by. Every
+      // Lifecycle commands reach Codex through typed engines, so the `codex`
+      // invocation sequence is their observable behavior. Every
       // invocation is recorded, including the rejected ones, so a case can
       // pin the exact sequence rather than only its accepted prefix.
       `printf '%s\\n' "$*" >> ${shQuote(sandbox.codexLog)}`,
@@ -453,10 +450,8 @@ function assertMalformedSelectionFailsBeforeTools(sandbox: Sandbox) {
   assertNoCodexContact(sandbox);
 }
 
-// Rewritten for PR 11.5 slice 4b Task 7 (D5), re-anchored by slice 6's PR 3
-// when the fixture and the seam's last baseline producer were deleted. The
-// seam itself survives until PR 4. The five lifecycle behaviour IDs
-// below run on `createCase`/`runScript` from `tests/bin/lifecycle-fixture.js`,
+// The five lifecycle behavior IDs below run on `createCase`/`runScript` from
+// `tests/bin/lifecycle-fixture.ts`,
 // not on a baseline sandbox: `tests/baseline/support.js`'s own
 // `validateEnvironment` refuses a `SUPERPOWERS_CODEX` override that resolves
 // outside the sandbox root, and the lifecycle fixture's fake `codex` lives
@@ -467,8 +462,8 @@ function assertMalformedSelectionFailsBeforeTools(sandbox: Sandbox) {
  * The fixture's own `codex` log, in place of `adapterOperations(sandbox)`.
  * Every mutation the real adapter performs reaches Codex through `codexBin`
  * (the marketplace/plugin `listingCommand`/`mutationCommand` calls in
- * `runInstall`, `src/harnesses/codex/adapter.ts`), so this is the channel that survives Task
- * 8's flip. `readLog` itself does NOT fail closed and never throws: it wraps
+ * `runInstall`, `src/harnesses/codex/adapter.ts`). `readLog` itself does NOT
+ * fail closed and never throws: it wraps
  * the `readFileSync` in a bare try/catch and returns `[]` for ANY read
  * error, a missing log included. The presence-form assertions below are what
  * turn that `[]` into a loud failure rather than a silent pass, because each
@@ -560,10 +555,7 @@ void test("CLI-MODE-VERSION-01 version mode routes through native source", () =>
   });
 });
 
-// Rewritten, not re-pointed (PR 11.5 slice 4b, Task 8): `update` dispatches
-// in-process now, so the dispatch record this used to read (an empty-dispatch
-// assertion on `update`) can never be written. The contract remains: no
-// arguments is the third distinct mode and is exactly equivalent to dispatching
+// No arguments is a distinct mode and exactly equivalent to dispatching
 // `update` with no arguments, which the equivalence below asserts literally.
 //
 // Two halves, because no single observable carries both directions of it.
@@ -686,15 +678,13 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
   // returns Record<Subcommand, string[]>, typed by the production Subcommand
   // union and therefore exhaustively checked, so either list can gain or lose an
   // entry the other does not have. A one-directional `includes` check cannot
-  // catch that. This replaces an identical assertion over Object.keys(DISPATCH),
-  // retired with the table in slice 6; the anchor moved, the property did not.
+  // catch that.
   assert.deepEqual(
     Object.keys(commandRequirements({})).sort(),
     [...COMMANDS].sort(),
   );
 
-  // PR 11.5 slice 4b, Task 8. Every command is in-process now, but these three
-  // cannot reach `assertCleanResult` in a shared sandbox: each one runs a real
+  // These three cannot reach `assertCleanResult` in a shared sandbox: each one runs a real
   // probe, a real prepare and a real Codex mutation, and the shared sandbox's
   // state carries between iterations. They are handled after the loop instead,
   // one fresh sandbox each, and pinned by the exact `codex` invocation sequence
@@ -861,9 +851,7 @@ void test("CLI-USAGE-01 invalid command and stray flag fail with exit 2", () => 
       args: ["unpin", "extra"],
       diagnostic: "usage: superpowers-manager unpin",
     },
-    // PR 11.5 slice 2. `probe`'s arity is decided in parseArgs, so a typo'd
-    // flag gets the usage block and exit 2 like every other CLI usage error.
-    // The separate block below proves it is decided before preflight.
+    // `probe` arity is decided in parseArgs before preflight.
     {
       args: ["probe", "--porcelaine"],
       diagnostic: "usage: superpowers-manager probe [--porcelain]",
@@ -1004,17 +992,13 @@ void test("CLI-PIN-REF-01 pin accepts exact tag or 40-hex commit only", () => {
 void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // Derived, never restated. The hand-written map this replaces spelled out
   // each command's tools by hand, so production could change its requirements
-  // while this expectation stayed silently stale; it also encoded the retired
-  // DISPATCH table a second time through the presence of "sh".
+  // while this expectation stayed silently stale.
   //
   // commandRequirements(env) takes the environment and returns the whole
   // Record<Subcommand, string[]>; index it per command. These cases configure
   // no validator, so the empty env is the right derivation for them.
   const declared = commandRequirements({});
-  // DISPATCH and its "spawn" | "in-process" split are gone (slice 6): there is
-  // no second mode this map could encode any more, so it is a plain copy of
-  // `declared` keyed the same way. This map has exactly one source now,
-  // commandRequirements(env).
+  // This map is a plain copy of `declared` keyed the same way.
   const requirements = new Map(
     COMMANDS.map((command) => {
       // COMMANDS is a plain string[]; CLI-COMMANDS-01 above asserts it agrees
@@ -1062,29 +1046,9 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   }
 });
 
-// PR 11.5 slice 4b, Task 8, §6.2.2. Two `void test(` blocks stood here and the
-// comment above them said of their five scenarios, "Vehicle only … they die
-// with buildSpawn in slice 4." That obligation is discharged as follows.
-//
-// `CLI-ENV-CODEX-PREFLIGHT-01` is not a child-handling property: a custom
+// `CLI-ENV-CODEX-PREFLIGHT-01` is a requirement-checking contract: a custom
 // `SUPERPOWERS_CODEX` satisfying launcher preflight with `codex` absent from
-// PATH is a requirement-checking contract the flip does not touch. Only the
-// body changed, because it ended in an empty-dispatch assertion on `install`
-// and there is no dispatch record to read any more. See the case below.
-//
-// `CLI-CHILD-STATUS-01` and all FOUR of its scenarios are retired at the gap.
-// The subject is gone, not relocated: after the flip the CLI spawns no
-// delegated child, so
-// inherited stdio, a propagated raw child status (the ID drove
-// `SPW_BASELINE_DELEGATE_EXIT: "42"`), signal-death normalisation, and the
-// `spawnSync … ENOENT` diagnostic have no referent at all. Post-flip a Codex
-// failure arrives through typed Codex engines and lifecycle handling, which is a
-// DIFFERENT observable contract, so the ID may not be reused for it. No
-// successor ID is minted here: one would need a fully specified contract of its
-// own, and the exit-status half is already covered per command by
-// tests/unit/commands-{install,update,uninstall}.test.js, which assert the
-// status each handler returns, and by src/cli.ts's single
-// `process.exit(status)`.
+// PATH is a requirement-checking contract. See the case below.
 void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher preflight", () => {
   withSandbox((sandbox) => {
     // A RECORDING custom codex, not `writeNoopTool`'s silent `exit 0`. The
@@ -1147,10 +1111,7 @@ void test("CLI-ENV-CODEX-PREFLIGHT-01 custom Codex command satisfies launcher pr
 
 void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
   withSandbox((sandbox) => {
-    // Re-anchored, not retired (PR 11.5 slice 4b, Task 8). `update` no longer
-    // spawns `scripts/update`, so the dispatch stub that used to record the
-    // child's environment is never invoked. CLI-ENV-PASSTHROUGH-01 still
-    // asserts the same contract: the CLI inherits its controlled invocation
+    // CLI-ENV-PASSTHROUGH-01 asserts that the CLI inherits its controlled invocation
     // environment wholesale, and it does not synthesize unrelated XDG_*, npm, or Codex
     // variables — and there is still exactly one child to observe it on:
     // the `codex` process a typed Codex engine spawns (src/harnesses/codex/adapter.ts's runCommand). The
@@ -1160,8 +1121,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
     //
     // "Wholesale" is true of the manager's own process but NOT of this witness:
     // runCommand deletes NODE_OPTIONS and NODE_PATH from the typed engine's child
-    // environment before execFile (`src/harnesses/codex/adapter.ts:145::delete childEnv.NODE_OPTIONS`), landed by this
-    // slice's Task 1). The dump below therefore covers those two names as well
+    // environment before execFile (`src/harnesses/codex/adapter.ts:145::delete childEnv.NODE_OPTIONS`). The dump below therefore covers those two names as well
     // and asserts they are ABSENT, so the row's word is qualified by the test
     // that certifies it rather than quietly contradicted by it. It is also the
     // only place in the tree where that scrub is observable end to end at the
@@ -1197,8 +1157,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       "utf8",
     );
     // SUPERPOWERS_REF and SUPERPOWERS_UPSTREAM_URL are the two values that
-    // stopped being free placeholders at slice 4b's flip: `update` resolves its
-    // effective selection before its first adapter call, so a non-resolvable
+    // must resolve before its first adapter call, so a non-resolvable
     // pair stops the run at the sandbox git shim and the child never runs. A
     // real local repository and its 40-hex commit are just as distinctive as
     // the `v9.8.7-rc.1` / `upstream source` placeholders they replace — the
@@ -1212,8 +1171,7 @@ void test("CLI-ENV-01 eleven SUPERPOWERS variables pass through", () => {
       SUPERPOWERS_CONFIG_DIR: join(sandbox.root, "custom config"),
       SUPERPOWERS_PLUGIN_ROOT: join(sandbox.root, "custom plugin"),
       SUPERPOWERS_MANIFEST_TEMPLATE: join(sandbox.root, "custom template.json"),
-      // Empty, and deliberately so. `update` is a VALIDATOR_COMMAND, and
-      // The retired variable is deliberately empty. The key is still forwarded and still asserted:
+      // Empty deliberately. The key is still forwarded and asserted:
       // a dropped variable is an ABSENT key in superpowers_env and `null` in
       // passthrough, and neither equals "" under deepEqual.
       SUPERPOWERS_VALIDATOR: "",
@@ -1873,13 +1831,7 @@ void test("FS-SYMLINK-01 escaping and broken symlinks fail closed", () => {
   }
 });
 
-// Rewritten, not re-pointed (PR 11.5 slice 2): the previous version ran the
-// real `scripts/probe` through an `SPW_ADAPTER` stub, and the stub stopped
-// taking effect once probe began dispatching in-process. Both that script and
-// the `scripts/core/adapter.sh` that honoured the seam have since been deleted
-// with the rest of the lifecycle shell runtime, so this drives `runProbe`
-// against the probe fake instead. The ID and the contract — probe mutates
-// nothing — are unchanged.
+// Probe is read-only; the case drives it against the probe fake.
 void test("PROBE-READONLY-01 probe is read-only", async () => {
   const c = createCase({ fakes: "probe" });
   // Two empty listings: probe issues `plugin list --json` once per inspection
@@ -1961,18 +1913,17 @@ const FIXTURE_BOTH_MARKETPLACES_PRESENT =
  * intercepted view goes to the real typed Codex engine, which execs the case's fake
  * `codex` — never a fake adapter. `createCase` is what writes both fakes.
  *
- * Recorded deviation (PR 11.5 slice 4b Task 7): the sequence-exhaustion
- * discipline — `nextPluginList` (`tests/bin/lifecycle-fakes.ts:171::const counterPath`), which
+ * `nextPluginList` (`tests/bin/lifecycle-fakes.ts:162::const counterPath`)
  * fails closed when a fixture makes more listing calls than it configured —
  * is NOT in force for these five IDs, and is deliberately not simulated.
  * `respondToListing` consults `nextPluginList` only when its caller passes
- * `sequencePluginList` (`tests/bin/lifecycle-fakes.ts:84-88::request.sequencePluginList`), and only
- * `tests/bin/probe-fakes.ts:28::sequencePluginList: true` passes it; the install and uninstall fakes read
+ * `sequencePluginList` (`tests/bin/lifecycle-fakes.ts:75-79::request.sequencePluginList`), and only
+ * `tests/bin/probe-fakes.ts:20::sequencePluginList: true` passes it; the install and uninstall fakes read
  * the flat `plugin_list.json` this helper writes. Adopting it here would mean
  * setting that flag in both lifecycle fakes, which every existing case in
  * tests/bin/install-commands.test.js and tests/bin/uninstall-commands.test.js
  * would then have to be reworked for — a fixture change well outside this
- * slice. What supplies the same guarantee instead: every subcase of the five
+ * scope. Every subcase of the five
  * IDs is guarded either by an exact `deepEqual` on `codexOperations(c)`
  * (which an empty log fails immediately) or by `assertNoCodexMutation`, whose
  * own `log.length > 0` check above rejects an empty log by name. A fake that
@@ -2038,24 +1989,12 @@ async function seedLifecycleManagerState(
  * cannot produce, and DELEGATES every other operation to the real in-process
  * typed Codex engine.
  *
- * Converted, not retired (Task 8, Step 5b). The lever this replaces was a
- * hand-written `SPW_ADAPTER` script that became inert the moment `update`
- * began dispatching in-process; both subcases would silently become the third
- * subcase below with the opposite assertion.
- *
  * The real adapter's update-control view is hardcoded to "managed"
  * (`codexInspectControl` in src/harnesses/codex/adapter.ts), which is why interception is needed at all
  * and why the third subcase needs none.
  *
- * `"malformed"` re-anchors onto the port's own reader rather than the shell's.
- * The shell fixture printed a bare `{`, which `validate-adapter-response.py`
- * rejected with `invalid adapter response` — a diagnostic that exists nowhere
- * under `src/`. An injected double returns a structured `AdapterResult`, so
- * the analogue at the same decision point is evidence the reader cannot
- * interpret: a well-formed outcome whose typed control payload is malformed,
- * which `src/commands/probe.ts`'s `inspect()` fails closed on. The ID's
- * contract — "Unsupported, unknown, or malformed evidence fails without
- * mutation" — is unchanged; only the wording of the diagnostic is the port's.
+ * `"malformed"` supplies a well-formed outcome whose typed control payload is
+ * malformed, which `src/commands/probe.ts`'s `inspect()` fails closed on.
  *
  * Carries a `calls` array so it satisfies the same shape `caseContext` takes
  * from `recordingAdapter` (tests/bin/command-context.js).
@@ -2300,11 +2239,8 @@ void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", as
   }
 
   {
-    // `removesMutateState: false` ports the shell driver's `remove_noop`
-    // marker (`tests/bin/lifecycle-config.ts:15-22::remove_noop`): the adapter's uninstall
-    // op runs and reports success, but the fake Codex's listings never
-    // change, so the post-removal ownership re-inspect still finds the
-    // manager plugin installed.
+    // The fake acknowledges removal without changing its listings, so
+    // post-removal verification must still find the installed manager.
     const c = lifecycleCodexCase({
       fakes: "uninstall",
       plugins: FIXTURE_MANAGER_PLUGIN_PRESENT,
@@ -2460,8 +2396,7 @@ function seedInstalledCache(
   return root;
 }
 
-// The five CLI-ENV-* rows below were owned by tests/test_adapter_protocol.sh
-// until PR 11.5 slice 5. Each is an environment-resolution rule, not a
+// The five CLI-ENV-* rows below are environment-resolution rules, not a
 // property of the transport, so each is asserted here against the real CLI.
 
 const CACHE_COMMIT = "d884ae0f2f6e5c4b3a29187e6d5c4b3a29187e6d";
@@ -2536,10 +2471,8 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // `src/harnesses/codex/adapter.ts:286::if (env.PATH === undefined) return false;` is reachable needs the true answer: the preflight
   // makes both branch outcomes unobservable on EVERY product path, not merely
   // the common one. src/cli.ts is the sole site that binds the concrete Codex
-  // harness to a context, and it runs the preflight first. The one entry point
-  // that called the typed Codex engine with a bare process.env
-  // and no preflight was src/adapter-cli.ts, and PR 11.5 slice 5 deleted it, so
-  // nothing shipped reaches `src/harnesses/codex/adapter.ts:286::if (env.PATH === undefined) return false;` unguarded. So this half and
+  // harness to a context, and it runs the preflight first. Nothing shipped
+  // reaches `src/harnesses/codex/adapter.ts:286::if (env.PATH === undefined) return false;` unguarded. So this half and
   // the next are DEFENSE-IN-DEPTH witnesses of a fail-closed invariant in
   // production code, pinned at the layer where the rule actually lives -- not
   // proof that a user-reachable invocation exercises it.
@@ -2592,7 +2525,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // resolves from execvp's built-in default path even with PATH unset, so a
   // precheck that synthesized `.` would find the working-directory copy, pass,
   // and then launch the SYSTEM `true`, whose empty output fails the listing
-  // parse under a different code. The retired driver paired the same two.
+  // parse under a different code.
   //
   // That discrimination is therefore a HOST DEPENDENCY, and a silent one: on a
   // host whose execvp default path holds no `true`, the mutant's spawn fails
@@ -2607,7 +2540,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:522::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
+  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:517::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2679,8 +2612,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1287::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1333::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1245::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1291::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

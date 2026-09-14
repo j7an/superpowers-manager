@@ -41,12 +41,7 @@ import {
   writeOpenCodeArtifact,
 } from "../../../lib/harnesses/opencode/package-fixture.ts";
 import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
-
-function value<T>(result: AdapterResult<T>): T {
-  assert.equal(result.status, 0);
-  if (!result.outcome.ok) assert.fail(result.outcome.error.message);
-  return result.outcome.result;
-}
+import { expectOk as value } from "../../../lib/command-doubles.ts";
 
 function transaction(result: AdapterResult<InstallReceipt>) {
   const receipt = value(result);

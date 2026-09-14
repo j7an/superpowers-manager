@@ -1,12 +1,9 @@
 // Shared base package root plus per-case PATH overlays for the bin-dispatch
-// port. The expensive operation (copying the real src/) happens once; each
+// tests. The expensive operation (copying the real src/) happens once; each
 // case states the tool set it needs at the assertion rather than inheriting it
 // from a mutation twenty lines earlier.
 //
-// The base is shared but NOT literally immutable, and has not been since PR
-// 11.5 slice 3.4 flipped `prepare` in-process. The `scripts` and
-// `missingScripts` per-case copy options went away with the scripts tree in
-// slice 4c. The subject under test still writes into the base: runPrepare's
+// The shared base is mutable: runPrepare writes preparation state into it.
 // gatherPrepare resolves `<root>/plugins/superpowers`, mkdirs its parent, and
 // opens a `.superpowers.prepare.*` workspace there, all before
 // computeEffectiveSelection runs.
@@ -109,15 +106,6 @@ function writeExecutable(dir: string, name: string, body: string) {
   return path;
 }
 
-// `patchDispatch` and the `dispatchOverride` option stood here until PR 11.5
-// slice 4b (Task 8, Step 5a). They existed to put one command into a DISPATCH
-// state src/cli.ts's IN_PROCESS_HANDLERS registry does not carry, by rewriting
-// a "spawn" mode literal to "in-process" in a case-local copy of the compiled
-// table. With DISPATCH at 8/8 in-process there was no "spawn" literal to
-// rewrite and `patchDispatch` rejected a no-op override by design, so the
-// mechanism could not construct that state at all. Its one consumer retired
-// with it; the only other test that used it tested the fixture itself.
-
 /** Copy source and optionally inject an import failure without changing exports. */
 function buildPackageRoot(kind: "real" | "throwing"): string {
   const root = mkdtempSync(join(SCRATCH, `pkg-${kind}-`));
@@ -197,7 +185,7 @@ export function runDispatch(options: DispatchOptions): {
     }
     // The shim, not a symlink to REAL_GIT. Matrix row 13: the symlink put a
     // real git in the case bin outside the only egress refusal this repository
-    // has, and slice 4b adds three more commands to this fixture.
+    // has.
     //
     // gitSentinel inserts a recording stub between the shim and the real git,
     // so a case can prove the refusal happened BEFORE git ran rather than

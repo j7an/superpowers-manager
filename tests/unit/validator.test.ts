@@ -6,17 +6,15 @@ import assert from "node:assert/strict";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   realpathSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { scratch } from "../lib/scratch.ts";
 
 import {
   runValidator,
@@ -154,12 +152,6 @@ const DRAIN_RACE = {
   maxBytesPerStream: 256,
 };
 
-function sandbox(t: import("node:test").TestContext) {
-  const dir = mkdtempSync(join(tmpdir(), "spw-validator-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 /**
  * Writes an executable POSIX sh script and returns its path.
  */
@@ -181,7 +173,7 @@ async function waitForPath(path: string, timeoutMs: number) {
 }
 
 void test("exit 0 is reported as exited with code 0", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const exe = writeScript(dir, "ok.sh", "echo out; echo err >&2; exit 0");
   const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
   assert.equal(run.kind, "exited");
@@ -206,7 +198,7 @@ void test("exit 0 is reported as exited with code 0", async (t) => {
 });
 
 void test("validator environment inheritance defaults on and can be disabled exactly", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const exe = writeScript(
     dir,
     "environment.sh",
@@ -239,7 +231,7 @@ void test("validator environment inheritance defaults on and can be disabled exa
 });
 
 void test("a nonzero exit is reported with its code", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const exe = writeScript(dir, "no.sh", "exit 3");
   const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
   assert.equal(run.kind, "exited");
@@ -247,7 +239,7 @@ void test("a nonzero exit is reported with its code", async (t) => {
 });
 
 void test("a nonexistent path is a launch failure, not an exit", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const run = await runValidator(
     [join(dir, "nope"), "/candidate"],
     SUCCEEDS,
@@ -259,7 +251,7 @@ void test("a nonexistent path is a launch failure, not an exit", async (t) => {
 });
 
 void test("a file with the exec bit but no interpreter is rejected, and on darwin throws synchronously", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // Not a script and not a binary: spawn raises ENOEXEC. POSIX execvp falls
   // back to re-running the file with /bin/sh when execve returns ENOEXEC, so
   // the SAME file surfaces differently by platform: launchFailed/ENOEXEC on
@@ -293,7 +285,7 @@ void test("a file with the exec bit but no interpreter is rejected, and on darwi
 });
 
 void test("a file with the exec bit, no shebang, and a passing shell body is pinned per platform", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // Unlike the previous case, this file's contents ARE valid shell source
   // (`exit 0`) -- it just lacks the `#!` line that would tell execve which
   // interpreter to use. POSIX execvp falls back to re-running a file with
@@ -316,7 +308,7 @@ void test("a file with the exec bit, no shebang, and a passing shell body is pin
 });
 
 void test("a launch failure resolves as launchFailed, not as the close that follows it", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // A nonexistent path fires `error` (launchFailed) and then `close` (which
   // would resolve as exited with a null code). The first settlement must win.
   const run = await runValidator(
@@ -330,7 +322,7 @@ void test("a launch failure resolves as launchFailed, not as the close that foll
 });
 
 void test("the two stream caps are independent", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // A chatty stdout must not crowd out the reason on stderr: the contract says
   // stderr carries it. A single combined cap would let stdout consume it.
   const exe = writeScript(
@@ -348,7 +340,7 @@ void test("the two stream caps are independent", async (t) => {
 });
 
 void test("output past the cap is truncated and the drop is counted", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // 1000 bytes of stdout against a 256-byte cap.
   const exe = writeScript(
     dir,
@@ -362,7 +354,7 @@ void test("output past the cap is truncated and the drop is counted", async (t) 
 });
 
 void test("a validator far past the cap still exits cleanly, never blocking into a timeout", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // ~2 MB on EACH of stdout and stderr against a 256-byte cap and
   // SUCCEEDS's 30s timeout. If either reader stopped consuming past the
   // cap, that stream's OS pipe buffer would fill, the child would block
@@ -387,7 +379,7 @@ void test("a validator far past the cap still exits cleanly, never blocking into
 });
 
 void test("the validator receives the candidate root as its SOLE argument, with no shell interpretation", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // Guards two contract points at once: exactly one argument, and no shell
   // interpretation -- a path containing shell metacharacters must arrive intact.
   const exe = writeScript(dir, "argv.sh", 'echo "count=$#"; echo "one=$1"');
@@ -404,7 +396,7 @@ void test("the validator receives the candidate root as its SOLE argument, with 
 });
 
 void test("a hanging validator is reported as timedOut inside the bound", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const exe = writeScript(dir, "hang.sh", "sleep 30");
   const started = Date.now();
   const run = await runValidator([exe, "/candidate"], TIMES_OUT, {}, dir);
@@ -419,7 +411,7 @@ void test("a hanging validator is reported as timedOut inside the bound", async 
 });
 
 void test("output written before the timeout is retained in the timedOut result", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // Deterministic: the write happens long before any signal. This tests the
   // MANAGER's obligation -- that it keeps what it read and hands it back on the
   // timeout path. It deliberately does NOT test a SIGTERM trap: a group signal
@@ -438,7 +430,7 @@ void test("output written before the timeout is retained in the timedOut result"
 });
 
 void test("timeout capture retains output written during the grace window", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const run = await runValidator(
     [process.execPath, GRACE_CHILD],
     CAPTURES_GRACE_OUTPUT,
@@ -463,7 +455,7 @@ void test("timeout capture retains output written during the grace window", asyn
 });
 
 void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const marker = join(dir, "survived");
   // The backgrounded shell ignores TERM and would create the marker at
   // install+20000ms. SIGKILL lands at timeout+grace (15400ms) and settlement
@@ -511,7 +503,7 @@ void test("a descendant ignoring SIGTERM is SIGKILLed BEFORE the run settles", a
 });
 
 void test("bounded drain captures only bytes written inside the window", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const completion = join(dir, "drain-descendant-complete");
   const exe = writeScript(
     dir,
@@ -546,7 +538,7 @@ void test("bounded drain captures only bytes written inside the window", async (
 });
 
 void test("a leading BOM survives decoding", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // TextDecoder strips a BOM; Buffer.toString does not.
   const exe = writeScript(dir, "bom.sh", "printf '\\357\\273\\277hi'");
   const run = await runValidator([exe, "/candidate"], SUCCEEDS, {}, dir);
@@ -555,7 +547,7 @@ void test("a leading BOM survives decoding", async (t) => {
 });
 
 void test("a validator whose DESCENDANT holds the pipes still settles inside the bound", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // The shell exits promptly; the backgrounded sleep inherits stdout and stderr
   // and outlives it. A runner that settles on `close` waits for the sleep --
   // measured at 5279 ms against a 300 ms timeout. What bounds it HERE is the
@@ -574,7 +566,7 @@ void test("a validator whose DESCENDANT holds the pipes still settles inside the
 });
 
 void test("a validator that ignores SIGTERM is still killed", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // A real termination oracle. `kind === "timedOut"` and the elapsed bound are
   // both produced by the settle alone and stay green with every signal
   // suppressed, so neither measures a kill. The child ignores TERM -- and so
@@ -616,7 +608,7 @@ void test("a validator that ignores SIGTERM is still killed", async (t) => {
 });
 
 void test("a validator exiting inside the drain window is never signalled", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   // The race: a child exiting inside [timeoutMs - drainMs, timeoutMs) already
   // has its drain settle QUEUED when the timeout comes due. If the exit handler
   // does not clear the timeout timer, the timeout still fires, SIGTERMs the
@@ -676,7 +668,7 @@ void test("every bounded policy this file uses keeps graceMs > drainMs", () => {
 });
 
 void test("a symlink is resolved and disclosed as one", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const real = writeScript(dir, "real.sh", "exit 0");
   const link = join(dir, "link");
   symlinkSync(real, link);
@@ -687,7 +679,7 @@ void test("a symlink is resolved and disclosed as one", async (t) => {
 });
 
 void test("a directory is disclosed as one so EACCES can be disambiguated", async (t) => {
-  const dir = sandbox(t);
+  const dir = scratch(t, "spw-validator-");
   const r = await resolveValidator(dir);
   assert.equal(r.isDirectory, true);
   assert.equal(r.isSymlink, false);

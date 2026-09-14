@@ -1,8 +1,5 @@
-// Migrated from tests/test_validate_generated_plugin.py. The Python suite was a
-// pure subprocess harness over dist/validate-generated-plugin-cli.js, so every
-// case here is a driver translation: same fixtures, same expected diagnostics,
-// same exit codes. This is the repository's strongest security boundary — each
-// adversarial case below carries its original assertion unweakened.
+// The validator CLI is a security boundary; adversarial cases pin its fixtures,
+// diagnostics, and exit codes.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

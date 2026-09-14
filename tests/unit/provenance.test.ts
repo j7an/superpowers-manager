@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { exactError } from "../lib/error-assertions.ts";
+import { scratch } from "../lib/scratch.ts";
 
 import {
   readGeneratedCommitLenient,
@@ -21,16 +21,10 @@ import { SafetyError } from "../../src/safety-error.ts";
 const commit = "0123456789abcdef0123456789abcdef01234567";
 const mixedCommit = "0123456789ABCDEF0123456789abcdef01234567";
 
-async function sandbox(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-provenance-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
-
 const nested = (depth: number) => "[".repeat(depth) + "0" + "]".repeat(depth);
 
 void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its accepting profile", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-provenance-");
   const file = join(directory, "provenance.json");
   await writeFile(
     file,
@@ -59,7 +53,7 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   // Bytes: the matrix says NO byte cap, and until PR-3 the only assertion of
   // that was `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:852-854::large` (a 1 MiB + 1 payload). Ported
   // here so the cell keeps a witness after the driver is deleted. Mirrors
-  // `tests/unit/harnesses/codex/state.test.ts:41::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
+  // `tests/unit/harnesses/codex/state.test.ts:35::"commit":"${full}","padding":"${"x".repeat(1_048_577)}"` for the sibling reader.
   await writeFile(
     file,
     `{"padding":"${"x".repeat(1_048_577)}","source":"https://example.invalid/repo"}`,
@@ -93,7 +87,7 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
 });
 
 void test("PROV-READER-STRICT-01 reads fields under the strict provenance profile", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-provenance-");
   const file = join(directory, "provenance.json");
 
   await writeFile(
@@ -159,7 +153,7 @@ void test("PROV-READER-STRICT-01 reads fields under the strict provenance profil
 });
 
 void test("PROV-READER-LENIENT-01 returns only an acceptable generated commit", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-provenance-");
   const file = join(directory, "provenance.json");
 
   await writeFile(file, `{"commit":"${commit}"}`);
@@ -226,7 +220,7 @@ const unicodeRecord: import("../../src/provenance.ts").ProvenanceRecord = {
 };
 
 void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-provenance-");
 
   assert.equal(escapePythonJsonString("\ud800"), "\\ud800");
   assert.equal(escapePythonJsonString("\udfff"), "\\udfff");
@@ -261,7 +255,7 @@ void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
 });
 
 void test("generatedCommitOrEmpty reads the generated tree's provenance", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-provenance-");
   const metadata = join(
     directory,
     "plugins",

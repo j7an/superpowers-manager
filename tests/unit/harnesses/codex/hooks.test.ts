@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import {
   lstat,
   mkdir,
-  mkdtemp,
   readFile,
   readlink,
-  rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { exactError } from "../../../lib/error-assertions.ts";
+import { scratch } from "../../../lib/scratch.ts";
 
 import { SafetyError } from "../../../../src/safety-error.ts";
 
@@ -21,12 +19,6 @@ import {
   materializeHooks,
   readManifest,
 } from "../../../../src/harnesses/codex/hooks.ts";
-
-async function sandbox(t: import("node:test").TestContext): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), "spw-hooks-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
 
 const nested = (depth: number) => `${"[".repeat(depth)}0${"]".repeat(depth)}`;
 
@@ -54,7 +46,7 @@ async function hookFailure(
 }
 
 void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-hooks-");
   const file = join(directory, "manifest.json");
 
   await writeFile(file, '{"hooks":"first","hooks":"last"}');
@@ -93,7 +85,7 @@ void test("MANIFEST-READER-MATERIALIZE-01 hook manifest reader complete matrix",
 // a `match` on a prefix would pass with strict-json's wording or an errno still
 // appended, which is the failure this pins.
 void test("readManifest diagnostics name the manifest and carry no reader vocabulary or errno", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-hooks-");
   const file = join(directory, "manifest.json");
   const absent = join(directory, "absent.json");
 
@@ -120,7 +112,7 @@ void test("readManifest diagnostics name the manifest and carry no reader vocabu
 });
 
 void test("classifyHooks rejects hooks in a fallback manifest", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   await hookFailure(
     () => classifyHooks({ hooks: {} }, "fallback", root),
@@ -129,7 +121,7 @@ void test("classifyHooks rejects hooks in a fallback manifest", async (t) => {
 });
 
 void test("classifyHooks allows a fallback manifest without hooks", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(await classifyHooks({}, "fallback", root), {
     copyHooksSubtree: false,
@@ -138,7 +130,7 @@ void test("classifyHooks allows a fallback manifest without hooks", async (t) =>
 });
 
 void test("classifyHooks default-discovers when hooks is absent", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(await classifyHooks({}, "upstream", root), {
     copyHooksSubtree: true,
@@ -147,7 +139,7 @@ void test("classifyHooks default-discovers when hooks is absent", async (t) => {
 });
 
 void test("classifyHooks default discovery needs a regular hooks.json", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await mkdir(join(root, "hooks"), { recursive: true });
   assert.deepEqual(await classifyHooks({}, "upstream", root), {
     copyHooksSubtree: false,
@@ -156,7 +148,7 @@ void test("classifyHooks default discovery needs a regular hooks.json", async (t
 });
 
 void test("classifyHooks treats an empty array as default discovery", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(await classifyHooks({ hooks: [] }, "upstream", root), {
     copyHooksSubtree: true,
@@ -165,7 +157,7 @@ void test("classifyHooks treats an empty array as default discovery", async (t) 
 });
 
 void test("classifyHooks treats an empty object as forbidding hooks", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(await classifyHooks({ hooks: {} }, "upstream", root), {
     copyHooksSubtree: false,
@@ -174,7 +166,7 @@ void test("classifyHooks treats an empty object as forbidding hooks", async (t) 
 });
 
 void test("classifyHooks accepts a string declaration", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(
     await classifyHooks(
@@ -187,7 +179,7 @@ void test("classifyHooks accepts a string declaration", async (t) => {
 });
 
 void test("classifyHooks accepts a string-array declaration", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(
     await classifyHooks(
@@ -203,7 +195,7 @@ void test("classifyHooks accepts a string-array declaration", async (t) => {
 });
 
 void test("classifyHooks treats an inline object as a subtree copy", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(
     await classifyHooks({ hooks: { SessionStart: [] } }, "upstream", root),
@@ -212,7 +204,7 @@ void test("classifyHooks treats an inline object as a subtree copy", async (t) =
 });
 
 void test("classifyHooks treats an object array as a subtree copy", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   assert.deepEqual(
     await classifyHooks({ hooks: [{ SessionStart: [] }] }, "upstream", root),
@@ -221,7 +213,7 @@ void test("classifyHooks treats an object array as a subtree copy", async (t) =>
 });
 
 void test("classifyHooks rejects scalar, mixed, and null declarations", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   for (const hooks of [42, null, true, ["./hooks/hooks.json", {}]]) {
     await hookFailure(
@@ -232,7 +224,7 @@ void test("classifyHooks rejects scalar, mixed, and null declarations", async (t
 });
 
 void test("classifyHooks rejects an unprefixed declared path", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   await hookFailure(
     () => classifyHooks({ hooks: "hooks/hooks.json" }, "upstream", root),
@@ -241,7 +233,7 @@ void test("classifyHooks rejects an unprefixed declared path", async (t) => {
 });
 
 void test("classifyHooks rejects an absolute declared path", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   await hookFailure(
     () => classifyHooks({ hooks: "/etc/passwd" }, "upstream", root),
@@ -250,7 +242,7 @@ void test("classifyHooks rejects an absolute declared path", async (t) => {
 });
 
 void test("classifyHooks rejects a traversing declared path", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   await hookFailure(
     () => classifyHooks({ hooks: "./../outside.json" }, "upstream", root),
@@ -259,7 +251,7 @@ void test("classifyHooks rejects a traversing declared path", async (t) => {
 });
 
 void test("classifyHooks rejects a missing declared path", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   await hookFailure(
     () => classifyHooks({ hooks: "./hooks/missing.json" }, "upstream", root),
@@ -268,7 +260,7 @@ void test("classifyHooks rejects a missing declared path", async (t) => {
 });
 
 void test("classifyHooks rejects a declared directory", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   await hookFailure(
     () => classifyHooks({ hooks: "./hooks" }, "upstream", root),
@@ -279,7 +271,7 @@ void test("classifyHooks rejects a declared directory", async (t) => {
 void test("classifyHooks rejects a declared symlink that escapes upstream", async (t) => {
   // The upstream root and the outside target both live inside one unique
   // sandbox, so parallel runs cannot overwrite or delete each other's files.
-  const base = await sandbox(t);
+  const base = scratch(t, "spw-hooks-");
   const root = join(base, "upstream");
   await mkdir(root, { recursive: true });
   await seedUpstream(root);
@@ -293,7 +285,7 @@ void test("classifyHooks rejects a declared symlink that escapes upstream", asyn
 });
 
 void test("classifyHooks accepts a declared symlink contained in upstream", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-hooks-");
   await seedUpstream(root);
   // The link must sit one level down: a root-level link to ../bin/target
   // would resolve to a SIBLING of the root and escape containment.
@@ -308,7 +300,7 @@ void test("classifyHooks accepts a declared symlink contained in upstream", asyn
 async function roots(
   t: import("node:test").TestContext,
 ): Promise<{ source: string; candidate: string }> {
-  const base = await sandbox(t);
+  const base = scratch(t, "spw-hooks-");
   const source = join(base, "upstream");
   const candidate = join(base, "candidate");
   await mkdir(source, { recursive: true });

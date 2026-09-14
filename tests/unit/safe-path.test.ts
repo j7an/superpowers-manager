@@ -1,18 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { exactError, matchingError } from "../lib/error-assertions.ts";
+import { scratch } from "../lib/scratch.ts";
 
 import { SafetyError } from "../../src/safety-error.ts";
 
 import * as paths from "../../src/safe-path.ts";
 
 async function sandbox(t: import("node:test").TestContext) {
-  const base = await mkdtemp(join(tmpdir(), "spw-safe-path-"));
-  t.after(() => rm(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-safe-path-");
   const root = join(base, "root");
   await mkdir(root);
   return { base, root };

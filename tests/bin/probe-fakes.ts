@@ -1,13 +1,5 @@
-// Executable, never imported. A two-line sh wrapper written by
-// lifecycle-fixture.js execs this as either `codex` or `adapter`.
-// Replaces the shell fake codex at `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:234-247::cat > "$probe_codex`.
-//
-// PR 11.5 slice 4b's Task 9 (matrix row 20) retires the duplicated outer
-// shell — the SPW_FIXTURE_STATE guard, the config load, the role dispatch,
-// and the unknown-role trap — in favour of the shared `runFake` that
-// install-fakes.js and uninstall-fakes.js already used. What stays here is
-// exactly what must NOT be shared: probe's own command branches and its own
-// exhaustiveness trap.
+// Executable, never imported. A two-line sh wrapper executes this as `codex`
+// or `adapter`; this file supplies probe-specific branches.
 
 import {
   respondToListing,

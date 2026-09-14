@@ -56,8 +56,7 @@ function runChecker(args: readonly string[]) {
 /**
  * Produces the explicit native packer's real npm report for this repo, plus
  * the same report's single packed entry pulled out of npm's one-element
- * array shape — mirrors the shell driver's `pack-raw.json` step and the
- * Python reshape step at `git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh:15-34::python3 - "$tmpdir/pack-`.
+ * array shape.
  */
 function packRealReport(scratchDir: string): {
   rawPath: string;
@@ -77,8 +76,7 @@ function packRealReport(scratchDir: string): {
       encoding: "utf8",
     },
   );
-  // Mirrors the shell driver's `command -v npm` precondition
-  // (`git show 0b6d50e1e9c688397285c6fa274dc8c9437d8ba3:tests/test_npm_pack_contents.sh:9::required`): name what broke without letting
+  // Name what broke without letting
   // the raw spawn error (which carries an ENOENT-shaped message) reach the
   // assertion output.
   if (result.error) {
@@ -320,8 +318,7 @@ void test("npm-pack-contents", async (t) => {
   // The real pack currently contains zero matches in any of the six
   // categories above, so that check alone can never go RED for a
   // mistranslated predicate (e.g. `includes` where the shell used
-  // `startsWith`, or a missing `parts` split). This synthetic fixture is
-  // not present in the original shell driver — it exists solely to make
+  // `startsWith`, or a missing `parts` split). This synthetic fixture makes
   // each category's predicate independently falsifiable.
   const FORBIDDEN_PATH_FIXTURES = [
     ["selection.json", "some/dir/selection.json"],
@@ -441,14 +438,11 @@ void test("npm-pack-contents", async (t) => {
   );
 });
 
-// --- port-only assertion (outside the 1:1 shell mapping) ----------------
 // The published package declares only its two approved bundled parsers as
 // runtime dependencies. This is about the ROOT manifest;
 // tests/container/package.json has its own, different dependency contract
-// asserted in container-contract.test.ts. See
-// docs/superpowers/specs/2026-08-02-pr11.1-workflow-driver-migration-design.md
-// section 3.7 — PR 11.1 added the first devDependency that is a library
-// rather than a tool, and this keeps unrelated libraries out of runtime.
+// asserted in container-contract.test.ts. This keeps unrelated libraries out
+// of runtime.
 void test("package.json declares exactly the approved bundled parsers at runtime", () => {
   const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   const runtimeDependencies = Object.keys(manifest.dependencies ?? {});

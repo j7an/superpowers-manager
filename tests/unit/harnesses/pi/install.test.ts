@@ -47,6 +47,7 @@ import {
   nativeFixture,
   nativeSelection,
 } from "../../../lib/harnesses/pi/package-fixture.ts";
+import { expectOk as value } from "../../../lib/command-doubles.ts";
 
 const RUNTIME_RESPONSE = "99.2.3";
 
@@ -61,12 +62,6 @@ async function withFsMock<T>(
     mocked.mock.restore();
     syncBuiltinESMExports();
   }
-}
-
-function value<T>(result: AdapterResult<T>): T {
-  assert.equal(result.status, 0, JSON.stringify(result));
-  if (!result.outcome.ok) assert.fail(JSON.stringify(result));
-  return result.outcome.result;
 }
 
 async function fixture(

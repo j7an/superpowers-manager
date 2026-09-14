@@ -1,9 +1,7 @@
 // Workflow contract tests.
 //
 // YAML is parsed by the `yaml` devDependency rather than by a hand-written
-// subset parser. See
-// docs/superpowers/specs/2026-08-02-pr11.1-workflow-driver-migration-design.md
-// section 3.1 for that decision and its evidence.
+// subset parser.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -37,7 +35,7 @@ import {
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WORKFLOW_DIR = join(ROOT, ".github", "workflows");
 
-// --- port-only: the YAML version this project parses under --------------
+// The YAML version this project parses under.
 void test("workflow documents parse under YAML 1.2, keeping `on` a string key", () => {
   const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
 

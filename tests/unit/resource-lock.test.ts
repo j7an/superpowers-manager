@@ -2,17 +2,14 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import {
-  mkdtemp,
   mkdir,
   readFile,
   realpath,
   readdir,
-  rm,
   symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -32,6 +29,7 @@ import { SafetyError } from "../../src/safety-error.ts";
 import { upstreamCacheRoot } from "../../src/upstream-workspace.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import { createHarnessFixture } from "../lib/test-harness.ts";
+import { scratch } from "../lib/scratch.ts";
 import { capture } from "./helpers/command-harness.ts";
 
 const CHILD = fileURLToPath(
@@ -129,12 +127,6 @@ async function childExit(child: ReturnType<typeof startChild>, label: string) {
   );
 }
 
-async function sandbox(t: import("node:test").TestContext): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "spw-resource-lock-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  return root;
-}
-
 async function hold(resource: string) {
   const process = startChild("hold", resource);
   const first = await nextMessage(process.child, "ready");
@@ -205,7 +197,7 @@ async function resourceLockEntries(parent: string): Promise<readonly string[]> {
 }
 
 void test("resource observation is read-only and validates live ownership metadata", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const resource = join(root, "future", "resource");
   const coordinator = createResourceCoordinator();
   const other = createResourceCoordinator();
@@ -246,7 +238,7 @@ void test("resource observation is read-only and validates live ownership metada
 });
 
 void test("competing processes treat existing symlink aliases from different package roots as one resource", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const target = join(root, "actual", "generated");
   await mkdir(target, { recursive: true });
   const first = join(root, "package-a", "plugins");
@@ -279,7 +271,7 @@ void test("competing processes treat existing symlink aliases from different pac
 });
 
 void test("competing processes canonicalize aliases to the same not-yet-created target", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const targetParent = join(root, "actual-parent");
   await mkdir(targetParent);
   const firstAlias = join(root, "package-a");
@@ -312,7 +304,7 @@ void test("competing processes canonicalize aliases to the same not-yet-created 
 });
 
 void test("a prospective lock remains authoritative after its owner creates the resource", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const resource = join(root, "future", "generated");
   const marker = join(root, "must-not-exist");
   const owner = await holdAndCreate(resource);
@@ -339,7 +331,7 @@ void test("a prospective lock remains authoritative after its owner creates the 
 });
 
 void test("a late stale ancestor acquisition cannot overlap a descendant owner", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const resource = join(root, "future", "generated");
   const marker = join(root, "stale-ancestor-action");
 
@@ -380,7 +372,7 @@ void test("a late stale ancestor acquisition cannot overlap a descendant owner",
 });
 
 void test("a late stale descendant acquisition cannot hide an ancestor owner", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const resource = join(root, "future", "generated");
   const marker = join(root, "stale-descendant-action");
 
@@ -427,7 +419,7 @@ void test("a late stale descendant acquisition cannot hide an ancestor owner", a
 });
 
 void test("a held resource does not block a disjoint process resource", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const first = join(root, "first");
   const second = join(root, "second");
   const marker = join(root, "second-was-written");
@@ -447,7 +439,7 @@ void test("a held resource does not block a disjoint process resource", async (t
 });
 
 void test("reentrant ownership survives nested resource additions and action failures release owned locks", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const resource = join(root, "resource");
   const added = join(root, "cache-added-by-nested-prepare");
   const coordinator = createResourceCoordinator();
@@ -487,7 +479,7 @@ void test("reentrant ownership survives nested resource additions and action fai
 });
 
 void test("a failed multi-resource acquisition releases only the locks acquired by that call", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const available = join(root, "a-available");
   const busy = join(root, "z-busy");
   const owner = await hold(busy);
@@ -511,7 +503,7 @@ void test("a failed multi-resource acquisition releases only the locks acquired 
 });
 
 void test("an interrupted owner is never reclaimed automatically", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const resource = join(root, "resource");
   const marker = join(root, "must-not-exist");
   const owner = await hold(resource);
@@ -535,7 +527,7 @@ void test("an interrupted owner is never reclaimed automatically", async (t) => 
 });
 
 void test("release preserves mismatched and unreadable ownership metadata", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   for (const ownerCase of [
     {
       name: "mismatched",
@@ -592,7 +584,7 @@ void test("release preserves mismatched and unreadable ownership metadata", asyn
 });
 
 void test("a real directory-removal failure is reported after a successful action and preserves the lock", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const otherParent = join(root, "a-other-resource");
   const parent = join(root, "z-release-failure");
   await mkdir(otherParent);
@@ -641,7 +633,7 @@ void test("a real directory-removal failure is reported after a successful actio
 });
 
 void test("an action exception remains primary when releasing its lock also fails", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const parent = join(root, "double-failure");
   await mkdir(parent);
   const resource = join(parent, "resource");
@@ -733,7 +725,7 @@ function observingCoordinator(observations: string[][]): ResourceCoordinator {
 }
 
 async function mutationContext(t: import("node:test").TestContext) {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-resource-lock-");
   const config = join(root, "config-dir");
   await mkdir(config);
   await writeFile(join(config, "selection.json"), pinned(A), "utf8");

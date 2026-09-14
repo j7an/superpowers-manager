@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import {
-  mkdtemp,
   mkdir,
   readdir,
   readFile,
@@ -10,20 +9,14 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { exactError } from "../lib/error-assertions.ts";
+import { scratch } from "../lib/scratch.ts";
 
 import { SafetyError } from "../../src/safety-error.ts";
 
 import { atomicReplaceDir, atomicWriteFile } from "../../src/atomic.ts";
-
-async function sandbox(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-atomic-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
 
 async function safetyFailure(
   operation: Promise<unknown>,
@@ -48,7 +41,7 @@ function escapeRegex(value: string) {
 }
 
 void test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and removes only the owned temp", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-atomic-");
   const target = join(directory, "selection.json");
   const foreign = join(directory, ".selection.json.tmp.foreign");
   await writeFile(target, "before");
@@ -73,7 +66,7 @@ void test("FS-SELECTION-ATOMIC-01 validator rejection preserves target and remov
 });
 
 void test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves prior bytes", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-atomic-");
   const target = join(directory, "selection.json");
   await writeFile(target, "before");
   const error = await safetyFailure(
@@ -98,7 +91,7 @@ void test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves p
 });
 
 void test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that landed", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-atomic-");
   const target = join(directory, "selection.json");
   const payload = Buffer.from("after");
   const error = await safetyFailure(
@@ -119,7 +112,7 @@ void test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes t
 });
 
 void test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement read fails", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-atomic-");
   const target = join(directory, "selection.json");
   const error = await safetyFailure(
     atomicWriteFile(target, Buffer.from("after"), {
@@ -138,7 +131,7 @@ void test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement 
 });
 
 void test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payload", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-atomic-");
   const target = join(directory, "selection.json");
   const payloads = [
     Buffer.from('{"mode":"pinned"}\\n'),
@@ -163,7 +156,7 @@ void test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payl
 });
 
 void test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-atomic-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await mkdir(live);
@@ -203,7 +196,7 @@ void test("FS-ATOMIC-SWAP-01 EXDEV activation restores the prior tree", async (t
 });
 
 void test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-atomic-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await mkdir(live);
@@ -232,7 +225,7 @@ void test("FS-ATOMIC-SWAP-01 rollback failure preserves and reports the backup",
 });
 
 void test("atomicReplaceDir reports post-replacement backup cleanup failure", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-atomic-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await mkdir(live);

@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
+import { expectOk } from "../../../lib/command-doubles.ts";
+
 import {
   codexPreparationLocation,
   inspectCodexPrepared,
@@ -238,10 +240,7 @@ void test("status inspection treats malformed generated provenance as needing pr
     env: { SUPERPOWERS_PLUGIN_ROOT: pluginRoot },
   });
 
-  assert.equal(result.status, 0);
-  assert.equal(result.outcome.ok, true);
-  if (!result.outcome.ok) assert.fail("expected status inspection success");
-  assert.deepEqual(result.outcome.result, {
+  assert.deepEqual(expectOk(result), {
     kind: "needs-prepare",
     observedIdentity: "",
     compatibility: {

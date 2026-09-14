@@ -4,6 +4,7 @@ import { writeQualifiedCodexFixture } from "./harnesses/codex/prepared-fixture.t
 import {
   failureResult,
   successResult,
+  type AdapterError,
   type AdapterResult,
 } from "../../src/adapter-result.ts";
 import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
@@ -117,6 +118,29 @@ export function successfulNonzeroResult<T>(
       error: null,
     },
   };
+}
+
+export function expectOk<T>(result: AdapterResult<T>): T {
+  if (!result.outcome.ok)
+    assert.fail(
+      `expected successful adapter outcome: ${JSON.stringify(result.outcome.error)}`,
+    );
+  assert.equal(result.status, 0, "expected adapter success status 0");
+  return result.outcome.result;
+}
+
+export function expectFailureCode(
+  result: AdapterResult<unknown>,
+  code: string,
+): AdapterError {
+  assert.equal(result.status, 1, "expected adapter failure status 1");
+  if (result.outcome.ok) assert.fail("expected failed adapter outcome");
+  assert.equal(
+    result.outcome.error.code,
+    code,
+    `expected adapter failure code ${code}`,
+  );
+  return result.outcome.error;
 }
 
 function preserveFailure<T>(result: AdapterResult<unknown>): AdapterResult<T> {
