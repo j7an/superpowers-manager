@@ -39,7 +39,7 @@ const ACCOUNT_QUERY_POLICY: ValidatorPolicy = {
 };
 const ACCOUNT_QUERY =
   "const{DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1],{readOnly:true});const row=db.prepare(\"SELECT 1 AS found FROM account_state s JOIN account a ON a.id=s.active_account_id WHERE s.id=1 AND s.active_account_id<>'' AND s.active_org_id<>'' LIMIT 1\").get();db.close();process.stdout.write(row?.found===1?'active':'absent')";
-export const OPEN_CODE_UNOWNED_MANAGER_INPUT =
+const OPEN_CODE_UNOWNED_MANAGER_INPUT =
   "OpenCode Manager registration outside native global writer";
 export const OPEN_CODE_PURE_MODE_INPUT =
   "OPENCODE_PURE disables OpenCode plugin activation";
