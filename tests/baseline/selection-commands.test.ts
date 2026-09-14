@@ -1,34 +1,3 @@
-// Migrated from tests/test_selection_commands.sh (506 lines), a shell driver
-// over scripts/pin, scripts/unpin, and scripts/track-latest.
-//
-// PR 11.5's earlier tasks already flipped all three commands to in-process
-// TypeScript (src/cli.ts's DISPATCH, src/commands/pin.ts, unpin.ts,
-// track-latest.ts), so this port calls those handlers directly instead of
-// spawning the shell scripts, which were still live (not yet deleted — that
-// happened in Task 10b) when this port was made. Three clusters have no
-// port here, each for a different reason:
-//   - Public argument-shape checks (no args / extra args) and the
-//     malformed-single-argument early guard (:72-112) exercise
-//     src/cli.ts's parseArgs — the TAG_RE/COMMIT_INPUT_RE gate that now runs
-//     strictly before any handler, tool lookup, or Git access (main() exits
-//     on a "usage-error" result before preflight/dispatch — src/cli.ts
-//     :322-326). tests/baseline/cli-parity.test.js's CLI-USAGE-01 (:594-628)
-//     and CLI-PIN-REF-01 (:630-716) already exercise this exact boundary
-//     with far more inputs than this driver's three malformed refs,
-//     including the numeric-component grammar (v01.2.3 etc.) that makes the
-//     CR/LF-embedded shapes here redundant: TAG_RE/COMMIT_INPUT_RE are
-//     whole-string anchored with no `m` flag, so an embedded CR or LF simply
-//     cannot match either regex, the same structural guarantee that already
-//     retired ref-resolution.md's spw_config_ref items.
-//   - The malformed-ref usage-failure loop (:187-189) exercises the same
-//     parseArgs boundary for six more argv shapes, all already covered by
-//     CLI-PIN-REF-01's `refused` array.
-//   - track-latest's "needs no Git" fixture (:418-431, a PATH stocked with
-//     only dirname/mktemp/rm/python3/node) proved a shell property that
-//     no longer exists to prove: runTrackLatest (src/commands/track-latest.ts)
-//     never spawns a child process at all, so "needs no Git" is now a
-//     structural fact about the absence of any child_process import, not a
-//     runtime PATH-starvation property.
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -403,7 +372,7 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     assert.equal(
       stdout.text(),
       `pinned upstream selection to v1.0.0 at ${v1Commit}\n`,
-    ); // :117
+    );
     const saved = await readSelectionState(statePath);
     if (saved === null || saved.mode !== "pinned") {
       throw new Error(
@@ -421,7 +390,7 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       requested_ref: "v1.0.0",
       resolved_ref: "v1.0.0",
       commit: v1Commit,
-    }); // :118-122
+    });
 
     const preRelease = await runPin(["v1.1.0-rc.1"], ctx);
     assert.equal(preRelease, 0);
@@ -429,8 +398,8 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     if (savedPreRelease === null || savedPreRelease.mode !== "pinned") {
       throw new Error("expected a pinned record for the annotated tag");
     }
-    assert.equal(savedPreRelease.requested_ref, "v1.1.0-rc.1"); // :125
-    assert.equal(savedPreRelease.resolved_ref, "v1.1.0-rc.1"); // :126
+    assert.equal(savedPreRelease.requested_ref, "v1.1.0-rc.1");
+    assert.equal(savedPreRelease.resolved_ref, "v1.1.0-rc.1");
     assert.equal(savedPreRelease.commit, headCommit); // :127, peeled past the tag object
   }
 
@@ -451,9 +420,9 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       throw new Error("expected a pinned record for the raw commit");
     }
     assert.equal(saved.requested_ref, headCommit); // :133, lowercased
-    assert.equal(saved.resolved_ref, headCommit); // :134
-    assert.equal(saved.commit, headCommit); // :135
-    assertWorkspaceParentEmpty(rawTmp); // :136
+    assert.equal(saved.resolved_ref, headCommit);
+    assert.equal(saved.commit, headCommit);
+    assertWorkspaceParentEmpty(rawTmp);
   }
 
   // Raw verification retains the caller's context for relative and
@@ -511,9 +480,9 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
     const stderr = capture();
     const errCtx = { ...ctx, stderr: stderr.stream };
     const status = await runPin(["v9.9.9"], errCtx);
-    assert.equal(status, 1); // :196
-    assert.match(stderr.text(), /upstream tag not found: v9\.9\.9/); // :197
-    assert.equal(readFileSync(statePath, "utf8"), before); // :198
+    assert.equal(status, 1);
+    assert.match(stderr.text(), /upstream tag not found: v9\.9\.9/);
+    assert.equal(readFileSync(statePath, "utf8"), before);
   }
 
   // Transport, unavailable-object, and non-commit failures occur before
@@ -536,9 +505,9 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
         stderr: stderr.stream,
       };
       const status = await runPin(["v1.0.0"], failCtx);
-      assert.equal(status, 1); // :204
-      assert.match(stderr.text(), /cannot query exact upstream tag v1\.0\.0/); // :205
-      assert.equal(readFileSync(statePath, "utf8"), before); // :206
+      assert.equal(status, 1);
+      assert.match(stderr.text(), /cannot query exact upstream tag v1\.0\.0/);
+      assert.equal(readFileSync(statePath, "utf8"), before);
     }
 
     // Raw-commit unavailable-object failure. :208-217
@@ -550,10 +519,10 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       const status = await withTmpdir(rawTmp, () =>
         runPin([missingCommit], failCtx),
       );
-      assert.equal(status, 1); // :214
-      assert.match(stderr.text(), /source cannot supply requested commit/); // :215
-      assert.equal(readFileSync(statePath, "utf8"), before); // :216
-      assertWorkspaceParentEmpty(rawTmp); // :217
+      assert.equal(status, 1);
+      assert.match(stderr.text(), /source cannot supply requested commit/);
+      assert.equal(readFileSync(statePath, "utf8"), before);
+      assertWorkspaceParentEmpty(rawTmp);
     }
 
     // Raw-commit blob-object rejection. :219-227
@@ -564,10 +533,10 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       const status = await withTmpdir(rawTmp, () =>
         runPin([blobCommit], failCtx),
       );
-      assert.equal(status, 1); // :224
-      assert.match(stderr.text(), /requested object is not a commit/); // :225
-      assert.equal(readFileSync(statePath, "utf8"), before); // :226
-      assertWorkspaceParentEmpty(rawTmp); // :227
+      assert.equal(status, 1);
+      assert.match(stderr.text(), /requested object is not a commit/);
+      assert.equal(readFileSync(statePath, "utf8"), before);
+      assertWorkspaceParentEmpty(rawTmp);
     }
 
     // Raw-commit annotated-tag-object rejection. :229-237
@@ -578,10 +547,10 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
       const status = await withTmpdir(rawTmp, () =>
         runPin([annotatedTagObject], failCtx),
       );
-      assert.equal(status, 1); // :234
-      assert.match(stderr.text(), /requested object is not a commit/); // :235
-      assert.equal(readFileSync(statePath, "utf8"), before); // :236
-      assertWorkspaceParentEmpty(rawTmp); // :237
+      assert.equal(status, 1);
+      assert.match(stderr.text(), /requested object is not a commit/);
+      assert.equal(readFileSync(statePath, "utf8"), before);
+      assertWorkspaceParentEmpty(rawTmp);
     }
 
     // Raw-commit transport (fetch) failure. :239-260
@@ -596,13 +565,13 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
         { [FAKE_GIT_REAL_VAR]: realGitPath() },
         () => withTmpdir(rawTmp, () => runPin([headCommit], failCtx)),
       );
-      assert.equal(status, 1); // :257
+      assert.equal(status, 1);
       assert.ok(
         stderr.text().includes(`cannot fetch requested commit from ${repo}`),
         stderr.text(),
-      ); // :258
-      assert.equal(readFileSync(statePath, "utf8"), before); // :259
-      assertWorkspaceParentEmpty(rawTmp); // :260
+      );
+      assert.equal(readFileSync(statePath, "utf8"), before);
+      assertWorkspaceParentEmpty(rawTmp);
     }
   }
 
@@ -629,11 +598,11 @@ void test("REF-PIN-SOURCE-01 exact tag and raw commit pins prove selected source
             assert.equal(
               error.message,
               "cannot fetch requested commit from <redacted-source>",
-            ); // :272-277
+            );
             assert.equal(
               error.message.includes("token@example.invalid"),
               false,
-            ); // :278-281
+            );
             return true;
           },
         );
@@ -751,7 +720,7 @@ void test("REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace", 
       child.once("close", (code, signal) => resolve({ code, signal }));
     });
 
-  // Task 4a's cleanupForSignal cleans synchronously, deregisters its own
+  // cleanupForSignal cleans synchronously, deregisters its own
   // listeners, then re-raises, so the process dies BY the signal rather than
   // exiting with a number — `128+N` is a shell convention, not a POSIX
   // guarantee, so this asserts the signal itself rather than 143. Strictly
@@ -805,7 +774,7 @@ void test("pin's writer revalidates saved state after Git verification and rejec
       },
       () => runPin(["v1.0.0"], errCtx),
     );
-    assert.equal(status, 1); // :368
+    assert.equal(status, 1);
     assert.equal(readFileSync(statePath, "utf8"), conflictBytes); // :373 — the conflicting write survives untouched
   }
 });
@@ -835,9 +804,9 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
   {
     const { status, gitLog, statePath } =
       await attemptWithExistingState("{bad json");
-    assert.equal(status, 1); // :393
-    assert.equal(existsSync(gitLog), false); // :394
-    assert.equal(readFileSync(statePath, "utf8"), "{bad json"); // :395
+    assert.equal(status, 1);
+    assert.equal(existsSync(gitLog), false);
+    assert.equal(readFileSync(statePath, "utf8"), "{bad json");
   }
 
   // Newer/incompatible existing state (a schema_version this port does not
@@ -847,9 +816,9 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
       '{"schema_version":2,"mode":"track-latest","source":"https://example.invalid/repo"}';
     const { status, gitLog, statePath } =
       await attemptWithExistingState(newerBytes);
-    assert.equal(status, 1); // :404
-    assert.equal(existsSync(gitLog), false); // :405
-    assert.equal(readFileSync(statePath, "utf8"), newerBytes); // :406
+    assert.equal(status, 1);
+    assert.equal(existsSync(gitLog), false);
+    assert.equal(readFileSync(statePath, "utf8"), newerBytes);
   }
 
   // Source validation is also pre-Git and refuses HTTP(S) userinfo. :408-416
@@ -867,9 +836,9 @@ void test("pin fails closed on malformed or newer saved state and on a credentia
       { [FAKE_GIT_REAL_VAR]: realGitPath(), [FAKE_GIT_LOG_VAR]: gitLog },
       () => runPin(["v1.0.0"], errCtx),
     );
-    assert.equal(status, 1); // :414
-    assert.match(stderr.text(), /HTTP\(S\) source must not include userinfo/); // :415
-    assert.equal(existsSync(gitLog), false); // :416
+    assert.equal(status, 1);
+    assert.match(stderr.text(), /HTTP\(S\) source must not include userinfo/);
+    assert.equal(existsSync(gitLog), false);
   }
 });
 
@@ -901,7 +870,7 @@ void test("track-latest defaults its saved source to the official upstream, and 
     if (saved === null || saved.mode !== "track-latest") {
       throw new Error("expected a track-latest record");
     }
-    assert.equal(saved.source, UPSTREAM_URL_DEFAULT); // :441
+    assert.equal(saved.source, UPSTREAM_URL_DEFAULT);
   }
 
   // An existing record of an unrecognized schema_version fails the
@@ -928,9 +897,9 @@ void test("track-latest defaults its saved source to the official upstream, and 
     const stderr = capture();
     const errCtx = { ...ctx, stderr: stderr.stream };
     const status = await runTrackLatest([], errCtx);
-    assert.equal(status, 1); // :449
+    assert.equal(status, 1);
     assert.match(stderr.text(), /schema_version must equal integer 1/);
-    assert.equal(readFileSync(statePath, "utf8"), newerBytes); // :450
+    assert.equal(readFileSync(statePath, "utf8"), newerBytes);
   }
 });
 
@@ -963,8 +932,8 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
     ); // :466-468, merged: exact-shape equality subsumes the shell's three
     // separate `grep -Fxq`/`grep -Fq` checks and is strictly stronger — it
     // also proves nothing else was printed.
-    assert.equal(existsSync(statePath), false); // :469
-    assert.equal(readFileSync(keep, "utf8"), "sibling"); // :470
+    assert.equal(existsSync(statePath), false);
+    assert.equal(readFileSync(keep, "utf8"), "sibling");
   }
 
   {
@@ -979,8 +948,8 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
     assert.equal(
       stdout.text(),
       `no saved upstream selection; packaged fallback is ${fallback}\n`,
-    ); // :473
-    assert.equal(readFileSync(keep, "utf8"), "sibling"); // :474
+    );
+    assert.equal(readFileSync(keep, "utf8"), "sibling");
   }
 
   async function assertUnpinRefuses(kind: "symlink" | "directory" | "special") {
@@ -991,8 +960,8 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
       stderr: stderr.stream,
     };
     const status = await runUnpin([], errCtx);
-    assert.equal(status, 1); // :481
-    assert.match(stderr.text(), /remove it manually after inspecting/); // :482
+    assert.equal(status, 1);
+    assert.match(stderr.text(), /remove it manually after inspecting/);
     // lstatSync succeeding at all (rather than throwing ENOENT) is itself the
     // proof that the path still exists as some filesystem entry — strictly
     // stronger than `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:483::test -e "$unpin_config/selection.json"`'s
@@ -1001,26 +970,26 @@ void test("FS-SELECTION-UNPIN-TYPES-01 unpin rejects unsafe path types", async (
     const info = lstatSync(statePath);
     switch (kind) {
       case "symlink":
-        assert.equal(info.isSymbolicLink(), true); // :485
+        assert.equal(info.isSymbolicLink(), true);
         break;
       case "directory":
-        assert.equal(info.isDirectory(), true); // :486
+        assert.equal(info.isDirectory(), true);
         break;
       case "special":
-        assert.equal(info.isFIFO(), true); // :487
+        assert.equal(info.isFIFO(), true);
         break;
     }
   }
 
   symlinkSync(keep, statePath);
-  await assertUnpinRefuses("symlink"); // :492
+  await assertUnpinRefuses("symlink");
   rmSync(statePath);
 
   mkdirSync(statePath);
-  await assertUnpinRefuses("directory"); // :495
+  await assertUnpinRefuses("directory");
   rmSync(statePath, { recursive: true });
 
   execFileSync("mkfifo", [statePath]);
-  await assertUnpinRefuses("special"); // :498
+  await assertUnpinRefuses("special");
   rmSync(statePath);
 });

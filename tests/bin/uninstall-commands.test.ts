@@ -1,6 +1,3 @@
-// Port of tests/test_uninstall_commands.sh (457 lines, deleted in this commit).
-// The retained uninstall-command contract follows.
-//
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup.
 
@@ -39,7 +36,6 @@ import { runUninstall } from "../../src/commands/uninstall.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
 
-// Fixture JSON, verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:101-108::plugin_present='{"installed":[{"pluginId":"superpowers@superpowers-manager`.
 const PLUGIN_PRESENT =
   '{"installed":[{"pluginId":"superpowers@superpowers-manager","name":"superpowers","marketplaceName":"superpowers-manager","installed":true,"enabled":true,"version":"1.0.0"}],"available":[]}';
 const PLUGIN_ABSENT = '{"installed":[],"available":[]}';
@@ -56,8 +52,7 @@ const BOTH_PLUGINS_PRESENT =
 const BOTH_MARKETPLACES_PRESENT =
   '{"marketplaces":[{"name":"superpowers-manager","root":"/manager"},{"name":"superpowers-wrapper","root":"/legacy"}]}';
 
-// Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:176::mktemp`. `git` is deliberately
-// absent; `node` is appended separately below.
+// `git` is deliberately absent; `node` is appended separately below.
 const NO_GIT_TOOLS = [
   "awk",
   "cat",
@@ -259,7 +254,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       !/\brunAdapter\b|\bSPW_ADAPTER\b/.test(uninstall),
       "public uninstall must hold no Codex-adapter implementation or environment seam",
     );
-    // :13-16
     const lifecycle = readFileSync(
       join(ROOT, "src", "harnesses", "codex", "lifecycle.ts"),
       "utf8",
@@ -271,22 +265,9 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("selection-independent recovery: malformed selection, no git, unsupported update control (:162-190)", async () => {
-    // Converted (Task 6, D4): calls `runUninstall` in-process. The old
-    // `updateControl: "unsupported"` fixture config is gone along with it:
-    // `runUninstall` (src/commands/uninstall.ts) never calls gatherProbe and
-    // structurally never issues an `inspect --view update-control` call at
-    // all -- unlike install/update, it does not route through gatherProbe --
-    // so the property this case names ("uninstall must not inspect update
-    // control") is now a fact about which operations the double answers
-    // (ownership and uninstall only), not about a fixture value that used to
-    // make a fake adapter refuse to answer that call.
-    //
-    // The malformed saved selection and the git-less PATH are kept for the
-    // same reason the case is named "selection-independent": uninstall reads
-    // neither (gatherUninstall never calls computeEffectiveSelection or runs
-    // git), so proving it succeeds despite both is still meaningful
-    // documentation even though the in-process double below does not route
-    // through either mechanism.
+    // The double permits only ownership and removal operations. Malformed
+    // saved selection and a Git-free PATH prove uninstall needs neither
+    // selection resolution nor update-control inspection.
     const c = uninstallCase({});
     // :168-170 — a malformed saved selection under the case-local
     // XDG_CONFIG_HOME the fixture already exports.
@@ -354,27 +335,12 @@ void describe("uninstall commands", { concurrency: true }, () => {
       pluginPresent: true,
       marketplacePresent: true,
     });
-    // :190
     assert.ok(out.includes("uninstall complete"), out);
   });
 
-  // Rewritten in place at PR 11.5 slice 4b, Task 8. Items 7, 8 and 9 are
-  // RETIRED at the historical migration boundary: the
-  // shell's `spw_require_command python3` (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:10::spw_require_command`) has no port,
-  // and `COMMAND_REQUIREMENTS.uninstall` drops from `["python3", "codex"]` to
-  // `["codex"]` at the flip, because `python3` was only ever required so
-  // `spw_invoke_adapter` could run validate-adapter-response.py per call
-  // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:37-44::--response "$response_file" --result "$result_file" \`). The condition those three items asserted —
-  // uninstall fails, names python3, and reaches no Codex — can no longer occur
-  // in either direction, and its inverse is a wholly new property with no shell
-  // counterpart, so this case is kept as one `test(` site carrying the
-  // successor instead of being deleted.
-  //
-  // The PATH-stripping is unchanged and still load-bearing: it is what makes
-  // `python3`'s absence real rather than declared, and it is also the case that
-  // proves runScript's retarget onto `process.execPath` kept the absolute-path
-  // property the old `/bin/sh` launch had (a bare `node` would not resolve
-  // through a PATH holding only `dirname`).
+  // This PATH contains only dirname. Besides proving Python is unnecessary,
+  // it checks that runScript launches Node via absolute process.execPath.
+  // The exact Codex sequence below proves the command reached its subject.
   void test("no python3 on PATH: uninstall runs anyway and reaches Codex (:192-212 retired)", async () => {
     // The default fixture state: the manager plugin and marketplace both
     // present, so the run has real removals to make and the sequence below is
@@ -386,16 +352,13 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const result = await runScript(c, "uninstall", { path: stripped });
     const out = result.stdout + result.stderr;
     assert.equal(result.status, 0, out);
-    // The successor to item 8: the diagnostic it pinned must be ABSENT, and
-    // that absence is non-vacuous because the Codex sequence below proves the
-    // run got all the way through.
+    // The exact Codex sequence makes this absence assertion non-vacuous.
     assert.ok(
       !out.includes("required command not found: python3"),
       `uninstall must no longer require python3:\n${out}`,
     );
-    // The successor to item 9, inverted: Codex is reached, exactly. The shell
-    // asserted an EMPTY log here; the port asserts the full ownership /
-    // remove / re-inspect sequence, which an empty log cannot satisfy.
+    // Require the full ownership, removal, and verification sequence;
+    // an empty log cannot satisfy it.
     assert.deepEqual(readLog(c.codexLog), [
       "plugin list --json",
       "plugin marketplace list --json",
@@ -413,7 +376,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("missing Codex: controlled ownership-inspect failure (:214-232)", async () => {
-    // Converted (Task 6, D4): calls `runUninstall` in-process, with the
+    // Calls `runUninstall` in-process, with the
     // double answering the ownership inspect exactly as the real adapter's
     // requireCodex check does for a missing binary (:180) -- a well-formed
     // ok:false outcome, not a transport-level fault. There is no re-anchor
@@ -435,7 +398,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runUninstall([], ctx);
     const out = stdout() + stderr();
-    // :220-225
     assert.notEqual(
       status,
       0,
@@ -448,7 +410,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       ["preparation-location", "mutation-roots", "inspect-ownership"],
       "ownership must be the only call made before the missing-Codex failure stops uninstall",
     );
-    // :227
     assert.ok(
       hasLine(out, `error: required Codex command not found: ${missingCodex}`),
       out,
@@ -469,7 +430,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const codex = readLog(c.codexLog);
-    // :239
     assertNoRemoves(codex);
     // :240, re-anchored onto the SUBJECT's stdout. The ownership-inspection
     // count alone would not do it: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:23-24::plugin_present=`,29 emits two
@@ -491,7 +451,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       codex,
       "legacy-only state must still reach a completed adapter uninstall",
     );
-    // :241-242
     assert.ok(
       hasLine(
         result.stdout,
@@ -519,7 +478,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
 
     const codex = readLog(c.codexLog);
-    // :250-251
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
     // :252-257 — one shell guard over two independent greps; non-vacuous
@@ -532,7 +490,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       !has(codex, "plugin marketplace remove superpowers-wrapper"),
       "uninstall must not remove the legacy marketplace",
     );
-    // :258-259
     assert.ok(
       hasLine(
         result.stdout,
@@ -547,7 +504,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
   });
 
   void test("both present: both removed, plugin before marketplace (:261-289)", async () => {
-    // Re-anchored onto codex.log (Task 6, D4/§5.3 step 1), keeping
+    // Re-anchored onto codex.log, keeping
     // `runScript` -- unlike the two cases above, every live claim here has a
     // Codex-level footprint. `inspect --view ownership` issues one
     // `plugin list --json` (`src/harnesses/codex/adapter.ts:722::async function runOwnership(`) and one
@@ -576,7 +533,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
 
     const codex = readLog(c.codexLog);
 
-    // :267
     assertTmpEmpty(c);
     // :268-270, re-anchored: two ownership inspections is the Codex-level
     // witness that the fresh re-inspect (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`) ran. :271's
@@ -617,7 +573,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       ],
       "plugin remove must precede marketplace remove",
     );
-    // :282-285
     assert.ok(
       !has(codex, "openai-curated"),
       "uninstall must never name openai-curated",
@@ -632,7 +587,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const codex = readLog(c.codexLog);
     // :301 first, so the negative below cannot pass on an empty log.
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
-    // :296-299
     assert.ok(
       !has(codex, "plugin remove superpowers@superpowers-manager"),
       "must not remove an absent plugin",
@@ -645,7 +599,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       codex,
       "the adapter uninstall must complete when only the marketplace is present",
     );
-    // :302
     assert.ok(result.stdout.includes("plugin not installed; skipping"));
   });
 
@@ -657,7 +610,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const result = await runScript(c, "uninstall");
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const codex = readLog(c.codexLog);
-    // :309
     assertNoRemoves(codex);
     // :310, re-anchored onto codex.log for the same reason as the legacy-only
     // case: completed adapter uninstall plus no removes is the both-false pair.
@@ -665,7 +617,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
       codex,
       "an idempotent uninstall must still reach a completed adapter uninstall",
     );
-    // :311-312
     assert.ok(result.stdout.includes("plugin not installed; skipping"));
     assert.ok(result.stdout.includes("marketplace not registered; skipping"));
   });
@@ -673,58 +624,47 @@ void describe("uninstall commands", { concurrency: true }, () => {
   void test("plugin list query fails: abort, no removes (:314-326)", async () => {
     const c = uninstallCase({ config: { pluginListRc: 1 } });
     const result = await runScript(c, "uninstall");
-    // :319
     assert.notEqual(
       result.status,
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :320
     assertTmpEmpty(c);
-    // :321-325
     assertNoAdapterUninstall(
       readLog(c.codexLog),
       "adapter uninstall must not run when ownership inspection fails",
     );
-    // :326
     assertNoRemoves(readLog(c.codexLog));
   });
 
   void test("malformed plugin list JSON: abort, no removes (:328-338)", async () => {
     const c = uninstallCase({ plugins: "not json {{{" });
     const result = await runScript(c, "uninstall");
-    // :332
     assert.notEqual(
       result.status,
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :333-337
     assertNoAdapterUninstall(
       readLog(c.codexLog),
       "adapter uninstall must not run on malformed ownership inspection",
     );
-    // :338
     assertNoRemoves(readLog(c.codexLog));
   });
 
   void test("malformed individual plugin entry: abort, no removes (:340-351)", async () => {
     const c = uninstallCase({ plugins: '{"installed":[{}],"available":[]}' });
     const result = await runScript(c, "uninstall");
-    // :344
     assert.notEqual(
       result.status,
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :345-349
     assertNoAdapterUninstall(
       readLog(c.codexLog),
       "adapter uninstall must not run on malformed individual plugin entries",
     );
-    // :350
     assertNoRemoves(readLog(c.codexLog));
-    // :351
     assert.ok(
       (result.stdout + result.stderr).includes("cannot parse output of"),
       result.stdout + result.stderr,
@@ -734,38 +674,31 @@ void describe("uninstall commands", { concurrency: true }, () => {
   void test("marketplace list fails while the plugin is present: abort before ANY remove (:353-365)", async () => {
     const c = uninstallCase({ config: { marketplaceListRc: 1 } });
     const result = await runScript(c, "uninstall");
-    // :359
     assert.notEqual(
       result.status,
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :360-364
     assertNoAdapterUninstall(
       readLog(c.codexLog),
       "adapter uninstall must not run when marketplace ownership inspection fails",
     );
-    // :365
     assertNoRemoves(readLog(c.codexLog));
   });
 
   void test("malformed individual marketplace entry: abort, no removes (:367-378)", async () => {
     const c = uninstallCase({ marketplaces: '{"marketplaces":[{}]}' });
     const result = await runScript(c, "uninstall");
-    // :371
     assert.notEqual(
       result.status,
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :372-376
     assertNoAdapterUninstall(
       readLog(c.codexLog),
       "adapter uninstall must not run on malformed individual marketplace entries",
     );
-    // :377
     assertNoRemoves(readLog(c.codexLog));
-    // :378
     assert.ok(
       (result.stdout + result.stderr).includes("cannot parse output of"),
       result.stdout + result.stderr,
@@ -775,28 +708,23 @@ void describe("uninstall commands", { concurrency: true }, () => {
   void test("malformed marketplace list while the plugin is present: abort before ANY remove (:380-392)", async () => {
     const c = uninstallCase({ marketplaces: "not json {{{" });
     const result = await runScript(c, "uninstall");
-    // :386
     assert.notEqual(
       result.status,
       0,
       "expected uninstall to fail but it succeeded",
     );
-    // :387-391
     assertNoAdapterUninstall(
       readLog(c.codexLog),
       "adapter uninstall must not run on malformed marketplace ownership inspection",
     );
-    // :392
     assertNoRemoves(readLog(c.codexLog));
   });
 
   void test("remove is a no-op: verify-after detects the still-present target (:394-410)", async () => {
-    // `removesMutateState: false` is the port of `: > "$state/remove_noop"`
-    // (:399), which the shell fake gated BOTH removes on (:44, :68).
+    // Suppress both fake removals' state changes while acknowledging the calls.
     const c = uninstallCase({ config: { removesMutateState: false } });
     const result = await runScript(c, "uninstall");
     const out = result.stdout + result.stderr;
-    // :400
     assert.notEqual(
       result.status,
       0,
@@ -826,7 +754,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const c = uninstallCase({ config: { pluginRemove: "missing-installed" } });
     const result = await runScript(c, "uninstall");
     const out = result.stdout + result.stderr;
-    // :418
     assert.notEqual(
       result.status,
       0,
@@ -844,9 +771,7 @@ void describe("uninstall commands", { concurrency: true }, () => {
       "verify-after must re-run ownership inspection after adapter uninstall",
       4,
     );
-    // :420
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
-    // :421
     assert.ok(out.includes("deregistration could not be verified"), out);
     // :422-426 — non-vacuous: the assertion above proves `out` carries the
     // subject's diagnostics.
@@ -860,7 +785,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     const c = uninstallCase({ config: { marketplaceRemove: "fail" } });
     const result = await runScript(c, "uninstall");
     const out = result.stdout + result.stderr;
-    // :435
     assert.notEqual(
       result.status,
       0,
@@ -872,7 +796,6 @@ void describe("uninstall commands", { concurrency: true }, () => {
     // before `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/uninstall:29-30::spw_verify_uninstalled_resources`'s verify-after inspection. The true/true flag
     // pair is witnessed instead by the two removes at :437-438, which the
     // adapter issues only when both flags are true (`src/harnesses/codex/adapter.ts:654::const { pluginPresent, marketplacePresent } = input;`).
-    // :437-438
     assert.ok(has(codex, "plugin remove superpowers@superpowers-manager"));
     assert.ok(has(codex, "plugin marketplace remove superpowers-manager"));
     // :449-450 — asserted before the negatives below so neither can pass on
@@ -884,17 +807,14 @@ void describe("uninstall commands", { concurrency: true }, () => {
       ),
       out,
     );
-    // :439-443
     assert.ok(
       !out.includes("uninstall complete"),
       "core must not print final success when marketplace removal fails",
     );
-    // :444-448
     assert.ok(
       !out.includes("error: invalid adapter response:"),
       "marketplace removal failure must be reported as one controlled adapter failure",
     );
-    // :451-455
     assert.ok(
       !has(codex, "openai-curated"),
       "marketplace failure must not mutate unrelated providers",

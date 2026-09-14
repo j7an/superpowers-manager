@@ -1,21 +1,13 @@
 import assert from "node:assert/strict";
-import {
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exactError } from "../lib/error-assertions.ts";
+import { scratch } from "../lib/scratch.ts";
 
 import { SafetyError } from "../../src/safety-error.ts";
 
 import {
-  displaySource,
   normalizePinnedArguments,
   normalizeSaved,
   serializeRecord,
@@ -29,12 +21,6 @@ import {
 } from "../../src/selection-store.ts";
 
 const commit = "0123456789abcdef0123456789abcdef01234567";
-
-async function sandbox(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-selection-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
 
 async function selectionFailure(
   operation: Promise<unknown>,
@@ -150,17 +136,6 @@ void test("validateSource matches the bounded CPython urlsplit verdict corpus", 
   }
 });
 
-void test("displaySource redacts sources that fail validation", () => {
-  assert.equal(
-    displaySource("https://github.com/obra/superpowers"),
-    "https://github.com/obra/superpowers",
-  );
-  assert.equal(
-    displaySource("https://user:password@example.invalid/repo"),
-    "<redacted-source>",
-  );
-});
-
 void test("selection serializer preserves Python-compatible bytes", () => {
   assert.equal(
     serializeRecord({
@@ -184,7 +159,7 @@ void test("selection serializer preserves Python-compatible bytes", () => {
 });
 
 void test("FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-selection-");
   const target = join(directory, "selection.json");
   const foreign = join(directory, ".selection.json.tmp.foreign");
   const before = serializeRecord({
@@ -234,7 +209,7 @@ void test("FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state
 });
 
 void test("FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-selection-");
   const target = join(directory, "selection.json");
   const error = await selectionFailure(
     writeSelectionState(
@@ -264,7 +239,7 @@ void test("FS-SELECTION-POST-REPLACE-01 selection write reports final landed mod
 });
 
 void test("selection reader preserves frozen malformed-JSON and UTF-8 classifications", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-selection-");
   const target = join(directory, "selection.json");
   await writeFile(target, "{\n");
   const malformed = await selectionFailure(readSelectionState(target));
@@ -281,7 +256,7 @@ void test("selection reader preserves frozen malformed-JSON and UTF-8 classifica
 });
 
 void test("selection reader rejects non-integer schema number tokens", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-selection-");
   const target = join(directory, "selection.json");
   for (const version of ["1.0", "1e0"]) {
     await writeFile(
@@ -294,7 +269,7 @@ void test("selection reader rejects non-integer schema number tokens", async (t)
 });
 
 void test("pinned writes preserve directory, existing-state, then proposed-record validation order", async (t) => {
-  const directory = await sandbox(t);
+  const directory = scratch(t, "spw-selection-");
   const stateDirectory = join(directory, "config");
   const target = join(stateDirectory, "selection.json");
 

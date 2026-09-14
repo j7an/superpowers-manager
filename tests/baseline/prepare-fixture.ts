@@ -271,9 +271,8 @@ function buildUpstream(): string {
   // tests/unit/harnesses/codex/hooks.test.ts. 42 falls through every accepted shape to the
   // unsupported-declaration throw.
   //
-  // The eight underlying causes the retired shell driver asserted behind this
-  // prefix are all already message-exact in tests/unit/harnesses/codex/hooks.test.ts. This
-  // branch exists for the wrapper alone.
+  // This branch covers the wrapper; underlying causes are message-exact in
+  // tests/unit/harnesses/codex/hooks.test.ts.
   branchWith("hooks-unsupported-declaration", () => {
     const declared = JSON.parse(
       readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),
@@ -283,9 +282,7 @@ function buildUpstream(): string {
   });
   // P2a — the hooks ROOT is a relative symlink escaping the upstream checkout,
   // so the SOURCE-side validateSubtreeSymlinks call (`src/harnesses/codex/hooks.ts:362::validateSubtreeSymlinks(sourceHooks`) fails
-  // its containment check at :303. Ports the retired driver's
-  // hooks-root-escape-symlink and hooks-root-broken-symlink cases (items 128
-  // and 127), which share this branch.
+  // its containment check at :303.
   //
   // classifyHooks returns copyHooksSubtree: hooksRootPresent
   // (`src/harnesses/codex/hooks.ts:234::return { copyHooksSubtree: hooksRootPresent, declaredPaths: paths }`), and a symlink is present rather than missing, so
@@ -309,13 +306,11 @@ function buildUpstream(): string {
   // that never reaches the candidate, so SOURCE validation passes and the
   // CANDIDATE validation at `src/harnesses/codex/hooks.ts:371::validateSubtreeSymlinks(candidateHooks` fails.
   //
-  // `.git` is the target for the same reason the retired shell fixture used
-  // it: it exists in the upstream checkout, so validateSubtreeSymlinks's
+  // `.git` exists in the upstream checkout, so validateSubtreeSymlinks's
   // containment check accepts it on the source side, and it is absent from
   // COPY_PATHS's five copied paths, so the symlink recreated at
   // `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)` dangles in the candidate. Any target outside those
-  // five works; this one keeps the ported case recognisable against the file
-  // it replaces.
+  // five works.
   branchWith("hooks-root-contained-source-only", () => {
     const declared = JSON.parse(
       readFileSync(join(MANIFESTS, "upstream-active-hooks.json"), "utf8"),

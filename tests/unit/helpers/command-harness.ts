@@ -20,9 +20,8 @@ export {
   observingCoordinator,
 } from "../../lib/command-doubles.ts";
 
-// async + `return await` for the same reason as withConfigDir below: a bare
-// `return fn(root)` hands back a pending promise, and the `finally` block's
-// rmSync then deletes the fixture before the callback has actually read it.
+// Await the callback before finally removes the fixture; returning its
+// pending promise directly would delete the fixture while it is still in use.
 /**
  * A package root with a packaged `config/upstream-ref` (for readConfigRef)
  * and an empty `config/` directory (for SUPERPOWERS_CONFIG_DIR) under a
@@ -46,34 +45,8 @@ export async function withPackage<T>(
   }
 }
 
-// MUST be async with `return await`. A synchronous `return fn(...)` hands back
-// a pending promise and `finally` then runs rmSync immediately, deleting the
-// fixture before the callback has read it. Matches
-// tests/unit/effective-selection.test.js's withConfigDir.
-/**
- * A bare SUPERPOWERS_CONFIG_DIR, optionally pre-seeded with a
- * `selection.json`, with no packaged root alongside it.
- */
-export async function withConfigDir<T>(
-  contents: string | null,
-  fn: (env: NodeJS.ProcessEnv) => Promise<T>,
-): Promise<T> {
-  const root = mkdtempSync(join(tmpdir(), "spw-cmd-cfg-"));
-  try {
-    const dir = join(root, "config");
-    mkdirSync(dir, { recursive: true });
-    if (contents !== null) {
-      writeFileSync(join(dir, "selection.json"), contents, "utf8");
-    }
-    return await fn({ SUPERPOWERS_CONFIG_DIR: dir });
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-// MUST be async with `return await`, for the same reason as withPackage and
-// withConfigDir above: a synchronous `return fn(...)` would let destroySandbox
-// run before the callback has actually read the sandbox.
+// Await the callback before destroySandbox runs, just as withPackage waits
+// before removing its fixture.
 //
 // `pin` (unlike unpin/track-latest) shells out to a real `git` to resolve its
 // requested ref (src/upstream.ts's resolveExactTag/verifyRawCommit), so its

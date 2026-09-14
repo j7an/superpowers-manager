@@ -1,13 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
@@ -18,15 +10,10 @@ import {
 } from "../../../../src/harnesses/pi/settings.ts";
 import { SafetyError } from "../../../../src/safety-error.ts";
 import { exactError } from "../../../lib/error-assertions.ts";
-
-async function sandbox(t: import("node:test").TestContext): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), "spw-pi-settings-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
+import { scratch } from "../../../lib/scratch.ts";
 
 void test("Pi settings reader reports the bounded registration state", async (t) => {
-  const agentDir = await sandbox(t);
+  const agentDir = scratch(t, "spw-pi-settings-");
   const settingsFile = join(agentDir, "settings.json");
 
   await t.test("a missing settings file means no registrations", async () => {

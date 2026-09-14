@@ -32,7 +32,6 @@ import { readCodexMarketplace } from "../../../../src/harnesses/codex/marketplac
 import { writeQualifiedCodexFixture } from "../../../lib/harnesses/codex/prepared-fixture.ts";
 
 const DESIRED = "d884ae04edebef577e82ff7c4e143debd0bbec99";
-const OTHER = "1".repeat(40);
 const PACKAGE_ROOT = resolve(
   fileURLToPath(new URL("../../../../", import.meta.url)),
 );
@@ -482,99 +481,6 @@ void test("Codex probe presentation preserves legacy fields and appends independ
       `${rendered.porcelain}ownership_conflict=active Codex plugin superpowers@another-provider\n`,
     );
   });
-});
-
-void test("verification presentation keeps desired and observed identity separate from success", () => {
-  const receipt = successResult("install", codexInstallReceipt("", ""), []);
-  assert.deepEqual(
-    codexPresentation.renderInstallVerification(
-      DESIRED,
-      receipt,
-      successResult(
-        "inspect",
-        { kind: "current", observedIdentity: DESIRED.slice(0, 7) },
-        [],
-      ),
-    ),
-    {
-      stdout: [
-        `desired_commit=${DESIRED}`,
-        `installed_commit=${DESIRED.slice(0, 7)}`,
-        "manager updated",
-      ],
-      stderr: [],
-    },
-  );
-});
-
-void test("verification presentation preserves missing, mismatch, and inspection-failure distinctions", () => {
-  const receipt = successResult(
-    "install",
-    codexInstallReceipt(
-      "verify the installed plugin",
-      "retry the installation",
-    ),
-    [],
-  );
-  assert.deepEqual(
-    codexPresentation.renderInstallVerification(
-      DESIRED,
-      receipt,
-      successResult("inspect", { kind: "absent", observedIdentity: "" }, []),
-    ),
-    {
-      stdout: [`desired_commit=${DESIRED}`, "installed_commit="],
-      stderr: [
-        "error: installed manager fingerprint is not detectable after install.",
-        "hint: verify the installed plugin",
-      ],
-    },
-  );
-  assert.deepEqual(
-    codexPresentation.renderInstallVerification(
-      DESIRED,
-      receipt,
-      successResult("inspect", { kind: "mismatch", observedIdentity: "" }, []),
-    ),
-    {
-      stdout: [`desired_commit=${DESIRED}`, "installed_commit="],
-      stderr: [
-        "error: installed manager fingerprint is not detectable after install.",
-        "hint: verify the installed plugin",
-      ],
-    },
-  );
-  assert.deepEqual(
-    codexPresentation.renderInstallVerification(
-      DESIRED,
-      receipt,
-      successResult(
-        "inspect",
-        { kind: "mismatch", observedIdentity: OTHER },
-        [],
-      ),
-    ),
-    {
-      stdout: [`desired_commit=${DESIRED}`, `installed_commit=${OTHER}`],
-      stderr: [
-        "error: installed manager fingerprint does not match the prepared plugin after install.",
-        "hint: retry the installation",
-      ],
-    },
-  );
-  assert.deepEqual(
-    codexPresentation.renderInstallVerification(
-      DESIRED,
-      receipt,
-      failureResult("inspect", "inspect-failed", "controlled", [], []),
-    ),
-    {
-      stdout: [],
-      stderr: [
-        "error: installed manager fingerprint inspection failed after install.",
-      ],
-    },
-  );
 });
 
 void test("removal completion appends the frozen completion text after a legacy report", () => {

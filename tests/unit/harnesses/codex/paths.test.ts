@@ -1,20 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import { scratch } from "../../../lib/scratch.ts";
 
 import {
   assertCodexPreparationSeparate,
   codexHome,
   codexPaths,
 } from "../../../../src/harnesses/codex/paths.ts";
-
-async function sandbox(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-codex-paths-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
 
 void test("Codex home selects durable storage independently of package location", () => {
   const paths = codexPaths(
@@ -48,7 +42,7 @@ void test("Codex home falls back only from an empty CODEX_HOME", () => {
 });
 
 void test("Codex preparation rejects only paths that overlap published or recovery storage", async (t) => {
-  const root = await sandbox(t);
+  const root = scratch(t, "spw-codex-paths-");
   const paths = codexPaths({ CODEX_HOME: join(root, "codex-home") }, root);
   const prefixSibling = `${paths.marketplaceRoot}-scratch`;
   const alias = join(root, "prepared-alias");

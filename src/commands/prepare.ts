@@ -406,7 +406,7 @@ async function performPrepare<R>(
     // its two manifest-version checks, and asResolutionKind;
     // readManifest's three hookError messages
     // (`src/harnesses/codex/hooks.ts:113-138::readManifest`), pinned by
-    // `tests/unit/harnesses/codex/hooks.test.ts:95::void test("readManifest diagnostics` as carrying no reader vocabulary or
+    // `tests/unit/harnesses/codex/hooks.test.ts:87::void test("readManifest diagnostics` as carrying no reader vocabulary or
     // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
     // withWorkspace.
     //
@@ -417,8 +417,9 @@ async function performPrepare<R>(
     //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
     //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
     //      by
-    //      `tests/unit/upstream.test.ts:453-462::void test("resolveRef reports a query failure for latest`,
-    //      :471-481, and :483-501.
+    //      `tests/unit/upstream.test.ts:439-448::void test("resolveRef reports a query failure for latest`,
+    //      `tests/unit/upstream.test.ts:450-460::void test("resolveRef reports a query failure for a tag lookup`, and
+    //      `tests/unit/upstream.test.ts:462-480::void test("resolveRef reports a query failure for the generic ref lookup`.
     //   2. fetchExactCommit splices the same combined stdout+stderr into its
     //      own text on the PINNED path (both of its own splice sites in
     //      src/upstream.ts, and proveCommit's, which it calls). This is the

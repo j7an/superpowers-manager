@@ -18,8 +18,8 @@ const handlers: Map<string, () => void> = new Map();
 
 /**
  * A cleanup failure must not be silent: src/workspace.ts's header (:15-18)
- * records that a fully-silent swallow "is the state PR 11.4 removed" from
- * the production path, and this mirrors that same policy at suite lifetime.
+ * records that cleanup failures must be reported; this mirrors that policy at
+ * suite lifetime.
  * Names the path only — never the caught error — per AGENTS.md's
  * diagnostics convention: a free-form caught message is not a bounded,
  * validated token.

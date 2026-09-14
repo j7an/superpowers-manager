@@ -1,30 +1,3 @@
-// Migrated from tests/test_ref_resolution.sh (242 lines), a shell driver over
-// scripts/core/upstream.sh's spw_config_ref, spw_manifest_version_for_ref,
-// spw_resolve_ref, and spw_fetch_exact_commit, plus scripts/core/common.sh's
-// spw_node_cli.
-//
-// PR 11.5's earlier tasks already ported the resolution/fetch/version-derivation
-// logic to TypeScript (src/upstream.ts's resolveRef/fetchExactCommit/
-// readConfigRef, src/upstream-version.ts's manifestVersionForRef), so this
-// port exercises those directly wherever doing so does not lose coverage.
-//
-// Four clusters have no TypeScript port here, each for a different reason:
-//   - The two spw_manifest_version_for_ref call sites (shell :38-39) are
-//     retired outright: tests/unit/upstream.test.js's "manifestVersionForRef
-//     reproduces the shell derivation table" (:159-257) already exercises the
-//     exact same (requestedRef, resolutionKind, resolvedRef, commit) tuples
-//     with the exact same expected strings.
-//   - Two spw_config_ref checks (shell :30-31) are retired: they exist only
-//     because a POSIX shell function without an explicit `()` subshell would
-//     leak/clobber its caller's `root`/`config_root` locals — which is why
-//     `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/upstream.sh:6::spw_config_ref` wraps spw_config_ref in one. Calling a
-//     TypeScript function (readConfigRef) cannot rebind a caller's local
-//     bindings; that hazard class does not exist in the port, so there is no
-//     runtime property left to assert.
-//   - The former shell seam's Node-environment scrub is re-expressed by
-//     tests/unit/harnesses/codex/adapter.test.ts over src/harnesses/codex/adapter.ts's child process. The git
-//     child diverges: src/git.ts pins LC_ALL and GIT_TERMINAL_PROMPT but does
-//     not scrub NODE_OPTIONS/NODE_PATH. Git history records that difference.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -206,14 +179,14 @@ void test("the git-release-repo builder produces a deterministic tagged reposito
   assert.ok(repoMatch !== null && stableMatch !== null, built.stdout);
   const repo = (repoMatch as RegExpMatchArray)[1];
   const stableCommit = (stableMatch as RegExpMatchArray)[1];
-  assert.equal(existsSync(join(repo, ".git")), true); // :21
+  assert.equal(existsSync(join(repo, ".git")), true);
   const peeled = spawnSync(
     "git",
     ["-C", repo, "rev-parse", "refs/tags/v1.1.0^{}"],
     { encoding: "utf8" },
   );
   assert.equal(peeled.status, 0, peeled.stderr);
-  assert.equal(peeled.stdout.trim(), stableCommit); // :22
+  assert.equal(peeled.stdout.trim(), stableCommit);
 });
 
 // Not a registered behavior ID either: `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/upstream.sh:6-13::spw_config_ref`'s
@@ -226,7 +199,7 @@ void test("readConfigRef returns the packaged upstream ref when no override is s
   t.after(() => rmSync(configRoot, { recursive: true, force: true }));
   mkdirSync(join(configRoot, "config"), { recursive: true });
   writeFileSync(join(configRoot, "config", "upstream-ref"), "v6.0.3\n", "utf8");
-  assert.equal(await readConfigRef(configRoot, {}), "v6.0.3"); // :26,29,32
+  assert.equal(await readConfigRef(configRoot, {}), "v6.0.3");
 });
 
 void test("REF-LATEST-STABLE-01 numeric stable release selection and peeling", async () => {
@@ -237,7 +210,7 @@ void test("REF-LATEST-STABLE-01 numeric stable release selection and peeling", a
     kind: "latest-release",
     ref: "v1.2.3",
     commit: releaseCommit,
-  }); // :59-60
+  });
 
   // A malformed leading-zero tag must not participate in selection. :62-66
   git(repo, ["tag", "v01.9.9"]);
@@ -250,33 +223,33 @@ void test("REF-LATEST-STABLE-01 numeric stable release selection and peeling", a
   git(repo, ["tag", "-d", "v01.9.9"]);
 
   const tag = await resolveRef(repo, "v1.2.3");
-  assert.deepEqual(tag, { kind: "tag", ref: "v1.2.3", commit: releaseCommit }); // :68-69
+  assert.deepEqual(tag, { kind: "tag", ref: "v1.2.3", commit: releaseCommit });
 
   const lightweight = await resolveRef(repo, "v1.2.2");
   assert.deepEqual(lightweight, {
     kind: "tag",
     ref: "v1.2.2",
     commit: mainCommit,
-  }); // :71-72
+  });
 
   const raw = await resolveRef(repo, mainCommit);
   assert.deepEqual(raw, {
     kind: "raw-commit",
     ref: mainCommit,
     commit: mainCommit,
-  }); // :74-75
+  });
 });
 
 void test("REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup", async () => {
   const { repo, mainCommit } = UPSTREAM;
   const main = await resolveRef(repo, "main");
-  assert.deepEqual(main, { kind: "ref", ref: "main", commit: mainCommit }); // :78-79
+  assert.deepEqual(main, { kind: "ref", ref: "main", commit: mainCommit });
   const branchNamedLikeTag = await resolveRef(repo, "v9.9.9");
   assert.deepEqual(branchNamedLikeTag, {
     kind: "ref",
     ref: "v9.9.9",
     commit: mainCommit,
-  }); // :80-81
+  });
 });
 
 void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", async (t) => {
@@ -288,7 +261,7 @@ void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", asy
   mkdirSync(exactWorkspace);
   writeFileSync(join(exactWorkspace, "sibling"), "keep\n", "utf8");
 
-  await fetchExactCommit(repo, releaseCommit, exactCache, exactWorkspace); // :90
+  await fetchExactCommit(repo, releaseCommit, exactCache, exactWorkspace);
   // The persistent cache must actually hold the requested commit object.
   // Extends the bare-check-relied-on-by-set-e rule that already applies to
   // `[ ... ]` and `grep -q` to a
@@ -300,7 +273,7 @@ void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", asy
     { encoding: "utf8" },
   );
   assert.equal(catFile.status, 0, catFile.stderr);
-  assertOnlySiblingKept(exactWorkspace); // :92-93
+  assertOnlySiblingKept(exactWorkspace);
 
   // Source proof must not be satisfiable by an object already present in the
   // persistent cache. :96-107
@@ -315,8 +288,8 @@ void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", asy
       error instanceof Error &&
       error.message ===
         `source cannot supply requested commit: ${releaseCommit}`,
-  ); // :99-105
-  assertOnlySiblingKept(exactWorkspace); // :106-107
+  );
+  assertOnlySiblingKept(exactWorkspace);
 
   // A blob object must not be accepted. :109-115
   await assert.rejects(
@@ -418,7 +391,7 @@ void test("REF-CLEANUP-01 interrupted source proof cleans only its workspace", a
     stderr += chunk;
   });
 
-  const reached = await waitForMarker(marker, 5000); // :176-178
+  const reached = await waitForMarker(marker, 5000);
   if (!reached) {
     if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
     assert.fail(
@@ -434,7 +407,7 @@ void test("REF-CLEANUP-01 interrupted source proof cleans only its workspace", a
       child.once("close", (code, signal) => resolve({ code, signal }));
     });
 
-  // Task 4a's cleanupForSignal cleans synchronously, deregisters its own
+  // cleanupForSignal cleans synchronously, deregisters its own
   // listeners, then re-raises, so the process dies BY the signal rather than
   // exiting with a number — `128+N` is a shell convention, not a POSIX
   // guarantee, so this asserts the signal itself rather than 143. Strictly
@@ -460,12 +433,12 @@ void test("REF-CLEANUP-01 interrupted source proof cleans only its workspace", a
     `expected the interrupted fetch to target the resolver's own workspace, got: ${fetchLine}`,
   );
 
-  // Task 4a's cleanup runs synchronously and re-raises only after removing
+  // Signal cleanup runs synchronously and re-raises only after removing
   // the workspace, so by the time `close` has already fired above, cleanup
   // is guaranteed complete: no retry loop is needed here, unlike
   // `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:182-186::interrupted exact fetch did not clean its proof repository`'s Python polling wait, which hedged
   // against exactly the asynchrony PR 11.4 removed from the signal path.
-  assertOnlySiblingKept(signalWorkspace); // :192-193
+  assertOnlySiblingKept(signalWorkspace);
 });
 
 // Not a registered behavior ID: no BASELINE CASE marker covers
@@ -489,5 +462,5 @@ void test("an upstream with no stable tags still fails latest-release resolution
     (error) =>
       error instanceof Error &&
       error.message === "no stable semver tag found for latest-release",
-  ); // :195-207
+  );
 });

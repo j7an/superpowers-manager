@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { shQuote } from "../lib/git-egress.ts";
 import { resolvePackageNode } from "../lib/package-runtime.ts";
+import { scratch } from "../lib/scratch.ts";
 
 const engine = JSON.parse(
   readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
@@ -12,8 +12,7 @@ const engine = JSON.parse(
 const floor = `${/^>=(\d+)$/.exec(engine)![1]}.0.0`;
 
 function shellDouble(t: import("node:test").TestContext, body: string): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-package-runtime-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-package-runtime-");
   const binary = join(root, "node");
   writeFileSync(binary, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
   return binary;
@@ -57,8 +56,7 @@ void test("package runtime evidence requires an absolute executable path", () =>
 });
 
 void test("package runtime rejects unavailable and invalid executable paths", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-package-runtime-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-package-runtime-");
   for (const binary of [
     join(root, "missing-node"),
     `${join(root, "node")}\0bad`,

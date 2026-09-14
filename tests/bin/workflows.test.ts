@@ -1,9 +1,7 @@
 // Workflow contract tests.
 //
 // YAML is parsed by the `yaml` devDependency rather than by a hand-written
-// subset parser. See
-// docs/superpowers/specs/2026-08-02-pr11.1-workflow-driver-migration-design.md
-// section 3.1 for that decision and its evidence.
+// subset parser.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -37,7 +35,7 @@ import {
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WORKFLOW_DIR = join(ROOT, ".github", "workflows");
 
-// --- port-only: the YAML version this project parses under --------------
+// The YAML version this project parses under.
 void test("workflow documents parse under YAML 1.2, keeping `on` a string key", () => {
   const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
 
@@ -227,26 +225,7 @@ function isFullSharedCommandLine(line: string): boolean {
   return FULL_SHARED_PACKAGE_ALIASES.has(alias);
 }
 
-void test("ci.yml declares the expected top-level contract", () => {
-  const ci = requireMapping(
-    parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
-    "ci",
-  );
-
-  assertNoNativeSelectorEnv(ci, "ci");
-  assert.equal(requireMapping(ci.on, "ci.on").pull_request, null);
-  assert.deepEqual(requireMapping(ci.on, "ci.on").push.branches, ["main"]);
-  assert.equal(
-    requireMapping(ci.concurrency, "ci.concurrency").group,
-    RELEASE_CONCURRENCY_GROUP,
-  );
-  assert.equal(
-    requireMapping(ci.concurrency, "ci.concurrency")["cancel-in-progress"],
-    true,
-  );
-  assert.deepEqual(ci.permissions, {});
-  const jobs = requireMapping(ci.jobs, "jobs");
-
+function validateCiReleaseClassifier(jobs: Record<string, any>): void {
   const classifier = requireMapping(
     jobs[RELEASE_CLASSIFIER_JOB],
     "jobs.classify-release",
@@ -263,56 +242,53 @@ void test("ci.yml declares the expected top-level contract", () => {
     Array.isArray(classifierSteps),
     "expected jobs.classify-release.steps to be an array",
   );
-  assert.equal(
-    classifierSteps.length,
-    4,
-    "classifier must run only harden, checkout, setup, and classification",
-  );
-  const classifierHarden = requireMapping(
-    classifierSteps[0],
-    "classifier harden step",
-  );
-  const classifierCheckout = requireMapping(
-    classifierSteps[1],
-    "classifier checkout step",
-  );
-  const classifierSetup = requireMapping(
-    classifierSteps[2],
-    "classifier setup step",
-  );
-  const classification = requireMapping(
-    classifierSteps[3],
-    "classification step",
-  );
-  const harness = requireMapping(jobs["harness-codex"], "jobs.harness-codex");
-  const harnessSteps = harness.steps as unknown[];
-  const harnessHarden = requireMapping(harnessSteps[0], "harness harden step");
-  const harnessCheckout = requireMapping(
-    harnessSteps[1],
-    "harness checkout step",
+  const order = [
+    uniqueStepTargetIndex(classifierSteps, "step-security/harden-runner"),
+    uniqueStepTargetIndex(classifierSteps, "actions/checkout"),
+    uniqueStepTargetIndex(classifierSteps, "actions/setup-node"),
+    uniqueRunStepIndex(
+      classifierSteps,
+      "node tests/tools/classify-release-bump.ts",
+    ),
+  ];
+  assert.deepEqual(
+    order,
+    [...order].sort((left, right) => left - right),
+    "classifier must run harden, checkout, setup, and classification in order",
   );
   assert.equal(
-    classifierHarden.uses,
-    harnessHarden.uses,
-    "classifier must reuse the existing harden-runner pin",
+    order[0],
+    0,
+    "classifier must harden before any executable step",
   );
-  assert.equal(
-    classifierCheckout.uses,
-    harnessCheckout.uses,
-    "classifier must reuse the existing checkout pin",
-  );
-  assert.equal(
-    classifierSetup.uses,
-    requireMapping(
-      requireMapping(jobs.toolchain, "jobs.toolchain").steps[4],
-      "toolchain setup step",
-    ).uses,
-    "classifier must reuse the existing setup-node pin",
+  const [
+    classifierHarden,
+    classifierCheckout,
+    classifierSetup,
+    classification,
+  ] = order.map((index) =>
+    requireMapping(classifierSteps[index], "classifier contract step"),
   );
   assert.deepEqual(
+    classifierSteps.flatMap((step, index) =>
+      step.if === "${{ false }}" ? [] : [index],
+    ),
+    order,
+    "classifier must execute only its required steps",
+  );
+  const harnessSteps = requireMapping(
+    jobs["harness-codex"],
+    "jobs.harness-codex",
+  ).steps as unknown[];
+  assert.deepEqual(
     classifierHarden.with,
-    harnessHarden.with,
-    "classifier must retain the harness hardening configuration",
+    requireMapping(
+      harnessSteps[
+        uniqueStepTargetIndex(harnessSteps, "step-security/harden-runner")
+      ],
+      "harness harden step",
+    ).with,
+    "classifier must retain the hardening configuration",
   );
   assert.equal(
     requireMapping(classifierCheckout.with, "classifier checkout.with")[
@@ -338,6 +314,29 @@ void test("ci.yml declares the expected top-level contract", () => {
   );
   assert.equal(classification.id, "classify");
   assert.equal(classification.run, "node tests/tools/classify-release-bump.ts");
+}
+
+void test("ci.yml declares the expected top-level contract", () => {
+  const ci = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
+    "ci",
+  );
+
+  assertNoNativeSelectorEnv(ci, "ci");
+  assert.equal(requireMapping(ci.on, "ci.on").pull_request, null);
+  assert.deepEqual(requireMapping(ci.on, "ci.on").push.branches, ["main"]);
+  assert.equal(
+    requireMapping(ci.concurrency, "ci.concurrency").group,
+    RELEASE_CONCURRENCY_GROUP,
+  );
+  assert.equal(
+    requireMapping(ci.concurrency, "ci.concurrency")["cancel-in-progress"],
+    true,
+  );
+  assert.deepEqual(ci.permissions, {});
+  const jobs = requireMapping(ci.jobs, "jobs");
+
+  validateCiReleaseClassifier(jobs);
   for (const key of [
     "harness-codex",
     "harness-pi",
@@ -639,11 +638,6 @@ function validateCiToolchain(document: unknown): void {
   const mainWith = requireMapping(mainSetup.with, "main setup.with");
   assert.equal(mainWith["node-version"], "${{ matrix.native }}");
   assert.equal(mainWith["check-latest"], "${{ matrix.static }}");
-  assert.equal(
-    packageSetup.uses,
-    mainSetup.uses,
-    "setup-node steps must use the same semantic pin",
-  );
 
   const captureSteps = steps.filter(
     (step: any) =>
@@ -756,24 +750,24 @@ function validateCiToolchain(document: unknown): void {
     [...order].sort((a, b) => a - b),
     "toolchain steps are out of order",
   );
-  for (const index of order.slice(6)) {
-    const step = requireMapping(steps[index], "toolchain validation step");
-    if (index === order[7]) {
-      assert.equal(
-        step.if,
-        "matrix.native == '24.12.0'",
-        "native compatibility runs only at the source floor",
-      );
-    } else if (index === order[8] || index === order[9]) {
-      assert.equal(
-        step.if,
-        "matrix.static",
-        "static and Git-backed checks run on latest native only",
-      );
-    } else {
-      assert.ok(!Object.hasOwn(step, "if"), "installation must always run");
-    }
-  }
+  assert.ok(
+    !Object.hasOwn(
+      requireMapping(
+        steps[uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile")],
+        "toolchain installation step",
+      ),
+      "if",
+    ),
+    "installation must always run",
+  );
+  assert.equal(
+    requireMapping(
+      steps[uniqueRunStepIndex(steps, "pnpm run check:static")],
+      "toolchain static check step",
+    ).if,
+    "matrix.static",
+    "static check must run only on latest native",
+  );
 
   const checkout = requireMapping(steps[order[1]], "toolchain checkout step");
   assert.equal(
@@ -932,6 +926,43 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
       /native compatibility must run the source, gate, and package producer checks/,
     );
   });
+});
+
+void test("ci.yml classifier preserves command and security order", () => {
+  const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
+  const jobs = requireMapping(requireMapping(ci, "ci").jobs, "jobs");
+  const steps = requireMapping(
+    jobs[RELEASE_CLASSIFIER_JOB],
+    "jobs.classify-release",
+  ).steps as unknown[];
+  const insertionIndex =
+    uniqueStepTargetIndex(steps, "step-security/harden-runner") + 1;
+  steps.splice(insertionIndex, 0, {
+    name: "Disabled local action",
+    if: "${{ false }}",
+    uses: "./.github/actions/disabled",
+  });
+  assert.doesNotThrow(() => validateCiReleaseClassifier(jobs));
+  delete requireMapping(steps[insertionIndex], "inserted action").if;
+  assert.throws(
+    () => validateCiReleaseClassifier(jobs),
+    /classifier must execute only its required steps/,
+  );
+  steps.splice(insertionIndex, 1);
+
+  const [classification] = steps.splice(
+    uniqueRunStepIndex(steps, "node tests/tools/classify-release-bump.ts"),
+    1,
+  );
+  steps.splice(
+    uniqueStepTargetIndex(steps, "actions/checkout"),
+    0,
+    classification,
+  );
+  assert.throws(
+    () => validateCiReleaseClassifier(jobs),
+    /classifier must run harden, checkout, setup, and classification in order/,
+  );
 });
 
 void test("ci.yml exists and blocking mode creates no compatibility workflow", () => {

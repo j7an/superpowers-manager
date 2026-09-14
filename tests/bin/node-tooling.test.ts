@@ -28,11 +28,8 @@ const MISSING_COMPILER_DIAGNOSTIC =
   "error: repo TypeScript compiler missing — run pnpm install --frozen-lockfile";
 
 /**
- * Mirrors `tsc_bin="${SPW_TSC:-$root/node_modules/.bin/tsc}"` from the
- * deleted tests/test_node_tooling.sh: that shell driver supported overriding
- * the compiler path through this environment variable, and this port
- * preserves the seam. No in-repo caller sets `SPW_TSC` today — the two tests
- * below exercise both branches by setting and unsetting it directly.
+ * Resolves the compiler path from `SPW_TSC` or the package-local default.
+ * The tests below exercise both branches directly.
  */
 function resolveTscBin(): string {
   return process.env.SPW_TSC || DEFAULT_TSC;

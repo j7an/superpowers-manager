@@ -1,18 +1,3 @@
-// Migrated from tests/test_selection_state.sh (335 lines), a shell driver
-// over scripts/core/selection.sh's spw_selection_config_dir,
-// spw_compute_effective_selection, spw_resolve_ref, spw_selection_state, and
-// spw_display_source, plus the CLI usage-error contract now owned by src/cli.ts.
-//
-// PR 11.5 already ported the config-dir chain and the env > saved >
-// package-default precedence ladder to TypeScript
-// (src/effective-selection.ts's selectionConfigDir / computeEffectiveSelection,
-// and src/selection.ts's validateSource / displaySource), so this port
-// exercises those directly wherever a TypeScript counterpart exists.
-//
-// The former selection-state wrapper cluster closes structurally in slice 4c:
-// src/selection-store.ts reads selection state in-process, so there is no
-// child Node process for NODE_OPTIONS to reach and no helper file left to be
-// missing.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -281,10 +266,10 @@ void test("the permission-denied builder produces a deterministically unreadable
   assert.ok(rootMatch !== null && targetMatch !== null, built.stdout);
   const permissionRoot = (rootMatch as RegExpExecArray)[1];
   const permissionTarget = (targetMatch as RegExpExecArray)[1];
-  assert.equal(existsSync(permissionRoot), true); // :30
+  assert.equal(existsSync(permissionRoot), true);
 
   if (process.getuid !== undefined && process.getuid() === 0) {
-    // :31-33 the shell driver skips the read-access assertion for root too.
+    // Root is excluded from the unreadability assertion.
   } else {
     let readable = true;
     try {
@@ -292,7 +277,7 @@ void test("the permission-denied builder produces a deterministically unreadable
     } catch {
       readable = false;
     }
-    assert.equal(readable, false); // :34-37
+    assert.equal(readable, false);
   }
   chmodSync(dirname(permissionTarget), 0o700); // :39, cleanup, not an assertion
 });
@@ -322,6 +307,15 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () =
     selectionConfigDir({ HOME: "/home" }),
     "/home/.config/superpowers-manager",
   );
+  // An explicitly empty override is still present, so it fails its own
+  // absolute-path requirement instead of falling through to HOME.
+  assert.throws(
+    () => selectionConfigDir({ SUPERPOWERS_CONFIG_DIR: "", HOME: "/home" }),
+    {
+      module: "selection",
+      message: "SUPERPOWERS_CONFIG_DIR must be absolute",
+    },
+  );
   // :47-51 a relative SUPERPOWERS_CONFIG_DIR fails closed with its own
   // diagnostic (the if-guard at :47, "unexpectedly succeeded", is subsumed
   // by assert.throws itself: a thrown error is strictly "did not succeed").
@@ -337,6 +331,10 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () =
     () => selectionConfigDir({ XDG_CONFIG_HOME: "relative", HOME: "/home" }),
     { module: "selection", message: "XDG_CONFIG_HOME must be absolute" },
   );
+  assert.throws(() => selectionConfigDir({ HOME: "relative" }), {
+    module: "selection",
+    message: "HOME must be absolute",
+  });
   // :57-61 with every base absent, resolution fails closed rather than
   // defaulting to a cwd-relative path.
   assert.throws(() => selectionConfigDir({}), {
@@ -344,10 +342,8 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () =
     message: "HOME is required to locate selection state",
   });
 
-  // :63-70 re-expressed through src/cli.ts's surviving usage-error contract:
-  // `error: <msg>` on stderr, followed by the same usage block `--help`
-  // prints, with exit 2. The shell guard's "unexpectedly succeeded" half is
-  // subsumed by the exact-status assertion below.
+  // Invalid commands exit 2 and emit the error followed by the same usage
+  // block as --help, all on stderr.
   const help = spawnSync(process.execPath, [BIN, "--help"], {
     encoding: "utf8",
   });
@@ -360,7 +356,7 @@ void test("SEL-LOCATION-01 selection location chain and fail-closed bases", () =
   assert.equal(
     usage.stderr,
     `error: unknown subcommand: bogus\n${help.stdout}`,
-  ); // :70
+  );
 });
 
 void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
@@ -368,7 +364,6 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
   const { dir: gitDir, log } = fakeResolverGitDir(t);
 
   // Absent state: packaged defaults, then independent environment overrides.
-  // :137-144
   resetLog(log);
   const absentConfig = makeConfigDir(t, null);
   const absentSelection = await withResolverEnv(gitDir, log, () =>
@@ -385,11 +380,10 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "v1.2.3",
     desiredCommit: RESOLVED_DEFAULT,
     resolutionKind: "tag",
-  }); // :141-142
-  assert.equal(absentSelection.saved.saved_mode, "none"); // :143
-  assert.equal(resolutionCount(log), 1); // :144
+  });
+  assert.equal(absentSelection.saved.saved_mode, "none");
+  assert.equal(resolutionCount(log), 1);
 
-  // :146-154
   resetLog(log);
   const envOverrideSelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -407,9 +401,8 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "main",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :153-154
+  });
 
-  // :156-163
   resetLog(log);
   const refOnlySelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -426,9 +419,8 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "main",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :162-163
+  });
 
-  // :165-172
   resetLog(log);
   const sourceOnlySelection = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -445,7 +437,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "v1.2.3",
     desiredCommit: RESOLVED_DEFAULT,
     resolutionKind: "tag",
-  }); // :171-172
+  });
 
   // Track-latest state: saved ref and source can each be overridden
   // independently. :176-182
@@ -463,10 +455,9 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: RESOLVED_LATEST_TAG,
     desiredCommit: RESOLVED_LATEST,
     resolutionKind: "latest-release",
-  }); // :180-181
-  assert.equal(trackSelection.saved.saved_mode, "track-latest"); // :182
+  });
+  assert.equal(trackSelection.saved.saved_mode, "track-latest");
 
-  // :184-191
   resetLog(log);
   const trackRefOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -483,9 +474,8 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "main",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :190-191
+  });
 
-  // :193-200
   resetLog(log);
   const trackSourceOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -502,9 +492,8 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: RESOLVED_LATEST_TAG,
     desiredCommit: RESOLVED_LATEST,
     resolutionKind: "latest-release",
-  }); // :199-200
+  });
 
-  // :202-210
   resetLog(log);
   const trackBothOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -522,7 +511,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "main",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :209-210
+  });
 
   // Pinned state reuses its verified identity unless the ref itself is
   // overridden. :213-223
@@ -542,13 +531,12 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "v6.1.1",
     desiredCommit: PINNED_COMMIT,
     resolutionKind: "tag",
-  }); // :218-219
-  assert.equal(logText(log), ""); // :220
-  assert.equal(pinnedSelection.saved.saved_requested_ref, "v6.1.1"); // :221
-  assert.equal(pinnedSelection.saved.saved_resolved_ref, "v6.1.1"); // :222
-  assert.equal(pinnedSelection.saved.saved_commit, PINNED_COMMIT); // :223
+  });
+  assert.equal(logText(log), "");
+  assert.equal(pinnedSelection.saved.saved_requested_ref, "v6.1.1");
+  assert.equal(pinnedSelection.saved.saved_resolved_ref, "v6.1.1");
+  assert.equal(pinnedSelection.saved.saved_commit, PINNED_COMMIT);
 
-  // :225-233
   resetLog(log);
   const pinnedRefOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -565,10 +553,9 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "main",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :231-232
-  assert.equal(resolutionCount(log), 1); // :233
+  });
+  assert.equal(resolutionCount(log), 1);
 
-  // :235-243
   resetLog(log);
   const pinnedSourceOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -585,10 +572,9 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "v6.1.1",
     desiredCommit: PINNED_COMMIT,
     resolutionKind: "tag",
-  }); // :241-242
-  assert.equal(logText(log), ""); // :243
+  });
+  assert.equal(logText(log), "");
 
-  // :245-252
   resetLog(log);
   const pinnedBothOverride = await withResolverEnv(gitDir, log, () =>
     computeEffectiveSelection(pkgRoot, {
@@ -606,7 +592,7 @@ void test("SEL-PRECEDENCE-REF-01 complete ref precedence", async (t) => {
     resolvedRef: "main",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :252-253
+  });
 });
 
 void test("an arbitrary environment ref and a raw-commit pin resolve without shell-quoting surprises", async (t) => {
@@ -632,7 +618,7 @@ void test("an arbitrary environment ref and a raw-commit pin resolve without she
     resolvedRef: "*",
     desiredCommit: RESOLVED_ENVIRONMENT,
     resolutionKind: "ref",
-  }); // :263-264
+  });
 
   // Raw commit saved pins derive their resolution kind without resolver
   // access. :266-279
@@ -660,8 +646,8 @@ void test("an arbitrary environment ref and a raw-commit pin resolve without she
     resolvedRef: PINNED_COMMIT,
     desiredCommit: PINNED_COMMIT,
     resolutionKind: "raw-commit",
-  }); // :277-278
-  assert.equal(logText(log), ""); // :279
+  });
+  assert.equal(logText(log), "");
 });
 
 void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", async (t) => {
@@ -687,9 +673,9 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
       ),
     (error) =>
       error instanceof Error &&
-      error.message.includes("schema_version must equal integer 1"), // :296
+      error.message.includes("schema_version must equal integer 1"),
   );
-  assert.equal(logText(log), ""); // :297
+  assert.equal(logText(log), "");
 
   // Effective HTTP(S) userinfo is rejected before resolver access and
   // display is safe. :300-312. The if-guard at :305 is likewise subsumed by
@@ -707,9 +693,9 @@ void test("SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution", asy
       ),
     (error) =>
       error instanceof Error &&
-      error.message.includes("HTTP(S) source must not include userinfo"), // :309
+      error.message.includes("HTTP(S) source must not include userinfo"),
   );
-  assert.equal(logText(log), ""); // :310
-  assert.equal(displaySource(credentialSource), "<redacted-source>"); // :311
-  assert.equal(displaySource(UPSTREAM_URL_DEFAULT), UPSTREAM_URL_DEFAULT); // :312
+  assert.equal(logText(log), "");
+  assert.equal(displaySource(credentialSource), "<redacted-source>");
+  assert.equal(displaySource(UPSTREAM_URL_DEFAULT), UPSTREAM_URL_DEFAULT);
 });

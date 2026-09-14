@@ -52,7 +52,7 @@ const EMPTY_MARKETPLACES = '{"marketplaces":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than `tests/baseline/cli-parity.test.ts:258::function snapshotTree`'s mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.ts:255::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  */
@@ -151,7 +151,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
   assert.match(result.stdout, /^saved_requested_ref=$/m);
   assert.match(result.stdout, /^saved_resolved_ref=$/m);
   assert.match(result.stdout, /^saved_commit=$/m);
-  // Ported from `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:411-413::actual_keys=`: the whole key list, in order.
+  // Assert the whole key list, in order.
   assert.deepEqual(
     result.stdout
       .split("\n")
@@ -195,7 +195,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     ],
     manifestVersion: ACTIVE_VERSION,
   });
-  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:122-134::if (usesSavedPin)`),
+  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:120-132::if (usesSavedPin)`),
   // so an unreachable source is the proof that Git was never consulted: any
   // ls-remote against this path would fail once it is renamed away.
   renameSync(source, `${source}-offline`);
@@ -259,8 +259,7 @@ void test("an environment ref overrides only the ref side and the saved fields s
     ],
     manifestVersion: ACTIVE_VERSION,
   });
-  // Renamed away for both runs, exactly as `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:434-477::mv "$upstream" "$offline_source"` leaves
-  // it: a 40-hex SUPERPOWERS_REF resolves as `raw-commit` without Git
+  // Rename the source for both runs: a 40-hex SUPERPOWERS_REF resolves as `raw-commit` without Git
   // (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so an unreachable source is what proves the
   // shell's `test ! -s "$git_log"` (:460) still holds here.
   renameSync(source, `${source}-offline`);
@@ -441,7 +440,7 @@ void test("no active plugin yields a null fingerprint and needs install", async 
     manifestVersion: ACTIVE_VERSION,
     installedProvenance: '{"commit":"not-a-fingerprint"}',
   });
-  // The manifest is malformed as well, matching `git show ad56569a4c161e7b122967442e2b026eeb6395f6:tests/test_probe.sh:588::printf '%s\n' '{' > "$installed_root/.codex-plugin/plugin.json"`. With
+  // The manifest is malformed as well. With
   // no active plugin the adapter never reaches it, so this only pins that a
   // second unusable input does not change the outcome.
   writeFileSync(
@@ -517,8 +516,8 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
   // The credential case points SUPERPOWERS_UPSTREAM_URL at a source that would
   // fail loudly if resolveRef were reached -- `v1.0.0` is not a commit, so
   // reaching resolveRef means an ls-remote against an unreachable host and a
-  // different diagnostic. This is the same technique
-  // `tests/unit/effective-selection.test.ts:137-159::source validation precedes ref resolution` uses.
+  // different diagnostic. A direct resolver-log check also lives in
+  // `tests/baseline/selection-location.test.ts::SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution`.
   for (const { name, seed, env, expected } of [
     {
       name: "malformed selection.json",
@@ -575,7 +574,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
   assert.match(result.stderr, /cannot parse output of/);
 });
 
-// Amended after Task 5's own verification. Exit criterion 8's rethrow branch
+// The adapter's outer rethrow branch
 // (`src/harnesses/codex/adapter.ts:829::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
 // `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:299::if (!(await commandAvailable(codexBin, env)))`), and

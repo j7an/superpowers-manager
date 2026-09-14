@@ -231,6 +231,11 @@ void test("install verification accepts the seven-character short form", () => {
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
   assert.equal(inspection.outcome.result.kind, "current");
+  assert.deepEqual(output.stdout, [
+    `desired_commit=${desired}`,
+    `installed_commit=${desired.slice(0, 7)}`,
+    "manager updated",
+  ]);
   assert.deepEqual(output.stderr, []);
 });
 
@@ -252,10 +257,11 @@ void test("install verification reports a failed inspection", () => {
 
 void test("install verification reports a mismatch and surfaces its hint", () => {
   const desired = "d".repeat(40);
+  const observed = "e".repeat(40);
   const receipt = ok(codexInstallReceipt("", "try reinstalling"));
   const inspection = ok({
     kind: "mismatch",
-    observedIdentity: "e".repeat(40),
+    observedIdentity: observed,
   });
   const output = codexPresentation.renderInstallVerification(
     desired,
@@ -265,6 +271,10 @@ void test("install verification reports a mismatch and surfaces its hint", () =>
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
   assert.equal(inspection.outcome.result.kind, "mismatch");
+  assert.deepEqual(output.stdout, [
+    `desired_commit=${desired}`,
+    `installed_commit=${observed}`,
+  ]);
   assert.deepEqual(output.stderr, [
     "error: installed manager fingerprint does not match the prepared plugin after install.",
     "hint: try reinstalling",
@@ -287,6 +297,32 @@ void test("install verification reports an undetectable fingerprint and its own 
   assert.equal(inspection.outcome.ok, true);
   if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
   assert.equal(inspection.outcome.result.kind, "absent");
+  assert.deepEqual(output.stdout, [
+    `desired_commit=${desired}`,
+    "installed_commit=",
+  ]);
+  assert.deepEqual(output.stderr, [
+    "error: installed manager fingerprint is not detectable after install.",
+    "hint: codex reported nothing",
+  ]);
+});
+
+void test("install verification treats an empty mismatch identity as undetectable", () => {
+  const desired = "9".repeat(40);
+  const receipt = ok(codexInstallReceipt("codex reported nothing", ""));
+  const inspection = ok({ kind: "mismatch", observedIdentity: "" });
+  const output = codexPresentation.renderInstallVerification(
+    desired,
+    receipt,
+    inspection,
+  );
+  assert.equal(inspection.outcome.ok, true);
+  if (!inspection.outcome.ok) assert.fail("expected normalized inspection");
+  assert.equal(inspection.outcome.result.kind, "mismatch");
+  assert.deepEqual(output.stdout, [
+    `desired_commit=${desired}`,
+    "installed_commit=",
+  ]);
   assert.deepEqual(output.stderr, [
     "error: installed manager fingerprint is not detectable after install.",
     "hint: codex reported nothing",

@@ -1,11 +1,6 @@
-// Port of tests/test_install_commands.sh (782 lines, deleted in this commit).
-// The retained install-command contract follows.
-//
 // Cases run concurrently. Every case builds its own package root, state
 // directory, logs, and TMPDIR, so none depends on another's cleanup — which is
-// why the driver's corrupt-and-restore dance (:418-423, :458-467, :475-476)
-// has no counterpart here, and why each case must state the preconditions the
-// shell inherited from the scenario above it.
+// is why each case must state its own preconditions.
 
 // Two statements, not one: the explicit imports keep the test binding clear.
 import test from "node:test";
@@ -79,7 +74,6 @@ import {
 } from "../../src/harnesses/codex/lifecycle.ts";
 import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
-// Verbatim from `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:16-21::forbidden_literals =`.
 const FORBIDDEN_LITERALS = [
   "requirements.toml",
   "hooks.state",
@@ -87,24 +81,20 @@ const FORBIDDEN_LITERALS = [
   "--dangerously-bypass-hook-trust",
 ];
 
-// Fixture JSON, verbatim from the shell driver at the cited lines.
-const PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}'; // :232
+// Default native listings for install cases.
+const PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}';
 const MARKETPLACE_ABSENT =
-  '{"marketplaces":[{"name":"openai-curated","root":"/x"}]}'; // :224
-// LEGACY_ONLY_PLUGINS, the BOTH_PLUGINS pair, and LEGACY_MARKETPLACE (:430,
-// :434, :437 in the shell original) are gone: the three cases that used them
-// to drive the REAL fake adapter's ownership computation now supply
-// `identity_state` directly to an injected double (Task 6, D4), so no Codex
+  '{"marketplaces":[{"name":"openai-curated","root":"/x"}]}';
+// The cases that drive the real fake adapter's ownership computation supply
+// `identity_state` directly to an injected double, so no Codex
 // fixture listing is read for that purpose any more.
 
-// `assert_no_codex_mutation` (:313-319) matched with an anchored ERE, so
-// "plugin marketplace add" is deliberately not a `^plugin (add|remove) ` hit.
+// Match plugin and marketplace mutations as separate command prefixes.
 const CODEX_MUTATION =
   /^plugin (add|remove) |^plugin marketplace (add|remove) /;
 
-// The abort-before-mutation ERE from :642. Deliberately NOT `CODEX_MUTATION`:
-// this one leaves `marketplace (add|remove)` unanchored, so it also rejects a
-// mutation reached through some other verb prefix.
+// Listing-parse failure must also reject marketplace mutations reached
+// through another verb prefix, so this marketplace alternative is unanchored.
 const PARSE_ABORT_MUTATION = /marketplace (add|remove)|^plugin (add|remove)/;
 
 /**
@@ -241,28 +231,10 @@ function copyFallbackManifestIntoCandidate(argv: readonly string[]): void {
 }
 
 /**
- * Reconstructs the generated-tree precondition the shell driver inherited from
- * the scenario above it. `src/status.ts:22-23::return "needs prepare"` returns "needs prepare"
- * whenever the package root carries no `.superpowers-upstream.json`, and
- * lifecycle-fixture.js's buildSnapshot() copies only `plugin.template.json`
- * into the snapshot — so a fresh `c.pkg` always probes as "needs prepare". In
- * the shell the prepare at :325 (and again inside the install at :383) left a
- * valid generated tree in the shared `$pkg`, and `reset` cleared Codex state
- * but never the package root. Every scenario from :340 to :416 therefore
- * reached the subject with that tree present, probing as "needs install" — or,
- * once `seed_installed_current` also populates the cache, as "current".
- *
- * Under per-case isolation that state has to be built, and running prepare is
- * exactly how the driver built it.
- *
- * Converted (Task 6, D4): calls `runPrepare` in-process with its own injected
- * recording adapter. "prepare did not inspect update control" is now a
- * property of the double's own construction — it answers ONLY a `build` call
- * and fails the case by exhaustion on anything else — rather than a read over
- * a log file that stops existing when the seam does. This double is entirely
- * separate from any double the CALLER builds for its own, later, real
- * subject call: the caller's own `c.adapterBin` / `c.codexBin` (used by
- * `runScript`) are untouched by this helper.
+ * Build the generated tree required for a needs-install or current scenario.
+ * Fresh package fixtures contain only the fallback template and need prepare.
+ * This recording adapter accepts only build; it is separate from the caller's
+ * later adapter and leaves the case's native fake executables untouched.
  */
 async function prepareGeneratedTree(
   c: import("./lifecycle-fixture.ts").CaseEnv,
@@ -534,8 +506,7 @@ function scenarioAdapter(
 }
 
 /**
- * The loop body at :427-450, shared by the `legacy` and `both` identity
- * states. Converted (Task 6, D4): calls `runInstall` in-process.
+ * Check that legacy and mixed identities stop the in-process install flow.
  * gatherProbe's own three inspects still run unconditionally, so the double
  * answers all three and `identityState` supplies the value under test.
  * requireNoLegacyState fires immediately after gatherProbe resolves, before
@@ -550,7 +521,6 @@ async function assertLegacyIdentityStops(
   const { ctx, stdout, stderr } = caseContext(c, { adapter });
   const status = await runInstall([], ctx);
   const out = stdout() + stderr();
-  // :438-441
   assert.notEqual(
     status,
     0,
@@ -618,7 +588,6 @@ void describe("install commands", { concurrency: true }, () => {
             `production source could not be inspected: ${path}: ${String(error)}`,
           );
         }
-        // :30-35
         for (const forbidden of FORBIDDEN_LITERALS) {
           assert.ok(
             !text.includes(forbidden),
@@ -648,7 +617,6 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("packaged root preconditions (:77-82)", () => {
     const c = installCase();
-    // :79-81
     for (const relative of [
       "src/validate-generated-plugin-cli.ts",
       "src/harnesses/codex/generated-plugin.ts",
@@ -663,18 +631,8 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("prepare is capability-independent (:321-336)", async () => {
-    // Converted (Task 6, D4): calls `runPrepare` in-process. The old
-    // `updateControl: "unsupported"` fixture config is gone along with it --
-    // it was always inert here (prepare never asks for update control) and
-    // only mattered to a fake adapter this case no longer spawns. The double
-    // below proves the same three properties structurally: it answers ONLY a
-    // `build` call and fails the case by exhaustion on anything else,
-    // including `inspect --view update-control` (:326-330) and
-    // `install --package-root` (:331-335). :336's "prepare makes no Codex
-    // call whatsoever" is now subsumed rather than separately witnessed:
-    // there is no codex.log at all in-process, since nothing here spawns a
-    // Codex fake, and the double's own exhaustiveness already proves prepare
-    // issues no OTHER adapter call either.
+    // The recording adapter accepts only build, so update-control inspection
+    // or installation would fail instead of passing through silently.
     const c = installCase();
     const adapter = recordingAdapter((argv) => {
       assert.equal(
@@ -704,11 +662,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("unsupported update control blocks the update fast path (:338-347)", async () => {
-    // Converted (Task 6, D4): calls `runUpdate` in-process, with a double
-    // answering `unsupported` where the shell fixture's `updateControl`
-    // config used to. The double is reachable through the real production
-    // switch (src/harnesses/codex/lifecycle.ts's requireManagedUpdateControl), so the
-    // contract survives the seam's removal unchanged.
+    // Unsupported control must block even a current installation.
     const c = installCase();
     // The generated tree, established in-process. Without it the package
     // root probes as "needs prepare" and `scripts/update` never reaches its
@@ -726,12 +680,10 @@ void describe("install commands", { concurrency: true }, () => {
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runUpdate([], ctx);
     const out = stdout() + stderr();
-    // :344
     assert.notEqual(status, 0, `expected update to fail:\n${out}`);
     // Precondition: probe reported "current", so the gate below is the update
     // fast path's gate and not `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:53-54::update_control=` reached via needs-prepare.
     assertNoPrepareRan(out);
-    // :345
     assert.ok(
       out.includes("adapter cannot guarantee manager-controlled updates"),
       out,
@@ -760,7 +712,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("unsupported update control blocks a direct install (:349-352)", async () => {
-    // Converted (Task 6, D4): calls `runInstall` in-process.
+    // Calls `runInstall` in-process.
     const c = installCase();
     // The shell reached this gate on the needs-install path: `reset` cleared
     // the Codex cache but left the generated tree from :325 in $pkg. Here,
@@ -771,7 +723,6 @@ void describe("install commands", { concurrency: true }, () => {
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
     const out = stdout() + stderr();
-    // :351
     assert.notEqual(status, 0, `expected install to fail:\n${out}`);
     // Precondition: the prepare-less install path the shell covered here.
     assertNoPrepareRan(out);
@@ -787,24 +738,12 @@ void describe("install commands", { concurrency: true }, () => {
     );
   });
 
-  // "malformed update-control output exits exactly 1" (:354-364) is RETIRED
-  // at the historical migration boundary.
-  // Its subject -- an adapter transport emitting non-JSON bytes across a
-  // process boundary -- cannot occur through `ctx.adapter`, an in-process
-  // function call that returns an already-typed AdapterResult with no
-  // serialization step to corrupt.
-
   void test("failed update-control inspection exits exactly 1 (:366-375)", async () => {
-    // Converted (Task 6, D4): calls `runUpdate` in-process. `updateControl:
-    // "failure"` is a well-formed ok:false outcome
-    // (src/adapter-result.js's failureResult) -- reachable through a
-    // double exactly as it was through the fixture, unlike the genuinely
-    // malformed cases retired below.
+    // A controlled failed outcome must retain its failure exit status.
     const c = installCase();
     const adapter = scenarioAdapter({ updateControl: "failure" });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runUpdate([], ctx);
-    // :368-374
     assert.equal(
       status,
       1,
@@ -824,7 +763,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("needs-prepare install reinspects after prepare and rejects drift (:377-392)", async () => {
-    // Converted (Task 6, D4): calls `runInstall` in-process. `runInstall`
+    // Calls `runInstall` in-process. `runInstall`
     // calls `runPrepare` internally on the needs-prepare branch, through the
     // SAME ctx.adapter -- so the double below also answers `build`.
     const c = installCase();
@@ -842,13 +781,11 @@ void describe("install commands", { concurrency: true }, () => {
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
     const out = stdout() + stderr();
-    // :383-386
     assert.notEqual(
       status,
       0,
       `install must reject capability drift after prepare:\n${out}`,
     );
-    // :387
     assert.ok(out.includes("prepared v1.0.0"), out);
     // The probe reads control twice; the fresh mutation gate reads it again.
     assert.equal(
@@ -874,7 +811,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("needs-install path inspects ownership then update control, then installs (:394-404)", async () => {
-    // Converted (Task 6, D4): calls `runInstall` in-process. The interceptor's
+    // Calls `runInstall` in-process. The interceptor's
     // on-disk counter is gone; the double's own call list supplies the count
     // directly.
     const c = installCase();
@@ -921,7 +858,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("the fresh gate, not the initial probe, controls mutation authority (:406-416)", async () => {
-    // Converted (Task 6, D4): calls `runInstall` in-process.
+    // Calls `runInstall` in-process.
     const c = installCase();
     await prepareGeneratedTree(c);
     const adapter = scenarioAdapter({
@@ -955,7 +892,7 @@ void describe("install commands", { concurrency: true }, () => {
   });
 
   void test("legacy identity state stops before prepare or adapter mutation (:425-451, legacy)", async () => {
-    // :429-430 — converted (Task 6, D4): the fixture plugin/marketplace
+    // :429-430 — the fixture plugin/marketplace
     // listings that used to drive the real fake adapter's ownership
     // computation are gone; `assertLegacyIdentityStops` now supplies
     // `identity_state` directly to its own injected double.
@@ -984,15 +921,12 @@ void describe("install commands", { concurrency: true }, () => {
 
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
-    // :468-472
     assert.notEqual(
       result.status,
       0,
       `expected install to fail on built-in validation:\n${out}`,
     );
-    // :473
     assert.ok(out.includes("field `name` must equal `superpowers`"), out);
-    // :474
     assertNoCodexMutation(readLog(c.codexLog));
   });
 
@@ -1006,16 +940,21 @@ void describe("install commands", { concurrency: true }, () => {
       env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
     });
     const out = result.stdout + result.stderr;
-    // :481-485
     assert.notEqual(
       result.status,
       0,
       `expected install to fail on external validation:\n${out}`,
     );
-    // :486
     assert.ok(out.includes("external plugin validation failed"), out);
-    // :487
-    assertNoCodexMutation(readLog(c.codexLog));
+    // Exact observations also detect a skipped or repeated pre-mutation gate.
+    assert.deepEqual(readLog(c.codexLog), [
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin list --json",
+      "plugin marketplace list --json",
+      "plugin list --json",
+      "plugin marketplace list --json", // closing installed-state observation
+    ]);
   });
 
   // ==========================================================================
@@ -1040,33 +979,47 @@ void describe("install commands", { concurrency: true }, () => {
     // No prepareGeneratedTree: :496 asserts prepare generated the tree, which
     // is only a claim about the subject if the tree is absent beforehand.
     const c = installCase();
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only" },
+    });
     // :495 — stdout captured, stderr left alone; `set -e` made a non-zero exit
     // fatal.
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :496
     assert.ok(
       existsSync(join(c.pkg, "plugins/superpowers/.superpowers-upstream.json")),
       "prepare must have generated the tree",
     );
-    // :497-501 — `line_of` is `grep -Fn … | head -n1`, which assertOrder's
-    // firstIndex reproduces. Two ordering claims, one call.
+    assert.match(result.stdout, /generated plugin validation passed:/);
+    assert.match(result.stdout, /prepared v1\.0\.0 at [0-9a-f]{40}/);
+    // Repeated observations must occur at every gate, including verification
+    // after activation. Relative ordering alone cannot detect a skipped repeat.
     const codex = readLog(c.codexLog);
-    assertOrder(
-      codex,
-      [
-        "plugin marketplace list",
-        `plugin marketplace add ${durableMarketplace(c)}`,
-        "plugin add superpowers@superpowers-manager",
-      ],
-      "order must be: marketplace list, marketplace add, plugin add",
-    );
-    // :502
+    assert.deepEqual(codex, [
+      "plugin list --json", // fingerprint (initial probe)
+      "plugin marketplace list --json", // installed state (initial probe)
+      "plugin list --json", // ownership (initial probe)
+      "plugin marketplace list --json", // ownership (initial probe)
+      "plugin list --json",
+      "plugin marketplace list --json", // closing installed-state observation
+      "plugin list --json", // ownership (install's fresh gate, before mutation)
+      "plugin marketplace list --json", // ownership (install's fresh gate, before mutation)
+      "plugin list --json", // native state before durable publication
+      "plugin marketplace list --json",
+      "plugin list --json", // native state at the fresh eligibility gate
+      "plugin marketplace list --json",
+      "plugin list --json", // native state immediately before publication
+      "plugin marketplace list --json",
+      "plugin marketplace list --json", // adapter install's own marketplace lookup
+      `plugin marketplace add ${durableMarketplace(c)}`,
+      "plugin add superpowers@superpowers-manager",
+      "plugin list --json", // installed verification, after mutation
+      "plugin marketplace list --json",
+      "plugin list --json", // native state before finalization
+      "plugin marketplace list --json",
+    ]);
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
-    // :503
     assertTmpEmpty(c);
-    // :504-512 — non-vacuous: assertOrder above proves all three commands
-    // reached the log, so it is neither missing nor empty.
+    // The exact log above proves the fake ran and excludes unrelated mutations.
     assert.ok(
       !has(codex, "marketplace remove"),
       `fresh install must not remove any marketplace:\n${codex.join("\n")}`,
@@ -1084,10 +1037,9 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a current manager is reconciled, not skipped as up to date (:514-532)", async () => {
     const c = installCase();
     await prepareGeneratedTree(c);
-    seedInstalledCurrent(c); // :520
+    seedInstalledCurrent(c);
     clearLogs(c);
     const result = await runScript(c, "install");
-    // :522
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // Precondition. `prepareGeneratedTree` proves the generated provenance
     // exists and `seedInstalledCurrent` copies that same file into the Codex
@@ -1100,7 +1052,6 @@ void describe("install commands", { concurrency: true }, () => {
     // the three commands below (`src/harnesses/codex/adapter.ts:557-562::const marketplaceList`), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
-    // :524-532
     assertOrder(
       readLog(c.codexLog),
       [
@@ -1115,21 +1066,19 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a matching fingerprint at a different registered root still reconciles (:534-551)", async () => {
     const c = installCase();
     await prepareGeneratedTree(c);
-    seedInstalledCurrent(c); // :539
+    seedInstalledCurrent(c);
     // :540 — `$tmpdir/otherroot` was never created in the shell either; only
     // its name matters.
     const otherRoot = join(c.dir, "otherroot");
     writeMarketplaces(c, [{ name: "superpowers-manager", root: otherRoot }]);
     clearLogs(c);
     const result = await runScript(c, "install");
-    // :541
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // Precondition: the "current" branch, as in the case above.
     assertNoPrepareRan(result.stdout);
     // :542, re-anchored onto codex.log for the same reason as the case above:
     // `plugin marketplace add ${c.pkg}` in the ordering below is the adapter
     // install operation's own Codex footprint, package root included.
-    // :543-551
     assertOrder(
       readLog(c.codexLog),
       [
@@ -1153,7 +1102,6 @@ void describe("install commands", { concurrency: true }, () => {
     writeMarketplaces(c, [{ name: "superpowers-manager", root: link }]);
     clearLogs(c);
     const result = await runScript(c, "install");
-    // :560
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const codex = readLog(c.codexLog);
     // :564 — hoisted above the negatives at :561-563 and :565-567, which would
@@ -1173,7 +1121,6 @@ void describe("install commands", { concurrency: true }, () => {
       ],
       "legacy aliases must migrate to the durable marketplace",
     );
-    // :565-567
     assert.ok(
       !has(codex, "plugin remove superpowers@superpowers-manager"),
       `add-only same-root install must not remove the manager plugin:\n${codex.join("\n")}`,
@@ -1183,7 +1130,6 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a different registered root is removed then added, in order (:569-585)", async () => {
     const c = installCase();
     await prepareGeneratedTree(c);
-    // :573
     const otherRoot = join(c.dir, "otherroot");
     writeMarketplaces(c, [
       { name: "openai-curated", root: "/x" },
@@ -1191,10 +1137,8 @@ void describe("install commands", { concurrency: true }, () => {
     ]);
     clearLogs(c);
     const result = await runScript(c, "install");
-    // :574
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const codex = readLog(c.codexLog);
-    // :575-579
     assertOrder(
       codex,
       [
@@ -1225,14 +1169,13 @@ void describe("install commands", { concurrency: true }, () => {
     );
     clearLogs(c);
     const result = await runScript(c, "update");
-    // :593
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.ok(result.stdout.includes("manager is current"), result.stdout);
     assertNoCodexMutation(readLog(c.codexLog));
   });
 
   void test("update rejects mixed legacy state even when the fingerprint is current (:604-620)", async () => {
-    // Converted (Task 6, D4): calls `runUpdate` in-process, the same
+    // Calls `runUpdate` in-process, the same
     // treatment as `assertLegacyIdentityStops`. The fixture plugin/
     // marketplace listings that used to drive the real fake adapter's
     // ownership computation are gone; the double supplies `identity_state`
@@ -1250,7 +1193,6 @@ void describe("install commands", { concurrency: true }, () => {
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runUpdate([], ctx);
     const out = stdout() + stderr();
-    // :610-613
     assert.notEqual(
       status,
       0,
@@ -1279,16 +1221,14 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a failed marketplace add after a successful remove never reaches plugin add (:622-634)", async () => {
     const c = installCase({
       config: { marketplaceAdd: "fail" },
-    }); // :628
+    });
     await prepareGeneratedTree(c);
-    // :627
     const otherRoot = join(c.dir, "otherroot");
     writeMarketplaces(c, [{ name: "superpowers-manager", root: otherRoot }]);
     clearLogs(c);
     const result = await runScript(c, "install");
     // :289-295 — `expect_fail` redirected stderr into the same capture.
     const out = result.stdout + result.stderr;
-    // :629
     assert.notEqual(
       result.status,
       0,
@@ -1302,7 +1242,6 @@ void describe("install commands", { concurrency: true }, () => {
       out,
     );
     assert.ok(out.includes(otherRoot), out);
-    // :632-634
     const codex = nonEmpty(readLog(c.codexLog), "codex");
     assert.ok(
       !has(codex, "plugin add superpowers@superpowers-manager"),
@@ -1313,18 +1252,15 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a malformed marketplace listing aborts before any mutation (:636-646)", async () => {
     const c = installCase();
     await prepareGeneratedTree(c);
-    // :640
     writeFileSync(join(c.state, "marketplace_list.json"), "not json {{{\n");
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
-    // :641
     assert.notEqual(
       result.status,
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :642-646
     const codex = nonEmpty(readLog(c.codexLog), "codex");
     assert.deepEqual(
       codex.filter((line) => PARSE_ABORT_MUTATION.test(line)),
@@ -1336,18 +1272,16 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a plugin add that refreshes nothing fails verification (:648-659)", async () => {
     const c = installCase({
       config: { pluginAdd: "noop" },
-    }); // :653
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
-    // :654
     assert.notEqual(
       result.status,
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :655
     assert.ok(out.includes("fingerprint is not detectable"), out);
     // The native add was attempted, so a missing cache cannot prove that
     // registration and cache stayed unchanged. Preserve recovery evidence.
@@ -1356,7 +1290,6 @@ void describe("install commands", { concurrency: true }, () => {
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
       "unverifiable native activation must retain recovery evidence",
     );
-    // :656
     assertTmpEmpty(c);
     // :657-659 — non-vacuous: :655 proves `out` carries the subject's
     // verification diagnostics.
@@ -1369,12 +1302,11 @@ void describe("install commands", { concurrency: true }, () => {
   void test("a stale installed fingerprint fails, with the retry hint from the adapter result (:661-674)", async () => {
     const c = installCase({
       config: { pluginAdd: "stale" },
-    }); // :668
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
-    // :669
     assert.notEqual(
       result.status,
       0,
@@ -1387,7 +1319,6 @@ void describe("install commands", { concurrency: true }, () => {
       existsSync(join(c.home, ".codex/superpowers-manager/recovery")),
       "a mismatched post-add cache must retain recovery evidence",
     );
-    // :672-674
     assert.ok(
       !out.includes("manager updated"),
       `must not print success while stale:\n${out}`,
@@ -1397,18 +1328,16 @@ void describe("install commands", { concurrency: true }, () => {
   void test("the missing-fingerprint replay hint also comes only from the adapter result (:676-685)", async () => {
     const c = installCase({
       config: { pluginAdd: "noop" },
-    }); // :682
+    });
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
-    // :683
     assert.notEqual(
       result.status,
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :684
     assert.ok(out.includes("fingerprint is not detectable"), out);
     // :685 — the missing hint is replayed from the adapter receipt.
     assert.ok(out.includes("verify with 'codex plugin list --json'"), out);
@@ -1433,7 +1362,7 @@ void describe("install commands", { concurrency: true }, () => {
     // inspection failure. The case needs no adapter interception.
     const c = installCase({
       config: { pluginAdd: "orphan" },
-    }); // :693
+    });
     await prepareGeneratedTree(c);
     const activeRoot = join(
       c.state,
@@ -1444,7 +1373,6 @@ void describe("install commands", { concurrency: true }, () => {
     clearLogs(c);
     const result = await runScript(c, "install");
     const out = result.stdout + result.stderr;
-    // :694
     assert.notEqual(
       result.status,
       0,
@@ -1474,12 +1402,6 @@ void describe("install commands", { concurrency: true }, () => {
       `unverifiable fingerprint state must not be reported as success:\n${out}`,
     );
   });
-
-  // "malformed fingerprint output is rejected by response validation"
-  // (:702-716) is RETIRED at the historical migration boundary. Same as above: a bare `{`
-  // on stdout is a transport-level fault with no analogue through
-  // `ctx.adapter`, which returns an already-typed AdapterResult with nothing
-  // to garble in between.
 
   void test("remove-add refresh mode removes the plugin between reconcile and add (:718-736)", async () => {
     const c = installCase();
@@ -1518,13 +1440,16 @@ void describe("install commands", { concurrency: true }, () => {
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "bogus" },
     });
     const out = result.stdout + result.stderr;
-    // :744
     assert.notEqual(
       result.status,
       0,
       `expected install to fail but it succeeded:\n${out}`,
     );
-    // :745
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /^error: unsupported SUPERPOWERS_INSTALL_REFRESH_MODE: bogus$/m,
+    );
     assertNoCodexMutation(readLog(c.codexLog));
   });
 
@@ -1536,7 +1461,6 @@ void describe("install commands", { concurrency: true }, () => {
     // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:7-26::spw_replace_generated_tree`). Building the tree first keeps that.
     await prepareGeneratedTree(c);
     clearLogs(c);
-    // :754
     writeFileSync(
       join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
       "{\n",
@@ -1545,12 +1469,10 @@ void describe("install commands", { concurrency: true }, () => {
     // the receipt preserves this case's legacy malformed-tree remediation path.
     unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
     const result = await runScript(c, "install");
-    // :755
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:141::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
-    // :757
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
@@ -1565,7 +1487,6 @@ void describe("install commands", { concurrency: true }, () => {
       ],
       "remediating install must reconcile via adapter install",
     );
-    // :759-768
     assertGeneratedCommitIsSha(c);
   });
 
@@ -1573,7 +1494,6 @@ void describe("install commands", { concurrency: true }, () => {
     const c = installCase();
     await prepareGeneratedTree(c);
     clearLogs(c);
-    // :776
     writeFileSync(
       join(c.pkg, "plugins/superpowers/.superpowers-upstream.json"),
       "{\n",
@@ -1582,11 +1502,8 @@ void describe("install commands", { concurrency: true }, () => {
     // the malformed provenance rather than accept invalid modern evidence.
     unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
     const result = await runScript(c, "update");
-    // :777
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    // :778
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
-    // :779
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :780, re-anchored onto codex.log for the same reason as the case above.
     assertOrder(

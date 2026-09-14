@@ -5,12 +5,10 @@ import {
   mkdtemp,
   readFile,
   rename,
-  rm,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -20,12 +18,7 @@ import {
 } from "../../src/atomic.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 import { exactError } from "../lib/error-assertions.ts";
-
-async function sandbox(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-publication-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  return directory;
-}
+import { scratch } from "../lib/scratch.ts";
 
 async function tree(path: string, marker: string) {
   await mkdir(path);
@@ -53,7 +46,7 @@ function escapeRegex(value: string) {
 }
 
 void test("beginDirectoryPublication retains the previous tree until finalize", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(live, "before");
@@ -70,7 +63,7 @@ void test("beginDirectoryPublication retains the previous tree until finalize", 
 });
 
 void test("rollback restores the previous tree after publication", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(live, "before");
@@ -86,7 +79,7 @@ void test("rollback restores the previous tree after publication", async (t) => 
 });
 
 void test("publication without a prior tree has no backup and rollback removes its tree", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(candidate, "after");
@@ -100,7 +93,7 @@ void test("publication without a prior tree has no backup and rollback removes i
 });
 
 void test("activation failure restores the prior tree before begin returns", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(live, "before");
@@ -129,7 +122,7 @@ void test("activation failure restores the prior tree before begin returns", asy
 });
 
 void test("activation failure without a prior tree removes only the candidate", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   const foreign = join(parent, "foreign");
@@ -152,7 +145,7 @@ void test("activation failure without a prior tree removes only the candidate", 
 });
 
 void test("rollback failure preserves the backup bytes", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(live, "before");
@@ -184,7 +177,7 @@ void test("rollback failure preserves the backup bytes", async (t) => {
 });
 
 void test("finalize cleanup failure leaves the published and backup bytes", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(live, "before");
@@ -212,7 +205,7 @@ void test("finalize cleanup failure leaves the published and backup bytes", asyn
 });
 
 void test("finalize refuses a replacement at the retained backup path", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   const originalBackup = join(parent, "original-backup");
@@ -237,7 +230,7 @@ void test("finalize refuses a replacement at the retained backup path", async (t
 });
 
 void test("rollback refuses a replacement at the retained backup path before deleting live", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   const originalBackup = join(parent, "original-backup");
@@ -262,7 +255,7 @@ void test("rollback refuses a replacement at the retained backup path before del
 });
 
 void test("publication settlement is single-use", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   await tree(live, "before");
@@ -278,7 +271,7 @@ void test("publication settlement is single-use", async (t) => {
 });
 
 void test("rollback refuses to delete an unexpected replacement live tree", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   const displaced = join(parent, "displaced");
@@ -305,7 +298,7 @@ void test("rollback refuses to delete an unexpected replacement live tree", asyn
 });
 
 void test("a validated deterministic backup path is retained and used", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
   const live = join(parent, "live");
   const candidate = join(parent, "candidate");
   const backupPath = join(parent, ".live.bak.operation-token");
@@ -323,7 +316,7 @@ void test("a validated deterministic backup path is retained and used", async (t
 });
 
 void test("invalid deterministic backup paths are rejected before mutation", async (t) => {
-  const parent = await sandbox(t);
+  const parent = scratch(t, "spw-publication-");
 
   for (const [name, kind] of [
     ["outside sibling scope", "outside"],

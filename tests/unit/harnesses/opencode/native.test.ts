@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { expectFailureCode } from "../../../lib/command-doubles.ts";
+
 import {
   normalizeOpenCodeRuntimeVersion,
   runOpenCode,
@@ -255,9 +257,7 @@ void test("runOpenCode returns controlled failures for native runner outcomes", 
         { root, env: { TMPDIR: root } },
         async () => run,
       );
-      assert.equal(result.status, 1);
-      assert.equal(result.outcome.ok, false);
-      if (!result.outcome.ok) assert.equal(result.outcome.error.code, code);
+      expectFailureCode(result, code);
       for (const message of result.outcome.messages) {
         assert.equal(message.text.includes("\u001b"), false);
         assert.equal(message.text.includes("\r"), false);

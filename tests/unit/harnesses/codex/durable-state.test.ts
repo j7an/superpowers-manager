@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -17,6 +16,7 @@ import { stageCodexMarketplace } from "../../../../src/harnesses/codex/marketpla
 import { inspectCodexInstallation } from "../../../../src/harnesses/codex/state.ts";
 import { writeQualifiedCodexFixture } from "../../../lib/harnesses/codex/prepared-fixture.ts";
 import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
+import { scratch } from "../../../lib/scratch.ts";
 
 const PACKAGE_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const FAKE_CODEX = fileURLToPath(
@@ -26,8 +26,7 @@ const COMMIT = "d884ae04edebef577e82ff7c4e143debd0bbec99";
 const SOURCE = "https://example.invalid/superpowers.git";
 
 async function sandbox(t: import("node:test").TestContext) {
-  const root = await mkdtemp(join(tmpdir(), "spw-codex-durable-state-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-codex-durable-state-");
   const log = join(root, "commands.log");
   await writeFile(log, "");
   return { root, log };

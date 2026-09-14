@@ -1,16 +1,5 @@
-// Executable, never imported. A two-line sh wrapper written by
-// lifecycle-fixture.js execs this as either `codex` or `adapter`.
-// Replaces the shell fake codex at `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_install_commands.sh:101-169::cat > "$fake_codex` and
-// the recording adapter at :171-221.
-//
-// PR 11.5 slice 2 extracted only the read side (config load + the two
-// listings) into lifecycle-fakes.js. Slice 4 converted the mutation branches
-// below to process.exitCode too.
-//
-// Slice 4a also moved the outer shell — state guard, config load, role
-// dispatch and tripwire — into runFake. What stays here is exactly
-// what must NOT be shared: this fake's own command branches and its
-// exhaustiveness trap.
+// Executable, never imported. A two-line sh wrapper executes this as `codex`
+// or `adapter`; this file supplies install-specific branches.
 
 import {
   cpSync,

@@ -1,7 +1,7 @@
-// Declarative fake-behaviour schemas, shared by lifecycle-fixture.js (which
+// Declarative fake-behavior schemas, shared by lifecycle-fixture.ts (which
 // validates eagerly at case creation) and by both fake executables (which
 // re-validate as defence in depth). Flat string enums only — no nesting, no
-// functions — so PR 11.5 has a small stable surface to keep working.
+// functions.
 
 export type Rule = "boolean" | "integer" | string[];
 
@@ -12,10 +12,7 @@ const UNINSTALL_SCHEMA: Record<string, Rule> = {
   pluginListRc: "integer",
   marketplaceListRc: "integer",
   spuriousMutation: "boolean",
-  // `removesMutateState: false` ports the shell driver's `remove_noop` marker,
-  // which is deliberately GLOBAL: `git show 81c2de1a9a71699ea340dc8235f9779140f7b3f6:tests/test_uninstall_commands.sh:71::path, marketplace_name` gates the
-  // marketplace mutation on the same marker as the plugin mutation, and :399
-  // comments it "removes are logged but do not mutate the fixtures" — plural.
+  // `removesMutateState: false` controls both plugin and marketplace mutation.
   // It is a separate key precisely so the global scope is visible at the call
   // site; folding it back into `pluginRemove` would read plugin-specific while
   // behaving globally.

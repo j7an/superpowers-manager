@@ -10,16 +10,9 @@ import {
   SEMVER_BASE_RE,
 } from "../../src/domain/refs.ts";
 
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { scratch } from "../lib/scratch.ts";
 
 import { runGit } from "../../src/git.ts";
 
@@ -64,17 +57,10 @@ void test("the SemVer grammar has one source", () => {
  * Writes an executable named `git` into a fresh directory and returns it.
  */
 async function fakeGitDir(t: import("node:test").TestContext, body: string) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-fake-git-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
+  const directory = scratch(t, "spw-fake-git-");
   const path = join(directory, "git");
   await writeFile(path, `#!/bin/sh\n${body}\n`, "utf8");
   await chmod(path, 0o755);
-  return directory;
-}
-
-async function sandboxDir(t: import("node:test").TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), "spw-upstream-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
   return directory;
 }
 
@@ -367,7 +353,7 @@ async function fakeGitFetch(
 }
 
 void test("verifyRawCommit classifies an unavailable object", async (t) => {
-  const parent = await sandboxDir(t);
+  const parent = scratch(t, "spw-upstream-");
   for (const marker of [
     "not our ref",
     "unadvertised object",
@@ -388,7 +374,7 @@ void test("verifyRawCommit classifies an unavailable object", async (t) => {
 });
 
 void test("verifyRawCommit reports other fetch failures as transport failures", async (t) => {
-  const parent = await sandboxDir(t);
+  const parent = scratch(t, "spw-upstream-");
   const bin = await fakeGitFetch(t, "printf 'fatal: boom\\n' >&2; exit 128");
   await assert.rejects(
     withPath(bin, () => verifyRawCommit("/srv/repo", COMMIT, parent)),
@@ -399,7 +385,7 @@ void test("verifyRawCommit reports other fetch failures as transport failures", 
 });
 
 void test("verifyRawCommit rejects a non-commit object and lowercases input", async (t) => {
-  const parent = await sandboxDir(t);
+  const parent = scratch(t, "spw-upstream-");
   const upper = "ABCDEF1234567890ABCDEF1234567890ABCDEF12";
   const bin = await fakeGitDir(
     t,
@@ -422,7 +408,7 @@ void test("verifyRawCommit rejects a non-commit object and lowercases input", as
 });
 
 void test("fetchExactCommit re-initializes a cache whose .git is a file", async (t) => {
-  const parent = await sandboxDir(t);
+  const parent = scratch(t, "spw-upstream-");
   const repository = join(parent, "cache");
   await mkdir(repository);
   await writeFile(join(repository, ".git"), "gitdir: /elsewhere\n", "utf8");

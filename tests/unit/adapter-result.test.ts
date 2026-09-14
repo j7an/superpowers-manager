@@ -13,6 +13,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { capture } from "./helpers/command-harness.ts";
+import { expectFailureCode, expectOk } from "../lib/command-doubles.ts";
 
 import {
   AdapterMessageLog,
@@ -21,6 +22,7 @@ import {
   requireProtocolString,
   successResult,
   writeAdapterFailure,
+  type AdapterResult,
 } from "../../src/adapter-result.ts";
 
 void test("command byte escaping matches the captured malformed UTF-8 corpus", () => {
@@ -107,6 +109,60 @@ void test("typed success preserves a non-JSON internal result", () => {
   assert.equal(result.outcome.ok, true);
   if (!result.outcome.ok) assert.fail("expected success");
   assert.equal(result.outcome.result.marker, marker);
+});
+
+void test("result assertion helpers preserve payload and error identity", () => {
+  const payload: { readonly count: bigint; self?: unknown } = { count: 1n };
+  payload.self = payload;
+  const successful = successResult("inspect", payload, []);
+  assert.equal(expectOk(successful), payload);
+
+  const failed = failureResult("inspect", "E_READ", "cannot read", [], []);
+  assert.throws(
+    () => expectOk(failed),
+    /"code":"E_READ".*"message":"cannot read"/,
+  );
+  const error = expectFailureCode(failed, "E_READ");
+  if (failed.outcome.ok) assert.fail("expected failure outcome");
+  assert.equal(error, failed.outcome.error);
+});
+
+void test("result assertion helpers reject mismatched status, outcome, and code", () => {
+  const successful = successResult("inspect", "value", []);
+  const wrongStatus: AdapterResult<string> = {
+    status: 1,
+    outcome: successful.outcome,
+  };
+  assert.throws(
+    () => expectOk(wrongStatus),
+    /expected adapter success status 0/,
+  );
+
+  const failed = failureResult("inspect", "E_READ", "cannot read", [], []);
+  const wrongOutcome: AdapterResult<string> = {
+    status: 0,
+    outcome: failed.outcome,
+  };
+  assert.throws(
+    () => expectOk(wrongOutcome),
+    /expected successful adapter outcome/,
+  );
+  assert.throws(
+    () => expectFailureCode(failed, "E_WRITE"),
+    /expected adapter failure code E_WRITE/,
+  );
+  assert.throws(
+    () => expectFailureCode(wrongOutcome, "E_READ"),
+    /expected adapter failure status 1/,
+  );
+  const wrongFailureOutcome: AdapterResult<string> = {
+    status: 1,
+    outcome: successful.outcome,
+  };
+  assert.throws(
+    () => expectFailureCode(wrongFailureOutcome, "E_READ"),
+    /expected failed adapter outcome/,
+  );
 });
 
 void test("requireProtocolString accepts safe text and rejects terminal controls", () => {

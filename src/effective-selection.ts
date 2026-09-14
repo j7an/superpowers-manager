@@ -69,10 +69,9 @@ export const UPSTREAM_URL_DEFAULT = "https://github.com/obra/superpowers";
 
 // Ports the env > saved > package-default precedence ladder from
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/selection.sh:88-162::spw_compute_effective_selection`.
-// validateSource runs before any ref resolution -- pinned by
-// tests/unit/effective-selection.test.js's "source validation precedes ref
-// resolution": a credential-bearing source must fail before Git is ever
-// invoked.
+// validateSource runs before any ref resolution. A credential-bearing source
+// must fail before Git is invoked; the resolver-log check lives in
+// `tests/baseline/selection-location.test.ts::SEL-PRECEDENCE-VALIDATE-01 invalid saved state stops resolution`.
 export async function computeEffectiveSelection(
   root: string,
   env: NodeJS.ProcessEnv,
@@ -92,8 +91,7 @@ export async function computeEffectiveSelection(
     effectiveSource = UPSTREAM_URL_DEFAULT;
   }
 
-  // Before any Git access. Pinned by tests/unit/effective-selection.test.js's
-  // "source validation precedes ref resolution".
+  // Before any Git access; the selection-location test above checks the log.
   validateSource(effectiveSource);
 
   let selectionOrigin: EffectiveSelection["selectionOrigin"];

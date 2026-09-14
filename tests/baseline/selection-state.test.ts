@@ -1,5 +1,3 @@
-// Migrated from tests/test_selection_state.py. The Python suite exercised the
-// saved-selection behavior; this native suite exercises that behavior directly.
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
@@ -168,10 +166,13 @@ function deepEqualsAny(
 void test("SEL-SCHEMA-MODES-01 read normalizes absent, pinned, and track-latest state", async (t) => {
   const state = fixture(t);
   assert.deepEqual(await readState(state), NORMALIZED_ABSENT);
-  assert.equal(
-    (await readRaw(state, fixtureText("pinned-tag.json"))).saved_commit,
-    PINNED.commit,
-  );
+  assert.deepEqual(await readRaw(state, fixtureText("pinned-tag.json")), {
+    saved_mode: "pinned",
+    saved_source: SOURCE,
+    saved_requested_ref: "v6.1.1",
+    saved_resolved_ref: "v6.1.1",
+    saved_commit: PINNED.commit,
+  });
   assert.equal(
     (await readRaw(state, fixtureText("track-latest.json"))).saved_mode,
     "track-latest",
