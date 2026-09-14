@@ -413,42 +413,41 @@ syncBuiltinESMExports();
   );
 });
 
-void test("clean tree passes", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": PASSING_SUITE },
+for (const [name, source, status] of [
+  [
+    "passing suite executes, exits promptly, and announces completion",
+    EXECUTED_SUITE,
+    0,
+  ],
+  ["failing child suite propagates and announces completion", FAILING_SUITE, 1],
+  [
+    "import failure propagates and announces completion",
+    'throw new Error("boom");\n',
+    1,
+  ],
+] as const) {
+  void test(name, (t) => {
+    const root = fakeRoot(t, {
+      suites: ["tests/unit/a.test.ts"],
+      files: { "tests/unit/a.test.ts": source },
+    });
+    const result = runIn(root);
+    assert.equal(
+      result.signal,
+      null,
+      "runner must finish before the harness timeout",
+    );
+    assert.equal(result.status, status, result.stderr);
+    assert.equal(
+      result.stdout.trimEnd().split("\n").at(-1),
+      `run-node-suites: complete status=${status}`,
+    );
+    if (status === 0) {
+      assert.match(result.stdout, /EXECUTED:fixture/);
+      assertNoRawFailure(result);
+    }
   });
-  const r = runIn(root);
-  assert.equal(r.status, 0);
-  assertNoRawFailure(r);
-});
-
-void test("the runner announces completion on a passing run", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/pass.test.ts"],
-    files: { "tests/unit/pass.test.ts": PASSING_SUITE },
-  });
-  const r = runIn(root);
-  assert.equal(r.status, 0);
-  const lines = r.stdout.trimEnd().split("\n");
-  assert.equal(lines[lines.length - 1], "run-node-suites: complete status=0");
-});
-
-// This fails if the runner only announces successful completion: a failed run
-// would then remain indistinguishable from one killed before it could finish.
-void test("the runner announces completion on a FAILING run", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/fail.test.ts"],
-    files: { "tests/unit/fail.test.ts": FAILING_SUITE },
-  });
-  const r = runIn(root);
-  assert.notEqual(r.status, 0);
-  const lines = r.stdout.trimEnd().split("\n");
-  assert.equal(
-    lines[lines.length - 1],
-    `run-node-suites: complete status=${r.status}`,
-  );
-});
+}
 
 void test("both sentinels reach a piped capture", (t) => {
   const root = fakeRoot(t, {
@@ -483,41 +482,6 @@ void test("the runner announces completion when it fails before spawning", (t) =
   assert.equal(r.status, 1);
   const lines = r.stdout.trimEnd().split("\n");
   assert.equal(lines[lines.length - 1], "run-node-suites: complete status=1");
-});
-
-// This fails if an ordinary non-zero child result does not reach the runner's
-// completion signal.
-void test("a suite that throws on import still ends with the sentinel", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/throws-on-import.test.ts"],
-    files: {
-      "tests/unit/throws-on-import.test.ts": 'throw new Error("boom");\n',
-    },
-  });
-  const r = runIn(root);
-  assert.notEqual(r.status, 0);
-  assert.equal(r.signal, null);
-  const lines = r.stdout.trimEnd().split("\n");
-  assert.equal(
-    lines[lines.length - 1],
-    `run-node-suites: complete status=${r.status}`,
-  );
-});
-
-// This fails if the runner is changed to leave a handle alive after setting its
-// completion status: runIn's timeout kills that regression and exposes a signal.
-void test("the runner exits promptly rather than lingering on a live handle", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/pass.test.ts"],
-    files: { "tests/unit/pass.test.ts": PASSING_SUITE },
-  });
-  const r = runIn(root);
-  assert.equal(
-    r.signal,
-    null,
-    "the runner was killed at the harness bound; a pending handle is keeping it alive",
-  );
-  assert.equal(r.status, 0);
 });
 
 const invalidManifestRows: {
@@ -699,7 +663,7 @@ void test("broken symlink suite", (t) => {
   // killed by a signal reports status null, which `runIn` maps to 1, and
   // leaves both streams empty — passing the status check and
   // assertNoRawFailure alike. The frozen diagnostic is what proves the
-  // directory-walk symlink guard (`tests/run-node-suites.ts:152::entry.isSymbolicLink()`)
+  // directory-walk symlink guard (`tests/run-node-suites.ts:149::entry.isSymbolicLink()`)
   // ran rather than a
   // follow-the-link stat throwing a raw ENOENT: lstatSync succeeds on a
   // broken symlink (it inspects the link itself, not its target), so this is
@@ -713,20 +677,6 @@ void test("broken symlink suite", (t) => {
     /suite entries may not be symlinks: tests\/unit\/broken\.test\.ts/,
   );
   assertNoRawFailure(r);
-});
-
-void test("failing child suite propagates", (t) => {
-  const root = fakeRoot(t, {
-    suites: ["tests/unit/a.test.ts"],
-    files: { "tests/unit/a.test.ts": FAILING_SUITE },
-  });
-  const r = runIn(root);
-  assert.notEqual(r.status, 0);
-  // Not assertNoRawFailure here: node:test's own failure reporter legitimately
-  // prints the thrown Error's stack for the failing child test — that is
-  // expected test output, not a leak from this runner's own error-handling
-  // paths, and the two are indistinguishable by the generic `/\n\s+at /`
-  // pattern.
 });
 
 void test("concurrent passing files do not hide one failing file", (t) => {
