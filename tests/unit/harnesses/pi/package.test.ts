@@ -11,10 +11,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import {
-  digestPiTree,
-  materializePiTree,
-} from "../../../../src/harnesses/pi/package.ts";
+import { digestPiTree } from "../../../../src/harnesses/pi/package.ts";
+import { materializeGitTree } from "../../../../src/git-tree.ts";
 import {
   commitFixture,
   fixtureGit,
@@ -31,7 +29,7 @@ void test("materializes committed binary, mode, hidden files and links without u
   const commit = commitFixture(root);
   writeFileSync(join(root, "poison"), "untracked");
   const destination = join(root, "candidate");
-  await materializePiTree(root, commit, destination);
+  await materializeGitTree(root, commit, destination);
   assert.deepEqual(
     readFileSync(join(destination, "binary")),
     Buffer.from([0, 255, 128, 13]),
@@ -70,8 +68,8 @@ void test("refuses escaping links, receipt collisions and gitlinks", async (t) =
         commit = fixtureGit(root, "rev-parse", "HEAD");
       }
       await assert.rejects(
-        materializePiTree(root, commit, join(root, "candidate")),
-        /Pi (tree|artifact)/,
+        materializeGitTree(root, commit, join(root, "candidate")),
+        /Git tree/,
       );
     });
 });
@@ -105,8 +103,8 @@ void test("rejects invalid UTF-8 and traversal paths in committed Git objects", 
         "invalid path fixture",
       );
       await assert.rejects(
-        materializePiTree(root, commit, join(root, "candidate")),
-        /cannot materialize Pi tree/,
+        materializeGitTree(root, commit, join(root, "candidate")),
+        /cannot materialize Git tree/,
       );
     });
 });
@@ -137,8 +135,8 @@ void test("materialization requires a commit and ignores repository replacement 
     first = commitFixture(root);
   const tree = fixtureGit(root, "rev-parse", "HEAD^{tree}");
   await assert.rejects(
-    materializePiTree(root, tree, join(root, "not-a-commit")),
-    /cannot materialize Pi tree/,
+    materializeGitTree(root, tree, join(root, "not-a-commit")),
+    /cannot materialize Git tree/,
   );
   writeFileSync(join(root, "replacement-only"), "poison");
   fixtureGit(root, "add", "replacement-only");
@@ -146,7 +144,7 @@ void test("materialization requires a commit and ignores repository replacement 
   const replacement = fixtureGit(root, "rev-parse", "HEAD");
   fixtureGit(root, "replace", first, replacement);
   const candidate = join(root, "candidate");
-  await materializePiTree(root, first, candidate);
+  await materializeGitTree(root, first, candidate);
   assert.throws(() => lstatSync(join(candidate, "replacement-only")), /ENOENT/);
 });
 

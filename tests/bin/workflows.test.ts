@@ -338,7 +338,12 @@ void test("ci.yml declares the expected top-level contract", () => {
   );
   assert.equal(classification.id, "classify");
   assert.equal(classification.run, "node tests/tools/classify-release-bump.ts");
-  for (const key of ["harness-codex", "harness-pi", "toolchain"]) {
+  for (const key of [
+    "harness-codex",
+    "harness-pi",
+    "harness-opencode",
+    "toolchain",
+  ]) {
     const job = requireMapping(jobs[key], `jobs.${key}`);
     assert.deepEqual(job.permissions, { contents: "read" });
     assert.equal(job.needs, RELEASE_CLASSIFIER_JOB);
@@ -348,7 +353,7 @@ void test("ci.yml declares the expected top-level contract", () => {
 });
 
 type HarnessJobContract = {
-  readonly key: "harness-codex" | "harness-pi";
+  readonly key: "harness-codex" | "harness-pi" | "harness-opencode";
   readonly name: string;
   readonly selector: string;
 };
@@ -363,6 +368,11 @@ const HARNESS_JOBS: readonly HarnessJobContract[] = [
     key: "harness-pi",
     name: "Pi harness integration",
     selector: "harness-pi",
+  },
+  {
+    key: "harness-opencode",
+    name: "OpenCode harness integration",
+    selector: "harness-opencode",
   },
 ];
 
@@ -1348,8 +1358,13 @@ void test("package.json carries stable manager and harness discovery metadata", 
   parseStableSemver(manifest.version, "package.json version");
   assert.match(manifest.description, /\bCodex\b/);
   assert.match(manifest.description, /\bPi\b/);
+  assert.match(manifest.description, /\bOpenCode\b/);
 
   const keywords = manifest.keywords;
+  assert.ok(
+    keywords.includes("opencode"),
+    "missing discovery keyword: opencode",
+  );
   assert.ok(Array.isArray(keywords), "package.json keywords must be an array");
   assert.equal(
     new Set(keywords).size,
@@ -1385,6 +1400,10 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.equal(
     manifest.scripts["test:harness:pi"],
     "sh tests/container.sh harness-pi",
+  );
+  assert.equal(
+    manifest.scripts["test:harness:opencode"],
+    "sh tests/container.sh harness-opencode",
   );
   assert.equal(manifest.scripts["test:acceptance"], "sh tests/acceptance.sh");
 });

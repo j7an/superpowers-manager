@@ -127,7 +127,7 @@ void test("requireProtocolString accepts safe text and rejects terminal controls
     );
   }
   // rejected: the three ranges hasTerminalControl scans
-  // (`src/adapter-result.ts:197-199::code < 0x20`), each sampled at both ends AND inside.
+  // (`src/adapter-result.ts:210-212::code < 0x20`), each sampled at both ends AND inside.
   // The interior samples are not decoration -- see the note below the fence:
   // with only the two surrogate endpoints, a predicate narrowed to
   // `code === 0xd800 || code === 0xdfff` passes this entire test.
@@ -214,7 +214,7 @@ void test("writeAdapterFailure writes the error and every hint to stderr in orde
 });
 
 // failureResult takes FIVE arguments -- (operation, code, message, hints,
-// messages) -- per `src/adapter-result.ts:174-180::failureResult`. The fifth is neither
+// messages) -- per `src/adapter-result.ts:174-180::export function failureResult(`. The fifth is neither
 // optional nor trailing-defaulted, and this file is typechecked: it carries
 // `// @ts-check` and annotates the destructured dist/ import with
 // `@type {typeof import("../../src/adapter-result.js")}`, so a four-argument
@@ -364,7 +364,7 @@ function assertRefused(
 // Each range is exercised at a BOUNDARY and in its INTERIOR, because a
 // boundary-only corpus cannot distinguish the range from its endpoints.
 // hasTerminalControl is `code < 0x20 || (code >= 0x7f && code <= 0x9f) || ...`
-// (`src/adapter-result.ts:196-201::code < 0x20`): U+0001 is the bottom of C0, so narrowing
+// (`src/adapter-result.ts:209-214::code < 0x20`): U+0001 is the bottom of C0, so narrowing
 // to `code < 0x02` keeps it green while admitting U+0002-U+001F including ESC;
 // U+007F and U+009F are the two ends of the DEL/C1 clause, so narrowing to
 // `code === 0x7f || code === 0x9f` keeps both green while admitting
@@ -583,7 +583,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
 void test("ADAPTER-SURROGATE-01 a surrogate code point in any terminal-facing failure string is refused without leaking a traceback", async (t) => {
   await t.test("refused at writeAdapterFailure", () => {
     // BOTH halves of the range, not just the high one. hasTerminalControl
-    // covers 0xd800-0xdfff (`src/adapter-result.ts:199::(code >= 0xd800`); a corpus of high
+    // covers 0xd800-0xdfff (`src/adapter-result.ts:212::(code >= 0xd800`); a corpus of high
     // surrogates alone stays green under a narrowing to `code <= 0xdbff`,
     // which admits every low surrogate. U+DC9B is the value the retiring
     // Python witness drove through code, message, hints, the message log,

@@ -21,6 +21,8 @@ const SCHEMA = join(ROOT, "tests/container/codex/assert-schema.ts");
 const PI_FIXTURE = join(ROOT, "tests/container/pi/fixture.ts");
 const METADATA_COMMIT = join(ROOT, "tests/tools/read-metadata-commit.ts");
 const PI_FIXTURE_SOURCE = join(ROOT, "tests/fixtures/pi-native");
+const OPENCODE_FIXTURE_SOURCE = join(ROOT, "tests/fixtures/opencode-native");
+const OPENCODE_PROBE = join(ROOT, "tests/container/opencode/native-probe.ts");
 const scratch = mkdtempSync(join(tmpdir(), "spw-container-probe-"));
 const fixtureHome = join(scratch, "home");
 
@@ -728,6 +730,37 @@ void test("Pi fixture and metadata helpers", async (t) => {
       }
     },
   );
+});
+
+void test("OpenCode native fixture helper materializes licensed phases", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "spw-opencode-fixture-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const upstream = join(root, "upstream");
+  const created = invoke(OPENCODE_PROBE, ["fixture-create", upstream]);
+  assert.equal(created.status, 0, created.stderr);
+  assert.equal(created.stdout, "");
+  for (const [sourceRoot, source, target] of [
+    [
+      OPENCODE_FIXTURE_SOURCE,
+      "bootstrap.js.txt",
+      ".opencode/plugins/superpowers.js",
+    ],
+    [PI_FIXTURE_SOURCE, "package.json.txt", "package.json"],
+    [PI_FIXTURE_SOURCE, "SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
+    [PI_FIXTURE_SOURCE, "LICENSE.txt", "LICENSE"],
+  ]) {
+    assert.deepEqual(
+      readFileSync(join(upstream, target)),
+      readFileSync(join(sourceRoot, source)),
+    );
+  }
+  const skill = join(upstream, "skills/snapshot-probe/SKILL.md");
+  assert.match(readFileSync(skill, "utf8"), /SNAPSHOT_A/);
+  const changed = invoke(OPENCODE_PROBE, ["fixture-phase-b", skill]);
+  assert.equal(changed.status, 0, changed.stderr);
+  assert.equal(changed.stdout, "");
+  assert.doesNotMatch(readFileSync(skill, "utf8"), /SNAPSHOT_A/);
+  assert.match(readFileSync(skill, "utf8"), /SNAPSHOT_B/);
 });
 
 function pluginsWithManager(): string {

@@ -15,6 +15,7 @@ export interface ValidatorPolicy {
   // after settlement.
   readonly drainMs: number;
   readonly maxBytesPerStream: number;
+  readonly inheritEnvironment?: boolean;
 }
 
 // SUPERPOWERS_VALIDATOR_EXECUTABLE. 30s is ~270x a measured realistic validator run
@@ -141,8 +142,12 @@ export function runValidator(
     // not an unhandled rejection -- which is what this try/catch prevents.
     let child;
     try {
+      const childEnvironment =
+        policy.inheritEnvironment === false
+          ? { ...env, TMPDIR: workspace }
+          : { ...process.env, ...env, TMPDIR: workspace };
       child = spawn(command, args, {
-        env: { ...process.env, ...env, TMPDIR: workspace },
+        env: childEnvironment,
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
         // The child leads its own process group so a timeout can signal the GROUP --

@@ -455,11 +455,13 @@ export async function runPack(
         await copyStageFile(join(sourceRoot, asset), join(packageRoot, asset));
         checkCancellation();
       }
-      await copyStageDirectory(
-        join(sourceRoot, "node_modules", "smol-toml"),
-        join(packageRoot, "node_modules", "smol-toml"),
-      );
-      checkCancellation();
+      for (const dependency of ["smol-toml", "jsonc-parser"]) {
+        await copyStageDirectory(
+          join(sourceRoot, "node_modules", dependency),
+          join(packageRoot, "node_modules", dependency),
+        );
+        checkCancellation();
+      }
       await runStep(
         join(sourceRoot, "node_modules", ".bin", "tsc"),
         [

@@ -415,7 +415,10 @@ void test("one staged package is delivered and all staging is removed", (t) => {
   assert.equal(sealed.scripts.prepack, undefined);
   assert.equal(typeof sealed.dependencies?.["smol-toml"], "string");
   assert.equal(sealed.bundleDependencies?.includes("smol-toml"), true);
+  assert.equal(typeof sealed.dependencies?.["jsonc-parser"], "string");
+  assert.equal(sealed.bundleDependencies?.includes("jsonc-parser"), true);
   assert.match(listing, /^package\/node_modules\/smol-toml\/LICENSE$/m);
+  assert.match(listing, /^package\/node_modules\/jsonc-parser\/LICENSE$/m);
 });
 
 void test("direct npm pack refuses absent and stale checkout output", (t) => {

@@ -35,8 +35,9 @@ function harnessRecorder(
   record: string,
   codexStatus: number,
   piStatus: number,
+  openCodeStatus = 0,
 ): string {
-  return `#!/bin/sh\nprintf '%s:%s\\n' container "$*" >> ${shQuote(record)}\ncase "\${1:-}" in\n  harness-codex) exit ${codexStatus} ;;\n  harness-pi) exit ${piStatus} ;;\n  *) exit 97 ;;\nesac\n`;
+  return `#!/bin/sh\nprintf '%s:%s\\n' container "$*" >> ${shQuote(record)}\ncase "\${1:-}" in\n  harness-codex) exit ${codexStatus} ;;\n  harness-pi) exit ${piStatus} ;;\n  harness-opencode) exit ${openCodeStatus} ;;\n  *) exit 97 ;;\nesac\n`;
 }
 
 function run(script: string) {
@@ -46,7 +47,7 @@ function run(script: string) {
   });
 }
 
-void test("local acceptance runs shared suites before both native harnesses", (t) => {
+void test("local acceptance runs shared suites before all native harnesses", (t) => {
   const f = fixture(t);
   writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
     mode: 0o755,
@@ -65,7 +66,8 @@ void test("local acceptance runs shared suites before both native harnesses", (t
     readFileSync(f.record, "utf8"),
     "shared:--require-package-node --concurrency 2\n" +
       "container:harness-codex\n" +
-      "container:harness-pi\n",
+      "container:harness-pi\n" +
+      "container:harness-opencode\n",
   );
   assert.equal(
     result.stdout,
@@ -74,7 +76,9 @@ void test("local acceptance runs shared suites before both native harnesses", (t
       "acceptance: Codex harness integration: start\n" +
       "acceptance: Codex harness integration: complete status=0\n" +
       "acceptance: Pi harness integration: start\n" +
-      "acceptance: Pi harness integration: complete status=0\n",
+      "acceptance: Pi harness integration: complete status=0\n" +
+      "acceptance: OpenCode harness integration: start\n" +
+      "acceptance: OpenCode harness integration: complete status=0\n",
   );
 });
 
@@ -156,6 +160,35 @@ void test("local acceptance propagates a Pi harness failure last", (t) => {
       "acceptance: Codex harness integration: complete status=0\n" +
       "acceptance: Pi harness integration: start\n",
   );
+});
+
+void test("local acceptance propagates an OpenCode harness failure last", (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.tests, "run.sh"), recorder(f.record, "shared"), {
+    mode: 0o755,
+  });
+  writeFileSync(
+    join(f.tests, "container.sh"),
+    harnessRecorder(f.record, 0, 0, 13),
+    { mode: 0o755 },
+  );
+
+  const result = run(f.script);
+
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 13);
+  assert.equal(
+    readFileSync(f.record, "utf8"),
+    "shared:--require-package-node --concurrency 2\n" +
+      "container:harness-codex\n" +
+      "container:harness-pi\n" +
+      "container:harness-opencode\n",
+  );
+  assert.match(
+    result.stdout,
+    /acceptance: OpenCode harness integration: start/,
+  );
+  assert.doesNotMatch(result.stdout, /OpenCode harness integration: complete/);
 });
 
 void test("local acceptance stops after a signalled shared child", (t) => {

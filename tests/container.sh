@@ -11,6 +11,15 @@ if [ "${1:-}" = "--inside" ]; then
   fi
 
   mode="${2:-suite}"
+  run_opencode_probe() {
+    env \
+      OPENCODE_CONFIG=/tmp/spw-ambient-forbidden.jsonc \
+      OPENCODE_CONFIG_DIR=/tmp/spw-ambient-forbidden-config \
+      OPENCODE_CONFIG_CONTENT='{"plugin":["superpowers"]}' \
+      OPENCODE_DB=/tmp/spw-ambient-forbidden.db \
+      OPENCODE_TEST_MANAGED_CONFIG_DIR=/tmp/spw-ambient-forbidden-managed \
+      sh tests/container/opencode/offline-probe.sh
+  }
   case "$mode" in
     suite)
       echo "container suite: shared checks: start"
@@ -22,6 +31,9 @@ if [ "${1:-}" = "--inside" ]; then
       echo "container suite: Pi harness integration: start"
       sh tests/container/pi/offline-probe.sh
       echo "container suite: Pi harness integration: complete status=0"
+      echo "container suite: OpenCode harness integration: start"
+      run_opencode_probe
+      echo "container suite: OpenCode harness integration: complete status=0"
       ;;
     harness-codex)
       echo "container: Codex harness integration: start"
@@ -33,13 +45,18 @@ if [ "${1:-}" = "--inside" ]; then
       sh tests/container/pi/offline-probe.sh
       echo "container: Pi harness integration: complete status=0"
       ;;
+    harness-opencode)
+      echo "container: OpenCode harness integration: start"
+      run_opencode_probe
+      echo "container: OpenCode harness integration: complete status=0"
+      ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
 mode="${1:-suite}"
-case "$mode" in suite|harness-codex|harness-pi) ;; *) echo "usage: tests/container.sh [suite|harness-codex|harness-pi]" >&2; exit 2 ;; esac
+case "$mode" in suite|harness-codex|harness-pi|harness-opencode) ;; *) echo "usage: tests/container.sh [suite|harness-codex|harness-pi|harness-opencode]" >&2; exit 2 ;; esac
 
 native_node=${SPW_NATIVE_NODE_VERSION:-24}
 case "$native_node" in

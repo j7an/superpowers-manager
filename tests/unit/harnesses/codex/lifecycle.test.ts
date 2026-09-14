@@ -337,7 +337,7 @@ void test("ADAPTER-SURROGATE-01 install verification omits a hint carrying a lon
   // BOTH halves of the surrogate range, in one test() rather than two:
   // The second value is a row here rather than a case of its own.
   //
-  // hasTerminalControl covers 0xd800-0xdfff (`src/adapter-result.ts:199::(code >= 0xd800`).
+  // hasTerminalControl covers 0xd800-0xdfff (`src/adapter-result.ts:212::(code >= 0xd800`).
   // U+D800 alone leaves that clause under-constrained: narrowing it to
   // `code <= 0xdbff` keeps a high-surrogate row green while admitting every
   // low surrogate. 0xdc9b is the value the retiring Python witness drove

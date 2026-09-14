@@ -18,12 +18,12 @@ import { piPaths } from "./paths.ts";
 import { assessPiCompatibility, samePiSource } from "./compatibility.ts";
 import {
   digestPiTree,
-  materializePiTree,
   readPiPackageAssessment,
   piReceiptBinding,
   type PiReceipt,
 } from "./package.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
+import { materializeGitTree } from "../../git-tree.ts";
 
 export function piPreparationLocation(
   ctx: AdapterContext,
@@ -39,7 +39,7 @@ export async function preparePiCandidate(
   _ctx: AdapterContext,
 ): Promise<AdapterResult<PreparedArtifact>> {
   try {
-    await materializePiTree(
+    await materializeGitTree(
       input.upstreamRoot,
       input.selection.desiredCommit,
       input.candidateRoot,

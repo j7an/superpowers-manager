@@ -281,14 +281,16 @@ function copyRuntimePackage(pkg: string) {
   copyFileSync(join(ROOT, "package.json"), join(pkg, "package.json"));
   const dependencies = join(pkg, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  cpSync(
-    join(ROOT, "node_modules", "smol-toml"),
-    join(dependencies, "smol-toml"),
-    {
-      recursive: true,
-      dereference: true,
-    },
-  );
+  for (const dependency of ["smol-toml", "jsonc-parser"]) {
+    cpSync(
+      join(ROOT, "node_modules", dependency),
+      join(dependencies, dependency),
+      {
+        recursive: true,
+        dereference: true,
+      },
+    );
+  }
 
   const manifestDirectory = join(
     pkg,

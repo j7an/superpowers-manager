@@ -205,6 +205,39 @@ void test("exit 0 is reported as exited with code 0", async (t) => {
   });
 });
 
+void test("validator environment inheritance defaults on and can be disabled exactly", async (t) => {
+  const dir = sandbox(t);
+  const exe = writeScript(
+    dir,
+    "environment.sh",
+    'printf "%s|%s|%s" "${SPW_VALIDATOR_AMBIENT-unset}" "${SPW_VALIDATOR_EXPLICIT-unset}" "$TMPDIR"',
+  );
+  const prior = process.env.SPW_VALIDATOR_AMBIENT;
+  process.env.SPW_VALIDATOR_AMBIENT = "ambient";
+  try {
+    const inherited = await runValidator(
+      [exe],
+      SUCCEEDS,
+      { SPW_VALIDATOR_EXPLICIT: "explicit", TMPDIR: "must-not-win" },
+      dir,
+    );
+    assert.equal(inherited.kind, "exited");
+    assert.equal(inherited.stdout.text, `ambient|explicit|${dir}`);
+
+    const exact = await runValidator(
+      [exe],
+      { ...SUCCEEDS, inheritEnvironment: false },
+      { SPW_VALIDATOR_EXPLICIT: "explicit", TMPDIR: "must-not-win" },
+      dir,
+    );
+    assert.equal(exact.kind, "exited");
+    assert.equal(exact.stdout.text, `unset|explicit|${dir}`);
+  } finally {
+    if (prior === undefined) delete process.env.SPW_VALIDATOR_AMBIENT;
+    else process.env.SPW_VALIDATOR_AMBIENT = prior;
+  }
+});
+
 void test("a nonzero exit is reported with its code", async (t) => {
   const dir = sandbox(t);
   const exe = writeScript(dir, "no.sh", "exit 3");

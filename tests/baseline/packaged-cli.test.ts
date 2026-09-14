@@ -221,6 +221,17 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
       readFileSync(join(ROOT, "node_modules", "smol-toml", "LICENSE"), "utf8"),
       "the bundled parser retains its complete upstream license",
     );
+    assert.equal(
+      readFileSync(
+        join(installedPackage, "node_modules", "jsonc-parser", "LICENSE.md"),
+        "utf8",
+      ),
+      readFileSync(
+        join(ROOT, "node_modules", "jsonc-parser", "LICENSE.md"),
+        "utf8",
+      ),
+      "the bundled JSONC parser retains its complete upstream license",
+    );
 
     for (const [index, executableNode] of runtimes.entries()) {
       const runtimeBin = join(root, `runtime-bin-${index}`);
@@ -240,6 +251,22 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
         { cwd: installedPackage, env: consumerEnv },
       );
       assertSucceeded(parser, "installed bundled TOML parser");
+      const openCodeConfig = join(root, `packaged-opencode-${index}.jsonc`);
+      writeFileSync(
+        openCodeConfig,
+        '{// retained packaged comment\n  "plugin": ["other", ["file:///owned", {"answer": 42}]],\n  "limit": 9007199254740993,\n}\n',
+      );
+      const jsonc = run(
+        executableNode,
+        [
+          "--input-type=module",
+          "--eval",
+          "const m=await import('./dist/harnesses/opencode/config.js'); const p=process.argv[1]; const o=await m.readOpenCodeConfig(p); if(!o||o.document.entries.length!==2||o.document.entries[1].options.answer!==42)process.exit(2); await m.removeObservedOpenCodeEntry(o,1); const a=await m.readOpenCodeConfig(p); if(!a||a.document.entries.length!==1||a.document.entries[0].spec!=='other'||!a.document.text.includes('// retained packaged comment')||!a.document.text.includes('9007199254740993'))process.exit(3);",
+          openCodeConfig,
+        ],
+        { cwd: installedPackage, env: consumerEnv },
+      );
+      assertSucceeded(jsonc, "installed bundled JSONC probe and removal");
       const help = run(executable, ["--help"], {
         cwd: consumer,
         env: consumerEnv,

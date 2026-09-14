@@ -22,6 +22,7 @@ const runner = join(ROOT, "tests/container.sh");
 const toolPackage = join(ROOT, "tests/container/package.json");
 const lockfile = join(ROOT, "tests/container/package-lock.json");
 const tsconfig = join(ROOT, "tests/tsconfig.json");
+const openCodeProbe = join(ROOT, "tests/container/opencode/offline-probe.sh");
 
 function executable(path: string): boolean {
   try {
@@ -108,6 +109,7 @@ void test("container contract", async (t) => {
       assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
         "@earendil-works/pi-coding-agent",
         "@openai/codex",
+        "opencode-ai",
       ]);
       for (const name of Object.keys(pkg.dependencies)) {
         assert.match(pkg.dependencies[name], /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/);
@@ -120,6 +122,32 @@ void test("container contract", async (t) => {
           pkg.dependencies[name],
         );
       }
+      const docker = readFileSync(dockerfile, "utf8").replace(/\\\n\s*/g, " ");
+      const install = docker.indexOf("npm ci --ignore-scripts");
+      const link = docker.indexOf(
+        "RUN --network=none node node_modules/opencode-ai/postinstall.mjs",
+      );
+      const version = docker.indexOf("./node_modules/.bin/opencode --version");
+      const seed = docker.indexOf("/opt/spw-opencode-config-seed");
+      assert.ok(install !== -1, "container must install tools without scripts");
+      assert.ok(
+        link > install,
+        "container must run only OpenCode's reviewed postinstall after npm ci",
+      );
+      assert.ok(
+        version > link,
+        "container must verify OpenCode after its offline postinstall",
+      );
+      assert.ok(
+        seed > version,
+        "container must provision native config dependencies after verifying OpenCode",
+      );
+      assert.ok(
+        docker.includes(
+          "npm ci --prefix /opt/spw-opencode-config-seed --ignore-scripts",
+        ),
+        "native config dependencies must install without lifecycle scripts",
+      );
     },
   );
   await t.test(
@@ -148,6 +176,22 @@ void test("container contract", async (t) => {
           "error: SPW_NATIVE_NODE_VERSION must be 24.12.0 or 24\n",
         );
       }
+    },
+  );
+  await t.test(
+    "OpenCode probe rejects host execution before lifecycle work",
+    () => {
+      assert.ok(executable(openCodeProbe));
+      const result = spawnSync("/bin/sh", [openCodeProbe], {
+        encoding: "utf8",
+        env: {
+          PATH: "/usr/bin:/bin",
+          SPW_CONTAINER: "0",
+          OPENCODE_DB: "/forbidden/ambient.db",
+        },
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /isolated UID 10001 container/);
     },
   );
   await t.test("test tsconfig resolves NodeNext", () => {
@@ -203,14 +247,16 @@ void test("container contract", async (t) => {
         '#!/bin/sh\n[ "${1:-}" = "-u" ] || exit 99\nprintf "%s\\n" "${SPW_FIXTURE_UID:-10001}"\n',
       );
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
-      const child = `#!/bin/sh\nset -eu\ncase "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; *) name=shared ;; esac\nprintf '%s\\n' "$name" >> "$SPW_RUNNER_LOG"\n[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n`;
+      const child = `#!/bin/sh\nset -eu\ncase "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac\nprintf '%s\\n' "$name" >> "$SPW_RUNNER_LOG"\n[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n`;
       const paths = [
         join(scratch, "tests/run.sh"),
         join(container, "codex/offline-probe.sh"),
         join(container, "pi/offline-probe.sh"),
+        join(container, "opencode/offline-probe.sh"),
       ];
       mkdirSync(join(container, "codex"), { recursive: true });
       mkdirSync(join(container, "pi"), { recursive: true });
+      mkdirSync(join(container, "opencode"), { recursive: true });
       for (const path of paths) writeFileSync(path, child);
       for (const path of [join(bin, "id"), join(bin, "docker"), ...paths])
         chmodSync(path, 0o755);
@@ -232,9 +278,10 @@ void test("container contract", async (t) => {
         );
       };
       for (const [mode, logText] of [
-        ["suite", "shared\ncodex\npi\n"],
+        ["suite", "shared\ncodex\npi\nopencode\n"],
         ["harness-codex", "codex\n"],
         ["harness-pi", "pi\n"],
+        ["harness-opencode", "opencode\n"],
       ] as const) {
         const result = run(mode);
         assert.equal(result.status, 0, result.stderr);
@@ -248,6 +295,7 @@ void test("container contract", async (t) => {
             "container suite: shared checks: complete status=0",
             "container suite: Codex harness integration: complete status=0",
             "container suite: Pi harness integration: complete status=0",
+            "container suite: OpenCode harness integration: complete status=0",
           ],
         ],
         [
@@ -256,12 +304,21 @@ void test("container contract", async (t) => {
           [
             "container suite: Codex harness integration: complete status=0",
             "container suite: Pi harness integration: complete status=0",
+            "container suite: OpenCode harness integration: complete status=0",
           ],
         ],
         [
           "pi",
           "shared\ncodex\npi\n",
-          ["container suite: Pi harness integration: complete status=0"],
+          [
+            "container suite: Pi harness integration: complete status=0",
+            "container suite: OpenCode harness integration: complete status=0",
+          ],
+        ],
+        [
+          "opencode",
+          "shared\ncodex\npi\nopencode\n",
+          ["container suite: OpenCode harness integration: complete status=0"],
         ],
       ] as const) {
         const result = run("suite", { SPW_FAIL_CHILD: failedChild });

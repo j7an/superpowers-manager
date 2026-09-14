@@ -3,9 +3,12 @@
 import assert from "node:assert/strict";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,6 +27,69 @@ import { runUpdate } from "../../src/commands/update.ts";
 import type { CodexRemovalInput } from "../../src/harnesses/codex/adapter.ts";
 import { readUpstreamManifestVersion } from "../../src/harnesses/codex/prepare.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+import { openCodeHarness } from "../../src/harnesses/opencode/harness.ts";
+import { openCodePaths } from "../../src/harnesses/opencode/paths.ts";
+import { createResourceCoordinator } from "../../src/resource-lock.ts";
+import { nativeSelection } from "../lib/harnesses/pi/package-fixture.ts";
+
+void test("OpenCode prepare rejects symlinked storage parents before locks, workspaces, or fetch", async (t) => {
+  for (const parent of ["config", "manager"] as const)
+    await t.test(parent, async (t) => {
+      const root = mkdtempSync(join(tmpdir(), "spw-opencode-command-prepare-"));
+      t.after(() => rmSync(root, { recursive: true, force: true }));
+      const env = {
+        HOME: join(root, "home"),
+        XDG_CONFIG_HOME: join(root, "xdg"),
+        SUPERPOWERS_CACHE_DIR: join(root, "cache"),
+      };
+      const paths = openCodePaths(env, root);
+      const target = join(root, "outside");
+      mkdirSync(target);
+      writeFileSync(join(target, "preserve"), "unchanged\n");
+      if (parent === "config") {
+        mkdirSync(join(paths.configRoot, ".."), { recursive: true });
+        symlinkSync(target, paths.configRoot, "dir");
+      } else {
+        mkdirSync(paths.configRoot, { recursive: true });
+        symlinkSync(target, paths.managerRoot, "dir");
+      }
+      const stdout = capture();
+      const stderr = capture();
+      const real = createResourceCoordinator();
+      let coordinated = false;
+      const status = await runPrepare([], {
+        root,
+        env,
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        options: { harness: "opencode", allowExperimental: false },
+        selection: {
+          ...nativeSelection(),
+          selectionMode: "pinned",
+          resolutionKind: "commit",
+          effectiveSource: join(root, "upstream-must-not-fetch"),
+        },
+        adapter: openCodeHarness,
+        coordination: {
+          observeResources: (resources) => real.observeResources(resources),
+          withResources: async (resources, action) =>
+            await real.withResources(resources, async () => {
+              coordinated = true;
+              return await action();
+            }),
+        },
+      });
+      assert.equal(status, 1);
+      assert.equal(coordinated, false);
+      assert.deepEqual(readdirSync(target), ["preserve"]);
+      assert.equal(existsSync(join(root, "cache")), false);
+      assert.match(
+        stderr.text(),
+        /cannot determine harness mutation resources/,
+      );
+      assert.equal(stdout.text(), "");
+    });
+});
 
 void test("retired validator rejects direct handlers before selection or adapter access", async () => {
   for (const run of [runPrepare, runInstall, runUpdate]) {

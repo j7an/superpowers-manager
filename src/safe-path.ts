@@ -12,7 +12,7 @@ import { SafetyError } from "./safety-error.ts";
 export type NoFollowPathType =
   "missing" | "regular-file" | "directory" | "symlink" | "other";
 
-function isErrno(value: unknown, code: string): boolean {
+export function isErrno(value: unknown, code: string): boolean {
   return (
     value instanceof Error &&
     "code" in value &&
@@ -20,7 +20,7 @@ function isErrno(value: unknown, code: string): boolean {
   );
 }
 
-function isContained(root: string, candidate: string): boolean {
+export function isContained(root: string, candidate: string): boolean {
   const suffix = relative(root, candidate);
   return (
     suffix === "" ||

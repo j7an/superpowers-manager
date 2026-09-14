@@ -53,14 +53,15 @@ function buildSnapshot(): string {
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
   const dependencies = join(snapshot, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  cpSync(
-    join(ROOT, "node_modules", "smol-toml"),
-    join(dependencies, "smol-toml"),
-    {
-      recursive: true,
-      dereference: true,
-    },
-  );
+  for (const dependency of ["smol-toml", "jsonc-parser"])
+    cpSync(
+      join(ROOT, "node_modules", dependency),
+      join(dependencies, dependency),
+      {
+        recursive: true,
+        dereference: true,
+      },
+    );
   const pluginDir = join(snapshot, "plugins", "superpowers", ".codex-plugin");
   mkdirSync(pluginDir, { recursive: true });
   cpSync(
@@ -640,6 +641,39 @@ export function writePiExecutable(
       `    writeFileSync(settingsFile, JSON.stringify({ ...settings, packages }));\n` +
       `  }\n` +
       `} else { process.exitCode = 99; }\n`,
+  );
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nexec "${process.execPath}" "${module}" "$@"\n`,
+  );
+  chmodSync(executable, 0o755);
+  return executable;
+}
+
+export function writeOpenCodeExecutable(
+  c: CaseEnv,
+  options: { failure?: "install"; failOnCall?: boolean } = {},
+): string {
+  const module = join(c.dir, "fake-opencode.mjs");
+  const executable = join(c.dir, "opencode");
+  const log = join(c.state, "opencode.log");
+  writeFileSync(
+    module,
+    `import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";\n` +
+      `import { join } from "node:path";\n` +
+      `const args = process.argv.slice(2);\n` +
+      `writeFileSync(${JSON.stringify(log)}, args.join(" ") + "\\n", { flag: "a" });\n` +
+      `if (${JSON.stringify(options.failOnCall === true)}) process.exit(97);\n` +
+      `if (args[0] === "--version") process.stdout.write("1.18.30\\n");\n` +
+      `else if (args[0] === "plugin" && args[2] === "--global") {\n` +
+      `  const file = join(process.env.XDG_CONFIG_HOME, "opencode", "opencode.jsonc");\n` +
+      `  mkdirSync(join(process.env.XDG_CONFIG_HOME, "opencode"), { recursive: true });\n` +
+      `  const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};\n` +
+      `  const plugin = Array.isArray(current.plugin) ? current.plugin : [];\n` +
+      `  if (!plugin.includes(args[1])) plugin.push(args[1]);\n` +
+      `  writeFileSync(file, JSON.stringify({ ...current, plugin }) + "\\n");\n` +
+      `  if (${JSON.stringify(options.failure === "install")}) process.exitCode = 7;\n` +
+      `} else process.exitCode = 99;\n`,
   );
   writeFileSync(
     executable,

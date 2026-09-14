@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { sharedPiSkillsActivity } from "./shared-skills.ts";
 
 import {
-  failureResult,
+  inspectionFailure,
   successResult,
   type AdapterContext,
   type AdapterResult,
@@ -261,19 +261,6 @@ async function unmanagedConflicts(
     conflicts.add(SHARED_PI_SKILLS_INDETERMINATE);
   }
   return [...conflicts];
-}
-
-function inspectionFailure<T>(
-  operation: string,
-  subject: string,
-): AdapterResult<T> {
-  return failureResult(
-    operation,
-    "invalid-state",
-    `cannot inspect ${subject}`,
-    [],
-    [],
-  );
 }
 
 export async function inspectPiOwnership(

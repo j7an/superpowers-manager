@@ -159,6 +159,39 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   const pluginRoot = location.destinationRoot;
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const tmpParent = dirname(pluginRoot);
+  const outcomes: AdapterOutcome<unknown>[] = [];
+  const failed = (message: string | null): PrepareOutcome => ({
+    kind: "failed",
+    outcomes,
+    validator: NO_VALIDATOR_OUTPUT,
+    message,
+  });
+  const selection =
+    ctx.selection ?? (await computeEffectiveSelection(ctx.root, env));
+  let prefetch;
+  try {
+    prefetch = await ctx.adapter.validatePreparationBeforeFetch(adapterContext);
+  } catch {
+    return {
+      outcome: failed(
+        ctx.adapter.presentation.callFailure("prepare", adapterContext)
+          .unexpected,
+      ),
+      cleanupWarning: null,
+    };
+  }
+  outcomes.push(prefetch.outcome);
+  if (!prefetch.outcome.ok)
+    return { outcome: failed(null), cleanupWarning: null };
+  if (prefetch.status !== 0) {
+    return {
+      outcome: failed(
+        ctx.adapter.presentation.callFailure("prepare", adapterContext)
+          .invalidStatus,
+      ),
+      cleanupWarning: null,
+    };
+  }
   await owned(`cannot create directory: ${tmpParent}`, () =>
     mkdir(tmpParent, { recursive: true }),
   );
@@ -168,34 +201,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
     tmpParent,
     ".superpowers.prepare.",
     async (workspace): Promise<PrepareOutcome> => {
-      const outcomes: AdapterOutcome<unknown>[] = [];
-      const failed = (message: string | null): PrepareOutcome => ({
-        kind: "failed",
-        outcomes,
-        validator: NO_VALIDATOR_OUTPUT,
-        message,
-      });
       const candidate = join(workspace, location.stagingLeaf);
-      const selection =
-        ctx.selection ?? (await computeEffectiveSelection(ctx.root, env));
-      let prefetch;
-      try {
-        prefetch =
-          await ctx.adapter.validatePreparationBeforeFetch(adapterContext);
-      } catch {
-        return failed(
-          ctx.adapter.presentation.callFailure("prepare", adapterContext)
-            .unexpected,
-        );
-      }
-      outcomes.push(prefetch.outcome);
-      if (!prefetch.outcome.ok) return failed(null);
-      if (prefetch.status !== 0) {
-        return failed(
-          ctx.adapter.presentation.callFailure("prepare", adapterContext)
-            .invalidStatus,
-        );
-      }
       await owned(`cannot create directory: ${cacheParent}`, () =>
         mkdir(cacheParent, { recursive: true }),
       );

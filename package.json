@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.6.0",
-  "description": "Install obra/superpowers directly from upstream for Codex and Pi. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
+  "description": "Install obra/superpowers directly from upstream for Codex, Pi, and OpenCode. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -17,6 +17,7 @@
     "updater",
     "pi",
     "pi-coding-agent",
+    "opencode",
     "version-pinning"
   ],
   "license": "MIT",
@@ -32,6 +33,7 @@
     "test:integration": "node tests/run-node-suites.ts --group integration",
     "test:harness:codex": "sh tests/container.sh harness-codex",
     "test:harness:pi": "sh tests/container.sh harness-pi",
+    "test:harness:opencode": "sh tests/container.sh harness-opencode",
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
     "check": "pnpm run check:static && pnpm run test",
@@ -69,9 +71,11 @@
     "README.md"
   ],
   "dependencies": {
+    "jsonc-parser": "3.3.1",
     "smol-toml": "1.8.0"
   },
   "bundleDependencies": [
+    "jsonc-parser",
     "smol-toml"
   ]
 }

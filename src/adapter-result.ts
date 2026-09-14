@@ -190,6 +190,19 @@ export function failureResult(
   };
 }
 
+export function inspectionFailure<T>(
+  operation: string,
+  subject: string,
+): AdapterResult<T> {
+  return failureResult(
+    operation,
+    "invalid-state",
+    `cannot inspect ${subject}`,
+    [],
+    [],
+  );
+}
+
 export function hasTerminalControl(value: string): boolean {
   for (const character of value) {
     const code = character.codePointAt(0)!;

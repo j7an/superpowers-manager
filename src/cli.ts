@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { extractHarnessOptions, oneLine, UsageError } from "./cli-arguments.ts";
 import { codexHarness } from "./harnesses/codex/harness.ts";
 import { piHarness } from "./harnesses/pi/harness.ts";
+import { openCodeHarness } from "./harnesses/opencode/harness.ts";
 import type { InvocationOptions } from "./harness-compatibility.ts";
 import { createResourceCoordinator } from "./resource-lock.ts";
 import type { CommandContext } from "./commands/context.ts";
@@ -312,19 +313,20 @@ function usage(): string {
     "  uninstall  remove the manager plugin and marketplace from Codex",
     "",
     "Target one invocation (default: codex; selection commands are shared):",
-    "  probe --harness pi [--porcelain]",
-    "  prepare --harness pi",
-    "  install --harness pi [--allow-experimental]",
-    "  update --harness pi [--allow-experimental]",
-    "  uninstall --harness pi",
-    "  --harness=codex and --harness=pi are also accepted after the command.",
+    "  probe --harness opencode [--porcelain]",
+    "  prepare --harness opencode",
+    "  install --harness opencode [--allow-experimental]",
+    "  update --harness opencode [--allow-experimental]",
+    "  uninstall --harness opencode",
+    "  --harness=codex, --harness=pi, and --harness=opencode are also accepted after the command.",
     "",
     "Environment overrides (used by in-process commands): SUPERPOWERS_REF,",
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",
     "SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,",
     "SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,",
     "SUPERPOWERS_VALIDATOR_EXECUTABLE,",
-    "SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE",
+    "SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE,",
+    "SUPERPOWERS_OPENCODE",
     "",
     "SUPERPOWERS_VALIDATOR is removed; unset it and use",
     "SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.",
@@ -358,9 +360,11 @@ async function main(): Promise<never> {
     process.exit(2);
   }
   const status =
-    parsed.options.harness === "pi"
-      ? await dispatch(piHarness, parsed)
-      : await dispatch(codexHarness, parsed);
+    parsed.options.harness === "opencode"
+      ? await dispatch(openCodeHarness, parsed)
+      : parsed.options.harness === "pi"
+        ? await dispatch(piHarness, parsed)
+        : await dispatch(codexHarness, parsed);
   process.exit(status);
 }
 

@@ -77,19 +77,20 @@ Apply and lifecycle commands:
   uninstall  remove the manager plugin and marketplace from Codex
 
 Target one invocation (default: codex; selection commands are shared):
-  probe --harness pi [--porcelain]
-  prepare --harness pi
-  install --harness pi [--allow-experimental]
-  update --harness pi [--allow-experimental]
-  uninstall --harness pi
-  --harness=codex and --harness=pi are also accepted after the command.
+  probe --harness opencode [--porcelain]
+  prepare --harness opencode
+  install --harness opencode [--allow-experimental]
+  update --harness opencode [--allow-experimental]
+  uninstall --harness opencode
+  --harness=codex, --harness=pi, and --harness=opencode are also accepted after the command.
 
 Environment overrides (used by in-process commands): SUPERPOWERS_REF,
 SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,
 SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,
 SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,
 SUPERPOWERS_VALIDATOR_EXECUTABLE,
-SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE
+SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE,
+SUPERPOWERS_OPENCODE
 
 SUPERPOWERS_VALIDATOR is removed; unset it and use
 SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.
@@ -1918,7 +1919,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   const err = capture();
   const status = await runProbe(["--porcelain"], {
     root: c.pkg,
-    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:140::tag.gpgsign=false` creates on
+    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:141::tag.gpgsign=false` creates on
     // UPSTREAM; both values come from the fixture, neither is invented.
     env: caseEnv(c, {
       SUPERPOWERS_REF: "v1.0.0",
@@ -2696,7 +2697,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:521::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
+  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:522::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2768,8 +2769,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1286::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1332::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1287::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1333::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is
