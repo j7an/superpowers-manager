@@ -22,8 +22,6 @@ import {
   commentText,
   CORPUS_DIRS,
   displayPath,
-  fixEdits,
-  applyFixEdits,
   listSources,
   scan,
   targetExists,
@@ -703,109 +701,6 @@ void test("the bare resolution form still parses and still has no anchor", () =>
   assert.equal(citation.line, undefined);
 });
 
-void test("fixEdits rewrites a single-line citation to its anchor's line", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:9::export function go`\n",
-    "src/x.ts": TARGET,
-  });
-  const edits = fixEdits(scan([join(root, "a.js")]), root);
-  assert.equal(edits.length, 1);
-  assert.equal(edits[0].from, "`src/x.ts:9::export function go`");
-  assert.equal(edits[0].to, "`src/x.ts:2::export function go`");
-  assert.equal(edits[0].column, 3);
-});
-
-for (const [name, files] of [
-  [
-    "refuses a range, because shifting one is applying an offset",
-    { "a.js": "// `src/x.ts:8-9::export function go`\n", "src/x.ts": TARGET },
-  ],
-  [
-    "never adds an anchor to a legacy citation",
-    { "a.js": "// src/x.ts:9\n", "src/x.ts": TARGET },
-  ],
-  [
-    "never touches a dead referent",
-    { "a.js": "// `scripts/gone.sh:9::anything`\n" },
-  ],
-  [
-    "leaves an ambiguous anchor alone rather than guessing",
-    { "a.js": "// `src/x.ts:9::return`\n", "src/x.ts": "return\nreturn\n" },
-  ],
-] as const) {
-  void test(`fixEdits ${name}`, () => {
-    const root = fixture(files);
-    assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
-  });
-}
-
-void test("applyFixEdits rewrites the file's bytes", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:9::export function go`\n",
-    "src/x.ts": TARGET,
-  });
-  const a = join(root, "a.js");
-  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 1);
-  assert.equal(
-    readFileSync(a, "utf8"),
-    "// `src/x.ts:2::export function go`\n",
-  );
-});
-
-void test("applyFixEdits rewrites two citations on one line correctly", () => {
-  // The left rewrite shrinks by one character, so a left-to-right writer using
-  // original columns would corrupt the right-hand one.
-  const root = fixture({
-    "a.js": "// `src/x.ts:11::const a` and `src/y.ts:12::const b`\n",
-    "src/x.ts": "const a = 1;\n",
-    "src/y.ts": "\nconst b = 2;\n",
-  });
-  const a = join(root, "a.js");
-  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 1);
-  assert.equal(
-    readFileSync(a, "utf8"),
-    "// `src/x.ts:1::const a` and `src/y.ts:2::const b`\n",
-  );
-});
-
-void test("applyFixEdits is idempotent: a second run rewrites nothing", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:9::export function go`\n",
-    "src/x.ts": TARGET,
-  });
-  const a = join(root, "a.js");
-  applyFixEdits(fixEdits(scan([a]), root));
-  const once = readFileSync(a, "utf8");
-  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 0);
-  assert.equal(
-    readFileSync(a, "utf8"),
-    once,
-    "a second run must not change a byte",
-  );
-});
-
-void test("applyFixEdits canonicalizes an accepted leading-zero citation in one pass", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:0001::export function go`\n",
-    "src/x.ts": TARGET,
-  });
-  const a = join(root, "a.js");
-  assert.equal(applyFixEdits(fixEdits(scan([a]), root)), 1);
-  const once = readFileSync(a, "utf8");
-  const secondEdits = fixEdits(scan([a]), root);
-  const secondWrites = applyFixEdits(secondEdits);
-  const corrected = "// `src/x.ts:2::export function go`\n";
-  assert.deepEqual(
-    {
-      once,
-      secondEditCount: secondEdits.length,
-      secondWrites,
-      twice: readFileSync(a, "utf8"),
-    },
-    { once: corrected, secondEditCount: 0, secondWrites: 0, twice: corrected },
-  );
-});
-
 const TOOL = fileURLToPath(new URL("../tools/citations.ts", import.meta.url));
 
 function runCitationTool(root: string, args: string[], expectedStatus = 0) {
@@ -819,38 +714,6 @@ function runCitationTool(root: string, args: string[], expectedStatus = 0) {
   assert.equal(result.status, expectedStatus, result.stderr);
   return result;
 }
-
-void test("the --fix CLI dispatch rewrites a scratch root, never the repository", () => {
-  const root = fixture({
-    "src/x.ts": TARGET,
-    "tests/bin/a.js": "// `src/x.ts:9::export function go`\n",
-    "tests/baseline/.keep": "",
-    "tests/unit/.keep": "",
-    "tests/lib/.keep": "",
-  });
-  const result = runCitationTool(root, ["--fix"]);
-  assert.match(result.stdout, /rewrote 1 citations in 1 files/);
-  assert.equal(
-    readFileSync(join(root, "tests", "bin", "a.js"), "utf8"),
-    "// `src/x.ts:2::export function go`\n",
-  );
-});
-
-void test("CITATION-03 --fix proposes nothing against this repository", () => {
-  assert.deepEqual(
-    fixEdits(scan(listSources(CORPUS_DIRS, ROOT)), ROOT),
-    [],
-    "there must be no repository citation for --fix to rewrite",
-  );
-});
-
-void test("fixEdits is empty on a correct citation, so a second run is a no-op", () => {
-  const root = fixture({
-    "a.js": "// `src/x.ts:2::export function go`\n",
-    "src/x.ts": TARGET,
-  });
-  assert.deepEqual(fixEdits(scan([join(root, "a.js")]), root), []);
-});
 
 for (const [name, source, expected] of [
   [
@@ -881,11 +744,15 @@ for (const [name, source, expected] of [
   });
 }
 
-for (const mode of ["--suggest", "--write-ledger"]) {
+for (const mode of ["--suggest", "--write-ledger", "--fix"]) {
   void test(`${mode} is rejected without changing the fixture`, () => {
+    const source =
+      mode === "--fix"
+        ? "// `src/x.ts:9::export function go`\n"
+        : "// `src/x.ts:2::export function go`\n";
     const root = fixture({
       "src/x.ts": TARGET,
-      "tests/bin/a.js": "// `src/x.ts:2::export function go`\n",
+      "tests/bin/a.js": source,
       "tests/baseline/.keep": "",
       "tests/unit/.keep": "",
       "tests/lib/.keep": "",

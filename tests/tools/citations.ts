@@ -1,26 +1,20 @@
 #!/usr/bin/env node
 // A TOOL, not a registered test suite. The suite is the gate; this exists so a
-// contributor can see the buckets in under a second, and so PR 12.3 has a
-// mechanically safe way to rewrite a line number.
+// contributor can see citation validation in under a second.
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CORPUS_DIRS,
-  applyFixEdits,
   classify,
   displayPath,
-  fixEdits,
   listSources,
   scan,
   validate,
 } from "../lib/citations.ts";
 
 // The suite drives this TOOL against isolated fixture roots, exactly as
-// tests/run-node-suites.js is driven by SPW_RUNNER_ROOT. Production callers
-// never set this. Without it the CLI's own dispatch could only be exercised
-// against the repository, which the design forbids for --fix. The override
-// belongs HERE, on the tool: the suite keeps its ordinary repository root,
-// because the corpus-validation gate must read the real corpus.
+// tests can exercise CLI dispatch against isolated roots. Production callers
+// never set this; the corpus-validation gate reads the real repository.
 const ROOT = process.env.SPW_CITATIONS_ROOT
   ? resolve(process.env.SPW_CITATIONS_ROOT)
   : fileURLToPath(new URL("../..", import.meta.url));
@@ -53,16 +47,9 @@ function report(): void {
   if (failures.length > 0) process.exitCode = 1;
 }
 
-function fix(): void {
-  const edits = fixEdits(scan(listSources(CORPUS_DIRS, ROOT)), ROOT);
-  const files = applyFixEdits(edits);
-  process.stdout.write(`rewrote ${edits.length} citations in ${files} files\n`);
-}
-
 const mode = process.argv[2] ?? "--report";
 if (mode === "--report") report();
-else if (mode === "--fix") fix();
 else {
-  process.stderr.write(`error: unknown mode ${mode ?? "(none)"}\n`);
+  process.stderr.write(`error: unknown mode ${mode}\n`);
   process.exitCode = 1;
 }
