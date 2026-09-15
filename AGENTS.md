@@ -129,7 +129,7 @@ product integrations, not a required agent harness.
 ## Testing
 
 - Run the closest targeted test while iterating.
-- Run `pnpm run check:static` (format, lint, no-emit typecheck — a
+- Run `pnpm run check:static` (format, lint, no-emit typecheck, and unused-code analysis — a
   seconds-scale gate) before submitting. `pnpm run check` adds the
   minutes-scale full suite and cannot run concurrently with other work.
   **Why:** three of PR 10's six remediation tasks needed an extra fix round,

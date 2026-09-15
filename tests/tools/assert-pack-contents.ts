@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { compareByCodePoint, pythonStrip } from "../../src/python-text.ts";
+import { dirname } from "node:path";
+import { expectedTarballPaths } from "../lib/pack-contents.ts";
 
 const DECODER = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const SHAPE_DIAGNOSTIC =
@@ -66,22 +67,21 @@ function packedPaths(packed: Record<string, unknown>, path: string): string[] {
     }
     paths.push(entry.path);
   }
-  return paths.sort(compareByCodePoint);
+  return paths.sort();
 }
 
-function expectedPaths(path: string): string[] {
+function expectedPaths(path: string, packagePath: string): string[] {
   let text: string;
   try {
     text = DECODER.decode(readFileSync(path));
   } catch {
     fail(`cannot read expected tarball contents: ${path}`);
   }
-  return text
-    .split(/\r\n|\r|\n/)
-    .filter((line) => !line.startsWith("#"))
-    .map(pythonStrip)
-    .filter((line) => line !== "")
-    .sort(compareByCodePoint);
+  try {
+    return expectedTarballPaths(dirname(packagePath), text);
+  } catch {
+    fail(`cannot discover package source files: ${dirname(packagePath)}`);
+  }
 }
 
 function validate(
@@ -124,7 +124,7 @@ function validate(
   }
 
   const actual = packedPaths(packed, reportPath);
-  const expected = expectedPaths(expectedPath);
+  const expected = expectedPaths(expectedPath, packagePath);
   const missing = expected.filter((entry) => !actual.includes(entry));
   const extra = actual.filter((entry) => !expected.includes(entry));
   const matches =

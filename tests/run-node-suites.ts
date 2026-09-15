@@ -32,17 +32,14 @@ function announce(status: number) {
 // `fail()` must not return, but it also must not call process.exit(), which
 // would skip the announce above on some paths. A module-local sentinel error
 // gives it a never-returns contract that the top level converts into a quiet
-// exit -- the status is already on process.exitCode.
+// exit.
 class RunnerExit extends Error {}
 
 function fail(message: string): never {
-  process.stderr.write(`error: ${message}\n`);
-  announce(1);
-  process.exitCode = 1;
-  throw new RunnerExit();
+  throw new RunnerExit(message);
 }
 
-async function main() {
+async function main(): Promise<number> {
   let selectedGroup: string;
   let concurrency: string | undefined;
   let requirePackageNode = false;
@@ -337,17 +334,15 @@ async function main() {
     },
   );
   if (result.error) fail("could not start the Node test runner");
-  const status = result.status ?? 1;
-  announce(status);
-  process.exitCode = status;
+  return result.status ?? 1;
 }
 
 try {
-  await main();
+  process.exitCode = await main();
 } catch (error) {
-  // `fail()` throws RunnerExit after announcing and setting process.exitCode.
+  process.exitCode = 1;
   if (error instanceof RunnerExit) {
-    // already announced
+    process.stderr.write(`error: ${error.message}\n`);
   } else {
     // BACKSTOP, not a covered branch. Every parent-side failure above is
     // funnelled through fail(), so nothing this module can be fed reaches here
@@ -358,8 +353,8 @@ try {
     // two would be indistinguishable again. The stack still propagates. No test
     // asserts this branch; a case that entered a different path and read the
     // tail's sentinel would be a control that cannot fail.
-    process.exitCode = 1;
-    announce(1);
     throw error;
   }
+} finally {
+  announce(Number(process.exitCode ?? 0));
 }

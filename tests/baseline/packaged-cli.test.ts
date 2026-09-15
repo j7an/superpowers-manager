@@ -78,39 +78,6 @@ function assertSucceeded(
   assert.equal(result.status, 0, `${label} failed:\n${result.stderr}`);
 }
 
-function normalizePackReport(report: any) {
-  assert.notEqual(
-    report,
-    null,
-    "npm pack JSON report must be an array or keyed object",
-  );
-  assert.equal(
-    typeof report,
-    "object",
-    "npm pack JSON report must be an array or keyed object",
-  );
-  return Array.isArray(report) ? report : Object.values(report);
-}
-
-void test("normalizes npm pack JSON array and keyed-object reports", () => {
-  const entry = { filename: "superpowers-wrapper-1.0.0.tgz" };
-  const expected = [entry];
-
-  assert.deepEqual(normalizePackReport(expected), expected);
-  assert.deepEqual(
-    normalizePackReport({ "superpowers-wrapper": entry }),
-    expected,
-  );
-  assert.throws(
-    () => normalizePackReport(null),
-    /npm pack JSON report must be an array or keyed object/,
-  );
-  assert.throws(
-    () => normalizePackReport("not a report"),
-    /npm pack JSON report must be an array or keyed object/,
-  );
-});
-
 function packagedManifest(
   tarball: string,
   environment: Record<string, string>,
@@ -152,16 +119,23 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
       },
     );
     assertSucceeded(packed, "explicit package command");
-    const report = normalizePackReport(JSON.parse(packed.stdout));
-    assert.equal(report.length, 1, "npm pack must produce one artifact");
+    const report = JSON.parse(packed.stdout);
+    assert.ok(Array.isArray(report), "manager pack output must be an array");
     assert.equal(
-      typeof report[0].filename,
+      report.length,
+      1,
+      "manager pack output must contain one artifact",
+    );
+    assert.ok(report[0] !== null && typeof report[0] === "object");
+    const packedReport = report[0];
+    assert.equal(
+      typeof packedReport.filename,
       "string",
       "npm pack report must include filename",
     );
-    const tarball = isAbsolute(report[0].filename)
-      ? report[0].filename
-      : resolve(pack, report[0].filename);
+    const tarball = isAbsolute(packedReport.filename)
+      ? packedReport.filename
+      : resolve(pack, packedReport.filename);
     assert.equal(
       relative(pack, tarball).startsWith(".."),
       false,

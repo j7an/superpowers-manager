@@ -39,8 +39,8 @@ import { shQuote, writeGitEgressShim } from "../lib/git-egress.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-// Matches every other suite's convention (e.g. action-pins.test.js,
-// node-tooling.test.js): os.tmpdir() honors TMPDIR when set, and
+// Matches every other suite's convention (e.g. action-pins.test.js):
+// os.tmpdir() honors TMPDIR when set, and
 // mkdtempSync supplies the uniqueness that makes this hermetic.
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-dispatch-"));
 registerScratch(SCRATCH);

@@ -28,7 +28,7 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { writeGitEgressShim } from "../lib/git-egress.ts";
+import { shQuote, writeGitEgressShim } from "../lib/git-egress.ts";
 
 export type Sandbox = {
   root: string;
@@ -54,23 +54,12 @@ const SANDBOX_TOOLS = [
   "node",
   "sh",
   "git",
-  "awk",
   "basename",
   "cat",
   "chmod",
-  "cp",
-  "cut",
   "dirname",
-  "grep",
   "ln",
   "mkdir",
-  "mktemp",
-  "mv",
-  "rm",
-  "sed",
-  "sort",
-  "tail",
-  "tr",
 ];
 const COMMANDS = [
   "pin",
@@ -114,17 +103,6 @@ const PATH_ENVIRONMENT_VARIABLES = new Set([
   "SPW_BASELINE_SANDBOX_ROOT",
   "SPW_BASELINE_VALIDATOR_MARKER",
 ]);
-
-/**
- * POSIX single-quotes `value` for interpolation into a generated shell
- * script, escaping any embedded single quote as `'\''`. Unlike
- * `JSON.stringify`, the result is inert inside single quotes: `$`, backticks,
- * and literal control characters cannot trigger expansion or re-encode into a
- * different byte sequence.
- */
-function shQuote(value: string) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
 
 function hostExecutable(name: string) {
   if (name === "node") return realpathSync(process.execPath);

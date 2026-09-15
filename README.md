@@ -110,13 +110,7 @@ The manager never removes another Superpowers provider. See the [ownership guida
 
 The [selection commands above](#choose-what-you-run) save shared upstream intent. They do not activate Codex, Pi, or OpenCode; run the selected harness's `install` or `update` to apply that choice. `unpin` restores the packaged fallback policy.
 
-| Command     | Purpose                                                           |
-| ----------- | ----------------------------------------------------------------- |
-| `prepare`   | Build and validate the selected harness's prepared output         |
-| `install`   | Apply the shared selection to the selected harness                |
-| `probe`     | Inspect the selected harness without mutation                     |
-| `update`    | Explicitly refresh the selected harness when needed and verify it |
-| `uninstall` | Remove only Manager-owned state from the selected harness         |
+See [targeted lifecycle commands](https://github.com/j7an/superpowers-manager/blob/main/docs/usage.md#targeted-lifecycle) for preparation, inspection, installation, updates, and removal.
 
 Use `--harness codex`, `--harness pi`, or `--harness opencode` with each targeted lifecycle command.
 

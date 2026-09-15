@@ -1,19 +1,11 @@
 {
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
-    "strict": true,
+    "rootDir": "..",
     "noImplicitReturns": true,
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "target": "ES2024",
-    "types": [
-      "node"
-    ],
-    "erasableSyntaxOnly": true,
-    "rewriteRelativeImportExtensions": true,
-    "verbatimModuleSyntax": true
+    "noUncheckedSideEffectImports": true,
+    "libReplacement": false,
+    "noEmitOnError": false
   },
-  "include": [
-    "**/*.ts"
-  ]
+  "include": ["**/*.ts"]
 }

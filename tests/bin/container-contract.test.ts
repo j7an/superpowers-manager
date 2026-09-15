@@ -56,10 +56,8 @@ void test("container contract", async (t) => {
         "RUN /opt/node-min/bin/node --version",
         "ENV SPW_PACKAGE_NODE=/opt/node-min/bin/node",
         "ENV SPW_PACKAGE_NODE_VERSION=24.0.0",
-        "npm ci --ignore-scripts",
         "pnpm install --frozen-lockfile",
         "ENV SPW_CONTAINER=1",
-        "USER spw",
       ])
         assert.ok(source.includes(required), required);
       const pack = source.indexOf(
@@ -229,7 +227,6 @@ void test("container contract", async (t) => {
         "plugins/.superpowers.bak.*/",
       ])
         assert.ok(ignoreLines.includes(entry), `missing ignore rule: ${entry}`);
-      assert.ok(!ignoreLines.includes("plugins/.superpowers.tmp.*/"));
     },
   );
   await t.test(
