@@ -24,7 +24,8 @@ import {
 } from "../../atomic.ts";
 import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
 import { digestArtifactTree } from "../../artifact-tree.ts";
-import { normalizePiRuntimeVersion, runPi } from "./native.ts";
+import { normalizeSnapshotRuntimeVersion } from "../../harness-command-result.ts";
+import { runPi } from "./native.ts";
 import {
   readPiPackageAssessment,
   readPiReceipt,
@@ -540,7 +541,10 @@ export async function installPi(
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned Pi registration");
     accepted(
-      normalizePiRuntimeVersion(await deps.run(["--version"], paths, ctx)),
+      normalizeSnapshotRuntimeVersion(
+        "Pi",
+        await deps.run(["--version"], paths, ctx),
+      ),
     );
     // Recheck after the native preflight, before claiming mutation ownership.
     await requireSnapshot(paths.installedRoot, previous);
@@ -676,7 +680,10 @@ export async function removePi(
     }
     if (registered !== null)
       accepted(
-        normalizePiRuntimeVersion(await deps.run(["--version"], paths, ctx)),
+        normalizeSnapshotRuntimeVersion(
+          "Pi",
+          await deps.run(["--version"], paths, ctx),
+        ),
       );
     await requireSnapshot(paths.installedRoot, previous);
     if (!sameRegistration(await registration(paths, deps), registered))

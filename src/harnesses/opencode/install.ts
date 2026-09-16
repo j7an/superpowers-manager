@@ -37,7 +37,8 @@ import {
   OPEN_CODE_PURE_MODE_INPUT,
   type OpenCodeDiscovery,
 } from "./discovery.ts";
-import { normalizeOpenCodeRuntimeVersion, runOpenCode } from "./native.ts";
+import { normalizeSnapshotRuntimeVersion } from "../../harness-command-result.ts";
+import { runOpenCode } from "./native.ts";
 import {
   readOpenCodePackageAssessment,
   readOpenCodeReceipt,
@@ -660,7 +661,8 @@ export async function installOpenCode(
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned OpenCode registration");
     accepted(
-      normalizeOpenCodeRuntimeVersion(
+      normalizeSnapshotRuntimeVersion(
+        "OpenCode",
         await deps.run(["--version"], paths, ctx),
       ),
     );
