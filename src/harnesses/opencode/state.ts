@@ -1,4 +1,3 @@
-import { digestArtifactTree } from "../../artifact-tree.ts";
 import {
   inspectionFailure,
   successResult,
@@ -12,9 +11,13 @@ import type {
   OwnershipInspection,
   UpdateControlInspection,
 } from "../../harness.ts";
-import { classifyPathNoFollow } from "../../safe-path.ts";
 import { displayPath } from "../../validator.ts";
-import { sameSnapshotSource } from "../../snapshot-package.ts";
+import {
+  observeSnapshot,
+  sameSnapshotSource,
+  type SnapshotObservation,
+} from "../../snapshot-package.ts";
+import { classifyPathNoFollow } from "../../safe-path.ts";
 import {
   inspectOpenCodeDiscovery,
   type OpenCodeDiscovery,
@@ -37,19 +40,10 @@ export interface OpenCodeRemovalInput {
   readonly receiptDigest: string | null;
 }
 
-type SnapshotObservation =
-  | { readonly kind: "absent" }
-  | { readonly kind: "unverified" }
-  | {
-      readonly kind: "owned";
-      readonly receipt: OpenCodeReceipt;
-      readonly digest: string;
-    };
-
 interface Facts {
   readonly paths: OpenCodePaths;
   readonly discovery: OpenCodeDiscovery;
-  readonly snapshot: SnapshotObservation;
+  readonly snapshot: SnapshotObservation<OpenCodeReceipt>;
   readonly recovery: "absent" | "required";
 }
 
@@ -64,28 +58,11 @@ function pathsFor(ctx: AdapterContext): OpenCodePaths {
   return openCodePaths(ctx.env ?? {}, process.cwd());
 }
 
-async function observeSnapshot(
-  paths: OpenCodePaths,
-): Promise<SnapshotObservation> {
-  const kind = await classifyPathNoFollow(paths.installedRoot);
-  if (kind === "missing") return { kind: "absent" };
-  if (kind !== "directory") return { kind: "unverified" };
-  try {
-    const receipt = await readOpenCodeReceipt(paths.installedRoot);
-    const digest = await digestArtifactTree(paths.installedRoot);
-    return receipt.digest === digest
-      ? { kind: "owned", receipt, digest }
-      : { kind: "unverified" };
-  } catch {
-    return { kind: "unverified" };
-  }
-}
-
 async function observeFacts(ctx: AdapterContext): Promise<Facts> {
   const paths = pathsFor(ctx);
   const [discovery, snapshot, recoveryKind] = await Promise.all([
     inspectOpenCodeDiscovery(paths, ctx.env ?? {}, process.cwd()),
-    observeSnapshot(paths),
+    observeSnapshot<OpenCodeReceipt>(paths.installedRoot, readOpenCodeReceipt),
     classifyPathNoFollow(paths.recoveryRoot),
   ]);
   return {

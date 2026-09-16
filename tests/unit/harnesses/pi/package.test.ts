@@ -12,7 +12,10 @@ import {
 import { join } from "node:path";
 import test from "node:test";
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
-import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
+import {
+  observeSnapshot,
+  snapshotReceiptBinding,
+} from "../../../../src/snapshot-package.ts";
 import { readOpenCodeReceipt } from "../../../../src/harnesses/opencode/package.ts";
 import { readPiReceipt } from "../../../../src/harnesses/pi/package.ts";
 import { materializeGitTree } from "../../../../src/git-tree.ts";
@@ -22,6 +25,39 @@ import {
   nativeFixture,
 } from "../../../lib/harnesses/pi/package-fixture.ts";
 import { nativeOpenCodeFixture } from "../../../lib/harnesses/opencode/package-fixture.ts";
+
+void test("snapshot observation distinguishes absence, ownership and invalid evidence", async (t) => {
+  const root = nativeFixture(t);
+  const digest = await digestArtifactTree(root);
+  let reads = 0;
+  const reader = async () => {
+    reads += 1;
+    return { digest };
+  };
+  assert.deepEqual(await observeSnapshot(join(root, "missing"), reader), {
+    kind: "absent",
+  });
+  assert.equal(reads, 0);
+  assert.deepEqual(await observeSnapshot(join(root, "LICENSE"), reader), {
+    kind: "unverified",
+  });
+  assert.equal(reads, 0);
+  assert.deepEqual(await observeSnapshot(root, reader), {
+    kind: "owned",
+    receipt: { digest },
+    digest,
+  });
+  assert.deepEqual(
+    await observeSnapshot(root, async () => ({ digest: "different" })),
+    { kind: "unverified" },
+  );
+  assert.deepEqual(
+    await observeSnapshot(root, async (): Promise<{ digest: string }> => {
+      throw new Error("unreadable receipt");
+    }),
+    { kind: "unverified" },
+  );
+});
 
 void test("receipt readers retain their distinct unsupported-generation policy", async (t) => {
   const piRoot = nativeFixture(t);

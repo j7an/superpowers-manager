@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { addArtifactHashField, readArtifactFile } from "./artifact-tree.ts";
+import {
+  addArtifactHashField,
+  digestArtifactTree,
+  readArtifactFile,
+} from "./artifact-tree.ts";
+import { classifyPathNoFollow } from "./safe-path.ts";
 import { validateSource } from "./selection.ts";
 import type { JsonValue } from "./strict-json.ts";
 
@@ -19,6 +24,29 @@ export interface SnapshotReceiptIdentity {
   readonly source: string;
   readonly commit: string;
   readonly digest: string;
+}
+
+export type SnapshotObservation<R> =
+  | { readonly kind: "absent" }
+  | { readonly kind: "unverified" }
+  | { readonly kind: "owned"; readonly receipt: R; readonly digest: string };
+
+export async function observeSnapshot<R extends { readonly digest: string }>(
+  root: string,
+  readReceipt: (root: string) => Promise<R>,
+): Promise<SnapshotObservation<R>> {
+  const kind = await classifyPathNoFollow(root);
+  if (kind === "missing") return { kind: "absent" };
+  if (kind !== "directory") return { kind: "unverified" };
+  try {
+    const receipt = await readReceipt(root);
+    const digest = await digestArtifactTree(root);
+    return receipt.digest === digest
+      ? { kind: "owned", receipt, digest }
+      : { kind: "unverified" };
+  } catch {
+    return { kind: "unverified" };
+  }
 }
 
 export function isOfficialSnapshotSource(source: string): boolean {

@@ -7,7 +7,7 @@ import {
   type AdapterContext,
   type AdapterResult,
 } from "../../adapter-result.ts";
-import { digestArtifactTree, readArtifactObject } from "../../artifact-tree.ts";
+import { readArtifactObject } from "../../artifact-tree.ts";
 import type { EffectiveSelection } from "../../effective-selection.ts";
 import type {
   Decision,
@@ -15,7 +15,11 @@ import type {
   OwnershipInspection,
   UpdateControlInspection,
 } from "../../harness.ts";
-import { sameSnapshotSource } from "../../snapshot-package.ts";
+import {
+  observeSnapshot,
+  sameSnapshotSource,
+  type SnapshotObservation,
+} from "../../snapshot-package.ts";
 import {
   readPiPackageAssessment,
   readPiReceipt,
@@ -36,15 +40,6 @@ export interface PiRemovalInput {
   readonly registrationIdentity: string | null;
   readonly receiptDigest: string | null;
 }
-
-type SnapshotObservation =
-  | { readonly kind: "absent" }
-  | { readonly kind: "unverified" }
-  | {
-      readonly kind: "owned";
-      readonly receipt: PiReceipt;
-      readonly digest: string;
-    };
 
 interface SettingsObservation {
   readonly settings: PiSettings;
@@ -169,21 +164,6 @@ async function observeSettings(paths: PiPaths): Promise<SettingsObservation> {
   return { settings, registration };
 }
 
-async function observeSnapshot(paths: PiPaths): Promise<SnapshotObservation> {
-  const kind = await classifyPathNoFollow(paths.installedRoot);
-  if (kind === "missing") return { kind: "absent" };
-  if (kind !== "directory") return { kind: "unverified" };
-  try {
-    const receipt = await readPiReceipt(paths.installedRoot);
-    const digest = await digestArtifactTree(paths.installedRoot);
-    return receipt.digest === digest
-      ? { kind: "owned", receipt, digest }
-      : { kind: "unverified" };
-  } catch {
-    return { kind: "unverified" };
-  }
-}
-
 async function isNamedLocalSuperpowers(
   entry: PiPackageEntry,
   paths: PiPaths,
@@ -270,7 +250,7 @@ export async function inspectPiOwnership(
   try {
     const [{ settings, registration }, snapshot] = await Promise.all([
       observeSettings(paths),
-      observeSnapshot(paths),
+      observeSnapshot<PiReceipt>(paths.installedRoot, readPiReceipt),
     ]);
     if (snapshot.kind === "unverified") {
       return inspectionFailure(
@@ -349,11 +329,11 @@ export async function inspectPiInstalled(
   const operation = "inspect-pi-installed";
   const paths = pathsFor(ctx);
   let settings: SettingsObservation;
-  let snapshot: SnapshotObservation;
+  let snapshot: SnapshotObservation<PiReceipt>;
   try {
     [settings, snapshot] = await Promise.all([
       observeSettings(paths),
-      observeSnapshot(paths),
+      observeSnapshot<PiReceipt>(paths.installedRoot, readPiReceipt),
     ]);
   } catch {
     return inspectionFailure(
