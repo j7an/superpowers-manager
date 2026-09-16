@@ -223,4 +223,12 @@ void test("a retired prepared profile needs replacement but cannot be read as an
     },
   });
   assert.equal((await readOpenCodePrepared(ctx)).outcome.ok, false);
+  const wrongSelection = await inspectOpenCodePrepared(
+    nativeSelection((commit[0] === "0" ? "1" : "0") + commit.slice(1)),
+    ctx,
+  );
+  assert.equal(wrongSelection.outcome.ok, true);
+  if (!wrongSelection.outcome.ok) assert.fail("expected inspectable mismatch");
+  assert.equal(wrongSelection.outcome.result.kind, "needs-prepare");
+  assert.equal(wrongSelection.outcome.result.compatibility.kind, "unknown");
 });
