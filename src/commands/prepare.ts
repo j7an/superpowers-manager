@@ -343,7 +343,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       // the workspace on return, and the candidate lives in it.
       //
       // atomicReplaceDir delegates to beginDirectoryPublication, whose outer
-      // catch (`src/atomic.ts:341-348::if (cause`) wraps every non-SafetyError
+      // catch (`src/atomic.ts:319::if (cause`) wraps every non-SafetyError
       // into a SafetyError, so the callee owns every failure on this path and
       // re-emitting its own diagnostic is the sanctioned form of interpolation.
       // The hand-written prefix carries the live root, which the callee's message
@@ -424,7 +424,7 @@ async function performPrepare<R>(
     //      own text on the PINNED path (both of its own splice sites in
     //      src/upstream.ts, and proveCommit's, which it calls). This is the
     //      rarer of the two raw-git-output paths, not the only one.
-    //   3. `src/selection-store.ts:120-124::cause.module === "selection") {`
+    //   3. `src/selection-store.ts:116-120::cause.module === "selection") {`
     //      (same shape at :49, :86, :98) is the
     //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
     //      it interpolates the caught error's own message, so Node errno

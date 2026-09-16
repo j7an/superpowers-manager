@@ -287,7 +287,7 @@ export async function runProbe<R>(
     // (src/effective-selection.ts); the ones validateRecord raises
     // (`src/selection.ts:198::integer`, :219, requireObject at :47, requireExactKeys at
     // :64, validatePinnedRecord at :170-183), reached from
-    // `src/selection-store.ts:103::return validateRecord` on the read path; the
+    // `src/selection-store.ts:99::return validateRecord` on the read path; the
     // selectionErrors requireAbsolute and selectionConfigDir
     // (src/effective-selection.ts) raise
     // for a non-absolute or missing config directory; readConfigRef's `cannot
@@ -310,17 +310,16 @@ export async function runProbe<R>(
     //      `tests/unit/upstream.test.ts:450::void test("resolveRef reports a query failure for a tag lookup`, and
     //      `tests/unit/upstream.test.ts:462::void test("resolveRef reports a query failure for the generic ref lookup`.
     //   2. The
-    //      `src/selection-store.ts:120-124::cause.module === "selection") {`
+    //      `src/selection-store.ts:116-120::cause.module === "selection") {`
     //      site (same shape at :49, :86, :98) is the module AGENTS.md's
     //      `src/selection-store.ts` bullet grandfathers:
     //      it interpolates the caught error's own message, so Node errno
     //      prose can reach this stream. Reached on the READ path only, via
     //      loadSavedSelection (src/effective-selection.ts) ->
     //      readSelectionState
-    //      (`src/selection-store.ts:149::export async function readSelectionState`).
-    //      This module's four write-only interpolating sites -- ensureStateDirectory
-    //      (:172), finalStateDiagnostic (:197), and the two in
-    //      writeSelectionState's own catch (:225, :231) -- are all
+    //      (`src/selection-store.ts:145::export async function readSelectionState`).
+    //      This module's two write-only interpolating sites -- ensureStateDirectory
+    //      (:172) and writeSelectionState's own catch (:202) -- are both
     //      unreachable from probe, which never writes.
     //   3. Every runGit call site inside resolveRef (src/upstream.ts) can
     //      reject instead of resolving. On the non-ENOENT arm of

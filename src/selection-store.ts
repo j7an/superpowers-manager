@@ -1,11 +1,7 @@
 import { constants } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  atomicWriteFile,
-  type AtomicErrorDetails,
-  type AtomicWriteHooks,
-} from "./atomic.ts";
+import { atomicWriteFile, type AtomicWriteHooks } from "./atomic.ts";
 import { classifyPathNoFollow, type NoFollowPathType } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 import {
@@ -181,23 +177,6 @@ async function ensureStateDirectory(path: string): Promise<void> {
   }
 }
 
-async function finalStateDiagnostic(
-  path: string,
-  finalBytes: Uint8Array | undefined,
-): Promise<string> {
-  try {
-    const record =
-      finalBytes === undefined
-        ? await readSelectionState(path)
-        : parseRecordBytes(path, finalBytes);
-    return record === null
-      ? "selection state is now absent"
-      : `selection state is now ${record.mode}`;
-  } catch (cause) {
-    return `final selection state cannot be validated: ${errorText(cause)}`;
-  }
-}
-
 export async function writeSelectionState(
   path: string,
   proposed: SelectionRecord,
@@ -216,19 +195,8 @@ export async function writeSelectionState(
       },
     });
   } catch (cause) {
-    const details =
-      cause instanceof SafetyError && cause.module === "atomic"
-        ? (cause.details as AtomicErrorDetails | undefined)
-        : undefined;
-    if (details?.phase !== "post-replacement") {
-      throw selectionError(
-        `cannot write selection state: ${causedErrorText(cause)}`,
-        cause,
-      );
-    }
-    const diagnostic = await finalStateDiagnostic(path, details.finalBytes);
     throw selectionError(
-      `cannot complete selection state write: ${causedErrorText(cause)}; ${diagnostic}`,
+      `cannot write selection state: ${causedErrorText(cause)}`,
       cause,
     );
   }

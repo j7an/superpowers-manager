@@ -5,7 +5,6 @@ import {
   readdir,
   readFile,
   rename,
-  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -88,46 +87,6 @@ void test("FS-SELECTION-ATOMIC-01 rename failure is pre-replacement and leaves p
     ),
     [],
   );
-});
-
-void test("FS-SELECTION-POST-REPLACE-01 post-replacement failure reports bytes that landed", async (t) => {
-  const directory = scratch(t, "spw-atomic-");
-  const target = join(directory, "selection.json");
-  const payload = Buffer.from("after");
-  const error = await safetyFailure(
-    atomicWriteFile(target, payload, {
-      validate: async () => {},
-      hooks: {
-        afterReplace: async () => {
-          throw new Error("uncertain completion");
-        },
-      },
-    }),
-  );
-  assert.ok(error.details);
-  assert.equal(error.details.phase, "post-replacement");
-  assert.ok(error.details.finalBytes);
-  assert.deepEqual(Buffer.from(error.details.finalBytes), payload);
-  assert.deepEqual(await readFile(target), payload);
-});
-
-void test("FS-SELECTION-POST-REPLACE-01 omits final bytes when post-replacement read fails", async (t) => {
-  const directory = scratch(t, "spw-atomic-");
-  const target = join(directory, "selection.json");
-  const error = await safetyFailure(
-    atomicWriteFile(target, Buffer.from("after"), {
-      validate: async () => {},
-      hooks: {
-        afterReplace: async () => {
-          await rm(target);
-          throw new Error("uncertain completion");
-        },
-      },
-    }),
-  );
-  assert.ok(error.details);
-  assert.equal(error.details.phase, "post-replacement");
-  assert.equal("finalBytes" in error.details, false);
 });
 
 void test("FS-SELECTION-CONCURRENT-01 concurrent writers leave one complete payload", async (t) => {

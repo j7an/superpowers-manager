@@ -208,36 +208,6 @@ void test("FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state
   );
 });
 
-void test("FS-SELECTION-POST-REPLACE-01 selection write reports final landed mode", async (t) => {
-  const directory = scratch(t, "spw-selection-");
-  const target = join(directory, "selection.json");
-  const error = await selectionFailure(
-    writeSelectionState(
-      target,
-      {
-        schema_version: 1,
-        mode: "pinned",
-        source: "https://example.invalid/repo",
-        requested_ref: "v1.2.3",
-        resolved_ref: "v1.2.3",
-        commit,
-      },
-      {
-        hooks: {
-          afterReplace: async () => {
-            throw new Error("completion uncertain");
-          },
-        },
-      },
-    ),
-  );
-  assert.match(
-    error.message,
-    /^cannot complete selection state write: .*; selection state is now pinned$/,
-  );
-  assert.equal((await readSelectionState(target))?.mode, "pinned");
-});
-
 void test("selection reader preserves frozen malformed-JSON and UTF-8 classifications", async (t) => {
   const directory = scratch(t, "spw-selection-");
   const target = join(directory, "selection.json");
