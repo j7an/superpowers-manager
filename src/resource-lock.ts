@@ -25,7 +25,7 @@ export interface ResourceCoordinator {
   ): Promise<T>;
 }
 
-export interface ResourceObservation {
+interface ResourceObservation {
   readonly resource: string;
   readonly state: "idle" | "owned" | "busy" | "uninspectable";
   readonly markerIdentity: string;

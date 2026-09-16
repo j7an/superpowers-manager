@@ -9,22 +9,21 @@ import type { EffectiveSelection } from "../effective-selection.ts";
 import type {
   Output,
   PreparedArtifact,
-  InstallReceipt,
   InstallTransaction,
 } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import {
-  gatherProbe,
-  replayOutcome,
-  validInstalled,
-  validOutput,
-} from "./probe.ts";
+  GatherFailure,
+  callAdapter,
+  type AdapterCall,
+} from "./adapter-call.ts";
+import { gatherProbe, replayOutcome } from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
 import { runWithMutation } from "./mutation.ts";
 import { activationBlock } from "../harness-compatibility.ts";
 
-function writeOutput(
+export function writeOutput(
   output: Output,
   ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
 ): void {
@@ -32,77 +31,23 @@ function writeOutput(
   for (const line of output.stderr) ctx.stderr.write(`${line}\n`);
 }
 
-type StageResult<T> =
-  | {
-      readonly ok: true;
-      readonly result: {
-        readonly status: 0;
-        readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
-      };
-    }
-  | {
-      readonly ok: false;
-      readonly message: string | null;
-      readonly result: AdapterResult<T> | null;
-    };
-
 async function invoke<T>(
   call: () => Promise<AdapterResult<T>>,
   failure: { readonly unexpected: string; readonly invalidStatus: string },
   outcomes: AdapterOutcome<unknown>[],
-  valid: (value: T) => boolean = () => true,
-): Promise<StageResult<T>> {
-  let result: AdapterResult<T>;
-  try {
-    result = await call();
-    if (
-      !result ||
-      !Number.isInteger(result.status) ||
-      !result.outcome ||
-      typeof result.outcome.ok !== "boolean" ||
-      typeof result.outcome.operation !== "string" ||
-      !Array.isArray(result.outcome.messages) ||
-      !result.outcome.messages.every(
-        (message) =>
-          message &&
-          (message.channel === "stdout" || message.channel === "stderr") &&
-          typeof message.text === "string",
-      ) ||
-      (result.outcome.ok
-        ? result.outcome.error !== null || !valid(result.outcome.result)
-        : !result.outcome.error ||
-          typeof result.outcome.error.code !== "string" ||
-          typeof result.outcome.error.message !== "string" ||
-          !Array.isArray(result.outcome.error.hints) ||
-          !result.outcome.error.hints.every((hint) => typeof hint === "string"))
-    ) {
-      return { ok: false, message: failure.invalidStatus, result: null };
+  acceptValue?: (value: T) => boolean,
+): Promise<AdapterCall<T>> {
+  let result = await callAdapter(call, failure);
+  if (result.ok && acceptValue !== undefined) {
+    try {
+      if (!acceptValue(result.result.outcome.result))
+        result = { ok: false, result: null, message: failure.invalidStatus };
+    } catch {
+      result = { ok: false, result: null, message: failure.invalidStatus };
     }
-  } catch {
-    return { ok: false, message: failure.unexpected, result: null };
   }
-  outcomes.push(result.outcome);
-  const outcome = result.outcome;
-  if (result.status !== 0 || !outcome.ok) {
-    return {
-      ok: false,
-      message: outcome.ok ? failure.invalidStatus : null,
-      result,
-    };
-  }
-  return {
-    ok: true,
-    result: { status: result.status, outcome },
-  };
-}
-
-function validReceipt(value: InstallReceipt): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    validOutput(value.missingVerificationOutput) &&
-    validOutput(value.mismatchVerificationOutput)
-  );
+  if (result.result !== null) outcomes.push(result.result.outcome);
+  return result;
 }
 
 // withWorkspace can throw AFTER its callback has already returned a fully
@@ -112,19 +57,7 @@ function validReceipt(value: InstallReceipt): boolean {
 // stays reserved for mkdtemp failure (nothing collected yet) and the
 // callback's own throw (never reachable here; see gatherInstallStages).
 // Carries the outcomes collected so far so runInstall's catch can still
-// replay them instead of discarding them with a bare re-throw. Same shape as
-// src/commands/uninstall.ts's GatherFailure, duplicated for the same reason
-// invoke() is: no shared dependency between the two modules.
-class GatherFailure extends Error {
-  readonly inner: unknown;
-  readonly outcomes: readonly AdapterOutcome<unknown>[];
-
-  constructor(inner: unknown, outcomes: readonly AdapterOutcome<unknown>[]) {
-    super("install gather failed");
-    this.inner = inner;
-    this.outcomes = outcomes;
-  }
-}
+// replay them instead of discarding them with a bare re-throw.
 
 type StageOutcome =
   | {
@@ -253,7 +186,6 @@ async function gatherInstallStages<R>(
           () => ctx.adapter.install(artifact, adapterContext),
           installFailure,
           outcomes,
-          validReceipt,
         );
         if (!install.ok) return failed(install.message);
         let transaction: InstallTransaction | undefined;
@@ -303,7 +235,6 @@ async function gatherInstallStages<R>(
           () => ctx.adapter.inspectInstalled(selection, adapterContext),
           inspectionFailure,
           outcomes,
-          validInstalled,
         );
         const inspection = inspected.result;
         const verified =
@@ -327,7 +258,6 @@ async function gatherInstallStages<R>(
               () => ctx.adapter.inspectInstalled(selection, adapterContext),
               inspectionFailure,
               outcomes,
-              validInstalled,
             );
             const restoration = restored.ok
               ? `installed state after rollback: ${restored.result.outcome.result.kind}; identity=${restored.result.outcome.result.observedIdentity}`
@@ -369,7 +299,6 @@ async function gatherInstallStages<R>(
               () => ctx.adapter.inspectInstalled(selection, adapterContext),
               inspectionFailure,
               outcomes,
-              validInstalled,
             );
             return {
               kind: "verified",
@@ -418,7 +347,7 @@ async function gatherInstallStages<R>(
     // Reachable only for mkdtemp failure (nothing collected yet) -- the
     // callback above never throws, so a post-success cleanup failure is
     // already handled by onCleanupFailure and cannot reach here.
-    throw new GatherFailure(cause, outcomes);
+    throw new GatherFailure("install gather failed", cause, outcomes);
   }
 }
 
@@ -451,7 +380,7 @@ async function performInstall<R>(
     // runs only after this try/catch has resolved.
     //
     // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:469-527::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:299::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first. Because both consumers wrap the identical
     // function, its long comment there enumerates exactly what can reach THIS
     // stream too, including the three foreign-text exceptions at :251-296:

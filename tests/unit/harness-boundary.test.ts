@@ -80,15 +80,8 @@ void test("shared install settles every transaction exit while retaining mutatio
     "throw",
     "failed",
     "nonzero",
-    "malformed",
   ] as const) {
-    for (const settlement of [
-      "ok",
-      "throw",
-      "failed",
-      "nonzero",
-      "malformed",
-    ] as const) {
+    for (const settlement of ["ok", "throw", "failed", "nonzero"] as const) {
       await t.test(`${inspection}/${settlement}`, async (t) => {
         const fixture = await createHarnessFixture(t);
         const statePath = join(fixture.ctx.root, "installed-state");
@@ -109,8 +102,6 @@ void test("shared install settles every transaction exit while retaining mutatio
           assert.doesNotMatch(fixture.out.text(), /fixture installed/);
           if (settlement === "throw")
             throw new Error("private settlement failure");
-          if (settlement === "malformed")
-            return null as unknown as AdapterResult<null>;
           if (settlement === "failed")
             return failureResult(kind, "failed", "settlement failed", [], []);
           if (settlement === "nonzero")
@@ -153,12 +144,6 @@ void test("shared install settles every transaction exit while retaining mutatio
             }
             if (inspection === "throw")
               throw new Error("private inspection failure");
-            if (inspection === "malformed")
-              return successResult(
-                "inspect",
-                null as unknown as InstalledState,
-                [],
-              );
             if (inspection === "failed")
               return failureResult(
                 "inspect",
@@ -1166,180 +1151,52 @@ void test("probe performs only the four read-only inspections", async (t) => {
   );
 });
 
-void test("probe rejects malformed successful payloads at every existing observation boundary", async (t) => {
-  const cases = [
-    ["prepared", "initial"],
-    ["prepared", "closing"],
-    ["installed", "initial"],
-    ["installed", "closing"],
-    ["ownership", "initial"],
-    ["control", "initial"],
-    ["control", "closing"],
-  ] as const;
-  for (const [stage, phase] of cases) {
-    await t.test(`${stage}/${phase}`, async (t) => {
-      const fixture = await createHarnessFixture(t);
-      const reads = {
-        prepared: 0,
-        installed: 0,
-        ownership: 0,
-        control: 0,
-      };
-      const targetRead = phase === "initial" ? 1 : 2;
-      const privatePayloadFailure = new Error(
-        `private ${stage} payload failure`,
-      );
-      const malformed =
-        phase === "initial"
-          ? null
-          : new Proxy(
-              {},
-              {
-                get() {
-                  throw privatePayloadFailure;
-                },
-              },
-            );
-      const messages = [
-        {
-          channel: "stdout" as const,
-          text: `fixture ${stage} diagnostic`,
-        },
-      ];
-      const corrupt = <T>(operation: string, value: T): AdapterResult<T> =>
-        successResult(operation, value, messages);
-      const adapter = {
-        ...fixture.adapter,
-        ...fixture.methods,
-        presentation: {
-          ...fixture.adapter.presentation,
-          callFailure(
-            site: Parameters<
-              typeof fixture.adapter.presentation.callFailure
-            >[0],
-          ) {
-            return {
-              unexpected: `unexpected ${site} inspection failure`,
-              invalidStatus: `invalid ${site} inspection payload`,
-            };
-          },
-        },
-        async inspectPrepared(
-          selection: typeof fixture.selection,
-          adapterContext: Parameters<typeof fixture.methods.inspectPrepared>[1],
-        ): Promise<AdapterResult<PreparedState>> {
-          const result = await fixture.methods.inspectPrepared(
-            selection,
-            adapterContext,
-          );
-          reads.prepared += 1;
-          return stage === "prepared" && reads.prepared === targetRead
-            ? corrupt("inspect-prepared", malformed as PreparedState)
-            : result;
-        },
-        async inspectInstalled(
-          selection: typeof fixture.selection,
-          adapterContext: Parameters<
-            typeof fixture.methods.inspectInstalled
-          >[1],
-        ): Promise<AdapterResult<InstalledState>> {
-          const result = await fixture.methods.inspectInstalled(
-            selection,
-            adapterContext,
-          );
-          reads.installed += 1;
-          return stage === "installed" && reads.installed === targetRead
-            ? corrupt("inspect-installed", malformed as InstalledState)
-            : result;
-        },
-        async inspectOwnership(
-          adapterContext: Parameters<
-            typeof fixture.methods.inspectOwnership
-          >[0],
-        ): Promise<AdapterResult<OwnershipInspection<never>>> {
-          const result = await fixture.methods.inspectOwnership(adapterContext);
-          reads.ownership += 1;
-          return stage === "ownership" && reads.ownership === targetRead
-            ? corrupt(
-                "inspect-ownership",
-                malformed as OwnershipInspection<never>,
-              )
-            : (result as AdapterResult<OwnershipInspection<never>>);
-        },
-        async inspectUpdateControl(
-          adapterContext: Parameters<
-            typeof fixture.methods.inspectUpdateControl
-          >[0],
-        ): Promise<AdapterResult<UpdateControlInspection>> {
-          const result =
-            await fixture.methods.inspectUpdateControl(adapterContext);
-          reads.control += 1;
-          return stage === "control" && reads.control === targetRead
-            ? corrupt("inspect-control", malformed as UpdateControlInspection)
-            : result;
-        },
-      };
-
-      assert.equal(
-        await runProbe([], { ...fixture.ctx, adapter }),
-        1,
-        `${stage}/${phase}`,
-      );
-      assert.equal(
-        fixture.out.text(),
-        phase === "initial" ? `fixture ${stage} diagnostic\n` : "",
-      );
-      assert.equal(
-        fixture.err.text(),
-        stage === "prepared"
-          ? "error: adapter reported a failure status for prepared harness inspection\n"
-          : `error: invalid probe-${stage} inspection payload\n`,
-      );
-      assert.doesNotMatch(
-        fixture.err.text(),
-        /private .* payload failure|Cannot read properties/,
-      );
-    });
-  }
-
-  for (const recoveryState of [null, "other", true] as const) {
-    await t.test(
-      `control/recovery-state-${String(recoveryState)}`,
-      async (t) => {
-        const fixture = await createHarnessFixture(t);
-        const adapter = {
-          ...fixture.adapter,
-          ...fixture.methods,
-          async inspectUpdateControl(
-            adapterContext: Parameters<
-              typeof fixture.methods.inspectUpdateControl
-            >[0],
-          ): Promise<AdapterResult<UpdateControlInspection>> {
-            const result =
-              await fixture.methods.inspectUpdateControl(adapterContext);
-            assert.ok(result.outcome.ok);
-            return successResult(
-              result.outcome.operation,
-              {
-                ...result.outcome.result,
-                recoveryState,
-              } as unknown as UpdateControlInspection,
-              result.outcome.messages,
-            );
-          },
-        };
-
-        assert.equal(await runProbe([], { ...fixture.ctx, adapter }), 1);
-        assert.equal(fixture.out.text(), "");
-        assert.equal(
-          fixture.err.text(),
-          "error: invalid test adapter status\n",
-        );
-        assert.equal(fixture.calls.includes("install"), false);
-        assert.equal(fixture.calls.includes("remove"), false);
+void test("probe rejects marker-only changes", async (t) => {
+  const f = await createHarnessFixture(t);
+  let reads = 0;
+  const result = await gatherProbe({
+    ...f.ctx,
+    adapter: { ...f.adapter, ...f.methods },
+    coordination: {
+      ...f.ctx.coordination,
+      async observeResources(paths: readonly string[]) {
+        reads += 1;
+        return paths.map((resource) => ({
+          resource,
+          state: "owned" as const,
+          markerIdentity: String(reads),
+        }));
       },
-    );
-  }
+    },
+  });
+  assert.equal(result.status, 1);
+  if (result.status !== 1) assert.fail("expected inconsistent observation");
+  assert.equal(
+    result.message,
+    "harness state changed during observation; retry for a coherent probe",
+  );
+  assert.equal(f.calls.includes("install"), false);
+});
+
+void test("probe rejects typed recovery evidence with allowed decisions", async (t) => {
+  const f = await createHarnessFixture(t);
+  const control: UpdateControlInspection = {
+    ...f.control,
+    recoveryState: "required",
+  };
+  const result = await gatherProbe({
+    ...f.ctx,
+    adapter: {
+      ...f.adapter,
+      ...f.methods,
+      inspectUpdateControl: async () =>
+        successResult("inspect-control", control, []),
+    },
+  });
+  assert.equal(result.status, 1);
+  if (result.status !== 1) assert.fail("expected recovery inconsistency");
+  assert.equal(result.message, "invalid test adapter status");
+  assert.equal(f.calls.includes("install"), false);
 });
 
 void test("probe keeps the generic removal capability opaque", async (t) => {

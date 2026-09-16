@@ -7,42 +7,22 @@ import { oneLine } from "../cli-arguments.ts";
 import type { Output } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
+import {
+  GatherFailure,
+  callAdapter,
+  type AdapterCall,
+} from "./adapter-call.ts";
 import { runWithMutation } from "./mutation.ts";
 import { replayOutcome } from "./probe.ts";
-
-type StageResult<T> =
-  | {
-      readonly ok: true;
-      readonly result: {
-        readonly status: 0;
-        readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
-      };
-    }
-  | { readonly ok: false; readonly message: string | null };
 
 async function invoke<T>(
   call: () => Promise<AdapterResult<T>>,
   failure: { readonly unexpected: string; readonly invalidStatus: string },
   outcomes: AdapterOutcome<unknown>[],
-): Promise<StageResult<T>> {
-  let result: AdapterResult<T>;
-  try {
-    result = await call();
-  } catch {
-    return { ok: false, message: failure.unexpected };
-  }
-  outcomes.push(result.outcome);
-  const outcome = result.outcome;
-  if (result.status !== 0 || !outcome.ok) {
-    return {
-      ok: false,
-      message: outcome.ok ? failure.invalidStatus : null,
-    };
-  }
-  return {
-    ok: true,
-    result: { status: result.status, outcome },
-  };
+): Promise<AdapterCall<T>> {
+  const result = await callAdapter(call, failure);
+  if (result.result !== null) outcomes.push(result.result.outcome);
+  return result;
 }
 
 type UninstallOutcome =
@@ -73,16 +53,6 @@ type UninstallOutcome =
 // warning as data, so the computed UninstallOutcome survives it. The
 // outcome-carrying is still load-bearing for mkdtemp, and the shape stays
 // identical to src/commands/install.ts's GatherFailure.
-class GatherFailure extends Error {
-  readonly inner: unknown;
-  readonly outcomes: readonly AdapterOutcome<unknown>[];
-
-  constructor(inner: unknown, outcomes: readonly AdapterOutcome<unknown>[]) {
-    super("uninstall gather failed");
-    this.inner = inner;
-    this.outcomes = outcomes;
-  }
-}
 
 // Mirrors src/commands/install.ts's StageRun, and for the same reason:
 // carries a post-success workspace-removal failure WITHOUT discarding the
@@ -211,7 +181,7 @@ async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
     // cannot reach here. Wrapping with `outcomes` anyway keeps the class
     // total over its declared contract rather than assuming the callback's
     // purity at the throw site.
-    throw new GatherFailure(cause, outcomes);
+    throw new GatherFailure("uninstall gather failed", cause, outcomes);
   }
 }
 

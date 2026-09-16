@@ -6,20 +6,11 @@
 // is also why update opens no temporary workspace of its own -- there is no
 // mutation here for one to protect.
 import { oneLine } from "../cli-arguments.ts";
-import type { Output } from "../harness.ts";
 import type { CommandContext } from "./context.ts";
+import { runInstall, writeOutput } from "./install.ts";
 import { gatherProbe, replayOutcome } from "./probe.ts";
-import { runInstall } from "./install.ts";
 import { runPrepare } from "./prepare.ts";
 import { runWithMutation } from "./mutation.ts";
-
-function writeOutput(
-  output: Output,
-  ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
-): void {
-  for (const line of output.stdout) ctx.stdout.write(`${line}\n`);
-  for (const line of output.stderr) ctx.stderr.write(`${line}\n`);
-}
 
 export async function runUpdate<R>(
   argv: readonly string[],
@@ -48,7 +39,7 @@ async function performUpdate<R>(
     // install's NOTE line.
     //
     // This is a THIRD consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:469-527::THREE exceptions, all inherited and none a regression:`'s
+    // `src/commands/probe.ts:299::THREE exceptions, all inherited and none a regression:`'s
     // runProbe catch is the first and src/commands/install.ts's runInstall catch
     // is the second. Because all three wrap the identical function, runProbe's
     // long comment there enumerates exactly what can reach this stream too; not

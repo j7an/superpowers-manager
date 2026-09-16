@@ -46,5 +46,11 @@ Use typed outcomes, existing diagnostic helpers, and hermetic tests. Native
 output and filesystem contents still require validation. Do not place raw
 validator streams through AdapterMessageLog.
 
+The harness interface is an internal typed boundary. Shared commands do not
+repeat runtime shape validation for successful interface payloads; they keep
+semantic acceptance checks where command invariants require them. Concrete
+harnesses continue to validate external/native data before constructing those
+typed payloads.
+
 See the [internal interface](../src/harness.ts) and the
 [boundary acceptance tests](../tests/unit/harness-boundary.test.ts).

@@ -2010,24 +2010,14 @@ async function seedLifecycleManagerState(
  * The real adapter's update-control view is hardcoded to "managed"
  * (`codexInspectControl` in src/harnesses/codex/adapter.ts), which is why interception is needed at all
  * and why the third subcase needs none.
- *
- * `"malformed"` supplies a well-formed outcome whose typed control payload is
- * malformed, which `src/commands/probe.ts`'s `inspect()` fails closed on.
- *
  * Carries a `calls` array so it satisfies the same shape `caseContext` takes
  * from `recordingAdapter` (tests/bin/command-context.js).
  */
-function updateControlAdapter(response: UpdateControlInspection | "malformed") {
+function updateControlAdapter(response: UpdateControlInspection) {
   return {
     ...codexHarness,
     async inspectUpdateControl() {
-      return successResult(
-        "inspect",
-        response === "malformed"
-          ? ({ presentationValue: 42 } as never)
-          : response,
-        [],
-      );
+      return successResult("inspect", response, []);
     },
   };
 }
@@ -2049,21 +2039,6 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
     // operation other than the intercepted view goes to the real typed Codex engine,
     // which execs that fake, so the mutation claim is made against the same
     // channel the third subcase below uses.
-    assertNoCodexMutation(codexOperations(c));
-  }
-
-  {
-    const c = lifecycleCodexCase({ fakes: "install" });
-    const { ctx, stdout, stderr } = caseContext(c, {
-      adapter: updateControlAdapter("malformed"),
-    });
-    const status = await runUpdate([], ctx);
-    const out = stdout() + stderr();
-    assert.notEqual(status, 0, `expected update to fail:\n${out}`);
-    assert.match(
-      stderr(),
-      /adapter reported a failure status for inspect --view update-control/,
-    );
     assertNoCodexMutation(codexOperations(c));
   }
 

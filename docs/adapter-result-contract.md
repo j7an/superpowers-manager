@@ -14,6 +14,13 @@ The concrete Codex harness calls the typed Codex operation engines directly.
 Those engines return the lifecycle payload types shared commands consume. There
 is no argv-based compatibility dispatcher or shape-normalization layer.
 
+Shared commands trust those internal TypeScript payload shapes and only classify
+the typed result envelope as success, controlled failure, nonzero status, or a
+thrown call. They retain semantic checks that relate otherwise valid values,
+such as recovery evidence requiring blocked control decisions and a transaction
+settlement returning `null`. Native command output, filesystem contents, saved
+state, and other external inputs remain parsed and validated at their boundary.
+
 ## Messages and errors
 
 Each message object has exactly `channel` and `text`. `channel` is `stdout` or

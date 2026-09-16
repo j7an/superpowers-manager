@@ -253,7 +253,7 @@ void test("install verification reports an undetectable fingerprint and its own 
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
   // the typed installed-state absence contract
-  // (`src/harness.ts:58::| { readonly kind: "absent"; readonly observedIdentity: "" }`).
+  // (`src/harness.ts:57::| { readonly kind: "absent"; readonly observedIdentity: "" }`).
   const desired = "f".repeat(40);
   const receipt = ok(codexInstallReceipt("codex reported nothing", ""));
   const inspection = ok({ kind: "absent", observedIdentity: "" });

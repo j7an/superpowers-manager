@@ -5,19 +5,13 @@ import {
 } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
-import type { Compatibility } from "../harness-compatibility.ts";
 import type {
-  Decision,
   FailureSite,
-  InstalledState,
-  Output,
-  OwnershipInspection,
-  PreparedArtifact,
-  PreparedState,
   ProbeSnapshot,
   UpdateControlInspection,
 } from "../harness.ts";
 import type { CommandContext } from "./context.ts";
+import { callAdapter, type AdapterCall } from "./adapter-call.ts";
 
 export const PROBE_USAGE =
   "error: usage: superpowers-manager probe [--porcelain]\n";
@@ -57,187 +51,12 @@ export function replayOutcome(
   writeAdapterFailure(ctx, outcome);
 }
 
-type SuccessfulAdapterResult<T> = {
-  readonly status: 0;
-  readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
-};
-
-type Inspection<T> =
-  | {
-      readonly ok: true;
-      readonly result: SuccessfulAdapterResult<T>;
-    }
-  | {
-      readonly ok: false;
-      // null when the outcome's own error already carries the diagnostic --
-      // replayOutcome emits it, and adding a second line would duplicate it.
-      readonly message: string | null;
-      readonly result: AdapterResult<T> | null;
-    };
-
-function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-export function validOutput(value: Output): boolean {
-  const candidate = record(value);
+function coherentControl(value: UpdateControlInspection): boolean {
   return (
-    candidate !== null &&
-    Array.isArray(candidate.stdout) &&
-    candidate.stdout.every((line) => typeof line === "string") &&
-    Array.isArray(candidate.stderr) &&
-    candidate.stderr.every((line) => typeof line === "string")
+    value.recoveryState !== "required" ||
+    (value.probeEligibility.kind === "blocked" &&
+      value.mutationEligibility.kind === "blocked")
   );
-}
-
-function validDecision(value: Decision): boolean {
-  const candidate = record(value);
-  return (
-    candidate !== null &&
-    (candidate.kind === "allowed" ||
-      (candidate.kind === "blocked" && validOutput(candidate.output as Output)))
-  );
-}
-
-function validCompatibility(value: Compatibility): boolean {
-  const candidate = record(value);
-  if (
-    candidate === null ||
-    typeof candidate.reason !== "string" ||
-    (candidate.kind !== "unknown" &&
-      candidate.kind !== "supported" &&
-      candidate.kind !== "experimental" &&
-      candidate.kind !== "unsupported")
-  )
-    return false;
-  return (
-    (candidate.kind !== "supported" && candidate.kind !== "experimental") ||
-    typeof candidate.generation === "string"
-  );
-}
-
-function validPreparedArtifact(value: PreparedArtifact): boolean {
-  const candidate = record(value);
-  return (
-    candidate !== null &&
-    typeof candidate.root === "string" &&
-    typeof candidate.commit === "string" &&
-    typeof candidate.identity === "string" &&
-    validCompatibility(candidate.compatibility as Compatibility)
-  );
-}
-
-function validPrepared(value: PreparedState): boolean {
-  const candidate = record(value);
-  return (
-    candidate !== null &&
-    typeof candidate.observedIdentity === "string" &&
-    validCompatibility(candidate.compatibility as Compatibility) &&
-    (candidate.kind === "needs-prepare" ||
-      (candidate.kind === "current" &&
-        validPreparedArtifact(candidate.artifact as PreparedArtifact)))
-  );
-}
-
-export function validInstalled(value: InstalledState): boolean {
-  const candidate = record(value);
-  return (
-    candidate !== null &&
-    (candidate.kind === "current" ||
-      candidate.kind === "mismatch" ||
-      candidate.kind === "absent") &&
-    typeof candidate.observedIdentity === "string" &&
-    (candidate.kind !== "absent" || candidate.observedIdentity === "")
-  );
-}
-
-function validOwnership<R>(value: OwnershipInspection<R>): boolean {
-  const candidate = record(value);
-  return (
-    candidate !== null &&
-    validDecision(candidate.installEligibility as Decision) &&
-    Object.prototype.hasOwnProperty.call(candidate, "removalInput") &&
-    validDecision(candidate.removalVerification as Decision) &&
-    validOutput(candidate.postRemovalOutput as Output) &&
-    typeof candidate.presentationValue === "string" &&
-    (candidate.presentationConflicts === undefined ||
-      (Array.isArray(candidate.presentationConflicts) &&
-        candidate.presentationConflicts.every(
-          (conflict) => typeof conflict === "string",
-        )))
-  );
-}
-
-function validControl(value: UpdateControlInspection): boolean {
-  const candidate = record(value);
-  return (
-    candidate !== null &&
-    validDecision(candidate.probeEligibility as Decision) &&
-    validDecision(candidate.mutationEligibility as Decision) &&
-    typeof candidate.presentationValue === "string" &&
-    (candidate.recoveryState === undefined ||
-      (candidate.recoveryState === "required" &&
-        (candidate.probeEligibility as Decision).kind === "blocked" &&
-        (candidate.mutationEligibility as Decision).kind === "blocked"))
-  );
-}
-
-// `runCodexOperation` reports a CONTROLLED failure by RETURN VALUE, not by throwing
-// (`src/adapter-result.ts:32-35::export interface AdapterResult`). The shell got
-// fail-closed behaviour for free: spw_invoke_adapter returned 1 and
-// scripts/probe ran under `set -eu`.
-// Omitting the status check here would read a failed inspection as absent
-// evidence and report it as success.
-//
-// It does still THROW for a non-AdapterFailure cause (runCodexOperation's closing
-// `throw cause`, src/harnesses/codex/adapter.ts). That is caught here rather than in runProbe's
-// outer catch, because the two need different diagnostics -- see spec §3.3a.
-//
-// Reached through ctx.adapter, not a direct module-level dependency on the
-// adapter module: src/commands/prepare.ts and this module are the two the
-// injected double must observe, because install reaches the adapter through
-// gatherProbe and runPrepare. Spec §4.5.
-async function inspect<T>(
-  call: () => Promise<AdapterResult<T>>,
-  unexpected: string,
-  invalidStatus: string,
-  valid: (value: T) => boolean,
-): Promise<Inspection<T>> {
-  let result: AdapterResult<T>;
-  try {
-    result = await call();
-    if (
-      !result ||
-      !Number.isInteger(result.status) ||
-      !result.outcome ||
-      typeof result.outcome.ok !== "boolean" ||
-      !Array.isArray(result.outcome.messages)
-    )
-      return { ok: false, result: null, message: invalidStatus };
-  } catch {
-    return { ok: false, result: null, message: unexpected };
-  }
-  const outcome = result.outcome;
-  if (result.status !== 0 || !outcome.ok) {
-    // The `outcome.ok && status !== 0` combination cannot arise from
-    // successResult/failureResult, so it gets its own hand-written message
-    // rather than falling through to a replay that would print nothing.
-    return {
-      ok: false,
-      result,
-      message: outcome.ok ? invalidStatus : null,
-    };
-  }
-  try {
-    if (!valid(outcome.result)) {
-      return { ok: false, result, message: invalidStatus };
-    }
-  } catch {
-    return { ok: false, result, message: invalidStatus };
-  }
-  return { ok: true, result: { status: result.status, outcome } };
 }
 
 type ProbeOutcome<R> =
@@ -292,10 +111,18 @@ export async function gatherProbe<R>(
     call: () => Promise<AdapterResult<T>>,
     unexpected: string,
     invalidStatus: string,
-    valid: (value: T) => boolean,
+    acceptValue?: (value: T) => boolean,
     replaySuccess = true,
-  ): Promise<Inspection<T>> => {
-    const result = await inspect(call, unexpected, invalidStatus, valid);
+  ): Promise<AdapterCall<T>> => {
+    let result = await callAdapter(call, { unexpected, invalidStatus });
+    if (result.ok && acceptValue !== undefined) {
+      try {
+        if (!acceptValue(result.result.outcome.result))
+          result = { ok: false, result: result.result, message: invalidStatus };
+      } catch {
+        result = { ok: false, result: result.result, message: invalidStatus };
+      }
+    }
     if (result.result !== null && (replaySuccess || !result.result.outcome.ok))
       outcomes.push(result.result.outcome);
     return result;
@@ -305,7 +132,6 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectPrepared(selection, adapterContext),
     "cannot inspect prepared harness state",
     "adapter reported a failure status for prepared harness inspection",
-    validPrepared,
   );
   if (!prepared.ok) {
     return { status: 1, outcomes, message: prepared.message };
@@ -317,7 +143,6 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectInstalled(selection, adapterContext),
     installedFailure.unexpected,
     installedFailure.invalidStatus,
-    validInstalled,
   );
   if (!installed.ok) {
     return { status: 1, outcomes, message: installed.message };
@@ -333,7 +158,6 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectOwnership(adapterContext),
     ownershipFailure.unexpected,
     ownershipFailure.invalidStatus,
-    validOwnership,
   );
   if (!ownership.ok) {
     return { status: 1, outcomes, message: ownership.message };
@@ -343,7 +167,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectUpdateControl(adapterContext),
     controlFailure.unexpected,
     controlFailure.invalidStatus,
-    validControl,
+    coherentControl,
   );
   if (!control.ok) {
     return { status: 1, outcomes, message: control.message };
@@ -353,7 +177,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectPrepared(selection, adapterContext),
     "cannot inspect prepared harness state",
     "adapter reported a failure status for prepared harness inspection",
-    validPrepared,
+    undefined,
     false,
   );
   if (!preparedAfter.ok)
@@ -362,7 +186,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectInstalled(selection, adapterContext),
     installedFailure.unexpected,
     installedFailure.invalidStatus,
-    validInstalled,
+    undefined,
     false,
   );
   if (!installedAfter.ok)
@@ -371,7 +195,7 @@ export async function gatherProbe<R>(
     () => ctx.adapter.inspectUpdateControl(adapterContext),
     controlFailure.unexpected,
     controlFailure.invalidStatus,
-    validControl,
+    coherentControl,
     false,
   );
   if (!controlAfter.ok)
@@ -416,7 +240,6 @@ export async function gatherProbe<R>(
       ownership: ownership.result.outcome.result,
       control: control.result.outcome.result,
       compatibility: preparedState.compatibility,
-      resources: after,
       resourceState:
         control.result.outcome.result.recoveryState === "required"
           ? "recovery-required"
