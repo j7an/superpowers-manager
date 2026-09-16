@@ -44,7 +44,6 @@ import {
 import { applyManifestOverlay } from "./manifest-overlay.ts";
 import { readCodexBuildSource } from "../../provenance.ts";
 import type { JsonValue } from "../../strict-json.ts";
-import { isAcceptedSplitValue } from "../../validate-generated-plugin-cli.ts";
 import type {
   InstallReceipt,
   OwnershipInspection,
@@ -450,48 +449,6 @@ async function runBuild(
     );
   } catch {
     fail("invalid-provenance", "candidate provenance is missing or invalid");
-  }
-  // The seven values the validator CLI would receive in split form:
-  // --plugin-root, --requested-ref, --resolved-ref, --commit,
-  // --manifest-version, --manifest-source, --upstream-manifest-version.
-  // The eighth, --source, is passed attached, where argparse accepts any
-  // dash-leading value, so it is deliberately absent here. Each value is
-  // paired with the ADAPTER-facing flag name to report: --manager-version
-  // (the CLI calls it --manifest-version) and --plugin-root /
-  // --manifest-source (derived, not user-supplied) deliberately differ
-  // from the validator CLI's own names, since the operator can only act
-  // on the adapter's surface.
-  const splitValues: ReadonlyArray<{
-    readonly value: string;
-    readonly name: string;
-  }> = [
-    { value: candidateRoot, name: "--plugin-root" },
-    { value: input.requestedRef, name: "--requested-ref" },
-    { value: input.resolvedRef, name: "--resolved-ref" },
-    { value: input.commit, name: "--commit" },
-    { value: input.managerVersion, name: "--manager-version" },
-    { value: manifestSource, name: "--manifest-source" },
-    {
-      value: input.upstreamManifestVersion,
-      name: "--upstream-manifest-version",
-    },
-  ];
-  const firstRejected = splitValues.find(
-    ({ value }) => !isAcceptedSplitValue(value),
-  );
-  if (firstRejected !== undefined) {
-    // Declared exception to message-record parity: argparse wrote usage
-    // records here; this guard precedes the call and writes a
-    // differently-worded record naming the rejected flag instead. The
-    // failure code and message are unchanged.
-    const text =
-      "Generated plugin validation failed:\n" +
-      `- validator argument \`${firstRejected.name}\` has a dash-leading value the argument parser rejects\n`;
-    log.appendBytes("stderr", Buffer.from(text, "utf8"));
-    fail(
-      "generated-plugin-validation-failed",
-      "built-in generated plugin validation failed",
-    );
   }
   let errors: readonly string[];
   try {

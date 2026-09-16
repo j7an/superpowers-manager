@@ -143,10 +143,7 @@ void test("shared utilities and harnesses respect concrete ownership", () => {
   });
   const project = snapshot.getProjects()[0]!;
   const violations: string[] = [];
-  const entrypoints = new Set([
-    "src/cli.ts",
-    "src/validate-generated-plugin-cli.ts",
-  ]);
+  const entrypoints = new Set(["src/cli.ts"]);
   try {
     for (const importer of tsFiles("src")) {
       const source = project.program.getSourceFile(join(ROOT, importer));

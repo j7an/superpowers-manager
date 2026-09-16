@@ -12,7 +12,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { pythonStrip, pythonSplitlines } from "../../../../src/python-text.ts";
 import {
@@ -21,8 +20,6 @@ import {
 } from "../../../../src/skill-validation.ts";
 
 import * as generated from "../../../../src/harnesses/codex/generated-plugin.ts";
-
-import { isAcceptedSplitValue } from "../../../../src/validate-generated-plugin-cli.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -562,6 +559,16 @@ void test("tree validation reproduces the Python diagnostics", async (t) => {
   ]);
 });
 
+void test("required files retain validator ordering", async (t) => {
+  const { root } = await candidate(t);
+  await rm(join(root, "README.md"));
+  await rm(join(root, "LICENSE"));
+  assert.deepStrictEqual(
+    await generated.validateGeneratedPlugin(options(root)),
+    ["missing required file `LICENSE`", "missing required file `README.md`"],
+  );
+});
+
 void test("skills are enumerated in code-point order", async (t) => {
   const { root } = await candidate(t);
   await rm(join(root, "skills", "brainstorming"), { recursive: true });
@@ -968,240 +975,4 @@ void test("a provenance read error maps to the unreadable-UTF-8 diagnostic", asy
     errors.includes("provenance is unreadable UTF-8"),
     errors.join("|"),
   );
-});
-
-const CLI = fileURLToPath(
-  new URL("../../../../src/validate-generated-plugin-cli.ts", import.meta.url),
-);
-
-async function runCli(
-  argv: string[],
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [
-      CLI,
-      ...argv,
-    ]);
-    return { code: 0, stdout, stderr };
-  } catch (error) {
-    const failure = error as { code?: number; stdout: string; stderr: string };
-    return {
-      code: failure.code ?? 1,
-      stdout: failure.stdout,
-      stderr: failure.stderr,
-    };
-  }
-}
-
-function cliArgv(pluginRoot: string) {
-  return [
-    "--plugin-root",
-    pluginRoot,
-    "--source",
-    SOURCE,
-    "--requested-ref",
-    "latest-release",
-    "--resolved-ref",
-    "v6.1.1",
-    "--commit",
-    COMMIT,
-    "--manifest-version",
-    "6.1.1+manager.d884ae0",
-    "--manifest-source",
-    "upstream",
-    "--upstream-manifest-version",
-    "6.1.1",
-  ];
-}
-
-void test("CLI exit, stdout and stderr are exact", async (t) => {
-  const { root } = await candidate(t);
-
-  assert.deepStrictEqual(await runCli(cliArgv(root)), {
-    code: 0,
-    stdout: `generated plugin validation passed: ${root}\n`,
-    stderr: "",
-  });
-
-  // The raw argument is echoed, not the resolved path.
-  assert.equal(
-    (await runCli(cliArgv(`${root}/.`))).stdout,
-    `generated plugin validation passed: ${root}/.\n`,
-  );
-
-  await rm(join(root, "README.md"));
-  await rm(join(root, "LICENSE"));
-  assert.deepStrictEqual(await runCli(cliArgv(root)), {
-    code: 1,
-    stdout: "",
-    stderr:
-      "Generated plugin validation failed:\n" +
-      "- missing required file `LICENSE`\n" +
-      "- missing required file `README.md`\n",
-  });
-});
-
-void test("CLI accepts a reversed flag order and the equals form", async (t) => {
-  const { root } = await candidate(t);
-  const reversed = [
-    "--upstream-manifest-version",
-    "6.1.1",
-    "--manifest-source",
-    "upstream",
-    "--manifest-version",
-    "6.1.1+manager.d884ae0",
-    "--commit",
-    COMMIT,
-    "--resolved-ref",
-    "v6.1.1",
-    "--requested-ref",
-    "latest-release",
-    "--source",
-    SOURCE,
-    "--plugin-root",
-    root,
-  ];
-  assert.deepStrictEqual(await runCli(reversed), {
-    code: 0,
-    stdout: `generated plugin validation passed: ${root}\n`,
-    stderr: "",
-  });
-
-  // Attached form carrying a dash-leading value: production relies on this.
-  const attached = [
-    `--plugin-root=${root}`,
-    "--source=-upstream",
-    "--requested-ref=latest-release",
-    "--resolved-ref=v6.1.1",
-    `--commit=${COMMIT}`,
-    "--manifest-version=6.1.1+manager.d884ae0",
-    "--manifest-source=upstream",
-    "--upstream-manifest-version=6.1.1",
-  ];
-  const result = await runCli(attached);
-  assert.equal(result.code, 1, result.stderr);
-  assert.equal(
-    result.stderr,
-    "Generated plugin validation failed:\n" +
-      "- provenance field `source` does not match expected value\n",
-    "the attached dash-leading value must reach validation, not usage",
-  );
-});
-
-void test("CLI usage rejections exit 2 with an empty stdout and no traceback", async (t) => {
-  const { root } = await candidate(t);
-
-  for (const [argv, flag] of [
-    [
-      cliArgv(root).map((token) =>
-        token === "latest-release" ? "-foo" : token,
-      ),
-      "--requested-ref",
-    ],
-    [
-      cliArgv(root).map((token) => (token === "upstream" ? "sideways" : token)),
-      "--manifest-source",
-    ],
-    [cliArgv(`${root}/�`), "--plugin-root"],
-  ] as [string[], string][]) {
-    const result = await runCli(argv);
-    assert.equal(result.code, 2, `${flag}: ${result.stderr}`);
-    assert.equal(result.stdout, "");
-    assert.ok(result.stderr.includes(flag), result.stderr);
-    assert.ok(!result.stderr.includes("Traceback"), result.stderr);
-  }
-});
-
-void test("split dash-leading exceptions are accepted as argparse accepts them", async (t) => {
-  const { root } = await candidate(t);
-  for (const value of ["-", "-1", "-1.5", "-.5"]) {
-    const argv = cliArgv(root).map((token) =>
-      token === "latest-release" ? value : token,
-    );
-    const result = await runCli(argv);
-    assert.equal(result.code, 1, `${value}: ${result.stderr}`);
-    assert.equal(
-      result.stderr,
-      "Generated plugin validation failed:\n" +
-        "- provenance field `requested_ref` does not match expected value\n",
-      `${value} must reach validation, not usage`,
-    );
-  }
-});
-
-// Ground truth measured against CPython 3.11.15 `argparse` on 2026-07-29.
-// `_negative_number_matcher` is `^-\d+$|^-\d*\.\d+$`; CPython `\d` is Unicode
-// category Nd, JavaScript `\d` is ASCII-only.
-const DASH_LEADING_PARITY = [
-  { value: "-1", accepted: true, note: "ASCII integer" },
-  { value: "-0", accepted: true, note: "ASCII zero" },
-  { value: "-1.5", accepted: true, note: "ASCII fractional" },
-  { value: "-.5", accepted: true, note: "leading-dot fractional, \\d* empty" },
-  { value: "-١", accepted: true, note: "U+0661 ARABIC-INDIC ONE" },
-  { value: "-१", accepted: true, note: "U+0967 DEVANAGARI ONE" },
-  {
-    value: "-١.٥",
-    accepted: true,
-    note: "Unicode fractional, second alternative",
-  },
-  { value: "-", accepted: true, note: "bare dash" },
-  { value: "-𐒠", accepted: true, note: "U+104A0 OSMANYA ZERO, astral Nd" },
-  { value: "-x", accepted: false, note: "flag" },
-  { value: "--flagish", accepted: false, note: "long flag" },
-  { value: "-1a", accepted: false, note: "trailing non-digit" },
-  // Nd, not N: every other rejection row here is non-numeric, so widening
-  // `\p{Nd}` to `\p{N}` would break parity while keeping the table green.
-  // CPython 3.11.15 rejects both against `^-\d+$|^-\d*\.\d+$`.
-  { value: "-²", accepted: false, note: "U+00B2 category No, not Nd" },
-  { value: "-½", accepted: false, note: "U+00BD category No, not Nd" },
-  { value: "-Ⅳ", accepted: false, note: "U+2163 category Nl, not Nd" },
-];
-
-/**
- * Unicode-decimal values the helper, the CLI and the adapter must all accept.
- * Kept in sync by hand with the inline list in tests/unit/harnesses/codex/adapter.test.js —
- * adding a value in only one place makes it look covered at all three levels.
- */
-const UNICODE_ACCEPTED_VALUES = ["-١", "-१", "-١.٥"];
-
-void test("split dash-leading values match argparse", () => {
-  for (const { value, accepted, note } of DASH_LEADING_PARITY) {
-    assert.equal(
-      isAcceptedSplitValue(value),
-      accepted,
-      `${JSON.stringify(value)} (${note})`,
-    );
-  }
-});
-
-// INTENTIONAL DIVERGENCE — PR 8 divergence #1, not a defect.
-// `argparse` accepts a dash-leading token containing a space as a positional;
-// this port rejects it. Verified against CPython 3.11.15: `-x y` is accepted as
-// a value there. Both implementations reject the input overall, though this test
-// pins only the helper — the CLI surface is pinned separately by the
-// dash-leading exit-2 case above. Asserted explicitly so a later reader does not
-// "fix" the rejection into a regression.
-void test("a dash-leading token containing a space is rejected", () => {
-  assert.equal(isAcceptedSplitValue("-x y"), false);
-});
-
-// A helper-only table would let a call-site bypass regress while staying green,
-// so the same values are driven through the built CLI in split form. The
-// diagnostic is asserted exactly: reaching validation and failing there is the
-// only outcome that proves the value was not rejected as an option.
-void test("split Unicode-decimal values reach CLI validation", async (t) => {
-  const { root } = await candidate(t);
-  for (const value of UNICODE_ACCEPTED_VALUES) {
-    const argv = cliArgv(root).map((token) =>
-      token === "latest-release" ? value : token,
-    );
-    const result = await runCli(argv);
-    assert.equal(result.code, 1, `${value}: ${result.stderr}`);
-    assert.equal(
-      result.stderr,
-      "Generated plugin validation failed:\n" +
-        "- provenance field `requested_ref` does not match expected value\n",
-      `${value} must reach validation, not usage`,
-    );
-  }
 });

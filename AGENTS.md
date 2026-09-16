@@ -82,11 +82,8 @@ product integrations, not a required agent harness.
   command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
   (`src/cli-arguments.ts`) collapses CR/LF runs to spaces. That bounds the
   blast radius to one line; it is not a control-character defense, and on that
-  path this rule is the whole defense. It is the whole defense again wherever
-  a reader's diagnostics are written directly, reaching no escaper and no
-  catch: `src/validate-generated-plugin-cli.ts` writes the same
-  `src/harnesses/codex/generated-plugin.ts` `errors` entries straight to stderr. Reader
-  wrappers are frozen by tests, but by three different kinds of assertion —
+  path this rule is the whole defense. Reader wrappers are frozen by tests,
+  but by three different kinds of assertion —
   enumerate the pinning tests for the specific string before changing any of
   them:
   - `src/harnesses/codex/manifest-overlay.ts` — most diagnostics are asserted as
