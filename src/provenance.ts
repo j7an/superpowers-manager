@@ -104,8 +104,8 @@ export function generatedMetadataPath(root: string): string {
 // Ported from
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:33-37::spw_generated_commit_or_empty`.
 // Lenient by design: a missing or malformed generated provenance file yields
-// "", which `statusForCommits` reads as "needs prepare". Aborting here would
-// deny the operator the remediation path.
+// "", which the typed prepared-state flow reports as "needs prepare".
+// Aborting here would deny the operator the remediation path.
 export async function generatedCommitOrEmpty(root: string): Promise<string> {
   return readGeneratedCommitLenient(generatedMetadataPath(root));
 }

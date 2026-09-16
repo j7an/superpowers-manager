@@ -376,8 +376,8 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
   const out = capture();
   const err = capture();
   const { adapter, calls } = scriptedAdapter([
-    // update's own probe. No generated tree exists yet, so statusForCommits
-    // returns "needs prepare" whatever the installed fingerprint says.
+    // update's own probe. No generated tree exists yet, so the typed
+    // prepared-state flow reports "needs prepare" whatever the installed state says.
     successResult("inspect", installed("absent", ""), []),
     successResult("inspect", ownership("manager"), []),
     successResult("inspect", control("managed"), []),

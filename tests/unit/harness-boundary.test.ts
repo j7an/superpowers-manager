@@ -827,6 +827,38 @@ void test("a malformed saved selection stops before fetch or integration inspect
   );
 });
 
+void test("probe status preserves preparation-before-installation precedence", async (t) => {
+  for (const [preparedKind, installedKind, expected] of [
+    ["needs-prepare", "absent", "needs prepare"],
+    ["needs-prepare", "mismatch", "needs prepare"],
+    ["needs-prepare", "current", "needs prepare"],
+    ["current", "absent", "needs install"],
+    ["current", "mismatch", "needs install"],
+    ["current", "current", "current"],
+  ] as const) {
+    await t.test(`${preparedKind}/${installedKind}`, async (t) => {
+      const f = await createHarnessFixture(t);
+      const prepared: PreparedState = preparedKind === "current"
+        ? { kind: "current", artifact: f.preparedArtifact,
+            observedIdentity: f.preparedArtifact.identity,
+            compatibility: f.preparedArtifact.compatibility }
+        : { kind: "needs-prepare", observedIdentity: "",
+            compatibility: { kind: "unknown", reason: "missing evidence" } };
+      const installed: InstalledState = installedKind === "absent"
+        ? { kind: "absent", observedIdentity: "" }
+        : { kind: installedKind, observedIdentity: "observed" };
+      const result = await gatherProbe({ ...f.ctx, adapter: {
+        ...f.adapter, ...f.methods,
+        inspectPrepared: async () => successResult("inspect-prepared", prepared, []),
+        inspectInstalled: async () => successResult("inspect-installed", installed, []),
+      } });
+      assert.equal(result.status, 0);
+      if (result.status !== 0) assert.fail("expected successful probe");
+      assert.equal(result.facts.status, expected);
+    });
+  }
+});
+
 void test("probe performs only the four read-only inspections", async (t) => {
   const fixture = await createHarnessFixture(t);
   const adapter = {

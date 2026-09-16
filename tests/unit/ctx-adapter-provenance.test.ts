@@ -28,7 +28,6 @@ import type {} from "../../src/harnesses/codex/hooks.ts";
 import type {} from "../../src/harnesses/codex/lifecycle.ts";
 import type {} from "../../src/harnesses/pi/harness.ts";
 import type {} from "../../src/provenance.ts";
-import type {} from "../../src/status.ts";
 import type {} from "../../src/upstream-version.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -109,7 +108,6 @@ function isConcreteHarnessModule(importer: string, specifier: string): boolean {
       "hooks.ts",
       "lifecycle.ts",
       "provenance.ts",
-      "status.ts",
       "upstream-version.ts",
     ].includes(name)
   );
@@ -315,7 +313,6 @@ void test("both gates reject every evasion form they claim to cover", () => {
     "../../src/harnesses/codex/lifecycle.ts",
     "../../src/harnesses/pi/harness.ts",
     "../../src/provenance.ts",
-    "../../src/status.ts",
     "../../src/upstream-version.ts",
   ]) {
     assert.ok(

@@ -351,8 +351,8 @@ void test("saved selection is validated before any adapter access", async () => 
 });
 
 void test("an unparseable generated commit is never treated as success", async () => {
-  // Rule 4. statusForCommits("") returns "needs prepare"; a failed inspection
-  // (here, prepare itself failing) propagates rather than defaulting to
+  // Rule 4. The typed prepared-state flow reports missing provenance as
+  // "needs prepare"; a failed inspection (here, prepare itself failing) propagates rather than defaulting to
   // success. No generated metadata file is written, so
   // generatedCommitOrEmpty yields "" and facts.status is "needs prepare".
   // runPrepare is called as a function and its own failure -- a missing

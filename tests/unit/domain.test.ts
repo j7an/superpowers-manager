@@ -5,8 +5,6 @@ import { SafetyError } from "../../src/safety-error.ts";
 
 import * as refs from "../../src/domain/refs.ts";
 
-import { commitMatches } from "../../src/domain/fingerprint.ts";
-
 const lower = "0123456789abcdef0123456789abcdef01234567";
 const upper = lower.toUpperCase();
 
@@ -48,12 +46,4 @@ void test("REF-PIN-SOURCE-01 / SEL-SCHEMA-COMMIT-01 / SEL-SCHEMA-COMMIT-WRITE-01
   assert.equal(refs.COMMIT_INPUT_RE.test(upper), true);
   assert.equal(refs.normalizeCommitInput(upper), lower);
   assert.equal(refs.normalizeCommitInput("0123456"), null);
-});
-
-void test("INSTALL-VERIFY-01 fingerprints match full or seven-character observed commits only", () => {
-  assert.equal(commitMatches(lower, lower), true);
-  assert.equal(commitMatches(lower, lower.slice(0, 7)), true);
-  assert.equal(commitMatches(lower, ""), false);
-  assert.equal(commitMatches(lower, lower.slice(0, 8)), false);
-  assert.equal(commitMatches(lower, "deadbee"), false);
 });

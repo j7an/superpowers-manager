@@ -215,8 +215,8 @@ void test("install verification accepts an exact commit match", () => {
 });
 
 void test("install verification accepts the seven-character short form", () => {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and commitMatches
-  // in src/status.ts keeps that rule. This case is what pins the two together.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and the typed installation
+  // verification flow keeps that rule. This case is what pins the two together.
   const desired = "b".repeat(40);
   const receipt = ok(codexInstallReceipt("", ""));
   const inspection = ok({
