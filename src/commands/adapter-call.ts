@@ -34,6 +34,8 @@ export async function callAdapter<T>(
   return { ok: true, result: { status: result.status, outcome } };
 }
 
+// Preserve outcomes collected before gathering throws so command catches can
+// replay them before reporting the underlying failure.
 export class GatherFailure extends Error {
   readonly inner: unknown;
   readonly outcomes: readonly AdapterOutcome<unknown>[];

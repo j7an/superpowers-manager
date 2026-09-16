@@ -35,22 +35,6 @@ type UninstallOutcome =
       readonly output: Output;
     };
 
-// withWorkspace throws for mkdtemp failure before the callback ever runs
-// ("cannot create workspace",
-// `src/workspace.ts:120::throw new SafetyError("workspace", "cannot create workspace"`).
-// A bare re-throw would silently drop every outcome collected before that
-// point -- a narrow
-// DIAG-ADAPTER-01 regression the shell never had, since it replayed each
-// adapter response as it went rather than batching replay to the end. This
-// carries the outcomes collected so far alongside the original cause, so
-// runUninstall's catch can still replay them before reporting the cause.
-//
-// The post-success cleanup failure no longer reaches here: onCleanupFailure
-// below suppresses withWorkspace's throw for that case and records the
-// warning as data, so the computed UninstallOutcome survives it. The
-// outcome-carrying is still load-bearing for mkdtemp, and the shape stays
-// identical to src/commands/install.ts's GatherFailure.
-
 // Carries a post-success workspace-removal failure without discarding the
 // outcome the callback already computed. Cleanup failures remain fail closed.
 interface GatherRun {

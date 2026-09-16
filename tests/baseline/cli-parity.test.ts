@@ -2009,7 +2009,7 @@ async function seedLifecycleManagerState(
  *
  * The real adapter's update-control view is hardcoded to "managed"
  * (`codexInspectControl` in src/harnesses/codex/adapter.ts), which is why interception is needed at all
- * and why the third subcase needs none.
+ * and why the real-Codex subcase needs none.
  * Carries a `calls` array so it satisfies the same shape `caseContext` takes
  * from `recordingAdapter` (tests/bin/command-context.js).
  */
@@ -2038,7 +2038,7 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
     // Still read through the case's fake `codex`, not the double: every
     // operation other than the intercepted view goes to the real typed Codex engine,
     // which execs that fake, so the mutation claim is made against the same
-    // channel the third subcase below uses.
+    // channel the real-Codex subcase below uses.
     assertNoCodexMutation(codexOperations(c));
   }
 

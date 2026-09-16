@@ -79,7 +79,7 @@ product integrations, not a required agent harness.
   message, and hints — which is hand-written `fail()` text, not a reader's
   message. (3) `src/selection-store.ts`'s interpolated cause
   reaches the terminal through the CLI-boundary catches (`src/cli.ts`, each
-  command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
+  command's outer catch), where `oneLine()`
   (`src/cli-arguments.ts`) collapses CR/LF runs to spaces. That bounds the
   blast radius to one line; it is not a control-character defense, and on that
   path this rule is the whole defense. Reader wrappers are frozen by tests,

@@ -46,15 +46,6 @@ async function invoke<T>(
   return result;
 }
 
-// withWorkspace can throw AFTER its callback has already returned a fully
-// computed StageOutcome: a post-success cleanup failure discards that return
-// value entirely and rejects instead, UNLESS an `onCleanupFailure` reporter is
-// supplied -- which gatherInstallStages below does, precisely so this class
-// stays reserved for mkdtemp failure (nothing collected yet) and the
-// callback's own throw (never reachable here; see gatherInstallStages).
-// Carries the outcomes collected so far so runInstall's catch can still
-// replay them instead of discarding them with a bare re-throw.
-
 type StageOutcome =
   | {
       readonly kind: "blocked";
