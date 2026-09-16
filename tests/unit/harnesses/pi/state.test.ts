@@ -868,7 +868,10 @@ void test("Pi detects shared user-wide Superpowers skills without crossing into 
       await preparedAndInstalled(t, state);
       const skill = sharedSkill(state, "using-superpowers");
       writeSkill(skill, "using-superpowers");
-      settingsWithSkills(state.paths, packages, ["!using-superpowers", "!*.md"]);
+      settingsWithSkills(state.paths, packages, [
+        "!using-superpowers",
+        "!*.md",
+      ]);
       const automatic = unwrapOwnership(await inspectPiOwnership(state.ctx));
       assert.deepEqual(automatic.presentationConflicts, [
         "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",

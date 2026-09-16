@@ -200,7 +200,8 @@ function forcedSkillActivity(
     const patterns = controls
       .filter((control) => control.startsWith(prefix))
       .map((control) => normalizeExactSkillPattern(control.slice(1)));
-    if (patterns.some((pattern) => identities.includes(pattern))) return activity;
+    if (patterns.some((pattern) => identities.includes(pattern)))
+      return activity;
   }
   return null;
 }
