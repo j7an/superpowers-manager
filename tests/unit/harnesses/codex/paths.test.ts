@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { readdir, symlink } from "node:fs/promises";
+import { mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { scratch } from "../../../lib/scratch.ts";
 
 import {
   assertCodexPreparationSeparate,
+  codexPathFailureDetails,
   codexHome,
   codexPaths,
 } from "../../../../src/harnesses/codex/paths.ts";
+import { SafetyError } from "../../../../src/safety-error.ts";
 
 void test("Codex home selects durable storage independently of package location", () => {
   const paths = codexPaths(
@@ -86,4 +88,39 @@ void test("Codex preparation rejects only paths that overlap published or recove
       assert.deepEqual(await readdir(root), ["prepared-alias"]);
     });
   }
+});
+
+void test("path failure details distinguish local evidence from unrelated errors", async (t) => {
+  assert.equal(codexPathFailureDetails(new Error("ordinary")), null);
+  assert.equal(
+    codexPathFailureDetails(new SafetyError("codex-paths", "no details")),
+    null,
+  );
+  const root = scratch(t, "spw-path-details-");
+  const paths = codexPaths({ CODEX_HOME: join(root, "home") }, root);
+  await assert.rejects(
+    assertCodexPreparationSeparate(paths.marketplaceRoot, paths),
+    (cause) => {
+      assert.deepEqual(codexPathFailureDetails(cause), { kind: "overlap" });
+      return (
+        cause instanceof Error && /preparation overlaps/.test(cause.message)
+      );
+    },
+  );
+  await mkdir(paths.managerRoot, { recursive: true });
+  await writeFile(paths.recoveryRoot, "preserve");
+  await assert.rejects(
+    assertCodexPreparationSeparate(paths.preparedRoot, paths),
+    (cause) => {
+      assert.deepEqual(codexPathFailureDetails(cause), {
+        kind: "inspection",
+        root: "recovery",
+        path: paths.recoveryRoot,
+      });
+      return (
+        cause instanceof Error &&
+        /cannot inspect recovery root/.test(cause.message)
+      );
+    },
+  );
 });

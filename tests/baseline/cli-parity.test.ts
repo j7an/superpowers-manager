@@ -2687,7 +2687,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
 
   // Half three: an EMPTY HOME fails closed instead of resolving a cwd-relative
   // `.codex`. The native reader delegates its default to codexHome, whose empty
-  // HOME guard (`src/harnesses/codex/paths.ts:24::if (home === undefined || home.length === 0) {`)
+  // HOME guard (`src/harnesses/codex/paths.ts:25::if (home === undefined || home.length === 0) {`)
   // is the current contract.
   //
   // The cwd decoy is what makes the assertion specific. sandbox.work is the
