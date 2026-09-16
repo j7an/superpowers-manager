@@ -49,10 +49,7 @@ import type {
   OwnershipInspection,
   UpdateControlInspection,
 } from "../../harness.ts";
-import {
-  codexControlInspection,
-  codexOwnershipInspection,
-} from "./lifecycle.ts";
+import { codexOwnershipInspection } from "./lifecycle.ts";
 import { codexInstallReceipt } from "./presentation.ts";
 
 const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
@@ -839,8 +836,14 @@ export function codexInspectOwnership(
 export function codexInspectControl(
   context: AdapterContext,
 ): Promise<AdapterResult<UpdateControlInspection>> {
-  return runCodexOperation("inspect", context, async () =>
-    codexControlInspection("managed"),
+  return runCodexOperation<UpdateControlInspection>(
+    "inspect",
+    context,
+    async () => ({
+      probeEligibility: { kind: "allowed" },
+      mutationEligibility: { kind: "allowed" },
+      presentationValue: "managed",
+    }),
   );
 }
 

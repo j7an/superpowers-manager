@@ -7,11 +7,7 @@
 // be relabelled as a domain failure. Keeping the predicates write-free means
 // the hazard cannot exist here at all.
 
-import type {
-  Decision,
-  OwnershipInspection,
-  UpdateControlInspection,
-} from "../../harness.ts";
+import type { Decision, OwnershipInspection } from "../../harness.ts";
 import type { CodexRemovalInput } from "./adapter.ts";
 
 // A three-way verdict rather than a boolean, because the shell has two
@@ -80,30 +76,6 @@ export function reportLegacyState(identityState: string): LegacyVerdict {
     return { kind: "report", lines: REPORT_LINES };
   }
   return unknownState(identityState);
-}
-
-interface Refusal {
-  readonly ok: false;
-  readonly message: string;
-}
-export type Check = { readonly ok: true } | Refusal;
-
-// Ported from
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:62-70::spw_require_managed_update_control`.
-// Both refusals reached spw_die in the shell, so both carry the `error: ` prefix
-// at the call site and neither is special.
-export function requireManagedUpdateControl(value: string): Check {
-  if (value === "managed") return { ok: true };
-  if (value === "unsupported") {
-    return {
-      ok: false,
-      message: "adapter cannot guarantee manager-controlled updates",
-    };
-  }
-  return {
-    ok: false,
-    message: `unknown adapter update-control capability: ${value}`,
-  };
 }
 
 function installDecision(legacy: LegacyVerdict): Decision {
@@ -201,40 +173,5 @@ export function codexOwnershipInspection(
     postRemovalOutput,
     presentationValue: identityState,
     presentationConflicts: conflicts,
-  };
-}
-
-export function codexControlInspection(
-  updateControl: string,
-): UpdateControlInspection {
-  const probeEligibility: Decision =
-    updateControl.length === 0
-      ? {
-          kind: "blocked",
-          output: {
-            stdout: [],
-            stderr: [
-              "error: probe did not report adapter update-control capability",
-            ],
-          },
-        }
-      : { kind: "allowed" };
-  const managed = requireManagedUpdateControl(updateControl);
-  const mutationEligibility: Decision =
-    probeEligibility.kind === "blocked"
-      ? probeEligibility
-      : managed.ok
-        ? { kind: "allowed" }
-        : {
-            kind: "blocked",
-            output: {
-              stdout: [],
-              stderr: [`error: ${managed.message}`],
-            },
-          };
-  return {
-    probeEligibility,
-    mutationEligibility,
-    presentationValue: updateControl,
   };
 }

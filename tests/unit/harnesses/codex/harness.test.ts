@@ -15,16 +15,17 @@ import {
   codexHarness,
   rejectSuccessfulNonzeroStatus,
 } from "../../../../src/harnesses/codex/harness.ts";
-import {
-  codexControlInspection,
-  codexOwnershipInspection,
-} from "../../../../src/harnesses/codex/lifecycle.ts";
+import { codexOwnershipInspection } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   codexInstallReceipt,
   codexPresentation,
 } from "../../../../src/harnesses/codex/presentation.ts";
 import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
-import type { HarnessAdapter, ProbeSnapshot } from "../../../../src/harness.ts";
+import type {
+  HarnessAdapter,
+  ProbeSnapshot,
+  UpdateControlInspection,
+} from "../../../../src/harness.ts";
 import { codexPaths } from "../../../../src/harnesses/codex/paths.ts";
 import { readCodexMarketplace } from "../../../../src/harnesses/codex/marketplace.ts";
 import { writeQualifiedCodexFixture } from "../../../lib/harnesses/codex/prepared-fixture.ts";
@@ -36,6 +37,11 @@ const PACKAGE_ROOT = resolve(
 const FAKE_CODEX = fileURLToPath(
   new URL("../../helpers/harnesses/codex/fake.sh", import.meta.url),
 );
+const ALLOWED_CONTROL: UpdateControlInspection = {
+  probeEligibility: { kind: "allowed" },
+  mutationEligibility: { kind: "allowed" },
+  presentationValue: "managed",
+};
 
 const codex: HarnessAdapter<CodexRemovalInput> = codexHarness;
 void codex;
@@ -325,11 +331,7 @@ void test("Codex boundaries reject successful nonzero statuses before reading ty
 });
 
 void test("Codex status guard passes zero successes and controlled failures through unchanged", () => {
-  const succeeded = successResult(
-    "inspect",
-    codexControlInspection("managed"),
-    [],
-  );
+  const succeeded = successResult("inspect", ALLOWED_CONTROL, []);
   const failed = failureResult(
     "install",
     "controlled-failure",
@@ -395,7 +397,7 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
       { pluginPresent: true, marketplacePresent: true },
       [],
     ),
-    control: codexControlInspection("managed"),
+    control: ALLOWED_CONTROL,
     compatibility: {
       kind: "supported",
       generation: "codex-native",

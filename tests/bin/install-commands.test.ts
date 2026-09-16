@@ -68,10 +68,8 @@ import { runInstall } from "../../src/commands/install.ts";
 import { runUpdate } from "../../src/commands/update.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
-import {
-  codexControlInspection,
-  codexOwnershipInspection,
-} from "../../src/harnesses/codex/lifecycle.ts";
+import type { UpdateControlInspection } from "../../src/harness.ts";
+import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
 import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 const FORBIDDEN_LITERALS = [
@@ -85,6 +83,22 @@ const FORBIDDEN_LITERALS = [
 const PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}';
 const MARKETPLACE_ABSENT =
   '{"marketplaces":[{"name":"openai-curated","root":"/x"}]}';
+const ALLOWED_CONTROL: UpdateControlInspection = {
+  probeEligibility: { kind: "allowed" },
+  mutationEligibility: { kind: "allowed" },
+  presentationValue: "managed",
+};
+const BLOCKED_CONTROL: UpdateControlInspection = {
+  probeEligibility: { kind: "allowed" },
+  mutationEligibility: {
+    kind: "blocked",
+    output: {
+      stdout: [],
+      stderr: ["error: adapter cannot guarantee manager-controlled updates"],
+    },
+  },
+  presentationValue: "unsupported",
+};
 // The cases that drive the real fake adapter's ownership computation supply
 // `identity_state` directly to an injected double, so no Codex
 // fixture listing is read for that purpose any more.
@@ -205,7 +219,7 @@ function assertNoCodexMutation(log: string[]): void {
  * operation performs that a LATER prepare/install run against the SAME
  * package root depends on: copying the fallback manifest template into the
  * candidate's `.codex-plugin` directory before `atomicReplaceDir` swaps the
- * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:436::plugin.template.json`). The
+ * candidate into `plugins/superpowers` (`src/harnesses/codex/adapter.ts:433::plugin.template.json`). The
  * candidate this module's own doubles build never copies
  * `plugin.template.json` itself (src/commands/prepare.ts's COPY_PATHS omits
  * it), so skipping this step here silently deletes it from the package root
@@ -432,7 +446,10 @@ function scenarioAdapter(
   scenario: {
     installedIdentity?: (string | null) | ((call: number) => string | null);
     identityState?: string | ((call: number) => string);
-    updateControl?: string | ((call: number) => string);
+    updateControl?:
+      | UpdateControlInspection
+      | "failure"
+      | ((call: number) => UpdateControlInspection | "failure");
     install?: (argv: readonly string[]) => unknown;
     build?: (argv: readonly string[]) => unknown;
   } = {},
@@ -440,7 +457,7 @@ function scenarioAdapter(
   const counters = { installedIdentity: 0, identityState: 0, updateControl: 0 };
 
   const resolve = (
-    field: "installedIdentity" | "identityState" | "updateControl",
+    field: "installedIdentity" | "identityState",
     fallback: string | null,
   ): string | null => {
     counters[field] += 1;
@@ -477,8 +494,15 @@ function scenarioAdapter(
       );
     }
     if (joined === "inspect --view update-control") {
-      const value = resolve("updateControl", "managed");
-      if (value === "failure") {
+      counters.updateControl += 1;
+      const configured = scenario.updateControl;
+      const control =
+        configured === undefined
+          ? ALLOWED_CONTROL
+          : typeof configured === "function"
+            ? configured(counters.updateControl)
+            : configured;
+      if (control === "failure") {
         return failureResult(
           "inspect",
           "inspect-failed",
@@ -487,8 +511,7 @@ function scenarioAdapter(
           [],
         );
       }
-      if (value === null) assert.fail("update control must be a string");
-      return successResult("inspect", codexControlInspection(value), []);
+      return successResult("inspect", control, []);
     }
     if (argv[0] === "install") {
       return scenario.install
@@ -674,7 +697,7 @@ void describe("install commands", { concurrency: true }, () => {
       // Replaces `seedInstalledCurrent(c)`, which drove the same precondition
       // through a real fake Codex cache this case no longer spawns.
       installedIdentity: commit,
-      updateControl: "unsupported",
+      updateControl: BLOCKED_CONTROL,
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runUpdate([], ctx);
@@ -718,7 +741,7 @@ void describe("install commands", { concurrency: true }, () => {
     // fingerprint defaults to null (no active install), which is exactly the
     // needs-install precondition given the generated tree just below.
     await prepareGeneratedTree(c);
-    const adapter = scenarioAdapter({ updateControl: "unsupported" });
+    const adapter = scenarioAdapter({ updateControl: BLOCKED_CONTROL });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
     const out = stdout() + stderr();
@@ -775,7 +798,7 @@ void describe("install commands", { concurrency: true }, () => {
       // managed-then-unsupported: the initial probe sees "managed"; only the
       // SECOND, fresh inspection (inside gatherInstallStages, after prepare
       // runs) sees "unsupported" -- the drift this case exists to catch.
-      updateControl: (call) => (call <= 2 ? "managed" : "unsupported"),
+      updateControl: (call) => (call <= 2 ? ALLOWED_CONTROL : BLOCKED_CONTROL),
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
@@ -861,7 +884,7 @@ void describe("install commands", { concurrency: true }, () => {
     const c = installCase();
     await prepareGeneratedTree(c);
     const adapter = scenarioAdapter({
-      updateControl: (call) => (call === 1 ? "managed" : "unsupported"),
+      updateControl: (call) => (call === 1 ? ALLOWED_CONTROL : BLOCKED_CONTROL),
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
@@ -1048,7 +1071,7 @@ void describe("install commands", { concurrency: true }, () => {
     assertNoPrepareRan(result.stdout);
     // :523, re-anchored onto codex.log. The shell grepped the adapter log for
     // `install --package-root $pkg`; that operation's whole Codex footprint is
-    // the three commands below (`src/harnesses/codex/adapter.ts:514::const marketplaceList`), and the second of them
+    // the three commands below (`src/harnesses/codex/adapter.ts:511::const marketplaceList`), and the second of them
     // carries the package root the original needle pinned. Nothing else in this
     // subject issues `plugin add`, so the ordering assertion is the same claim.
     assertOrder(
@@ -1094,7 +1117,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     // :558-559 — a symlink to this case's own package root, registered as the
     // marketplace root. Portable stand-in for macOS /var vs /private/var:
-    // `src/harnesses/codex/adapter.ts:552::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
+    // `src/harnesses/codex/adapter.ts:549::pathsEqual(packageRoot, registeredRoot)` compares the two through `pathsEqual`, so a
     // lexical comparison would re-register and turn the negatives below RED.
     const link = join(c.dir, "pkg-link");
     symlinkSync(c.pkg, link);
@@ -1234,7 +1257,7 @@ void describe("install commands", { concurrency: true }, () => {
       `expected install to fail but it succeeded:\n${out}`,
     );
     // :630-631 — the recovery message must name the root it failed to add AND
-    // the previous root it already removed (`src/harnesses/codex/adapter.ts:578::adding`).
+    // the previous root it already removed (`src/harnesses/codex/adapter.ts:575::adding`).
     assert.ok(
       out.includes(`plugin marketplace add ${durableMarketplace(c)}`) ||
         out.includes("Codex activation may have changed native state"),
@@ -1475,7 +1498,7 @@ void describe("install commands", { concurrency: true }, () => {
     assert.ok(result.stdout.includes("manager updated"), result.stdout);
     // :758, re-anchored onto codex.log. `install --package-root ${c.pkg}` is
     // witnessed by the Codex commands that operation issues
-    // (`src/harnesses/codex/adapter.ts:514::const marketplaceList`): the marketplace add carries the same package
+    // (`src/harnesses/codex/adapter.ts:511::const marketplaceList`): the marketplace add carries the same package
     // root the original needle pinned, and the plugin add is unconditional.
     // clearLogs above means both lines can only have come from this run.
     assertOrder(

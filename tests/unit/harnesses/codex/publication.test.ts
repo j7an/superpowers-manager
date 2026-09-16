@@ -36,10 +36,7 @@ import type {
   CodexNativeState,
   CodexRemovalInput,
 } from "../../../../src/harnesses/codex/adapter.ts";
-import {
-  codexControlInspection,
-  codexOwnershipInspection,
-} from "../../../../src/harnesses/codex/lifecycle.ts";
+import { codexOwnershipInspection } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   readCodexMarketplace,
   stageCodexMarketplace,
@@ -66,6 +63,11 @@ const RECEIPT: InstallReceipt = {
     stdout: [],
     stderr: ["installed plugin mismatch"],
   },
+};
+const ALLOWED_CONTROL: UpdateControlInspection = {
+  probeEligibility: { kind: "allowed" },
+  mutationEligibility: { kind: "allowed" },
+  presentationValue: "managed",
 };
 
 function nativeState(
@@ -105,7 +107,7 @@ function ownershipInspection(
 function controlInspection(
   message: string,
 ): AdapterResult<UpdateControlInspection> {
-  return successResult("inspect", codexControlInspection("managed"), [
+  return successResult("inspect", ALLOWED_CONTROL, [
     { channel: "stderr", text: message },
   ]);
 }
@@ -517,7 +519,7 @@ void test("publication requires affirmative ownership and control eligibility be
     { pluginPresent: true, marketplacePresent: true },
     [],
   );
-  const controlAllowed = codexControlInspection("managed");
+  const controlAllowed = ALLOWED_CONTROL;
   const variants: readonly RefusalVariant[] = [
     "inspection failure",
     "successful nonzero status",

@@ -50,10 +50,9 @@ present, and legacy presence is whether either observed legacy resource is
 present. Those values determine the policy's presentation identity while the
 manager booleans remain the removal input.
 
-For update control, `unsupported` is never emitted on this path. It survives as
-an input the consumer still recognizes: `requireManagedUpdateControl`
-(`src/harnesses/codex/lifecycle.ts`) rejects `unsupported` as a capability it cannot guarantee,
-and rejects any other non-`managed` value as unknown.
+For update control, the low-level Codex adapter always returns fixed managed
+capability. The public Codex harness retains its recovery overlay, and command
+gates still refuse an injected blocked or malformed inspection before mutation.
 
 ## Capture-time buffering
 
