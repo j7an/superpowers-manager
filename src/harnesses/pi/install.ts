@@ -23,9 +23,9 @@ import {
   type DirectoryPublication,
 } from "../../atomic.ts";
 import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
+import { digestArtifactTree } from "../../artifact-tree.ts";
 import { normalizePiRuntimeVersion, runPi } from "./native.ts";
 import {
-  digestPiTree,
   readPiPackageAssessment,
   readPiReceipt,
   type PiReceipt,
@@ -189,7 +189,7 @@ async function snapshot(root: string): Promise<PiReceipt | null> {
   if ((await assertNoFollowType(root, ["directory", "missing"])) === "missing")
     return null;
   const receipt = await readPiReceipt(root);
-  if (receipt.digest !== (await digestPiTree(root)))
+  if (receipt.digest !== (await digestArtifactTree(root)))
     throw new Error("Pi snapshot changed");
   return receipt;
 }

@@ -1,31 +1,17 @@
-import { createHash } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import type { EffectiveSelection } from "../../effective-selection.ts";
 import type { Compatibility } from "../../harness-compatibility.ts";
 import {
-  readArtifactFile,
   readArtifactObject,
   validateNativeSkill,
 } from "../../artifact-tree.ts";
 import { SEMVER_RE } from "../../domain/refs.ts";
 import { validateSource } from "../../selection.ts";
-
-const OFFICIAL_SOURCES = new Set([
-  "https://github.com/obra/superpowers",
-  "https://github.com/obra/superpowers.git",
-  "ssh://git@github.com/obra/superpowers.git",
-  "git@github.com:obra/superpowers.git",
-]);
-
-export function samePiSource(left: string, right: string): boolean {
-  validateSource(left);
-  validateSource(right);
-  return (
-    left === right ||
-    (OFFICIAL_SOURCES.has(left) && OFFICIAL_SOURCES.has(right))
-  );
-}
+import {
+  isOfficialSnapshotSource,
+  requireNoSnapshotDependencies,
+  requireSnapshotBootstrap,
+} from "../../snapshot-package.ts";
 
 export async function assessPiCompatibility(
   root: string,
@@ -33,7 +19,7 @@ export async function assessPiCompatibility(
 ): Promise<Compatibility> {
   try {
     validateSource(selection.effectiveSource);
-    const official = OFFICIAL_SOURCES.has(selection.effectiveSource);
+    const official = isOfficialSnapshotSource(selection.effectiveSource);
     const pkg = await readArtifactObject(root, join(root, "package.json"));
     if (
       pkg.name !== "superpowers" ||
@@ -52,32 +38,14 @@ export async function assessPiCompatibility(
       JSON.stringify(pi.skills) !== '["./skills"]'
     )
       throw new Error("resource declaration");
-    for (const key of [
-      "dependencies",
-      "optionalDependencies",
-      "peerDependencies",
-      "bundleDependencies",
-      "bundledDependencies",
-    ]) {
-      const value = pkg[key];
-      if (
-        value !== undefined &&
-        (value === null ||
-          typeof value !== "object" ||
-          Object.keys(value).length !== 0)
-      )
-        throw new Error("runtime dependencies");
-    }
+    requireNoSnapshotDependencies(pkg);
     await validateNativeSkill(root);
-    const bootstrap = join(root, ".pi/extensions/superpowers.ts");
-    const bytes = await readArtifactFile(root, bootstrap, 4283);
-    if (
-      (await lstat(bootstrap)).mode & 0o111 ||
-      bytes.length !== 4283 ||
-      createHash("sha256").update(bytes).digest("hex") !==
-        "39c27000c047f8a1399a76e032e4cd239d7bdb0be168a121f46a2ac719deaae0"
-    )
-      throw new Error("bootstrap implementation");
+    await requireSnapshotBootstrap(
+      root,
+      ".pi/extensions/superpowers.ts",
+      4283,
+      "39c27000c047f8a1399a76e032e4cd239d7bdb0be168a121f46a2ac719deaae0",
+    );
     return {
       kind: official ? "supported" : "experimental",
       generation: "pi-native-bootstrap-v1",

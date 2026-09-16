@@ -13,15 +13,14 @@ import type {
   PreparedArtifact,
   PreparedState,
 } from "../../harness.ts";
-import { ARTIFACT_RECEIPT } from "../../artifact-tree.ts";
-import { piPaths } from "./paths.ts";
-import { assessPiCompatibility, samePiSource } from "./compatibility.ts";
+import { ARTIFACT_RECEIPT, digestArtifactTree } from "../../artifact-tree.ts";
 import {
-  digestPiTree,
-  readPiPackageAssessment,
-  piReceiptBinding,
-  type PiReceipt,
-} from "./package.ts";
+  sameSnapshotSource,
+  snapshotReceiptBinding,
+} from "../../snapshot-package.ts";
+import { piPaths } from "./paths.ts";
+import { assessPiCompatibility } from "./compatibility.ts";
+import { readPiPackageAssessment, type PiReceipt } from "./package.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
 import { materializeGitTree } from "../../git-tree.ts";
 
@@ -59,7 +58,7 @@ export async function preparePiCandidate(
         [],
         [],
       );
-    const digest = await digestPiTree(input.candidateRoot);
+    const digest = await digestArtifactTree(input.candidateRoot);
     const identity = {
       schema: 1,
       manager: "superpowers-manager",
@@ -70,7 +69,7 @@ export async function preparePiCandidate(
     } as const;
     const receipt: PiReceipt = {
       ...identity,
-      binding: piReceiptBinding(identity),
+      binding: snapshotReceiptBinding(identity),
       compatibility,
     };
     await writeFile(
@@ -147,7 +146,7 @@ export async function inspectPiPrepared(
     const { artifact, receipt } = await readArtifactAssessment(root);
     if (
       artifact.commit !== selection.desiredCommit ||
-      !samePiSource(receipt.source, selection.effectiveSource)
+      !sameSnapshotSource(receipt.source, selection.effectiveSource)
     )
       return successResult(
         "inspect-prepared",

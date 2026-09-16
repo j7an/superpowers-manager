@@ -34,10 +34,11 @@ import {
 } from "./lifecycle-fixture.ts";
 import { caseContext, recordingAdapter } from "./command-context.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+import { digestArtifactTree } from "../../src/artifact-tree.ts";
 import { piHarness } from "../../src/harnesses/pi/harness.ts";
 import { piPaths } from "../../src/harnesses/pi/paths.ts";
 import { preparePiCandidate } from "../../src/harnesses/pi/prepare.ts";
-import { digestPiTree, readPiReceipt } from "../../src/harnesses/pi/package.ts";
+import { readPiReceipt } from "../../src/harnesses/pi/package.ts";
 import {
   commitFixture,
   crossHarnessUpstream,
@@ -1719,7 +1720,10 @@ void describe("install commands", { concurrency: true }, () => {
         const paths = piPaths(piCtxA.env, process.cwd());
         const receiptA = await readPiReceipt(paths.installedRoot);
         assert.equal(receiptA.commit, commitA);
-        assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
+        assert.equal(
+          await digestArtifactTree(paths.installedRoot),
+          receiptA.digest,
+        );
 
         const codexCache = join(
           c.state,
@@ -1768,7 +1772,10 @@ void describe("install commands", { concurrency: true }, () => {
         const receiptB = await readPiReceipt(paths.installedRoot);
         assert.equal(receiptB.commit, commitB);
         assert.notEqual(receiptB.digest, receiptA.digest);
-        assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
+        assert.equal(
+          await digestArtifactTree(paths.installedRoot),
+          receiptB.digest,
+        );
         assert.match(
           readFileSync(
             join(paths.installedRoot, "skills/using-superpowers/SKILL.md"),
@@ -1835,7 +1842,10 @@ void describe("install commands", { concurrency: true }, () => {
         );
         const receiptA = await readPiReceipt(paths.installedRoot);
         assert.equal(receiptA.commit, commitA);
-        assert.equal(await digestPiTree(paths.installedRoot), receiptA.digest);
+        assert.equal(
+          await digestArtifactTree(paths.installedRoot),
+          receiptA.digest,
+        );
 
         const commitB = commitPhaseB(upstream);
         const selectionB = nativeSelection(commitB);
@@ -1861,7 +1871,10 @@ void describe("install commands", { concurrency: true }, () => {
         const receiptB = await readPiReceipt(paths.installedRoot);
         assert.equal(receiptB.commit, commitB);
         assert.notEqual(receiptB.digest, receiptA.digest);
-        assert.equal(await digestPiTree(paths.installedRoot), receiptB.digest);
+        assert.equal(
+          await digestArtifactTree(paths.installedRoot),
+          receiptB.digest,
+        );
         assert.ok(readLog(piLog).includes("--version"));
       },
     );

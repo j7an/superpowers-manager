@@ -10,11 +10,9 @@ import {
   readPiPrepared,
 } from "../../../../src/harnesses/pi/prepare.ts";
 import { piHarness } from "../../../../src/harnesses/pi/harness.ts";
-import {
-  digestPiTree,
-  readPiReceipt,
-  piReceiptBinding,
-} from "../../../../src/harnesses/pi/package.ts";
+import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
+import { readPiReceipt } from "../../../../src/harnesses/pi/package.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import {
   commitFixture,
   nativeFixture,
@@ -44,7 +42,7 @@ void test("prepared Pi identity survives fetch removal and frozen copies survive
   assert.equal(result.outcome.ok, true);
   const installed = join(root, "installed");
   cpSync(prepared, installed, { recursive: true, verbatimSymlinks: true });
-  const frozenDigest = await digestPiTree(installed);
+  const frozenDigest = await digestArtifactTree(installed);
   rmSync(join(root, ".git"), { recursive: true });
   assert.equal((await readPiPrepared(ctx)).outcome.ok, true);
   const state = await inspectPiPrepared(nativeSelection(commit), ctx);
@@ -67,7 +65,7 @@ void test("prepared Pi identity survives fetch removal and frozen copies survive
   assert.equal((await readPiPrepared(ctx)).outcome.ok, true);
   writeFileSync(join(prepared, "extra"), "B");
   assert.equal((await readPiPrepared(ctx)).outcome.ok, false);
-  assert.equal(await digestPiTree(installed), frozenDigest);
+  assert.equal(await digestArtifactTree(installed), frozenDigest);
   assert.match(
     readFileSync(join(installed, "skills/using-superpowers/SKILL.md"), "utf8"),
     /name: using-superpowers/,
@@ -110,12 +108,12 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
     false,
   );
   writeFileSync(join(prepared, ".pi/extensions/superpowers.ts"), "unsupported");
-  const rewritten = { ...receipt, digest: await digestPiTree(prepared) };
+  const rewritten = { ...receipt, digest: await digestArtifactTree(prepared) };
   writeFileSync(
     path,
     JSON.stringify({
       ...rewritten,
-      binding: piReceiptBinding(rewritten),
+      binding: snapshotReceiptBinding(rewritten),
       compatibility: {
         kind: "supported",
         generation: "invented",
@@ -300,7 +298,7 @@ void test("missing prepared evidence is unknown and unsupported candidates prese
     },
     ctx,
   );
-  const digest = await digestPiTree(prepared);
+  const digest = await digestArtifactTree(prepared);
   const unsupported = nativeFixture(t);
   writeFileSync(
     join(unsupported, ".pi/extensions/superpowers.ts"),
@@ -316,7 +314,7 @@ void test("missing prepared evidence is unknown and unsupported candidates prese
     ctx,
   );
   assert.equal(rejected.outcome.ok, false);
-  assert.equal(await digestPiTree(prepared), digest);
+  assert.equal(await digestArtifactTree(prepared), digest);
   writeFileSync(
     join(prepared, ".superpowers-manager.json"),
     "{ invalid\u001b[2J",

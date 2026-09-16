@@ -14,6 +14,7 @@ import type {
 } from "../../harness.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
 import { displayPath } from "../../validator.ts";
+import { sameSnapshotSource } from "../../snapshot-package.ts";
 import {
   inspectOpenCodeDiscovery,
   type OpenCodeDiscovery,
@@ -22,7 +23,6 @@ import {
   assessOpenCodeCompatibility,
   readOpenCodePackageAssessment,
   readOpenCodeReceipt,
-  sameOpenCodeSource,
   type OpenCodeReceipt,
 } from "./package.ts";
 import { openCodePaths, type OpenCodePaths } from "./paths.ts";
@@ -247,9 +247,9 @@ export async function inspectOpenCodeInstalled(
       (installedProfile.kind !== "supported" &&
         installedProfile.kind !== "experimental") ||
       prepared.receipt.commit !== selection.desiredCommit ||
-      !sameOpenCodeSource(prepared.receipt.source, selection.effectiveSource) ||
+      !sameSnapshotSource(prepared.receipt.source, selection.effectiveSource) ||
       facts.snapshot.receipt.commit !== prepared.receipt.commit ||
-      !sameOpenCodeSource(
+      !sameSnapshotSource(
         facts.snapshot.receipt.source,
         prepared.receipt.source,
       ) ||

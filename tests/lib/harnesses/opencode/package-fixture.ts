@@ -11,10 +11,8 @@ import { tmpdir } from "node:os";
 import type { TestContext } from "node:test";
 import type { AdapterContext } from "../../../../src/adapter-result.ts";
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
-import {
-  openCodeReceiptBinding,
-  type OpenCodeReceipt,
-} from "../../../../src/harnesses/opencode/package.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
+import type { OpenCodeReceipt } from "../../../../src/harnesses/opencode/package.ts";
 import {
   openCodePaths,
   type OpenCodePaths,
@@ -93,7 +91,7 @@ export async function writeOpenCodeArtifact(
     join(root, ".superpowers-manager.json"),
     JSON.stringify({
       ...identity,
-      binding: openCodeReceiptBinding(identity),
+      binding: snapshotReceiptBinding(identity),
       compatibility,
     }) + "\n",
   );

@@ -16,12 +16,14 @@ import type {
   PreparedState,
 } from "../../harness.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
+import {
+  sameSnapshotSource,
+  snapshotReceiptBinding,
+} from "../../snapshot-package.ts";
 import { assertOpenCodePreparationSeparate, openCodePaths } from "./paths.ts";
 import {
   assessOpenCodeCompatibility,
-  openCodeReceiptBinding,
   readOpenCodePackageAssessment,
-  sameOpenCodeSource,
   type OpenCodeReceipt,
 } from "./package.ts";
 
@@ -88,7 +90,7 @@ export async function prepareOpenCodeCandidate(
     } as const;
     const receipt: OpenCodeReceipt = {
       ...identity,
-      binding: openCodeReceiptBinding(identity),
+      binding: snapshotReceiptBinding(identity),
       compatibility,
     };
     await writeFile(
@@ -156,7 +158,7 @@ export async function inspectOpenCodePrepared(
     const { receipt, compatibility } = assessment;
     if (
       receipt.commit !== selection.desiredCommit ||
-      !sameOpenCodeSource(receipt.source, selection.effectiveSource)
+      !sameSnapshotSource(receipt.source, selection.effectiveSource)
     )
       return successResult(
         "inspect-prepared",

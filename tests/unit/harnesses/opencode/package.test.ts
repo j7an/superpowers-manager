@@ -4,9 +4,9 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   assessOpenCodeCompatibility,
-  openCodeReceiptBinding,
   readOpenCodeReceipt,
 } from "../../../../src/harnesses/opencode/package.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import { nativeOpenCodeFixture } from "../../../lib/harnesses/opencode/package-fixture.ts";
 import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
@@ -96,7 +96,7 @@ void test("rejects receipt compatibility without a valid discriminant shape", as
     join(root, ".superpowers-manager.json"),
     JSON.stringify({
       ...identity,
-      binding: openCodeReceiptBinding(identity),
+      binding: snapshotReceiptBinding(identity),
       compatibility: { kind: "supported", reason: "missing generation" },
     }),
   );

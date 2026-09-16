@@ -7,7 +7,7 @@ import {
   type AdapterContext,
   type AdapterResult,
 } from "../../adapter-result.ts";
-import { readArtifactObject } from "../../artifact-tree.ts";
+import { digestArtifactTree, readArtifactObject } from "../../artifact-tree.ts";
 import type { EffectiveSelection } from "../../effective-selection.ts";
 import type {
   Decision,
@@ -15,9 +15,8 @@ import type {
   OwnershipInspection,
   UpdateControlInspection,
 } from "../../harness.ts";
-import { samePiSource } from "./compatibility.ts";
+import { sameSnapshotSource } from "../../snapshot-package.ts";
 import {
-  digestPiTree,
   readPiPackageAssessment,
   readPiReceipt,
   type PiReceipt,
@@ -176,7 +175,7 @@ async function observeSnapshot(paths: PiPaths): Promise<SnapshotObservation> {
   if (kind !== "directory") return { kind: "unverified" };
   try {
     const receipt = await readPiReceipt(paths.installedRoot);
-    const digest = await digestPiTree(paths.installedRoot);
+    const digest = await digestArtifactTree(paths.installedRoot);
     return receipt.digest === digest
       ? { kind: "owned", receipt, digest }
       : { kind: "unverified" };
@@ -400,9 +399,9 @@ export async function inspectPiInstalled(
       (intended.compatibility.kind !== "supported" &&
         intended.compatibility.kind !== "experimental") ||
       intended.receipt.commit !== selection.desiredCommit ||
-      !samePiSource(intended.receipt.source, selection.effectiveSource) ||
+      !sameSnapshotSource(intended.receipt.source, selection.effectiveSource) ||
       snapshot.receipt.commit !== intended.receipt.commit ||
-      !samePiSource(snapshot.receipt.source, intended.receipt.source) ||
+      !sameSnapshotSource(snapshot.receipt.source, intended.receipt.source) ||
       snapshot.digest !== intended.receipt.digest
     ) {
       return mismatch;
