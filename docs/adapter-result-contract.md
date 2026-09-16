@@ -21,6 +21,11 @@ such as recovery evidence requiring blocked control decisions and a transaction
 settlement returning `null`. Native command output, filesystem contents, saved
 state, and other external inputs remain parsed and validated at their boundary.
 
+A success envelope with nonzero status is refused as a controlled failure.
+Recovery-coherence contradictions, a settlement that does not return `null`, and
+a present optional transaction capability that cannot be acquired and bound also
+fail closed with controlled reporting before verification.
+
 ## Messages and errors
 
 Each message object has exactly `channel` and `text`. `channel` is `stdout` or
