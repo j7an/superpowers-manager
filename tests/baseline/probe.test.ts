@@ -35,11 +35,34 @@ import {
   SHORT,
 } from "./probe-fixture.ts";
 
-import { PROBE_PORCELAIN_KEYS } from "../../src/harnesses/codex/presentation.ts";
-
 import { writeSelectionState } from "../../src/selection-store.ts";
 
 type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
+
+const EXPECTED_PROBE_KEYS = [
+  "harness",
+  "requested_ref",
+  "resolved_ref",
+  "desired_commit",
+  "generated_commit",
+  "installed_commit",
+  "identity_state",
+  "status",
+  "selection_origin",
+  "selection_mode",
+  "upstream_source_origin",
+  "effective_source",
+  "saved_mode",
+  "saved_source",
+  "saved_requested_ref",
+  "saved_resolved_ref",
+  "saved_commit",
+  "update_control",
+  "installation_state",
+  "resource_state",
+  "compatibility",
+  "compatibility_reason",
+];
 
 // One listing shape reused wherever a case needs the manager plugin ACTIVE at
 // the manifest version seedCodex writes, so `installed_commit` resolves to the
@@ -144,7 +167,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/harnesses/codex/presentation.ts:200::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/harnesses/codex/presentation.ts:175::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
@@ -157,13 +180,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
       .split("\n")
       .slice(0, -1)
       .map((line) => line.slice(0, line.indexOf("="))),
-    [
-      ...PROBE_PORCELAIN_KEYS,
-      "installation_state",
-      "resource_state",
-      "compatibility",
-      "compatibility_reason",
-    ],
+    [...EXPECTED_PROBE_KEYS],
   );
 });
 

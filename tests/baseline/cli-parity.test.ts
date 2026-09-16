@@ -1882,7 +1882,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
 // the shapes tests/bin/uninstall-commands.test.js already exercises against
 // the real adapter's ownership parser (installedListingHas), plus a
 // "version" field on the manager entry: unlike uninstall, `install`'s own
-// fingerprint inspect calls activePluginVersionFromJson (`src/harnesses/codex/json.ts:126::activePluginVersionFromJson`),
+// fingerprint inspect calls activePluginVersionFromJson (`src/harnesses/codex/json.ts:113::activePluginVersionFromJson`),
 // which fails closed ("active plugin version is invalid") without one.
 const FIXTURE_PLUGIN_LIST_EMPTY = '{"installed":[],"available":[]}';
 const FIXTURE_MARKETPLACE_ABSENT = '{"marketplaces":[]}';

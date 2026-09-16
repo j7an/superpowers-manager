@@ -22,8 +22,6 @@ import {
 import {
   codexInstallReceipt,
   codexPresentation,
-  formatHuman,
-  formatPorcelain,
 } from "../../../../src/harnesses/codex/presentation.ts";
 import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 import type { HarnessAdapter, ProbeSnapshot } from "../../../../src/harness.ts";
@@ -407,57 +405,91 @@ function snapshot(): ProbeSnapshot<CodexRemovalInput> {
   };
 }
 
+const EXPECTED_PROBE_KEYS = [
+  "harness",
+  "requested_ref",
+  "resolved_ref",
+  "desired_commit",
+  "generated_commit",
+  "installed_commit",
+  "identity_state",
+  "status",
+  "selection_origin",
+  "selection_mode",
+  "upstream_source_origin",
+  "effective_source",
+  "saved_mode",
+  "saved_source",
+  "saved_requested_ref",
+  "saved_resolved_ref",
+  "saved_commit",
+  "update_control",
+  "installation_state",
+  "resource_state",
+  "compatibility",
+  "compatibility_reason",
+];
+
 void test("Codex probe presentation preserves legacy fields and appends independent state", async (t) => {
-  const rendered = codexPresentation.renderProbe(snapshot());
+  const facts = snapshot();
+  const rendered = codexPresentation.renderProbe(facts);
   assert.match(rendered.human, /^harness: codex\n/);
   assert.match(rendered.porcelain, /^harness=codex\n/);
   assert.equal(
     rendered.human,
-    formatHuman({
-      harness: "codex",
-      requestedRef: "latest-release",
-      resolvedRef: "v6.1.1",
-      desiredCommit: DESIRED,
-      generatedCommit: DESIRED,
-      installedCommit: DESIRED.slice(0, 7),
-      identityState: "manager",
-      status: "current",
-      selectionOrigin: "package-default",
-      selectionMode: "default",
-      upstreamSourceOrigin: "package-default",
-      effectiveSource: "https://example.invalid/superpowers.git",
-      savedMode: "none",
-      savedSource: "",
-      savedRequestedRef: "",
-      savedResolvedRef: "",
-      savedCommit: "",
-      updateControl: "managed",
-    }) +
-      "installation state: current\nresource state: idle\ncompatibility: supported\ncompatibility reason: fixture compatibility\n",
+    [
+      "harness: codex",
+      "requested ref: latest-release",
+      `resolved ref: ${facts.selection.resolvedRef}`,
+      `desired commit: ${DESIRED}`,
+      `generated plugin commit: ${DESIRED}`,
+      `installed manager commit or fingerprint: ${DESIRED.slice(0, 7)}`,
+      "Codex identity state: manager",
+      "status: current",
+      "selection origin: package-default",
+      "selection mode: default",
+      "upstream source origin: package-default",
+      "effective source: https://example.invalid/superpowers.git",
+      "saved mode: none",
+      "saved source: ",
+      "saved requested ref: ",
+      "saved resolved ref: ",
+      "saved commit: ",
+      "update control: managed",
+      "installation state: current",
+      "resource state: idle",
+      "compatibility: supported",
+      "compatibility reason: fixture compatibility",
+      "",
+    ].join("\n"),
   );
   assert.equal(
     rendered.porcelain,
-    formatPorcelain({
-      harness: "codex",
-      requestedRef: "latest-release",
-      resolvedRef: "v6.1.1",
-      desiredCommit: DESIRED,
-      generatedCommit: DESIRED,
-      installedCommit: DESIRED.slice(0, 7),
-      identityState: "manager",
-      status: "current",
-      selectionOrigin: "package-default",
-      selectionMode: "default",
-      upstreamSourceOrigin: "package-default",
-      effectiveSource: "https://example.invalid/superpowers.git",
-      savedMode: "none",
-      savedSource: "",
-      savedRequestedRef: "",
-      savedResolvedRef: "",
-      savedCommit: "",
-      updateControl: "managed",
-    }) +
-      "installation_state=current\nresource_state=idle\ncompatibility=supported\ncompatibility_reason=fixture compatibility\n",
+    [
+      "harness=codex",
+      "requested_ref=latest-release",
+      `resolved_ref=${facts.selection.resolvedRef}`,
+      `desired_commit=${DESIRED}`,
+      `generated_commit=${DESIRED}`,
+      `installed_commit=${DESIRED.slice(0, 7)}`,
+      "identity_state=manager",
+      "status=current",
+      "selection_origin=package-default",
+      "selection_mode=default",
+      "upstream_source_origin=package-default",
+      "effective_source=https://example.invalid/superpowers.git",
+      "saved_mode=none",
+      "saved_source=",
+      "saved_requested_ref=",
+      "saved_resolved_ref=",
+      "saved_commit=",
+      "update_control=managed",
+      "installation_state=current",
+      "resource_state=idle",
+      "compatibility=supported",
+      "compatibility_reason=fixture compatibility",
+      "",
+    ].join("\n"),
   );
 
   await t.test("appends conflicts without changing clean probe output", () => {
@@ -481,6 +513,50 @@ void test("Codex probe presentation preserves legacy fields and appends independ
       `${rendered.porcelain}ownership_conflict=active Codex plugin superpowers@another-provider\n`,
     );
   });
+});
+
+void test("Codex renderer preserves the complete ordered probe keys", () => {
+  const text = codexPresentation.renderProbe(snapshot()).porcelain;
+  assert.deepEqual(
+    text
+      .trimEnd()
+      .split("\n")
+      .map((line) => line.split("=", 1)[0]),
+    EXPECTED_PROBE_KEYS,
+  );
+});
+
+void test("Codex renderer preserves absence labels without filling empty source", () => {
+  const facts = snapshot();
+  const text = codexPresentation.renderProbe({
+    ...facts,
+    prepared: { ...facts.prepared, observedIdentity: "" },
+    installed: { kind: "absent", observedIdentity: "" },
+  });
+  assert.match(text.human, /^generated plugin commit: not present$/m);
+  assert.match(
+    text.human,
+    /^installed manager commit or fingerprint: not detected$/m,
+  );
+  assert.match(text.human, /^saved source: $/m);
+  assert.match(text.porcelain, /^generated_commit=$/m);
+  assert.match(text.porcelain, /^installed_commit=$/m);
+});
+
+void test("Codex renderer reports mixed origins before appended state fields", () => {
+  const facts = snapshot();
+  const text = codexPresentation.renderProbe({
+    ...facts,
+    selection: { ...facts.selection, selectionOrigin: "environment" },
+  });
+  assert.match(
+    text.human,
+    /^warning: effective ref and source have mixed origins \(ref: environment, source: package-default\)$/m,
+  );
+  assert.match(
+    text.human,
+    /warning: effective ref and source have mixed origins \(ref: environment, source: package-default\)\ninstallation state: current\n/,
+  );
 });
 
 void test("removal completion appends the frozen completion text after a legacy report", () => {

@@ -18,8 +18,8 @@ import { expectFailureCode, expectOk } from "../lib/command-doubles.ts";
 import {
   AdapterMessageLog,
   failureResult,
+  hasTerminalControl,
   pythonUnicodeEscapeBytes,
-  requireProtocolString,
   successResult,
   writeAdapterFailure,
   type AdapterResult,
@@ -165,7 +165,7 @@ void test("result assertion helpers reject mismatched status, outcome, and code"
   );
 });
 
-void test("requireProtocolString accepts safe text and rejects terminal controls", () => {
+void test("hasTerminalControl recognizes safe text and terminal controls", () => {
   const cp: (...codes: number[]) => string = (...codes) =>
     String.fromCodePoint(...codes);
   // accepted: printable ASCII, and non-ASCII that is neither a control nor a
@@ -177,10 +177,7 @@ void test("requireProtocolString accepts safe text and rejects terminal controls
     cp(0xe9),
     cp(0x65e5, 0x672c),
   ]) {
-    assert.doesNotThrow(
-      () => requireProtocolString(safe),
-      `rejected safe input ${JSON.stringify(safe)}`,
-    );
+    assert.equal(hasTerminalControl(safe), false, JSON.stringify(safe));
   }
   // rejected: the three ranges hasTerminalControl scans
   // (`src/adapter-result.ts:210-212::code < 0x20`), each sampled at both ends AND inside.
@@ -204,23 +201,12 @@ void test("requireProtocolString accepts safe text and rejects terminal controls
     cp(0xdfff), // lone low surrogate, top of the third range
   ];
   for (const bad of rejected) {
-    assert.throws(
-      () => requireProtocolString(bad),
-      {
-        name: "Error",
-        message:
-          "protocol strings must not contain terminal control characters",
-      },
-      `accepted unsafe input ${JSON.stringify(bad)}`,
-    );
+    assert.equal(hasTerminalControl(bad), true, JSON.stringify(bad));
   }
   // the safe side of each boundary, so a predicate widened by one code point
   // reddens this test rather than passing quietly
   for (const edge of [cp(0x20), cp(0x7e), cp(0xa0), cp(0x10000)]) {
-    assert.doesNotThrow(
-      () => requireProtocolString(edge),
-      `rejected boundary ${JSON.stringify(edge)}`,
-    );
+    assert.equal(hasTerminalControl(edge), false, JSON.stringify(edge));
   }
 });
 
