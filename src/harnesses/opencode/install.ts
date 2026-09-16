@@ -325,6 +325,18 @@ function requireSafeActivationDiscovery(observed: OpenCodeDiscovery): void {
     throw new Error("OpenCode configuration changed");
 }
 
+async function requireStableActivationRegistration(
+  paths: OpenCodePaths,
+  ctx: AdapterContext,
+  expected: RegistrationRecord | null,
+): Promise<OpenCodeDiscovery> {
+  const observed = await discovery(paths, ctx);
+  requireSafeActivationDiscovery(observed);
+  if (!sameRegistration(observed.managedEntries[0], expected))
+    throw new Error("OpenCode registration changed");
+  return observed;
+}
+
 function requireSafeRemovalDiscovery(observed: OpenCodeDiscovery): void {
   const unresolvedSkillInput = observed.blockedInputs.some(
     (input) => input !== OPEN_CODE_PURE_MODE_INPUT,
@@ -514,12 +526,13 @@ async function finalizeOpenCodePublication(
   let publicationCleanupCompleted = false;
   try {
     await requirePublication(pending);
-    const observed = await discovery(pending.paths, pending.ctx);
-    requireSafeActivationDiscovery(observed);
     const expected =
       pending.journal.priorRegistration ?? pending.journal.createdRegistration;
-    if (!sameRegistration(observed.managedEntries[0], expected))
-      throw new Error("OpenCode registration changed");
+    await requireStableActivationRegistration(
+      pending.paths,
+      pending.ctx,
+      expected,
+    );
     const assessment = await readOpenCodePackageAssessment(
       pending.canonicalRoot,
     );
@@ -667,10 +680,11 @@ export async function installOpenCode(
       ),
     );
     await requireSnapshot(paths.installedRoot, previous);
-    observed = await discovery(paths, ctx);
-    requireSafeActivationDiscovery(observed);
-    if (!sameRegistration(observed.managedEntries[0], priorRegistration))
-      throw new Error("OpenCode registration changed");
+    observed = await requireStableActivationRegistration(
+      paths,
+      ctx,
+      priorRegistration,
+    );
     priorRegistration = registrationRecord(observed.managedEntries[0]);
     pending = await beginJournal(
       paths,
@@ -696,10 +710,11 @@ export async function installOpenCode(
     await phase(pending, "publishing");
     await requireIdentity(pending.stage, pending.stageIdentity);
     await requireSnapshot(paths.installedRoot, previous);
-    observed = await discovery(paths, ctx);
-    requireSafeActivationDiscovery(observed);
-    if (!sameRegistration(observed.managedEntries[0], priorRegistration))
-      throw new Error("OpenCode registration changed");
+    observed = await requireStableActivationRegistration(
+      paths,
+      ctx,
+      priorRegistration,
+    );
     publication = await deps.beginPublication(
       pending.stage,
       pending.canonicalRoot,
@@ -709,10 +724,7 @@ export async function installOpenCode(
     await phase(pending, "published");
     if (priorRegistration === null) {
       await phase(pending, "registering");
-      observed = await discovery(paths, ctx);
-      requireSafeActivationDiscovery(observed);
-      if (observed.managedEntries.length !== 0)
-        throw new Error("OpenCode registration changed");
+      observed = await requireStableActivationRegistration(paths, ctx, null);
       const native = await deps
         .run(["plugin", pending.canonicalRoot, "--global"], paths, ctx)
         .catch(() =>

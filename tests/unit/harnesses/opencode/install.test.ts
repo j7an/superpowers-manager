@@ -124,6 +124,33 @@ void test("OpenCode first install journals publication until verified finalizati
   assert.equal((await tx.rollback()).outcome.ok, false);
 });
 
+void test("registration changed by version preflight refuses before publication", async (t) => {
+  const f = await fixture(t);
+  const result = await installOpenCode(f.artifact, f.ctx, {
+    ...f.deps,
+    run: async (args, paths, ctx, execute) => {
+      const result = await f.deps.run(args, paths, ctx, execute);
+      if (args[0] === "--version") {
+        const config = JSON.parse(readFileSync(f.configFile, "utf8"));
+        config.plugin.push(f.canonicalRoot);
+        writeFileSync(f.configFile, JSON.stringify(config));
+      }
+      return result;
+    },
+  });
+  assert.equal(result.outcome.ok, false);
+  assert.equal(
+    f.calls.some((args) => args[0] === "publication"),
+    false,
+  );
+  assert.equal(
+    f.calls.some((args) => args[0] === "plugin"),
+    false,
+  );
+  assert.equal(existsSync(f.paths.installedRoot), false);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
+});
+
 void test("OpenCode stable registration updates by snapshot swap and can roll back", async (t) => {
   const f = await fixture(t);
   value(
