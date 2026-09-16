@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {
+  failureResult,
+  successResult,
+} from "../../../../src/adapter-result.ts";
 import { openCodeHarness } from "../../../../src/harnesses/opencode/harness.ts";
-import type { ProbeSnapshot } from "../../../../src/harness.ts";
+import type { InstalledState, ProbeSnapshot } from "../../../../src/harness.ts";
 import type { OpenCodeRemovalInput } from "../../../../src/harnesses/opencode/state.ts";
 import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
@@ -98,6 +102,75 @@ void test("OpenCode probe presents source provenance and escapes every field val
     rendered.porcelain,
     /^effective_source=https:\/\/example\.invalid\/upstream$/m,
   );
+  assert.deepEqual(
+    rendered.porcelain
+      .trimEnd()
+      .split("\n")
+      .map((line) => line.split("=", 1)[0]),
+    [
+      "harness",
+      "desired_commit",
+      "upstream_source_origin",
+      "effective_source",
+      "prepared_identity",
+      "installed_identity",
+      "installation_state",
+      "resource_state",
+      "ownership",
+      "conflicts",
+      "update_control",
+      "compatibility",
+      "compatibility_reason",
+      "status",
+    ],
+  );
+});
+
+void test("OpenCode verification preserves receipt and inspection precedence", () => {
+  const receipt = successResult(
+    "install",
+    {
+      missingVerificationOutput: { stdout: [], stderr: ["missing"] },
+      mismatchVerificationOutput: { stdout: [], stderr: ["mismatch"] },
+    },
+    [],
+  );
+  const current = successResult(
+    "inspect",
+    { kind: "current" as const, observedIdentity: "id" },
+    [],
+  );
+  const failed = failureResult("install", "failed", "failure", [], []);
+  assert.deepEqual(
+    openCodeHarness.presentation.renderInstallVerification(
+      "id",
+      failed,
+      current,
+    ),
+    {
+      stdout: [],
+      stderr: [
+        "error: OpenCode activation did not return a verified installation receipt",
+      ],
+    },
+  );
+  for (const [kind, expected] of [
+    ["absent", "missing"],
+    ["mismatch", "mismatch"],
+  ] as const) {
+    const state: InstalledState =
+      kind === "absent"
+        ? { kind, observedIdentity: "" }
+        : { kind, observedIdentity: "id" };
+    assert.deepEqual(
+      openCodeHarness.presentation.renderInstallVerification(
+        "id",
+        receipt,
+        successResult("inspect", state, []),
+      ),
+      { stdout: [], stderr: [expected] },
+    );
+  }
 });
 
 void test("OpenCode no-op uninstall reports prior absence without restart", () => {

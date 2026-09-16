@@ -134,6 +134,26 @@ void test("Pi presentation separates installed facts from unsupported desired co
   const rendered = piHarness.presentation.renderProbe(facts);
   assert.match(rendered.porcelain, /installed_identity=old-digest\n/);
   assert.match(rendered.porcelain, /compatibility=unsupported\n/);
+  assert.deepEqual(
+    rendered.porcelain
+      .trimEnd()
+      .split("\n")
+      .map((line) => line.split("=", 1)[0]),
+    [
+      "harness",
+      "desired_commit",
+      "prepared_identity",
+      "installed_identity",
+      "installation_state",
+      "resource_state",
+      "ownership",
+      "conflicts",
+      "update_control",
+      "compatibility",
+      "compatibility_reason",
+      "status",
+    ],
+  );
   const codex = codexPresentation.renderProbe({
     ...facts,
     ownership: {
