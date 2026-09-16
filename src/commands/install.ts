@@ -1,7 +1,3 @@
-// Ports scripts/install. The shell sourced common.sh, provenance.sh,
-// status.sh, lifecycle.sh and adapter.sh; the predicates now live in
-// src/harnesses/codex/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
-// and the adapter arrives through ctx.adapter.
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
@@ -92,25 +88,17 @@ interface StageRun {
   // the post-SUCCESS case this option exists to catch -- there is no
   // "callback also failed" case to lose the message to.
   //
-  // An earlier draft offered that precondition as the reason install's shape
-  // "lets this go further than src/commands/uninstall.ts's GatherFailure
-  // does". It does not discriminate: uninstall's callback asserts and holds
-  // the same property, so uninstall now carries the identical GatherRun
-  // retrofit rather than dropping its closing lines. The two modules agree.
+  // This type exists for cleanup retention, not a special throw path.
   readonly cleanupWarning: string | null;
 }
 
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:44-58::TMPDIR=`, wrapped in the temporary workspace scripts/install
-// created via spw_make_workspace + spw_install_workspace_trap. Performs no
-// writes of its own -- same EPIPE-avoidance shape as gatherProbe and
-// src/commands/uninstall.ts's gatherUninstall.
+// Collect outcomes without writing so output failures cannot be classified as
+// inspection failures. Replay collected outcomes after gathering completes.
 async function gatherInstallStages<R>(
   ctx: CommandContext<R>,
   selection: EffectiveSelection,
   artifact: PreparedArtifact,
 ): Promise<StageRun> {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:38::tmp_parent=` -- ${TMPDIR:-/tmp}. Matches
-  // src/commands/uninstall.ts's gatherUninstall.
   const parent = ctx.env.TMPDIR ?? tmpdir();
   const outcomes: AdapterOutcome<unknown>[] = [];
   let cleanupWarning: string | null = null;
@@ -374,31 +362,8 @@ async function performInstall<R>(
   try {
     probe = await gatherProbe(ctx);
   } catch (cause) {
-    // gatherProbe performs no writes of its own (src/commands/probe.ts), so
-    // this catch cannot also be reached by an EPIPE from install's own
-    // output: the NOTE line above already left the try, and everything below
-    // runs only after this try/catch has resolved.
-    //
-    // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:299::THREE exceptions, all inherited and none a regression:`'s
-    // runProbe catch is the first. Because both consumers wrap the identical
-    // function, its long comment there enumerates exactly what can reach THIS
-    // stream too, including the three foreign-text exceptions at :251-296:
-    //   1. :251-262 -- resolveRef splices git's own combined stdout+stderr
-    //      into its text. Reached on probe's DEFAULT path, which that comment
-    //      defines as every invocation NOT resolving a saved pin: a 40-hex
-    //      ref returns a "raw-commit" resolution at
-    //      `src/upstream.ts:162-164::return { kind: "raw-commit"`
-    //      before any git call, so it reaches no splice at all.
-    //   2. :263-280 -- src/selection-store.ts's read path interpolates the
-    //      caught error's own message, so Node errno prose can appear.
-    //      AGENTS.md grandfathers that module's wording.
-    //   3. :281-296 -- a SPAWN-level git failure, a different channel from
-    //      exception 1's exit-status one: on the non-ENOENT arm of
-    //      `src/git.ts:47-52::if (typeof failure.code === "string") {`, runGit
-    //      rejects with "cannot run git: " followed by the Node spawn error's
-    //      own message.
-    // Not repeated in full here; read it there.
+    // Gathering does not write, so this catch cannot misclassify an output
+    // failure. oneLine() bounds any inherited diagnostic to one line.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }

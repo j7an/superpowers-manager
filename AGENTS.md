@@ -100,8 +100,8 @@ product integrations, not a required agent harness.
     no operator-facing prose. The diagnostics it pushes onto its `errors`
     array are operator-facing, but coverage is partial and the pinning is
     split across two suites: `tests/unit/harnesses/codex/generated-plugin.test.ts` and
-    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`, which drives the
-    validator CLI and pins some strings the unit suite does not. Search both
+    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`, which
+    pins some strings the unit suite does not. Search both
     for the specific string rather than assuming one suite will catch it.
 
   Re-emitting a subordinate module's own diagnostic onto that stream is the
