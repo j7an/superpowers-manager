@@ -94,15 +94,13 @@ void test("stored state recognizes quoted and dotted manager configuration only 
     managerPluginEnabled: true,
     legacyPluginPresent: false,
     legacyPluginEnabled: false,
-    installedListingJson: JSON.stringify({
-      installed: [
-        {
-          pluginId: "superpowers@superpowers-manager",
-          installed: true,
-          enabled: true,
-        },
-      ],
-    }),
+    installedPlugins: [
+      {
+        pluginId: "superpowers@superpowers-manager",
+        installed: true,
+        enabled: true,
+      },
+    ],
   });
   assert.deepEqual(await treeSnapshot(state.codexHome), before);
 });

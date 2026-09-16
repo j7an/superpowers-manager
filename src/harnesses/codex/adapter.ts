@@ -740,7 +740,7 @@ async function runOwnership(
     );
     const conflicts = await inspectCodexConflicts(
       { root: context.root, env },
-      stored.installedListingJson,
+      stored.installedPlugins,
     );
     return ownershipFromResources(
       stored.managerPluginPresent,
@@ -753,21 +753,14 @@ async function runOwnership(
   let legacyPlugin: boolean;
   let conflicts: readonly string[];
   try {
-    managerPlugin = installedListingHas(
-      plugins.stdout,
-      "installed",
-      "pluginId",
-      PLUGIN_ID,
-    );
-    legacyPlugin = installedListingHas(
-      plugins.stdout,
-      "installed",
-      "pluginId",
-      LEGACY_PLUGIN_ID,
+    const installed = codexInstalledPluginsFromJson(plugins.stdout);
+    managerPlugin = installed.some((plugin) => plugin.pluginId === PLUGIN_ID);
+    legacyPlugin = installed.some(
+      (plugin) => plugin.pluginId === LEGACY_PLUGIN_ID,
     );
     conflicts = await inspectCodexConflicts(
       { root: context.root, env },
-      plugins.stdout.toString("utf8"),
+      installed,
     );
   } catch {
     fail(
@@ -789,7 +782,7 @@ async function runOwnership(
     );
     const conflicts = await inspectCodexConflicts(
       { root: context.root, env },
-      stored.installedListingJson,
+      stored.installedPlugins,
     );
     return ownershipFromResources(
       stored.managerPluginPresent,

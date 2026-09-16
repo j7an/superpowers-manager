@@ -2543,7 +2543,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // rejects an absent PATH first, so a CLI run never reaches
   // `src/harnesses/codex/adapter.ts:286::if (env.PATH === undefined) return false;`. Deleting PATH from the CONTEXT env is not enough
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
-  // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
+  // (`src/harnesses/codex/adapter.ts:827::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
   // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:529::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
   const absentPath = createSandbox();
@@ -2661,7 +2661,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   // restatement of half one -- it asserts that two specific lines agree.
   // validateEnvironment skips path checking when `value === ""`, so the
   // empty value survives to the native reader; its `|| codexHome(...)` fallback
-  // (`src/harnesses/codex/adapter.ts:978-979::const searchRoot =`) is true for absent and empty alike. Step 5's
+  // (`src/harnesses/codex/adapter.ts:971::const searchRoot =`) is true for absent and empty alike. Step 5's
   // second mutation makes that equality an asserted property rather than a
   // reading of the source.
   withSandbox((sandbox) => {
@@ -2758,7 +2758,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     // BOTH names deleted. Unsetting only HOME would leave
     // SUPERPOWERS_INSTALLED_SEARCH_ROOT -- which baseEnvironment always sets
     // (its `SUPERPOWERS_INSTALLED_SEARCH_ROOT: sandbox.codex` entry) --
-    // winning at `src/harnesses/codex/adapter.ts:979::env.SUPERPOWERS_INSTALLED_SEARCH_ROOT || codexHome(env, process.cwd())`, and the HOME branch would never be
+    // winning at `src/harnesses/codex/adapter.ts:972::env.SUPERPOWERS_INSTALLED_SEARCH_ROOT || codexHome(env, process.cwd())`, and the HOME branch would never be
     // reached at all.
     const result = runCliWithoutEnvironment(
       sandbox,

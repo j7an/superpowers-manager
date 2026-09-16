@@ -15,9 +15,15 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import { inspectCodexConflicts } from "../../../../src/harnesses/codex/conflicts.ts";
+import {
+  codexInstalledPluginsFromJson,
+  type CodexInstalledPlugin,
+} from "../../../../src/harnesses/codex/json.ts";
 
-function listing(items: readonly Record<string, unknown>[]): string {
-  return JSON.stringify({ installed: items });
+function records(
+  items: readonly CodexInstalledPlugin[],
+): readonly CodexInstalledPlugin[] {
+  return items;
 }
 
 void test("Codex unmanaged plugin conflicts follow qualified native state", async (t) => {
@@ -25,7 +31,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
   t.after(() => rm(emptyHome, { recursive: true, force: true }));
   for (const env of [{}, { HOME: "" }]) {
     assert.deepEqual(
-      await inspectCodexConflicts({ root: "/unused", env }, listing([])),
+      await inspectCodexConflicts({ root: "/unused", env }, records([])),
       [
         "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
       ],
@@ -36,7 +42,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
     assert.deepEqual(
       await inspectCodexConflicts(
         { root: "/unused", env: { HOME: emptyHome } },
-        listing([
+        records([
           {
             pluginId: "superpowers@another-provider",
             installed: true,
@@ -54,7 +60,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
       assert.deepEqual(
         await inspectCodexConflicts(
           { root: "/unused", env: { HOME: emptyHome } },
-          listing([
+          records([
             {
               pluginId: "superpowers@disabled-provider",
               installed: true,
@@ -78,19 +84,23 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
       assert.deepEqual(
         await inspectCodexConflicts(
           { root: "/unused", env: { HOME: emptyHome } },
-          listing([
-            { pluginId: "superpowers@missing-state" },
-            {
-              pluginId: "superpowers@malformed-state",
-              installed: true,
-              enabled: "yes",
-            },
-            {
-              pluginId: "superpowers@contradictory-state",
-              installed: false,
-              enabled: true,
-            },
-          ]),
+          codexInstalledPluginsFromJson(
+            JSON.stringify({
+              installed: [
+                { pluginId: "superpowers@missing-state" },
+                {
+                  pluginId: "superpowers@malformed-state",
+                  installed: true,
+                  enabled: "yes",
+                },
+                {
+                  pluginId: "superpowers@contradictory-state",
+                  installed: false,
+                  enabled: true,
+                },
+              ],
+            }),
+          ),
         ),
         [
           "Codex plugin superpowers@missing-state has indeterminate activity",
@@ -107,7 +117,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
       assert.deepEqual(
         await inspectCodexConflicts(
           { root: "/unused", env: { HOME: emptyHome } },
-          listing([
+          records([
             {
               pluginId: "superpowers@superpowers-manager",
               installed: true,
@@ -141,7 +151,7 @@ void test("Codex unmanaged plugin conflicts follow qualified native state", asyn
       assert.deepEqual(
         await inspectCodexConflicts(
           { root: "/unused", env: { HOME: emptyHome } },
-          listing([
+          records([
             {
               pluginId: "superpowers@unsafe\n",
               installed: true,
@@ -173,7 +183,7 @@ void test("the documented native Codex skills route is indeterminate and untouch
   assert.deepEqual(
     await inspectCodexConflicts(
       { root: "/unused", env: { HOME: home } },
-      listing([]),
+      records([]),
     ),
     [
       "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
@@ -204,7 +214,7 @@ void test("the documented native Codex skills route is indeterminate and untouch
     assert.deepEqual(
       await inspectCodexConflicts(
         { root: "/unused", env: { HOME: danglingHome } },
-        listing([]),
+        records([]),
       ),
       [
         "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
@@ -240,7 +250,7 @@ void test("the documented native Codex skills route is indeterminate and untouch
       assert.deepEqual(
         await inspectCodexConflicts(
           { root: "/unused", env: { HOME: unreadableHome } },
-          listing([]),
+          records([]),
         ),
         [
           "native Codex skills route ~/.agents/skills/superpowers has indeterminate activity",
@@ -270,7 +280,7 @@ void test("the documented native Codex skills route is indeterminate and untouch
       assert.deepEqual(
         await inspectCodexConflicts(
           { root: "/unused", env: { HOME: unrelatedHome } },
-          listing([]),
+          records([]),
         ),
         [],
       );
@@ -299,7 +309,7 @@ void test("Pi resources never appear in Codex conflict results", async (t) => {
   assert.deepEqual(
     await inspectCodexConflicts(
       { root: "/unused", env: { HOME: home } },
-      listing([]),
+      records([]),
     ),
     [],
   );
