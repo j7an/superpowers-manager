@@ -22,7 +22,6 @@ import {
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
-  commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,
@@ -32,6 +31,7 @@ import {
   writeCodexLogTool,
   writeNoopTool,
 } from "./support.ts";
+import { requirementsFor } from "../../src/cli.ts";
 import {
   createCase,
   readLog,
@@ -53,12 +53,24 @@ import { runProbe } from "../../src/commands/probe.ts";
 
 import { codexReadNativeState } from "../../src/harnesses/codex/adapter.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+import type { HarnessCommand } from "../../src/harness.ts";
 import { codexControlInspection } from "../../src/harnesses/codex/lifecycle.ts";
 import { successResult } from "../../src/adapter-result.ts";
 
 import { runUpdate } from "../../src/commands/update.ts";
 
 type Sandbox = import("./support.ts").Sandbox;
+
+const REQUIREMENT_COMMANDS = {
+  pin: true,
+  "track-latest": true,
+  unpin: true,
+  prepare: true,
+  probe: true,
+  install: true,
+  update: true,
+  uninstall: true,
+} satisfies Record<HarnessCommand, true>;
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -673,14 +685,13 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     ["uninstall", ["--purge", "arbitrary value"]],
   ]);
   assert.deepEqual([...cases.keys()], COMMANDS);
-  // The production subcommand set and the test-side COMMANDS list must agree as
-  // sets in both directions. COMMANDS is hand-maintained; commandRequirements
-  // returns Record<Subcommand, string[]>, typed by the production Subcommand
-  // union and therefore exhaustively checked, so either list can gain or lose an
-  // entry the other does not have. A one-directional `includes` check cannot
-  // catch that.
+  // The production command union and the test-side COMMANDS list must agree as
+  // sets in both directions. REQUIREMENT_COMMANDS is typed exhaustively by the
+  // production HarnessCommand union, so either list can gain or lose an entry
+  // the other does not have. A one-directional `includes` check cannot catch
+  // that.
   assert.deepEqual(
-    Object.keys(commandRequirements({})).sort(),
+    Object.keys(REQUIREMENT_COMMANDS).sort(),
     [...COMMANDS].sort(),
   );
 
@@ -994,19 +1005,13 @@ void test("CLI-PREFLIGHT-01 missing tools fail before dispatch", () => {
   // each command's tools by hand, so production could change its requirements
   // while this expectation stayed silently stale.
   //
-  // commandRequirements(env) takes the environment and returns the whole
-  // Record<Subcommand, string[]>; index it per command. These cases configure
-  // no validator, so the empty env is the right derivation for them.
-  const declared = commandRequirements({});
-  // This map is a plain copy of `declared` keyed the same way.
   const requirements = new Map(
-    COMMANDS.map((command) => {
-      // COMMANDS is a plain string[]; CLI-COMMANDS-01 above asserts it agrees
-      // with Object.keys(commandRequirements({})) as a set in both directions,
-      // which is what makes this narrowing sound rather than assumed.
-      const key = command as keyof typeof declared;
-      return [command, [...declared[key]]];
-    }),
+    (Object.keys(REQUIREMENT_COMMANDS) as HarnessCommand[]).map((command) => [
+      command,
+      requirementsFor(command, {}, codexHarness).map(
+        (requirement) => requirement.name,
+      ),
+    ]),
   );
   // Every tool any command in `requirements` can require. Used below to give
   // the empty-requirements rows (`track-latest`, `unpin`) a real assertion
@@ -2540,7 +2545,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // either -- runCodexOperation merges `{ ...process.env, ...context.env }`
   // (`src/harnesses/codex/adapter.ts:834::const env = { ...process.env, ...context.env };`), so the runner's own PATH would survive the merge.
   // Both have to go, and process.env is restored in the finally below the way
-  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:517::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
+  // CLI-HOST-TOOLS-02 (`tests/baseline/cli-parity.test.ts:529::CLI-HOST-TOOLS-02 removes an unregistered root`) restores it.
   const absentPath = createSandbox();
   const originalPath = process.env.PATH;
   try {
@@ -2612,8 +2617,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1245::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1291::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1250::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1296::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

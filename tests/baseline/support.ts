@@ -72,7 +72,6 @@ const COMMANDS = [
   "uninstall",
 ];
 
-import { commandRequirements } from "../../src/cli.ts";
 const PASSTHROUGH_VARIABLES = [
   "SUPERPOWERS_REF",
   "SUPERPOWERS_UPSTREAM_URL",
@@ -518,7 +517,6 @@ export {
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
-  commandRequirements,
   createSandbox,
   destroySandbox,
   fixturePath,
