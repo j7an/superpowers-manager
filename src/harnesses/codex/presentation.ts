@@ -10,7 +10,7 @@ import type {
 import type { AdapterContext } from "../../adapter-result.ts";
 import type { CodexRemovalInput } from "./adapter.ts";
 
-export interface ProbeFacts {
+interface ProbeFacts {
   readonly harness: "codex";
   readonly requestedRef: string;
   readonly resolvedRef: string;
@@ -97,38 +97,13 @@ function fields(f: ProbeFacts): readonly Field[] {
   ];
 }
 
-const NO_FACTS: ProbeFacts = {
-  harness: "codex",
-  requestedRef: "",
-  resolvedRef: "",
-  desiredCommit: "",
-  generatedCommit: "",
-  installedCommit: "",
-  identityState: "",
-  status: "",
-  selectionOrigin: "",
-  selectionMode: "",
-  upstreamSourceOrigin: "",
-  effectiveSource: "",
-  savedMode: "",
-  savedSource: "",
-  savedRequestedRef: "",
-  savedResolvedRef: "",
-  savedCommit: "",
-  updateControl: "",
-};
-
-export const PROBE_PORCELAIN_KEYS: readonly string[] = fields(NO_FACTS).map(
-  (field) => field.key,
-);
-
-export function formatPorcelain(f: ProbeFacts): string {
+function formatPorcelain(f: ProbeFacts): string {
   return fields(f)
     .map((field) => `${field.key}=${field.value}\n`)
     .join("");
 }
 
-export function formatHuman(f: ProbeFacts): string {
+function formatHuman(f: ProbeFacts): string {
   let text = fields(f)
     .map((field) => {
       const shown =

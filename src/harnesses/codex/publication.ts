@@ -491,13 +491,6 @@ async function rollbackPublication(
   ctx: AdapterContext,
   dependencies: CodexPublicationDependencies,
 ): Promise<AdapterResult<null>> {
-  if (pending.settled) {
-    return fail(
-      "already-settled",
-      "Codex installation transaction has already been settled",
-      [],
-    );
-  }
   const messages: AdapterMessage[] = [];
   try {
     const currentNative = await observeNative(ctx, dependencies, messages);
@@ -589,13 +582,6 @@ async function finalizePublication(
   dependencies: CodexPublicationDependencies,
   ctx: AdapterContext,
 ): Promise<AdapterResult<null>> {
-  if (pending.settled) {
-    return fail(
-      "already-settled",
-      "Codex installation transaction has already been settled",
-      [],
-    );
-  }
   const messages: AdapterMessage[] = [];
   let verified = false;
   let backupRemoved = false;

@@ -134,10 +134,9 @@ function validStagingLeaf(value: string): boolean {
 }
 
 async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
+  // Collect outcomes without writing so output failures cannot be classified as
+  // inspection failures. Replay collected outcomes after gathering completes.
   const env = ctx.env;
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:16::invocation_root=` — captured before the two case statements below.
-  // getcwd(3) returns the physical path, so this matches `pwd -P` without a
-  // realpath call.
   const cwd = process.cwd();
   const cache = upstreamCacheRoot(ctx.root, env, cwd);
   const cacheParent = dirname(cache);
@@ -343,7 +342,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       // the workspace on return, and the candidate lives in it.
       //
       // atomicReplaceDir delegates to beginDirectoryPublication, whose outer
-      // catch (`src/atomic.ts:341-348::if (cause`) wraps every non-SafetyError
+      // catch (`src/atomic.ts:319::if (cause`) wraps every non-SafetyError
       // into a SafetyError, so the callee owns every failure on this path and
       // re-emitting its own diagnostic is the sanctioned form of interpolation.
       // The hand-written prefix carries the live root, which the callee's message
@@ -401,59 +400,10 @@ async function performPrepare<R>(
   try {
     run = await gatherPrepare(ctx);
   } catch (cause) {
-    // Hand-written messages, per AGENTS.md's reader-diagnostics rule.
-    // Reachable here: prepareError(), from this module's owned() wrappers,
-    // its two manifest-version checks, and asResolutionKind;
-    // readManifest's three hookError messages
-    // (`src/harnesses/codex/hooks.ts:113-138::readManifest`), pinned by
-    // `tests/unit/harnesses/codex/hooks.test.ts:87::void test("readManifest diagnostics` as carrying no reader vocabulary or
-    // errno; and SafetyErrors from gitSafeSource, writeProvenance, and
-    // withWorkspace.
-    //
-    // FOUR exceptions, all inherited and none a regression:
-    //   1. resolveRef splices git's combined stdout+stderr into its own text
-    //      on the NON-PINNED path (src/upstream.ts), reached via
-    //      computeEffectiveSelection (src/effective-selection.ts).
-    //      This is the DEFAULT invocation -- plain `prepare`, `track-latest`,
-    //      and any non-40-hex SUPERPOWERS_REF -- not an exotic corner. Pinned
-    //      by
-    //      `tests/unit/upstream.test.ts:439-448::void test("resolveRef reports a query failure for latest`,
-    //      `tests/unit/upstream.test.ts:450-460::void test("resolveRef reports a query failure for a tag lookup`, and
-    //      `tests/unit/upstream.test.ts:462-480::void test("resolveRef reports a query failure for the generic ref lookup`.
-    //   2. fetchExactCommit splices the same combined stdout+stderr into its
-    //      own text on the PINNED path (both of its own splice sites in
-    //      src/upstream.ts, and proveCommit's, which it calls). This is the
-    //      rarer of the two raw-git-output paths, not the only one.
-    //   3. `src/selection-store.ts:120-124::cause.module === "selection") {`
-    //      (same shape at :49, :86, :98) is the
-    //      module AGENTS.md's `src/selection-store.ts` bullet grandfathers:
-    //      it interpolates the caught error's own message, so Node errno
-    //      prose can reach this stream -- sanctioned, nothing here needs
-    //      fixing.
-    //   4. Every runGit call site in this module (fetch, clone, checkout) can
-    //      reject instead of resolving: `src/git.ts:47-52::reject(new SafetyError` wraps every string
-    //      errno other than ENOENT in
-    //      `new SafetyError("git", \`cannot run git: ${failure.message}\`)`,
-    //      and that Node spawn-level message reaches ctx.stderr through this
-    //      catch. So the claim that the non-pinned clone/fetch/checkout
-    //      branch names only the source is true for a non-zero *exit status*
-    //      (handled explicitly below, in gatherPrepare) but false for a
-    //      *spawn-level* failure -- runGit throws rather than returning a
-    //      status in that case, and this outer catch is what stands between
-    //      it and the stream.
-    //
-    // oneLine() at this catch collapses each of exceptions 1, 2, and 4 -- the
-    // three carrying git-derived text -- to a single line. It collapses CR/LF
-    // only, so it bounds how much of that text lands, not what it may
-    // contain.
-    //
-    // runCodexOperation's closing `throw cause` (src/harnesses/codex/adapter.ts) does NOT arrive
-    // here -- the call site catches it and converts it to a hand-written
-    // message per AGENTS.md's reader-diagnostics rule.
-    //
-    // gatherPrepare performs no writes of its own, so this catch cannot also be
-    // reached by an EPIPE from prepare's own output: every write below runs
-    // only after this try/catch has resolved.
+    // Reader wrappers supply their own diagnostics. The saved-selection read
+    // path retains its sanctioned interpolation at
+    // `src/selection-store.ts:116-121::if (cause instanceof SafetyError && cause.module === "selection") {`.
+    // oneLine() bounds any inherited git or filesystem diagnostic to one line.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
@@ -481,7 +431,7 @@ async function performPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:561-570::if (cleanupWarning`.
+    // `src/commands/install.ts:446::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

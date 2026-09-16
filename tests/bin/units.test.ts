@@ -6,7 +6,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import * as bin from "../../src/cli.ts";
+import { requirementsFor } from "../../src/cli.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+import type { HarnessCommand } from "../../src/harness.ts";
 
 assert.strictEqual(typeof bin.main, "function");
 
@@ -96,24 +98,26 @@ assert.strictEqual(bin.parseArgs(["--version"]).kind, "version");
 assert.strictEqual(bin.parseArgs(["bogus"]).kind, "usage-error");
 assert.strictEqual(bin.parseArgs(["--porcelain"]).kind, "usage-error");
 
-const requirements = bin.commandRequirements({});
-assert.deepStrictEqual(requirements.pin, ["git"]);
-assert.deepStrictEqual(requirements["track-latest"], []);
-assert.deepStrictEqual(requirements.unpin, []);
+const requirements = (command: HarnessCommand, env: NodeJS.ProcessEnv = {}) =>
+  requirementsFor(command, env, codexHarness).map(
+    (requirement) => requirement.name,
+  );
+assert.deepStrictEqual(requirements("pin"), ["git"]);
+assert.deepStrictEqual(requirements("track-latest"), []);
+assert.deepStrictEqual(requirements("unpin"), []);
 // Uninstall requires Codex but not Python; it has no validator process.
-assert.deepStrictEqual(requirements.uninstall, ["codex"]);
-assert.deepStrictEqual(requirements.prepare, ["git"]);
+assert.deepStrictEqual(requirements("uninstall"), ["codex"]);
+assert.deepStrictEqual(requirements("prepare"), ["git"]);
 // An empty legacy-validator value leaves tool requirements unchanged.
-assert.deepStrictEqual(
-  bin.commandRequirements({ SUPERPOWERS_VALIDATOR: "" }).prepare,
-  ["git"],
-);
+assert.deepStrictEqual(requirements("prepare", { SUPERPOWERS_VALIDATOR: "" }), [
+  "git",
+]);
 // SUPERPOWERS_VALIDATOR_EXECUTABLE names a program invoked directly, not a
 // Python script, so it must never add python3 to prepare's requirements.
 assert.ok(
-  !bin
-    .commandRequirements({ SUPERPOWERS_VALIDATOR_EXECUTABLE: "/validator" })
-    .prepare.includes("python3"),
+  !requirements("prepare", {
+    SUPERPOWERS_VALIDATOR_EXECUTABLE: "/validator",
+  }).includes("python3"),
   "executable validators must not require python3",
 );
 
@@ -154,13 +158,13 @@ assert.throws(
 
 // --- preflight: codex required for every command that inspects or mutates Codex ---
 const emptyEnv = { PATH: "/nonexistent-dir-for-test" };
-const probePf = bin.preflight("probe", emptyEnv, "linux");
+const probePf = bin.preflight("probe", emptyEnv, "linux", codexHarness);
 assert.strictEqual(probePf.ok, false);
 assert.ok(
   probePf.errors.join("\n").includes("codex"),
   "probe must require codex",
 );
-const installPf = bin.preflight("install", emptyEnv, "linux");
+const installPf = bin.preflight("install", emptyEnv, "linux", codexHarness);
 assert.strictEqual(installPf.ok, false);
 assert.ok(
   installPf.errors.join("\n").includes("codex"),
@@ -196,6 +200,7 @@ try {
     "prepare",
     { ...retiredPreflightEnv, PATH: "" },
     process.platform,
+    codexHarness,
   );
 } finally {
   if (savedRequirements !== undefined)
@@ -216,12 +221,28 @@ assert.ok(
 // Positive control: the same command, real PATH, no validator variables set
 // at all -- must stay ok. Without this, a preflight that rejected EVERY
 // command would also satisfy the assertion above for the wrong reason.
-const cleanPreflight = bin.preflight("prepare", realPathEnv, "linux");
+const cleanPreflight = bin.preflight(
+  "prepare",
+  realPathEnv,
+  "linux",
+  codexHarness,
+);
 assert.strictEqual(
   cleanPreflight.ok,
   true,
   "preflight must stay ok when the validator configuration is clean",
 );
+
+const requested: string[] = [];
+const selectedAdapter = {
+  ...codexHarness,
+  requirements(command: HarnessCommand) {
+    requested.push(command);
+    return [];
+  },
+};
+bin.preflight("prepare", { PATH: "" }, process.platform, selectedAdapter);
+assert.deepStrictEqual(requested, ["prepare"]);
 
 // --- the baseline sandbox refuses network egress through git ---
 // Local upstream paths must pass through while network URLs are refused.

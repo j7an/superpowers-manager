@@ -21,10 +21,8 @@ import type {
 } from "../../../../src/adapter-result.ts";
 import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 import type { OwnershipInspection } from "../../../../src/harness.ts";
-import {
-  digestPiTree,
-  piReceiptBinding,
-} from "../../../../src/harnesses/pi/package.ts";
+import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import { piPaths, type PiPaths } from "../../../../src/harnesses/pi/paths.ts";
 import {
   inspectPiControl,
@@ -97,7 +95,7 @@ async function preparedAndInstalled(
   const upstream = nativeFixture(t);
   const selection = nativeSelection();
   cpSync(upstream, state.paths.preparedRoot, { recursive: true });
-  const digest = await digestPiTree(state.paths.preparedRoot);
+  const digest = await digestArtifactTree(state.paths.preparedRoot);
   const identity = {
     schema: 1 as const,
     manager: "superpowers-manager" as const,
@@ -110,7 +108,7 @@ async function preparedAndInstalled(
     join(state.paths.preparedRoot, ".superpowers-manager.json"),
     JSON.stringify({
       ...identity,
-      binding: piReceiptBinding(identity),
+      binding: snapshotReceiptBinding(identity),
       compatibility: {
         kind: "supported",
         generation: "pi-native-bootstrap-v1",
@@ -296,11 +294,14 @@ void test("Pi inspection keeps registration, filesystem, and configuration evide
       const original = JSON.parse(readFileSync(receiptPath, "utf8"));
       const changed = {
         ...original,
-        digest: await digestPiTree(state.paths.installedRoot),
+        digest: await digestArtifactTree(state.paths.installedRoot),
       };
       writeFileSync(
         receiptPath,
-        JSON.stringify({ ...changed, binding: piReceiptBinding(changed) }),
+        JSON.stringify({
+          ...changed,
+          binding: snapshotReceiptBinding(changed),
+        }),
       );
 
       const inspected = await inspectPiInstalled(selection, state.ctx);
@@ -419,11 +420,14 @@ void test("missing or unsupported desired preparation does not suppress installe
   const original = JSON.parse(readFileSync(receiptPath, "utf8"));
   const rewritten = {
     ...original,
-    digest: await digestPiTree(state.paths.preparedRoot),
+    digest: await digestArtifactTree(state.paths.preparedRoot),
   };
   writeFileSync(
     receiptPath,
-    JSON.stringify({ ...rewritten, binding: piReceiptBinding(rewritten) }),
+    JSON.stringify({
+      ...rewritten,
+      binding: snapshotReceiptBinding(rewritten),
+    }),
   );
   const unsupported = await inspectPiInstalled(selection, state.ctx);
   assert.deepEqual(unsupported.outcome.ok && unsupported.outcome.result, {
@@ -856,6 +860,32 @@ void test("Pi detects shared user-wide Superpowers skills without crossing into 
     ownership = unwrapOwnership(await inspectPiOwnership(state.ctx));
     assert.equal(ownership.installEligibility.kind, "allowed");
   });
+
+  await t.test(
+    "literal exclusions retain route-specific uncertainty priority",
+    async (t) => {
+      const state = sandbox(t);
+      await preparedAndInstalled(t, state);
+      const skill = sharedSkill(state, "using-superpowers");
+      writeSkill(skill, "using-superpowers");
+      settingsWithSkills(state.paths, packages, [
+        "!using-superpowers",
+        "!*.md",
+      ]);
+      const automatic = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.deepEqual(automatic.presentationConflicts, [
+        "native Pi skills route ~/.agents/skills/superpowers has indeterminate activity",
+      ]);
+      settingsWithSkills(state.paths, packages, [
+        skill,
+        "!using-superpowers",
+        "!*.md",
+      ]);
+      const explicit = unwrapOwnership(await inspectPiOwnership(state.ctx));
+      assert.deepEqual(explicit.presentationConflicts, []);
+      assert.equal(explicit.installEligibility.kind, "allowed");
+    },
+  );
 
   await t.test("every discovered sibling must be disabled", async (t) => {
     const state = sandbox(t);

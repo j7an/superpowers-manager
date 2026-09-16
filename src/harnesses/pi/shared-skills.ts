@@ -12,7 +12,7 @@ import {
 import { fileURLToPath } from "node:url";
 import type { PiPaths } from "./paths.ts";
 import type { PiSettings } from "./settings.ts";
-import { classifyPathNoFollow } from "../../safe-path.ts";
+import { classifyPathNoFollow, isContained } from "../../safe-path.ts";
 const PI_IGNORE_FILES = [".gitignore", ".ignore", ".fdignore"] as const;
 
 type SharedSkillCollection =
@@ -187,6 +187,25 @@ function normalizeExactSkillPattern(pattern: string): string {
   return toPosixPath(normalized);
 }
 
+function forcedSkillActivity(
+  path: string,
+  identityRoot: string,
+  controls: readonly string[],
+): "active" | "disabled" | null {
+  const identities = exactSkillIdentities(path, identityRoot);
+  for (const [prefix, activity] of [
+    ["-", "disabled"],
+    ["+", "active"],
+  ] as const) {
+    const patterns = controls
+      .filter((control) => control.startsWith(prefix))
+      .map((control) => normalizeExactSkillPattern(control.slice(1)));
+    if (patterns.some((pattern) => identities.includes(pattern)))
+      return activity;
+  }
+  return null;
+}
+
 function hasUnknownMinimatchSyntax(pattern: string): boolean {
   return (
     pattern.startsWith("#") ||
@@ -201,20 +220,8 @@ function sharedSkillActivity(
   agentsRoot: string,
   controls: readonly string[],
 ): SharedSkillActivity {
-  const exactIdentities = exactSkillIdentities(path, agentsRoot);
-  const forceExcludes = controls
-    .filter((control) => control.startsWith("-"))
-    .map((control) => normalizeExactSkillPattern(control.slice(1)));
-  if (forceExcludes.some((pattern) => exactIdentities.includes(pattern))) {
-    return "disabled";
-  }
-
-  const forceIncludes = controls
-    .filter((control) => control.startsWith("+"))
-    .map((control) => normalizeExactSkillPattern(control.slice(1)));
-  if (forceIncludes.some((pattern) => exactIdentities.includes(pattern))) {
-    return "active";
-  }
+  const forced = forcedSkillActivity(path, agentsRoot, controls);
+  if (forced !== null) return forced;
 
   const excludePatterns = controls
     .filter((control) => control.startsWith("!"))
@@ -272,14 +279,6 @@ function resolveTopLevelSkillPath(source: string, paths: PiPaths): string {
     : resolve(paths.agentDir, normalized);
 }
 
-function containedBy(root: string, candidate: string): boolean {
-  const suffix = relative(root, candidate);
-  return (
-    suffix === "" ||
-    (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
-  );
-}
-
 async function hasSafeSharedSkillAncestors(
   path: string,
   sharedRoot: string,
@@ -307,20 +306,8 @@ function explicitSharedSkillActivity(
   paths: PiPaths,
   controls: readonly string[],
 ): SharedSkillActivity {
-  const exactIdentities = exactSkillIdentities(path, paths.agentDir);
-  const forceExcludes = controls
-    .filter((control) => control.startsWith("-"))
-    .map((control) => normalizeExactSkillPattern(control.slice(1)));
-  if (forceExcludes.some((pattern) => exactIdentities.includes(pattern))) {
-    return "disabled";
-  }
-
-  const forceIncludes = controls
-    .filter((control) => control.startsWith("+"))
-    .map((control) => normalizeExactSkillPattern(control.slice(1)));
-  if (forceIncludes.some((pattern) => exactIdentities.includes(pattern))) {
-    return "active";
-  }
+  const forced = forcedSkillActivity(path, paths.agentDir, controls);
+  if (forced !== null) return forced;
 
   const excludePatterns = controls
     .filter((control) => control.startsWith("!"))
@@ -378,7 +365,7 @@ async function explicitSharedSkillActivities(
     try {
       lexicalKind = await classifyPathNoFollow(path);
     } catch {
-      if (containedBy(sharedRoot, path) || containedBy(path, sharedRoot)) {
+      if (isContained(sharedRoot, path) || isContained(path, sharedRoot)) {
         indeterminate = true;
       }
       continue;
@@ -389,12 +376,12 @@ async function explicitSharedSkillActivities(
       canonicalPath = await realpath(path);
     } catch {
       let related =
-        containedBy(sharedRoot, path) || containedBy(path, sharedRoot);
+        isContained(sharedRoot, path) || isContained(path, sharedRoot);
       if (!related && lexicalKind === "symlink") {
         try {
           const target = resolve(dirname(path), await readlink(path));
           related =
-            containedBy(sharedRoot, target) || containedBy(target, sharedRoot);
+            isContained(sharedRoot, target) || isContained(target, sharedRoot);
         } catch {
           // Without a relationship to the known route, preserve unrelated state.
         }
@@ -403,10 +390,10 @@ async function explicitSharedSkillActivities(
       continue;
     }
     const related =
-      containedBy(sharedRoot, path) ||
-      containedBy(path, sharedRoot) ||
-      containedBy(canonicalSharedRoot, canonicalPath) ||
-      containedBy(canonicalPath, canonicalSharedRoot);
+      isContained(sharedRoot, path) ||
+      isContained(path, sharedRoot) ||
+      isContained(canonicalSharedRoot, canonicalPath) ||
+      isContained(canonicalPath, canonicalSharedRoot);
     if (!related) continue;
     let canonicalKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
     try {

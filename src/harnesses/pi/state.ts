@@ -15,9 +15,12 @@ import type {
   OwnershipInspection,
   UpdateControlInspection,
 } from "../../harness.ts";
-import { samePiSource } from "./compatibility.ts";
 import {
-  digestPiTree,
+  observeSnapshot,
+  sameSnapshotSource,
+  type SnapshotObservation,
+} from "../../snapshot-package.ts";
+import {
   readPiPackageAssessment,
   readPiReceipt,
   type PiReceipt,
@@ -37,15 +40,6 @@ export interface PiRemovalInput {
   readonly registrationIdentity: string | null;
   readonly receiptDigest: string | null;
 }
-
-type SnapshotObservation =
-  | { readonly kind: "absent" }
-  | { readonly kind: "unverified" }
-  | {
-      readonly kind: "owned";
-      readonly receipt: PiReceipt;
-      readonly digest: string;
-    };
 
 interface SettingsObservation {
   readonly settings: PiSettings;
@@ -170,21 +164,6 @@ async function observeSettings(paths: PiPaths): Promise<SettingsObservation> {
   return { settings, registration };
 }
 
-async function observeSnapshot(paths: PiPaths): Promise<SnapshotObservation> {
-  const kind = await classifyPathNoFollow(paths.installedRoot);
-  if (kind === "missing") return { kind: "absent" };
-  if (kind !== "directory") return { kind: "unverified" };
-  try {
-    const receipt = await readPiReceipt(paths.installedRoot);
-    const digest = await digestPiTree(paths.installedRoot);
-    return receipt.digest === digest
-      ? { kind: "owned", receipt, digest }
-      : { kind: "unverified" };
-  } catch {
-    return { kind: "unverified" };
-  }
-}
-
 async function isNamedLocalSuperpowers(
   entry: PiPackageEntry,
   paths: PiPaths,
@@ -271,7 +250,7 @@ export async function inspectPiOwnership(
   try {
     const [{ settings, registration }, snapshot] = await Promise.all([
       observeSettings(paths),
-      observeSnapshot(paths),
+      observeSnapshot<PiReceipt>(paths.installedRoot, readPiReceipt),
     ]);
     if (snapshot.kind === "unverified") {
       return inspectionFailure(
@@ -350,11 +329,11 @@ export async function inspectPiInstalled(
   const operation = "inspect-pi-installed";
   const paths = pathsFor(ctx);
   let settings: SettingsObservation;
-  let snapshot: SnapshotObservation;
+  let snapshot: SnapshotObservation<PiReceipt>;
   try {
     [settings, snapshot] = await Promise.all([
       observeSettings(paths),
-      observeSnapshot(paths),
+      observeSnapshot<PiReceipt>(paths.installedRoot, readPiReceipt),
     ]);
   } catch {
     return inspectionFailure(
@@ -400,9 +379,9 @@ export async function inspectPiInstalled(
       (intended.compatibility.kind !== "supported" &&
         intended.compatibility.kind !== "experimental") ||
       intended.receipt.commit !== selection.desiredCommit ||
-      !samePiSource(intended.receipt.source, selection.effectiveSource) ||
+      !sameSnapshotSource(intended.receipt.source, selection.effectiveSource) ||
       snapshot.receipt.commit !== intended.receipt.commit ||
-      !samePiSource(snapshot.receipt.source, intended.receipt.source) ||
+      !sameSnapshotSource(snapshot.receipt.source, intended.receipt.source) ||
       snapshot.digest !== intended.receipt.digest
     ) {
       return mismatch;

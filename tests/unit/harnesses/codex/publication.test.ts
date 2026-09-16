@@ -36,10 +36,7 @@ import type {
   CodexNativeState,
   CodexRemovalInput,
 } from "../../../../src/harnesses/codex/adapter.ts";
-import {
-  codexControlInspection,
-  codexOwnershipInspection,
-} from "../../../../src/harnesses/codex/lifecycle.ts";
+import { codexOwnershipInspection } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   readCodexMarketplace,
   stageCodexMarketplace,
@@ -66,6 +63,11 @@ const RECEIPT: InstallReceipt = {
     stdout: [],
     stderr: ["installed plugin mismatch"],
   },
+};
+const ALLOWED_CONTROL: UpdateControlInspection = {
+  probeEligibility: { kind: "allowed" },
+  mutationEligibility: { kind: "allowed" },
+  presentationValue: "managed",
 };
 
 function nativeState(
@@ -105,7 +107,7 @@ function ownershipInspection(
 function controlInspection(
   message: string,
 ): AdapterResult<UpdateControlInspection> {
-  return successResult("inspect", codexControlInspection("managed"), [
+  return successResult("inspect", ALLOWED_CONTROL, [
     { channel: "stderr", text: message },
   ]);
 }
@@ -517,7 +519,7 @@ void test("publication requires affirmative ownership and control eligibility be
     { pluginPresent: true, marketplacePresent: true },
     [],
   );
-  const controlAllowed = codexControlInspection("managed");
+  const controlAllowed = ALLOWED_CONTROL;
   const variants: readonly RefusalVariant[] = [
     "inspection failure",
     "successful nonzero status",
@@ -629,6 +631,23 @@ void test("publication returns a pending transaction and preserves ordered nativ
   assert.deepEqual(f.inspectionCalls, ["ownership", "update-control"]);
   assert.equal((await tx.finalize()).outcome.ok, true);
   assert.equal(await readCodexRecovery(f.paths), null);
+});
+
+void test("concurrent settlement admits only the first operation", async (t) => {
+  const f = await fixture(t);
+  const tx = transaction(
+    await installCodexMarketplace(
+      f.artifact,
+      f.ctx,
+      f.activateCurrent,
+      f.dependencies,
+    ),
+  );
+  const [first, second] = await Promise.all([tx.finalize(), tx.rollback()]);
+  assert.equal(first.outcome.ok, true, JSON.stringify(first));
+  assert.equal(second.outcome.ok, false);
+  if (second.outcome.ok) assert.fail("second settlement was admitted");
+  assert.equal(second.outcome.error.code, "already-settled");
 });
 
 void test("configured enabled plugin without a cache starts and settles publication", async (t) => {

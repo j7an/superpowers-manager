@@ -6,6 +6,7 @@ import { parse, TomlDate, type TomlTable, type TomlValue } from "smol-toml";
 
 import { SafetyError } from "../../safety-error.ts";
 import { codexHome } from "./paths.ts";
+import type { CodexInstalledPlugin } from "./json.ts";
 
 const CONFIG_LIMIT = 1024 * 1024;
 const CONFIG_DEPTH_LIMIT = 64;
@@ -23,7 +24,7 @@ export interface CodexStoredState {
   readonly managerPluginEnabled: boolean;
   readonly legacyPluginPresent: boolean;
   readonly legacyPluginEnabled: boolean;
-  readonly installedListingJson: string;
+  readonly installedPlugins: readonly CodexInstalledPlugin[];
 }
 
 function storedError(message: string, cause?: unknown): SafetyError {
@@ -272,11 +273,7 @@ export async function readCodexStoredState(
   );
   const plugins = table(config.plugins, "plugins");
   const searchRoot = env.SUPERPOWERS_INSTALLED_SEARCH_ROOT || root;
-  const installed: Array<{
-    pluginId: string;
-    installed: boolean | null;
-    enabled: boolean;
-  }> = [];
+  const installed: CodexInstalledPlugin[] = [];
   for (const [pluginId, rawEntry] of Object.entries(plugins)) {
     const entry = table(rawEntry, `plugins.${pluginId}`);
     if (typeof entry.enabled !== "boolean") {
@@ -301,6 +298,6 @@ export async function readCodexStoredState(
     managerPluginEnabled: manager?.enabled === true,
     legacyPluginPresent: legacy?.installed === true,
     legacyPluginEnabled: legacy?.enabled === true,
-    installedListingJson: JSON.stringify({ installed }),
+    installedPlugins: installed,
   };
 }

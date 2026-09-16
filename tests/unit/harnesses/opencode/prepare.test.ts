@@ -15,7 +15,7 @@ import {
   validateOpenCodePreparationBeforeFetch,
 } from "../../../../src/harnesses/opencode/prepare.ts";
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
-import { openCodeReceiptBinding } from "../../../../src/harnesses/opencode/package.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
 import {
   commitFixture,
@@ -207,7 +207,7 @@ void test("a retired prepared profile needs replacement but cannot be read as an
     receiptPath,
     JSON.stringify({
       ...rewritten,
-      binding: openCodeReceiptBinding(rewritten),
+      binding: snapshotReceiptBinding(rewritten),
     }) + "\n",
   );
 
@@ -223,4 +223,12 @@ void test("a retired prepared profile needs replacement but cannot be read as an
     },
   });
   assert.equal((await readOpenCodePrepared(ctx)).outcome.ok, false);
+  const wrongSelection = await inspectOpenCodePrepared(
+    nativeSelection((commit[0] === "0" ? "1" : "0") + commit.slice(1)),
+    ctx,
+  );
+  assert.equal(wrongSelection.outcome.ok, true);
+  if (!wrongSelection.outcome.ok) assert.fail("expected inspectable mismatch");
+  assert.equal(wrongSelection.outcome.result.kind, "needs-prepare");
+  assert.equal(wrongSelection.outcome.result.compatibility.kind, "unknown");
 });

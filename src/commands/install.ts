@@ -1,7 +1,3 @@
-// Ports scripts/install. The shell sourced common.sh, provenance.sh,
-// status.sh, lifecycle.sh and adapter.sh; the predicates now live in
-// src/harnesses/codex/lifecycle.ts, the generated-metadata read lives in src/provenance.ts,
-// and the adapter arrives through ctx.adapter.
 import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
@@ -9,22 +5,21 @@ import type { EffectiveSelection } from "../effective-selection.ts";
 import type {
   Output,
   PreparedArtifact,
-  InstallReceipt,
   InstallTransaction,
 } from "../harness.ts";
 import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import {
-  gatherProbe,
-  replayOutcome,
-  validInstalled,
-  validOutput,
-} from "./probe.ts";
+  GatherFailure,
+  callAdapter,
+  type AdapterCall,
+} from "./adapter-call.ts";
+import { gatherProbe, replayOutcome } from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
 import { runWithMutation } from "./mutation.ts";
 import { activationBlock } from "../harness-compatibility.ts";
 
-function writeOutput(
+export function writeOutput(
   output: Output,
   ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
 ): void {
@@ -32,98 +27,23 @@ function writeOutput(
   for (const line of output.stderr) ctx.stderr.write(`${line}\n`);
 }
 
-type StageResult<T> =
-  | {
-      readonly ok: true;
-      readonly result: {
-        readonly status: 0;
-        readonly outcome: Extract<AdapterOutcome<T>, { readonly ok: true }>;
-      };
-    }
-  | {
-      readonly ok: false;
-      readonly message: string | null;
-      readonly result: AdapterResult<T> | null;
-    };
-
 async function invoke<T>(
   call: () => Promise<AdapterResult<T>>,
   failure: { readonly unexpected: string; readonly invalidStatus: string },
   outcomes: AdapterOutcome<unknown>[],
-  valid: (value: T) => boolean = () => true,
-): Promise<StageResult<T>> {
-  let result: AdapterResult<T>;
-  try {
-    result = await call();
-    if (
-      !result ||
-      !Number.isInteger(result.status) ||
-      !result.outcome ||
-      typeof result.outcome.ok !== "boolean" ||
-      typeof result.outcome.operation !== "string" ||
-      !Array.isArray(result.outcome.messages) ||
-      !result.outcome.messages.every(
-        (message) =>
-          message &&
-          (message.channel === "stdout" || message.channel === "stderr") &&
-          typeof message.text === "string",
-      ) ||
-      (result.outcome.ok
-        ? result.outcome.error !== null || !valid(result.outcome.result)
-        : !result.outcome.error ||
-          typeof result.outcome.error.code !== "string" ||
-          typeof result.outcome.error.message !== "string" ||
-          !Array.isArray(result.outcome.error.hints) ||
-          !result.outcome.error.hints.every((hint) => typeof hint === "string"))
-    ) {
-      return { ok: false, message: failure.invalidStatus, result: null };
+  acceptValue?: (value: T) => boolean,
+): Promise<AdapterCall<T>> {
+  let result = await callAdapter(call, failure);
+  if (result.ok && acceptValue !== undefined) {
+    try {
+      if (!acceptValue(result.result.outcome.result))
+        result = { ok: false, result: null, message: failure.invalidStatus };
+    } catch {
+      result = { ok: false, result: null, message: failure.invalidStatus };
     }
-  } catch {
-    return { ok: false, message: failure.unexpected, result: null };
   }
-  outcomes.push(result.outcome);
-  const outcome = result.outcome;
-  if (result.status !== 0 || !outcome.ok) {
-    return {
-      ok: false,
-      message: outcome.ok ? failure.invalidStatus : null,
-      result,
-    };
-  }
-  return {
-    ok: true,
-    result: { status: result.status, outcome },
-  };
-}
-
-function validReceipt(value: InstallReceipt): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    validOutput(value.missingVerificationOutput) &&
-    validOutput(value.mismatchVerificationOutput)
-  );
-}
-
-// withWorkspace can throw AFTER its callback has already returned a fully
-// computed StageOutcome: a post-success cleanup failure discards that return
-// value entirely and rejects instead, UNLESS an `onCleanupFailure` reporter is
-// supplied -- which gatherInstallStages below does, precisely so this class
-// stays reserved for mkdtemp failure (nothing collected yet) and the
-// callback's own throw (never reachable here; see gatherInstallStages).
-// Carries the outcomes collected so far so runInstall's catch can still
-// replay them instead of discarding them with a bare re-throw. Same shape as
-// src/commands/uninstall.ts's GatherFailure, duplicated for the same reason
-// invoke() is: no shared dependency between the two modules.
-class GatherFailure extends Error {
-  readonly inner: unknown;
-  readonly outcomes: readonly AdapterOutcome<unknown>[];
-
-  constructor(inner: unknown, outcomes: readonly AdapterOutcome<unknown>[]) {
-    super("install gather failed");
-    this.inner = inner;
-    this.outcomes = outcomes;
-  }
+  if (result.result !== null) outcomes.push(result.result.outcome);
+  return result;
 }
 
 type StageOutcome =
@@ -159,25 +79,17 @@ interface StageRun {
   // the post-SUCCESS case this option exists to catch -- there is no
   // "callback also failed" case to lose the message to.
   //
-  // An earlier draft offered that precondition as the reason install's shape
-  // "lets this go further than src/commands/uninstall.ts's GatherFailure
-  // does". It does not discriminate: uninstall's callback asserts and holds
-  // the same property, so uninstall now carries the identical GatherRun
-  // retrofit rather than dropping its closing lines. The two modules agree.
+  // This type exists for cleanup retention, not a special throw path.
   readonly cleanupWarning: string | null;
 }
 
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:44-58::TMPDIR=`, wrapped in the temporary workspace scripts/install
-// created via spw_make_workspace + spw_install_workspace_trap. Performs no
-// writes of its own -- same EPIPE-avoidance shape as gatherProbe and
-// src/commands/uninstall.ts's gatherUninstall.
+// Collect outcomes without writing so output failures cannot be classified as
+// inspection failures. Replay collected outcomes after gathering completes.
 async function gatherInstallStages<R>(
   ctx: CommandContext<R>,
   selection: EffectiveSelection,
   artifact: PreparedArtifact,
 ): Promise<StageRun> {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:38::tmp_parent=` -- ${TMPDIR:-/tmp}. Matches
-  // src/commands/uninstall.ts's gatherUninstall.
   const parent = ctx.env.TMPDIR ?? tmpdir();
   const outcomes: AdapterOutcome<unknown>[] = [];
   let cleanupWarning: string | null = null;
@@ -253,7 +165,6 @@ async function gatherInstallStages<R>(
           () => ctx.adapter.install(artifact, adapterContext),
           installFailure,
           outcomes,
-          validReceipt,
         );
         if (!install.ok) return failed(install.message);
         let transaction: InstallTransaction | undefined;
@@ -287,7 +198,7 @@ async function gatherInstallStages<R>(
         // is what turns a failed inspection into "error: installed manager
         // fingerprint inspection failed after install."
         // renderInstallVerification's failed-inspection arm
-        // (`src/harnesses/codex/presentation.ts:305::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
+        // (`src/harnesses/codex/presentation.ts:280::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
         // exists for this result-bearing path. Returning
         // failed() instead reported the adapter's own generic diagnostic and
         // dropped the post-install verification claim -- a mutation had
@@ -303,7 +214,6 @@ async function gatherInstallStages<R>(
           () => ctx.adapter.inspectInstalled(selection, adapterContext),
           inspectionFailure,
           outcomes,
-          validInstalled,
         );
         const inspection = inspected.result;
         const verified =
@@ -327,7 +237,6 @@ async function gatherInstallStages<R>(
               () => ctx.adapter.inspectInstalled(selection, adapterContext),
               inspectionFailure,
               outcomes,
-              validInstalled,
             );
             const restoration = restored.ok
               ? `installed state after rollback: ${restored.result.outcome.result.kind}; identity=${restored.result.outcome.result.observedIdentity}`
@@ -369,7 +278,6 @@ async function gatherInstallStages<R>(
               () => ctx.adapter.inspectInstalled(selection, adapterContext),
               inspectionFailure,
               outcomes,
-              validInstalled,
             );
             return {
               kind: "verified",
@@ -418,7 +326,7 @@ async function gatherInstallStages<R>(
     // Reachable only for mkdtemp failure (nothing collected yet) -- the
     // callback above never throws, so a post-success cleanup failure is
     // already handled by onCleanupFailure and cannot reach here.
-    throw new GatherFailure(cause, outcomes);
+    throw new GatherFailure("install gather failed", cause, outcomes);
   }
 }
 
@@ -445,31 +353,8 @@ async function performInstall<R>(
   try {
     probe = await gatherProbe(ctx);
   } catch (cause) {
-    // gatherProbe performs no writes of its own (src/commands/probe.ts), so
-    // this catch cannot also be reached by an EPIPE from install's own
-    // output: the NOTE line above already left the try, and everything below
-    // runs only after this try/catch has resolved.
-    //
-    // This is a SECOND consumer of gatherProbe's throw channel --
-    // `src/commands/probe.ts:469-527::THREE exceptions, all inherited and none a regression:`'s
-    // runProbe catch is the first. Because both consumers wrap the identical
-    // function, its long comment there enumerates exactly what can reach THIS
-    // stream too, including the three foreign-text exceptions at :251-296:
-    //   1. :251-262 -- resolveRef splices git's own combined stdout+stderr
-    //      into its text. Reached on probe's DEFAULT path, which that comment
-    //      defines as every invocation NOT resolving a saved pin: a 40-hex
-    //      ref returns a "raw-commit" resolution at
-    //      `src/upstream.ts:162-164::return { kind: "raw-commit"`
-    //      before any git call, so it reaches no splice at all.
-    //   2. :263-280 -- src/selection-store.ts's read path interpolates the
-    //      caught error's own message, so Node errno prose can appear.
-    //      AGENTS.md grandfathers that module's wording.
-    //   3. :281-296 -- a SPAWN-level git failure, a different channel from
-    //      exception 1's exit-status one: on the non-ENOENT arm of
-    //      `src/git.ts:47-52::if (typeof failure.code === "string") {`, runGit
-    //      rejects with "cannot run git: " followed by the Node spawn error's
-    //      own message.
-    // Not repeated in full here; read it there.
+    // Gathering does not write, so this catch cannot misclassify an output
+    // failure. oneLine() bounds any inherited diagnostic to one line.
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }

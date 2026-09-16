@@ -23,9 +23,10 @@ import {
   type DirectoryPublication,
 } from "../../atomic.ts";
 import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
-import { normalizePiRuntimeVersion, runPi } from "./native.ts";
+import { digestArtifactTree } from "../../artifact-tree.ts";
+import { normalizeSnapshotRuntimeVersion } from "../../harness-command-result.ts";
+import { runPi } from "./native.ts";
 import {
-  digestPiTree,
   readPiPackageAssessment,
   readPiReceipt,
   type PiReceipt,
@@ -189,7 +190,7 @@ async function snapshot(root: string): Promise<PiReceipt | null> {
   if ((await assertNoFollowType(root, ["directory", "missing"])) === "missing")
     return null;
   const receipt = await readPiReceipt(root);
-  if (receipt.digest !== (await digestPiTree(root)))
+  if (receipt.digest !== (await digestArtifactTree(root)))
     throw new Error("Pi snapshot changed");
   return receipt;
 }
@@ -540,7 +541,10 @@ export async function installPi(
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned Pi registration");
     accepted(
-      normalizePiRuntimeVersion(await deps.run(["--version"], paths, ctx)),
+      normalizeSnapshotRuntimeVersion(
+        "Pi",
+        await deps.run(["--version"], paths, ctx),
+      ),
     );
     // Recheck after the native preflight, before claiming mutation ownership.
     await requireSnapshot(paths.installedRoot, previous);
@@ -676,7 +680,10 @@ export async function removePi(
     }
     if (registered !== null)
       accepted(
-        normalizePiRuntimeVersion(await deps.run(["--version"], paths, ctx)),
+        normalizeSnapshotRuntimeVersion(
+          "Pi",
+          await deps.run(["--version"], paths, ctx),
+        ),
       );
     await requireSnapshot(paths.installedRoot, previous);
     if (!sameRegistration(await registration(paths, deps), registered))

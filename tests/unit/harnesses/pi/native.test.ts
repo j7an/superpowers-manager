@@ -10,10 +10,8 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import test, { type TestContext } from "node:test";
 
-import {
-  normalizePiRuntimeVersion,
-  runPi,
-} from "../../../../src/harnesses/pi/native.ts";
+import { normalizeSnapshotRuntimeVersion } from "../../../../src/harness-command-result.ts";
+import { runPi } from "../../../../src/harnesses/pi/native.ts";
 import { piPaths } from "../../../../src/harnesses/pi/paths.ts";
 import {
   BOUNDED_EXECUTABLE,
@@ -121,7 +119,7 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
     "a successful payload with nonzero status cannot admit runtime",
     () => {
       assert.equal(
-        normalizePiRuntimeVersion({
+        normalizeSnapshotRuntimeVersion("Pi", {
           status: 1,
           outcome: {
             operation: "pi-command",
@@ -146,7 +144,8 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
 
   for (const [stdout, accepted] of cases)
     await t.test(JSON.stringify(stdout), async () => {
-      const result = normalizePiRuntimeVersion(
+      const result = normalizeSnapshotRuntimeVersion(
+        "Pi",
         await runPi(["--version"], paths, { root }, async () => exited(stdout)),
       );
       assert.equal(result.outcome.ok, accepted);
@@ -164,7 +163,8 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
   await t.test(
     "a successful payload with nonzero status cannot admit runtime",
     async () => {
-      const result = normalizePiRuntimeVersion(
+      const result = normalizeSnapshotRuntimeVersion(
+        "Pi",
         await runPi(["--version"], paths, { root }, async () =>
           exited("99.2.3", { code: 2, stderr: "native failure\n" }),
         ),
@@ -185,7 +185,8 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
         },
         stderr: { text: "", droppedBytes: channel === "stderr" ? 1 : 0 },
       };
-      const result = normalizePiRuntimeVersion(
+      const result = normalizeSnapshotRuntimeVersion(
+        "Pi",
         await runPi(["--version"], paths, { root }, async () => run),
       );
       assert.equal(result.status, 1);
@@ -200,7 +201,8 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
     });
 
   await t.test("a timeout cannot admit runtime", async () => {
-    const result = normalizePiRuntimeVersion(
+    const result = normalizeSnapshotRuntimeVersion(
+      "Pi",
       await runPi(["--version"], paths, { root }, async () => ({
         kind: "timedOut",
         afterMs: 30_000,
@@ -212,7 +214,8 @@ void test("Pi runtime normalization admits valid version responses", async (t) =
   });
 
   await t.test("a launch failure cannot admit runtime", async () => {
-    const result = normalizePiRuntimeVersion(
+    const result = normalizeSnapshotRuntimeVersion(
+      "Pi",
       await runPi(["--version"], paths, { root }, async () => ({
         kind: "launchFailed",
         errno: "ENOENT",

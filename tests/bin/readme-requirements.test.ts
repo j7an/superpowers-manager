@@ -7,14 +7,26 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-import * as cli from "../../src/cli.ts";
+import { requirementsFor } from "../../src/cli.ts";
+import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import { piHarness } from "../../src/harnesses/pi/harness.ts";
 import { openCodeHarness } from "../../src/harnesses/opencode/harness.ts";
+import type { HarnessCommand } from "../../src/harness.ts";
 
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
 type HarnessName = "codex" | "pi" | "opencode";
-type Subcommand = keyof ReturnType<typeof cli.commandRequirements>;
+
+const COMMANDS = {
+  pin: true,
+  "track-latest": true,
+  unpin: true,
+  prepare: true,
+  probe: true,
+  install: true,
+  update: true,
+  uninstall: true,
+} satisfies Record<HarnessCommand, true>;
 
 // Column heading -> selected harness and production requirement token.
 const TOOL_COLUMNS = [
@@ -25,34 +37,22 @@ const TOOL_COLUMNS = [
 ] as const satisfies readonly (readonly [string, HarnessName, string])[];
 const COLUMNS = TOOL_COLUMNS.map(([column]) => column);
 
-function requirements(
-  env: NodeJS.ProcessEnv,
-): Record<HarnessName, Record<Subcommand, string[]>> {
-  const native = Object.fromEntries(
-    Object.entries({
-      pi: cli.commandRequirementsFor(env, piHarness),
-      opencode: cli.commandRequirementsFor(env, openCodeHarness),
-    }).map(([name, commands]) => [
-      name,
-      Object.fromEntries(
-        Object.entries(commands).map(([command, tools]) => [
-          command,
-          tools.map((requirement) => requirement.name),
-        ]),
-      ),
-    ]),
-  ) as Record<"pi" | "opencode", Record<Subcommand, string[]>>;
-  return { codex: cli.commandRequirements(env), ...native };
-}
-
 function derive(): Record<string, string>[] {
-  const unset = requirements({});
-  return Object.keys(unset.codex).map((command) => {
-    const key = command as Subcommand;
-
+  return (Object.keys(COMMANDS) as HarnessCommand[]).map((command) => {
+    const names = {
+      codex: requirementsFor(command, {}, codexHarness).map(
+        (requirement) => requirement.name,
+      ),
+      pi: requirementsFor(command, {}, piHarness).map(
+        (requirement) => requirement.name,
+      ),
+      opencode: requirementsFor(command, {}, openCodeHarness).map(
+        (requirement) => requirement.name,
+      ),
+    };
     const row: Record<string, string> = { Command: command };
     for (const [column, harness, tool] of TOOL_COLUMNS) {
-      row[column] = unset[harness][key].includes(tool) ? "yes" : "no";
+      row[column] = names[harness].includes(tool) ? "yes" : "no";
     }
     return row;
   });

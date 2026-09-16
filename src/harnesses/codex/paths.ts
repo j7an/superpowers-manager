@@ -1,8 +1,9 @@
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   assertNoFollowType,
   canonicalizeProspectivePath,
+  isContained,
 } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 
@@ -46,14 +47,7 @@ export function codexPaths(env: NodeJS.ProcessEnv, cwd: string): CodexPaths {
 }
 
 function overlaps(a: string, b: string): boolean {
-  const inside = (root: string, leaf: string): boolean => {
-    const suffix = relative(root, leaf);
-    return (
-      suffix === "" ||
-      (!isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`))
-    );
-  };
-  return inside(a, b) || inside(b, a);
+  return isContained(a, b) || isContained(b, a);
 }
 
 export type CodexPathFailureDetails =
@@ -64,11 +58,23 @@ export type CodexPathFailureDetails =
       readonly path: string;
     };
 
+class CodexPathError extends SafetyError<CodexPathFailureDetails> {
+  constructor(
+    message: string,
+    details: CodexPathFailureDetails,
+    cause?: unknown,
+  ) {
+    super("codex-paths", message, {
+      details,
+      ...(cause === undefined ? {} : { cause }),
+    });
+  }
+}
+
 function separationError(): SafetyError<CodexPathFailureDetails> {
-  return new SafetyError<CodexPathFailureDetails>(
-    "codex-paths",
+  return new CodexPathError(
     "preparation overlaps Codex published or recovery storage",
-    { details: { kind: "overlap" } },
+    { kind: "overlap" },
   );
 }
 
@@ -80,10 +86,10 @@ async function inspectRoot(
     await assertNoFollowType(path, ["directory", "missing"]);
     return await canonicalizeProspectivePath(path);
   } catch (cause) {
-    throw new SafetyError<CodexPathFailureDetails>(
-      "codex-paths",
+    throw new CodexPathError(
       `cannot inspect ${root} root: ${path}`,
-      { cause, details: { kind: "inspection", root, path } },
+      { kind: "inspection", root, path },
+      cause,
     );
   }
 }
@@ -91,26 +97,7 @@ async function inspectRoot(
 export function codexPathFailureDetails(
   cause: unknown,
 ): CodexPathFailureDetails | null {
-  if (!(cause instanceof SafetyError) || cause.module !== "codex-paths") {
-    return null;
-  }
-  const details: unknown = cause.details;
-  if (details === null || typeof details !== "object" || !("kind" in details)) {
-    return null;
-  }
-  if (details.kind === "overlap") return { kind: "overlap" };
-  if (
-    details.kind !== "inspection" ||
-    !("root" in details) ||
-    !("path" in details) ||
-    (details.root !== "preparation" &&
-      details.root !== "marketplace" &&
-      details.root !== "recovery") ||
-    typeof details.path !== "string"
-  ) {
-    return null;
-  }
-  return { kind: "inspection", root: details.root, path: details.path };
+  return cause instanceof CodexPathError ? (cause.details ?? null) : null;
 }
 
 export async function assertCodexPreparationSeparate(

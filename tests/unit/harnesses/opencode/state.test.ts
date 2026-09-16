@@ -11,7 +11,7 @@ import {
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
-import { openCodeReceiptBinding } from "../../../../src/harnesses/opencode/package.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
 import {
   inspectOpenCodeControl,
@@ -507,7 +507,7 @@ void test("receipt digest remains bound to actual artifact bytes", async (t) => 
   const changed = { ...receipt, digest };
   writeFileSync(
     receiptPath,
-    JSON.stringify({ ...changed, binding: openCodeReceiptBinding(changed) }),
+    JSON.stringify({ ...changed, binding: snapshotReceiptBinding(changed) }),
   );
   config(join(state.paths.configRoot, "opencode.json"), [
     state.paths.installedRoot,

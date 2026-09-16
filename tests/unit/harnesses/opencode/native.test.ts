@@ -12,10 +12,8 @@ import test, { type TestContext } from "node:test";
 
 import { expectFailureCode } from "../../../lib/command-doubles.ts";
 
-import {
-  normalizeOpenCodeRuntimeVersion,
-  runOpenCode,
-} from "../../../../src/harnesses/opencode/native.ts";
+import { normalizeSnapshotRuntimeVersion } from "../../../../src/harness-command-result.ts";
+import { runOpenCode } from "../../../../src/harnesses/opencode/native.ts";
 import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
 import {
   BOUNDED_EXECUTABLE,
@@ -195,7 +193,7 @@ void test("OpenCode runtime normalization accepts one semantic version only", ()
     ["version unknown", false],
     ["99.2.3\nextra", false],
   ] as const) {
-    const result = normalizeOpenCodeRuntimeVersion({
+    const result = normalizeSnapshotRuntimeVersion("OpenCode", {
       status: 0,
       outcome: {
         operation: "opencode-command",
@@ -209,7 +207,7 @@ void test("OpenCode runtime normalization accepts one semantic version only", ()
     if (result.outcome.ok) assert.equal(result.outcome.result, stdout.trim());
   }
   assert.equal(
-    normalizeOpenCodeRuntimeVersion({
+    normalizeSnapshotRuntimeVersion("OpenCode", {
       status: 1,
       outcome: {
         operation: "opencode-command",
@@ -263,6 +261,24 @@ void test("runOpenCode returns controlled failures for native runner outcomes", 
         assert.equal(message.text.includes("\r"), false);
       }
     });
+});
+
+void test("native nonzero exit outranks output overflow", async (t) => {
+  const { root, paths } = sandbox(t);
+  const result = await runOpenCode(
+    [],
+    paths,
+    { root, env: { TMPDIR: root } },
+    async () => ({
+      kind: "exited",
+      code: 7,
+      stdout: { text: "partial", droppedBytes: 1 },
+      stderr: { text: "", droppedBytes: 0 },
+    }),
+  );
+  assert.equal(result.outcome.ok, false);
+  if (result.outcome.ok) assert.fail("expected native failure");
+  assert.equal(result.outcome.error.code, "nonzero-exit");
 });
 
 void test("runOpenCode reports isolated workspace creation and callback failures", async (t) => {

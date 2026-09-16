@@ -11,13 +11,88 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { digestPiTree } from "../../../../src/harnesses/pi/package.ts";
+import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
+import {
+  observeSnapshot,
+  snapshotReceiptBinding,
+} from "../../../../src/snapshot-package.ts";
+import { readOpenCodeReceipt } from "../../../../src/harnesses/opencode/package.ts";
+import { readPiReceipt } from "../../../../src/harnesses/pi/package.ts";
 import { materializeGitTree } from "../../../../src/git-tree.ts";
 import {
   commitFixture,
   fixtureGit,
   nativeFixture,
 } from "../../../lib/harnesses/pi/package-fixture.ts";
+import { nativeOpenCodeFixture } from "../../../lib/harnesses/opencode/package-fixture.ts";
+
+void test("snapshot observation distinguishes absence, ownership and invalid evidence", async (t) => {
+  const root = nativeFixture(t);
+  const digest = await digestArtifactTree(root);
+  let reads = 0;
+  const reader = async () => {
+    reads += 1;
+    return { digest };
+  };
+  assert.deepEqual(await observeSnapshot(join(root, "missing"), reader), {
+    kind: "absent",
+  });
+  assert.equal(reads, 0);
+  assert.deepEqual(await observeSnapshot(join(root, "LICENSE"), reader), {
+    kind: "unverified",
+  });
+  assert.equal(reads, 0);
+  assert.deepEqual(await observeSnapshot(root, reader), {
+    kind: "owned",
+    receipt: { digest },
+    digest,
+  });
+  assert.deepEqual(
+    await observeSnapshot(root, async () => ({ digest: "different" })),
+    { kind: "unverified" },
+  );
+  assert.deepEqual(
+    await observeSnapshot(root, async (): Promise<{ digest: string }> => {
+      throw new Error("unreadable receipt");
+    }),
+    { kind: "unverified" },
+  );
+});
+
+void test("receipt readers retain their distinct unsupported-generation policy", async (t) => {
+  const piRoot = nativeFixture(t);
+  const openCodeRoot = nativeOpenCodeFixture(t);
+  for (const [root, harness] of [
+    [piRoot, "pi"],
+    [openCodeRoot, "opencode"],
+  ] as const) {
+    const identity = {
+      schema: 1,
+      manager: "superpowers-manager",
+      harness,
+      source: "https://github.com/obra/superpowers",
+      commit: "1".repeat(40),
+      digest: await digestArtifactTree(root),
+    } as const;
+    writeFileSync(
+      join(root, ".superpowers-manager.json"),
+      JSON.stringify({
+        ...identity,
+        binding: snapshotReceiptBinding(identity),
+        compatibility: {
+          kind: "unsupported",
+          reason: "retired",
+          generation: "extra",
+        },
+      }) + "\n",
+    );
+  }
+  assert.equal((await readPiReceipt(piRoot)).compatibility.kind, "unsupported");
+  await assert.rejects(
+    readOpenCodeReceipt(openCodeRoot),
+    /invalid OpenCode artifact receipt/,
+  );
+});
 
 void test("materializes committed binary, mode, hidden files and links without untracked poison", async (t) => {
   const root = nativeFixture(t);
@@ -38,11 +113,11 @@ void test("materializes committed binary, mode, hidden files and links without u
   assert.equal(readlinkSync(join(destination, "link")), "binary");
   assert.equal(readFileSync(join(destination, ".support"), "utf8"), "hidden");
   assert.throws(() => lstatSync(join(destination, "poison")), /ENOENT/);
-  const digest = await digestPiTree(destination);
+  const digest = await digestArtifactTree(destination);
   writeFileSync(join(destination, ".superpowers-manager.json"), "receipt");
-  assert.equal(await digestPiTree(destination), digest);
+  assert.equal(await digestArtifactTree(destination), digest);
   writeFileSync(join(destination, "extra"), "drift");
-  assert.notEqual(await digestPiTree(destination), digest);
+  assert.notEqual(await digestArtifactTree(destination), digest);
 });
 
 void test("refuses escaping links, receipt collisions and gitlinks", async (t) => {
@@ -117,17 +192,20 @@ void test("digest distinguishes framed paths, executable modes, links and nested
   mkdirSync(right);
   writeFileSync(join(left, "a"), "0z");
   writeFileSync(join(right, "a0"), "z");
-  assert.notEqual(await digestPiTree(left), await digestPiTree(right));
-  const original = await digestPiTree(left);
+  assert.notEqual(
+    await digestArtifactTree(left),
+    await digestArtifactTree(right),
+  );
+  const original = await digestArtifactTree(left);
   chmodSync(join(left, "a"), 0o755);
-  assert.notEqual(await digestPiTree(left), original);
+  assert.notEqual(await digestArtifactTree(left), original);
   chmodSync(join(left, "a"), 0o644);
   symlinkSync("a", join(left, "link"));
-  assert.notEqual(await digestPiTree(left), original);
+  assert.notEqual(await digestArtifactTree(left), original);
   mkdirSync(join(right, "nested"));
-  const before = await digestPiTree(right);
+  const before = await digestArtifactTree(right);
   writeFileSync(join(right, "nested/.superpowers-manager.json"), "content");
-  assert.notEqual(await digestPiTree(right), before);
+  assert.notEqual(await digestArtifactTree(right), before);
 });
 
 void test("materialization requires a commit and ignores repository replacement refs", async (t) => {
@@ -162,6 +240,6 @@ void test("digest orders Unicode scalar paths and ignores creation order and roo
   // is preceded by its unsigned 64-bit big-endian byte length.
   const expected =
     "4876f54002f825a34a7e7e3053ec35b96f58b0dab59d338838b6784b9ec7f67d";
-  assert.equal(await digestPiTree(first), expected);
-  assert.equal(await digestPiTree(second), expected);
+  assert.equal(await digestArtifactTree(first), expected);
+  assert.equal(await digestArtifactTree(second), expected);
 });

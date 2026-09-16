@@ -89,9 +89,9 @@ const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
 // per adapter call
 // (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/adapter.sh:37-44::--response "$response_file" --result "$result_file" \`);
 // the in-process path no longer uses that adapter-response validator.
-// No command has a Python requirement in commandRequirements(env).
+// No command has a Python requirement in requirementsFor().
 // No command requires a POSIX shell any more.
-const SHARED_COMMAND_REQUIREMENTS: Record<Subcommand, string[]> = {
+const SHARED_COMMAND_REQUIREMENTS: Record<HarnessCommand, string[]> = {
   pin: ["git"],
   "track-latest": [],
   unpin: [],
@@ -230,45 +230,23 @@ function sharedRequirement(name: string): ToolRequirement {
   };
 }
 
-function commandRequirementsFor<R>(
+function requirementsFor<R>(
+  command: HarnessCommand,
   env: NodeJS.ProcessEnv,
   adapter: HarnessAdapter<R>,
-): Record<Subcommand, readonly ToolRequirement[]> {
-  const forCommand = (command: Subcommand): readonly ToolRequirement[] => {
-    const shared = SHARED_COMMAND_REQUIREMENTS[command].map(sharedRequirement);
-    return [...shared, ...adapter.requirements(command as HarnessCommand, env)];
-  };
-  return {
-    pin: forCommand("pin"),
-    "track-latest": forCommand("track-latest"),
-    unpin: forCommand("unpin"),
-    prepare: forCommand("prepare"),
-    probe: forCommand("probe"),
-    install: forCommand("install"),
-    update: forCommand("update"),
-    uninstall: forCommand("uninstall"),
-  };
-}
-
-function commandRequirements(
-  env: NodeJS.ProcessEnv,
-): Record<Subcommand, string[]> {
-  return Object.fromEntries(
-    SUBCOMMANDS.map((command) => [
-      command,
-      commandRequirementsFor(env, codexHarness)[command].map(
-        (requirement) => requirement.name,
-      ),
-    ]),
-  ) as Record<Subcommand, string[]>;
+): readonly ToolRequirement[] {
+  return [
+    ...SHARED_COMMAND_REQUIREMENTS[command].map(sharedRequirement),
+    ...adapter.requirements(command, env),
+  ];
 }
 
 // Preflight; never touches Codex state. It is the union of two exported
 // accessors: configurationErrors (validator configuration) and
-// commandRequirements (tool availability), both specific to the selected
+// requirementsFor (tool availability), both specific to the selected
 // command. No command requires a POSIX shell: slice 4b flipped the last
 // spawned command in-process, so there is no shell to discover.
-function preflightFor<R>(
+function preflight<R>(
   cmd: Subcommand,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
@@ -276,7 +254,7 @@ function preflightFor<R>(
 ): PreflightResult {
   const errors: string[] = [...configurationErrors(cmd, env)];
   if (errors.length > 0) return { ok: false, errors };
-  for (const requirement of commandRequirementsFor(env, adapter)[cmd]) {
+  for (const requirement of requirementsFor(cmd, env, adapter)) {
     const found =
       requirement.lookup === "explicit-path-or-path" &&
       requirement.executable.includes(path.sep)
@@ -286,14 +264,6 @@ function preflightFor<R>(
   }
   if (errors.length) return { ok: false, errors };
   return { ok: true };
-}
-
-function preflight(
-  cmd: Subcommand,
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-): PreflightResult {
-  return preflightFor(cmd, env, platform, codexHarness);
 }
 
 function usage(): string {
@@ -377,7 +347,7 @@ async function dispatch<R>(
     console.error("error: cannot resolve the superpowers-manager package root");
     return 1;
   }
-  const pf = preflightFor(parsed.cmd, process.env, process.platform, adapter);
+  const pf = preflight(parsed.cmd, process.env, process.platform, adapter);
   if (!pf.ok) {
     for (const e of pf.errors) console.error(`error: ${e}`);
     return 1;
@@ -422,8 +392,7 @@ export {
   resolvePackageRoot,
   isMain,
   parseArgs,
-  commandRequirements,
-  commandRequirementsFor,
+  requirementsFor,
   preflight,
   usage,
   main,

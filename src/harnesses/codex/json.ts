@@ -1,4 +1,5 @@
 import { SafetyError } from "../../safety-error.ts";
+import { hasTerminalControl } from "../../adapter-result.ts";
 import {
   parseStrictJson,
   type JsonValue,
@@ -66,20 +67,6 @@ function checkedItems(
     }
     return candidate;
   });
-}
-
-function hasTerminalControl(value: string): boolean {
-  for (const character of value) {
-    const code = character.codePointAt(0)!;
-    if (
-      code < 0x20 ||
-      (code >= 0x7f && code <= 0x9f) ||
-      (code >= 0xd800 && code <= 0xdfff)
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export function installedListingHas(

@@ -1,24 +1,15 @@
 import { randomBytes } from "node:crypto";
-import {
-  constants,
-  lstat,
-  open,
-  readFile,
-  rename,
-  rm,
-  unlink,
-} from "node:fs/promises";
+import { constants, lstat, open, rename, rm, unlink } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { isErrno } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 
 export interface AtomicErrorDetails {
   readonly phase: "pre-replacement" | "post-replacement";
-  readonly finalBytes?: Uint8Array;
 }
 
 export interface AtomicWriteHooks {
   readonly rename?: typeof rename;
-  readonly afterReplace?: (target: string) => void | Promise<void>;
 }
 
 export interface AtomicWriteOptions {
@@ -34,7 +25,6 @@ export async function atomicWriteFile(
   const renamePath = options.hooks?.rename ?? rename;
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   let temporary: string | undefined;
-  let phase: AtomicErrorDetails["phase"] = "pre-replacement";
   try {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const suffix = randomBytes(8).toString("hex");
@@ -72,20 +62,12 @@ export async function atomicWriteFile(
     await options.validate(temporary);
     await renamePath(temporary, path);
     temporary = undefined;
-    phase = "post-replacement";
-    await options.hooks?.afterReplace?.(path);
     await fsyncDirectoryBestEffort(dirname(path));
   } catch (cause) {
-    let finalBytes: Uint8Array | undefined;
-    if (phase === "post-replacement") {
-      finalBytes = await readFile(path).catch(() => undefined);
-    }
-    const details: AtomicErrorDetails =
-      finalBytes === undefined ? { phase } : { phase, finalBytes };
     throw new SafetyError<AtomicErrorDetails>(
       "atomic",
-      `atomic file write failed during ${phase}`,
-      { cause, details },
+      "atomic file write failed during pre-replacement",
+      { cause, details: { phase: "pre-replacement" } },
     );
   } finally {
     if (handle !== undefined) {
@@ -131,13 +113,7 @@ async function exists(path: string): Promise<boolean> {
     await lstat(path);
     return true;
   } catch (cause) {
-    if (
-      cause instanceof Error &&
-      "code" in cause &&
-      (cause as NodeJS.ErrnoException).code === "ENOENT"
-    ) {
-      return false;
-    }
+    if (isErrno(cause, "ENOENT")) return false;
     throw cause;
   }
 }

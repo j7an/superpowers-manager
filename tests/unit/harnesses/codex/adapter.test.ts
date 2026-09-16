@@ -6,8 +6,10 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { successResult } from "../../../../src/adapter-result.ts";
 import {
   codexBuild,
+  codexInspectControl,
   codexInspectOwnership,
   codexInstall,
   codexReadNativeState,
@@ -29,6 +31,22 @@ const SOURCE = "https://example.invalid/superpowers.git";
 const GATE_URL = new URL("../../../assert-matcher-gate.ts", import.meta.url)
   .href;
 
+void test("low-level Codex capability is managed", async () => {
+  const result = await codexInspectControl({ root: PACKAGE_ROOT, env: {} });
+  assert.deepEqual(
+    result,
+    successResult(
+      "inspect",
+      {
+        probeEligibility: { kind: "allowed" },
+        mutationEligibility: { kind: "allowed" },
+        presentationValue: "managed",
+      },
+      [],
+    ),
+  );
+});
+
 /**
  * Build the upstream root, candidate root, and fallback manifest `build`
  * requires, with a candidate that passes validation.
@@ -45,8 +63,8 @@ async function buildWorkspace(t: import("node:test").TestContext) {
     await writeFile(join(candidate, name), `${name}\n`);
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
-  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:355::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
-  // `src/harnesses/codex/adapter.ts:442::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:351::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
+  // `src/harnesses/codex/adapter.ts:438::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -171,7 +189,7 @@ void test("the adapter replays a multi-error failure as one record per line", as
 });
 
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/harnesses/codex/adapter.ts:389::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
+// call (`src/harnesses/codex/adapter.ts:385::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/harnesses/codex/hooks.ts) must keep succeeding, so this exercises the read at
@@ -338,7 +356,21 @@ void test("a manifest overlay read fails closed when the file changes between th
   );
 });
 
-void test("a split dash-leading ref fails before the validator with a named-flag record", async (t) => {
+void test("typed dash-leading provenance reaches substantive validation", async (t) => {
+  const workspace = await buildWorkspace(t);
+  const path = join(workspace.candidate, ".superpowers-upstream.json");
+  const provenance = JSON.parse(await readFile(path, "utf8"));
+  provenance.requested_ref = "-foo";
+  await writeFile(path, JSON.stringify(provenance) + "\n");
+  const result = await codexBuild(
+    buildInput(workspace, { requestedRef: "-foo" }),
+    { root: PACKAGE_ROOT },
+  );
+  assert.equal(result.status, 0, JSON.stringify(result));
+  assert.equal(result.outcome.ok, true);
+});
+
+void test("a dash-leading requested ref is validated against provenance", async (t) => {
   const workspace = await buildWorkspace(t);
   const result = await codexBuild(
     buildInput(workspace, { requestedRef: "-foo" }),
@@ -349,19 +381,16 @@ void test("a split dash-leading ref fails before the validator with a named-flag
     result.outcome.error?.code,
     "generated-plugin-validation-failed",
   );
-  // Declared exception: argparse wrote usage records here; the pre-call guard
-  // writes a differently-worded record naming the rejected flag instead. The
-  // failure code and message are unchanged.
   assert.deepStrictEqual(result.outcome.messages, [
     { channel: "stderr", text: "Generated plugin validation failed:" },
     {
       channel: "stderr",
-      text: "- validator argument `--requested-ref` has a dash-leading value the argument parser rejects",
+      text: "- provenance field `requested_ref` does not match expected value",
     },
   ]);
 });
 
-void test("a split dash-leading value on a different flag names that flag", async (t) => {
+void test("an invalid dash-leading commit reaches substantive validation", async (t) => {
   const workspace = await buildWorkspace(t);
   const result = await codexBuild(
     buildInput(workspace, { commit: "-deadbeef" }),
@@ -372,21 +401,23 @@ void test("a split dash-leading value on a different flag names that flag", asyn
     result.outcome.error?.code,
     "generated-plugin-validation-failed",
   );
-  assert.deepStrictEqual(result.outcome.messages, [
-    { channel: "stderr", text: "Generated plugin validation failed:" },
-    {
-      channel: "stderr",
-      text: "- validator argument `--commit` has a dash-leading value the argument parser rejects",
-    },
-  ]);
+  const messages = result.outcome.messages.map((message) => message.text);
+  assert.ok(
+    messages.includes(
+      "- provenance field `commit` does not match expected value",
+    ),
+    messages.join("\n"),
+  );
+  assert.ok(
+    messages.includes("- commit must be 40 lowercase hexadecimal characters"),
+    messages.join("\n"),
+  );
 });
 
 // `-١` U+0661 ARABIC-INDIC ONE, `-१` U+0967 DEVANAGARI ONE, `-١.٥` a Unicode
-// fractional exercising the matcher's second alternative. CPython `re` `\d`
-// matches Unicode category Nd, so real `argparse` accepts all three as negative
-// numbers; the guard must let them through to the validator rather than
-// reporting them as rejected split flags.
-void test("split Unicode-decimal values still reach the validator", async (t) => {
+// fractional. These are literal provenance inputs; validation rejects each
+// because it differs from the generated provenance.
+void test("Unicode-decimal provenance inputs reach the validator", async (t) => {
   for (const value of ["-١", "-१", "-١.٥"]) {
     await t.test(value, async (t) => {
       const workspace = await buildWorkspace(t);
@@ -406,7 +437,7 @@ void test("split Unicode-decimal values still reach the validator", async (t) =>
   }
 });
 
-void test("split dash-leading exceptions still reach the validator", async (t) => {
+void test("dash-leading provenance inputs reach the validator", async (t) => {
   for (const value of ["-", "-1", "-1.5", "-.5"]) {
     await t.test(value, async (t) => {
       const workspace = await buildWorkspace(t);
@@ -514,7 +545,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/harnesses/codex/adapter.ts:574::registeredRoot = marketplaceRootFromJson(`) is the destructive
+// The install reconciliation read (`src/harnesses/codex/adapter.ts:528::registeredRoot = marketplaceRootFromJson(`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -630,7 +661,7 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
   });
 });
 
-// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:707::const managerPresent = pluginPresent || marketplacePresent;` computes
+// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:661::const managerPresent = pluginPresent || marketplacePresent;` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -842,7 +873,7 @@ void test("ADAPTER-INSTALL-RESULT-01 typed receipt reports the missing hint alwa
 });
 
 /**
- * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:621::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
+ * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:575::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -880,13 +911,13 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: `src/harnesses/codex/adapter.ts:548::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
+      // executor's shell: `src/harnesses/codex/adapter.ts:502::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:595::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
+      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:549::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/harnesses/codex/adapter.ts:548::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
+      // the default (`src/harnesses/codex/adapter.ts:502::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -917,7 +948,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. `src/harnesses/codex/adapter.ts:621::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
+  // witness that. `src/harnesses/codex/adapter.ts:575::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);

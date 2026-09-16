@@ -189,7 +189,6 @@
     { "path": "tests/unit/resource-lock.test.ts", "group": "integration" },
     { "path": "tests/unit/safe-path.test.ts", "group": "unit" },
     { "path": "tests/unit/selection.test.ts", "group": "unit" },
-    { "path": "tests/unit/status.test.ts", "group": "unit" },
     { "path": "tests/unit/strict-json.test.ts", "group": "unit" },
     { "path": "tests/unit/upstream.test.ts", "group": "integration" },
     { "path": "tests/unit/validator.test.ts", "group": "integration" },

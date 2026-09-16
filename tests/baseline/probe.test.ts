@@ -35,11 +35,34 @@ import {
   SHORT,
 } from "./probe-fixture.ts";
 
-import { PROBE_PORCELAIN_KEYS } from "../../src/harnesses/codex/presentation.ts";
-
 import { writeSelectionState } from "../../src/selection-store.ts";
 
 type CaseEnv = import("../bin/lifecycle-fixture.ts").CaseEnv;
+
+const EXPECTED_PROBE_KEYS = [
+  "harness",
+  "requested_ref",
+  "resolved_ref",
+  "desired_commit",
+  "generated_commit",
+  "installed_commit",
+  "identity_state",
+  "status",
+  "selection_origin",
+  "selection_mode",
+  "upstream_source_origin",
+  "effective_source",
+  "saved_mode",
+  "saved_source",
+  "saved_requested_ref",
+  "saved_resolved_ref",
+  "saved_commit",
+  "update_control",
+  "installation_state",
+  "resource_state",
+  "compatibility",
+  "compatibility_reason",
+];
 
 // One listing shape reused wherever a case needs the manager plugin ACTIVE at
 // the manifest version seedCodex writes, so `installed_commit` resolves to the
@@ -52,7 +75,7 @@ const EMPTY_MARKETPLACES = '{"marketplaces":[]}';
 
 /**
  * Sorted `path\tkind\tdigest` lines for everything under `root`. Deliberately
- * smaller than `tests/baseline/cli-parity.test.ts:255::function snapshotTree`'s mode- and symlink-aware snapshot:
+ * smaller than `tests/baseline/cli-parity.test.ts:280::function snapshotTree`'s mode- and symlink-aware snapshot:
  * probe is never a mutator, so all this has to catch is a file appearing,
  * vanishing, or changing.
  */
@@ -144,7 +167,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
     result.stdout,
   );
   assert.match(result.stdout, /^saved_mode=none$/m);
-  // `src/harnesses/codex/presentation.ts:200::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
+  // `src/harnesses/codex/presentation.ts:175::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
   // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
@@ -157,13 +180,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
       .split("\n")
       .slice(0, -1)
       .map((line) => line.slice(0, line.indexOf("="))),
-    [
-      ...PROBE_PORCELAIN_KEYS,
-      "installation_state",
-      "resource_state",
-      "compatibility",
-      "compatibility_reason",
-    ],
+    [...EXPECTED_PROBE_KEYS],
   );
 });
 
@@ -562,7 +579,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:933-936::activeVersion =`).
+  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:886::activeVersion =`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the native-state inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -575,9 +592,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // The adapter's outer rethrow branch
-// (`src/harnesses/codex/adapter.ts:829::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/harnesses/codex/adapter.ts:776::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:299::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:295::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -616,7 +633,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (`src/harnesses/codex/adapter.ts:261::async function listingCommand(`), and the fake writes nothing there
+// child's stderr (`src/harnesses/codex/adapter.ts:257::async function listingCommand(`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr.

@@ -44,16 +44,12 @@ import {
 import { applyManifestOverlay } from "./manifest-overlay.ts";
 import { readCodexBuildSource } from "../../provenance.ts";
 import type { JsonValue } from "../../strict-json.ts";
-import { isAcceptedSplitValue } from "../../validate-generated-plugin-cli.ts";
 import type {
   InstallReceipt,
   OwnershipInspection,
   UpdateControlInspection,
 } from "../../harness.ts";
-import {
-  codexControlInspection,
-  codexOwnershipInspection,
-} from "./lifecycle.ts";
+import { codexOwnershipInspection } from "./lifecycle.ts";
 import { codexInstallReceipt } from "./presentation.ts";
 
 const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
@@ -451,48 +447,6 @@ async function runBuild(
   } catch {
     fail("invalid-provenance", "candidate provenance is missing or invalid");
   }
-  // The seven values the validator CLI would receive in split form:
-  // --plugin-root, --requested-ref, --resolved-ref, --commit,
-  // --manifest-version, --manifest-source, --upstream-manifest-version.
-  // The eighth, --source, is passed attached, where argparse accepts any
-  // dash-leading value, so it is deliberately absent here. Each value is
-  // paired with the ADAPTER-facing flag name to report: --manager-version
-  // (the CLI calls it --manifest-version) and --plugin-root /
-  // --manifest-source (derived, not user-supplied) deliberately differ
-  // from the validator CLI's own names, since the operator can only act
-  // on the adapter's surface.
-  const splitValues: ReadonlyArray<{
-    readonly value: string;
-    readonly name: string;
-  }> = [
-    { value: candidateRoot, name: "--plugin-root" },
-    { value: input.requestedRef, name: "--requested-ref" },
-    { value: input.resolvedRef, name: "--resolved-ref" },
-    { value: input.commit, name: "--commit" },
-    { value: input.managerVersion, name: "--manager-version" },
-    { value: manifestSource, name: "--manifest-source" },
-    {
-      value: input.upstreamManifestVersion,
-      name: "--upstream-manifest-version",
-    },
-  ];
-  const firstRejected = splitValues.find(
-    ({ value }) => !isAcceptedSplitValue(value),
-  );
-  if (firstRejected !== undefined) {
-    // Declared exception to message-record parity: argparse wrote usage
-    // records here; this guard precedes the call and writes a
-    // differently-worded record naming the rejected flag instead. The
-    // failure code and message are unchanged.
-    const text =
-      "Generated plugin validation failed:\n" +
-      `- validator argument \`${firstRejected.name}\` has a dash-leading value the argument parser rejects\n`;
-    log.appendBytes("stderr", Buffer.from(text, "utf8"));
-    fail(
-      "generated-plugin-validation-failed",
-      "built-in generated plugin validation failed",
-    );
-  }
   let errors: readonly string[];
   try {
     errors = await validateGeneratedPlugin({
@@ -740,7 +694,7 @@ async function runOwnership(
     );
     const conflicts = await inspectCodexConflicts(
       { root: context.root, env },
-      stored.installedListingJson,
+      stored.installedPlugins,
     );
     return ownershipFromResources(
       stored.managerPluginPresent,
@@ -753,21 +707,14 @@ async function runOwnership(
   let legacyPlugin: boolean;
   let conflicts: readonly string[];
   try {
-    managerPlugin = installedListingHas(
-      plugins.stdout,
-      "installed",
-      "pluginId",
-      PLUGIN_ID,
-    );
-    legacyPlugin = installedListingHas(
-      plugins.stdout,
-      "installed",
-      "pluginId",
-      LEGACY_PLUGIN_ID,
+    const installed = codexInstalledPluginsFromJson(plugins.stdout);
+    managerPlugin = installed.some((plugin) => plugin.pluginId === PLUGIN_ID);
+    legacyPlugin = installed.some(
+      (plugin) => plugin.pluginId === LEGACY_PLUGIN_ID,
     );
     conflicts = await inspectCodexConflicts(
       { root: context.root, env },
-      plugins.stdout.toString("utf8"),
+      installed,
     );
   } catch {
     fail(
@@ -789,7 +736,7 @@ async function runOwnership(
     );
     const conflicts = await inspectCodexConflicts(
       { root: context.root, env },
-      stored.installedListingJson,
+      stored.installedPlugins,
     );
     return ownershipFromResources(
       stored.managerPluginPresent,
@@ -889,8 +836,14 @@ export function codexInspectOwnership(
 export function codexInspectControl(
   context: AdapterContext,
 ): Promise<AdapterResult<UpdateControlInspection>> {
-  return runCodexOperation("inspect", context, async () =>
-    codexControlInspection("managed"),
+  return runCodexOperation<UpdateControlInspection>(
+    "inspect",
+    context,
+    async () => ({
+      probeEligibility: { kind: "allowed" },
+      mutationEligibility: { kind: "allowed" },
+      presentationValue: "managed",
+    }),
   );
 }
 

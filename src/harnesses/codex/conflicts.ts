@@ -2,10 +2,7 @@ import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { AdapterContext } from "../../adapter-result.ts";
-import {
-  codexInstalledPluginsFromJson,
-  type CodexInstalledPlugin,
-} from "./json.ts";
+import type { CodexInstalledPlugin } from "./json.ts";
 
 export const CODEX_MANAGER_PLUGIN_ID = "superpowers@superpowers-manager";
 export const CODEX_LEGACY_PLUGIN_ID = "superpowers@superpowers-wrapper";
@@ -101,10 +98,10 @@ async function nativeRouteConflict(ctx: AdapterContext): Promise<string> {
 
 export async function inspectCodexConflicts(
   ctx: AdapterContext,
-  installedListing: string,
+  installedPlugins: readonly CodexInstalledPlugin[],
 ): Promise<readonly string[]> {
   const conflicts = new Set<string>();
-  for (const plugin of codexInstalledPluginsFromJson(installedListing)) {
+  for (const plugin of installedPlugins) {
     const conflict = unmanagedPluginConflict(plugin);
     if (conflict.length > 0) conflicts.add(conflict);
   }

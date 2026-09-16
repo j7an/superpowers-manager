@@ -4,11 +4,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  codexControlInspection,
   codexOwnershipInspection,
   requireNoLegacyState,
   reportLegacyState,
-  requireManagedUpdateControl,
 } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   codexInstallReceipt,
@@ -28,7 +26,7 @@ const REPORT_LINES = [
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
 ];
 
-void test("typed Codex policy builders retain ownership and control decisions", () => {
+void test("typed Codex policy builder retains ownership decisions", () => {
   const clean = codexOwnershipInspection(
     "manager",
     { pluginPresent: true, marketplacePresent: true },
@@ -52,18 +50,6 @@ void test("typed Codex policy builders retain ownership and control decisions", 
       { pluginPresent: false, marketplacePresent: false },
       [],
     ).installEligibility.kind,
-    "blocked",
-  );
-  assert.equal(
-    codexControlInspection("managed").mutationEligibility.kind,
-    "allowed",
-  );
-  assert.equal(
-    codexControlInspection("unsupported").mutationEligibility.kind,
-    "blocked",
-  );
-  assert.equal(
-    codexControlInspection("unrecognized").mutationEligibility.kind,
     "blocked",
   );
 });
@@ -176,24 +162,6 @@ function failed(): any {
   };
 }
 
-void test("requireManagedUpdateControl admits only managed", () => {
-  assert.deepEqual(requireManagedUpdateControl("managed"), { ok: true });
-});
-
-void test("requireManagedUpdateControl rejects unsupported with its own text", () => {
-  assert.deepEqual(requireManagedUpdateControl("unsupported"), {
-    ok: false,
-    message: "adapter cannot guarantee manager-controlled updates",
-  });
-});
-
-void test("requireManagedUpdateControl rejects an unrecognised capability", () => {
-  assert.deepEqual(requireManagedUpdateControl("weird"), {
-    ok: false,
-    message: "unknown adapter update-control capability: weird",
-  });
-});
-
 void test("install verification accepts an exact commit match", () => {
   const desired = "a".repeat(40);
   const receipt = ok(codexInstallReceipt("", ""));
@@ -215,8 +183,8 @@ void test("install verification accepts an exact commit match", () => {
 });
 
 void test("install verification accepts the seven-character short form", () => {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and commitMatches
-  // in src/status.ts keeps that rule. This case is what pins the two together.
+  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/status.sh:7::cut` compares against `cut -c 1-7`, and the typed installation
+  // verification flow keeps that rule. This case is what pins the two together.
   const desired = "b".repeat(40);
   const receipt = ok(codexInstallReceipt("", ""));
   const inspection = ok({
@@ -285,7 +253,7 @@ void test("install verification reports an undetectable fingerprint and its own 
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:108-112::mismatch` chooses between two hint keys on whether
   // the installed commit is empty. A null fingerprint reads as empty, matching
   // the typed installed-state absence contract
-  // (`src/harness.ts:58::| { readonly kind: "absent"; readonly observedIdentity: "" }`).
+  // (`src/harness.ts:57::| { readonly kind: "absent"; readonly observedIdentity: "" }`).
   const desired = "f".repeat(40);
   const receipt = ok(codexInstallReceipt("codex reported nothing", ""));
   const inspection = ok({ kind: "absent", observedIdentity: "" });
@@ -445,38 +413,4 @@ void test("removal verification rejects a surviving marketplace", () => {
       ],
     },
   });
-});
-
-// ADAPTER-UPDATE-CONTROL-01 was owned by tests/test_adapter_protocol.py until
-// PR 11.5 slice 5, and its contract SPLITS.
-//
-// The recognition rule -- only `managed` and `unsupported` are known values,
-// and a third is rejected -- survives in-process here.
-//
-// The reportability half -- that an inspection can emit `unsupported` --
-// retires with the transport. src/harnesses/codex/adapter.ts's update-control view returns
-// the literal `managed`; the old witness at
-// `git show 41c99390f51a0cbeb552ab0a0bff26fc1c5c07df:tests/test_adapter_protocol.sh:102-104::run_adapter update` ran a fixture SHELL adapter emitting
-// a canned outcome, and no shell adapters remain. It cannot be ported because
-// nothing in-process produces the value.
-
-void test("ADAPTER-UPDATE-CONTROL-01 update-control recognizes exactly managed and unsupported and rejects a third value", () => {
-  assert.deepEqual(requireManagedUpdateControl("managed"), { ok: true });
-  assert.deepEqual(requireManagedUpdateControl("unsupported"), {
-    ok: false,
-    message: "adapter cannot guarantee manager-controlled updates",
-  });
-  // A third value is rejected with a DIFFERENT message than `unsupported`.
-  // Asserting only `ok: false` would pass if the two collapsed into one
-  // branch, which is exactly the closed-enumeration property at stake.
-  for (const value of ["", "MANAGED", "unknown", "unsupported "]) {
-    assert.deepEqual(
-      requireManagedUpdateControl(value),
-      {
-        ok: false,
-        message: `unknown adapter update-control capability: ${value}`,
-      },
-      value,
-    );
-  }
 });

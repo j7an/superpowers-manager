@@ -221,10 +221,8 @@ export function hasTerminalControl(value: string): boolean {
 // every command replays through -- wrote these three strings to the terminal
 // unfiltered.
 //
-// NOT requireProtocolString: that one message
-// ("protocol strings must not contain terminal control characters") names no
-// member, and D8b requires the thrown message to name the failing one. So this
-// scans with the predicate underneath it instead.
+// This scans with the predicate underneath it because D8b requires the thrown
+// message to name the failing member.
 //
 // Order is code, then message, then hints by ascending index, so the thrown
 // message is a function of the outcome rather than of iteration order.
@@ -276,13 +274,5 @@ export function writeAdapterFailure(
   ctx.stderr.write(`error: ${outcome.error.message}\n`);
   for (const hint of outcome.error.hints) {
     ctx.stderr.write(`hint: ${hint}\n`);
-  }
-}
-
-export function requireProtocolString(value: string): void {
-  if (hasTerminalControl(value)) {
-    throw new Error(
-      "protocol strings must not contain terminal control characters",
-    );
   }
 }

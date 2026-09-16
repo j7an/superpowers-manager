@@ -180,10 +180,7 @@ function validateEvidenceShape(record: RecoveryRecord): void {
   }
 }
 
-async function decodeRecord(
-  bytes: Uint8Array,
-  paths: CodexPaths,
-): Promise<RecoveryRecord> {
+function decodeRecord(bytes: Uint8Array, paths: CodexPaths): RecoveryRecord {
   const parsed = object(parseStrictJson(bytes, PROFILE));
   if (parsed === null) throw new Error("recovery journal is not an object");
   exactKeys(parsed, RECORD_KEYS);
@@ -261,7 +258,7 @@ async function readOwnedRecord(paths: CodexPaths): Promise<RecoveryRecord> {
   }
   const path = recordPath(paths);
   await assertNoFollowType(path, ["regular-file"]);
-  return await decodeRecord(await readFile(path), paths);
+  return decodeRecord(await readFile(path), paths);
 }
 
 export async function readCodexRecovery(
@@ -342,11 +339,12 @@ export async function beginCodexRecovery(
       oldDigest: input.oldDigest,
       oldIdentity: input.oldIdentity,
     };
-    await decodeRecord(recordBytes(record), paths);
+    const bytes = recordBytes(record);
+    decodeRecord(bytes, paths);
     const path = recordPath(paths);
     const handle = await open(path, "wx", 0o600);
     try {
-      await handle.writeFile(recordBytes(record));
+      await handle.writeFile(bytes);
       await handle.sync();
     } finally {
       await handle.close();
@@ -421,7 +419,6 @@ async function requirePending(pending: PendingCodexPublication): Promise<void> {
   ) {
     throw new Error("Codex recovery journal changed");
   }
-  await decodeRecord(recordBytes(pending.record), pending.paths);
 }
 
 export async function finishCodexRecovery(

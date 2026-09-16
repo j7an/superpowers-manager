@@ -26,6 +26,7 @@ import {
   type AdapterResult,
 } from "../../../../src/adapter-result.ts";
 import { beginDirectoryPublication } from "../../../../src/atomic.ts";
+import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
 import type {
   InstallReceipt,
   PreparedArtifact,
@@ -35,11 +36,8 @@ import {
   removePi,
   type PiInstallDependencies,
 } from "../../../../src/harnesses/pi/install.ts";
-import {
-  digestPiTree,
-  piReceiptBinding,
-  readPiPackageAssessment,
-} from "../../../../src/harnesses/pi/package.ts";
+import { readPiPackageAssessment } from "../../../../src/harnesses/pi/package.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import { piPaths } from "../../../../src/harnesses/pi/paths.ts";
 import { readPiSettings } from "../../../../src/harnesses/pi/settings.ts";
 import { inspectPiOwnership } from "../../../../src/harnesses/pi/state.ts";
@@ -94,13 +92,13 @@ async function fixture(
       harness: "pi",
       source: nativeSelection().effectiveSource,
       commit,
-      digest: await digestPiTree(paths.preparedRoot),
+      digest: await digestArtifactTree(paths.preparedRoot),
     } as const;
     writeFileSync(
       join(paths.preparedRoot, ".superpowers-manager.json"),
       JSON.stringify({
         ...identity,
-        binding: piReceiptBinding(identity),
+        binding: snapshotReceiptBinding(identity),
         compatibility: {
           kind: "supported",
           generation: "pi-native-bootstrap-v1",

@@ -1,12 +1,8 @@
-import { createHash } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ARTIFACT_DIGEST_RE,
   ARTIFACT_RECEIPT,
-  addArtifactHashField,
   digestArtifactTree,
-  readArtifactFile,
   readArtifactObject,
   validateNativeSkill,
 } from "../../artifact-tree.ts";
@@ -15,13 +11,13 @@ import type { EffectiveSelection } from "../../effective-selection.ts";
 import type { Compatibility } from "../../harness-compatibility.ts";
 import { validateSource } from "../../selection.ts";
 import { SafetyError } from "../../safety-error.ts";
+import {
+  isOfficialSnapshotSource,
+  requireNoSnapshotDependencies,
+  requireSnapshotBootstrap,
+  snapshotReceiptBinding,
+} from "../../snapshot-package.ts";
 
-const OFFICIAL = new Set([
-  "https://github.com/obra/superpowers",
-  "https://github.com/obra/superpowers.git",
-  "ssh://git@github.com/obra/superpowers.git",
-  "git@github.com:obra/superpowers.git",
-]);
 const BOOTSTRAP = ".opencode/plugins/superpowers.js";
 const BOOTSTRAP_SIZE = 5464;
 const BOOTSTRAP_SHA256 =
@@ -52,29 +48,6 @@ function isReceiptCompatibility(value: unknown): value is Compatibility {
     compatibility.generation === undefined
   );
 }
-export function openCodeReceiptBinding(
-  receipt: Pick<
-    OpenCodeReceipt,
-    "schema" | "manager" | "harness" | "source" | "commit" | "digest"
-  >,
-): string {
-  const hash = createHash("sha256");
-  for (const field of [
-    String(receipt.schema),
-    receipt.manager,
-    receipt.harness,
-    receipt.source,
-    receipt.commit,
-    receipt.digest,
-  ])
-    addArtifactHashField(hash, Buffer.from(field));
-  return hash.digest("hex");
-}
-export function sameOpenCodeSource(left: string, right: string): boolean {
-  validateSource(left);
-  validateSource(right);
-  return left === right || (OFFICIAL.has(left) && OFFICIAL.has(right));
-}
 export async function assessOpenCodeCompatibility(
   root: string,
   selection: Pick<EffectiveSelection, "effectiveSource">,
@@ -90,32 +63,15 @@ export async function assessOpenCodeCompatibility(
       !SEMVER_RE.test(pkg.version)
     )
       throw new Error("package metadata");
-    for (const key of [
-      "dependencies",
-      "optionalDependencies",
-      "peerDependencies",
-      "bundleDependencies",
-      "bundledDependencies",
-    ]) {
-      const value = pkg[key];
-      if (
-        value !== undefined &&
-        (value === null ||
-          typeof value !== "object" ||
-          Object.keys(value).length !== 0)
-      )
-        throw new Error("runtime dependencies");
-    }
+    requireNoSnapshotDependencies(pkg);
     await validateNativeSkill(root);
-    const bootstrap = join(root, BOOTSTRAP),
-      bytes = await readArtifactFile(root, bootstrap, BOOTSTRAP_SIZE);
-    if (
-      (await lstat(bootstrap)).mode & 0o111 ||
-      bytes.length !== BOOTSTRAP_SIZE ||
-      createHash("sha256").update(bytes).digest("hex") !== BOOTSTRAP_SHA256
-    )
-      throw new Error("bootstrap implementation");
-    const official = OFFICIAL.has(selection.effectiveSource);
+    await requireSnapshotBootstrap(
+      root,
+      BOOTSTRAP,
+      BOOTSTRAP_SIZE,
+      BOOTSTRAP_SHA256,
+    );
+    const official = isOfficialSnapshotSource(selection.effectiveSource);
     return {
       kind: official ? "supported" : "experimental",
       generation: "opencode-native-bootstrap-v1",
@@ -151,7 +107,7 @@ export async function readOpenCodeReceipt(
       throw new Error("receipt fields");
     validateSource(value.source);
     if (
-      openCodeReceiptBinding(value as unknown as OpenCodeReceipt) !==
+      snapshotReceiptBinding(value as unknown as OpenCodeReceipt) !==
       value.binding
     )
       throw new Error("receipt binding");

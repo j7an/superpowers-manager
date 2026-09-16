@@ -77,6 +77,47 @@ void test("recovery journal is exclusively owned and strictly readable", async (
   );
 });
 
+void test("journal creation validates serialized limits and native evidence", async (t) => {
+  for (const priorNative of [
+    {
+      ...ABSENT_NATIVE,
+      pluginPresent: true,
+      activeVersion: "v",
+      activeRoot: null,
+    },
+    {
+      ...ABSENT_NATIVE,
+      pluginPresent: true,
+      activeVersion: "v",
+      activeRoot: "/" + "x".repeat(70_000),
+    },
+  ]) {
+    await t.test(
+      priorNative.activeRoot === null ? "incoherent" : "oversized",
+      async (t) => {
+        const { paths } = await fixture(t);
+        await assert.rejects(
+          beginCodexRecovery(paths, {
+            operation: "install",
+            marketplaceRoot: paths.marketplaceRoot,
+            priorNative,
+            oldDigest: null,
+            oldIdentity: null,
+          }),
+          /cannot begin Codex recovery journal/,
+        );
+        await assert.rejects(
+          lstat(join(paths.recoveryRoot, "transaction.json")),
+          {
+            code: "ENOENT",
+            message: /ENOENT/,
+          },
+        );
+      },
+    );
+  }
+});
+
 void test("recovery journal bytes and identity remain stable while artifact layout changes", async (t) => {
   const { paths } = await fixture(t);
   await mkdir(paths.marketplaceRoot, { recursive: true });

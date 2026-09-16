@@ -14,6 +14,20 @@ The concrete Codex harness calls the typed Codex operation engines directly.
 Those engines return the lifecycle payload types shared commands consume. There
 is no argv-based compatibility dispatcher or shape-normalization layer.
 
+Shared commands trust those internal TypeScript payload shapes and only classify
+the typed result envelope as success, controlled failure, nonzero status, or a
+thrown call. They retain semantic checks that relate otherwise valid values,
+such as recovery evidence requiring blocked control decisions and a transaction
+settlement returning `null`. Native command output, filesystem contents, saved
+state, and other external inputs remain parsed and validated at their boundary.
+
+A success envelope with nonzero status is refused as a controlled failure.
+Recovery-coherence contradictions, a settlement that does not return `null`, and
+a present optional transaction capability that cannot be acquired and bound also
+fail closed with controlled reporting. Transaction-capability acquisition and
+binding occur before installed-state inspection; settlement validation occurs
+after that inspection.
+
 ## Messages and errors
 
 Each message object has exactly `channel` and `text`. `channel` is `stdout` or
@@ -50,10 +64,9 @@ present, and legacy presence is whether either observed legacy resource is
 present. Those values determine the policy's presentation identity while the
 manager booleans remain the removal input.
 
-For update control, `unsupported` is never emitted on this path. It survives as
-an input the consumer still recognizes: `requireManagedUpdateControl`
-(`src/harnesses/codex/lifecycle.ts`) rejects `unsupported` as a capability it cannot guarantee,
-and rejects any other non-`managed` value as unknown.
+For update control, the low-level Codex adapter always returns fixed managed
+capability. The public Codex harness retains its recovery overlay, and command
+gates still refuse an injected blocked or malformed inspection before mutation.
 
 ## Capture-time buffering
 

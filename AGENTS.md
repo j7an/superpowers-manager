@@ -79,14 +79,11 @@ product integrations, not a required agent harness.
   message, and hints — which is hand-written `fail()` text, not a reader's
   message. (3) `src/selection-store.ts`'s interpolated cause
   reaches the terminal through the CLI-boundary catches (`src/cli.ts`, each
-  command's outer catch, the `*-cli.ts` entry points), where `oneLine()`
+  command's outer catch), where `oneLine()`
   (`src/cli-arguments.ts`) collapses CR/LF runs to spaces. That bounds the
   blast radius to one line; it is not a control-character defense, and on that
-  path this rule is the whole defense. It is the whole defense again wherever
-  a reader's diagnostics are written directly, reaching no escaper and no
-  catch: `src/validate-generated-plugin-cli.ts` writes the same
-  `src/harnesses/codex/generated-plugin.ts` `errors` entries straight to stderr. Reader
-  wrappers are frozen by tests, but by three different kinds of assertion —
+  path this rule is the whole defense. Reader wrappers are frozen by tests,
+  but by three different kinds of assertion —
   enumerate the pinning tests for the specific string before changing any of
   them:
   - `src/harnesses/codex/manifest-overlay.ts` — most diagnostics are asserted as
@@ -103,8 +100,8 @@ product integrations, not a required agent harness.
     no operator-facing prose. The diagnostics it pushes onto its `errors`
     array are operator-facing, but coverage is partial and the pinning is
     split across two suites: `tests/unit/harnesses/codex/generated-plugin.test.ts` and
-    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`, which drives the
-    validator CLI and pins some strings the unit suite does not. Search both
+    `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts`, which
+    pins some strings the unit suite does not. Search both
     for the specific string rather than assuming one suite will catch it.
 
   Re-emitting a subordinate module's own diagnostic onto that stream is the
