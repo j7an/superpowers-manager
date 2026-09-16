@@ -24,7 +24,9 @@ state, and other external inputs remain parsed and validated at their boundary.
 A success envelope with nonzero status is refused as a controlled failure.
 Recovery-coherence contradictions, a settlement that does not return `null`, and
 a present optional transaction capability that cannot be acquired and bound also
-fail closed with controlled reporting before verification.
+fail closed with controlled reporting. Transaction-capability acquisition and
+binding occur before installed-state inspection; settlement validation occurs
+after that inspection.
 
 ## Messages and errors
 

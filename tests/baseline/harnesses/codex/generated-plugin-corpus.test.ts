@@ -222,7 +222,7 @@ void test("PROV-READER-CANDIDATE-01 candidate provenance validator profile", asy
     errors.join("\n"),
   );
   assert.equal(
-    errors.includes("exceeds maximum JSON nesting"),
+    errors.some((error) => error.includes("exceeds maximum JSON nesting")),
     false,
     errors.join("\n"),
   );
