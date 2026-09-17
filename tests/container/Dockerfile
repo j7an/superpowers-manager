@@ -11,9 +11,19 @@ RUN apt-get update \
        ca-certificates git procps \
     && rm -rf /var/lib/apt/lists/*
 
+# Root package.json pins pnpm via packageManager; corepack resolves it from
+# the working directory, so install the tools from /workspace to reuse that pin
+# without a second one. The tools package must not carry its own
+# packageManager: pnpm then writes a multi-document lockfile, which the
+# dependency-safety gate refuses to parse. The hoisted linker keeps the flat
+# npm-style layout the probes expect (real directories, no symlink store);
+# it is a flag because pnpm reads .npmrc from the cwd, not from --dir.
+COPY package.json /workspace/package.json
+COPY tests/container/package.json tests/container/pnpm-lock.yaml /opt/spw-test-tools/
+WORKDIR /workspace
+RUN corepack enable \
+    && pnpm --dir /opt/spw-test-tools --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts
 WORKDIR /opt/spw-test-tools
-COPY tests/container/package.json tests/container/package-lock.json ./
-RUN npm ci --ignore-scripts
 RUN --network=none node node_modules/opencode-ai/postinstall.mjs \
     && ./node_modules/.bin/opencode --version \
     && ./node_modules/.bin/codex --version >/dev/null \
@@ -41,8 +51,7 @@ RUN spw_rg_root=$(mktemp -d) \
 RUN useradd --create-home --uid 10001 spw
 WORKDIR /workspace
 COPY . .
-RUN corepack enable \
-    && pnpm install --frozen-lockfile \
+RUN pnpm install --frozen-lockfile \
     && chown -R root:root /workspace /opt/spw-test-tools /opt/node-min \
     && chmod a+r node_modules/.pnpm-workspace-state-v1.json \
     && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh tests/container/opencode/offline-probe.sh

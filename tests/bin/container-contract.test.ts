@@ -15,12 +15,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const dockerfile = join(ROOT, "tests/container/Dockerfile");
 const runner = join(ROOT, "tests/container.sh");
 const toolPackage = join(ROOT, "tests/container/package.json");
-const lockfile = join(ROOT, "tests/container/package-lock.json");
+const lockfile = join(ROOT, "tests/container/pnpm-lock.yaml");
 const tsconfig = join(ROOT, "tests/tsconfig.json");
 const openCodeProbe = join(ROOT, "tests/container/opencode/offline-probe.sh");
 
@@ -103,7 +104,26 @@ void test("container contract", async (t) => {
     "container tool dependencies remain exact approved harness pins",
     () => {
       const pkg = JSON.parse(readFileSync(toolPackage, "utf8"));
-      const lock = JSON.parse(readFileSync(lockfile, "utf8"));
+      const lock = parseYaml(readFileSync(lockfile, "utf8")) as {
+        lockfileVersion: string;
+        importers: Record<
+          string,
+          {
+            dependencies: Record<
+              string,
+              { specifier: string; version: string }
+            >;
+          }
+        >;
+        packages: Record<string, unknown>;
+      };
+      // The dependency-safety gate parses only pnpm lockfile format 9.0; any
+      // other format fails that required check closed on every harness bump.
+      assert.equal(lock.lockfileVersion, "9.0");
+      // A packageManager pin here makes pnpm write a multi-document lockfile,
+      // which that gate refuses. The image reuses the root pin via corepack.
+      assert.equal(pkg.packageManager, undefined);
+      assert.equal(Object.keys(lock.importers).join(), ".");
       assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
         "@earendil-works/pi-coding-agent",
         "@openai/codex",
@@ -111,17 +131,18 @@ void test("container contract", async (t) => {
       ]);
       for (const name of Object.keys(pkg.dependencies)) {
         assert.match(pkg.dependencies[name], /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/);
-        assert.equal(
-          lock.packages[""].dependencies[name],
-          pkg.dependencies[name],
+        const entry = lock.importers["."].dependencies[name];
+        assert.equal(entry.specifier, pkg.dependencies[name]);
+        assert.ok(
+          entry.version.startsWith(`${pkg.dependencies[name]}`),
+          `${name} resolves to its pin`,
         );
-        assert.equal(
-          lock.packages[`node_modules/${name}`].version,
-          pkg.dependencies[name],
-        );
+        assert.ok(`${name}@${pkg.dependencies[name]}` in lock.packages);
       }
       const docker = readFileSync(dockerfile, "utf8").replace(/\\\n\s*/g, " ");
-      const install = docker.indexOf("npm ci --ignore-scripts");
+      const install = docker.indexOf(
+        "pnpm --dir /opt/spw-test-tools --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts",
+      );
       const link = docker.indexOf(
         "RUN --network=none node node_modules/opencode-ai/postinstall.mjs",
       );
@@ -130,7 +151,7 @@ void test("container contract", async (t) => {
       assert.ok(install !== -1, "container must install tools without scripts");
       assert.ok(
         link > install,
-        "container must run only OpenCode's reviewed postinstall after npm ci",
+        "container must run only OpenCode's reviewed postinstall after pnpm install",
       );
       assert.ok(
         version > link,
