@@ -204,9 +204,10 @@ product integrations, not a required agent harness.
   download runtimes.
 
 - Release validation is the deliberate combined-path exception: validate both
-  native endpoints sequentially with
-  `SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh` and
-  `SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh`. The default is `24` and
+  native endpoints with `SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh`
+  and `SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh`. The release workflow
+  runs them as parallel matrix jobs before the publisher; locally, run them one
+  after the other. The default is `24` and
   all other selectors are rejected. Each combined image runs shared checks,
   then Codex, Pi, and OpenCode. It also runs the installed package on Node
   24.0.0 through its verified `SPW_PACKAGE_NODE` binary, declared by
