@@ -278,10 +278,8 @@ function validateCiReleaseClassifier(jobs: Record<string, any>): void {
     order,
     "classifier must execute only its required steps",
   );
-  const harnessSteps = requireMapping(
-    jobs["harness-codex"],
-    "jobs.harness-codex",
-  ).steps as unknown[];
+  const harnessSteps = requireMapping(jobs.harness, "jobs.harness")
+    .steps as unknown[];
   assert.deepEqual(
     classifierHarden.with,
     requireMapping(
@@ -339,12 +337,7 @@ void test("ci.yml declares the expected top-level contract", () => {
   const jobs = requireMapping(ci.jobs, "jobs");
 
   validateCiReleaseClassifier(jobs);
-  for (const key of [
-    "harness-codex",
-    "harness-pi",
-    "harness-opencode",
-    "toolchain",
-  ]) {
+  for (const key of ["harness", "toolchain"]) {
     const job = requireMapping(jobs[key], `jobs.${key}`);
     assert.deepEqual(job.permissions, { contents: "read" });
     assert.equal(job.needs, RELEASE_CLASSIFIER_JOB);
@@ -353,38 +346,19 @@ void test("ci.yml declares the expected top-level contract", () => {
   }
 });
 
-type HarnessJobContract = {
-  readonly key: "harness-codex" | "harness-pi" | "harness-opencode";
-  readonly name: string;
-  readonly selector: string;
-};
-
-const HARNESS_JOBS: readonly HarnessJobContract[] = [
-  {
-    key: "harness-codex",
-    name: "Codex harness integration",
-    selector: "harness-codex",
-  },
-  {
-    key: "harness-pi",
-    name: "Pi harness integration",
-    selector: "harness-pi",
-  },
-  {
-    key: "harness-opencode",
-    name: "OpenCode harness integration",
-    selector: "harness-opencode",
-  },
+// One matrix job runs every native harness integration. The include list is
+// the contract: each entry is one isolated `tests/container.sh` selector.
+const HARNESS_MATRIX = [
+  { name: "Codex", selector: "harness-codex" },
+  { name: "Pi", selector: "harness-pi" },
+  { name: "OpenCode", selector: "harness-opencode" },
 ];
 
-function validateCiHarnessJob(
-  document: unknown,
-  contract: HarnessJobContract,
-): void {
+function validateCiHarnessJob(document: unknown): void {
   const ci = requireMapping(document, "ci");
   const jobs = requireMapping(ci.jobs, "jobs");
-  const path = `jobs.${contract.key}`;
-  const harnessJob = requireMapping(jobs[contract.key], path);
+  const path = "jobs.harness";
+  const harnessJob = requireMapping(jobs.harness, path);
 
   assert.ok(
     !Object.hasOwn(harnessJob, "continue-on-error"),
@@ -393,28 +367,30 @@ function validateCiHarnessJob(
   assert.equal(harnessJob.if, RELEASE_TEST_CONDITION);
   assert.equal(harnessJob.needs, RELEASE_CLASSIFIER_JOB);
   assertNoNativeSelectorEnv(harnessJob, path);
-  assert.equal(harnessJob.name, contract.name);
+  assert.equal(harnessJob.name, "${{ matrix.name }} harness integration");
   assert.equal(harnessJob["runs-on"], "ubuntu-latest");
   assert.equal(
     requireMapping(harnessJob.permissions, `${path}.permissions`).contents,
     "read",
   );
 
-  assert.ok(
-    !Object.hasOwn(harnessJob, "strategy"),
-    `${contract.name} must run once at the container's latest-24 default`,
+  const strategy = requireMapping(harnessJob.strategy, `${path}.strategy`);
+  assert.equal(strategy["fail-fast"], false);
+  assert.deepEqual(
+    requireMapping(strategy.matrix, `${path}.strategy.matrix`),
+    { include: HARNESS_MATRIX },
+    "each harness integration runs once at the container's latest-24 default",
   );
 
   const steps = harnessJob.steps;
   assert.ok(Array.isArray(steps), `expected ${path}.steps to be an array`);
-  const expectedCommand = `sh tests/container.sh ${contract.selector}`;
   const commands = steps.flatMap((candidate, index) => {
     const step = requireMapping(candidate, `${path}.steps[${index}]`);
     return typeof step.run === "string" ? [{ index, command: step.run }] : [];
   });
   assert.deepEqual(
     commands.map(({ command }) => command),
-    [expectedCommand],
+    ['sh tests/container.sh "$SPW_HARNESS_SELECTOR"'],
     `${path} must contain only its integration-only harness command`,
   );
   steps.forEach((candidate, index) => {
@@ -435,7 +411,7 @@ function validateCiHarnessJob(
   const acceptance = commands[0];
   assert.ok(
     hardenIndex < checkoutIndex && checkoutIndex < acceptance.index,
-    `expected harden runner, checkout, and ${contract.name} in that order`,
+    "expected harden runner, checkout, and the harness integration in that order",
   );
 
   const harden = requireMapping(steps[hardenIndex], "harden runner step");
@@ -445,12 +421,8 @@ function validateCiHarnessJob(
   );
 
   const checkout = requireMapping(steps[checkoutIndex], "checkout step");
-  assert.equal(
-    requireMapping(checkout.with, "checkout step.with")["persist-credentials"],
-    false,
-  );
-
   const checkoutWith = requireMapping(checkout.with, "checkout step.with");
+  assert.equal(checkoutWith["persist-credentials"], false);
   const depth = checkoutWith["fetch-depth"];
   assert.ok(
     depth === undefined || depth === 1,
@@ -461,94 +433,95 @@ function validateCiHarnessJob(
     steps[acceptance.index],
     "container acceptance step",
   );
-  assert.ok(
-    !Object.hasOwn(acceptanceStep, "env"),
-    `${contract.name} must use tests/container.sh's latest-24 default`,
+  // The selector is the only environment the step may carry: the native
+  // Node version stays at tests/container.sh's latest-24 default.
+  assert.deepEqual(
+    acceptanceStep.env,
+    { SPW_HARNESS_SELECTOR: "${{ matrix.selector }}" },
+    "harness step env must carry only the matrix selector",
   );
   assert.ok(
     !Object.hasOwn(acceptanceStep, "if"),
-    `${contract.name} must run in the PR job`,
+    "the harness integration must run in the PR job",
   );
 }
 
-void test("ci.yml native harness jobs run one independent integration each", async (t) => {
+void test("ci.yml harness matrix runs one independent integration per selector", async (t) => {
   const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
-  for (const contract of HARNESS_JOBS) {
-    await t.test(`${contract.name} has its isolated selector`, () => {
-      assert.doesNotThrow(() => validateCiHarnessJob(ci, contract));
-    });
-
-    await t.test(contract.name + " rejects unnecessary full history", () => {
-      const mutant = structuredClone(ci);
-      const jobs = requireMapping(requireMapping(mutant, "ci").jobs, "jobs");
-      const job = requireMapping(jobs[contract.key], "harness job");
-      const steps = job.steps as Record<string, unknown>[];
-      const checkout = requireMapping(
-        steps[uniqueStepTargetIndex(steps, "actions/checkout")],
-        "checkout step",
-      );
-      requireMapping(checkout.with, "checkout step.with")["fetch-depth"] = 0;
-      assert.throws(
-        () => validateCiHarnessJob(mutant, contract),
-        /harness checkout must be shallow/,
-      );
-    });
-
-    await t.test(
-      `${contract.name} rejects the combined container suite`,
-      () => {
-        const mutant = structuredClone(ci);
-        const steps = requireMapping(
-          requireMapping(requireMapping(mutant, "ci").jobs, "jobs")[
-            contract.key
-          ],
-          `jobs.${contract.key}`,
-        ).steps as unknown[];
-        const integration = steps.find(
-          (step) =>
-            typeof step === "object" &&
-            step !== null &&
-            typeof (step as Record<string, unknown>).run === "string",
-        ) as Record<string, unknown>;
-        integration.run = "sh tests/container.sh";
-        assert.throws(
-          () => validateCiHarnessJob(mutant, contract),
-          /integration-only harness command/,
-        );
-      },
+  const harnessJob = (mutant: unknown): Record<string, any> =>
+    requireMapping(
+      requireMapping(requireMapping(mutant, "ci").jobs, "jobs").harness,
+      "jobs.harness",
     );
 
-    await t.test(`${contract.name} rejects a duplicate shared suite`, () => {
-      const mutant = structuredClone(ci);
-      const harnessJob = requireMapping(
-        requireMapping(requireMapping(mutant, "ci").jobs, "jobs")[contract.key],
-        `jobs.${contract.key}`,
-      );
-      (harnessJob.steps as unknown[]).push({ run: "pnpm test" });
-      assert.throws(
-        () => validateCiHarnessJob(mutant, contract),
-        /integration-only harness command/,
-      );
-    });
+  await t.test("the matrix job satisfies its contract", () => {
+    assert.doesNotThrow(() => validateCiHarnessJob(ci));
+  });
 
-    await t.test(`${contract.name} rejects nonblocking execution`, () => {
-      const mutant = structuredClone(ci);
-      const harnessJob = requireMapping(
-        requireMapping(requireMapping(mutant, "ci").jobs, "jobs")[contract.key],
-        `jobs.${contract.key}`,
-      );
-      harnessJob["continue-on-error"] = true;
-      assert.throws(
-        () => validateCiHarnessJob(mutant, contract),
-        new RegExp(
-          `jobs\\.${contract.key} must not use continue-on-error`.replaceAll(
-            "-",
-            "\\-",
-          ),
-        ),
-      );
-    });
-  }
+  await t.test("rejects a missing selector", () => {
+    const mutant = structuredClone(ci);
+    (harnessJob(mutant).strategy.matrix.include as unknown[]).pop();
+    assert.throws(
+      () => validateCiHarnessJob(mutant),
+      /each harness integration runs once/,
+    );
+  });
+
+  await t.test("rejects unnecessary full history", () => {
+    const mutant = structuredClone(ci);
+    const steps = harnessJob(mutant).steps as Record<string, unknown>[];
+    const checkout = requireMapping(
+      steps[uniqueStepTargetIndex(steps, "actions/checkout")],
+      "checkout step",
+    );
+    requireMapping(checkout.with, "checkout step.with")["fetch-depth"] = 0;
+    assert.throws(
+      () => validateCiHarnessJob(mutant),
+      /harness checkout must be shallow/,
+    );
+  });
+
+  await t.test("rejects the combined container suite", () => {
+    const mutant = structuredClone(ci);
+    const steps = harnessJob(mutant).steps as Record<string, unknown>[];
+    const integration = steps.find(
+      (step) => typeof step.run === "string",
+    ) as Record<string, unknown>;
+    integration.run = "sh tests/container.sh";
+    assert.throws(
+      () => validateCiHarnessJob(mutant),
+      /integration-only harness command/,
+    );
+  });
+
+  await t.test("rejects a duplicate shared suite", () => {
+    const mutant = structuredClone(ci);
+    (harnessJob(mutant).steps as unknown[]).push({ run: "pnpm test" });
+    assert.throws(
+      () => validateCiHarnessJob(mutant),
+      /integration-only harness command/,
+    );
+  });
+
+  await t.test("rejects a native selector on the step", () => {
+    const mutant = structuredClone(ci);
+    const steps = harnessJob(mutant).steps as Record<string, any>[];
+    const integration = steps.find((step) => typeof step.run === "string")!;
+    integration.env.SPW_NATIVE_NODE_VERSION = "24.12.0";
+    assert.throws(
+      () => validateCiHarnessJob(mutant),
+      /must not set SPW_NATIVE_NODE_VERSION/,
+    );
+  });
+
+  await t.test("rejects nonblocking execution", () => {
+    const mutant = structuredClone(ci);
+    harnessJob(mutant)["continue-on-error"] = true;
+    assert.throws(
+      () => validateCiHarnessJob(mutant),
+      /jobs\.harness must not use continue-on-error/,
+    );
+  });
 });
 
 function validateCiToolchain(document: unknown): void {
