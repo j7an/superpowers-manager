@@ -16,3 +16,23 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "deps"
+
+  # Harness CLIs exercised by the container integration suite. Exact pins
+  # keep tests/container.sh hermetic and reproducible; Dependabot refreshes
+  # them to the npm `latest` dist-tag so the suite tracks current releases.
+  - package-ecosystem: "npm"
+    directory: "/tests/container"
+    rebase-strategy: "disabled"
+    versioning-strategy: "increase"
+    cooldown:
+      default-days: 5
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "18:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      harnesses:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
