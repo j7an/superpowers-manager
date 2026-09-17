@@ -71,6 +71,8 @@ const EXPECTED_EXTERNAL_PINS = [
     ".github/workflows/pnpm-packagemanager-update.yml",
     "j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml",
   ],
+  [".github/workflows/release.yml", "step-security/harden-runner"],
+  [".github/workflows/release.yml", "actions/checkout"],
   [
     ".github/workflows/release.yml",
     "j7an/shared-workflows/.github/workflows/publish-npm.yml",
@@ -1179,7 +1181,7 @@ void test("release.yml publish job delegates to the shared workflow", async (t) 
   assert.equal(withBlock["package-name"], "superpowers-manager");
   assert.equal(
     withBlock["test-command"],
-    "corepack enable && pnpm install --frozen-lockfile && pnpm run check:static && SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh && SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh",
+    "corepack enable && pnpm install --frozen-lockfile && pnpm run check:static",
   );
   assert.equal(
     withBlock["pack-command"],
@@ -1237,6 +1239,42 @@ void test("release.yml publish job delegates to the shared workflow", async (t) 
       }
     });
   }
+});
+
+void test("release.yml validates both native endpoints in parallel before publish", () => {
+  const release = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "release.yml"), "utf8")),
+    "release",
+  );
+  const jobs = requireMapping(release.jobs, "jobs");
+  const validate = requireMapping(jobs.validate, "jobs.validate");
+  const matrix = requireMapping(
+    requireMapping(validate.strategy, "jobs.validate.strategy").matrix,
+    "jobs.validate.strategy.matrix",
+  );
+  // Both container endpoints are the release gate; a matrix runs them in
+  // parallel instead of serially inside the publisher's test command.
+  assert.deepEqual(matrix.native, ["24.12.0", "24"]);
+  assert.ok(Array.isArray(validate.steps), "expected jobs.validate.steps");
+  const containerStep = validate.steps
+    .map((step: unknown) => requireMapping(step, "jobs.validate.steps[]"))
+    .find(
+      (step) =>
+        typeof step.run === "string" &&
+        /^SPW_NATIVE_NODE_VERSION="\$SPW_NATIVE_NODE_VERSION" sh tests\/container\.sh$/.test(
+          step.run.trim(),
+        ),
+    );
+  assert.ok(containerStep, "validate must run tests/container.sh");
+  assert.equal(
+    requireMapping(containerStep.env, "container step env")
+      .SPW_NATIVE_NODE_VERSION,
+    "${{ matrix.native }}",
+    "the container endpoint must come from the matrix",
+  );
+  const publish = requireMapping(jobs.publish, "jobs.publish");
+  const needs = Array.isArray(publish.needs) ? publish.needs : [publish.needs];
+  assert.ok(needs.includes("validate"), "publish must depend on validate");
 });
 
 void test("release.yml contains no forbidden publish configuration", () => {

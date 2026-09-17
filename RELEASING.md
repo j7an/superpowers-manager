@@ -133,8 +133,9 @@ tag recovery, or any other registry mutation.
 The pinned reusable publisher:
 
 1. checks out and validates the release tag;
-2. runs the CI caller command that installs the frozen root dependencies,
-   checks native TypeScript, and runs `sh tests/container.sh`;
+2. runs the CI caller command that installs the frozen root dependencies and
+   checks native TypeScript, after the caller's `validate` matrix has run
+   `sh tests/container.sh` for both native endpoints in parallel;
 3. invokes `node tests/tools/pack.ts --out-dir .` once, compiling production
    source in external temporary staging and validating the real package allowlist;
 4. continues the existing OIDC publish, registry verification, `npx`
@@ -181,7 +182,8 @@ reside in the checkout before the publisher moves it to its artifact directory.
 Loose generated JavaScript remains external. This does not create an alternate
 release or approval path.
 
-Run the two container endpoints sequentially. `SPW_NATIVE_NODE_VERSION` accepts
+Run the two container endpoints one after the other locally; the release
+workflow runs them as parallel matrix jobs. `SPW_NATIVE_NODE_VERSION` accepts
 only `24.12.0` and `24`, defaulting to `24`. Both run the native TypeScript suite,
 then the real Codex, Pi, and OpenCode CLIs in isolated offline homes. Each image
 copies and smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
