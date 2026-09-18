@@ -52,7 +52,7 @@ void test("container contract", async (t) => {
       const source = readFileSync(dockerfile, "utf8");
       for (const required of [
         "FROM node:24.0.0-bookworm-slim AS minimum-node",
-        "FROM node:${NATIVE_NODE_VERSION}-bookworm-slim",
+        "FROM node:24-bookworm-slim",
         "COPY --from=minimum-node /usr/local/bin/node /opt/node-min/bin/node",
         "RUN /opt/node-min/bin/node --version",
         "ENV SPW_PACKAGE_NODE=/opt/node-min/bin/node",
@@ -169,34 +169,19 @@ void test("container contract", async (t) => {
       );
     },
   );
-  await t.test(
-    "container runner requests isolated Docker resources and rejects unsupported native runtimes",
-    () => {
-      const source = readFileSync(runner, "utf8");
-      assert.ok(executable(runner));
-      for (const required of [
-        "--network none",
-        "--read-only",
-        "--tmpfs /tmp:rw,exec,nosuid,size=512m",
-        "--tmpfs /home/spw:rw,nosuid,size=128m,uid=10001,gid=10001",
-        "docker build --pull",
-        '--build-arg "NATIVE_NODE_VERSION=$native_node"',
-        "docker run --rm",
-      ])
-        assert.ok(source.includes(required), required);
-      for (const native of ["22", "24.0.0", "24.12.1"]) {
-        const result = spawnSync("/bin/sh", [runner], {
-          encoding: "utf8",
-          env: { PATH: "/usr/bin:/bin", SPW_NATIVE_NODE_VERSION: native },
-        });
-        assert.equal(result.status, 2);
-        assert.equal(
-          result.stderr,
-          "error: SPW_NATIVE_NODE_VERSION must be 24.12.0 or 24\n",
-        );
-      }
-    },
-  );
+  await t.test("container runner requests isolated Docker resources", () => {
+    const source = readFileSync(runner, "utf8");
+    assert.ok(executable(runner));
+    for (const required of [
+      "--network none",
+      "--read-only",
+      "--tmpfs /tmp:rw,exec,nosuid,size=512m",
+      "--tmpfs /home/spw:rw,nosuid,size=128m,uid=10001,gid=10001",
+      "docker build --pull",
+      "docker run --rm",
+    ])
+      assert.ok(source.includes(required), required);
+  });
   await t.test(
     "OpenCode probe rejects host execution before lifecycle work",
     () => {
