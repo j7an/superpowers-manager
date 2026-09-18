@@ -116,7 +116,7 @@ prerelease, publish manually, or introduce an npm token for this decision.
 
 CI skips its test jobs only when a main push is verified as a single release-bot
 commit changing only the configured package version. Release then owns static
-validation and full acceptance at both native runtime endpoints on the tagged
+validation and full acceptance on latest Node 24 on the tagged
 commit before publication. A skipped CI job is not a passing test result.
 
 If the version bump lands but tag creation fails, the bump can remain without
@@ -134,8 +134,8 @@ The pinned reusable publisher:
 
 1. checks out and validates the release tag;
 2. runs the CI caller command that installs the frozen root dependencies and
-   checks native TypeScript, after the caller's `validate` matrix has run
-   `sh tests/container.sh` for both native endpoints in parallel;
+   checks native TypeScript, after the caller's `validate` job has run
+   `sh tests/container.sh`;
 3. invokes `node tests/tools/pack.ts --out-dir .` once, compiling production
    source in external temporary staging and validating the real package allowlist;
 4. continues the existing OIDC publish, registry verification, `npx`
@@ -160,15 +160,14 @@ Run locally while iterating:
 pnpm install --frozen-lockfile
 pnpm run check:static
 sh tests/run.sh
-SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh
-SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh
+sh tests/container.sh
 node tests/tools/pack.ts --out-dir /absolute/existing/temporary/output
 node --import ./tests/assert-matcher-gate.ts --test tests/bin/npm-pack-contents.test.ts tests/baseline/packaged-cli.test.ts
 git diff --check
 ```
 
 Use Homebrew-managed pnpm by command name locally, without Corepack.
-Native source, tests, and packaging tooling require Node >=24.12.0; the installed
+Native source, tests, and packaging tooling target latest Node 24; the installed
 package retains Node >=24. Static checking emits nothing into the checkout.
 Allocate the packaging command's existing output directory outside the checkout
 for developer verification. The command emits npm-compatible PackReport JSON,
@@ -182,19 +181,17 @@ reside in the checkout before the publisher moves it to its artifact directory.
 Loose generated JavaScript remains external. This does not create an alternate
 release or approval path.
 
-Run the two container endpoints one after the other locally; the release
-workflow runs them as parallel matrix jobs. `SPW_NATIVE_NODE_VERSION` accepts
-only `24.12.0` and `24`, defaulting to `24`. Both run the native TypeScript suite,
-then the real Codex, Pi, and OpenCode CLIs in isolated offline homes. Each image
-copies and smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
+The container suite runs on latest Node 24, as does the release workflow. It
+runs the native TypeScript suite, then the real Codex, Pi, and OpenCode CLIs in
+isolated offline homes. The image copies and smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
 `SPW_PACKAGE_NODE_VERSION`, then runs the installed package's emitted JavaScript
 with both that binary and the native harness binary. The minimum binary never
 runs TypeScript or installs dependencies during offline acceptance.
 
-PR CI runs focused native compatibility at Node 24.12.0 and one full container
-at latest Node 24. Static no-emit checking, tooling coverage, and historical
-citations run only on the latest-24 checkout entry. Release acceptance retains
-static checking and both offline container endpoints before the shared
+PR CI runs static no-emit checking, tooling coverage, historical citations, and
+the shared suite with package-minimum evidence on latest Node 24, plus one
+container per harness. Release acceptance retains static checking and the
+offline container suite before the shared
 publisher's `pack-command` produces the tarball.
 The package assertion must expose only the manager executable and approved
 source allowlist.

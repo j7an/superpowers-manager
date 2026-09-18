@@ -58,12 +58,7 @@ fi
 mode="${1:-suite}"
 case "$mode" in suite|harness-codex|harness-pi|harness-opencode) ;; *) echo "usage: tests/container.sh [suite|harness-codex|harness-pi|harness-opencode]" >&2; exit 2 ;; esac
 
-native_node=${SPW_NATIVE_NODE_VERSION:-24}
-case "$native_node" in
-  24.12.0|24) ;;
-  *) echo "error: SPW_NATIVE_NODE_VERSION must be 24.12.0 or 24" >&2; exit 2 ;;
-esac
-image="superpowers-manager-test:node-$native_node"
+image="superpowers-manager-test"
 
 command -v docker >/dev/null 2>&1 || {
   echo "error: docker is required for the container acceptance suite" >&2
@@ -71,7 +66,6 @@ command -v docker >/dev/null 2>&1 || {
 }
 
 docker build --pull \
-  --build-arg "NATIVE_NODE_VERSION=$native_node" \
   -f "$root/tests/container/Dockerfile" -t "$image" "$root"
 exec docker run --rm \
   --network none \

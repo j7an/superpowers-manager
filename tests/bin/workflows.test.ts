@@ -188,29 +188,11 @@ function requireMapping(value: unknown, path: string): Record<string, any> {
   return value as Record<string, any>;
 }
 
-function assertNoNativeSelectorEnv(
-  scope: Record<string, any>,
-  path: string,
-): void {
-  if (!Object.hasOwn(scope, "env")) return;
-
-  const env = requireMapping(scope.env, `${path}.env`);
-  assert.ok(
-    !Object.hasOwn(env, "SPW_NATIVE_NODE_VERSION"),
-    `${path}.env must not set SPW_NATIVE_NODE_VERSION`,
-  );
-}
-
 const FULL_SHARED_PACKAGE_ALIASES = new Set([
   "test",
   "check",
   "test:acceptance",
 ]);
-const NATIVE_COMPATIBILITY_COMMAND = `${[
-  "node --import ./tests/assert-matcher-gate.ts --test tests/bin/native-source.test.ts",
-  "node --import ./tests/assert-matcher-gate.ts --test tests/bin/assert-matcher-gate.test.ts",
-  "node --import ./tests/assert-matcher-gate.ts --test --test-name-pattern='^(compiler failure yields no package metadata or artifact|one staged package is delivered and all staging is removed)$' tests/bin/pack.test.ts",
-].join("\n")}\n`;
 
 const RELEASE_CLASSIFIER_JOB = "classify-release";
 const RELEASE_TEST_CONDITION =
@@ -322,7 +304,6 @@ void test("ci.yml declares the expected top-level contract", () => {
     "ci",
   );
 
-  assertNoNativeSelectorEnv(ci, "ci");
   assert.equal(requireMapping(ci.on, "ci.on").pull_request, null);
   assert.deepEqual(requireMapping(ci.on, "ci.on").push.branches, ["main"]);
   assert.equal(
@@ -366,7 +347,6 @@ function validateCiHarnessJob(document: unknown): void {
   );
   assert.equal(harnessJob.if, RELEASE_TEST_CONDITION);
   assert.equal(harnessJob.needs, RELEASE_CLASSIFIER_JOB);
-  assertNoNativeSelectorEnv(harnessJob, path);
   assert.equal(harnessJob.name, "${{ matrix.name }} harness integration");
   assert.equal(harnessJob["runs-on"], "ubuntu-latest");
   assert.equal(
@@ -395,7 +375,6 @@ function validateCiHarnessJob(document: unknown): void {
   );
   steps.forEach((candidate, index) => {
     const step = requireMapping(candidate, `${path}.steps[${index}]`);
-    assertNoNativeSelectorEnv(step, `${path}.steps[${index}]`);
     assert.ok(
       !Object.hasOwn(step, "continue-on-error"),
       `${path}.steps[${index}] must remain blocking`,
@@ -433,8 +412,7 @@ function validateCiHarnessJob(document: unknown): void {
     steps[acceptance.index],
     "container acceptance step",
   );
-  // The selector is the only environment the step may carry: the native
-  // Node version stays at tests/container.sh's latest-24 default.
+  // The selector is the only environment the step may carry.
   assert.deepEqual(
     acceptanceStep.env,
     { SPW_HARNESS_SELECTOR: "${{ matrix.selector }}" },
@@ -503,17 +481,6 @@ void test("ci.yml harness matrix runs one independent integration per selector",
     );
   });
 
-  await t.test("rejects a native selector on the step", () => {
-    const mutant = structuredClone(ci);
-    const steps = harnessJob(mutant).steps as Record<string, any>[];
-    const integration = steps.find((step) => typeof step.run === "string")!;
-    integration.env.SPW_NATIVE_NODE_VERSION = "24.12.0";
-    assert.throws(
-      () => validateCiHarnessJob(mutant),
-      /must not set SPW_NATIVE_NODE_VERSION/,
-    );
-  });
-
   await t.test("rejects nonblocking execution", () => {
     const mutant = structuredClone(ci);
     harnessJob(mutant)["continue-on-error"] = true;
@@ -535,7 +502,6 @@ function validateCiToolchain(document: unknown): void {
   );
   assert.equal(toolchain.if, RELEASE_TEST_CONDITION);
   assert.equal(toolchain.needs, RELEASE_CLASSIFIER_JOB);
-  assertNoNativeSelectorEnv(toolchain, "jobs.toolchain");
   assert.equal(toolchain["runs-on"], "ubuntu-latest");
   assert.equal(
     requireMapping(toolchain.permissions, "jobs.toolchain.permissions")
@@ -543,19 +509,10 @@ function validateCiToolchain(document: unknown): void {
     "read",
   );
 
-  const strategy: Record<string, unknown> = requireMapping(
-    toolchain.strategy,
-    "jobs.toolchain.strategy",
+  assert.ok(
+    !Object.hasOwn(toolchain, "strategy"),
+    "jobs.toolchain runs once at latest Node 24",
   );
-  assert.equal(strategy["fail-fast"], false);
-  const matrix: Record<string, unknown> = requireMapping(
-    strategy.matrix,
-    "jobs.toolchain.strategy.matrix",
-  );
-  assert.deepEqual(matrix.include, [
-    { native: "24.12.0", static: false },
-    { native: "24", static: true },
-  ]);
 
   const steps = toolchain.steps;
   assert.ok(
@@ -565,10 +522,13 @@ function validateCiToolchain(document: unknown): void {
 
   steps.forEach((candidate, index) => {
     const step = requireMapping(candidate, `jobs.toolchain.steps[${index}]`);
-    assertNoNativeSelectorEnv(step, `jobs.toolchain.steps[${index}]`);
     assert.ok(
       !Object.hasOwn(step, "continue-on-error"),
       `jobs.toolchain.steps[${index}] must remain blocking`,
+    );
+    assert.ok(
+      !Object.hasOwn(step, "if"),
+      `jobs.toolchain.steps[${index}] must run unconditionally`,
     );
   });
 
@@ -578,19 +538,6 @@ function validateCiToolchain(document: unknown): void {
       usesTarget(step.uses, "setup.uses") === "actions/setup-node",
   );
   assert.equal(setups.length, 2, "expected exactly two setup-node steps");
-  const packageSetup = setups.find((step: any) => step.if === "matrix.static");
-  assert.ok(
-    packageSetup,
-    "package minimum setup must run only on matrix.static",
-  );
-  const mainSetup = setups.find(
-    (step: any) =>
-      !Object.hasOwn(step, "if") &&
-      requireMapping(step.with, "main setup.with")["node-version"] ===
-        "${{ matrix.native }}",
-  );
-  assert.ok(mainSetup, "main setup must restore the matrix native runtime");
-
   const packageManifest = JSON.parse(
     readFileSync(join(ROOT, "package.json"), "utf8"),
   );
@@ -607,12 +554,22 @@ function validateCiToolchain(document: unknown): void {
       `full shared package alias must remain registered: ${alias}`,
     );
   }
+  const packageSetup = setups.find(
+    (step: any) =>
+      requireMapping(step.with, "package setup.with")["node-version"] ===
+      minimum,
+  );
+  assert.ok(packageSetup, "package minimum setup must install engines.node");
+  const mainSetup = setups.find(
+    (step: any) =>
+      requireMapping(step.with, "main setup.with")["node-version"] === "24",
+  );
+  assert.ok(mainSetup, "main setup must restore latest Node 24");
   const packageWith = requireMapping(packageSetup.with, "package setup.with");
   assert.equal(packageWith["node-version"], minimum);
   assert.equal(packageWith["package-manager-cache"], false);
   const mainWith = requireMapping(mainSetup.with, "main setup.with");
-  assert.equal(mainWith["node-version"], "${{ matrix.native }}");
-  assert.equal(mainWith["check-latest"], "${{ matrix.static }}");
+  assert.equal(mainWith["check-latest"], true);
 
   const captureSteps = steps.filter(
     (step: any) =>
@@ -624,11 +581,6 @@ function validateCiToolchain(document: unknown): void {
     "expected exactly one package minimum runtime capture",
   );
   const capture = requireMapping(captureSteps[0], "package runtime capture");
-  assert.equal(
-    capture.if,
-    "matrix.static",
-    "package runtime capture must run only on matrix.static",
-  );
   assert.match(capture.run, /require\("\.\/package\.json"\)\.engines\.node/);
   assert.match(capture.run, /process\.execPath/);
   assert.match(capture.run, /process\.versions\.node/);
@@ -638,35 +590,6 @@ function validateCiToolchain(document: unknown): void {
     (capture.run.match(/>> "\$GITHUB_ENV"/g) ?? []).length,
     2,
     "capture must persist both the absolute executable and observed version",
-  );
-
-  const nativeCompatibilitySteps = steps.filter(
-    (step) =>
-      step !== null &&
-      typeof step === "object" &&
-      typeof (step as Record<string, unknown>).run === "string" &&
-      (step as Record<string, string>).run.includes(
-        "tests/bin/native-source.test.ts",
-      ),
-  );
-  assert.equal(
-    nativeCompatibilitySteps.length,
-    1,
-    "expected exactly one focused native compatibility step",
-  );
-  const nativeCompatibility = requireMapping(
-    nativeCompatibilitySteps[0],
-    "native compatibility step",
-  );
-  assert.equal(
-    nativeCompatibility.if,
-    "matrix.native == '24.12.0'",
-    "native compatibility must run only at the supported source floor",
-  );
-  assert.deepEqual(
-    nativeCompatibility.run,
-    NATIVE_COMPATIBILITY_COMMAND,
-    "native compatibility must run the source, gate, and package producer checks",
   );
 
   const sharedInvocations = steps.flatMap((step: any, index) =>
@@ -692,11 +615,6 @@ function validateCiToolchain(document: unknown): void {
     "sh tests/run.sh --require-package-node",
     "full shared run must require package-minimum evidence without narrowing",
   );
-  assert.equal(
-    shared.if,
-    "matrix.static",
-    "full shared run must run only on matrix.static",
-  );
 
   assert.ok(
     !steps.some(
@@ -716,7 +634,6 @@ function validateCiToolchain(document: unknown): void {
     steps.indexOf(mainSetup),
     uniqueRunStepIndex(steps, "corepack enable"),
     uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile"),
-    steps.indexOf(nativeCompatibilitySteps[0]),
     uniqueRunStepIndex(steps, "pnpm run check:static"),
     sharedInvocation.index,
   ];
@@ -724,24 +641,6 @@ function validateCiToolchain(document: unknown): void {
     order,
     [...order].sort((a, b) => a - b),
     "toolchain steps are out of order",
-  );
-  assert.ok(
-    !Object.hasOwn(
-      requireMapping(
-        steps[uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile")],
-        "toolchain installation step",
-      ),
-      "if",
-    ),
-    "installation must always run",
-  );
-  assert.equal(
-    requireMapping(
-      steps[uniqueRunStepIndex(steps, "pnpm run check:static")],
-      "toolchain static check step",
-    ).if,
-    "matrix.static",
-    "static check must run only on latest native",
   );
 
   const checkout = requireMapping(steps[order[1]], "toolchain checkout step");
@@ -792,7 +691,7 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
     );
   });
 
-  await t.test("rejects capture after the matrix runtime setup", () => {
+  await t.test("rejects capture after the latest runtime setup", () => {
     const mutant = structuredClone(ci);
     const steps = toolchainSteps(mutant);
     const captureIndex = steps.findIndex(
@@ -801,28 +700,11 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
     );
     const capture = steps.splice(captureIndex, 1)[0];
     const mainIndex = steps.findIndex(
-      (step) => step.with?.["node-version"] === "${{ matrix.native }}",
+      (step) => step.with?.["node-version"] === "24",
     );
     steps.splice(mainIndex + 1, 0, capture);
     assert.throws(() => validateCiToolchain(mutant), /steps are out of order/);
   });
-
-  await t.test(
-    "rejects a package capture without the latest-only condition",
-    () => {
-      const mutant = structuredClone(ci);
-      const capture = toolchainSteps(mutant).find(
-        (step) =>
-          typeof step.run === "string" &&
-          step.run.includes("SPW_PACKAGE_NODE="),
-      )!;
-      delete capture.if;
-      assert.throws(
-        () => validateCiToolchain(mutant),
-        /capture must run only on matrix.static/,
-      );
-    },
-  );
 
   for (const [name, command] of [
     [
@@ -854,7 +736,7 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
   ]) {
     await t.test(`rejects duplicate full shared alias: ${command}`, () => {
       const mutant = structuredClone(ci);
-      toolchainSteps(mutant).push({ if: "matrix.static", run: command });
+      toolchainSteps(mutant).push({ run: command });
       assert.throws(
         () => validateCiToolchain(mutant),
         /expected exactly one full shared invocation/,
@@ -865,7 +747,6 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
   await t.test("rejects a duplicate standalone tooling run", () => {
     const mutant = structuredClone(ci);
     toolchainSteps(mutant).push({
-      if: "matrix.static",
       run: "node --test tests/bin/tooling-coverage.test.ts tests/bin/citations.test.ts",
     });
     assert.throws(
@@ -880,26 +761,6 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
       (step) => step.run === "pnpm run check:static",
     )!["continue-on-error"] = true;
     assert.throws(() => validateCiToolchain(mutant), /must remain blocking/);
-  });
-
-  await t.test("rejects weakened native-floor coverage", () => {
-    const mutant = structuredClone(ci);
-    const native = toolchainSteps(mutant).find(
-      (step) =>
-        typeof step.run === "string" &&
-        step.run.includes("tests/bin/native-source.test.ts"),
-    )!;
-    native.run = native.run
-      .split("\n")
-      .filter(
-        (line: string) =>
-          !line.includes("tests/bin/assert-matcher-gate.test.ts"),
-      )
-      .join("\n");
-    assert.throws(
-      () => validateCiToolchain(mutant),
-      /native compatibility must run the source, gate, and package producer checks/,
-    );
   });
 });
 
@@ -1214,36 +1075,21 @@ void test("release.yml publish job delegates to the shared workflow", async (t) 
   }
 });
 
-void test("release.yml validates both native endpoints in parallel before publish", () => {
+void test("release.yml validates the container suite before publish", () => {
   const release = requireMapping(
     parse(readFileSync(join(WORKFLOW_DIR, "release.yml"), "utf8")),
     "release",
   );
   const jobs = requireMapping(release.jobs, "jobs");
   const validate = requireMapping(jobs.validate, "jobs.validate");
-  const matrix = requireMapping(
-    requireMapping(validate.strategy, "jobs.validate.strategy").matrix,
-    "jobs.validate.strategy.matrix",
-  );
-  // Both container endpoints are the release gate; a matrix runs them in
-  // parallel instead of serially inside the publisher's test command.
-  assert.deepEqual(matrix.native, ["24.12.0", "24"]);
   assert.ok(Array.isArray(validate.steps), "expected jobs.validate.steps");
-  const containerStep = validate.steps
-    .map((step: unknown) => requireMapping(step, "jobs.validate.steps[]"))
-    .find(
-      (step) =>
-        typeof step.run === "string" &&
-        /^SPW_NATIVE_NODE_VERSION="\$SPW_NATIVE_NODE_VERSION" sh tests\/container\.sh$/.test(
-          step.run.trim(),
-        ),
-    );
-  assert.ok(containerStep, "validate must run tests/container.sh");
-  assert.equal(
-    requireMapping(containerStep.env, "container step env")
-      .SPW_NATIVE_NODE_VERSION,
-    "${{ matrix.native }}",
-    "the container endpoint must come from the matrix",
+  assert.ok(
+    validate.steps.some(
+      (step: unknown) =>
+        requireMapping(step, "jobs.validate.steps[]").run ===
+        "sh tests/container.sh",
+    ),
+    "validate must run tests/container.sh",
   );
   const publish = requireMapping(jobs.publish, "jobs.publish");
   const needs = Array.isArray(publish.needs) ? publish.needs : [publish.needs];

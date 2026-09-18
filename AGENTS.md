@@ -115,8 +115,8 @@ product integrations, not a required agent harness.
   directly to `main`.
 - Use Conventional Commit subjects; automatic release bump inference depends
   on their user-visible intent.
-- Keep test shell code compatible with POSIX `sh`. Preserve installed Node >=24 and native source/tooling/tests
-  Node >=24.12.0.
+- Keep test shell code compatible with POSIX `sh`. Preserve installed Node >=24; native source, tooling,
+  and tests target latest Node 24.
 - Ask before adding a runtime dependency.
 - Update documentation and contract tests when observable behavior changes.
   For test consolidation or removal, preserve each surviving behavioral
@@ -203,12 +203,9 @@ product integrations, not a required agent harness.
   reaching extraction. Linux CI uses `actions/setup-node`; test cases never
   download runtimes.
 
-- Release validation is the deliberate combined-path exception: validate both
-  native endpoints with `SPW_NATIVE_NODE_VERSION=24.12.0 sh tests/container.sh`
-  and `SPW_NATIVE_NODE_VERSION=24 sh tests/container.sh`. The release workflow
-  runs them as parallel matrix jobs before the publisher; locally, run them one
-  after the other. The default is `24` and
-  all other selectors are rejected. Each combined image runs shared checks,
+- Release validation is the deliberate combined-path exception: validate with
+  `sh tests/container.sh`, which the release workflow runs before the
+  publisher. The combined image uses latest Node 24, runs shared checks,
   then Codex, Pi, and OpenCode. It also runs the installed package on Node
   24.0.0 through its verified `SPW_PACKAGE_NODE` binary, declared by
   `SPW_PACKAGE_NODE_VERSION`. The minimum binary never runs TypeScript tooling.
