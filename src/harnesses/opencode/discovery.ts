@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
@@ -28,9 +29,7 @@ import {
 } from "./config.ts";
 import type { OpenCodePaths } from "./paths.ts";
 
-// Account inspection pays a full-copy cost so it never opens the native DB or
-// its WAL with SQLite. Keep DB+WAL to one finite 16 MiB capture, without retry.
-const MAX_ACCOUNT_FILE_BYTES = 16 * 1024 * 1024;
+const MAX_AUTH_FILE_BYTES = 16 * 1024 * 1024;
 const ACCOUNT_QUERY_POLICY: ValidatorPolicy = {
   timeoutMs: 2_000,
   graceMs: 200,
@@ -73,6 +72,13 @@ interface DiscoveryState {
 
 interface CapturedFile {
   readonly bytes: Buffer;
+  readonly dev: number;
+  readonly ino: number;
+  readonly mode: number;
+}
+
+interface HashedFile {
+  readonly hash: string;
   readonly dev: number;
   readonly ino: number;
   readonly mode: number;
@@ -500,7 +506,7 @@ async function captureFile(path: string): Promise<CapturedFile | null> {
   try {
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > MAX_ACCOUNT_FILE_BYTES)
+    if (!stat.isFile() || stat.size > MAX_AUTH_FILE_BYTES)
       throw new Error("unsupported account database file");
     const bytes = Buffer.allocUnsafe(stat.size);
     let offset = 0;
@@ -523,16 +529,58 @@ async function captureFile(path: string): Promise<CapturedFile | null> {
   }
 }
 
-function sameCapture(
-  left: CapturedFile | null,
-  right: CapturedFile | null,
-): boolean {
+async function hashFile(
+  path: string,
+  copyTo?: string,
+): Promise<HashedFile | null> {
+  let handle: Awaited<ReturnType<typeof open>>;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (cause) {
+    if (isErrno(cause, "ENOENT")) return null;
+    throw cause;
+  }
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw new Error("unsupported account database file");
+    const hash = createHash("sha256");
+    const out =
+      copyTo === undefined
+        ? undefined
+        : await open(
+            copyTo,
+            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+            0o600,
+          );
+    try {
+      for await (const chunk of handle.createReadStream({
+        autoClose: false,
+        start: 0,
+      }) as AsyncIterable<Buffer>) {
+        hash.update(chunk);
+        await out?.write(chunk);
+      }
+    } finally {
+      await out?.close();
+    }
+    return {
+      hash: hash.digest("hex"),
+      dev: stat.dev,
+      ino: stat.ino,
+      mode: stat.mode,
+    };
+  } finally {
+    await handle.close().catch(() => {});
+  }
+}
+
+function sameFile(left: HashedFile | null, right: HashedFile | null): boolean {
   return left === null || right === null
     ? left === right
     : left.dev === right.dev &&
         left.ino === right.ino &&
         left.mode === right.mode &&
-        left.bytes.equals(right.bytes);
+        left.hash === right.hash;
 }
 
 function accountDatabasePath(
@@ -553,59 +601,34 @@ async function inspectAccount(
   const database = accountDatabasePath(state.env, dataRoot);
   if (database === null) return;
   const wal = `${database}-wal`;
-  let initialDb: CapturedFile | null;
-  let initialWal: CapturedFile | null;
   try {
-    [initialDb, initialWal] = await Promise.all([
-      captureFile(database),
-      captureFile(wal),
-    ]);
-    if (initialDb === null) {
-      if (initialWal !== null) throw new Error("orphan account WAL");
+    if ((await classifyPathNoFollow(database)) === "missing") {
+      if ((await classifyPathNoFollow(wal)) !== "missing")
+        throw new Error("orphan account WAL");
       return;
     }
-    if (
-      initialDb.bytes.length + (initialWal?.bytes.length ?? 0) >
-      MAX_ACCOUNT_FILE_BYTES
-    )
-      throw new Error("account database capture limit");
+    // Account inspection pays a streamed full-copy cost so it never opens the
+    // native DB or its WAL with SQLite: a live read-only open rewrites -shm and
+    // creates -wal/-shm when absent. ponytail: copy time and temp space scale
+    // with DB size; query live only if that cost is measured to matter and
+    // -shm writes can be avoided.
     const result = await withWorkspace(
       tmpdir(),
       "spw-opencode-account-",
       async (workspace) => {
         const copy = join(workspace, "opencode.db");
-        await (
-          await open(
-            copy,
-            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-            0o600,
-          )
-        ).close();
-        const dbOut = await open(copy, constants.O_WRONLY);
-        try {
-          await dbOut.writeFile(initialDb!.bytes);
-        } finally {
-          await dbOut.close();
-        }
-        if (initialWal !== null) {
-          const walOut = await open(
-            `${copy}-wal`,
-            constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-            0o600,
-          );
-          try {
-            await walOut.writeFile(initialWal.bytes);
-          } finally {
-            await walOut.close();
-          }
-        }
+        const [initialDb, initialWal] = await Promise.all([
+          hashFile(database, copy),
+          hashFile(wal, `${copy}-wal`),
+        ]);
+        if (initialDb === null) throw new Error("account database moved");
         const beforeQuery = await Promise.all([
-          captureFile(database),
-          captureFile(wal),
+          hashFile(database),
+          hashFile(wal),
         ]);
         if (
-          !sameCapture(initialDb, beforeQuery[0]) ||
-          !sameCapture(initialWal, beforeQuery[1])
+          !sameFile(initialDb, beforeQuery[0]) ||
+          !sameFile(initialWal, beforeQuery[1])
         )
           throw new Error("account database moved");
         const run = await runValidator(
@@ -630,18 +653,18 @@ async function inspectAccount(
           (run.stdout.text !== "active" && run.stdout.text !== "absent")
         )
           throw new Error("account database query failed");
+        const afterQuery = await Promise.all([
+          hashFile(database),
+          hashFile(wal),
+        ]);
+        if (
+          !sameFile(initialDb, afterQuery[0]) ||
+          !sameFile(initialWal, afterQuery[1])
+        )
+          throw new Error("account database moved");
         return run.stdout.text;
       },
     );
-    const afterQuery = await Promise.all([
-      captureFile(database),
-      captureFile(wal),
-    ]);
-    if (
-      !sameCapture(initialDb, afterQuery[0]) ||
-      !sameCapture(initialWal, afterQuery[1])
-    )
-      throw new Error("account database moved");
     if (result === "active")
       addBlocked(state, "OpenCode active account remote configuration");
   } catch {

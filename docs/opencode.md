@@ -39,11 +39,11 @@ the intended target; its internal managed-configuration redirect is
 qualification-sensitive and is not a runtime version allowlist. Original config,
 project, account, and managed origins are not forwarded to the writer.
 
-Account activation inspection copies SQLite state and WAL into disposable
-storage before querying it, with a fixed 16 MiB combined capture ceiling.
-Moving, oversized, or malformed account state remains unresolved; retry only
-after it is stable or resolve it manually. Reassess the ceiling when measured
-usage requires it.
+Account activation inspection streams SQLite state and WAL into disposable
+storage before querying it, so it never opens OpenCode's files with SQLite and
+database size does not affect eligibility. Copy time and temporary space grow
+with the database. Moving or malformed account state remains unresolved; retry
+only after it is stable or resolve it manually.
 
 Restart OpenCode after a successful install, an activating update, or a verified
 removal. End-to-end native lifecycle qualification runs offline in an isolated
