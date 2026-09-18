@@ -194,12 +194,6 @@ const FULL_SHARED_PACKAGE_ALIASES = new Set([
   "test:acceptance",
 ]);
 
-const RELEASE_CLASSIFIER_JOB = "classify-release";
-const RELEASE_TEST_CONDITION =
-  "${{ !cancelled() && (needs.classify-release.result != 'success' || needs.classify-release.outputs.skip_tests != 'true') }}";
-const RELEASE_CONCURRENCY_GROUP =
-  "${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor_id == '275375463' && github.actor == 'shared-workflows-release-bot[bot]' && 'release-bot' || 'ordinary' }}";
-
 function isFullSharedCommandLine(line: string): boolean {
   const words = line.trim().split(/\s+/).filter(Boolean);
   if (words[0] === "sh" && words[1] === "tests/run.sh") return true;
@@ -209,106 +203,18 @@ function isFullSharedCommandLine(line: string): boolean {
   return FULL_SHARED_PACKAGE_ALIASES.has(alias);
 }
 
-function validateCiReleaseClassifier(jobs: Record<string, any>): void {
-  const classifier = requireMapping(
-    jobs[RELEASE_CLASSIFIER_JOB],
-    "jobs.classify-release",
-  );
-  assert.equal(classifier.if, "github.event_name == 'push'");
-  assert.equal(classifier["runs-on"], "ubuntu-latest");
-  assert.deepEqual(classifier.permissions, { contents: "read" });
-  assert.equal(
-    classifier.outputs.skip_tests,
-    "${{ steps.classify.outputs.skip_tests }}",
-  );
-  const classifierSteps = classifier.steps;
-  assert.ok(
-    Array.isArray(classifierSteps),
-    "expected jobs.classify-release.steps to be an array",
-  );
-  const order = [
-    uniqueStepTargetIndex(classifierSteps, "step-security/harden-runner"),
-    uniqueStepTargetIndex(classifierSteps, "actions/checkout"),
-    uniqueStepTargetIndex(classifierSteps, "actions/setup-node"),
-    uniqueRunStepIndex(
-      classifierSteps,
-      "node tests/tools/classify-release-bump.ts",
-    ),
-  ];
-  assert.deepEqual(
-    order,
-    [...order].sort((left, right) => left - right),
-    "classifier must run harden, checkout, setup, and classification in order",
-  );
-  assert.equal(
-    order[0],
-    0,
-    "classifier must harden before any executable step",
-  );
-  const [
-    classifierHarden,
-    classifierCheckout,
-    classifierSetup,
-    classification,
-  ] = order.map((index) =>
-    requireMapping(classifierSteps[index], "classifier contract step"),
-  );
-  assert.deepEqual(
-    classifierSteps.flatMap((step, index) =>
-      step.if === "${{ false }}" ? [] : [index],
-    ),
-    order,
-    "classifier must execute only its required steps",
-  );
-  const harnessSteps = requireMapping(jobs.harness, "jobs.harness")
-    .steps as unknown[];
-  assert.deepEqual(
-    classifierHarden.with,
-    requireMapping(
-      harnessSteps[
-        uniqueStepTargetIndex(harnessSteps, "step-security/harden-runner")
-      ],
-      "harness harden step",
-    ).with,
-    "classifier must retain the hardening configuration",
-  );
-  assert.equal(
-    requireMapping(classifierCheckout.with, "classifier checkout.with")[
-      "persist-credentials"
-    ],
-    false,
-  );
-  assert.equal(
-    requireMapping(classifierCheckout.with, "classifier checkout.with")[
-      "fetch-depth"
-    ],
-    0,
-  );
-  assert.equal(
-    requireMapping(classifierCheckout.with, "classifier checkout.with").ref,
-    "${{ github.sha }}",
-  );
-  assert.equal(
-    requireMapping(classifierSetup.with, "classifier setup.with")[
-      "node-version"
-    ],
-    "24",
-  );
-  assert.equal(classification.id, "classify");
-  assert.equal(classification.run, "node tests/tools/classify-release-bump.ts");
-}
-
 void test("ci.yml declares the expected top-level contract", () => {
   const ci = requireMapping(
     parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
     "ci",
   );
 
-  assert.equal(requireMapping(ci.on, "ci.on").pull_request, null);
-  assert.deepEqual(requireMapping(ci.on, "ci.on").push.branches, ["main"]);
+  // PR-only is the contract: strict up-to-date merges make post-merge CI
+  // redundant, and Release validates the tagged commit.
+  assert.deepEqual(ci.on, { pull_request: null });
   assert.equal(
     requireMapping(ci.concurrency, "ci.concurrency").group,
-    RELEASE_CONCURRENCY_GROUP,
+    "${{ github.workflow }}-${{ github.ref }}",
   );
   assert.equal(
     requireMapping(ci.concurrency, "ci.concurrency")["cancel-in-progress"],
@@ -317,12 +223,12 @@ void test("ci.yml declares the expected top-level contract", () => {
   assert.deepEqual(ci.permissions, {});
   const jobs = requireMapping(ci.jobs, "jobs");
 
-  validateCiReleaseClassifier(jobs);
+  assert.deepEqual(Object.keys(jobs), ["harness", "toolchain"]);
   for (const key of ["harness", "toolchain"]) {
     const job = requireMapping(jobs[key], `jobs.${key}`);
     assert.deepEqual(job.permissions, { contents: "read" });
-    assert.equal(job.needs, RELEASE_CLASSIFIER_JOB);
-    assert.equal(job.if, RELEASE_TEST_CONDITION);
+    assert.ok(!Object.hasOwn(job, "needs"));
+    assert.ok(!Object.hasOwn(job, "if"));
     assert.ok(!Object.hasOwn(job, "continue-on-error"));
   }
 });
@@ -345,8 +251,6 @@ function validateCiHarnessJob(document: unknown): void {
     !Object.hasOwn(harnessJob, "continue-on-error"),
     `${path} must not use continue-on-error`,
   );
-  assert.equal(harnessJob.if, RELEASE_TEST_CONDITION);
-  assert.equal(harnessJob.needs, RELEASE_CLASSIFIER_JOB);
   assert.equal(harnessJob.name, "${{ matrix.name }} harness integration");
   assert.equal(harnessJob["runs-on"], "ubuntu-latest");
   assert.equal(
@@ -500,8 +404,6 @@ function validateCiToolchain(document: unknown): void {
     !Object.hasOwn(toolchain, "continue-on-error"),
     "jobs.toolchain must not use continue-on-error",
   );
-  assert.equal(toolchain.if, RELEASE_TEST_CONDITION);
-  assert.equal(toolchain.needs, RELEASE_CLASSIFIER_JOB);
   assert.equal(toolchain["runs-on"], "ubuntu-latest");
   assert.equal(
     requireMapping(toolchain.permissions, "jobs.toolchain.permissions")
@@ -762,43 +664,6 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", async (t
     )!["continue-on-error"] = true;
     assert.throws(() => validateCiToolchain(mutant), /must remain blocking/);
   });
-});
-
-void test("ci.yml classifier preserves command and security order", () => {
-  const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
-  const jobs = requireMapping(requireMapping(ci, "ci").jobs, "jobs");
-  const steps = requireMapping(
-    jobs[RELEASE_CLASSIFIER_JOB],
-    "jobs.classify-release",
-  ).steps as unknown[];
-  const insertionIndex =
-    uniqueStepTargetIndex(steps, "step-security/harden-runner") + 1;
-  steps.splice(insertionIndex, 0, {
-    name: "Disabled local action",
-    if: "${{ false }}",
-    uses: "./.github/actions/disabled",
-  });
-  assert.doesNotThrow(() => validateCiReleaseClassifier(jobs));
-  delete requireMapping(steps[insertionIndex], "inserted action").if;
-  assert.throws(
-    () => validateCiReleaseClassifier(jobs),
-    /classifier must execute only its required steps/,
-  );
-  steps.splice(insertionIndex, 1);
-
-  const [classification] = steps.splice(
-    uniqueRunStepIndex(steps, "node tests/tools/classify-release-bump.ts"),
-    1,
-  );
-  steps.splice(
-    uniqueStepTargetIndex(steps, "actions/checkout"),
-    0,
-    classification,
-  );
-  assert.throws(
-    () => validateCiReleaseClassifier(jobs),
-    /classifier must run harden, checkout, setup, and classification in order/,
-  );
 });
 
 void test("ci.yml exists and blocking mode creates no compatibility workflow", () => {
