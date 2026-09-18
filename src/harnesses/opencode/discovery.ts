@@ -558,7 +558,11 @@ async function hashFile(
         start: 0,
       }) as AsyncIterable<Buffer>) {
         hash.update(chunk);
-        await out?.write(chunk);
+        for (let offset = 0; out !== undefined && offset < chunk.length;) {
+          const { bytesWritten } = await out.write(chunk, offset);
+          if (bytesWritten === 0) throw new Error("account copy stalled");
+          offset += bytesWritten;
+        }
       }
     } finally {
       await out?.close();

@@ -13,6 +13,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
@@ -537,6 +538,61 @@ void test("WAL-only active organization evidence is detected without changing th
     true,
   );
   assert.deepEqual(snapshotDirectory(data), before);
+});
+
+void test("a short write while copying the WAL still detects WAL-only active account state", async (t) => {
+  const state = openCodeSandbox(t);
+  const data = join(state.env.XDG_DATA_HOME!, "opencode");
+  mkdirSync(data, { recursive: true });
+  const writer = new DatabaseSync(join(data, "opencode.db"));
+  t.after(() => writer.close());
+  writer.exec(
+    "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;" +
+      "CREATE TABLE account(id TEXT PRIMARY KEY, email TEXT NOT NULL, url TEXT NOT NULL, access_token TEXT NOT NULL, refresh_token TEXT NOT NULL, token_expiry INTEGER);" +
+      "CREATE TABLE account_state(id INTEGER PRIMARY KEY, active_account_id TEXT, active_org_id TEXT);" +
+      "PRAGMA wal_checkpoint(TRUNCATE);",
+  );
+  writer.exec(
+    "INSERT INTO account VALUES('acct','e','https://example.test','secret','refresh',NULL);" +
+      "INSERT INTO account_state VALUES(1,'acct','org');",
+  );
+  const probe = await open(join(data, "opencode.db"), "r");
+  const fileHandle = Object.getPrototypeOf(probe) as {
+    write: (
+      this: unknown,
+      buffer: Buffer,
+      ...rest: unknown[]
+    ) => Promise<unknown>;
+  };
+  await probe.close();
+  const write = fileHandle.write;
+  let shortened = false;
+  t.mock.method(
+    fileHandle,
+    "write",
+    function (this: unknown, buffer: Buffer, ...rest: unknown[]) {
+      // Shorten the first WAL-copy write once; the WAL header magic is 0x377f068x.
+      if (
+        !shortened &&
+        (rest[0] ?? 0) === 0 &&
+        buffer.length > 1 &&
+        buffer.readUInt32BE(0) >>> 1 === 0x377f0682 >>> 1
+      ) {
+        shortened = true;
+        return write.call(this, buffer, 0, buffer.length >> 1);
+      }
+      return write.call(this, buffer, ...rest);
+    },
+  );
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.equal(shortened, true);
+  assert.deepEqual(result.blockedInputs, [
+    "OpenCode active account remote configuration",
+  ]);
 });
 
 void test("a database and WAL larger than 16 MiB with inactive account state do not block", async (t) => {
