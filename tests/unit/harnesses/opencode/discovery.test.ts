@@ -13,6 +13,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
@@ -28,6 +29,25 @@ import {
 function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(value));
+}
+
+function snapshotDirectory(directory: string) {
+  return Object.fromEntries(
+    readdirSync(directory)
+      .sort()
+      .map((name) => {
+        const file = join(directory, name);
+        const stat = statSync(file);
+        return [
+          name,
+          {
+            mode: stat.mode,
+            size: stat.size,
+            hash: createHash("sha256").update(readFileSync(file)).digest("hex"),
+          },
+        ];
+      }),
+  );
 }
 
 function writeSkill(path: string): void {
@@ -505,26 +525,7 @@ void test("WAL-only active organization evidence is detected without changing th
     "INSERT INTO account VALUES('acct','e','https://example.test','secret','refresh',NULL);" +
       "INSERT INTO account_state VALUES(1,'acct','org');",
   );
-  const snapshot = () =>
-    Object.fromEntries(
-      readdirSync(data)
-        .sort()
-        .map((name) => {
-          const file = join(data, name);
-          const stat = statSync(file);
-          return [
-            name,
-            {
-              mode: stat.mode,
-              size: stat.size,
-              hash: createHash("sha256")
-                .update(readFileSync(file))
-                .digest("hex"),
-            },
-          ];
-        }),
-    );
-  const before = snapshot();
+  const before = snapshotDirectory(data);
   const result = await inspectOpenCodeDiscovery(
     state.paths,
     state.env,
@@ -536,7 +537,105 @@ void test("WAL-only active organization evidence is detected without changing th
     ),
     true,
   );
-  assert.deepEqual(snapshot(), before);
+  assert.deepEqual(snapshotDirectory(data), before);
+});
+
+void test("a short write while copying the WAL still detects WAL-only active account state", async (t) => {
+  const state = openCodeSandbox(t);
+  const data = join(state.env.XDG_DATA_HOME!, "opencode");
+  mkdirSync(data, { recursive: true });
+  const writer = new DatabaseSync(join(data, "opencode.db"));
+  t.after(() => writer.close());
+  writer.exec(
+    "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;" +
+      "CREATE TABLE account(id TEXT PRIMARY KEY, email TEXT NOT NULL, url TEXT NOT NULL, access_token TEXT NOT NULL, refresh_token TEXT NOT NULL, token_expiry INTEGER);" +
+      "CREATE TABLE account_state(id INTEGER PRIMARY KEY, active_account_id TEXT, active_org_id TEXT);" +
+      "PRAGMA wal_checkpoint(TRUNCATE);",
+  );
+  writer.exec(
+    "INSERT INTO account VALUES('acct','e','https://example.test','secret','refresh',NULL);" +
+      "INSERT INTO account_state VALUES(1,'acct','org');",
+  );
+  const probe = await open(join(data, "opencode.db"), "r");
+  const fileHandle = Object.getPrototypeOf(probe) as {
+    write: (
+      this: unknown,
+      buffer: Buffer,
+      ...rest: unknown[]
+    ) => Promise<unknown>;
+  };
+  await probe.close();
+  const write = fileHandle.write;
+  let shortened = false;
+  t.mock.method(
+    fileHandle,
+    "write",
+    function (this: unknown, buffer: Buffer, ...rest: unknown[]) {
+      // Shorten the first WAL-copy write once; the WAL header magic is 0x377f068x.
+      if (
+        !shortened &&
+        (rest[0] ?? 0) === 0 &&
+        buffer.length > 1 &&
+        buffer.readUInt32BE(0) >>> 1 === 0x377f0682 >>> 1
+      ) {
+        shortened = true;
+        return write.call(this, buffer, 0, buffer.length >> 1);
+      }
+      return write.call(this, buffer, ...rest);
+    },
+  );
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.equal(shortened, true);
+  assert.deepEqual(result.blockedInputs, [
+    "OpenCode active account remote configuration",
+  ]);
+});
+
+void test("a database and WAL larger than 16 MiB with inactive account state do not block", async (t) => {
+  const state = openCodeSandbox(t);
+  const data = join(state.env.XDG_DATA_HOME!, "opencode");
+  mkdirSync(data, { recursive: true });
+  const writer = new DatabaseSync(join(data, "opencode.db"));
+  t.after(() => writer.close());
+  const junkRows = (count: number) =>
+    `INSERT INTO junk SELECT randomblob(1048576) FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x<${count}) SELECT x FROM c);`;
+  writer.exec(
+    "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;" +
+      "CREATE TABLE account(id TEXT PRIMARY KEY, email TEXT NOT NULL, url TEXT NOT NULL, access_token TEXT NOT NULL, refresh_token TEXT NOT NULL, token_expiry INTEGER);" +
+      "CREATE TABLE account_state(id INTEGER PRIMARY KEY, active_account_id TEXT, active_org_id TEXT);" +
+      "CREATE TABLE junk(b BLOB);" +
+      junkRows(20) +
+      "PRAGMA wal_checkpoint(TRUNCATE);",
+  );
+  writer.exec("INSERT INTO account_state VALUES(1,NULL,NULL);" + junkRows(4));
+  assert.ok(statSync(join(data, "opencode.db")).size > 16 * 1024 * 1024);
+  assert.ok(statSync(join(data, "opencode.db-wal")).size > 1024 * 1024);
+  const before = snapshotDirectory(data);
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(result.blockedInputs, []);
+  assert.deepEqual(snapshotDirectory(data), before);
+});
+
+void test("an account database that is not SQLite is reported as unknown", async (t) => {
+  const state = openCodeSandbox(t);
+  const data = join(state.env.XDG_DATA_HOME!, "opencode");
+  mkdirSync(data, { recursive: true });
+  const path = join(data, "opencode.db");
+  writeFileSync(path, "not a database");
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.deepEqual(result.blockedInputs, [`OpenCode account database ${path}`]);
 });
 
 void test("an unrelated auth key named plugin and provider substitution do not block ownership", async (t) => {
