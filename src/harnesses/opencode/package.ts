@@ -19,9 +19,21 @@ import {
 } from "../../snapshot-package.ts";
 
 const BOOTSTRAP = ".opencode/plugins/superpowers.js";
-const BOOTSTRAP_SIZE = 5464;
-const BOOTSTRAP_SHA256 =
-  "a5c5e1dbb0abfbd6ec3322b724b9a7b3318bbbb3d83f9a661c56ae0ed0a3adb8";
+// Exact-byte allowlist: every upstream bootstrap change needs re-qualification
+// in the native container before its bytes are added here. Revisit the policy
+// if upstream churn makes that a per-release chore.
+const QUALIFIED_BOOTSTRAPS = [
+  // obra/superpowers v6.0.0-v6.3.0
+  {
+    size: 5464,
+    sha256: "a5c5e1dbb0abfbd6ec3322b724b9a7b3318bbbb3d83f9a661c56ae0ed0a3adb8",
+  },
+  // obra/superpowers v6.4.1
+  {
+    size: 17617,
+    sha256: "c979fe5a9fd6fddc9bc9730b34b25989f9d53939eed7d594c4564f6e47495f26",
+  },
+];
 export interface OpenCodeReceipt {
   readonly schema: 1;
   readonly manager: "superpowers-manager";
@@ -65,11 +77,10 @@ export async function assessOpenCodeCompatibility(
       throw new Error("package metadata");
     requireNoSnapshotDependencies(pkg);
     await validateNativeSkill(root);
-    await requireSnapshotBootstrap(
-      root,
-      BOOTSTRAP,
-      BOOTSTRAP_SIZE,
-      BOOTSTRAP_SHA256,
+    await Promise.any(
+      QUALIFIED_BOOTSTRAPS.map(({ size, sha256 }) =>
+        requireSnapshotBootstrap(root, BOOTSTRAP, size, sha256),
+      ),
     );
     const official = isOfficialSnapshotSource(selection.effectiveSource);
     return {

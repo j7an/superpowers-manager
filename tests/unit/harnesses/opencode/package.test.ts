@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -24,6 +29,21 @@ void test("an unknown bootstrap is unsupported even with valid metadata", async 
   assert.equal(
     (await assessOpenCodeCompatibility(root, selection)).kind,
     "unsupported",
+  );
+});
+
+void test("the frozen v6.0.0-v6.3.0 bootstrap remains supported", async (t) => {
+  const root = nativeOpenCodeFixture(t);
+  copyFileSync(
+    new URL(
+      "../../../fixtures/opencode-native/bootstrap-6.3.0.js.txt",
+      import.meta.url,
+    ),
+    join(root, ".opencode/plugins/superpowers.js"),
+  );
+  assert.equal(
+    (await assessOpenCodeCompatibility(root, nativeSelection())).kind,
+    "supported",
   );
 });
 

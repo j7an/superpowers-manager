@@ -23,7 +23,8 @@ configuration or repairs state.
 
 Admission requires the exact qualified upstream-native package profile: the
 expected package metadata, OpenCode bootstrap bytes, required skills, and no
-upstream runtime dependencies. The qualified profile from the official
+upstream runtime dependencies. The qualified bootstrap bytes are those shipped
+by upstream v6.0.0 through v6.3.0 and by v6.4.1. The qualified profile from the official
 `obra/superpowers` source is supported. Matching mechanics from a custom source
 remain experimental and require `--allow-experimental`; the opt-in does not
 admit an unknown or changed bootstrap profile.
