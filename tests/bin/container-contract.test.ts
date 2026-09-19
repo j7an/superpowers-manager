@@ -167,6 +167,14 @@ void test("container contract", async (t) => {
         ),
         "native config dependencies must install without lifecycle scripts",
       );
+      // OpenCode fetches ripgrep from github.com during this step and hides the
+      // request failure, so the build retries it; the bound keeps a real outage
+      // from looping forever.
+      assert.match(
+        docker,
+        /until [^;]*\.\/node_modules\/\.bin\/opencode debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
+        "ripgrep seeding must retry a bounded number of times",
+      );
     },
   );
   await t.test("container runner requests isolated Docker resources", () => {

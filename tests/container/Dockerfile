@@ -34,15 +34,27 @@ RUN opencode_version=$(./node_modules/.bin/opencode --version) \
        "@opencode-ai/plugin@$opencode_version" \
     && npm ci --prefix /opt/spw-opencode-config-seed --ignore-scripts \
     && node -e 'const expected=process.argv[1]; const actual=require("/opt/spw-opencode-config-seed/node_modules/@opencode-ai/plugin/package.json").version; if(actual!==expected) process.exit(1)' "$opencode_version"
+# OpenCode downloads its own ripgrep release from github.com on first use and
+# reports any request failure only as "ripgrep execution failed", so a
+# transient fetch error is retried here rather than failing the image build.
 RUN spw_rg_root=$(mktemp -d) \
-    && HOME="$spw_rg_root/home" \
+    && spw_rg_attempt=1 \
+    && until HOME="$spw_rg_root/home" \
        XDG_CONFIG_HOME="$spw_rg_root/config" \
        XDG_DATA_HOME="$spw_rg_root/data" \
        XDG_CACHE_HOME=/opt/spw-opencode-cache-seed \
        XDG_STATE_HOME="$spw_rg_root/state" \
        OPENCODE_DISABLE_AUTOUPDATE=1 \
        OPENCODE_DISABLE_MODELS_FETCH=1 \
-       ./node_modules/.bin/opencode debug rg files --limit 1 \
+       ./node_modules/.bin/opencode debug rg files --limit 1; do \
+         if [ "$spw_rg_attempt" -ge 3 ]; then \
+           echo "OpenCode ripgrep seed failed after $spw_rg_attempt attempts" >&2; \
+           exit 1; \
+         fi; \
+         echo "OpenCode ripgrep seed attempt $spw_rg_attempt failed; retrying" >&2; \
+         sleep $((spw_rg_attempt * 5)); \
+         spw_rg_attempt=$((spw_rg_attempt + 1)); \
+       done \
     && rm -rf "$spw_rg_root" \
     && test -x /opt/spw-opencode-cache-seed/opencode/bin/rg \
     && /opt/spw-opencode-cache-seed/opencode/bin/rg --version >/dev/null
