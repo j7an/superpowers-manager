@@ -9,6 +9,12 @@ into a project.
 The manager uses installed OpenCode and never installs, upgrades, or downgrades
 it; set `SUPERPOWERS_OPENCODE` to select a non-default executable.
 
+OpenCode support currently covers the 1.x line, qualified against the native
+test pin below. OpenCode 2.x has not been tested and is not certified as
+compatible. The manager does not check the OpenCode version, so it does not
+refuse 2.x; install and update still validate the resulting state and fail
+closed when it cannot be verified.
+
 Prepared output, the installed snapshot, and recovery material are separate
 Manager-owned state. The manager registers the installed snapshot through
 OpenCode's native global installer and verifies configuration and snapshot
