@@ -143,7 +143,7 @@ The installed package requires Node >=24. Native source, tests, and packaging to
 
 Generated Codex manifests preserve upstream JSON number tokens while rejecting non-finite decimal or exponent values.
 
-macOS and Linux are tested. WSL2 is supported for the established Codex path; Pi in WSL2 and native Windows remain untested. The manager runs in-process and does not require Git Bash. The [Pi reference](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md#runtime-compatibility) explains its runtime qualification and admission checks.
+macOS and Linux are tested. WSL2 is supported for the established Codex path; Pi in WSL2 and native Windows remain untested. The manager runs in-process and does not require Git Bash. The [Pi reference](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md#runtime-compatibility) explains its runtime qualification and admission checks. OpenCode support currently covers 1.x; OpenCode 2.x is untested and not certified as compatible (see the [OpenCode reference](https://github.com/j7an/superpowers-manager/blob/main/docs/opencode.md)).
 
 Native test versions qualify integration mechanisms; they are not runtime allowlists, and an untested runtime is not automatically certified as compatible.
 
