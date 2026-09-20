@@ -12,6 +12,7 @@ import test, { type TestContext } from "node:test";
 
 import { expectFailureCode } from "../../../lib/command-doubles.ts";
 
+import { successResult } from "../../../../src/adapter-result.ts";
 import { normalizeSnapshotRuntimeVersion } from "../../../../src/harness-command-result.ts";
 import { runOpenCode } from "../../../../src/harnesses/opencode/native.ts";
 import { openCodePaths } from "../../../../src/harnesses/opencode/paths.ts";
@@ -219,6 +220,29 @@ void test("OpenCode runtime normalization accepts one semantic version only", ()
     }).outcome.ok,
     false,
   );
+});
+
+void test("OpenCode runtime version accepts both line formats", () => {
+  const v1 = normalizeSnapshotRuntimeVersion(
+    "OpenCode",
+    successResult("opencode-command", { stdout: "1.18.31\n" }, []),
+    /^opencode\s+v/i,
+  );
+  assert.equal(v1.outcome.ok && v1.outcome.result, "1.18.31");
+
+  const v2 = normalizeSnapshotRuntimeVersion(
+    "OpenCode",
+    successResult("opencode-command", { stdout: "opencode v2.0.10\n" }, []),
+    /^opencode\s+v/i,
+  );
+  assert.equal(v2.outcome.ok && v2.outcome.result, "2.0.10");
+
+  const junk = normalizeSnapshotRuntimeVersion(
+    "OpenCode",
+    successResult("opencode-command", { stdout: "not a version\n" }, []),
+    /^opencode\s+v/i,
+  );
+  assert.equal(junk.outcome.ok, false);
 });
 
 void test("runOpenCode returns controlled failures for native runner outcomes", async (t) => {

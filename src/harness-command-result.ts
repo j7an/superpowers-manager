@@ -92,6 +92,7 @@ export function nativeCommandResult(
 export function normalizeSnapshotRuntimeVersion(
   label: Label,
   result: AdapterResult<NativeCommandOutput>,
+  strip?: RegExp,
 ): AdapterResult<string> {
   if (!result.outcome.ok)
     return { status: result.status, outcome: result.outcome };
@@ -104,7 +105,8 @@ export function normalizeSnapshotRuntimeVersion(
       [],
       result.outcome.messages,
     );
-  const version = result.outcome.result.stdout.trim();
+  const reported = result.outcome.result.stdout.trim();
+  const version = strip === undefined ? reported : reported.replace(strip, "");
   if (!SEMVER_RE.test(version))
     return failureResult(
       operation,

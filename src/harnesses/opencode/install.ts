@@ -67,6 +67,9 @@ const DEFAULTS: OpenCodeInstallDependencies = {
   beginPublication: beginDirectoryPublication,
 };
 
+// V1 prints a bare semver ("1.18.31"); V2 prints "opencode v2.0.10".
+const OPEN_CODE_VERSION_PREFIX = /^opencode\s+v/i;
+
 type Identity = { readonly dev: number; readonly ino: number };
 // The journal can contain data from two independently bounded 1 MiB receipts
 // plus one bounded 1 MiB config. Six bytes of JSON output per input byte covers
@@ -673,12 +676,19 @@ export async function installOpenCode(
     let priorRegistration = registrationRecord(observed.managedEntries[0]);
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned OpenCode registration");
-    accepted(
+    const runtimeVersion = accepted(
       normalizeSnapshotRuntimeVersion(
         "OpenCode",
         await deps.run(["--version"], paths, ctx),
+        OPEN_CODE_VERSION_PREFIX,
       ),
     );
+    const major = Number.parseInt(runtimeVersion, 10);
+    if (major !== 1 && major !== 2)
+      return fail(
+        "unsupported-runtime",
+        `unsupported OpenCode major version ${major}`,
+      );
     await requireSnapshot(paths.installedRoot, previous);
     observed = await requireStableActivationRegistration(
       paths,

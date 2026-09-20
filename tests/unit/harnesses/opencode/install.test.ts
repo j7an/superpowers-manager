@@ -86,7 +86,7 @@ async function fixture(t: TestContext) {
     run: async (args) => {
       calls.push([...args]);
       if (args[0] === "--version")
-        return successResult("opencode-command", { stdout: "99.2.3\n" }, []);
+        return successResult("opencode-command", { stdout: "1.18.31\n" }, []);
       assert.deepEqual(args, ["plugin", canonicalRoot, "--global"]);
       const config = JSON.parse(readFileSync(configFile, "utf8")) as {
         plugin: string[];
@@ -107,6 +107,30 @@ async function fixture(t: TestContext) {
     canonicalRoot,
   };
 }
+
+void test("OpenCode install refuses an unrecognized major version", async (t) => {
+  const f = await fixture(t);
+  const result = await installOpenCode(f.artifact, f.ctx, {
+    ...f.deps,
+    run: async (args, paths, ctx, execute) => {
+      if (args[0] === "--version") {
+        f.calls.push([...args]);
+        return successResult(
+          "opencode-command",
+          { stdout: "opencode v3.0.0\n" },
+          [],
+        );
+      }
+      return await f.deps.run(args, paths, ctx, execute);
+    },
+  });
+  assert.equal(result.outcome.ok, false);
+  assert.match(
+    result.outcome.ok ? "" : result.outcome.error.message,
+    /unsupported OpenCode major version 3/,
+  );
+  assert.deepEqual(f.calls, [["--version"]]);
+});
 
 void test("OpenCode first install journals publication until verified finalization", async (t) => {
   const f = await fixture(t);
