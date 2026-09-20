@@ -26,13 +26,13 @@ WORKDIR /opt/spw-test-tools
 # Both OpenCode packages declare a bin named `opencode`; the V2 package wins the
 # shim and `opencode-ai` gets none, with no warning. Address each line by its
 # absolute path so a lane can never silently run the other line's binary.
-RUN --network=none node node_modules/opencode-ai/postinstall.mjs \
-    && node node_modules/@opencode/cli/postinstall.mjs \
-    && node_modules/opencode-ai/bin/opencode.exe --version \
-    && node_modules/@opencode/cli/bin/opencode.exe --version \
+RUN --network=none node /opt/spw-test-tools/node_modules/opencode-ai/postinstall.mjs \
+    && node /opt/spw-test-tools/node_modules/@opencode/cli/postinstall.mjs \
+    && /opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version \
+    && /opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe --version \
     && ./node_modules/.bin/codex --version >/dev/null \
     && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 ./node_modules/.bin/pi --version
-RUN opencode_version=$(node_modules/opencode-ai/bin/opencode.exe --version) \
+RUN opencode_version=$(/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version) \
     && mkdir -p /opt/spw-opencode-config-seed \
     && npm install --prefix /opt/spw-opencode-config-seed \
        --package-lock-only --ignore-scripts --save-exact \
@@ -51,7 +51,7 @@ RUN spw_rg_root=$(mktemp -d) \
        XDG_STATE_HOME="$spw_rg_root/state" \
        OPENCODE_DISABLE_AUTOUPDATE=1 \
        OPENCODE_DISABLE_MODELS_FETCH=1 \
-       node_modules/opencode-ai/bin/opencode.exe debug rg files --limit 1; do \
+       /opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe debug rg files --limit 1; do \
          if [ "$spw_rg_attempt" -ge 3 ]; then \
            echo "OpenCode ripgrep seed failed after $spw_rg_attempt attempts" >&2; \
            exit 1; \

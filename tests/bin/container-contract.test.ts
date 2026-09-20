@@ -145,13 +145,13 @@ void test("container contract", async (t) => {
         "pnpm --dir /opt/spw-test-tools --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts",
       );
       const link = docker.indexOf(
-        "RUN --network=none node node_modules/opencode-ai/postinstall.mjs",
+        "RUN --network=none node /opt/spw-test-tools/node_modules/opencode-ai/postinstall.mjs",
       );
       const v1 = docker.indexOf(
-        "node_modules/opencode-ai/bin/opencode.exe --version",
+        "/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version",
       );
       const v2 = docker.indexOf(
-        "node_modules/@opencode/cli/bin/opencode.exe --version",
+        "/opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe --version",
       );
       const seed = docker.indexOf("/opt/spw-opencode-config-seed");
       assert.ok(install !== -1, "container must install tools without scripts");
@@ -169,7 +169,7 @@ void test("container contract", async (t) => {
       );
       assert.ok(
         docker.includes(
-          "opencode_version=$(node_modules/opencode-ai/bin/opencode.exe --version)",
+          "opencode_version=$(/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version)",
         ),
         "V1 config seeding must derive its version from V1's executable",
       );
@@ -184,7 +184,7 @@ void test("container contract", async (t) => {
       // from looping forever.
       assert.match(
         docker,
-        /until [^;]*node_modules\/opencode-ai\/bin\/opencode\.exe debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
+        /until [^;]*\/opt\/spw-test-tools\/node_modules\/opencode-ai\/bin\/opencode\.exe debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
         "ripgrep seeding must retry a bounded number of times",
       );
     },
