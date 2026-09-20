@@ -150,6 +150,9 @@ void test("container contract", async (t) => {
       const v1 = docker.indexOf(
         "/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version",
       );
+      const v2Postinstall = docker.indexOf(
+        "node /opt/spw-test-tools/node_modules/@opencode/cli/postinstall.mjs",
+      );
       const v2 = docker.indexOf(
         "/opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe --version",
       );
@@ -162,6 +165,10 @@ void test("container contract", async (t) => {
       assert.ok(
         v1 > link && v2 > v1,
         "container must verify both OpenCode lines after their offline postinstalls",
+      );
+      assert.ok(
+        v2Postinstall > link && v2 > v2Postinstall,
+        "container must run V2's absolute postinstall between V1's postinstall and V2's version check",
       );
       assert.ok(
         seed > v2,
