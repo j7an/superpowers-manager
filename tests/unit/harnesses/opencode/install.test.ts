@@ -389,6 +389,29 @@ void test("OpenCode rollback removes only its newly created current entry", asyn
   assert.equal((await tx.finalize()).outcome.ok, false);
 });
 
+void test("OpenCode V2 rollback removes its plugins entry and preserves plugin entries", async (t) => {
+  const f = await fixture(t);
+  const tx = transaction(
+    await installOpenCode(f.artifact, f.ctx, {
+      ...f.deps,
+      run: v2Run(f),
+    }),
+  );
+
+  value(await tx.rollback());
+
+  const config = JSON.parse(readFileSync(f.configFile, "utf8")) as {
+    plugin: string[];
+    plugins: string[];
+    theme: string;
+  };
+  assert.deepEqual(config.plugin, ["npm:unrelated"]);
+  assert.deepEqual(config.plugins, []);
+  assert.equal(config.theme, "light");
+  assert.equal(existsSync(f.paths.installedRoot), false);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
+});
+
 void test("OpenCode settlement refuses a changed journal without deleting recovery", async (t) => {
   const f = await fixture(t);
   const tx = transaction(await installOpenCode(f.artifact, f.ctx, f.deps));
@@ -493,6 +516,60 @@ void test("OpenCode removal revalidates input and removes only a proven owned re
   assert.deepEqual(after.plugin, ["npm:new-before-remove", "npm:unrelated"]);
   assert.equal(after.theme, "light");
   assert.equal(existsSync(f.paths.installedRoot), false);
+});
+
+void test("OpenCode V2 removal deletes its plugins entry and preserves plugin entries", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, {
+        ...f.deps,
+        run: v2Run(f),
+      }),
+    ).finalize(),
+  );
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+
+  value(await removeOpenCode(ownership.removalInput, f.ctx, f.deps));
+
+  const config = JSON.parse(readFileSync(f.configFile, "utf8")) as {
+    plugin: string[];
+    plugins: string[];
+    theme: string;
+  };
+  assert.deepEqual(config.plugin, ["npm:unrelated"]);
+  assert.deepEqual(config.plugins, []);
+  assert.equal(config.theme, "light");
+  assert.equal(existsSync(f.paths.installedRoot), false);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
+});
+
+void test("OpenCode removal rejects a stale registration key", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  const ownership = value(await inspectOpenCodeOwnership(f.ctx));
+  const registration = ownership.removalInput.registration;
+  assert.ok(registration);
+  assert.equal(registration.key, "plugin");
+  const before = readFileSync(f.configFile);
+
+  const result = await removeOpenCode(
+    {
+      ...ownership.removalInput,
+      registration: { ...registration, key: "plugins" },
+    },
+    f.ctx,
+    f.deps,
+  );
+
+  assert.equal(result.outcome.ok, false);
+  assert.deepEqual(readFileSync(f.configFile), before);
+  assert.equal(existsSync(f.paths.installedRoot), true);
+  assert.equal(existsSync(f.paths.recoveryRoot), false);
 });
 
 void test("OpenCode removal preserves unresolved package conflicts without recovery", async (t) => {

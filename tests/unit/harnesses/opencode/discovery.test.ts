@@ -216,6 +216,28 @@ void test("duplicate registrations within one document remain ambiguous", async 
   assert.equal(result.managedEntries.length, 2);
 });
 
+void test("owned registrations across both config keys remain ambiguous", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, {
+    plugin: [state.paths.installedRoot],
+    plugins: [state.paths.installedRoot],
+  });
+
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+
+  assert.equal(result.managedEntries.length, 2);
+  assert.deepEqual(
+    result.managedEntries.map(({ entry }) => entry.key),
+    ["plugin", "plugins"],
+  );
+});
+
 void test("known upstream package forms are conflicts in files and inline config", async (t) => {
   const forms = [
     "superpowers@github:obra/superpowers",
