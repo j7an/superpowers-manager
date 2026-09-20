@@ -7,6 +7,7 @@ import {
   createScanner,
   findNodeAtLocation,
   getNodeValue,
+  modify,
   parseTree,
   type Node as JsonNode,
   type ParseError,
@@ -31,7 +32,12 @@ const SYNTAX_KIND = (
   }
 ).SyntaxKind;
 
+export type OpenCodeConfigKey = "plugin" | "plugins";
+
+const CONFIG_KEYS: readonly OpenCodeConfigKey[] = ["plugin", "plugins"];
+
 export interface ConfigEntry {
+  readonly key: OpenCodeConfigKey;
   readonly index: number;
   readonly spec: string;
   readonly options: Readonly<Record<string, unknown>> | null;
@@ -104,6 +110,14 @@ function cannotRemove(path: string, cause?: unknown): SafetyError {
   );
 }
 
+function cannotRegister(path: string, cause?: unknown): SafetyError {
+  return new SafetyError(
+    "opencode-config",
+    `cannot register owned OpenCode registration: ${path}`,
+    cause === undefined ? {} : { cause },
+  );
+}
+
 function propertyParts(property: JsonNode): readonly [JsonNode, JsonNode] {
   const [key, value] = property.children ?? [];
   if (
@@ -136,31 +150,33 @@ function validateTree(node: JsonNode, depth: number): void {
 }
 
 function configEntries(root: JsonNode): readonly ConfigEntry[] {
-  const plugin = findNodeAtLocation(root, ["plugin"]);
-  if (plugin === undefined) return [];
-  if (plugin.type !== "array") throw new Error("plugin must be an array");
-
-  return (plugin.children ?? []).map((entry, index): ConfigEntry => {
-    if (entry.type === "string" && typeof entry.value === "string") {
-      return { index, spec: entry.value, options: null };
-    }
-    const tuple = entry.children ?? [];
-    if (
-      entry.type !== "array" ||
-      tuple.length !== 2 ||
-      tuple[0]?.type !== "string" ||
-      typeof tuple[0].value !== "string" ||
-      tuple[1]?.type !== "object"
-    ) {
-      throw new Error("unsupported plugin entry");
-    }
-    return {
-      index,
-      spec: tuple[0].value,
-      options: structuredClone(getNodeValue(tuple[1])) as Readonly<
-        Record<string, unknown>
-      >,
-    };
+  return CONFIG_KEYS.flatMap((key) => {
+    const array = findNodeAtLocation(root, [key]);
+    if (array === undefined) return [];
+    if (array.type !== "array") throw new Error(`${key} must be an array`);
+    return (array.children ?? []).map((entry, index): ConfigEntry => {
+      if (entry.type === "string" && typeof entry.value === "string") {
+        return { key, index, spec: entry.value, options: null };
+      }
+      const tuple = entry.children ?? [];
+      if (
+        entry.type !== "array" ||
+        tuple.length !== 2 ||
+        tuple[0]?.type !== "string" ||
+        typeof tuple[0].value !== "string" ||
+        tuple[1]?.type !== "object"
+      ) {
+        throw new Error("unsupported plugin entry");
+      }
+      return {
+        key,
+        index,
+        spec: tuple[0].value,
+        options: structuredClone(getNodeValue(tuple[1])) as Readonly<
+          Record<string, unknown>
+        >,
+      };
+    });
   });
 }
 
@@ -193,6 +209,7 @@ function sameEntries(
     left.length === right.length &&
     left.every(
       (entry, index) =>
+        entry.key === right[index]?.key &&
         entry.spec === right[index]?.spec &&
         isDeepStrictEqual(entry.options, right[index]?.options),
     )
@@ -201,10 +218,11 @@ function sameEntries(
 
 export function removeOpenCodeEntry(
   document: ConfigDocument,
+  key: OpenCodeConfigKey,
   index: number,
 ): string {
   try {
-    const array = findNodeAtLocation(document.root, ["plugin"]);
+    const array = findNodeAtLocation(document.root, [key]);
     const elements = array?.children ?? [];
     const element = elements[index];
     if (
@@ -250,13 +268,51 @@ export function removeOpenCodeEntry(
     }
     const output = applyEdits(document.text, edits);
     const after = parseOpenCodeConfig(output, document.path);
-    const expected = document.entries.filter((entry) => entry.index !== index);
+    const expected = document.entries.filter(
+      (entry) => entry.key !== key || entry.index !== index,
+    );
     if (!sameEntries(after.entries, expected)) {
       throw new Error("removal changed surviving registrations");
     }
     return output;
   } catch (cause) {
     throw cannotRemove(document.path, cause);
+  }
+}
+
+export function addOpenCodeEntry(
+  document: ConfigDocument,
+  key: OpenCodeConfigKey,
+  spec: string,
+): string {
+  try {
+    if (spec.trim().length === 0) throw new Error("empty registration spec");
+    const array = findNodeAtLocation(document.root, [key]);
+    if (array !== undefined && array.type !== "array") {
+      throw new Error(`${key} must be an array`);
+    }
+    const position = array?.children?.length ?? 0;
+    const edits = modify(document.text, [key, position], spec, {
+      isArrayInsertion: true,
+    });
+    const output = applyEdits(document.text, edits);
+    const after = parseOpenCodeConfig(output, document.path);
+    const expected = [
+      ...document.entries,
+      { key, index: position, spec, options: null },
+    ].sort((left, right) =>
+      left.key === right.key
+        ? left.index - right.index
+        : left.key < right.key
+          ? -1
+          : 1,
+    );
+    if (!sameEntries(after.entries, expected)) {
+      throw new Error("registration changed surviving registrations");
+    }
+    return output;
+  } catch (cause) {
+    throw cannotRegister(document.path, cause);
   }
 }
 
@@ -321,42 +377,73 @@ function sameObservedState(
   );
 }
 
+async function writeObservedOpenCodeConfig(
+  observation: ConfigFileObservation,
+  outputBytes: Buffer,
+  expected: readonly ConfigEntry[],
+): Promise<void> {
+  const path = observation.document.path;
+  await atomicWriteFile(path, outputBytes, {
+    validate: async (temporary) => {
+      await chmod(temporary, observation.identity.mode & 0o7777);
+      const current = await readConfigBytes(path);
+      if (
+        current === null ||
+        !sameObservedState(current.identity, observation.identity) ||
+        !current.bytes.equals(observation.bytes)
+      ) {
+        throw new Error("OpenCode configuration changed concurrently");
+      }
+    },
+  });
+
+  const after = await readOpenCodeConfig(path);
+  if (
+    after === null ||
+    !after.bytes.equals(outputBytes) ||
+    after.identity.mode !== observation.identity.mode ||
+    !sameEntries(after.document.entries, expected)
+  ) {
+    throw new Error("published OpenCode configuration could not be verified");
+  }
+}
+
 export async function removeObservedOpenCodeEntry(
   observation: ConfigFileObservation,
+  key: OpenCodeConfigKey,
   index: number,
 ): Promise<void> {
   const path = observation.document.path;
   try {
     const originalText = decodeConfig(observation.bytes, path);
     const original = parseOpenCodeConfig(originalText, path);
-    const output = removeOpenCodeEntry(original, index);
+    const output = removeOpenCodeEntry(original, key, index);
     const outputBytes = Buffer.from(output, "utf8");
-    const expected = original.entries.filter((entry) => entry.index !== index);
+    const expected = original.entries.filter(
+      (entry) => entry.key !== key || entry.index !== index,
+    );
 
-    await atomicWriteFile(path, outputBytes, {
-      validate: async (temporary) => {
-        await chmod(temporary, observation.identity.mode & 0o7777);
-        const current = await readConfigBytes(path);
-        if (
-          current === null ||
-          !sameObservedState(current.identity, observation.identity) ||
-          !current.bytes.equals(observation.bytes)
-        ) {
-          throw new Error("OpenCode configuration changed concurrently");
-        }
-      },
-    });
-
-    const after = await readOpenCodeConfig(path);
-    if (
-      after === null ||
-      !after.bytes.equals(outputBytes) ||
-      after.identity.mode !== observation.identity.mode ||
-      !sameEntries(after.document.entries, expected)
-    ) {
-      throw new Error("published OpenCode configuration could not be verified");
-    }
+    await writeObservedOpenCodeConfig(observation, outputBytes, expected);
   } catch (cause) {
     throw cannotRemove(path, cause);
+  }
+}
+
+export async function addObservedOpenCodeEntry(
+  observation: ConfigFileObservation,
+  key: OpenCodeConfigKey,
+  spec: string,
+): Promise<void> {
+  const path = observation.document.path;
+  try {
+    const originalText = decodeConfig(observation.bytes, path);
+    const original = parseOpenCodeConfig(originalText, path);
+    const output = addOpenCodeEntry(original, key, spec);
+    const outputBytes = Buffer.from(output, "utf8");
+    const expected = parseOpenCodeConfig(output, path).entries;
+
+    await writeObservedOpenCodeConfig(observation, outputBytes, expected);
+  } catch (cause) {
+    throw cannotRegister(path, cause);
   }
 }

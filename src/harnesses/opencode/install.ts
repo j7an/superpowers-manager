@@ -31,7 +31,11 @@ import {
   canonicalizeProspectivePath,
   classifyPathNoFollow,
 } from "../../safe-path.ts";
-import { removeObservedOpenCodeEntry } from "./config.ts";
+import {
+  addObservedOpenCodeEntry,
+  removeObservedOpenCodeEntry,
+  type OpenCodeConfigKey,
+} from "./config.ts";
 import {
   inspectOpenCodeDiscovery,
   OPEN_CODE_PURE_MODE_INPUT,
@@ -67,6 +71,9 @@ const DEFAULTS: OpenCodeInstallDependencies = {
   beginPublication: beginDirectoryPublication,
 };
 
+// V1 prints a bare semver ("1.18.31"); V2 prints "opencode v2.0.10".
+const OPEN_CODE_VERSION_PREFIX = /^opencode\s+v/i;
+
 type Identity = { readonly dev: number; readonly ino: number };
 // The journal can contain data from two independently bounded 1 MiB receipts
 // plus one bounded 1 MiB config. Six bytes of JSON output per input byte covers
@@ -93,6 +100,7 @@ type Phase =
   | "deregistered";
 interface RegistrationRecord {
   readonly configPath: string;
+  readonly configKey: OpenCodeConfigKey;
   readonly entryIndex: number;
   readonly spec: string;
   readonly optionsDigest: string;
@@ -265,13 +273,14 @@ function registrationRecord(
   if (registration === undefined) return null;
   const observation = registration.observation;
   const node = findNodeAtLocation(observation.document.root, [
-    "plugin",
+    registration.entry.key,
     registration.entry.index,
   ]);
   if (node === undefined)
     throw new Error("OpenCode registration syntax changed");
   return {
     configPath: observation.document.path,
+    configKey: registration.entry.key,
     entryIndex: registration.entry.index,
     spec: registration.entry.spec,
     optionsDigest: createHash("sha256")
@@ -298,6 +307,7 @@ function sameRegistration(
     ? registration === undefined
     : registration !== undefined &&
         registration.observation.document.path === expected.configPath &&
+        registration.entry.key === expected.configKey &&
         registration.entry.spec === expected.spec &&
         createHash("sha256")
           .update(JSON.stringify(registration.entry.options))
@@ -311,6 +321,7 @@ function registrationInputSame(
   return input === null
     ? current === null
     : current !== null &&
+        input.key === current.key &&
         input.entryIndex === current.entryIndex &&
         input.spec === current.spec &&
         input.observation.document.path === current.observation.document.path &&
@@ -584,6 +595,7 @@ async function rollbackOpenCodePublication(
         throw new Error("OpenCode created registration missing");
       await removeObservedOpenCodeEntry(
         current.observation,
+        current.entry.key,
         current.entry.index,
       );
       observed = await discovery(pending.paths, pending.ctx);
@@ -673,12 +685,27 @@ export async function installOpenCode(
     let priorRegistration = registrationRecord(observed.managedEntries[0]);
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned OpenCode registration");
-    accepted(
+    const runtimeVersion = accepted(
       normalizeSnapshotRuntimeVersion(
         "OpenCode",
         await deps.run(["--version"], paths, ctx),
+        OPEN_CODE_VERSION_PREFIX,
       ),
     );
+    const major = Number.parseInt(runtimeVersion, 10);
+    if (major !== 1 && major !== 2)
+      return fail(
+        "unsupported-runtime",
+        `unsupported OpenCode major version ${major}`,
+      );
+    if (
+      major === 2 &&
+      assessment.compatibility.generation !== "opencode-native-bootstrap-v2"
+    )
+      return fail(
+        "unsupported-artifact",
+        "the selected upstream ref does not support OpenCode 2; select a ref that ships the V2 entrypoint",
+      );
     await requireSnapshot(paths.installedRoot, previous);
     observed = await requireStableActivationRegistration(
       paths,
@@ -725,18 +752,55 @@ export async function installOpenCode(
     if (priorRegistration === null) {
       await phase(pending, "registering");
       observed = await requireStableActivationRegistration(paths, ctx, null);
-      const native = await deps
-        .run(["plugin", pending.canonicalRoot, "--global"], paths, ctx)
-        .catch(() =>
-          fail("native-failed", "OpenCode native installation failed"),
+      let native: Awaited<ReturnType<typeof runOpenCode>> | null = null;
+      if (major === 1) {
+        native = await deps
+          .run(["plugin", pending.canonicalRoot, "--global"], paths, ctx)
+          .catch(() =>
+            fail("native-failed", "OpenCode native installation failed"),
+          );
+      } else {
+        const jsonc = join(paths.configRoot, "opencode.jsonc");
+        const json = join(paths.configRoot, "opencode.json");
+        let target =
+          observed.documents.find(
+            (document) => document.document.path === jsonc,
+          ) ??
+          observed.documents.find(
+            (document) => document.document.path === json,
+          );
+        if (target === undefined) {
+          await atomicWriteFile(json, Buffer.from("{}\n"), {
+            validate: async () => {
+              await assertNoFollowType(paths.configRoot, ["directory"]);
+              await assertNoFollowType(jsonc, ["missing"]);
+              await assertNoFollowType(json, ["missing"]);
+            },
+          });
+          observed = await requireStableActivationRegistration(
+            paths,
+            ctx,
+            null,
+          );
+          target = observed.documents.find(
+            (document) => document.document.path === json,
+          );
+        }
+        if (target === undefined)
+          throw new Error("no OpenCode configuration to register in");
+        await addObservedOpenCodeEntry(
+          target,
+          "plugins",
+          pending.canonicalRoot,
         );
+      }
       observed = await discovery(paths, ctx);
       requireSafeActivationDiscovery(observed);
       const created = registrationRecord(observed.managedEntries[0]);
       if (created === null || created.spec !== pending.canonicalRoot)
         throw new Error("OpenCode activation unverified");
       await phase(pending, "registered", { createdRegistration: created });
-      accepted(native);
+      if (native !== null) accepted(native);
     }
     await requirePublication(pending);
     observed = await discovery(paths, ctx);
@@ -831,6 +895,7 @@ export async function removeOpenCode(
           ? null
           : {
               observation: registered.observation,
+              key: registered.entry.key,
               entryIndex: registered.entry.index,
               spec: registered.entry.spec,
             },
@@ -868,6 +933,7 @@ export async function removeOpenCode(
     if (registered !== undefined) {
       await removeObservedOpenCodeEntry(
         registered.observation,
+        registered.entry.key,
         registered.entry.index,
       );
       observed = await discovery(paths, ctx);

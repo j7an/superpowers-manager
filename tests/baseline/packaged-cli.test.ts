@@ -235,7 +235,7 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
         [
           "--input-type=module",
           "--eval",
-          "const m=await import('./dist/harnesses/opencode/config.js'); const p=process.argv[1]; const o=await m.readOpenCodeConfig(p); if(!o||o.document.entries.length!==2||o.document.entries[1].options.answer!==42)process.exit(2); await m.removeObservedOpenCodeEntry(o,1); const a=await m.readOpenCodeConfig(p); if(!a||a.document.entries.length!==1||a.document.entries[0].spec!=='other'||!a.document.text.includes('// retained packaged comment')||!a.document.text.includes('9007199254740993'))process.exit(3);",
+          "const m=await import('./dist/harnesses/opencode/config.js'); const p=process.argv[1]; const o=await m.readOpenCodeConfig(p); if(!o||o.document.entries.length!==2||o.document.entries[1].options.answer!==42)process.exit(2); await m.removeObservedOpenCodeEntry(o,'plugin',1); const a=await m.readOpenCodeConfig(p); if(!a||a.document.entries.length!==1||a.document.entries[0].spec!=='other'||!a.document.text.includes('// retained packaged comment')||!a.document.text.includes('9007199254740993'))process.exit(3);",
           openCodeConfig,
         ],
         { cwd: installedPackage, env: consumerEnv },

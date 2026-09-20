@@ -15,6 +15,7 @@ const renderProbe: HarnessPresentation<OpenCodeRemovalInput>["renderProbe"] = (
     ["prepared_identity", facts.prepared.observedIdentity],
     ["installed_identity", facts.installed.observedIdentity],
     ["installation_state", facts.installed.kind],
+    ["registration_key", facts.ownership.removalInput.registration?.key ?? ""],
     ["resource_state", facts.resourceState ?? "idle"],
     ["ownership", facts.ownership.presentationValue],
     ["conflicts", (facts.ownership.presentationConflicts ?? []).join("; ")],

@@ -5,8 +5,14 @@ if [ "${SPW_CONTAINER:-}" != 1 ] || [ "$(id -u)" != 10001 ]; then
   echo "error: OpenCode acceptance requires the isolated UID 10001 container" >&2
   exit 1
 fi
+if [ -z "${SPW_OPENCODE_BIN:-}" ] || [ -z "${SPW_OPENCODE_MAJOR:-}" ]; then
+  echo "error: SPW_OPENCODE_BIN and SPW_OPENCODE_MAJOR must name the OpenCode executable under test and its expected major" >&2
+  exit 1
+fi
 if [ "${1:-}" != --isolated ]; then
   exec env -i PATH="$PATH" HOME=/home/spw SPW_CONTAINER=1 \
+    SPW_OPENCODE_BIN="$SPW_OPENCODE_BIN" \
+    SPW_OPENCODE_MAJOR="$SPW_OPENCODE_MAJOR" \
     sh "$0" --isolated
 fi
 if [ "${OPENCODE_CONFIG+x}" = x ] || \
@@ -37,7 +43,13 @@ TMPDIR="$root/tmp"
 SUPERPOWERS_CONFIG_DIR="$root/selection"
 SUPERPOWERS_CACHE_DIR="$root/manager-cache"
 SUPERPOWERS_UPSTREAM_URL="$root/upstream"
-SUPERPOWERS_OPENCODE=/opt/spw-test-tools/node_modules/.bin/opencode
+SUPERPOWERS_OPENCODE="$SPW_OPENCODE_BIN"
+spw_reported=$("$SUPERPOWERS_OPENCODE" --version)
+spw_major=$(printf '%s' "$spw_reported" | sed -n 's/^\(opencode v\)\{0,1\}\([0-9][0-9]*\)\..*$/\2/p')
+if [ "$spw_major" != "$SPW_OPENCODE_MAJOR" ]; then
+  echo "error: expected OpenCode major $SPW_OPENCODE_MAJOR, got '$spw_reported'" >&2
+  exit 1
+fi
 OPENCODE_DISABLE_AUTOUPDATE=1
 OPENCODE_DISABLE_MODELS_FETCH=1
 OPENCODE_CONFIG="$root/explicit/opencode.jsonc"
@@ -52,7 +64,7 @@ export HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME TMPDIR \
   SUPERPOWERS_OPENCODE OPENCODE_DISABLE_AUTOUPDATE \
   OPENCODE_DISABLE_MODELS_FETCH OPENCODE_CONFIG OPENCODE_CONFIG_DIR \
   OPENCODE_DB OPENCODE_TEST_MANAGED_CONFIG_DIR GIT_CONFIG_GLOBAL \
-  GIT_CONFIG_NOSYSTEM SPW_NATIVE_DIAGNOSTIC
+  GIT_CONFIG_NOSYSTEM SPW_NATIVE_DIAGNOSTIC SPW_OPENCODE_MAJOR
 
 mkdir -p "$HOME/.opencode" "$XDG_CONFIG_HOME/opencode" "$XDG_DATA_HOME" \
   "$XDG_CACHE_HOME" "$XDG_STATE_HOME" "$TMPDIR" "$SUPERPOWERS_CONFIG_DIR" \
@@ -154,6 +166,7 @@ SUPERPOWERS_OPENCODE="$tripwire" \
 test ! -e "$root/native-called"
 tar -cf "$root/probe.after.tar" -C "$root" config data cache state selection manager-cache explicit override home managed database
 cmp "$probe_before" "$root/probe.after.tar"
+rm "$probe_before" "$root/probe.after.tar"
 
 actual_uninstall_stdout="$root/actual-uninstall.stdout"
 actual_uninstall_stderr="$root/actual-uninstall.stderr"

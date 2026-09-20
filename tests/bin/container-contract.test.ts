@@ -127,6 +127,7 @@ void test("container contract", async (t) => {
       assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
         "@earendil-works/pi-coding-agent",
         "@openai/codex",
+        "@opencode/cli",
         "opencode-ai",
       ]);
       for (const name of Object.keys(pkg.dependencies)) {
@@ -144,9 +145,17 @@ void test("container contract", async (t) => {
         "pnpm --dir /opt/spw-test-tools --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts",
       );
       const link = docker.indexOf(
-        "RUN --network=none node node_modules/opencode-ai/postinstall.mjs",
+        "RUN --network=none node /opt/spw-test-tools/node_modules/opencode-ai/postinstall.mjs",
       );
-      const version = docker.indexOf("./node_modules/.bin/opencode --version");
+      const v1 = docker.indexOf(
+        "/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version",
+      );
+      const v2Postinstall = docker.indexOf(
+        "node /opt/spw-test-tools/node_modules/@opencode/cli/postinstall.mjs",
+      );
+      const v2 = docker.indexOf(
+        "/opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe --version",
+      );
       const seed = docker.indexOf("/opt/spw-opencode-config-seed");
       assert.ok(install !== -1, "container must install tools without scripts");
       assert.ok(
@@ -154,12 +163,22 @@ void test("container contract", async (t) => {
         "container must run only OpenCode's reviewed postinstall after pnpm install",
       );
       assert.ok(
-        version > link,
-        "container must verify OpenCode after its offline postinstall",
+        v1 > link && v2 > v1,
+        "container must verify both OpenCode lines after their offline postinstalls",
       );
       assert.ok(
-        seed > version,
+        v2Postinstall > link && v2 > v2Postinstall,
+        "container must run V2's absolute postinstall between V1's postinstall and V2's version check",
+      );
+      assert.ok(
+        seed > v2,
         "container must provision native config dependencies after verifying OpenCode",
+      );
+      assert.ok(
+        docker.includes(
+          "opencode_version=$(/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version)",
+        ),
+        "V1 config seeding must derive its version from V1's executable",
       );
       assert.ok(
         docker.includes(
@@ -172,7 +191,7 @@ void test("container contract", async (t) => {
       // from looping forever.
       assert.match(
         docker,
-        /until [^;]*\.\/node_modules\/\.bin\/opencode debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
+        /until [^;]*\/opt\/spw-test-tools\/node_modules\/opencode-ai\/bin\/opencode\.exe debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
         "ripgrep seeding must retry a bounded number of times",
       );
     },
@@ -258,7 +277,20 @@ void test("container contract", async (t) => {
         '#!/bin/sh\n[ "${1:-}" = "-u" ] || exit 99\nprintf "%s\\n" "${SPW_FIXTURE_UID:-10001}"\n',
       );
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
-      const child = `#!/bin/sh\nset -eu\ncase "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac\nprintf '%s\\n' "$name" >> "$SPW_RUNNER_LOG"\n[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n`;
+      const child = `#!/bin/sh
+set -eu
+case "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac
+label=$name
+if [ "$name" = opencode ]; then
+  case "$SPW_OPENCODE_MAJOR:$SPW_OPENCODE_BIN" in
+    1:/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe) label=opencode-v1 ;;
+    2:/opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe) label=opencode-v2 ;;
+    *) exit 98 ;;
+  esac
+fi
+printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
+[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17
+`;
       const paths = [
         join(scratch, "tests/run.sh"),
         join(container, "codex/offline-probe.sh"),
@@ -289,14 +321,20 @@ void test("container contract", async (t) => {
         );
       };
       for (const [mode, logText] of [
-        ["suite", "shared\ncodex\npi\nopencode\n"],
+        ["suite", "shared\ncodex\npi\nopencode-v1\nopencode-v2\n"],
         ["harness-codex", "codex\n"],
         ["harness-pi", "pi\n"],
-        ["harness-opencode", "opencode\n"],
+        ["harness-opencode", "opencode-v1\nopencode-v2\n"],
       ] as const) {
         const result = run(mode);
         assert.equal(result.status, 0, result.stderr);
         assert.equal(readFileSync(log, "utf8"), logText);
+        if (mode === "suite" || mode === "harness-opencode")
+          for (const lane of ["V1", "V2"])
+            assert.match(
+              result.stdout,
+              new RegExp(`container: OpenCode ${lane} lane: complete status=0`),
+            );
       }
       for (const [failedChild, expected, forbiddenCompletions] of [
         [
@@ -328,8 +366,12 @@ void test("container contract", async (t) => {
         ],
         [
           "opencode",
-          "shared\ncodex\npi\nopencode\n",
-          ["container suite: OpenCode harness integration: complete status=0"],
+          "shared\ncodex\npi\nopencode-v1\n",
+          [
+            "container: OpenCode V1 lane: complete status=0",
+            "container: OpenCode V2 lane: start",
+            "container suite: OpenCode harness integration: complete status=0",
+          ],
         ],
       ] as const) {
         const result = run("suite", { SPW_FAIL_CHILD: failedChild });

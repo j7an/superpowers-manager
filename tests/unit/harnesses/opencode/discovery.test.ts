@@ -82,6 +82,43 @@ void test("duplicate routes to one global config retain one owned registration",
   assert.deepEqual(result.blockedInputs, []);
 });
 
+void test("recognizes an owned plugins entry beside an unrelated plugin entry", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, {
+    plugin: ["unrelated"],
+    plugins: [state.paths.installedRoot],
+  });
+
+  const observed = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.equal(observed.managedEntries.length, 1);
+  assert.equal(observed.managedEntries[0]?.entry.key, "plugins");
+  assert.deepEqual(observed.blockedInputs, []);
+});
+
+void test("labels a blocked entry with the key it came from", async (t) => {
+  const state = openCodeSandbox(t);
+  writeJson(join(state.paths.configRoot, "opencode.json"), {
+    plugins: [""],
+  });
+
+  const observed = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+
+  assert.ok(
+    observed.blockedInputs.some((input) => /plugins\[0\]/u.test(input)),
+    `expected a plugins-keyed blocked input, got ${observed.blockedInputs.join(", ")}`,
+  );
+});
+
 void test("a canonical config-directory alias retains native-writer ownership", async (t) => {
   const state = openCodeSandbox(t);
   const config = join(state.paths.configRoot, "opencode.json");
@@ -177,6 +214,28 @@ void test("duplicate registrations within one document remain ambiguous", async 
 
   assert.equal(result.documents.length, 1);
   assert.equal(result.managedEntries.length, 2);
+});
+
+void test("owned registrations across both config keys remain ambiguous", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, {
+    plugin: [state.paths.installedRoot],
+    plugins: [state.paths.installedRoot],
+  });
+
+  const result = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+
+  assert.equal(result.managedEntries.length, 2);
+  assert.deepEqual(
+    result.managedEntries.map(({ entry }) => entry.key),
+    ["plugin", "plugins"],
+  );
 });
 
 void test("known upstream package forms are conflicts in files and inline config", async (t) => {

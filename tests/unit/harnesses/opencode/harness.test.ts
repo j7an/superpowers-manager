@@ -41,7 +41,9 @@ void test("OpenCode adapter needs its native command only for install and update
   }
 });
 
-function probeFacts(): ProbeSnapshot<OpenCodeRemovalInput> {
+function probeFacts(
+  registration: OpenCodeRemovalInput["registration"] = null,
+): ProbeSnapshot<OpenCodeRemovalInput> {
   const compatibility = {
     kind: "supported",
     generation: "opencode-native-bootstrap-v1",
@@ -49,7 +51,7 @@ function probeFacts(): ProbeSnapshot<OpenCodeRemovalInput> {
   } as const;
   const removalInput: OpenCodeRemovalInput = {
     installedRoot: "/isolated/installed",
-    registration: null,
+    registration,
     receiptDigest: null,
   };
   return {
@@ -115,6 +117,7 @@ void test("OpenCode probe presents source provenance and escapes every field val
       "prepared_identity",
       "installed_identity",
       "installation_state",
+      "registration_key",
       "resource_state",
       "ownership",
       "conflicts",
@@ -124,6 +127,21 @@ void test("OpenCode probe presents source provenance and escapes every field val
       "status",
     ],
   );
+  assert.match(rendered.porcelain, /^registration_key=$/m);
+  assert.match(rendered.human, /^registration key: not present$/m);
+});
+
+void test("OpenCode probe reports the observed registration key", () => {
+  const registration = { key: "plugins" as const } as NonNullable<
+    OpenCodeRemovalInput["registration"]
+  >;
+
+  const rendered = openCodeHarness.presentation.renderProbe(
+    probeFacts(registration),
+  );
+
+  assert.match(rendered.porcelain, /^registration_key=plugins$/m);
+  assert.match(rendered.human, /^registration key: plugins$/m);
 });
 
 void test("OpenCode verification preserves receipt and inspection precedence", () => {
