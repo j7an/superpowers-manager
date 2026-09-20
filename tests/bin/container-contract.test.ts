@@ -127,6 +127,7 @@ void test("container contract", async (t) => {
       assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
         "@earendil-works/pi-coding-agent",
         "@openai/codex",
+        "@opencode/cli",
         "opencode-ai",
       ]);
       for (const name of Object.keys(pkg.dependencies)) {
@@ -146,7 +147,12 @@ void test("container contract", async (t) => {
       const link = docker.indexOf(
         "RUN --network=none node node_modules/opencode-ai/postinstall.mjs",
       );
-      const version = docker.indexOf("./node_modules/.bin/opencode --version");
+      const v1 = docker.indexOf(
+        "node_modules/opencode-ai/bin/opencode.exe --version",
+      );
+      const v2 = docker.indexOf(
+        "node_modules/@opencode/cli/bin/opencode.exe --version",
+      );
       const seed = docker.indexOf("/opt/spw-opencode-config-seed");
       assert.ok(install !== -1, "container must install tools without scripts");
       assert.ok(
@@ -154,12 +160,18 @@ void test("container contract", async (t) => {
         "container must run only OpenCode's reviewed postinstall after pnpm install",
       );
       assert.ok(
-        version > link,
-        "container must verify OpenCode after its offline postinstall",
+        v1 > link && v2 > v1,
+        "container must verify both OpenCode lines after their offline postinstalls",
       );
       assert.ok(
-        seed > version,
+        seed > v2,
         "container must provision native config dependencies after verifying OpenCode",
+      );
+      assert.ok(
+        docker.includes(
+          "opencode_version=$(node_modules/opencode-ai/bin/opencode.exe --version)",
+        ),
+        "V1 config seeding must derive its version from V1's executable",
       );
       assert.ok(
         docker.includes(
@@ -172,7 +184,7 @@ void test("container contract", async (t) => {
       // from looping forever.
       assert.match(
         docker,
-        /until [^;]*\.\/node_modules\/\.bin\/opencode debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
+        /until [^;]*node_modules\/opencode-ai\/bin\/opencode\.exe debug rg files --limit 1;\s+do\s+if \[ "\$spw_rg_attempt" -ge \d+ \];\s+then\s+[^;]*;\s+exit 1;\s+fi;/,
         "ripgrep seeding must retry a bounded number of times",
       );
     },
