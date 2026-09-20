@@ -166,6 +166,7 @@ SUPERPOWERS_OPENCODE="$tripwire" \
 test ! -e "$root/native-called"
 tar -cf "$root/probe.after.tar" -C "$root" config data cache state selection manager-cache explicit override home managed database
 cmp "$probe_before" "$root/probe.after.tar"
+rm "$probe_before" "$root/probe.after.tar"
 
 actual_uninstall_stdout="$root/actual-uninstall.stdout"
 actual_uninstall_stderr="$root/actual-uninstall.stderr"
