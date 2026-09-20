@@ -302,7 +302,10 @@ async function inspectPluginEntry(
   const kind = await classifyPathNoFollow(local);
   if (kind === "missing") {
     if (/^superpowers(?:\.(?:js|ts))?$/u.test(basename(local)))
-      addBlocked(state, `${observation.document.path} ${entry.key}[${entry.index}]`);
+      addBlocked(
+        state,
+        `${observation.document.path} ${entry.key}[${entry.index}]`,
+      );
     return;
   }
   if (isKnownPluginFile(local)) {
@@ -310,7 +313,10 @@ async function inspectPluginEntry(
     return;
   }
   if (kind !== "directory" && kind !== "symlink") {
-    addBlocked(state, `${observation.document.path} ${entry.key}[${entry.index}]`);
+    addBlocked(
+      state,
+      `${observation.document.path} ${entry.key}[${entry.index}]`,
+    );
     return;
   }
   try {
@@ -323,7 +329,10 @@ async function inspectPluginEntry(
       );
   } catch {
     if (basename(local) === "superpowers")
-      addBlocked(state, `${observation.document.path} ${entry.key}[${entry.index}]`);
+      addBlocked(
+        state,
+        `${observation.document.path} ${entry.key}[${entry.index}]`,
+      );
   }
 }
 
