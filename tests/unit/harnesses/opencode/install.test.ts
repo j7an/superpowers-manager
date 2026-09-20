@@ -49,7 +49,13 @@ function transaction(result: AdapterResult<InstallReceipt>) {
   return receipt.transaction;
 }
 
-async function fixture(t: TestContext) {
+async function fixture(
+  t: TestContext,
+  options: {
+    readonly bootstrap?: "6.3.0" | "6.4.1";
+    readonly entrypoint?: boolean;
+  } = {},
+) {
   const state = openCodeSandbox(t);
   mkdirSync(state.paths.configRoot, { recursive: true });
   const configFile = join(state.paths.configRoot, "opencode.json");
@@ -62,6 +68,15 @@ async function fixture(t: TestContext) {
     t,
     state.paths.preparedRoot,
     selection,
+    {
+      kind: "supported",
+      generation:
+        options.entrypoint === false
+          ? "opencode-native-bootstrap-v1"
+          : "opencode-native-bootstrap-v2",
+      reason: "fixture",
+    },
+    options,
   );
   const artifact: PreparedArtifact = {
     root: state.paths.preparedRoot,
@@ -69,7 +84,10 @@ async function fixture(t: TestContext) {
     identity: digest,
     compatibility: {
       kind: "supported",
-      generation: "opencode-native-bootstrap-v1",
+      generation:
+        options.entrypoint === false
+          ? "opencode-native-bootstrap-v1"
+          : "opencode-native-bootstrap-v2",
       reason: "fixture",
     },
   };
@@ -107,6 +125,86 @@ async function fixture(t: TestContext) {
     canonicalRoot,
   };
 }
+
+function v2Run(
+  f: Awaited<ReturnType<typeof fixture>>,
+): OpenCodeInstallDependencies["run"] {
+  return async (args, paths, ctx, execute) => {
+    if (args[0] === "--version") {
+      f.calls.push([...args]);
+      return successResult(
+        "opencode-command",
+        { stdout: "opencode v2.0.10\n" },
+        [],
+      );
+    }
+    return await f.deps.run(args, paths, ctx, execute);
+  };
+}
+
+void test("OpenCode V2 install registers by writing the plugins key", async (t) => {
+  const f = await fixture(t);
+  const result = await installOpenCode(f.artifact, f.ctx, {
+    ...f.deps,
+    run: v2Run(f),
+  });
+  assert.equal(result.outcome.ok, true);
+  assert.deepEqual(f.calls, [["--version"], ["publication"]]);
+  const config = await readOpenCodeConfig(f.configFile);
+  assert.deepEqual(
+    config?.document.entries.filter((entry) => entry.spec === f.canonicalRoot),
+    [{ key: "plugins", index: 0, spec: f.canonicalRoot, options: null }],
+  );
+});
+
+void test("OpenCode V2 install refuses an artifact without a qualified entrypoint", async (t) => {
+  const f = await fixture(t, { bootstrap: "6.3.0", entrypoint: false });
+  const result = await installOpenCode(f.artifact, f.ctx, {
+    ...f.deps,
+    run: v2Run(f),
+  });
+  assert.equal(result.outcome.ok, false);
+  assert.match(
+    result.outcome.ok ? "" : result.outcome.error.message,
+    /does not support OpenCode 2/,
+  );
+  assert.deepEqual(f.calls, [["--version"]]);
+  assert.equal(existsSync(f.paths.installedRoot), false);
+});
+
+void test("OpenCode V2 install creates a missing global config", async (t) => {
+  const f = await fixture(t);
+  await removePath(f.configFile);
+  const result = await installOpenCode(f.artifact, f.ctx, {
+    ...f.deps,
+    run: v2Run(f),
+  });
+  assert.equal(result.outcome.ok, true);
+  assert.deepEqual(f.calls, [["--version"], ["publication"]]);
+  const config = await readOpenCodeConfig(f.configFile);
+  assert.deepEqual(config?.document.entries, [
+    { key: "plugins", index: 0, spec: f.canonicalRoot, options: null },
+  ]);
+});
+
+void test("OpenCode V2 install prefers an existing global jsonc config", async (t) => {
+  const f = await fixture(t);
+  const jsoncFile = join(f.paths.configRoot, "opencode.jsonc");
+  writeFileSync(jsoncFile, '{ // user comment\n  "theme": "dark"\n}\n');
+  const result = await installOpenCode(f.artifact, f.ctx, {
+    ...f.deps,
+    run: v2Run(f),
+  });
+  assert.equal(result.outcome.ok, true);
+  assert.deepEqual(f.calls, [["--version"], ["publication"]]);
+  assert.match(readFileSync(jsoncFile, "utf8"), /user comment/);
+  assert.deepEqual((await readOpenCodeConfig(jsoncFile))?.document.entries, [
+    { key: "plugins", index: 0, spec: f.canonicalRoot, options: null },
+  ]);
+  assert.deepEqual((await readOpenCodeConfig(f.configFile))?.document.entries, [
+    { key: "plugin", index: 0, spec: "npm:unrelated", options: null },
+  ]);
+});
 
 void test("OpenCode install refuses an unrecognized major version", async (t) => {
   const f = await fixture(t);

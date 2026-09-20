@@ -32,6 +32,7 @@ import {
   classifyPathNoFollow,
 } from "../../safe-path.ts";
 import {
+  addObservedOpenCodeEntry,
   removeObservedOpenCodeEntry,
   type OpenCodeConfigKey,
 } from "./config.ts";
@@ -696,6 +697,14 @@ export async function installOpenCode(
         "unsupported-runtime",
         `unsupported OpenCode major version ${major}`,
       );
+    if (
+      major === 2 &&
+      assessment.compatibility.generation !== "opencode-native-bootstrap-v2"
+    )
+      return fail(
+        "unsupported-artifact",
+        "the selected upstream ref does not support OpenCode 2; select a ref that ships the V2 entrypoint",
+      );
     await requireSnapshot(paths.installedRoot, previous);
     observed = await requireStableActivationRegistration(
       paths,
@@ -742,18 +751,55 @@ export async function installOpenCode(
     if (priorRegistration === null) {
       await phase(pending, "registering");
       observed = await requireStableActivationRegistration(paths, ctx, null);
-      const native = await deps
-        .run(["plugin", pending.canonicalRoot, "--global"], paths, ctx)
-        .catch(() =>
-          fail("native-failed", "OpenCode native installation failed"),
+      let native: Awaited<ReturnType<typeof runOpenCode>> | null = null;
+      if (major === 1) {
+        native = await deps
+          .run(["plugin", pending.canonicalRoot, "--global"], paths, ctx)
+          .catch(() =>
+            fail("native-failed", "OpenCode native installation failed"),
+          );
+      } else {
+        const jsonc = join(paths.configRoot, "opencode.jsonc");
+        const json = join(paths.configRoot, "opencode.json");
+        let target =
+          observed.documents.find(
+            (document) => document.document.path === jsonc,
+          ) ??
+          observed.documents.find(
+            (document) => document.document.path === json,
+          );
+        if (target === undefined) {
+          await atomicWriteFile(json, Buffer.from("{}\n"), {
+            validate: async () => {
+              await assertNoFollowType(paths.configRoot, ["directory"]);
+              await assertNoFollowType(jsonc, ["missing"]);
+              await assertNoFollowType(json, ["missing"]);
+            },
+          });
+          observed = await requireStableActivationRegistration(
+            paths,
+            ctx,
+            null,
+          );
+          target = observed.documents.find(
+            (document) => document.document.path === json,
+          );
+        }
+        if (target === undefined)
+          throw new Error("no OpenCode configuration to register in");
+        await addObservedOpenCodeEntry(
+          target,
+          "plugins",
+          pending.canonicalRoot,
         );
+      }
       observed = await discovery(paths, ctx);
       requireSafeActivationDiscovery(observed);
       const created = registrationRecord(observed.managedEntries[0]);
       if (created === null || created.spec !== pending.canonicalRoot)
         throw new Error("OpenCode activation unverified");
       await phase(pending, "registered", { createdRegistration: created });
-      accepted(native);
+      if (native !== null) accepted(native);
     }
     await requirePublication(pending);
     observed = await discovery(paths, ctx);
