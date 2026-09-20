@@ -41,6 +41,13 @@ export function crossHarnessUpstream(t: TestContext): string {
     ),
     bootstrap,
   );
+  copyFileSync(
+    new URL(
+      "../../../fixtures/opencode-native/entrypoint.js.txt",
+      import.meta.url,
+    ),
+    join(upstream, "index.js"),
+  );
   writeFileSync(join(upstream, "README.md"), "cross-harness fixture\n");
   writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "fixture conduct\n");
   return upstream;
