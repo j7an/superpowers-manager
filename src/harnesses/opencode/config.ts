@@ -31,7 +31,12 @@ const SYNTAX_KIND = (
   }
 ).SyntaxKind;
 
+export type OpenCodeConfigKey = "plugin" | "plugins";
+
+const CONFIG_KEYS: readonly OpenCodeConfigKey[] = ["plugin", "plugins"];
+
 export interface ConfigEntry {
+  readonly key: OpenCodeConfigKey;
   readonly index: number;
   readonly spec: string;
   readonly options: Readonly<Record<string, unknown>> | null;
@@ -136,31 +141,33 @@ function validateTree(node: JsonNode, depth: number): void {
 }
 
 function configEntries(root: JsonNode): readonly ConfigEntry[] {
-  const plugin = findNodeAtLocation(root, ["plugin"]);
-  if (plugin === undefined) return [];
-  if (plugin.type !== "array") throw new Error("plugin must be an array");
-
-  return (plugin.children ?? []).map((entry, index): ConfigEntry => {
-    if (entry.type === "string" && typeof entry.value === "string") {
-      return { index, spec: entry.value, options: null };
-    }
-    const tuple = entry.children ?? [];
-    if (
-      entry.type !== "array" ||
-      tuple.length !== 2 ||
-      tuple[0]?.type !== "string" ||
-      typeof tuple[0].value !== "string" ||
-      tuple[1]?.type !== "object"
-    ) {
-      throw new Error("unsupported plugin entry");
-    }
-    return {
-      index,
-      spec: tuple[0].value,
-      options: structuredClone(getNodeValue(tuple[1])) as Readonly<
-        Record<string, unknown>
-      >,
-    };
+  return CONFIG_KEYS.flatMap((key) => {
+    const array = findNodeAtLocation(root, [key]);
+    if (array === undefined) return [];
+    if (array.type !== "array") throw new Error(`${key} must be an array`);
+    return (array.children ?? []).map((entry, index): ConfigEntry => {
+      if (entry.type === "string" && typeof entry.value === "string") {
+        return { key, index, spec: entry.value, options: null };
+      }
+      const tuple = entry.children ?? [];
+      if (
+        entry.type !== "array" ||
+        tuple.length !== 2 ||
+        tuple[0]?.type !== "string" ||
+        typeof tuple[0].value !== "string" ||
+        tuple[1]?.type !== "object"
+      ) {
+        throw new Error("unsupported plugin entry");
+      }
+      return {
+        key,
+        index,
+        spec: tuple[0].value,
+        options: structuredClone(getNodeValue(tuple[1])) as Readonly<
+          Record<string, unknown>
+        >,
+      };
+    });
   });
 }
 
@@ -193,6 +200,7 @@ function sameEntries(
     left.length === right.length &&
     left.every(
       (entry, index) =>
+        entry.key === right[index]?.key &&
         entry.spec === right[index]?.spec &&
         isDeepStrictEqual(entry.options, right[index]?.options),
     )
@@ -201,10 +209,11 @@ function sameEntries(
 
 export function removeOpenCodeEntry(
   document: ConfigDocument,
+  key: OpenCodeConfigKey,
   index: number,
 ): string {
   try {
-    const array = findNodeAtLocation(document.root, ["plugin"]);
+    const array = findNodeAtLocation(document.root, [key]);
     const elements = array?.children ?? [];
     const element = elements[index];
     if (
@@ -250,7 +259,9 @@ export function removeOpenCodeEntry(
     }
     const output = applyEdits(document.text, edits);
     const after = parseOpenCodeConfig(output, document.path);
-    const expected = document.entries.filter((entry) => entry.index !== index);
+    const expected = document.entries.filter(
+      (entry) => entry.key !== key || entry.index !== index,
+    );
     if (!sameEntries(after.entries, expected)) {
       throw new Error("removal changed surviving registrations");
     }
@@ -323,15 +334,18 @@ function sameObservedState(
 
 export async function removeObservedOpenCodeEntry(
   observation: ConfigFileObservation,
+  key: OpenCodeConfigKey,
   index: number,
 ): Promise<void> {
   const path = observation.document.path;
   try {
     const originalText = decodeConfig(observation.bytes, path);
     const original = parseOpenCodeConfig(originalText, path);
-    const output = removeOpenCodeEntry(original, index);
+    const output = removeOpenCodeEntry(original, key, index);
     const outputBytes = Buffer.from(output, "utf8");
-    const expected = original.entries.filter((entry) => entry.index !== index);
+    const expected = original.entries.filter(
+      (entry) => entry.key !== key || entry.index !== index,
+    );
 
     await atomicWriteFile(path, outputBytes, {
       validate: async (temporary) => {

@@ -268,7 +268,7 @@ function registrationRecord(
   if (registration === undefined) return null;
   const observation = registration.observation;
   const node = findNodeAtLocation(observation.document.root, [
-    "plugin",
+    registration.entry.key,
     registration.entry.index,
   ]);
   if (node === undefined)
@@ -587,6 +587,7 @@ async function rollbackOpenCodePublication(
         throw new Error("OpenCode created registration missing");
       await removeObservedOpenCodeEntry(
         current.observation,
+        current.entry.key,
         current.entry.index,
       );
       observed = await discovery(pending.paths, pending.ctx);
@@ -878,6 +879,7 @@ export async function removeOpenCode(
     if (registered !== undefined) {
       await removeObservedOpenCodeEntry(
         registered.observation,
+        registered.entry.key,
         registered.entry.index,
       );
       observed = await discovery(paths, ctx);

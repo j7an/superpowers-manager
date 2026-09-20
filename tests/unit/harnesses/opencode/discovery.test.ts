@@ -82,6 +82,25 @@ void test("duplicate routes to one global config retain one owned registration",
   assert.deepEqual(result.blockedInputs, []);
 });
 
+void test("recognizes an owned plugins entry beside an unrelated plugin entry", async (t) => {
+  const state = openCodeSandbox(t);
+  const config = join(state.paths.configRoot, "opencode.json");
+  mkdirSync(state.paths.installedRoot, { recursive: true });
+  writeJson(config, {
+    plugin: ["unrelated"],
+    plugins: [state.paths.installedRoot],
+  });
+
+  const observed = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+  assert.equal(observed.managedEntries.length, 1);
+  assert.equal(observed.managedEntries[0]?.entry.key, "plugins");
+  assert.deepEqual(observed.blockedInputs, []);
+});
+
 void test("a canonical config-directory alias retains native-writer ownership", async (t) => {
   const state = openCodeSandbox(t);
   const config = join(state.paths.configRoot, "opencode.json");

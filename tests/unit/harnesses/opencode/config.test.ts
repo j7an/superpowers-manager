@@ -34,13 +34,50 @@ void test("parses the two qualified plugin entry shapes", () => {
     "/fixture/opencode.json",
   );
   assert.deepEqual(document.entries, [
-    { index: 0, spec: "other", options: null },
+    { key: "plugin", index: 0, spec: "other", options: null },
     {
+      key: "plugin",
       index: 1,
       spec: "file:///owned",
       options: { answer: 42, nested: { ok: true } },
     },
   ]);
+});
+
+void test("parses registrations under both OpenCode config keys", () => {
+  const document = parseOpenCodeConfig(
+    '{"plugin":["one"],"plugins":["two","three"]}',
+    "/fixture/opencode.json",
+  );
+  assert.deepEqual(document.entries, [
+    { key: "plugin", index: 0, spec: "one", options: null },
+    { key: "plugins", index: 0, spec: "two", options: null },
+    { key: "plugins", index: 1, spec: "three", options: null },
+  ]);
+});
+
+void test("removes an owned entry from the plugins key only", () => {
+  const document = parseOpenCodeConfig(
+    '{"plugin":["keep"],"plugins":["drop","stay"]}',
+    "/fixture/opencode.json",
+  );
+  const output = removeOpenCodeEntry(document, "plugins", 0);
+  const after = parseOpenCodeConfig(output, "/fixture/opencode.json");
+  assert.deepEqual(after.entries, [
+    { key: "plugin", index: 0, spec: "keep", options: null },
+    { key: "plugins", index: 0, spec: "stay", options: null },
+  ]);
+});
+
+void test("rejects a removal index that does not exist under the named key", () => {
+  const document = parseOpenCodeConfig(
+    '{"plugin":["only"]}',
+    "/fixture/opencode.json",
+  );
+  assert.throws(
+    () => removeOpenCodeEntry(document, "plugins", 0),
+    CANNOT_REMOVE,
+  );
 });
 
 void test("preserves special option keys without prototype pollution", () => {
@@ -71,7 +108,7 @@ void test("removal preserves unrelated comments and numeric source", () => {
   const input =
     '{\n // retained\n "plugin": ["other", "file:///owned"],\n "limit": 9007199254740993,\n "literal": "https://example.invalid/a//b"\n}\n';
   const document = parseOpenCodeConfig(input, "/fixture/opencode.jsonc");
-  const output = removeOpenCodeEntry(document, 1);
+  const output = removeOpenCodeEntry(document, "plugin", 1);
   assert.deepEqual(
     parseOpenCodeConfig(output, document.path).entries.map(
       (entry) => entry.spec,
@@ -116,7 +153,7 @@ void test("removes first, middle, last, and sole entries without consuming neigh
       fixture.input,
       "/fixture/opencode.jsonc",
     );
-    const output = removeOpenCodeEntry(document, fixture.index);
+    const output = removeOpenCodeEntry(document, "plugin", fixture.index);
     assert.deepEqual(
       parseOpenCodeConfig(output, document.path).entries.map(
         (entry) => entry.spec,
@@ -180,7 +217,10 @@ void test("rejects invalid removal indexes", () => {
     "/fixture/opencode.json",
   );
   for (const index of [-1, 0.5, 1]) {
-    assert.throws(() => removeOpenCodeEntry(document, index), CANNOT_REMOVE);
+    assert.throws(
+      () => removeOpenCodeEntry(document, "plugin", index),
+      CANNOT_REMOVE,
+    );
   }
 });
 
@@ -269,7 +309,7 @@ void test("checked removal preserves mode and publishes only the intended edit",
   await chmod(path, 0o644);
   const observation = await readOpenCodeConfig(path);
   assert.ok(observation);
-  await removeObservedOpenCodeEntry(observation, 1);
+  await removeObservedOpenCodeEntry(observation, "plugin", 1);
   const after = await readFile(path, "utf8");
   assert.deepEqual(
     parseOpenCodeConfig(after, path).entries.map((entry) => entry.spec),
@@ -290,7 +330,7 @@ void test("checked removal refuses a concurrent edit and preserves the newer byt
   const newer = '{"plugin":["owned"],"future":2}\n';
   await writeFile(path, newer);
   await assert.rejects(
-    removeObservedOpenCodeEntry(observation, 0),
+    removeObservedOpenCodeEntry(observation, "plugin", 0),
     CANNOT_REMOVE,
   );
   assert.equal(await readFile(path, "utf8"), newer);
@@ -308,7 +348,7 @@ void test("checked removal refuses a same-byte concurrent replacement", async (t
   await writeFile(replacement, bytes);
   await rename(replacement, path);
   await assert.rejects(
-    removeObservedOpenCodeEntry(observation, 0),
+    removeObservedOpenCodeEntry(observation, "plugin", 0),
     CANNOT_REMOVE,
   );
   assert.equal(await readFile(path, "utf8"), bytes);
@@ -325,7 +365,7 @@ void test("checked removal refuses a mode change and preserves the newer policy"
   await chmod(path, 0o600);
 
   await assert.rejects(
-    removeObservedOpenCodeEntry(observation, 0),
+    removeObservedOpenCodeEntry(observation, "plugin", 0),
     CANNOT_REMOVE,
   );
   assert.equal(await readFile(path, "utf8"), bytes);

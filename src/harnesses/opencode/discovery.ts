@@ -409,7 +409,10 @@ async function inspectDocument(
   await inspectConfigFields(effective.root, source, state);
   const active = !truthy(state.env.OPENCODE_PURE);
   for (const entry of effective.entries) {
-    const original = observation.document.entries[entry.index];
+    const original = observation.document.entries.find(
+      (candidate) =>
+        candidate.key === entry.key && candidate.index === entry.index,
+    );
     const stable = original !== undefined && original.spec === entry.spec;
     await inspectPluginEntry(
       observation,
