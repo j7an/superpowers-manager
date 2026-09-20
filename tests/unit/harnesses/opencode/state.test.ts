@@ -60,6 +60,10 @@ void test("current state requires one registration and matching desired, prepare
     ownership.outcome.result.removalInput.registration?.entryIndex,
     0,
   );
+  assert.equal(
+    ownership.outcome.result.removalInput.registration?.key,
+    "plugin",
+  );
   const control = await inspectOpenCodeControl(state.ctx);
   assert.equal(
     control.outcome.ok && control.outcome.result.mutationEligibility.kind,

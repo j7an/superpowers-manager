@@ -34,6 +34,7 @@ export interface OpenCodeRemovalInput {
   readonly installedRoot: string;
   readonly registration: {
     readonly observation: OpenCodeDiscovery["managedEntries"][number]["observation"];
+    readonly key: OpenCodeDiscovery["managedEntries"][number]["entry"]["key"];
     readonly entryIndex: number;
     readonly spec: string;
   } | null;
@@ -110,6 +111,7 @@ function registrationFor(facts: Facts): OpenCodeRemovalInput["registration"] {
     ? null
     : {
         observation: managed.observation,
+        key: managed.entry.key,
         entryIndex: managed.entry.index,
         spec: managed.entry.spec,
       };

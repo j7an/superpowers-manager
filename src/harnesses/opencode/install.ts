@@ -321,6 +321,7 @@ function registrationInputSame(
   return input === null
     ? current === null
     : current !== null &&
+        input.key === current.key &&
         input.entryIndex === current.entryIndex &&
         input.spec === current.spec &&
         input.observation.document.path === current.observation.document.path &&
@@ -894,6 +895,7 @@ export async function removeOpenCode(
           ? null
           : {
               observation: registered.observation,
+              key: registered.entry.key,
               entryIndex: registered.entry.index,
               spec: registered.entry.spec,
             },
