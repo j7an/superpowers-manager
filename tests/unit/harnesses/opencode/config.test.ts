@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  addObservedOpenCodeEntry,
+  addOpenCodeEntry,
   parseOpenCodeConfig,
   readOpenCodeConfig,
   removeObservedOpenCodeEntry,
@@ -23,6 +25,7 @@ import {
 const INVALID = /invalid OpenCode configuration/;
 const CANNOT_READ = /cannot read OpenCode configuration/;
 const CANNOT_REMOVE = /cannot remove owned OpenCode registration/;
+const CANNOT_REGISTER = /cannot register owned OpenCode registration/;
 
 function nestedConfig(depth: number): string {
   return `{"future":${"[".repeat(depth - 1)}0${"]".repeat(depth - 1)}}`;
@@ -67,6 +70,45 @@ void test("removes an owned entry from the plugins key only", () => {
     { key: "plugin", index: 0, spec: "keep", options: null },
     { key: "plugins", index: 0, spec: "stay", options: null },
   ]);
+});
+
+void test("adds a registration under the named key, creating the array", () => {
+  const document = parseOpenCodeConfig(
+    '{"theme":"dark"}',
+    "/fixture/opencode.json",
+  );
+  const after = parseOpenCodeConfig(
+    addOpenCodeEntry(document, "plugins", "/owned/root"),
+    "/fixture/opencode.json",
+  );
+  assert.deepEqual(after.entries, [
+    { key: "plugins", index: 0, spec: "/owned/root", options: null },
+  ]);
+});
+
+void test("appends to an existing array and preserves comments", () => {
+  const document = parseOpenCodeConfig(
+    '{\n  // keep me\n  "plugins": ["first"]\n}',
+    "/fixture/opencode.jsonc",
+  );
+  const output = addOpenCodeEntry(document, "plugins", "/owned/root");
+  assert.match(output, /\/\/ keep me/);
+  const after = parseOpenCodeConfig(output, "/fixture/opencode.jsonc");
+  assert.deepEqual(after.entries, [
+    { key: "plugins", index: 0, spec: "first", options: null },
+    { key: "plugins", index: 1, spec: "/owned/root", options: null },
+  ]);
+});
+
+void test("rejects a non-array plugins key before registration", () => {
+  assert.throws(
+    () =>
+      parseOpenCodeConfig(
+        '{"plugins":"not-an-array"}',
+        "/fixture/opencode.json",
+      ),
+    INVALID,
+  );
 });
 
 void test("rejects a removal index that does not exist under the named key", () => {
@@ -318,6 +360,34 @@ void test("checked removal preserves mode and publishes only the intended edit",
   assert.ok(after.includes("// keep"));
   assert.ok(after.includes('"future":1'));
   assert.equal((await lstat(path)).mode & 0o777, 0o644);
+});
+
+void test("writes an added registration atomically and verifies it", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spw-add-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const path = join(dir, "opencode.json");
+  await writeFile(path, '{"plugins":["first"]}', "utf8");
+  const observation = await readOpenCodeConfig(path);
+  assert.notEqual(observation, null);
+  await addObservedOpenCodeEntry(observation!, "plugins", "/owned/root");
+  const after = await readOpenCodeConfig(path);
+  assert.deepEqual(after?.document.entries, [
+    { key: "plugins", index: 0, spec: "first", options: null },
+    { key: "plugins", index: 1, spec: "/owned/root", options: null },
+  ]);
+});
+
+void test("refuses to add when the configuration changed concurrently", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "spw-add-race-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const path = join(dir, "opencode.json");
+  await writeFile(path, '{"plugins":["first"]}', "utf8");
+  const observation = await readOpenCodeConfig(path);
+  await writeFile(path, '{"plugins":["changed"]}', "utf8");
+  await assert.rejects(
+    () => addObservedOpenCodeEntry(observation!, "plugins", "/owned/root"),
+    CANNOT_REGISTER,
+  );
 });
 
 void test("checked removal refuses a concurrent edit and preserves the newer bytes", async (t) => {
