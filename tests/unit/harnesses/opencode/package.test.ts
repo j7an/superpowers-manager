@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  appendFileSync,
-  copyFileSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -33,18 +28,60 @@ void test("an unknown bootstrap is unsupported even with valid metadata", async 
 });
 
 void test("the frozen v6.0.0-v6.3.0 bootstrap remains supported", async (t) => {
-  const root = nativeOpenCodeFixture(t);
-  copyFileSync(
-    new URL(
-      "../../../fixtures/opencode-native/bootstrap-6.3.0.js.txt",
-      import.meta.url,
-    ),
-    join(root, ".opencode/plugins/superpowers.js"),
-  );
+  const root = nativeOpenCodeFixture(t, {
+    bootstrap: "6.3.0",
+    entrypoint: false,
+  });
   assert.equal(
     (await assessOpenCodeCompatibility(root, nativeSelection())).kind,
     "supported",
   );
+});
+
+void test("qualifies a paired bootstrap and V2 entrypoint", async (t) => {
+  const root = nativeOpenCodeFixture(t, { entrypoint: true });
+  const compatibility = await assessOpenCodeCompatibility(
+    root,
+    nativeSelection(),
+  );
+  assert.equal(compatibility.kind, "supported");
+  assert.equal(compatibility.generation, "opencode-native-bootstrap-v2");
+});
+
+void test("qualifies a bootstrap-only package as the V1 generation", async (t) => {
+  const root = nativeOpenCodeFixture(t, {
+    bootstrap: "6.3.0",
+    entrypoint: false,
+  });
+  const compatibility = await assessOpenCodeCompatibility(
+    root,
+    nativeSelection(),
+  );
+  assert.equal(compatibility.kind, "supported");
+  assert.equal(compatibility.generation, "opencode-native-bootstrap-v1");
+});
+
+void test("refuses a qualified bootstrap beside an unqualified entrypoint", async (t) => {
+  const root = nativeOpenCodeFixture(t, { entrypoint: true });
+  writeFileSync(join(root, "index.js"), "export default {};\n", "utf8");
+  const compatibility = await assessOpenCodeCompatibility(
+    root,
+    nativeSelection(),
+  );
+  assert.equal(compatibility.kind, "unsupported");
+});
+
+void test("refuses a bootstrap-only ref carrying an unexpected entrypoint", async (t) => {
+  const root = nativeOpenCodeFixture(t, {
+    bootstrap: "6.3.0",
+    entrypoint: false,
+  });
+  writeFileSync(join(root, "index.js"), "export default {};\n", "utf8");
+  const compatibility = await assessOpenCodeCompatibility(
+    root,
+    nativeSelection(),
+  );
+  assert.equal(compatibility.kind, "unsupported");
 });
 
 void test("a custom source is experimental", async (t) => {

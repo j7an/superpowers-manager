@@ -19,11 +19,27 @@ import {
 } from "../../../../src/harnesses/opencode/paths.ts";
 import { nativeSelection } from "../pi/package-fixture.ts";
 
-export function nativeOpenCodeFixture(t: TestContext): string {
+interface NativeOpenCodeFixtureOptions {
+  readonly bootstrap?: "6.3.0" | "6.4.1";
+  readonly entrypoint?: boolean;
+}
+
+export function nativeOpenCodeFixture(
+  t: TestContext,
+  options: NativeOpenCodeFixtureOptions = {},
+): string {
   const root = mkdtempSync(join(tmpdir(), "spw-opencode-package-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const [fixture, target] of [
-    ["opencode-native/bootstrap.js.txt", ".opencode/plugins/superpowers.js"],
+    [
+      options.bootstrap === "6.3.0"
+        ? "opencode-native/bootstrap-6.3.0.js.txt"
+        : "opencode-native/bootstrap.js.txt",
+      ".opencode/plugins/superpowers.js",
+    ],
+    ...(options.entrypoint === false
+      ? []
+      : [["opencode-native/entrypoint.js.txt", "index.js"]]),
     ["pi-native/package.json.txt", "package.json"],
     ["pi-native/SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
     ["pi-native/LICENSE.txt", "LICENSE"],
@@ -76,8 +92,9 @@ export async function writeOpenCodeArtifact(
     generation: "opencode-native-bootstrap-v1",
     reason: "fixture",
   },
+  options: NativeOpenCodeFixtureOptions = {},
 ): Promise<string> {
-  cpSync(nativeOpenCodeFixture(t), root, { recursive: true });
+  cpSync(nativeOpenCodeFixture(t, options), root, { recursive: true });
   const digest = await digestArtifactTree(root);
   const identity = {
     schema: 1 as const,
