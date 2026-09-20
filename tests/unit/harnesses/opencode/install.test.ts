@@ -218,6 +218,57 @@ void test("OpenCode stable registration updates by snapshot swap and can roll ba
   assert.equal(f.calls.filter((args) => args[0] === "plugin").length, 1);
 });
 
+void test("OpenCode update refuses a registration moved between config keys after journaling", async (t) => {
+  const f = await fixture(t);
+  value(
+    await transaction(
+      await installOpenCode(f.artifact, f.ctx, f.deps),
+    ).finalize(),
+  );
+  writeFileSync(
+    f.configFile,
+    JSON.stringify({ plugin: [f.canonicalRoot], theme: "light" }),
+  );
+  rmSync(f.paths.preparedRoot, { recursive: true });
+  const nextSelection = nativeSelection("2".repeat(40));
+  const nextDigest = await writeOpenCodeArtifact(
+    t,
+    f.paths.preparedRoot,
+    nextSelection,
+  );
+  const next = {
+    ...f.artifact,
+    commit: nextSelection.desiredCommit,
+    identity: nextDigest,
+  };
+  const result = await installOpenCode(next, f.ctx, {
+    ...f.deps,
+    beginPublication: async (...args) => {
+      const publication = await f.deps.beginPublication(...args);
+      writeFileSync(
+        f.configFile,
+        JSON.stringify({ plugins: [f.canonicalRoot], theme: "light" }),
+      );
+      return publication;
+    },
+  });
+
+  assert.equal(result.outcome.ok, false);
+  assert.equal(existsSync(f.paths.recoveryRoot), true);
+  assert.deepEqual(
+    (await readOpenCodeConfig(f.configFile))?.document.entries.map((entry) => [
+      entry.key,
+      entry.index,
+      entry.spec,
+    ]),
+    [["plugins", 0, f.canonicalRoot]],
+  );
+  const journal = JSON.parse(
+    readFileSync(join(f.paths.recoveryRoot, "transaction.json"), "utf8"),
+  ) as { priorRegistration: { configKey: string } };
+  assert.equal(journal.priorRegistration.configKey, "plugin");
+});
+
 void test("OpenCode rollback removes only its newly created current entry", async (t) => {
   const f = await fixture(t);
   const tx = transaction(await installOpenCode(f.artifact, f.ctx, f.deps));

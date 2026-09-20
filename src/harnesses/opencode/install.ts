@@ -31,7 +31,10 @@ import {
   canonicalizeProspectivePath,
   classifyPathNoFollow,
 } from "../../safe-path.ts";
-import { removeObservedOpenCodeEntry } from "./config.ts";
+import {
+  removeObservedOpenCodeEntry,
+  type OpenCodeConfigKey,
+} from "./config.ts";
 import {
   inspectOpenCodeDiscovery,
   OPEN_CODE_PURE_MODE_INPUT,
@@ -96,6 +99,7 @@ type Phase =
   | "deregistered";
 interface RegistrationRecord {
   readonly configPath: string;
+  readonly configKey: OpenCodeConfigKey;
   readonly entryIndex: number;
   readonly spec: string;
   readonly optionsDigest: string;
@@ -275,6 +279,7 @@ function registrationRecord(
     throw new Error("OpenCode registration syntax changed");
   return {
     configPath: observation.document.path,
+    configKey: registration.entry.key,
     entryIndex: registration.entry.index,
     spec: registration.entry.spec,
     optionsDigest: createHash("sha256")
@@ -301,6 +306,7 @@ function sameRegistration(
     ? registration === undefined
     : registration !== undefined &&
         registration.observation.document.path === expected.configPath &&
+        registration.entry.key === expected.configKey &&
         registration.entry.spec === expected.spec &&
         createHash("sha256")
           .update(JSON.stringify(registration.entry.options))
