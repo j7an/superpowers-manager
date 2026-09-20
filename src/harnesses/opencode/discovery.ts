@@ -258,11 +258,17 @@ async function inspectPluginEntry(
   active = true,
 ): Promise<void> {
   if (entry.spec.trim().length === 0) {
-    addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
+    addBlocked(
+      state,
+      `${observation.document.path} ${entry.key}[${entry.index}]`,
+    );
     return;
   }
   if (containsSubstitution(entry.spec)) {
-    addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
+    addBlocked(
+      state,
+      `${observation.document.path} ${entry.key}[${entry.index}]`,
+    );
     return;
   }
   const local = localPluginPath(entry.spec, observation.document.path, state);
@@ -287,7 +293,7 @@ async function inspectPluginEntry(
   if (
     inspectUpstreamSpec(
       entry.spec,
-      `${observation.document.path} plugin[${entry.index}]`,
+      `${observation.document.path} ${entry.key}[${entry.index}]`,
       state,
     )
   )
@@ -296,7 +302,7 @@ async function inspectPluginEntry(
   const kind = await classifyPathNoFollow(local);
   if (kind === "missing") {
     if (/^superpowers(?:\.(?:js|ts))?$/u.test(basename(local)))
-      addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
+      addBlocked(state, `${observation.document.path} ${entry.key}[${entry.index}]`);
     return;
   }
   if (isKnownPluginFile(local)) {
@@ -304,7 +310,7 @@ async function inspectPluginEntry(
     return;
   }
   if (kind !== "directory" && kind !== "symlink") {
-    addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
+    addBlocked(state, `${observation.document.path} ${entry.key}[${entry.index}]`);
     return;
   }
   try {
@@ -317,7 +323,7 @@ async function inspectPluginEntry(
       );
   } catch {
     if (basename(local) === "superpowers")
-      addBlocked(state, `${observation.document.path} plugin[${entry.index}]`);
+      addBlocked(state, `${observation.document.path} ${entry.key}[${entry.index}]`);
   }
 }
 
@@ -777,11 +783,14 @@ export async function inspectOpenCodeDiscovery(
             entry.spec.trim().length === 0 ||
             containsSubstitution(entry.spec)
           )
-            addBlocked(state, `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`);
+            addBlocked(
+              state,
+              `OPENCODE_CONFIG_CONTENT ${entry.key}[${entry.index}]`,
+            );
           else if (
             inspectUpstreamSpec(
               entry.spec,
-              `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`,
+              `OPENCODE_CONFIG_CONTENT ${entry.key}[${entry.index}]`,
               state,
             )
           ) {
@@ -798,7 +807,7 @@ export async function inspectOpenCodeDiscovery(
                 state,
                 canonical === state.installedRoot
                   ? `${OPEN_CODE_UNOWNED_MANAGER_INPUT}: OPENCODE_CONFIG_CONTENT`
-                  : `OPENCODE_CONFIG_CONTENT plugin[${entry.index}]`,
+                  : `OPENCODE_CONFIG_CONTENT ${entry.key}[${entry.index}]`,
               );
             }
           }

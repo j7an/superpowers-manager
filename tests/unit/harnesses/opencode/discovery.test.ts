@@ -101,6 +101,24 @@ void test("recognizes an owned plugins entry beside an unrelated plugin entry", 
   assert.deepEqual(observed.blockedInputs, []);
 });
 
+void test("labels a blocked entry with the key it came from", async (t) => {
+  const state = openCodeSandbox(t);
+  writeJson(join(state.paths.configRoot, "opencode.json"), {
+    plugins: [""],
+  });
+
+  const observed = await inspectOpenCodeDiscovery(
+    state.paths,
+    state.env,
+    state.root,
+  );
+
+  assert.ok(
+    observed.blockedInputs.some((input) => /plugins\[0\]/u.test(input)),
+    `expected a plugins-keyed blocked input, got ${observed.blockedInputs.join(", ")}`,
+  );
+});
+
 void test("a canonical config-directory alias retains native-writer ownership", async (t) => {
   const state = openCodeSandbox(t);
   const config = join(state.paths.configRoot, "opencode.json");
