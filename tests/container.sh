@@ -12,13 +12,21 @@ if [ "${1:-}" = "--inside" ]; then
 
   mode="${2:-suite}"
   run_opencode_probe() {
-    env \
+    SPW_OPENCODE_BIN="$1" SPW_OPENCODE_MAJOR="$2" \
       OPENCODE_CONFIG=/tmp/spw-ambient-forbidden.jsonc \
       OPENCODE_CONFIG_DIR=/tmp/spw-ambient-forbidden-config \
       OPENCODE_CONFIG_CONTENT='{"plugin":["superpowers"]}' \
       OPENCODE_DB=/tmp/spw-ambient-forbidden.db \
       OPENCODE_TEST_MANAGED_CONFIG_DIR=/tmp/spw-ambient-forbidden-managed \
       sh tests/container/opencode/offline-probe.sh
+  }
+  run_opencode_lines() {
+    echo "container: OpenCode V1 lane: start"
+    run_opencode_probe /opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe 1
+    echo "container: OpenCode V1 lane: complete status=0"
+    echo "container: OpenCode V2 lane: start"
+    run_opencode_probe /opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe 2
+    echo "container: OpenCode V2 lane: complete status=0"
   }
   case "$mode" in
     suite)
@@ -32,7 +40,7 @@ if [ "${1:-}" = "--inside" ]; then
       sh tests/container/pi/offline-probe.sh
       echo "container suite: Pi harness integration: complete status=0"
       echo "container suite: OpenCode harness integration: start"
-      run_opencode_probe
+      run_opencode_lines
       echo "container suite: OpenCode harness integration: complete status=0"
       ;;
     harness-codex)
@@ -47,7 +55,7 @@ if [ "${1:-}" = "--inside" ]; then
       ;;
     harness-opencode)
       echo "container: OpenCode harness integration: start"
-      run_opencode_probe
+      run_opencode_lines
       echo "container: OpenCode harness integration: complete status=0"
       ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;

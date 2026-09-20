@@ -10,7 +10,7 @@ The manager uses installed OpenCode and never installs, upgrades, or downgrades
 it; set `SUPERPOWERS_OPENCODE` to select a non-default executable.
 
 OpenCode support covers the 1.x and 2.x lines, qualified in isolated containers
-against OpenCode 1.18.30 and `@opencode/cli` 2.0.10 respectively. Install and
+against OpenCode 1.18.30 and `@opencode/cli` 2.0.9 respectively. Install and
 update check the host major version and refuse other lines before mutation.
 
 Prepared output, the installed snapshot, and recovery material are separate
@@ -61,12 +61,16 @@ Linux container and covers registration, bootstrap and skill loading, snapshot
 refresh, and removal. macOS evidence covers the released command surface and
 focused unit behavior; it does not establish the same end-to-end lifecycle.
 
-The shipping qualification uses OpenCode 1.18.30 as UID 10001 in a read-only,
-network-disabled Linux container. The real manager and native OpenCode command
-proved experimental-source refusal before mutation, install of snapshot A,
+The shipping qualification runs OpenCode 1.18.30 and `@opencode/cli` 2.0.9 as
+separate lanes under UID 10001 in a read-only, network-disabled Linux container.
+On both lines, the real manager and native OpenCode command prove
+experimental-source refusal before mutation, registration of snapshot A,
 continued activation of A after preparing B, update to B in a fresh native
 process, a byte-stable probe with no native invocation, exact registration and
 snapshot removal, and an idempotent second removal. Each active observation
-loaded the upstream bootstrap and returned the installed snapshot marker through
-OpenCode's native skill tool. The packaged OpenCode JSONC read/removal path and
-its bundled parser also execute under the declared minimum Node 24.0.0 runtime.
+loads the upstream bootstrap and returns the installed snapshot's skill marker
+through OpenCode's native skill tool. The V2 lane registers through a
+manager-written `plugins` entry and never invokes the native installer. Native
+V2 observations use `opencode run --standalone`, giving each run a private
+server. The packaged OpenCode JSONC read/removal path and its bundled parser
+also execute under the declared minimum Node 24.0.0 runtime.

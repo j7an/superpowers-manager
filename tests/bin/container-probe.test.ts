@@ -745,6 +745,7 @@ void test("OpenCode native fixture helper materializes licensed phases", (t) => 
       "bootstrap.js.txt",
       ".opencode/plugins/superpowers.js",
     ],
+    [OPENCODE_FIXTURE_SOURCE, "entrypoint.js.txt", "index.js"],
     [PI_FIXTURE_SOURCE, "package.json.txt", "package.json"],
     [PI_FIXTURE_SOURCE, "SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
     [PI_FIXTURE_SOURCE, "LICENSE.txt", "LICENSE"],

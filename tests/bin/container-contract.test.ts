@@ -277,7 +277,20 @@ void test("container contract", async (t) => {
         '#!/bin/sh\n[ "${1:-}" = "-u" ] || exit 99\nprintf "%s\\n" "${SPW_FIXTURE_UID:-10001}"\n',
       );
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
-      const child = `#!/bin/sh\nset -eu\ncase "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac\nprintf '%s\\n' "$name" >> "$SPW_RUNNER_LOG"\n[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17\n`;
+      const child = `#!/bin/sh
+set -eu
+case "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac
+label=$name
+if [ "$name" = opencode ]; then
+  case "$SPW_OPENCODE_MAJOR:$SPW_OPENCODE_BIN" in
+    1:/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe) label=opencode-v1 ;;
+    2:/opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe) label=opencode-v2 ;;
+    *) exit 98 ;;
+  esac
+fi
+printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
+[ "\${SPW_FAIL_CHILD:-}" != "$name" ] || exit 17
+`;
       const paths = [
         join(scratch, "tests/run.sh"),
         join(container, "codex/offline-probe.sh"),
@@ -308,14 +321,20 @@ void test("container contract", async (t) => {
         );
       };
       for (const [mode, logText] of [
-        ["suite", "shared\ncodex\npi\nopencode\n"],
+        ["suite", "shared\ncodex\npi\nopencode-v1\nopencode-v2\n"],
         ["harness-codex", "codex\n"],
         ["harness-pi", "pi\n"],
-        ["harness-opencode", "opencode\n"],
+        ["harness-opencode", "opencode-v1\nopencode-v2\n"],
       ] as const) {
         const result = run(mode);
         assert.equal(result.status, 0, result.stderr);
         assert.equal(readFileSync(log, "utf8"), logText);
+        if (mode === "suite" || mode === "harness-opencode")
+          for (const lane of ["V1", "V2"])
+            assert.match(
+              result.stdout,
+              new RegExp(`container: OpenCode ${lane} lane: complete status=0`),
+            );
       }
       for (const [failedChild, expected, forbiddenCompletions] of [
         [
@@ -347,8 +366,12 @@ void test("container contract", async (t) => {
         ],
         [
           "opencode",
-          "shared\ncodex\npi\nopencode\n",
-          ["container suite: OpenCode harness integration: complete status=0"],
+          "shared\ncodex\npi\nopencode-v1\n",
+          [
+            "container: OpenCode V1 lane: complete status=0",
+            "container: OpenCode V2 lane: start",
+            "container suite: OpenCode harness integration: complete status=0",
+          ],
         ],
       ] as const) {
         const result = run("suite", { SPW_FAIL_CHILD: failedChild });

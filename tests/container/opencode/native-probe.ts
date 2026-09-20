@@ -27,6 +27,9 @@ const FIXTURE_PROMPT = "Complete the qualification.";
 const TOOL_CALL_ID = "fixture-skill";
 const CONFIG_SEED = "/opt/spw-opencode-config-seed";
 const CACHE_SEED = "/opt/spw-opencode-cache-seed";
+const CONFIG_KEY =
+  process.env.SPW_OPENCODE_MAJOR === "2" ? "plugins" : "plugin";
+const LOG_LEVEL = process.env.SPW_OPENCODE_MAJOR === "2" ? "debug" : "DEBUG";
 const markers = { A: "SNAPSHOT_A", B: "SNAPSHOT_B" } as const;
 type Marker = keyof typeof markers | "absent";
 
@@ -168,7 +171,7 @@ function registrations(env: NodeJS.ProcessEnv): {
 } {
   const file = globalConfig(env);
   if (!file) return { values: [] };
-  const plugin = parseConfig(file).plugin;
+  const plugin = parseConfig(file)[CONFIG_KEY];
   if (plugin === undefined) return { file, values: [] };
   check(Array.isArray(plugin), "native plugin config is not an array");
   const values = plugin.map((entry) => {
@@ -353,7 +356,11 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
                 type: "function",
                 function: {
                   name: "skill",
-                  arguments: JSON.stringify({ name: SKILL }),
+                  arguments: JSON.stringify(
+                    process.env.SPW_OPENCODE_MAJOR === "2"
+                      ? { id: SKILL }
+                      : { name: SKILL },
+                  ),
                 },
               },
             ],
@@ -406,8 +413,9 @@ async function observe(installedRoot: string, expected: Marker): Promise<void> {
         [
           "--print-logs",
           "--log-level",
-          "DEBUG",
+          LOG_LEVEL,
           "run",
+          ...(process.env.SPW_OPENCODE_MAJOR === "2" ? ["--standalone"] : []),
           "--model",
           "fixture/probe",
           "--title",
@@ -496,6 +504,7 @@ function materialize(packageRoot: string, marker: "A" | "B"): void {
   mkdirSync(join(packageRoot, "skills/snapshot-probe"), { recursive: true });
   for (const [source, target] of [
     ["opencode-native/bootstrap.js.txt", ".opencode/plugins/superpowers.js"],
+    ["opencode-native/entrypoint.js.txt", "index.js"],
     ["pi-native/package.json.txt", "package.json"],
     ["pi-native/SKILL.md.txt", "skills/using-superpowers/SKILL.md"],
     ["pi-native/LICENSE.txt", "LICENSE"],
