@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { readArtifactFile } from "../../artifact-tree.ts";
 import {
   inspectionFailure,
   successResult,
@@ -45,6 +46,13 @@ import {
 
 export const CLAUDE_CODE_MARKETPLACE = "superpowers-manager";
 export const CLAUDE_CODE_PLUGIN_ID = "superpowers@superpowers-manager";
+export const CLAUDE_CODE_MARKETPLACE_BYTES = Buffer.from(
+  JSON.stringify({
+    name: CLAUDE_CODE_MARKETPLACE,
+    owner: { name: CLAUDE_CODE_MARKETPLACE },
+    plugins: [{ name: "superpowers", source: "./plugins/superpowers" }],
+  }) + "\n",
+);
 const SYNCED_ID = "superpowers@synced";
 const DISPLAYABLE_ID = /^superpowers@[A-Za-z0-9][A-Za-z0-9._-]{0,200}$/;
 
@@ -105,6 +113,66 @@ export function managerPlugin(
   return entries[0];
 }
 
+// An unregistered directory is removable only when every entry is part of
+// the Manager's marketplace layout. Empty known directories are safe crash
+// residue; a present snapshot must have a valid Manager receipt and digest.
+export async function inspectClaudeCodeMarketplaceStorage(
+  paths: ClaudeCodePaths,
+): Promise<"absent" | "owned" | "recovery" | "unverified"> {
+  const rootKind = await classifyPathNoFollow(paths.marketplaceRoot);
+  if (rootKind === "missing") return "absent";
+  if (rootKind !== "directory") return "unverified";
+  try {
+    await assertClaudeCodeStorageSafe(paths);
+    // Probe must present recovery before judging a crash leftover's contents.
+    // Mutation paths still refuse these siblings before any native call.
+    if ((await leftoverPublicationMaterial(paths)).length > 0)
+      return "recovery";
+    const known = (entries: string[], allowed: readonly string[]) =>
+      entries.every((entry) => allowed.includes(entry));
+    if (
+      !known(await readdir(paths.marketplaceRoot), [
+        ".claude-plugin",
+        "plugins",
+      ])
+    )
+      return "unverified";
+    const metadataRoot = join(paths.marketplaceRoot, ".claude-plugin");
+    if ((await classifyPathNoFollow(metadataRoot)) !== "missing") {
+      if (!known(await readdir(metadataRoot), ["marketplace.json"]))
+        return "unverified";
+    }
+    const manifestKind = await classifyPathNoFollow(paths.marketplaceManifest);
+    if (manifestKind !== "missing") {
+      if (
+        manifestKind !== "regular-file" ||
+        !(
+          await readArtifactFile(
+            paths.marketplaceRoot,
+            paths.marketplaceManifest,
+            CLAUDE_CODE_MARKETPLACE_BYTES.length,
+          )
+        ).equals(CLAUDE_CODE_MARKETPLACE_BYTES)
+      )
+        return "unverified";
+    }
+    if ((await classifyPathNoFollow(paths.pluginsRoot)) !== "missing") {
+      if (!known(await readdir(paths.pluginsRoot), ["superpowers"]))
+        return "unverified";
+      if ((await classifyPathNoFollow(paths.pluginRoot)) !== "missing") {
+        const snapshot = await observeSnapshot<ClaudeCodeReceipt>(
+          paths.pluginRoot,
+          readClaudeCodeReceipt,
+        );
+        if (snapshot.kind !== "owned") return "unverified";
+      }
+    }
+    return "owned";
+  } catch {
+    return "unverified";
+  }
+}
+
 // A synced copy is reported as not loaded whenever another origin provides the
 // same name, so it never duplicates the Manager plugin.
 function conflicts(native: ClaudeCodeNativeState): string[] {
@@ -135,6 +203,12 @@ async function observeFacts(
     observeSnapshot<ClaudeCodeReceipt>(paths.pluginRoot, readClaudeCodeReceipt),
     classifyPathNoFollow(paths.marketplaceRoot),
   ]);
+  if (
+    registration === "absent" &&
+    marketplaceKind !== "missing" &&
+    (await inspectClaudeCodeMarketplaceStorage(paths)) === "unverified"
+  )
+    throw new Error("unverified Claude Code marketplace storage");
   return {
     paths,
     registration,

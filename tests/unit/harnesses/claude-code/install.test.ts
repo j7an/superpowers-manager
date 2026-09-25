@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { rename } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { beginDirectoryPublication } from "../../../../src/atomic.ts";
 import {
@@ -17,7 +17,10 @@ import {
   removeClaudeCode,
 } from "../../../../src/harnesses/claude-code/install.ts";
 import { readClaudeCodeReceipt } from "../../../../src/harnesses/claude-code/prepare.ts";
-import { inspectClaudeCodeInstalled } from "../../../../src/harnesses/claude-code/state.ts";
+import {
+  inspectClaudeCodeInstalled,
+  inspectClaudeCodeOwnership,
+} from "../../../../src/harnesses/claude-code/state.ts";
 import {
   claudeCodeSandbox,
   prepareClaudeCodeArtifact,
@@ -170,6 +173,46 @@ void test("failed first install preserves a preexisting marketplace directory", 
   const result = await installClaudeCode(artifact, sandbox.ctx, deps(fake));
   assert.equal(result.outcome.ok, false);
   assert.equal(readFileSync(sentinel, "utf8"), "existing content\n");
+});
+
+void test("failed install restores a preexisting manifest and removes only created entries", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  fake.failOn = "plugin install";
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  mkdirSync(dirname(sandbox.paths.marketplaceManifest), { recursive: true });
+  const original = Buffer.from(
+    '{"name":"superpowers-manager","note":"prior"}\n',
+  );
+  writeFileSync(sandbox.paths.marketplaceManifest, original);
+  const sentinel = join(sandbox.paths.marketplaceRoot, "keep.txt");
+  writeFileSync(sentinel, "keep\n");
+  fake.marketplaces.push({
+    name: "superpowers-manager",
+    source: "directory",
+    path: sandbox.paths.marketplaceRoot,
+  });
+  let sawReplacedManifestAtNativeInstall = false;
+  const run: typeof fake.run = async (args, ctx) => {
+    if (args.join(" ").startsWith("plugin install ")) {
+      assert.deepEqual(
+        readFileSync(sandbox.paths.marketplaceManifest),
+        CLAUDE_CODE_MARKETPLACE_BYTES,
+      );
+      sawReplacedManifestAtNativeInstall = true;
+    }
+    return await fake.run(args, ctx);
+  };
+  const result = await installClaudeCode(artifact, sandbox.ctx, {
+    run,
+    beginPublication: beginDirectoryPublication,
+  });
+  assert.equal(result.outcome.ok, false);
+  assert.equal(sawReplacedManifestAtNativeInstall, true);
+  assert.deepEqual(readFileSync(sandbox.paths.marketplaceManifest), original);
+  assert.equal(existsSync(sandbox.paths.pluginsRoot), false);
+  assert.equal(readFileSync(sentinel, "utf8"), "keep\n");
+  assert.equal(fake.marketplaces.length, 1);
 });
 
 void test("install refuses a foreign marketplace before any mutation", async (t) => {
@@ -411,4 +454,69 @@ void test("removal refuses a foreign marketplace", async (t) => {
     result.outcome.error?.message ?? "",
     /refusing to remove a foreign/,
   );
+});
+
+void test("unregistered unrelated marketplace storage is refused and preserved", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  mkdirSync(sandbox.paths.marketplaceRoot, { recursive: true });
+  const sentinel = join(sandbox.paths.marketplaceRoot, "unrelated.txt");
+  writeFileSync(sentinel, "leave this alone\n");
+  const ownership = await inspectClaudeCodeOwnership(sandbox.ctx, fake.run);
+  const removal = await removeClaudeCode(
+    { registration: "absent", pluginInstalled: false, published: true },
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(ownership.outcome.ok, false);
+  assert.equal(removal.outcome.ok, false);
+  assert.deepEqual(mutationCalls(fake), []);
+  assert.equal(readFileSync(sentinel, "utf8"), "leave this alone\n");
+});
+
+void test("unregistered Manager snapshot with an unrelated entry is preserved", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  await (await install(sandbox, fake, artifact)).finalize();
+  fake.marketplaces = [];
+  fake.plugins = [];
+  const sentinel = join(sandbox.paths.marketplaceRoot, "unrelated.txt");
+  writeFileSync(sentinel, "leave this alone\n");
+  fake.calls.length = 0;
+  const ownership = await inspectClaudeCodeOwnership(sandbox.ctx, fake.run);
+  const removal = await removeClaudeCode(
+    { registration: "absent", pluginInstalled: false, published: true },
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(ownership.outcome.ok, false);
+  assert.equal(removal.outcome.ok, false);
+  assert.deepEqual(mutationCalls(fake), []);
+  assert.equal(readFileSync(sentinel, "utf8"), "leave this alone\n");
+  assert.equal(existsSync(sandbox.paths.pluginRoot), true);
+});
+
+void test("unregistered Manager snapshot residue is removed on retry", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  await (await install(sandbox, fake, artifact)).finalize();
+  fake.marketplaces = [];
+  fake.plugins = [];
+  const ownership = await inspectClaudeCodeOwnership(sandbox.ctx, fake.run);
+  assert.equal(ownership.outcome.ok, true);
+  assert.deepEqual(ownership.outcome.result?.removalInput, {
+    registration: "absent",
+    pluginInstalled: false,
+    published: true,
+  });
+  const removal = await removeClaudeCode(
+    ownership.outcome.result!.removalInput,
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(removal.outcome.ok, true);
+  assert.equal(existsSync(sandbox.paths.marketplaceRoot), false);
+  assert.equal(existsSync(sandbox.paths.preparedRoot), true);
 });
