@@ -3,9 +3,9 @@
 ## Repository Purpose
 
 This repository is an npm/npx manager that turns upstream Superpowers releases
-into a locally installable Codex plugin marketplace or a persistent Pi or
-OpenCode package snapshot. References to Codex, Pi, or OpenCode below describe
-product integrations, not a required agent harness.
+into a locally installable Codex plugin marketplace or a persistent Pi,
+OpenCode, or Claude Code snapshot. References to Codex, Pi, OpenCode, or Claude
+Code below describe product integrations, not a required agent harness.
 
 ## Source and Generated-File Boundaries
 
@@ -143,6 +143,7 @@ product integrations, not a required agent harness.
   pnpm run test:harness:codex
   pnpm run test:harness:pi
   pnpm run test:harness:opencode
+  pnpm run test:harness:claude-code
   pnpm run test:acceptance
   ```
 
@@ -206,18 +207,19 @@ product integrations, not a required agent harness.
 - Release validation is the deliberate combined-path exception: validate with
   `sh tests/container.sh`, which the release workflow runs before the
   publisher. The combined image uses latest Node 24, runs shared checks,
-  then Codex, Pi, and OpenCode. It also runs the installed package on Node
+  then Codex, Pi, OpenCode, and Claude Code. It also runs the installed package on Node
   24.0.0 through its verified `SPW_PACKAGE_NODE` binary, declared by
   `SPW_PACKAGE_NODE_VERSION`. The minimum binary never runs TypeScript tooling.
 - Keep Layers 1-3 hermetic: no network access and no mutation of the developer's
-  or runner's real Codex, Pi, or OpenCode state.
+  or runner's real Codex, Pi, OpenCode, or Claude Code state.
 - Layer 4 lives behind the blocking `pnpm run test:harness:codex`,
-  `pnpm run test:harness:pi`, and `pnpm run test:harness:opencode` scripts. Each
+  `pnpm run test:harness:pi`, `pnpm run test:harness:opencode`, and
+  `pnpm run test:harness:claude-code` scripts. Each
   exercises only its named real CLI inside an isolated container home with
   networking disabled, so it may mutate
   throwaway container state but never the developer's or runner's real harness
   state. `pnpm run test:acceptance` runs shared checks once, then
-  Codex, Pi, and OpenCode.
+  Codex, Pi, OpenCode, and Claude Code.
 - Use `tests/manual/codex/behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the
