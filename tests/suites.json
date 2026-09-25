@@ -181,6 +181,14 @@
       "path": "tests/unit/harnesses/opencode/harness.test.ts",
       "group": "integration"
     },
+    {
+      "path": "tests/unit/harnesses/claude-code/paths.test.ts",
+      "group": "unit"
+    },
+    {
+      "path": "tests/unit/harnesses/claude-code/prepare.test.ts",
+      "group": "unit"
+    },
     { "path": "tests/unit/upstream-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/pi/settings.test.ts", "group": "unit" },
     { "path": "tests/unit/provenance.test.ts", "group": "unit" },

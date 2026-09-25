@@ -8,7 +8,7 @@ import {
 import { SEMVER_RE } from "./domain/refs.ts";
 import type { Captured, ValidatorRun } from "./validator.ts";
 
-type Label = "Pi" | "OpenCode";
+type Label = "Pi" | "OpenCode" | "Claude Code";
 
 export interface NativeCommandOutput {
   readonly stdout: string;
@@ -32,7 +32,7 @@ export function nativeCommandResult(
   label: Label,
   result: ValidatorRun,
 ): AdapterResult<NativeCommandOutput> {
-  const operation = `${label.toLowerCase()}-command`;
+  const operation = `${label.toLowerCase().replaceAll(" ", "-")}-command`;
   if (result.kind === "launchFailed") {
     const errno = /^[A-Z][A-Z0-9_]*$/u.test(result.errno)
       ? result.errno
@@ -96,7 +96,7 @@ export function normalizeSnapshotRuntimeVersion(
 ): AdapterResult<string> {
   if (!result.outcome.ok)
     return { status: result.status, outcome: result.outcome };
-  const operation = `${label.toLowerCase()}-runtime`;
+  const operation = `${label.toLowerCase().replaceAll(" ", "-")}-runtime`;
   if (result.status !== 0)
     return failureResult(
       operation,
