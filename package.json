@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.8.0",
-  "description": "Install obra/superpowers directly from upstream for Codex, Pi, and OpenCode. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
+  "description": "Install obra/superpowers directly from upstream for Codex, Pi, OpenCode, and Claude Code. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -18,6 +18,8 @@
     "pi",
     "pi-coding-agent",
     "opencode",
+    "claude-code",
+    "claude-code-plugin",
     "version-pinning"
   ],
   "license": "MIT",
@@ -34,6 +36,7 @@
     "test:harness:codex": "sh tests/container.sh harness-codex",
     "test:harness:pi": "sh tests/container.sh harness-pi",
     "test:harness:opencode": "sh tests/container.sh harness-opencode",
+    "test:harness:claude-code": "sh tests/container.sh harness-claude-code",
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip",
     "check": "pnpm run check:static && pnpm run test",

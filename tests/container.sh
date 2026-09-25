@@ -42,6 +42,9 @@ if [ "${1:-}" = "--inside" ]; then
       echo "container suite: OpenCode harness integration: start"
       run_opencode_lines
       echo "container suite: OpenCode harness integration: complete status=0"
+      echo "container suite: Claude Code harness integration: start"
+      sh tests/container/claude-code/offline-probe.sh
+      echo "container suite: Claude Code harness integration: complete status=0"
       ;;
     harness-codex)
       echo "container: Codex harness integration: start"
@@ -58,13 +61,18 @@ if [ "${1:-}" = "--inside" ]; then
       run_opencode_lines
       echo "container: OpenCode harness integration: complete status=0"
       ;;
+    harness-claude-code)
+      echo "container: Claude Code harness integration: start"
+      sh tests/container/claude-code/offline-probe.sh
+      echo "container: Claude Code harness integration: complete status=0"
+      ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
 mode="${1:-suite}"
-case "$mode" in suite|harness-codex|harness-pi|harness-opencode) ;; *) echo "usage: tests/container.sh [suite|harness-codex|harness-pi|harness-opencode]" >&2; exit 2 ;; esac
+case "$mode" in suite|harness-codex|harness-pi|harness-opencode|harness-claude-code) ;; *) echo "usage: tests/container.sh [suite|harness-codex|harness-pi|harness-opencode|harness-claude-code]" >&2; exit 2 ;; esac
 
 image="superpowers-manager-test"
 

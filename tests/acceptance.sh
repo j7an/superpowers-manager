@@ -14,3 +14,6 @@ echo "acceptance: Pi harness integration: complete status=0"
 echo "acceptance: OpenCode harness integration: start"
 sh "$root/tests/container.sh" harness-opencode
 echo "acceptance: OpenCode harness integration: complete status=0"
+echo "acceptance: Claude Code harness integration: start"
+sh "$root/tests/container.sh" harness-claude-code
+echo "acceptance: Claude Code harness integration: complete status=0"
