@@ -16,7 +16,10 @@ import {
   installClaudeCode,
   removeClaudeCode,
 } from "../../../../src/harnesses/claude-code/install.ts";
-import { readClaudeCodeReceipt } from "../../../../src/harnesses/claude-code/prepare.ts";
+import {
+  readClaudeCodeManifestVersion,
+  readClaudeCodeReceipt,
+} from "../../../../src/harnesses/claude-code/prepare.ts";
 import {
   inspectClaudeCodeInstalled,
   inspectClaudeCodeOwnership,
@@ -137,6 +140,71 @@ void test("rolling back an update restores the snapshot and reruns the version r
     first.artifact.identity,
   );
   assert.equal(fake.marketplaces.length, 1);
+});
+
+void test("rolling back a disabled update restores the disabled prior plugin and snapshot", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const first = await prepareClaudeCodeArtifact(t, sandbox, "A");
+  await (await install(sandbox, fake, first.artifact)).finalize();
+  fake.plugins[0]!.enabled = false;
+  fake.calls.length = 0;
+  const second = await prepareClaudeCodeArtifact(t, sandbox, "B");
+  const transaction = await install(sandbox, fake, second.artifact);
+  assert.deepEqual(mutationCalls(fake), [
+    `plugin enable ${ID} --scope user`,
+    `plugin update ${ID} --scope user`,
+  ]);
+  const installed = await inspectClaudeCodeInstalled(
+    second.selection,
+    sandbox.ctx,
+    fake.run,
+  );
+  assert.equal(installed.outcome.result?.kind, "current");
+  fake.calls.length = 0;
+  assert.equal((await transaction.rollback()).outcome.ok, true);
+  assert.deepEqual(mutationCalls(fake), [
+    `plugin disable ${ID} --scope user`,
+    `plugin update ${ID} --scope user`,
+  ]);
+  assert.equal(fake.plugins[0]?.enabled, false);
+  assert.equal(
+    fake.plugins[0]?.version,
+    await readClaudeCodeManifestVersion(sandbox.paths.pluginRoot),
+  );
+  assert.equal(
+    (await readClaudeCodeReceipt(sandbox.paths.pluginRoot)).digest,
+    first.artifact.identity,
+  );
+  const state = await inspectClaudeCodeInstalled(
+    first.selection,
+    sandbox.ctx,
+    fake.run,
+  );
+  assert.equal(state.outcome.result?.kind, "mismatch");
+});
+
+void test("rolling back a replacement that reinstalls a missing plugin retains the marketplace", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const first = await prepareClaudeCodeArtifact(t, sandbox, "A");
+  await (await install(sandbox, fake, first.artifact)).finalize();
+  fake.plugins = [];
+  fake.calls.length = 0;
+  const second = await prepareClaudeCodeArtifact(t, sandbox, "B");
+  const transaction = await install(sandbox, fake, second.artifact);
+  assert.deepEqual(mutationCalls(fake), [`plugin install ${ID} --scope user`]);
+  fake.calls.length = 0;
+  assert.equal((await transaction.rollback()).outcome.ok, true);
+  assert.deepEqual(mutationCalls(fake), [
+    `plugin uninstall ${ID} --scope user`,
+  ]);
+  assert.equal(fake.marketplaces.length, 1);
+  assert.deepEqual(fake.plugins, []);
+  assert.equal(
+    (await readClaudeCodeReceipt(sandbox.paths.pluginRoot)).digest,
+    first.artifact.identity,
+  );
 });
 
 void test("a failed native install restores prior state and leaves no staging material", async (t) => {
@@ -331,6 +399,69 @@ void test("removal deregisters through the marketplace, verifies, then deletes o
   ]);
   assert.equal(existsSync(sandbox.paths.marketplaceRoot), false);
   assert.equal(existsSync(sandbox.paths.preparedRoot), true);
+});
+
+void test("removal retains owned storage when Claude Code still lists a removed resource", async (t) => {
+  for (const retained of ["plugin", "marketplace"] as const) {
+    await t.test(`retained ${retained}`, async (t) => {
+      const sandbox = claudeCodeSandbox(t);
+      const fake = fakeClaude();
+      const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+      await (await install(sandbox, fake, artifact)).finalize();
+      const plugin = fake.plugins[0]!;
+      const marketplace = fake.marketplaces[0]!;
+      fake.calls.length = 0;
+      const run: typeof fake.run = async (args, ctx) => {
+        const result = await fake.run(args, ctx);
+        if (
+          args.join(" ") === "plugin marketplace remove superpowers-manager"
+        ) {
+          if (retained === "plugin") fake.plugins.push(plugin);
+          else fake.marketplaces.push(marketplace);
+        }
+        return result;
+      };
+      const result = await removeClaudeCode(
+        { registration: "owned", pluginInstalled: true, published: true },
+        sandbox.ctx,
+        { run, beginPublication: beginDirectoryPublication },
+      );
+      assert.equal(result.outcome.ok, false);
+      assert.equal(result.outcome.error?.code, "removal-unverified");
+      assert.deepEqual(mutationCalls(fake), [
+        "plugin marketplace remove superpowers-manager",
+      ]);
+      assert.equal(existsSync(sandbox.paths.marketplaceRoot), true);
+      assert.equal(
+        retained === "plugin" ? fake.plugins.length : fake.marketplaces.length,
+        1,
+      );
+      assert.equal(
+        (await readClaudeCodeReceipt(sandbox.paths.pluginRoot)).digest,
+        artifact.identity,
+      );
+    });
+  }
+});
+
+void test("removal uninstalls an unregistered plugin before deleting owned storage", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  await (await install(sandbox, fake, artifact)).finalize();
+  fake.marketplaces = [];
+  fake.calls.length = 0;
+  const result = await removeClaudeCode(
+    { registration: "absent", pluginInstalled: true, published: true },
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(result.outcome.ok, true);
+  assert.deepEqual(mutationCalls(fake), [
+    `plugin uninstall ${ID} --scope user`,
+  ]);
+  assert.deepEqual(fake.plugins, []);
+  assert.equal(existsSync(sandbox.paths.marketplaceRoot), false);
 });
 
 void test("removal reports cleanup pending when owned storage cannot be deleted after verified deregistration", async (t) => {
