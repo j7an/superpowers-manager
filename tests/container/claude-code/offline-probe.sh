@@ -104,9 +104,26 @@ claude_cli plugin details superpowers >"$root/details.out"
 grep -Fq snapshot-probe "$root/details.out" || fail "Claude Code did not load snapshot B"
 
 run_manager uninstall --harness claude-code
-if claude_cli plugin list --json | grep -Fq 'superpowers@superpowers-manager'; then
-  fail "plugin still listed after uninstall"
-fi
+claude_cli plugin list --json >"$root/after-uninstall.json"
+node -e '
+  const fs = require("node:fs");
+  let entries;
+  try {
+    entries = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  } catch {
+    console.error("error: malformed Claude Code plugin listing after uninstall");
+    process.exit(1);
+  }
+  if (!Array.isArray(entries) || entries.some((entry) =>
+    !entry || typeof entry !== "object" || Array.isArray(entry) || typeof entry.id !== "string")) {
+    console.error("error: malformed Claude Code plugin listing after uninstall");
+    process.exit(1);
+  }
+  if (entries.some((entry) => entry.id === "superpowers@superpowers-manager")) {
+    console.error("error: plugin still listed after uninstall");
+    process.exit(1);
+  }
+' "$root/after-uninstall.json"
 test ! -e "$marketplace" || fail "marketplace directory remains after uninstall"
 run_manager uninstall --harness claude-code >"$root/noop.out"
 grep -Fxq "No managed Superpowers Claude Code installation is present." "$root/noop.out" \
