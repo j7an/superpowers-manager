@@ -128,16 +128,16 @@ The installed package requires Node >=24. Native source, tests, and packaging to
 
 <!-- requirements:begin -->
 
-| Command        | git | Codex CLI (default) | Pi CLI (`--harness pi`) | OpenCode CLI (`--harness opencode`) |
-| -------------- | --- | ------------------- | ----------------------- | ----------------------------------- |
-| `pin`          | yes | no                  | no                      | no                                  |
-| `track-latest` | no  | no                  | no                      | no                                  |
-| `unpin`        | no  | no                  | no                      | no                                  |
-| `prepare`      | yes | no                  | no                      | no                                  |
-| `probe`        | yes | yes                 | no                      | no                                  |
-| `install`      | yes | yes                 | yes                     | yes                                 |
-| `update`       | yes | yes                 | yes                     | yes                                 |
-| `uninstall`    | no  | yes                 | yes                     | no                                  |
+| Command        | git | Codex CLI (default) | Pi CLI (`--harness pi`) | OpenCode CLI (`--harness opencode`) | Claude Code CLI (`--harness claude-code`) |
+| -------------- | --- | ------------------- | ----------------------- | ----------------------------------- | ----------------------------------------- |
+| `pin`          | yes | no                  | no                      | no                                  | no                                        |
+| `track-latest` | no  | no                  | no                      | no                                  | no                                        |
+| `unpin`        | no  | no                  | no                      | no                                  | no                                        |
+| `prepare`      | yes | no                  | no                      | no                                  | no                                        |
+| `probe`        | yes | yes                 | no                      | no                                  | yes                                       |
+| `install`      | yes | yes                 | yes                     | yes                                 | yes                                       |
+| `update`       | yes | yes                 | yes                     | yes                                 | yes                                       |
+| `uninstall`    | no  | yes                 | yes                     | no                                  | yes                                       |
 
 <!-- requirements:end -->
 

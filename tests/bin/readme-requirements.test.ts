@@ -9,13 +9,14 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 import { requirementsFor } from "../../src/cli.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
+import { claudeCodeHarness } from "../../src/harnesses/claude-code/harness.ts";
 import { piHarness } from "../../src/harnesses/pi/harness.ts";
 import { openCodeHarness } from "../../src/harnesses/opencode/harness.ts";
 import type { HarnessCommand } from "../../src/harness.ts";
 
 const BEGIN = "<!-- requirements:begin -->";
 const END = "<!-- requirements:end -->";
-type HarnessName = "codex" | "pi" | "opencode";
+type HarnessName = "codex" | "pi" | "opencode" | "claude-code";
 
 const COMMANDS = {
   pin: true,
@@ -34,6 +35,7 @@ const TOOL_COLUMNS = [
   ["Codex CLI (default)", "codex", "codex"],
   ["Pi CLI (`--harness pi`)", "pi", "pi"],
   ["OpenCode CLI (`--harness opencode`)", "opencode", "opencode"],
+  ["Claude Code CLI (`--harness claude-code`)", "claude-code", "claude"],
 ] as const satisfies readonly (readonly [string, HarnessName, string])[];
 const COLUMNS = TOOL_COLUMNS.map(([column]) => column);
 
@@ -47,6 +49,9 @@ function derive(): Record<string, string>[] {
         (requirement) => requirement.name,
       ),
       opencode: requirementsFor(command, {}, openCodeHarness).map(
+        (requirement) => requirement.name,
+      ),
+      "claude-code": requirementsFor(command, {}, claudeCodeHarness).map(
         (requirement) => requirement.name,
       ),
     };
