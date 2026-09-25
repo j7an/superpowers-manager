@@ -772,6 +772,7 @@ for (const selected of HARNESSES) {
     assert.deepEqual(readLog(fixture.c.codexLog), []);
     assert.deepEqual(readLog(fixture.piLog), []);
     assert.deepEqual(readLog(join(fixture.c.state, "opencode.log")), []);
+    assert.deepEqual(readLog(join(fixture.c.state, "claude.log")), []);
     assert.deepEqual(readLog(fixture.c.adapterLog), []);
   });
 }
