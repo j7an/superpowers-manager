@@ -20,7 +20,7 @@ const OFFICIAL_SOURCES = new Set([
 export interface SnapshotReceiptIdentity {
   readonly schema: 1;
   readonly manager: "superpowers-manager";
-  readonly harness: "pi" | "opencode";
+  readonly harness: "pi" | "opencode" | "claude-code";
   readonly source: string;
   readonly commit: string;
   readonly digest: string;

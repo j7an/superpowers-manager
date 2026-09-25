@@ -107,7 +107,7 @@ Target one invocation (default: codex; selection commands are shared):
   install --harness opencode [--allow-experimental]
   update --harness opencode [--allow-experimental]
   uninstall --harness opencode
-  --harness=codex, --harness=pi, and --harness=opencode are also accepted after the command.
+  --harness=codex, --harness=pi, --harness=opencode, and --harness=claude-code are also accepted after the command.
 
 Environment overrides (used by in-process commands): SUPERPOWERS_REF,
 SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,
@@ -115,7 +115,7 @@ SUPERPOWERS_CONFIG_DIR, XDG_CONFIG_HOME,
 SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,
 SUPERPOWERS_VALIDATOR_EXECUTABLE,
 SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE,
-SUPERPOWERS_OPENCODE
+SUPERPOWERS_OPENCODE, SUPERPOWERS_CLAUDE_CODE, CLAUDE_CONFIG_DIR
 
 SUPERPOWERS_VALIDATOR is removed; unset it and use
 SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.

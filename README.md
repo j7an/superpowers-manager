@@ -1,6 +1,6 @@
 # Superpowers Manager
 
-Install [`obra/superpowers`](https://github.com/obra/superpowers) directly from upstream for Codex, the Pi coding agent, and OpenCode. Stay on a known-good release or commit, try a branch, and upgrade when you choose—without waiting for a marketplace copy to catch up.
+Install [`obra/superpowers`](https://github.com/obra/superpowers) directly from upstream for Codex, the Pi coding agent, OpenCode, and Claude Code. Stay on a known-good release or commit, try a branch, and upgrade when you choose—without waiting for a marketplace copy to catch up.
 
 > Unofficial community integration. Not affiliated with the `obra/superpowers` maintainers.
 
@@ -21,7 +21,7 @@ npx superpowers-manager pin v6.1.1
 npx superpowers-manager install --harness codex
 ```
 
-Use `--harness pi` for Pi or `--harness opencode` for OpenCode. The pin is shared by all harnesses, but each installation changes only when you run its `install` or `update` command. A saved pin keeps subsequent installs and updates on that version unless you change or override the selection.
+Use `--harness pi` for Pi, `--harness opencode` for OpenCode, or `--harness claude-code` for Claude Code. The pin is shared by all harnesses, but each installation changes only when you run its `install` or `update` command. A saved pin keeps subsequent installs and updates on that version unless you change or override the selection.
 
 To try a branch, replace `feature/foo` with an existing upstream branch:
 
@@ -42,7 +42,7 @@ See [version selection](https://github.com/j7an/superpowers-manager/blob/main/do
 
 ## Start with your agent
 
-The three harnesses share upstream selection, while each has independent prepared and installed state. Omitting `--harness` selects Codex.
+The four harnesses share upstream selection, while each has independent prepared and installed state. Omitting `--harness` selects Codex.
 
 ### Codex
 
@@ -84,6 +84,19 @@ OpenCode after a successful install, activating update, or removal. See the
 [OpenCode reference](https://github.com/j7an/superpowers-manager/blob/main/docs/opencode.md)
 for global configuration, conflicts, and recovery behavior.
 
+### Claude Code
+
+```sh
+npx superpowers-manager install --harness claude-code
+npx superpowers-manager probe --harness claude-code
+npx superpowers-manager update --harness claude-code
+```
+
+Claude Code installs a validated, Manager-owned local marketplace snapshot.
+Restart Claude Code or run `/reload-plugins` after an install, activating update,
+or removal. See the [Claude Code reference](https://github.com/j7an/superpowers-manager/blob/main/docs/claude-code.md)
+for conflicts, hooks, and recovery.
+
 To remove a Manager-owned installation, choose one harness explicitly:
 
 ### Uninstall Codex
@@ -104,23 +117,30 @@ npx superpowers-manager uninstall --harness pi
 npx superpowers-manager uninstall --harness opencode
 ```
 
+### Uninstall Claude Code
+
+```sh
+npx superpowers-manager uninstall --harness claude-code
+```
+
 The manager never removes another Superpowers provider. See the [ownership guidance](https://github.com/j7an/superpowers-manager/blob/main/docs/usage.md#provider-ownership) before switching providers.
 
 ## Shared selection and lifecycle
 
-The [selection commands above](#choose-what-you-run) save shared upstream intent. They do not activate Codex, Pi, or OpenCode; run the selected harness's `install` or `update` to apply that choice. `unpin` restores the packaged fallback policy.
+The [selection commands above](#choose-what-you-run) save shared upstream intent. They do not activate Codex, Pi, OpenCode, or Claude Code; run the selected harness's `install` or `update` to apply that choice. `unpin` restores the packaged fallback policy.
 
 See [targeted lifecycle commands](https://github.com/j7an/superpowers-manager/blob/main/docs/usage.md#targeted-lifecycle) for preparation, inspection, installation, updates, and removal.
 
-Use `--harness codex`, `--harness pi`, or `--harness opencode` with each targeted lifecycle command.
+Use `--harness codex`, `--harness pi`, `--harness opencode`, or `--harness claude-code` with each targeted lifecycle command.
 
 ```text
 shared selection -> prepare / inspect / activate Codex
                  -> prepare / inspect / activate Pi
                  -> prepare / inspect / activate OpenCode
+                 -> prepare / inspect / activate Claude Code
 ```
 
-The [usage reference](https://github.com/j7an/superpowers-manager/blob/main/docs/usage.md) covers version selection, precedence, offline behavior, `prepare`, validators, and every lifecycle command. The harness references cover [Codex registration and hooks](https://github.com/j7an/superpowers-manager/blob/main/docs/codex.md) and [Pi snapshots and recovery](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md).
+The [usage reference](https://github.com/j7an/superpowers-manager/blob/main/docs/usage.md) covers version selection, precedence, offline behavior, `prepare`, validators, and every lifecycle command. The harness references cover [Codex registration and hooks](https://github.com/j7an/superpowers-manager/blob/main/docs/codex.md), [Pi snapshots and recovery](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md), [OpenCode snapshots](https://github.com/j7an/superpowers-manager/blob/main/docs/opencode.md), and [Claude Code marketplace registration](https://github.com/j7an/superpowers-manager/blob/main/docs/claude-code.md).
 
 ## Requirements and platforms
 
@@ -128,16 +148,16 @@ The installed package requires Node >=24. Native source, tests, and packaging to
 
 <!-- requirements:begin -->
 
-| Command        | git | Codex CLI (default) | Pi CLI (`--harness pi`) | OpenCode CLI (`--harness opencode`) |
-| -------------- | --- | ------------------- | ----------------------- | ----------------------------------- |
-| `pin`          | yes | no                  | no                      | no                                  |
-| `track-latest` | no  | no                  | no                      | no                                  |
-| `unpin`        | no  | no                  | no                      | no                                  |
-| `prepare`      | yes | no                  | no                      | no                                  |
-| `probe`        | yes | yes                 | no                      | no                                  |
-| `install`      | yes | yes                 | yes                     | yes                                 |
-| `update`       | yes | yes                 | yes                     | yes                                 |
-| `uninstall`    | no  | yes                 | yes                     | no                                  |
+| Command        | git | Codex CLI (default) | Pi CLI (`--harness pi`) | OpenCode CLI (`--harness opencode`) | Claude Code CLI (`--harness claude-code`) |
+| -------------- | --- | ------------------- | ----------------------- | ----------------------------------- | ----------------------------------------- |
+| `pin`          | yes | no                  | no                      | no                                  | no                                        |
+| `track-latest` | no  | no                  | no                      | no                                  | no                                        |
+| `unpin`        | no  | no                  | no                      | no                                  | no                                        |
+| `prepare`      | yes | no                  | no                      | no                                  | no                                        |
+| `probe`        | yes | yes                 | no                      | no                                  | yes                                       |
+| `install`      | yes | yes                 | yes                     | yes                                 | yes                                       |
+| `update`       | yes | yes                 | yes                     | yes                                 | yes                                       |
+| `uninstall`    | no  | yes                 | yes                     | no                                  | yes                                       |
 
 <!-- requirements:end -->
 

@@ -30,7 +30,12 @@ export function extractHarnessOptions(
           : token.slice("--harness=".length);
       if (!value || value.startsWith("--"))
         throw new UsageError("option --harness requires a value");
-      if (value !== "codex" && value !== "pi" && value !== "opencode")
+      if (
+        value !== "codex" &&
+        value !== "pi" &&
+        value !== "opencode" &&
+        value !== "claude-code"
+      )
         throw new UsageError(`unknown harness: ${value}`);
       harness = value;
     } else if (token === "--allow-experimental") {

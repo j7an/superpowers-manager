@@ -28,10 +28,12 @@ WORKDIR /opt/spw-test-tools
 # absolute path so a lane can never silently run the other line's binary.
 RUN --network=none node /opt/spw-test-tools/node_modules/opencode-ai/postinstall.mjs \
     && node /opt/spw-test-tools/node_modules/@opencode/cli/postinstall.mjs \
+    && node /opt/spw-test-tools/node_modules/@anthropic-ai/claude-code/install.cjs \
     && /opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version \
     && /opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe --version \
     && ./node_modules/.bin/codex --version >/dev/null \
-    && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 ./node_modules/.bin/pi --version
+    && PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 ./node_modules/.bin/pi --version \
+    && CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 ./node_modules/.bin/claude --version >/dev/null
 RUN opencode_version=$(/opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe --version) \
     && mkdir -p /opt/spw-opencode-config-seed \
     && npm install --prefix /opt/spw-opencode-config-seed \
@@ -70,7 +72,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile \
     && chown -R root:root /workspace /opt/spw-test-tools /opt/node-min \
     && chmod a+r node_modules/.pnpm-workspace-state-v1.json \
-    && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh tests/container/opencode/offline-probe.sh
+    && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh tests/container/opencode/offline-probe.sh tests/container/claude-code/offline-probe.sh
 RUN mkdir -p /opt/spw-package \
     && node tests/tools/pack.ts --out-dir /opt/spw-package \
     && chmod -R a+rX /opt/spw-package

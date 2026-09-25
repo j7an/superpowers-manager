@@ -24,6 +24,10 @@ const toolPackage = join(ROOT, "tests/container/package.json");
 const lockfile = join(ROOT, "tests/container/pnpm-lock.yaml");
 const tsconfig = join(ROOT, "tests/tsconfig.json");
 const openCodeProbe = join(ROOT, "tests/container/opencode/offline-probe.sh");
+const claudeCodeProbe = join(
+  ROOT,
+  "tests/container/claude-code/offline-probe.sh",
+);
 
 function executable(path: string): boolean {
   try {
@@ -125,6 +129,7 @@ void test("container contract", async (t) => {
       assert.equal(pkg.packageManager, undefined);
       assert.equal(Object.keys(lock.importers).join(), ".");
       assert.deepEqual(Object.keys(pkg.dependencies).sort(), [
+        "@anthropic-ai/claude-code",
         "@earendil-works/pi-coding-agent",
         "@openai/codex",
         "@opencode/cli",
@@ -225,6 +230,18 @@ void test("container contract", async (t) => {
       assert.match(result.stderr, /isolated UID 10001 container/);
     },
   );
+  await t.test(
+    "Claude Code probe rejects host execution before lifecycle work",
+    () => {
+      assert.ok(executable(claudeCodeProbe));
+      const result = spawnSync("/bin/sh", [claudeCodeProbe], {
+        encoding: "utf8",
+        env: { PATH: "/usr/bin:/bin", SPW_CONTAINER: "0" },
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /isolated UID 10001 container/);
+    },
+  );
   await t.test("test tsconfig resolves NodeNext", () => {
     const config = effectiveTsconfig();
     assert.equal(String(config.module).toLowerCase(), "nodenext");
@@ -279,7 +296,7 @@ void test("container contract", async (t) => {
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
       const child = `#!/bin/sh
 set -eu
-case "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; *) name=shared ;; esac
+case "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; */claude-code/offline-probe.sh) name=claude-code ;; *) name=shared ;; esac
 label=$name
 if [ "$name" = opencode ]; then
   case "$SPW_OPENCODE_MAJOR:$SPW_OPENCODE_BIN" in
@@ -296,10 +313,12 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         join(container, "codex/offline-probe.sh"),
         join(container, "pi/offline-probe.sh"),
         join(container, "opencode/offline-probe.sh"),
+        join(container, "claude-code/offline-probe.sh"),
       ];
       mkdirSync(join(container, "codex"), { recursive: true });
       mkdirSync(join(container, "pi"), { recursive: true });
       mkdirSync(join(container, "opencode"), { recursive: true });
+      mkdirSync(join(container, "claude-code"), { recursive: true });
       for (const path of paths) writeFileSync(path, child);
       for (const path of [join(bin, "id"), join(bin, "docker"), ...paths])
         chmodSync(path, 0o755);
@@ -321,10 +340,11 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         );
       };
       for (const [mode, logText] of [
-        ["suite", "shared\ncodex\npi\nopencode-v1\nopencode-v2\n"],
+        ["suite", "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\n"],
         ["harness-codex", "codex\n"],
         ["harness-pi", "pi\n"],
         ["harness-opencode", "opencode-v1\nopencode-v2\n"],
+        ["harness-claude-code", "claude-code\n"],
       ] as const) {
         const result = run(mode);
         assert.equal(result.status, 0, result.stderr);
@@ -345,6 +365,7 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
             "container suite: Codex harness integration: complete status=0",
             "container suite: Pi harness integration: complete status=0",
             "container suite: OpenCode harness integration: complete status=0",
+            "container suite: Claude Code harness integration: complete status=0",
           ],
         ],
         [
@@ -354,6 +375,7 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
             "container suite: Codex harness integration: complete status=0",
             "container suite: Pi harness integration: complete status=0",
             "container suite: OpenCode harness integration: complete status=0",
+            "container suite: Claude Code harness integration: complete status=0",
           ],
         ],
         [
@@ -362,6 +384,7 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
           [
             "container suite: Pi harness integration: complete status=0",
             "container suite: OpenCode harness integration: complete status=0",
+            "container suite: Claude Code harness integration: complete status=0",
           ],
         ],
         [
@@ -371,6 +394,14 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
             "container: OpenCode V1 lane: complete status=0",
             "container: OpenCode V2 lane: start",
             "container suite: OpenCode harness integration: complete status=0",
+            "container suite: Claude Code harness integration: complete status=0",
+          ],
+        ],
+        [
+          "claude-code",
+          "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\n",
+          [
+            "container suite: Claude Code harness integration: complete status=0",
           ],
         ],
       ] as const) {

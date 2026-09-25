@@ -1,0 +1,7 @@
+{
+  "name": "superpowers",
+  "description": "Inert Claude Code test fixture",
+  "version": "6.4.1",
+  "keywords": ["fixture"],
+  "license": "MIT"
+}

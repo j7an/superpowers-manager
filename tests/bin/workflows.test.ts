@@ -239,6 +239,7 @@ const HARNESS_MATRIX = [
   { name: "Codex", selector: "harness-codex" },
   { name: "Pi", selector: "harness-pi" },
   { name: "OpenCode", selector: "harness-opencode" },
+  { name: "Claude Code", selector: "harness-claude-code" },
 ];
 
 function validateCiHarnessJob(document: unknown): void {
@@ -1112,11 +1113,16 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.match(manifest.description, /\bCodex\b/);
   assert.match(manifest.description, /\bPi\b/);
   assert.match(manifest.description, /\bOpenCode\b/);
+  assert.match(manifest.description, /\bClaude Code\b/);
 
   const keywords = manifest.keywords;
   assert.ok(
     keywords.includes("opencode"),
     "missing discovery keyword: opencode",
+  );
+  assert.ok(
+    keywords.includes("claude-code"),
+    "missing discovery keyword: claude-code",
   );
   assert.ok(Array.isArray(keywords), "package.json keywords must be an array");
   assert.equal(
@@ -1157,6 +1163,10 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.equal(
     manifest.scripts["test:harness:opencode"],
     "sh tests/container.sh harness-opencode",
+  );
+  assert.equal(
+    manifest.scripts["test:harness:claude-code"],
+    "sh tests/container.sh harness-claude-code",
   );
   assert.equal(manifest.scripts["test:acceptance"], "sh tests/acceptance.sh");
 });

@@ -30,14 +30,20 @@ interface Assessment {
 }
 
 interface Bindings {
-  readonly harness: "pi" | "opencode";
-  readonly label: "Pi" | "OpenCode";
+  readonly harness: "pi" | "opencode" | "claude-code";
+  readonly label: "Pi" | "OpenCode" | "Claude Code";
   readonly preparationLocation: (ctx: AdapterContext) => PreparationLocation;
   readonly assessCompatibility: (
     root: string,
     selection: Pick<EffectiveSelection, "effectiveSource">,
   ) => Promise<Compatibility>;
   readonly readAssessment: (root: string) => Promise<Assessment>;
+  // Runs after admission and before the digest, so the receipt covers the
+  // rewritten bytes. Only Claude Code passes it.
+  readonly rewrite?: (
+    root: string,
+    selection: EffectiveSelection,
+  ) => Promise<void>;
 }
 
 type Preparation = Pick<
@@ -75,6 +81,8 @@ export function createSnapshotPreparation(b: Bindings): Preparation {
             [],
             [],
           );
+        if (b.rewrite !== undefined)
+          await b.rewrite(input.candidateRoot, input.selection);
         const digest = await digestArtifactTree(input.candidateRoot);
         const identity: SnapshotReceiptIdentity = {
           schema: 1,
