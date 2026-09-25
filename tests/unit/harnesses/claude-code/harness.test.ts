@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { preflight } from "../../../../src/cli.ts";
 import { runProbe } from "../../../../src/commands/probe.ts";
 import type { ProbeSnapshot } from "../../../../src/harness.ts";
 import { claudeCodeHarness } from "../../../../src/harnesses/claude-code/harness.ts";
@@ -35,6 +36,24 @@ void test("Claude Code needs its CLI for probe, install, update, and uninstall o
       "./selected-claude",
     );
   }
+});
+
+void test("preflight escapes the configured Claude Code executable in its error", () => {
+  const executable = "/missing/claude\n\u001b[31m";
+  const env = { ...process.env, SUPERPOWERS_CLAUDE_CODE: executable };
+  const requirement = claudeCodeHarness.requirements("probe", env)[0];
+  assert.equal(requirement?.executable, executable);
+  const result = preflight("probe", env, process.platform, claudeCodeHarness);
+  assert.equal(result.ok, false);
+  if (result.ok)
+    return assert.fail("preflight unexpectedly accepted the missing CLI");
+  const message = result.errors.join("\n");
+  assert.equal(message.includes("\u001b"), false);
+  assert.equal(message.includes(executable), false);
+  assert.match(
+    message,
+    /required command not found: \/missing\/claude\\n\\x1b\[31m/,
+  );
 });
 
 void test("shared probe reports recovery required and names the leftover path", async (t) => {

@@ -72,6 +72,28 @@ void test("command-first harness options are removed before command arity checks
   });
 });
 
+void test("Claude Code harness accepts both selector forms on lifecycle commands", () => {
+  for (const command of [
+    "prepare",
+    "probe",
+    "install",
+    "update",
+    "uninstall",
+  ] as const) {
+    for (const target of [
+      ["--harness", "claude-code"],
+      ["--harness=claude-code"],
+    ]) {
+      assert.deepEqual(parseArgs([command, ...target]), {
+        kind: "run",
+        cmd: command,
+        args: [],
+        options: { harness: "claude-code", allowExperimental: false },
+      });
+    }
+  }
+});
+
 void test("shared install settles every transaction exit while retaining mutation ownership", async (t) => {
   for (const inspection of [
     "current",

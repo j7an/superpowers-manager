@@ -3,6 +3,7 @@ import type {
   HarnessCommand,
   ToolRequirement,
 } from "../../harness.ts";
+import { displayPath } from "../../validator.ts";
 import { installClaudeCode, removeClaudeCode } from "./install.ts";
 import { claudeCodePaths } from "./paths.ts";
 import {
@@ -37,7 +38,7 @@ function requirements(
       name: "claude",
       executable,
       lookup: "explicit-path-or-path",
-      missingMessage: `required command not found: ${executable} — install Claude Code or set SUPERPOWERS_CLAUDE_CODE`,
+      missingMessage: `required command not found: ${displayPath(executable)} — install Claude Code or set SUPERPOWERS_CLAUDE_CODE`,
     },
   ];
 }
