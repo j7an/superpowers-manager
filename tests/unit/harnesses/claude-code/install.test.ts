@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  writeFileSync,
 } from "node:fs";
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
@@ -114,6 +115,7 @@ void test("rolling back a first install removes the marketplace this invocation 
   assert.deepEqual(fake.marketplaces, []);
   assert.deepEqual(fake.plugins, []);
   assert.equal(existsSync(sandbox.paths.pluginRoot), false);
+  assert.equal(existsSync(sandbox.paths.marketplaceRoot), false);
   assert.deepEqual(siblings(sandbox), []);
 });
 
@@ -138,7 +140,7 @@ void test("a failed native install restores prior state and leaves no staging ma
   const sandbox = claudeCodeSandbox(t);
   const fake = fakeClaude();
   fake.failOn = "plugin install";
-  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  const { artifact, selection } = await prepareClaudeCodeArtifact(t, sandbox);
   const result = await installClaudeCode(artifact, sandbox.ctx, deps(fake));
   assert.equal(result.outcome.ok, false);
   assert.match(
@@ -147,7 +149,27 @@ void test("a failed native install restores prior state and leaves no staging ma
   );
   assert.deepEqual(fake.marketplaces, []);
   assert.equal(existsSync(sandbox.paths.pluginRoot), false);
+  assert.equal(existsSync(sandbox.paths.marketplaceRoot), false);
   assert.deepEqual(siblings(sandbox), []);
+  const state = await inspectClaudeCodeInstalled(
+    selection,
+    sandbox.ctx,
+    fake.run,
+  );
+  assert.equal(state.outcome.result?.kind, "absent");
+});
+
+void test("failed first install preserves a preexisting marketplace directory", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  fake.failOn = "plugin install";
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  mkdirSync(sandbox.paths.marketplaceRoot);
+  const sentinel = join(sandbox.paths.marketplaceRoot, "keep.txt");
+  writeFileSync(sentinel, "existing content\n");
+  const result = await installClaudeCode(artifact, sandbox.ctx, deps(fake));
+  assert.equal(result.outcome.ok, false);
+  assert.equal(readFileSync(sentinel, "utf8"), "existing content\n");
 });
 
 void test("install refuses a foreign marketplace before any mutation", async (t) => {
@@ -305,8 +327,63 @@ void test("removal refuses while leftover publication material exists and preser
   );
   assert.equal(result.outcome.ok, false);
   assert.equal(result.outcome.error?.code, "recovery-required");
-  assert.deepEqual(mutationCalls(fake), []);
+  assert.deepEqual(fake.calls, []);
   assert.equal(existsSync(leftover), true);
+  assert.equal(fake.marketplaces.length, 1);
+});
+
+void test("removal refuses when a previously owned marketplace becomes foreign", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  await (await install(sandbox, fake, artifact)).finalize();
+  fake.marketplaces[0] = { name: "superpowers-manager", source: "github" };
+  fake.calls.length = 0;
+  const result = await removeClaudeCode(
+    { registration: "owned", pluginInstalled: true, published: true },
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(result.outcome.ok, false);
+  assert.equal(result.outcome.error?.code, "foreign-marketplace");
+  assert.deepEqual(mutationCalls(fake), []);
+  assert.equal(existsSync(sandbox.paths.pluginRoot), true);
+  assert.equal(fake.marketplaces[0]?.source, "github");
+});
+
+void test("removal refuses stale absent input when the marketplace is now owned", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  await (await install(sandbox, fake, artifact)).finalize();
+  fake.calls.length = 0;
+  const result = await removeClaudeCode(
+    { registration: "absent", pluginInstalled: false, published: true },
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(result.outcome.ok, false);
+  assert.equal(result.outcome.error?.code, "stale-ownership");
+  assert.deepEqual(mutationCalls(fake), []);
+  assert.equal(existsSync(sandbox.paths.pluginRoot), true);
+  assert.equal(fake.marketplaces.length, 1);
+});
+
+void test("removal refuses uninspectable native state before mutation", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const fake = fakeClaude();
+  const { artifact } = await prepareClaudeCodeArtifact(t, sandbox);
+  await (await install(sandbox, fake, artifact)).finalize();
+  fake.calls.length = 0;
+  fake.failOn = "plugin list --json";
+  const result = await removeClaudeCode(
+    { registration: "owned", pluginInstalled: true, published: true },
+    sandbox.ctx,
+    deps(fake),
+  );
+  assert.equal(result.outcome.ok, false);
+  assert.deepEqual(mutationCalls(fake), []);
+  assert.equal(existsSync(sandbox.paths.pluginRoot), true);
   assert.equal(fake.marketplaces.length, 1);
 });
 
@@ -319,7 +396,7 @@ void test("removal of absent state issues no native mutation", async (t) => {
     deps(fake),
   );
   assert.equal(result.outcome.ok, true);
-  assert.deepEqual(fake.calls, []);
+  assert.deepEqual(mutationCalls(fake), []);
 });
 
 void test("removal refuses a foreign marketplace", async (t) => {

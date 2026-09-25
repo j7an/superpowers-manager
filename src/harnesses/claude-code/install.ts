@@ -1,4 +1,12 @@
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  rmdir,
+  unlink,
+} from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   failureResult,
@@ -12,7 +20,11 @@ import {
   type DirectoryPublication,
 } from "../../atomic.ts";
 import type { InstallReceipt, PreparedArtifact } from "../../harness.ts";
-import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
+import {
+  assertNoFollowType,
+  classifyPathNoFollow,
+  isErrno,
+} from "../../safe-path.ts";
 import { displayPath } from "../../validator.ts";
 import {
   readClaudeCodeState,
@@ -101,6 +113,33 @@ async function writeMarketplaceManifest(paths: ClaudeCodePaths): Promise<void> {
   });
 }
 
+// Only a marketplace directory created by this invocation may be removed on
+// rollback. Remove known empty parts individually so unexpected contents stay.
+async function removeCreatedMarketplace(paths: ClaudeCodePaths): Promise<void> {
+  const manifestKind = await classifyPathNoFollow(paths.marketplaceManifest);
+  if (manifestKind !== "missing") {
+    if (
+      manifestKind !== "regular-file" ||
+      !(await readFile(paths.marketplaceManifest)).equals(
+        CLAUDE_CODE_MARKETPLACE_BYTES,
+      )
+    )
+      throw new Error("Claude Code marketplace manifest changed");
+    await unlink(paths.marketplaceManifest);
+  }
+  for (const path of [
+    paths.pluginsRoot,
+    join(paths.marketplaceRoot, ".claude-plugin"),
+    paths.marketplaceRoot,
+  ]) {
+    try {
+      await rmdir(path);
+    } catch (cause) {
+      if (!isErrno(cause, "ENOENT")) throw cause;
+    }
+  }
+}
+
 // Undo native steps relative to what step 1 observed, after the snapshot has
 // already been restored so a rerun `plugin update` records the restored version.
 async function restoreNative(
@@ -171,6 +210,7 @@ export async function installClaudeCode(
   let publication: DirectoryPublication | undefined;
   let publicationAttempted = false;
   let refreshed = false;
+  let createdMarketplace = false;
   try {
     await assertClaudeCodeStorageSafe(paths);
     if (artifact.root !== paths.preparedRoot)
@@ -216,6 +256,14 @@ export async function installClaudeCode(
       );
     }
     start = observed;
+    if ((await classifyPathNoFollow(paths.marketplaceRoot)) === "missing") {
+      try {
+        await mkdir(paths.marketplaceRoot);
+        createdMarketplace = true;
+      } catch (cause) {
+        if (!isErrno(cause, "EEXIST")) throw cause;
+      }
+    }
     await mkdir(join(paths.marketplaceRoot, ".claude-plugin"), {
       recursive: true,
     });
@@ -307,6 +355,7 @@ export async function installClaudeCode(
               async () => {
                 await published.rollback();
                 await restoreNative(begun, wasRefreshed, paths, deps.run, ctx);
+                if (createdMarketplace) await removeCreatedMarketplace(paths);
               },
             ),
         },
@@ -342,7 +391,16 @@ export async function installClaudeCode(
         restored = false;
       }
     }
-    let recoveryPath = paths.pluginsRoot;
+    if (restored && createdMarketplace) {
+      try {
+        await removeCreatedMarketplace(paths);
+      } catch {
+        restored = false;
+      }
+    }
+    let recoveryPath = createdMarketplace
+      ? paths.marketplaceRoot
+      : paths.pluginsRoot;
     if (!restored) {
       try {
         const leftovers = await leftoverPublicationMaterial(paths);
@@ -392,6 +450,31 @@ export async function removeClaudeCode(
         operation,
         "recovery-required",
         `Claude Code recovery required; inspect and remove leftover publication material in ${displayPath(paths.pluginsRoot)} before uninstalling`,
+        [],
+        [],
+      );
+    const current = await readClaudeCodeState(ctx, deps.run);
+    const registration = await marketplaceRegistration(current, paths);
+    if (registration === "foreign")
+      return failureResult(
+        operation,
+        "foreign-marketplace",
+        `refusing to remove a foreign ${CLAUDE_CODE_MARKETPLACE} Claude Code marketplace; remove it manually`,
+        [],
+        [],
+      );
+    const pluginInstalled = managerPlugin(current) !== undefined;
+    const published =
+      (await classifyPathNoFollow(paths.marketplaceRoot)) !== "missing";
+    if (
+      registration !== input.registration ||
+      pluginInstalled !== input.pluginInstalled ||
+      published !== input.published
+    )
+      return failureResult(
+        operation,
+        "stale-ownership",
+        "Claude Code marketplace or plugin state changed before removal; inspect it and retry",
         [],
         [],
       );
