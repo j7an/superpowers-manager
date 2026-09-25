@@ -682,3 +682,43 @@ export function writeOpenCodeExecutable(
   chmodSync(executable, 0o755);
   return executable;
 }
+
+export function writeClaudeCodeExecutable(
+  c: CaseEnv,
+  options: { failure?: "install" | "remove" } = {},
+): string {
+  const module = join(c.dir, "fake-claude.mjs");
+  const executable = join(c.dir, "claude");
+  const log = join(c.state, "claude.log");
+  const state = join(c.state, "claude-state.json");
+  if (!existsSync(state))
+    writeFileSync(state, '{"plugins":[],"marketplaces":[]}\n');
+  writeFileSync(
+    module,
+    `import { readFileSync, writeFileSync } from "node:fs";\n` +
+      `import { join } from "node:path";\n` +
+      `const args = process.argv.slice(2);\n` +
+      `const command = args.join(" ");\n` +
+      `writeFileSync(${JSON.stringify(log)}, command + "\\n", { flag: "a" });\n` +
+      `const s = JSON.parse(readFileSync(${JSON.stringify(state)}, "utf8"));\n` +
+      `const save = () => writeFileSync(${JSON.stringify(state)}, JSON.stringify(s) + "\\n");\n` +
+      `const id = "superpowers@superpowers-manager";\n` +
+      `const market = s.marketplaces.find((m) => m.name === "superpowers-manager");\n` +
+      `const root = market ? join(market.path, "plugins", "superpowers") : "";\n` +
+      `const version = () => JSON.parse(readFileSync(join(root, ".claude-plugin", "plugin.json"), "utf8")).version;\n` +
+      `const existing = s.plugins.find((p) => p.id === id);\n` +
+      `if (command === "plugin list --json") process.stdout.write(JSON.stringify(s.plugins));\n` +
+      `else if (command === "plugin marketplace list --json") process.stdout.write(JSON.stringify(s.marketplaces));\n` +
+      `else if (args.length === 4 && command.startsWith("plugin marketplace add ")) { if (!market) s.marketplaces.push({ name: "superpowers-manager", source: "directory", path: args[3] }); save(); }\n` +
+      `else if (command === "plugin marketplace remove superpowers-manager") { if (${JSON.stringify(options.failure === "remove")}) process.exitCode = 7; else { s.marketplaces = s.marketplaces.filter((m) => m !== market); s.plugins = s.plugins.filter((p) => p.id !== id); save(); } }\n` +
+      `else if (command === "plugin install " + id + " --scope user" && market) { if (${JSON.stringify(options.failure === "install")}) process.exitCode = 7; else { if (!existing) s.plugins.push({ id, version: version(), scope: "user", enabled: true, installPath: join(market.path, "native-cache", version()) }); save(); } }\n` +
+      `else if (command === "plugin update " + id + " --scope user" && existing) { existing.version = version(); existing.installPath = join(market.path, "native-cache", existing.version); save(); }\n` +
+      `else process.exitCode = 99;\n`,
+  );
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nexec "${process.execPath}" "${module}" "$@"\n`,
+  );
+  chmodSync(executable, 0o755);
+  return executable;
+}

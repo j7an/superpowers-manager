@@ -50,6 +50,15 @@ export function crossHarnessUpstream(t: TestContext): string {
   );
   writeFileSync(join(upstream, "README.md"), "cross-harness fixture\n");
   writeFileSync(join(upstream, "CODE_OF_CONDUCT.md"), "fixture conduct\n");
+  const claudeManifest = join(upstream, ".claude-plugin", "plugin.json");
+  mkdirSync(dirname(claudeManifest), { recursive: true });
+  copyFileSync(
+    new URL(
+      "../../../fixtures/claude-code-native/plugin.json.txt",
+      import.meta.url,
+    ),
+    claudeManifest,
+  );
   return upstream;
 }
 

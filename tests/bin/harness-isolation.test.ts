@@ -17,6 +17,7 @@ import {
   type CaseEnv,
   writePiExecutable,
   writeOpenCodeExecutable,
+  writeClaudeCodeExecutable,
 } from "./lifecycle-fixture.ts";
 import {
   commitFixture,
@@ -27,10 +28,12 @@ import { piPaths } from "../../src/harnesses/pi/paths.ts";
 import { readPiReceipt } from "../../src/harnesses/pi/package.ts";
 import { openCodePaths } from "../../src/harnesses/opencode/paths.ts";
 import { readOpenCodeReceipt } from "../../src/harnesses/opencode/package.ts";
+import { claudeCodePaths } from "../../src/harnesses/claude-code/paths.ts";
+import { readClaudeCodeReceipt } from "../../src/harnesses/claude-code/prepare.ts";
 
-type Harness = "codex" | "pi" | "opencode";
+type Harness = "codex" | "pi" | "opencode" | "claude-code";
 type Command = "prepare" | "probe" | "install" | "update" | "uninstall";
-const HARNESSES = ["codex", "pi", "opencode"] as const;
+const HARNESSES = ["codex", "pi", "opencode", "claude-code"] as const;
 function commandArgs(command: Command, harness: Harness): string[] {
   return [
     "--harness",
@@ -47,6 +50,7 @@ function clearNativeLogs(c: CaseEnv, piLog: string): void {
   writeFileSync(c.adapterLog, "");
   writeFileSync(piLog, "");
   writeFileSync(join(c.state, "opencode.log"), "");
+  writeFileSync(join(c.state, "claude.log"), "");
 }
 
 function harnessEnv(
@@ -61,9 +65,18 @@ function harnessEnv(
     SPW_PI_LOG: piLog,
     SUPERPOWERS_PI: pi,
     SUPERPOWERS_OPENCODE: join(c.dir, "opencode"),
+    SUPERPOWERS_CLAUDE_CODE: join(c.dir, "claude"),
+    CLAUDE_CONFIG_DIR: join(c.home, ".claude"),
     SUPERPOWERS_REF: commit,
     SUPERPOWERS_UPSTREAM_URL: upstream,
   };
+}
+
+function claudePaths(c: CaseEnv) {
+  return claudeCodePaths(
+    { HOME: c.home, CLAUDE_CONFIG_DIR: join(c.home, ".claude") },
+    process.cwd(),
+  );
 }
 
 async function invoke(
@@ -117,6 +130,11 @@ function snapshotHarness(c: CaseEnv, harness: Harness): unknown {
       ),
     };
   }
+  if (harness === "claude-code")
+    return [
+      snapshotTree(join(c.home, ".claude")),
+      readFileSync(join(c.state, "claude-state.json"), "utf8"),
+    ];
   if (harness === "pi") return snapshotTree(join(c.home, ".pi", "agent"));
   return snapshotTree(join(c.home, ".config", "opencode"));
 }
@@ -130,8 +148,9 @@ function assertNoUnselectedCalls(
     codex: readLog(c.codexLog),
     pi: readLog(piLog),
     opencode: readLog(join(c.state, "opencode.log")),
+    "claude-code": readLog(join(c.state, "claude.log")),
   };
-  for (const harness of ["codex", "pi", "opencode"] as const) {
+  for (const harness of HARNESSES) {
     if (harness === selected) continue;
     assert.deepEqual(logs[harness], [], `unselected ${harness} CLI was called`);
   }
@@ -157,6 +176,14 @@ function assertHarnessesUnchanged(
 }
 
 function assertInstalled(c: CaseEnv, harness: Harness): void {
+  if (harness === "claude-code") {
+    assert.equal(existsSync(claudePaths(c).pluginRoot), true);
+    assert.match(
+      readFileSync(join(c.state, "claude-state.json"), "utf8"),
+      /superpowers@superpowers-manager/,
+    );
+    return;
+  }
   if (harness === "codex") {
     assert.match(
       readFileSync(join(c.state, "plugin_list.json"), "utf8"),
@@ -194,6 +221,13 @@ async function assertPrepared(
   harness: Harness,
   commit: string,
 ): Promise<void> {
+  if (harness === "claude-code") {
+    assert.equal(
+      (await readClaudeCodeReceipt(claudePaths(c).preparedRoot)).commit,
+      commit,
+    );
+    return;
+  }
   if (harness === "codex") {
     const provenance = JSON.parse(
       readFileSync(
@@ -224,6 +258,13 @@ async function assertInstalledCommit(
   harness: Harness,
   commit: string,
 ): Promise<void> {
+  if (harness === "claude-code") {
+    assert.equal(
+      (await readClaudeCodeReceipt(claudePaths(c).pluginRoot)).commit,
+      commit,
+    );
+    return;
+  }
   if (harness === "codex") {
     const receipt = JSON.parse(
       readFileSync(
@@ -263,6 +304,15 @@ function assertNoSelectedUpdateMutation(
   selected: Harness,
   piLog: string,
 ): void {
+  if (selected === "claude-code") {
+    assert.deepEqual(
+      readLog(join(c.state, "claude.log")).filter(
+        (call) => !call.endsWith("list --json"),
+      ),
+      [],
+    );
+    return;
+  }
   if (selected === "opencode") {
     assert.deepEqual(
       readLog(join(c.state, "opencode.log")).filter((call) =>
@@ -284,6 +334,14 @@ function assertNoSelectedUpdateMutation(
 }
 
 function assertAbsent(c: CaseEnv, harness: Harness): void {
+  if (harness === "claude-code") {
+    assert.equal(existsSync(claudePaths(c).marketplaceRoot), false);
+    assert.doesNotMatch(
+      readFileSync(join(c.state, "claude-state.json"), "utf8"),
+      /superpowers@superpowers-manager/,
+    );
+    return;
+  }
   if (harness === "codex") {
     assert.doesNotMatch(
       readFileSync(join(c.state, "plugin_list.json"), "utf8"),
@@ -335,11 +393,13 @@ function isolationCase(
   writeFileSync(join(piSentinel, "sentinel"), "preserve\n", { mode: 0o640 });
   symlinkSync("sentinel", join(piSentinel, "config-link"));
   mkdirSync(join(c.home, ".config", "opencode"), { recursive: true });
+  mkdirSync(join(c.home, ".claude"), { recursive: true });
   const upstream = crossHarnessUpstream(t);
   const commitA = commitFixture(upstream);
   const piLog = join(c.state, "pi.log");
   const pi = writePiExecutable(c);
   const opencode = writeOpenCodeExecutable(c);
+  writeClaudeCodeExecutable(c);
   return { c, commitA, pi, piLog, opencode, upstream };
 }
 
@@ -392,8 +452,7 @@ for (const selected of HARNESSES) {
         if (command === "install" || command === "prepare")
           for (const other of unselected) await seed(fixture.c, other, env);
         else {
-          for (const harness of ["codex", "pi", "opencode"] as const)
-            await seed(fixture.c, harness, env);
+          for (const harness of HARNESSES) await seed(fixture.c, harness, env);
         }
         const before = unselected.map(
           (other) => [other, snapshotHarness(fixture.c, other)] as const,
@@ -444,7 +503,9 @@ for (const selected of HARNESSES) {
               ? /manager is current/
               : selected === "pi"
                 ? /Superpowers Pi snapshot is current/
-                : /Superpowers OpenCode snapshot is current/,
+                : selected === "opencode"
+                  ? /Superpowers OpenCode snapshot is current/
+                  : /Superpowers Claude Code snapshot is current/,
           );
           assertInstalled(fixture.c, selected);
           assertNoSelectedUpdateMutation(fixture.c, selected, fixture.piLog);
@@ -495,7 +556,9 @@ for (const selected of HARNESSES) {
         ? /manager updated/
         : selected === "pi"
           ? /Installed the frozen Superpowers Pi snapshot/
-          : /Installed the frozen Superpowers OpenCode snapshot/,
+          : selected === "opencode"
+            ? /Installed the frozen Superpowers OpenCode snapshot/
+            : /Installed the frozen Superpowers Claude Code snapshot/,
     );
     await assertPrepared(fixture.c, selected, next);
     await assertInstalledCommit(fixture.c, selected, next);
@@ -554,6 +617,8 @@ for (const selected of HARNESSES) {
         : fixture.pi;
     if (selected === "opencode")
       writeOpenCodeExecutable(fixture.c, { failure: "install" });
+    if (selected === "claude-code")
+      writeClaudeCodeExecutable(fixture.c, { failure: "install" });
     const env = harnessEnv(
       fixture.c,
       fixture.upstream,
@@ -575,9 +640,13 @@ for (const selected of HARNESSES) {
         ? readLog(fixture.c.codexLog)
         : selected === "pi"
           ? readLog(fixture.piLog)
-          : readLog(join(fixture.c.state, "opencode.log"));
+          : selected === "opencode"
+            ? readLog(join(fixture.c.state, "opencode.log"))
+            : readLog(join(fixture.c.state, "claude.log"));
     assert.ok(
-      calls.some((call) => /^(?:plugin add |install |plugin \/)/.test(call)),
+      calls.some((call) =>
+        /^(?:plugin add |install |plugin \/|plugin install )/.test(call),
+      ),
       "native install injection was not reached",
     );
     assert.match(
@@ -586,7 +655,9 @@ for (const selected of HARNESSES) {
         ? /Codex activation may have changed native state; preserve recovery material at /
         : selected === "pi"
           ? /Pi activation failed; the previous snapshot and registration were restored/
-          : /OpenCode activation failed; the previous snapshot and registration were restored/,
+          : selected === "opencode"
+            ? /OpenCode activation failed; the previous snapshot and registration were restored/
+            : /claude plugin install superpowers@superpowers-manager --scope user did not complete \(exit status 7\)/,
     );
     assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
@@ -607,6 +678,8 @@ for (const selected of HARNESSES) {
       fixture.piLog,
     );
     for (const harness of HARNESSES) await seed(fixture.c, harness, env);
+    if (selected === "claude-code")
+      writeClaudeCodeExecutable(fixture.c, { failure: "remove" });
     const before = snapshotHarnesses(fixture.c, unselected);
     if (selected === "opencode") {
       const paths = openCodePaths(
@@ -629,7 +702,9 @@ for (const selected of HARNESSES) {
       const calls =
         selected === "codex"
           ? readLog(fixture.c.codexLog)
-          : readLog(fixture.piLog);
+          : selected === "pi"
+            ? readLog(fixture.piLog)
+            : readLog(join(fixture.c.state, "claude.log"));
       assert.ok(
         calls.some((call) =>
           /^(?:plugin marketplace remove |remove )/.test(call),
@@ -643,7 +718,9 @@ for (const selected of HARNESSES) {
         ? /Codex native removal failed; preserve the marketplace and recovery material at /
         : selected === "pi"
           ? /cannot verify Pi removal at .*; preserve the snapshot and any recovery material at /
-          : /cannot determine harness mutation resources/,
+          : selected === "opencode"
+            ? /cannot determine harness mutation resources/
+            : /claude plugin marketplace remove superpowers-manager did not complete \(exit status 7\)/,
     );
     assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
