@@ -197,6 +197,10 @@
       "path": "tests/unit/harnesses/claude-code/state.test.ts",
       "group": "unit"
     },
+    {
+      "path": "tests/unit/harnesses/claude-code/install.test.ts",
+      "group": "unit"
+    },
     { "path": "tests/unit/upstream-compatibility.test.ts", "group": "unit" },
     { "path": "tests/unit/harnesses/pi/settings.test.ts", "group": "unit" },
     { "path": "tests/unit/provenance.test.ts", "group": "unit" },
