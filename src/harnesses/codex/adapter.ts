@@ -10,11 +10,10 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { delimiter, isAbsolute, join } from "node:path";
+import { delimiter, join } from "node:path";
 import {
   AdapterMessageLog,
   failureResult,
-  hasTerminalControl,
   successResult,
   type AdapterContext,
   type AdapterResult,
@@ -51,19 +50,12 @@ import type {
 } from "../../harness.ts";
 import { codexOwnershipInspection } from "./lifecycle.ts";
 import { codexInstallReceipt } from "./presentation.ts";
+import { isFile } from "../../safe-path.ts";
 
 const PLUGIN_ID = CODEX_MANAGER_PLUGIN_ID;
 const MARKETPLACE_NAME = "superpowers-manager";
 const LEGACY_PLUGIN_ID = CODEX_LEGACY_PLUGIN_ID;
 const LEGACY_MARKETPLACE_NAME = "superpowers-wrapper";
-
-// Re-exported so existing importers of AdapterContext from this module are
-// unaffected: the interface itself now lives in adapter-result.js, grouped
-// with the other protocol types (AdapterResult, AdapterOutcome) rather than
-// with this module's implementation. Not a cycle avoidance — see
-// adapter-result.ts's comment on AdapterContext for why a cycle was never
-// possible here regardless of import direction.
-export type { AdapterContext };
 
 export interface CodexBuildInput {
   readonly upstreamRoot: string;
@@ -221,7 +213,7 @@ export function mapCodexLaunchFailure(
     signal: null,
     stdout: Buffer.alloc(0),
     // Trailing newline matches how a real process writes stderr;
-    // `src/adapter-result.ts:133::appendBytes` splits on newlines and terminates the
+    // `src/adapter-result.ts:132::appendBytes` splits on newlines and terminates the
     // final chunk at end-of-buffer either way.
     stderr: Buffer.from(
       `cannot launch Codex command ${codexBin}${detail}\n`,
@@ -297,41 +289,13 @@ async function requireCodex(
   }
 }
 
-async function directoryExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
-}
-
 async function runBuild(
   input: CodexBuildInput,
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<JsonValue> {
   const { upstreamRoot, candidateRoot, fallbackManifest } = input;
-  if (!isAbsolute(upstreamRoot)) {
-    fail("invalid-arguments", "--upstream-root must be an absolute path");
-  }
-  if (!isAbsolute(candidateRoot)) {
-    fail("invalid-arguments", "--candidate-root must be an absolute path");
-  }
-  if (!(await directoryExists(upstreamRoot))) {
-    fail("invalid-arguments", `upstream root not found: ${upstreamRoot}`);
-  }
-  if (!(await directoryExists(candidateRoot))) {
-    fail("invalid-arguments", `candidate root not found: ${candidateRoot}`);
-  }
-  if (!(await fileExists(fallbackManifest))) {
+  if (!(await isFile(fallbackManifest))) {
     fail(
       "invalid-arguments",
       `fallback manifest not found: ${fallbackManifest}`,
@@ -340,7 +304,7 @@ async function runBuild(
 
   const candidateManifest = join(candidateRoot, ".codex-plugin/plugin.json");
   const upstreamManifest = join(upstreamRoot, ".codex-plugin/plugin.json");
-  const manifestSource: ManifestSource = (await fileExists(upstreamManifest))
+  const manifestSource: ManifestSource = (await isFile(upstreamManifest))
     ? "upstream"
     : "fallback";
   try {
@@ -410,8 +374,8 @@ async function runBuild(
     // applyManifestOverlay's own messages already name the manifest
     // path — three are the frozen CPython wording, and the fourth (the
     // numeric-overflow diagnostic, which has no CPython oracle wording
-    // to match) now carries the path via its own rewrap in
-    // src/harnesses/codex/manifest-overlay.ts. Emit as-is, with no added prefix — a
+    // to match) carries the path from src/harnesses/codex/manifest-overlay.ts's
+    // emitter. Emit as-is, with no added prefix — a
     // prefix here would double up the path these messages already
     // name.
     log.appendText("stderr", oneLine(cause));
@@ -492,12 +456,6 @@ async function runInstall(
   env: NodeJS.ProcessEnv,
   log: AdapterMessageLog,
 ): Promise<InstallReceipt> {
-  if (!isAbsolute(packageRoot)) {
-    fail("invalid-arguments", "--package-root must be an absolute path");
-  }
-  if (!(await directoryExists(packageRoot))) {
-    fail("invalid-arguments", `package root not found: ${packageRoot}`);
-  }
   const codexBin = env.SUPERPOWERS_CODEX || "codex";
   const refreshMode = codexInstallRefreshMode(env);
   await requireCodex(codexBin, env);
@@ -648,16 +606,6 @@ function ownershipFromResources(
   legacyPresent: boolean,
   conflicts: readonly string[],
 ): OwnershipInspection<CodexRemovalInput> {
-  if (
-    conflicts.some(
-      (item) =>
-        typeof item !== "string" ||
-        item.length === 0 ||
-        hasTerminalControl(item),
-    )
-  ) {
-    fail("malformed-result", "expected an array of strings at conflicts");
-  }
   const managerPresent = pluginPresent || marketplacePresent;
   const identityState = managerPresent
     ? legacyPresent
@@ -671,6 +619,46 @@ function ownershipFromResources(
     { pluginPresent, marketplacePresent },
     conflicts,
   );
+}
+
+async function ownershipAfterListingFailure(
+  context: AdapterContext,
+  env: NodeJS.ProcessEnv,
+  message: string,
+): Promise<OwnershipInspection<CodexRemovalInput>> {
+  const stored = await storedStateAfterListingFailure(
+    env,
+    "inspect-failed",
+    message,
+  );
+  const conflicts = await inspectCodexConflicts(
+    { root: context.root, env },
+    stored.installedPlugins,
+  );
+  return ownershipFromResources(
+    stored.managerPluginPresent,
+    true,
+    stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
+    conflicts,
+  );
+}
+
+async function nativeAfterListingFailure(
+  env: NodeJS.ProcessEnv,
+  message: string,
+): Promise<CodexNativeState> {
+  const stored = await storedStateAfterListingFailure(
+    env,
+    "inspect-failed",
+    message,
+  );
+  return {
+    marketplaceRoot: stored.managerMarketplaceRoot,
+    pluginPresent: stored.managerPluginPresent,
+    pluginEnabled: stored.managerPluginEnabled,
+    activeVersion: null,
+    activeRoot: null,
+  };
 }
 
 async function runOwnership(
@@ -687,20 +675,10 @@ async function runOwnership(
     env,
   );
   if (commandFailed(plugins)) {
-    const stored = await storedStateAfterListingFailure(
+    return await ownershipAfterListingFailure(
+      context,
       env,
-      "inspect-failed",
       `cannot list Codex plugins via '${codexBin} plugin list --json'`,
-    );
-    const conflicts = await inspectCodexConflicts(
-      { root: context.root, env },
-      stored.installedPlugins,
-    );
-    return ownershipFromResources(
-      stored.managerPluginPresent,
-      true,
-      stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
-      conflicts,
     );
   }
   let managerPlugin: boolean;
@@ -729,20 +707,10 @@ async function runOwnership(
     env,
   );
   if (commandFailed(marketplaces)) {
-    const stored = await storedStateAfterListingFailure(
+    return await ownershipAfterListingFailure(
+      context,
       env,
-      "inspect-failed",
       `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
-    );
-    const conflicts = await inspectCodexConflicts(
-      { root: context.root, env },
-      stored.installedPlugins,
-    );
-    return ownershipFromResources(
-      stored.managerPluginPresent,
-      true,
-      stored.legacyPluginPresent || stored.legacyMarketplaceRoot !== null,
-      conflicts,
     );
   }
   let managerMarketplace: boolean;
@@ -860,18 +828,10 @@ export function codexReadNativeState(
       env,
     );
     if (commandFailed(plugins)) {
-      const stored = await storedStateAfterListingFailure(
+      return await nativeAfterListingFailure(
         env,
-        "inspect-failed",
         `cannot list Codex plugins via '${codexBin} plugin list --json'`,
       );
-      return {
-        marketplaceRoot: stored.managerMarketplaceRoot,
-        pluginPresent: stored.managerPluginPresent,
-        pluginEnabled: stored.managerPluginEnabled,
-        activeVersion: null,
-        activeRoot: null,
-      };
     }
     let manager:
       ReturnType<typeof codexInstalledPluginsFromJson>[number] | undefined;
@@ -901,18 +861,10 @@ export function codexReadNativeState(
       env,
     );
     if (commandFailed(marketplaces)) {
-      const stored = await storedStateAfterListingFailure(
+      return await nativeAfterListingFailure(
         env,
-        "inspect-failed",
         `cannot list Codex marketplaces via '${codexBin} plugin marketplace list --json'`,
       );
-      return {
-        marketplaceRoot: stored.managerMarketplaceRoot,
-        pluginPresent: stored.managerPluginPresent,
-        pluginEnabled: stored.managerPluginEnabled,
-        activeVersion: null,
-        activeRoot: null,
-      };
     }
     let marketplaceRoot: string;
     try {
