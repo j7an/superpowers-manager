@@ -1,5 +1,5 @@
 // `selectionError` already exists at
-// `src/selection.ts:41::export function selectionError` and tags errors with
+// `src/selection.ts:34::export function selectionError` and tags errors with
 // module "selection". Import it rather than defining a second one.
 import {
   normalizeSaved,
@@ -97,7 +97,6 @@ export async function computeEffectiveSelection(
   let selectionOrigin: EffectiveSelection["selectionOrigin"];
   let selectionMode: EffectiveSelection["selectionMode"];
   let requestedRef: string;
-  let usesSavedPin = false;
   if (env.SUPERPOWERS_REF) {
     selectionOrigin = "environment";
     selectionMode = "override";
@@ -106,18 +105,6 @@ export async function computeEffectiveSelection(
     selectionOrigin = "user-config";
     selectionMode = "pinned";
     requestedRef = saved.saved_requested_ref;
-    usesSavedPin = true;
-  } else if (saved.saved_mode === "track-latest") {
-    selectionOrigin = "user-config";
-    selectionMode = "track-latest";
-    requestedRef = "latest-release";
-  } else {
-    selectionOrigin = "package-default";
-    selectionMode = "default";
-    requestedRef = await readConfigRef(root, env);
-  }
-
-  if (usesSavedPin) {
     return {
       selectionOrigin,
       selectionMode,
@@ -131,6 +118,14 @@ export async function computeEffectiveSelection(
         : "tag",
       saved,
     };
+  } else if (saved.saved_mode === "track-latest") {
+    selectionOrigin = "user-config";
+    selectionMode = "track-latest";
+    requestedRef = "latest-release";
+  } else {
+    selectionOrigin = "package-default";
+    selectionMode = "default";
+    requestedRef = await readConfigRef(root, env);
   }
 
   const resolution = await resolveRef(effectiveSource, requestedRef);

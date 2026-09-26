@@ -286,7 +286,6 @@ async function prepareGeneratedTree(
     [
       "preparation-location",
       "mutation-roots",
-      "preparation-location",
       "validate-preparation-before-fetch",
       "prepare-candidate",
     ],
@@ -675,7 +674,6 @@ void describe("install commands", { concurrency: true }, () => {
       [
         "preparation-location",
         "mutation-roots",
-        "preparation-location",
         "validate-preparation-before-fetch",
         "prepare-candidate",
       ],

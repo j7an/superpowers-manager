@@ -25,19 +25,9 @@ import type {
 } from "./harness.ts";
 import { configurationErrors } from "./validator.ts";
 
-type Subcommand =
-  | "pin"
-  | "track-latest"
-  | "unpin"
-  | "prepare"
-  | "probe"
-  | "install"
-  | "update"
-  | "uninstall";
-
 type RunParseResult = {
   kind: "run";
-  cmd: Subcommand;
+  cmd: HarnessCommand;
   args: string[];
   options: InvocationOptions;
 };
@@ -52,30 +42,14 @@ type ParseResult =
 
 type PreflightResult = { ok: true } | { ok: false; errors: string[] };
 
-const SUBCOMMANDS: readonly Subcommand[] = [
-  "pin",
-  "track-latest",
-  "unpin",
-  "prepare",
-  "probe",
-  "install",
-  "update",
-  "uninstall",
-];
-
 type InProcessHandler = <R>(
   argv: string[],
   ctx: CommandContext<R>,
 ) => Promise<number>;
 
-// Keyed by Subcommand itself. Until slice 6 this was keyed by a mapped type
-// that filtered Subcommand through a DISPATCH table of "spawn" | "in-process"
-// literals; with every command in-process that filter was the identity, so the
-// table, its mode union and the mapped type were one indirection with nothing
-// left to discriminate. The guarantee is unchanged and is the whole protection
-// — tests/bin/bin-dispatch.test.js records that decision: a Subcommand added
-// without a handler registered here is a compile error, not a runtime surprise.
-const IN_PROCESS_HANDLERS: Record<Subcommand, InProcessHandler> = {
+// Keyed by HarnessCommand: a command added to that type without a handler
+// here is a compile error, not a runtime surprise.
+const IN_PROCESS_HANDLERS: Record<HarnessCommand, InProcessHandler> = {
   pin: runPin,
   "track-latest": runTrackLatest,
   unpin: runUnpin,
@@ -137,8 +111,8 @@ function parseArgs(argv: string[]): ParseResult {
     };
   if (first === "--help" || first === "-h") return { kind: "help" };
   if (first === "--version") return { kind: "version" };
-  if (first && SUBCOMMANDS.includes(first as Subcommand)) {
-    const command = first as Subcommand;
+  if (first && Object.hasOwn(IN_PROCESS_HANDLERS, first)) {
+    const command = first as HarnessCommand;
     let extracted: ReturnType<typeof extractHarnessOptions>;
     try {
       extracted = extractHarnessOptions(command, argv.slice(1));
@@ -248,7 +222,7 @@ function requirementsFor<R>(
 // command. No command requires a POSIX shell: slice 4b flipped the last
 // spawned command in-process, so there is no shell to discover.
 function preflight<R>(
-  cmd: Subcommand,
+  cmd: HarnessCommand,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
   adapter: HarnessAdapter<R>,
@@ -332,42 +306,26 @@ async function main(): Promise<never> {
   }
   const status =
     parsed.options.harness === "claude-code"
-      ? await dispatch(claudeCodeHarness, parsed)
+      ? await dispatch(claudeCodeHarness, parsed, root)
       : parsed.options.harness === "opencode"
-        ? await dispatch(openCodeHarness, parsed)
+        ? await dispatch(openCodeHarness, parsed, root)
         : parsed.options.harness === "pi"
-          ? await dispatch(piHarness, parsed)
-          : await dispatch(codexHarness, parsed);
+          ? await dispatch(piHarness, parsed, root)
+          : await dispatch(codexHarness, parsed, root);
   process.exit(status);
 }
 
 async function dispatch<R>(
   adapter: HarnessAdapter<R>,
   parsed: RunParseResult,
+  root: string,
 ): Promise<number> {
-  const root = resolvePackageRoot(import.meta.filename);
-  if (!root) {
-    console.error("error: cannot resolve the superpowers-manager package root");
-    return 1;
-  }
   const pf = preflight(parsed.cmd, process.env, process.platform, adapter);
   if (!pf.ok) {
     for (const e of pf.errors) console.error(`error: ${e}`);
     return 1;
   }
-  // Dispatch is no longer a branch: slice 4b flipped the last spawned command,
-  // so every subcommand runs here, and slice 6 deleted the DISPATCH table whose
-  // only remaining job was narrowing this registry's key type. `parsed.cmd` is
-  // a Subcommand and the registry is keyed by Subcommand, so no cast is needed.
-  // The exhaustiveness check on IN_PROCESS_HANDLERS makes an unregistered
-  // handler a compile error; the `!handler` guard below is the runtime backstop
-  // for that guarantee. It is unreachable through production code, and no
-  // fixture reaches it either.
-  const handler: InProcessHandler | undefined = IN_PROCESS_HANDLERS[parsed.cmd];
-  if (!handler) {
-    console.error(`error: no in-process handler registered for: ${parsed.cmd}`);
-    return 1;
-  }
+  const handler = IN_PROCESS_HANDLERS[parsed.cmd];
   const ctx: CommandContext<R> = {
     root,
     env: process.env,

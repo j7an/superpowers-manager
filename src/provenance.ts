@@ -1,7 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { COMMIT_INPUT_RE } from "./domain/refs.ts";
-import { escapePythonJsonString } from "./python-json.ts";
+import { escapeNonAscii } from "./python-json-format.ts";
 import { SafetyError } from "./safety-error.ts";
 import {
   parseStrictJson,
@@ -93,23 +92,6 @@ export async function readGeneratedCommitLenient(
   }
 }
 
-// Ported from
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:28-31::spw_generated_metadata_path(`.
-// The path the generated tree's provenance lives at, relative to a package
-// root.
-export function generatedMetadataPath(root: string): string {
-  return join(root, "plugins", "superpowers", ".superpowers-upstream.json");
-}
-
-// Ported from
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:33-37::spw_generated_commit_or_empty`.
-// Lenient by design: a missing or malformed generated provenance file yields
-// "", which the typed prepared-state flow reports as "needs prepare".
-// Aborting here would deny the operator the remediation path.
-export async function generatedCommitOrEmpty(root: string): Promise<string> {
-  return readGeneratedCommitLenient(generatedMetadataPath(root));
-}
-
 export async function readCodexBuildSource(path: string): Promise<string> {
   try {
     const parsed = parseStrictJson(
@@ -142,10 +124,10 @@ const PROVENANCE_KEYS = [
 ] as const;
 
 export function serializeProvenance(record: ProvenanceRecord): string {
-  const lines = PROVENANCE_KEYS.map(
-    (key) => `  "${key}": "${escapePythonJsonString(record[key])}"`,
+  const ordered = Object.fromEntries(
+    PROVENANCE_KEYS.map((key) => [key, record[key]]),
   );
-  return `{\n${lines.join(",\n")}\n}\n`;
+  return `${escapeNonAscii(JSON.stringify(ordered, null, 2))}\n`;
 }
 
 export async function writeProvenance(

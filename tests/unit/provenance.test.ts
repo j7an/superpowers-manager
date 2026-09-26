@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import { exactError } from "../lib/error-assertions.ts";
 import { scratch } from "../lib/scratch.ts";
@@ -11,11 +11,9 @@ import {
   readStrictProvenanceField,
   serializeProvenance,
   writeProvenance,
-  generatedMetadataPath,
-  generatedCommitOrEmpty,
 } from "../../src/provenance.ts";
 
-import { escapePythonJsonString } from "../../src/python-json.ts";
+import { escapeNonAscii } from "../../src/python-json-format.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 
 const commit = "0123456789abcdef0123456789abcdef01234567";
@@ -69,7 +67,7 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   // same unmodified reader rejects at depth 20000 under --stack-size=984 and
   // accepts under --stack-size=8192, so such an assertion would report RED on
   // a correct product under one node invocation and GREEN under another.
-  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (`src/provenance.ts:31-34::const PROVENANCE_CODEX_SOURCE_PROFILE`)
+  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (`src/provenance.ts:30-33::const PROVENANCE_CODEX_SOURCE_PROFILE`)
   // sets no maxDepth, and nested(255) reaches container depth 256, which a
   // `maxDepth: 256` mutant still ACCEPTS -- `src/strict-json.ts:165::if (this.profile.maxDepth` rejects only on
   // `depth > maxDepth`. nested(256) reaches 257 and is the first depth that
@@ -222,14 +220,16 @@ const unicodeRecord: import("../../src/provenance.ts").ProvenanceRecord = {
 void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
   const directory = scratch(t, "spw-provenance-");
 
-  assert.equal(escapePythonJsonString("\ud800"), "\\ud800");
-  assert.equal(escapePythonJsonString("\udfff"), "\\udfff");
-  assert.equal(escapePythonJsonString("\ud83d\ude00"), "\\ud83d\\ude00");
+  const escape = (value: string) =>
+    escapeNonAscii(JSON.stringify(value)).slice(1, -1);
+  assert.equal(escape("\ud800"), "\\ud800");
+  assert.equal(escape("\udfff"), "\\udfff");
+  assert.equal(escape("\ud83d\ude00"), "\\ud83d\\ude00");
   assert.equal(
-    escapePythonJsonString('"\\/\b\t\n\f\r\u0001\u007f'),
+    escape('"\\/\b\t\n\f\r\u0001\u007f'),
     '\\"\\\\/\\b\\t\\n\\f\\r\\u0001\\u007f',
   );
-  assert.equal(escapePythonJsonString(""), "");
+  assert.equal(escape(""), "");
 
   const fixtures: [
     string,
@@ -252,31 +252,12 @@ void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
     await writeProvenance(output, record);
     assert.deepEqual(await readFile(output), expected, fixture);
   }
-});
-
-void test("generatedCommitOrEmpty reads the generated tree's provenance", async (t) => {
-  const directory = scratch(t, "spw-provenance-");
-  const metadata = join(
-    directory,
-    "plugins",
-    "superpowers",
-    ".superpowers-upstream.json",
-  );
+  // Only the five provenance keys are written, whatever else the object holds.
   assert.equal(
-    generatedMetadataPath(directory),
-    metadata,
-    "the metadata path must match src/provenance.ts's generatedMetadataPath",
+    serializeProvenance({
+      ...tagRecord,
+      extra: "not written",
+    } as import("../../src/provenance.ts").ProvenanceRecord),
+    serializeProvenance(tagRecord),
   );
-
-  // Absent tree: empty, not a throw. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:33-37::spw_generated_commit_or_empty` relied on
-  // the lenient reader so `probe` can report "needs prepare" instead of
-  // aborting the remediation path.
-  assert.equal(await generatedCommitOrEmpty(directory), "");
-
-  await mkdir(dirname(metadata), { recursive: true });
-  await writeFile(metadata, `{"commit":"${commit}"}`);
-  assert.equal(await generatedCommitOrEmpty(directory), commit);
-
-  await writeFile(metadata, "{");
-  assert.equal(await generatedCommitOrEmpty(directory), "");
 });

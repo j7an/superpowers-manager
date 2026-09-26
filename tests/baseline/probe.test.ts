@@ -169,7 +169,7 @@ void test("malformed installed metadata falls back to the manifest short SHA", a
   assert.match(result.stdout, /^saved_mode=none$/m);
   // `src/harnesses/codex/presentation.ts:175::saved.saved_source.length > 0 ? displaySource`: an absent saved source stays empty rather
   // than going through displaySource, which renders "" as <redacted-source>
-  // (`src/selection.ts:69-79::function requireSingleLineString` rejects the empty string).
+  // (`src/selection.ts:62-70::function requireSingleLineString` rejects the empty string).
   assert.match(result.stdout, /^saved_source=$/m);
   assert.match(result.stdout, /^saved_requested_ref=$/m);
   assert.match(result.stdout, /^saved_resolved_ref=$/m);
@@ -192,7 +192,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
   // desired_commit and saved_commit (the 40-hex SHA), so a swapped field in
   // the EffectiveSelection -> ProbeFacts mapping (`gatherProbe`)
   // cannot pass. The schema forbids requested_ref and resolved_ref differing
-  // for a tag pin (`src/selection.ts:173-174::tag resolved_ref must equal requested_ref`), so those two are the one pair no
+  // for a tag pin (`src/selection.ts:166-167::tag resolved_ref must equal requested_ref`), so those two are the one pair no
   // valid fixture can tell apart.
   await saveSelection(c, {
     schema_version: 1,
@@ -212,7 +212,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     ],
     manifestVersion: ACTIVE_VERSION,
   });
-  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:120-132::if (usesSavedPin)`),
+  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:114::resolvedRef: saved.saved_resolved_ref`),
   // so an unreachable source is the proof that Git was never consulted: any
   // ls-remote against this path would fail once it is renamed away.
   renameSync(source, `${source}-offline`);

@@ -364,7 +364,7 @@ void test("an unparseable generated commit is never treated as success", async (
   // Rule 4. The typed prepared-state flow reports missing provenance as
   // "needs prepare"; a failed inspection (here, prepare itself failing) propagates rather than defaulting to
   // success. No generated metadata file is written, so
-  // generatedCommitOrEmpty yields "" and facts.status is "needs prepare".
+  // readGeneratedCommitLenient yields "" and facts.status is "needs prepare".
   // runPrepare is called as a function and its own failure -- a missing
   // fallback manifest template, since none was created in this fixture --
   // becomes install's return value verbatim.
@@ -374,7 +374,7 @@ void test("an unparseable generated commit is never treated as success", async (
   const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  assert.equal(calls.length, 15);
+  assert.equal(calls.length, 14);
   const template = join(
     ctx.root,
     "plugins",
@@ -538,7 +538,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/harnesses/codex/lifecycle.ts:122::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:371::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:297::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
@@ -1137,13 +1137,12 @@ void test("argv is ignored by src/commands/install.ts", async () => {
 
 // --- Post-success withWorkspace cleanup failure carries the outcome ---
 //
-// install's gatherInstallStages passes withWorkspace an `onCleanupFailure`
-// reporter. That suppresses the discard: the callback's already-computed
-// StageOutcome -- including "manager updated" -- still comes back, and the
-// cleanup failure is layered on top as a SEPARATE, additional stderr line
-// that still forces status 1. See install.ts's report for why this is safe:
-// the callback here never throws, so there is no "domain failure AND cleanup
-// failure" case to lose a message to.
+// install's gatherInstallStages runs in withWorkspaceReporting, so the
+// callback's already-computed StageOutcome -- including "manager updated" --
+// still comes back, and the cleanup failure is layered on top as a SEPARATE,
+// additional stderr line that still forces status 1. The callback never
+// throws, so there is no "domain failure AND cleanup failure" case to lose a
+// message to.
 
 void test("a post-success workspace cleanup failure still reports the domain outcome, then fails closed", async () => {
   if (process.getuid?.() === 0) return; // chmod does not gate root

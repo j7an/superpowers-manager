@@ -6,17 +6,11 @@ import { SafetyError } from "./safety-error.ts";
 const MANAGED_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
 type ManagedSignal = (typeof MANAGED_SIGNALS)[number];
 
-// Each active workspace carries its caller's failure reporter. The signal
-// path still invokes it, for parity with the normal path, but a signal death
-// never builds a result outcome (see src/adapter-result.ts), so a report
-// that only lands in the adapter's buffered log would never become
-// observable — the signal path therefore also writes the hand-written
-// diagnostic straight to process.stderr, unconditionally; that raw write is
-// the only thing actually visible to a caller. Previously the signal path
-// called the module-private cleanup and swallowed the rejection in
-// Promise.allSettled, so a signal-time failure was silent entirely — this is
-// the state PR 11.4 removed from the normal path.
-const active = new Map<string, ((path: string) => void) | undefined>();
+// Workspaces the signal path must remove. A signal death never builds a
+// result outcome (see src/adapter-result.ts), so the signal path writes its
+// hand-written diagnostic straight to process.stderr; that write is the only
+// report a caller can observe.
+const active = new Set<string>();
 let exiting = false;
 const handlers = new Map<ManagedSignal, () => void>();
 
@@ -44,27 +38,17 @@ async function cleanup(path: string): Promise<void> {
 function cleanupForSignal(signal: ManagedSignal): void {
   if (exiting) return;
   exiting = true;
-  for (const [path, report] of active) {
+  for (const path of active) {
     try {
       rmSync(path, { recursive: true, force: true });
     } catch {
-      // The reporter is invoked for parity with the normal path, but nothing
-      // ever reads it back here — no outcome is built before the process
-      // dies — so the diagnostic is also written straight to stderr,
-      // unconditionally; that write is the only thing actually observable.
       // The diagnostic is hand-written and names the workspace; the caught
-      // cause is not interpolated.
-      //
-      // Reporting is guarded: if either call throws — plausibly EPIPE after
-      // SIGHUP, when the process on the other end of the pipe is already
-      // gone — the exception must not escape this loop, or the remaining
-      // workspaces' cleanup, deregistration, and the re-raise below never run.
+      // cause is not interpolated. Guarded: if the write throws — plausibly
+      // EPIPE after SIGHUP — the remaining workspaces' cleanup,
+      // deregistration, and the re-raise below must still run. Node documents
+      // pipe writes as asynchronous on some platforms (notably macOS); small
+      // buffers like this one are written inline.
       try {
-        if (report) report(path);
-        // Node documents pipe writes as asynchronous on some platforms
-        // (notably macOS); a saturated pipe could drop this write. Small
-        // buffers like this one are written inline, which is why the
-        // covering test observes it reliably.
         process.stderr.write(`${workspaceRemovalFailure(path)}\n`);
       } catch {
         // See above: a reporting failure must not block cleanup/re-raise.
@@ -97,13 +81,57 @@ function deregisterCoordinator(): void {
 }
 
 export interface WorkspaceOptions {
+  // Replaces the removal step; tests use it to stage a cleanup failure.
   readonly cleanup?: (path: string) => Promise<void>;
-  // Presence is the suppression signal: suppression cannot be requested
-  // without saying where the report goes.
-  // Must be synchronous: the call site below does not await it, so an async
-  // implementation's rejection would become an unhandled rejection instead
-  // of a visible failure.
-  readonly onCleanupFailure?: (path: string) => void;
+}
+
+export interface ReportedWorkspace<T> {
+  readonly value: T;
+  // Non-null only when the callback succeeded and its workspace could not be
+  // removed afterwards.
+  readonly cleanupWarning: string | null;
+}
+
+async function runInWorkspace<T>(
+  parent: string,
+  prefix: string,
+  fn: (workspace: string) => T | Promise<T>,
+  options: WorkspaceOptions,
+  reportCleanupFailure: boolean,
+): Promise<ReportedWorkspace<T>> {
+  const remove = options.cleanup ?? cleanup;
+  let workspace: string;
+  try {
+    workspace = await mkdtemp(join(parent, prefix));
+  } catch (cause) {
+    throw new SafetyError("workspace", "cannot create workspace", { cause });
+  }
+  active.add(workspace);
+  registerCoordinator();
+  try {
+    let value!: T;
+    let failed = false;
+    let callbackError: unknown;
+    try {
+      value = await fn(workspace);
+    } catch (error) {
+      failed = true;
+      callbackError = error;
+    }
+    let cleanupWarning: string | null = null;
+    try {
+      await remove(workspace);
+    } catch (cleanupError) {
+      if (failed) throw callbackError;
+      if (!reportCleanupFailure) throw cleanupError;
+      cleanupWarning = workspaceRemovalFailure(workspace);
+    }
+    if (failed) throw callbackError;
+    return { value, cleanupWarning };
+  } finally {
+    active.delete(workspace);
+    deregisterCoordinator();
+  }
 }
 
 export async function withWorkspace<T>(
@@ -112,36 +140,18 @@ export async function withWorkspace<T>(
   fn: (workspace: string) => T | Promise<T>,
   options: WorkspaceOptions = {},
 ): Promise<T> {
-  const remove = options.cleanup ?? cleanup;
-  let workspace: string;
-  try {
-    workspace = await mkdtemp(join(parent, prefix));
-  } catch (cause) {
-    throw new SafetyError("workspace", "cannot create workspace", { cause });
-  }
-  active.set(workspace, options.onCleanupFailure);
-  registerCoordinator();
-  try {
-    let result!: T;
-    let failed = false;
-    let callbackError: unknown;
-    try {
-      result = await fn(workspace);
-    } catch (error) {
-      failed = true;
-      callbackError = error;
-    }
-    try {
-      await remove(workspace);
-    } catch (cleanupError) {
-      if (failed) throw callbackError;
-      if (options.onCleanupFailure === undefined) throw cleanupError;
-      options.onCleanupFailure(workspace);
-    }
-    if (failed) throw callbackError;
-    return result;
-  } finally {
-    active.delete(workspace);
-    deregisterCoordinator();
-  }
+  return (await runInWorkspace(parent, prefix, fn, options, false)).value;
+}
+
+// Like withWorkspace, except a cleanup failure after a SUCCESSFUL callback is
+// returned as `cleanupWarning` instead of thrown, so the caller keeps the value
+// it already computed and reports the leak itself. A callback throw still
+// propagates, and a cleanup failure never masks it.
+export function withWorkspaceReporting<T>(
+  parent: string,
+  prefix: string,
+  fn: (workspace: string) => T | Promise<T>,
+  options: WorkspaceOptions = {},
+): Promise<ReportedWorkspace<T>> {
+  return runInWorkspace(parent, prefix, fn, options, true);
 }

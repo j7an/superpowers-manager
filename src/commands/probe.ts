@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import {
   assertFailureWritable,
@@ -175,13 +176,20 @@ export async function gatherProbe<R>(
     return { status: 1, outcomes, message: controlAfter.message };
   const after = await ctx.coordination.observeResources(resources);
   if (
-    JSON.stringify(before) !== JSON.stringify(after) ||
-    JSON.stringify(prepared.result.outcome.result) !==
-      JSON.stringify(preparedAfter.result.outcome.result) ||
-    JSON.stringify(installed.result.outcome.result) !==
-      JSON.stringify(installedAfter.result.outcome.result) ||
-    JSON.stringify(control.result.outcome.result) !==
-      JSON.stringify(controlAfter.result.outcome.result)
+    !isDeepStrictEqual(
+      [
+        before,
+        prepared.result.outcome.result,
+        installed.result.outcome.result,
+        control.result.outcome.result,
+      ],
+      [
+        after,
+        preparedAfter.result.outcome.result,
+        installedAfter.result.outcome.result,
+        controlAfter.result.outcome.result,
+      ],
+    )
   ) {
     return {
       status: 1,
@@ -229,6 +237,36 @@ export async function gatherProbe<R>(
   };
 }
 
+// Runs the probe and reports a failed gather the way every probing command
+// does: `error:` for a throw, replay of every collected outcome, then the
+// command-level message. null means the caller must return 1.
+export async function probeFacts<R>(
+  ctx: CommandContext<R>,
+): Promise<ProbeSnapshot<R> | null> {
+  let outcome: ProbeOutcome<R>;
+  try {
+    outcome = await gatherProbe(ctx);
+  } catch (cause) {
+    // Reader wrappers supply their own diagnostics. The saved-selection read
+    // path retains its sanctioned interpolation at
+    // `src/selection-store.ts:116-121::if (cause instanceof SafetyError && cause.module === "selection") {`.
+    // oneLine() bounds any inherited git or filesystem diagnostic to one line.
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
+    return null;
+  }
+  // Replay before reporting a command-level result on either path.
+  for (const each of outcome.outcomes) replayOutcome(each, ctx);
+  if (outcome.status === 1) {
+    // null means replayOutcome already emitted the adapter's own `error:`
+    // and `hint:` lines for the failing outcome.
+    if (outcome.message !== null) {
+      ctx.stderr.write(`error: ${outcome.message}\n`);
+    }
+    return null;
+  }
+  return outcome.facts;
+}
+
 export async function runProbe<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
@@ -240,28 +278,9 @@ export async function runProbe<R>(
     ctx.stderr.write(PROBE_USAGE);
     return 2;
   }
-  let outcome: ProbeOutcome<R>;
-  try {
-    outcome = await gatherProbe(ctx);
-  } catch (cause) {
-    // Reader wrappers supply their own diagnostics. The saved-selection read
-    // path retains its sanctioned interpolation at
-    // `src/selection-store.ts:116-121::if (cause instanceof SafetyError && cause.module === "selection") {`.
-    // oneLine() bounds any inherited git or filesystem diagnostic to one line.
-    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
-    return 1;
-  }
-  // Replay before reporting a command-level result on either path.
-  for (const each of outcome.outcomes) replayOutcome(each, ctx);
-  if (outcome.status === 1) {
-    // null means replayOutcome already emitted the adapter's own `error:`
-    // and `hint:` lines for the failing outcome.
-    if (outcome.message !== null) {
-      ctx.stderr.write(`error: ${outcome.message}\n`);
-    }
-    return 1;
-  }
-  const rendered = ctx.adapter.presentation.renderProbe(outcome.facts);
+  const facts = await probeFacts(ctx);
+  if (facts === null) return 1;
+  const rendered = ctx.adapter.presentation.renderProbe(facts);
   ctx.stdout.write(porcelain ? rendered.porcelain : rendered.human);
-  return outcome.facts.resourceState === "recovery-required" ? 1 : 0;
+  return facts.resourceState === "recovery-required" ? 1 : 0;
 }

@@ -23,10 +23,6 @@ export function isTagRef(value: string): boolean {
   return TAG_RE.test(value);
 }
 
-export function isCommit(value: string): boolean {
-  return COMMIT_RE.test(value);
-}
-
 export function normalizeCommitInput(value: string): string | null {
   return COMMIT_INPUT_RE.test(value) ? value.toLowerCase() : null;
 }

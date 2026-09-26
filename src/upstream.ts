@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   COMMIT_INPUT_RE,
   compareStable,
@@ -68,7 +68,7 @@ function combined(result: GitResult): string {
 
 // Mirrors `[ -d "$repository/.git" ]`: a regular file, a broken symlink, or
 // an unreadable path is *not* a directory, so the cache is re-initialized.
-async function isDirectory(path: string): Promise<boolean> {
+export async function isDirectory(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isDirectory();
   } catch {
@@ -358,5 +358,17 @@ export async function fetchExactCommit(
         );
       }
     },
+  );
+}
+
+// An explicit relative SUPERPOWERS_CACHE_DIR resolves against the
+// invocation's working directory.
+export function upstreamCacheRoot(
+  root: string,
+  env: NodeJS.ProcessEnv,
+): string {
+  return resolve(
+    env.SUPERPOWERS_CACHE_DIR || join(root, ".cache", "upstream"),
+    "superpowers",
   );
 }

@@ -1,5 +1,5 @@
-import { mkdir, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, sep } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname, join, sep } from "node:path";
 
 import type { AdapterOutcome } from "../adapter-result.ts";
 import { atomicReplaceDir } from "../atomic.ts";
@@ -8,8 +8,12 @@ import { computeEffectiveSelection } from "../effective-selection.ts";
 import { runGit } from "../git.ts";
 import type { PreparationLocation } from "../harness.ts";
 import { SafetyError } from "../safety-error.ts";
-import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
-import { upstreamCacheRoot } from "../upstream-workspace.ts";
+import {
+  fetchExactCommit,
+  gitSafeSource,
+  isDirectory,
+  upstreamCacheRoot,
+} from "../upstream.ts";
 import {
   BOUNDED_EXECUTABLE,
   launchFailureMessage,
@@ -19,8 +23,12 @@ import {
   type Captured,
   type ValidatorResolution,
 } from "../validator.ts";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import {
+  withWorkspaceReporting,
+  type ReportedWorkspace,
+} from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
+import { invoke } from "./adapter-call.ts";
 import { replayOutcome } from "./probe.ts";
 import { runWithMutation } from "./mutation.ts";
 
@@ -30,19 +38,6 @@ import { runWithMutation } from "./mutation.ts";
 // (`src/harnesses/codex/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
-}
-
-// `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
-// worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
-// fetch branch and let git follow its `gitdir:` pointer, where the shell took
-// the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
-// same distinction.
-async function directoryExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 // mkdir throws raw ErrnoExceptions. Every command-owned call goes through here
@@ -107,54 +102,16 @@ type PrepareOutcome =
       readonly message: string | null;
     };
 
-// Carries a post-success workspace-removal failure WITHOUT discarding the
-// PrepareOutcome the callback already computed. See the header comment on
-// withWorkspace's onCleanupFailure option
-// (`src/workspace.ts:99-107::interface`).
-//
-// Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
-// StageRun documents a precondition that its callback never throws, so it has
-// no "callback also failed" case to lose the cleanup message to. That
-// precondition does not hold here: a callback throw makes withWorkspace throw
-// without consulting the reporter below. This type covers only the
-// post-success cleanup case.
-interface PrepareRun {
-  readonly outcome: PrepareOutcome;
-  readonly cleanupWarning: string | null;
-}
-
-function validStagingLeaf(value: string): boolean {
-  return (
-    value.length > 0 &&
-    value !== "." &&
-    value !== ".." &&
-    !value.includes("/") &&
-    !value.includes("\\")
-  );
-}
-
-async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
+async function gatherPrepare<R>(
+  ctx: CommandContext<R>,
+  location: PreparationLocation,
+): Promise<ReportedWorkspace<PrepareOutcome>> {
   // Collect outcomes without writing so output failures cannot be classified as
   // inspection failures. Replay collected outcomes after gathering completes.
   const env = ctx.env;
-  const cwd = process.cwd();
-  const cache = upstreamCacheRoot(ctx.root, env, cwd);
+  const cache = upstreamCacheRoot(ctx.root, env);
   const cacheParent = dirname(cache);
   const adapterContext = { root: ctx.root, env };
-  let location: PreparationLocation;
-  try {
-    location = ctx.adapter.preparationLocation(adapterContext);
-  } catch (cause) {
-    throw prepareError("cannot determine preparation location", cause);
-  }
-  if (!isAbsolute(location.destinationRoot)) {
-    throw prepareError(
-      "adapter returned a non-absolute preparation destination",
-    );
-  }
-  if (!validStagingLeaf(location.stagingLeaf)) {
-    throw prepareError("adapter returned an invalid preparation staging leaf");
-  }
   const pluginRoot = location.destinationRoot;
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const tmpParent = dirname(pluginRoot);
@@ -167,36 +124,24 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   });
   const selection =
     ctx.selection ?? (await computeEffectiveSelection(ctx.root, env));
-  let prefetch;
-  try {
-    prefetch = await ctx.adapter.validatePreparationBeforeFetch(adapterContext);
-  } catch {
-    return {
-      outcome: failed(
-        ctx.adapter.presentation.callFailure("prepare", adapterContext)
-          .unexpected,
-      ),
-      cleanupWarning: null,
-    };
-  }
-  outcomes.push(prefetch.outcome);
-  if (!prefetch.outcome.ok)
-    return { outcome: failed(null), cleanupWarning: null };
-  if (prefetch.status !== 0) {
-    return {
-      outcome: failed(
-        ctx.adapter.presentation.callFailure("prepare", adapterContext)
-          .invalidStatus,
-      ),
-      cleanupWarning: null,
-    };
+  // callFailure only formats strings; computing it once up front is safe.
+  const failure = ctx.adapter.presentation.callFailure(
+    "prepare",
+    adapterContext,
+  );
+  const prefetch = await invoke(
+    () => ctx.adapter.validatePreparationBeforeFetch(adapterContext),
+    failure,
+    outcomes,
+  );
+  if (!prefetch.ok) {
+    return { value: failed(prefetch.message), cleanupWarning: null };
   }
   await owned(`cannot create directory: ${tmpParent}`, () =>
     mkdir(tmpParent, { recursive: true }),
   );
 
-  let cleanupWarning: string | null = null;
-  const outcome = await withWorkspace(
+  return await withWorkspaceReporting(
     tmpParent,
     ".superpowers.prepare.",
     async (workspace): Promise<PrepareOutcome> => {
@@ -214,7 +159,12 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         );
       } else {
         const source = gitSafeSource(selection.effectiveSource);
-        if (await directoryExists(join(cache, ".git"))) {
+        // `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
+        // worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
+        // fetch branch and let git follow its `gitdir:` pointer, where the shell took
+        // the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
+        // same distinction.
+        if (await isDirectory(join(cache, ".git"))) {
           const fetched = await runGit([
             "-C",
             cache,
@@ -256,40 +206,30 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         );
       }
 
-      let prepared;
-      try {
-        prepared = await ctx.adapter.prepareCandidate(
-          {
-            upstreamRoot: cache,
-            workspaceRoot: workspace,
-            candidateRoot: candidate,
-            selection,
-          },
-          adapterContext,
-        );
-      } catch {
-        return failed(
-          ctx.adapter.presentation.callFailure("prepare", adapterContext)
-            .unexpected,
-        );
-      }
-      outcomes.push(prepared.outcome);
-      if (prepared.status !== 0 || !prepared.outcome.ok) {
-        return failed(
-          prepared.outcome.ok
-            ? ctx.adapter.presentation.callFailure("prepare", adapterContext)
-                .invalidStatus
-            : null,
-        );
-      }
-      if (prepared.outcome.result.root !== candidate) {
+      const prepared = await invoke(
+        () =>
+          ctx.adapter.prepareCandidate(
+            {
+              upstreamRoot: cache,
+              workspaceRoot: workspace,
+              candidateRoot: candidate,
+              selection,
+            },
+            adapterContext,
+          ),
+        failure,
+        outcomes,
+      );
+      if (!prepared.ok) return failed(prepared.message);
+      const candidateResult = prepared.result.outcome.result;
+      if (candidateResult.root !== candidate) {
         return failed("adapter returned an unexpected preparation root");
       }
-      if (prepared.outcome.result.commit !== selection.desiredCommit) {
+      if (candidateResult.commit !== selection.desiredCommit) {
         return failed("adapter returned an unexpected preparation commit");
       }
-      if (prepared.outcome.result.compatibility.kind === "unsupported") {
-        return failed(prepared.outcome.result.compatibility.reason);
+      if (candidateResult.compatibility.kind === "unsupported") {
+        return failed(candidateResult.compatibility.reason);
       }
       let validator = NO_VALIDATOR_OUTPUT;
       if (executableValidator.length > 0) {
@@ -342,7 +282,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
       // the workspace on return, and the candidate lives in it.
       //
       // atomicReplaceDir delegates to beginDirectoryPublication, whose outer
-      // catch (`src/atomic.ts:319::if (cause`) wraps every non-SafetyError
+      // catch (`src/atomic.ts:315::if (cause`) wraps every non-SafetyError
       // into a SafetyError, so the callee owns every failure on this path and
       // re-emitting its own diagnostic is the sanctioned form of interpolation.
       // The hand-written prefix carries the live root, which the callee's message
@@ -366,39 +306,27 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         commit: selection.desiredCommit,
       };
     },
-    {
-      // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure, so
-      // the PrepareOutcome the callback already computed still reaches
-      // runPrepare instead of being discarded. The reporter runs synchronously,
-      // as the option requires (`src/workspace.ts:103-106::Must`).
-      onCleanupFailure: (path) => {
-        cleanupWarning = workspaceRemovalFailure(path);
-      },
-    },
   );
-  return { outcome, cleanupWarning };
 }
 
 export async function runPrepare<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
-  return await runWithMutation("prepare", ctx, async (scoped) =>
-    performPrepare(argv, scoped),
+  // argv is ignored: scripts/prepare never read "$@". Probe, by contrast,
+  // rejects extra arguments in the CLI parser.
+  return await runWithMutation("prepare", ctx, async (scoped, location) =>
+    performPrepare(scoped, location),
   );
 }
 
 async function performPrepare<R>(
-  argv: readonly string[],
   ctx: CommandContext<R>,
+  location: PreparationLocation,
 ): Promise<number> {
-  // scripts/prepare never reads "$@", so extra arguments are ignored. This is a
-  // deliberate asymmetry with probe, whose shell original rejected unknown
-  // arguments and whose arity therefore moved into parseArgs in slice 2.
-  void argv;
-  let run: PrepareRun;
+  let run: ReportedWorkspace<PrepareOutcome>;
   try {
-    run = await gatherPrepare(ctx);
+    run = await gatherPrepare(ctx, location);
   } catch (cause) {
     // Reader wrappers supply their own diagnostics. The saved-selection read
     // path retains its sanctioned interpolation at
@@ -407,7 +335,7 @@ async function performPrepare<R>(
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
-  const { outcome, cleanupWarning } = run;
+  const { value: outcome, cleanupWarning } = run;
   for (const each of outcome.outcomes) replayOutcome(each, ctx);
   if (outcome.validator.stdout.length > 0) {
     ctx.stdout.write(outcome.validator.stdout);
@@ -431,7 +359,7 @@ async function performPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:446::if (cleanupWarning`.
+    // `src/commands/install.ts:372::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

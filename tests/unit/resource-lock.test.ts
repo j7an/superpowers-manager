@@ -26,7 +26,7 @@ import {
   type ResourceCoordinator,
 } from "../../src/resource-lock.ts";
 import { SafetyError } from "../../src/safety-error.ts";
-import { upstreamCacheRoot } from "../../src/upstream-workspace.ts";
+import { upstreamCacheRoot } from "../../src/upstream.ts";
 import { codexHarness } from "../../src/harnesses/codex/harness.ts";
 import { createHarnessFixture } from "../lib/test-harness.ts";
 import { scratch } from "../lib/scratch.ts";
@@ -660,15 +660,16 @@ void test("an action exception remains primary when releasing its lock also fail
 
 void test("upstreamCacheRoot preserves explicit, invocation-relative, and package defaults", () => {
   assert.equal(
-    upstreamCacheRoot("/package", { SUPERPOWERS_CACHE_DIR: "/cache" }, "/cwd"),
+    upstreamCacheRoot("/package", { SUPERPOWERS_CACHE_DIR: "/cache" }),
     "/cache/superpowers",
   );
+  // A relative override resolves against the invocation's working directory.
   assert.equal(
-    upstreamCacheRoot("/package", { SUPERPOWERS_CACHE_DIR: "cache" }, "/cwd"),
-    "/cwd/cache/superpowers",
+    upstreamCacheRoot("/package", { SUPERPOWERS_CACHE_DIR: "cache" }),
+    join(process.cwd(), "cache", "superpowers"),
   );
   assert.equal(
-    upstreamCacheRoot("/package", {}, "/cwd"),
+    upstreamCacheRoot("/package", {}),
     "/package/.cache/upstream/superpowers",
   );
 });

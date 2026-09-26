@@ -266,13 +266,20 @@ export async function resolveValidator(
   // runs whatever PATH selects -- the same divergence that makes realpath unsafe
   // here.
   const pathLike = configured.includes(sep);
+  if (!pathLike) {
+    return {
+      configured,
+      resolved: null,
+      isSymlink: false,
+      isDirectory: false,
+      exists: false,
+    };
+  }
   let isSymlink = false;
-  if (pathLike) {
-    try {
-      isSymlink = (await lstat(configured)).isSymbolicLink();
-    } catch {
-      /* spawn reports the real reason */
-    }
+  try {
+    isSymlink = (await lstat(configured)).isSymbolicLink();
+  } catch {
+    /* spawn reports the real reason */
   }
   // Resolve ONLY when the configured value contains a path separator -- which is
   // exactly when spawn bypasses PATH and the two agree about the target. For a
@@ -281,23 +288,19 @@ export async function resolveValidator(
   // interpreter and spawn("node") ran another. Resolving a bare name would let the
   // manager confidently disclose a file it is not about to run.
   let resolved: string | null = null;
-  if (configured.includes(sep)) {
-    try {
-      resolved = await realpath(configured);
-    } catch {
-      /* unresolvable; stays null and is never claimed */
-    }
+  try {
+    resolved = await realpath(configured);
+  } catch {
+    /* unresolvable; stays null and is never claimed */
   }
   let isDirectory = false;
   let exists = false;
-  if (pathLike) {
-    try {
-      const s = await stat(configured);
-      isDirectory = s.isDirectory();
-      exists = true;
-    } catch {
-      /* spawn reports the real reason */
-    }
+  try {
+    const s = await stat(configured);
+    isDirectory = s.isDirectory();
+    exists = true;
+  } catch {
+    /* spawn reports the real reason */
   }
   return { configured, resolved, isSymlink, isDirectory, exists };
 }
