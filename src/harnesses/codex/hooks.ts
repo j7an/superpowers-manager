@@ -27,7 +27,7 @@ export interface HookPlan {
 }
 
 // Annotated, not `as const`, matching
-// `src/provenance.ts:20::const PROVENANCE_STRICT_PROFILE` and
+// `src/provenance.ts:19::const PROVENANCE_STRICT_PROFILE` and
 // `src/selection-store.ts:15::const SELECTION_JSON_PROFILE`. The annotation
 // rejects a misspelled or unsupported profile field here rather than at the
 // parseStrictJson call.
@@ -38,7 +38,7 @@ const MANIFEST_PROFILE: StrictJsonProfile = {
 };
 
 // Private helper, matching
-// `src/selection.ts:42::return new SafetyError("selection"` and
+// `src/selection.ts:35::return new SafetyError("selection"` and
 // `src/upstream.ts:35::function upstreamError`. No new exported error class:
 // SafetyError already carries module and cause.
 function hookError(message: string, cause?: unknown): SafetyError {

@@ -884,7 +884,7 @@ void test("track-latest defaults its saved source to the official upstream, and 
   // honest parity — but this `assert.match` earns its place anyway: it is
   // the empirical proof that this fixture actually reaches
   // `validateRecord`'s `schema_version must equal integer 1` branch
-  // (`src/selection.ts:198::schema_version must equal integer 1`), not the JSON-parse-failure branch
+  // (`src/selection.ts:191::schema_version must equal integer 1`), not the JSON-parse-failure branch
   // tests/unit/commands-track-latest.test.js's "refuses to overwrite a
   // corrupt saved record" exercises — the exact distinction Important 1's
   // retirement citation got wrong, made self-evident here once

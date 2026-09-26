@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { COMMIT_RE, TAG_RE, normalizeCommitInput } from "./domain/refs.ts";
+import { COMMIT_RE, TAG_RE } from "./domain/refs.ts";
 import { escapePythonJsonString } from "./python-json.ts";
 import { SafetyError } from "./safety-error.ts";
 
@@ -27,13 +27,6 @@ export interface NormalizedSavedSelection {
   readonly saved_requested_ref: string;
   readonly saved_resolved_ref: string;
   readonly saved_commit: string;
-}
-
-interface PinnedArguments {
-  readonly source: string;
-  readonly requestedRef: string;
-  readonly resolvedRef: string;
-  readonly commit: string;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -237,24 +230,6 @@ export function normalizeSaved(
     saved_requested_ref: record.mode === "pinned" ? record.requested_ref : "",
     saved_resolved_ref: record.mode === "pinned" ? record.resolved_ref : "",
     saved_commit: record.mode === "pinned" ? record.commit : "",
-  };
-}
-
-export function normalizePinnedArguments(
-  arguments_: PinnedArguments,
-): PinnedSelectionRecord {
-  const requestedRef =
-    normalizeCommitInput(arguments_.requestedRef) ?? arguments_.requestedRef;
-  const resolvedRef =
-    normalizeCommitInput(arguments_.resolvedRef) ?? arguments_.resolvedRef;
-  const commit = arguments_.commit.toLowerCase();
-  return {
-    schema_version: 1,
-    mode: "pinned",
-    source: arguments_.source,
-    requested_ref: requestedRef,
-    resolved_ref: resolvedRef,
-    commit,
   };
 }
 

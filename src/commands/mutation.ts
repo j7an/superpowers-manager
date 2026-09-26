@@ -1,5 +1,5 @@
 import { computeEffectiveSelection } from "../effective-selection.ts";
-import { upstreamCacheRoot } from "../upstream-workspace.ts";
+import { upstreamCacheRoot } from "../upstream.ts";
 import type { CommandContext } from "./context.ts";
 import { SafetyError } from "../safety-error.ts";
 import type { PreparationLocation } from "../harness.ts";
@@ -70,7 +70,7 @@ export async function withMutation<R>(
   }
   const resources = [location.destinationRoot, ...mutationRoots];
   if (command === "prepare") {
-    resources.push(upstreamCacheRoot(ctx.root, ctx.env, process.cwd()));
+    resources.push(upstreamCacheRoot(ctx.root, ctx.env));
   }
 
   // The coordinator sorts each acquisition and refuses conflicts immediately.

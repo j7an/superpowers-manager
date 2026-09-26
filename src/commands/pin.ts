@@ -6,7 +6,7 @@ import {
   selectionStatePath,
   UPSTREAM_URL_DEFAULT,
 } from "../effective-selection.ts";
-import { normalizePinnedArguments, validateSource } from "../selection.ts";
+import { validateSource } from "../selection.ts";
 import { writeSelectionState } from "../selection-store.ts";
 import { resolveExactTag, verifyRawCommit } from "../upstream.ts";
 import type { CommandContext } from "./context.ts";
@@ -55,15 +55,17 @@ async function attemptPin<R>(
     commit = await verifyRawCommit(source, resolvedRef, tmpdir());
   }
 
-  await writeSelectionState(
-    selectionStatePath(ctx.env),
-    normalizePinnedArguments({
-      source,
-      requestedRef: resolvedRef,
-      resolvedRef,
-      commit,
-    }),
-  );
+  // resolvedRef is already normalized (lowercase for a raw commit; a v-tag is
+  // unchanged), and commit comes lowercase from verifyRawCommit or git
+  // ls-remote. validateRecord still rejects anything else.
+  await writeSelectionState(selectionStatePath(ctx.env), {
+    schema_version: 1,
+    mode: "pinned",
+    source,
+    requested_ref: resolvedRef,
+    resolved_ref: resolvedRef,
+    commit,
+  });
   return { resolvedRef, commit };
 }
 

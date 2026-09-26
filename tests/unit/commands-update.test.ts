@@ -373,8 +373,8 @@ void test('current: an UNRECOGNISED update control capability is its own diagnos
 });
 
 void test("needs prepare: a failing prepare's status propagates verbatim, and install never runs", async () => {
-  // No generated metadata file is written, so generatedCommitOrEmpty yields
-  // "" and facts.status is "needs prepare". runPrepare is called as a
+  // No generated metadata file is written, so readGeneratedCommitLenient
+  // yields "" and facts.status is "needs prepare". runPrepare is called as a
   // FUNCTION and its own failure -- a missing fallback manifest template,
   // since none was created in this fixture -- becomes update's return value
   // verbatim, the property `set -eu` gave the shell for free and a function

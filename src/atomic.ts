@@ -41,11 +41,7 @@ export async function atomicWriteFile(
         temporary = candidate;
         break;
       } catch (cause) {
-        if (
-          cause instanceof Error &&
-          "code" in cause &&
-          (cause as NodeJS.ErrnoException).code === "EEXIST"
-        ) {
+        if (isErrno(cause, "EEXIST")) {
           continue;
         }
         throw cause;

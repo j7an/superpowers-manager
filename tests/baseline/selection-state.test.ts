@@ -23,7 +23,6 @@ import {
 } from "../../src/selection-store.ts";
 import {
   displaySource,
-  normalizePinnedArguments,
   normalizeSaved,
   validateSource,
 } from "../../src/selection.ts";
@@ -127,15 +126,14 @@ function writePinned(
     commit?: string;
   } = {},
 ): Promise<void> {
-  return writeSelectionState(
-    overrides.path ?? state.statePath,
-    normalizePinnedArguments({
-      source: overrides.source ?? SOURCE,
-      requestedRef: overrides.requestedRef ?? "v6.1.1",
-      resolvedRef: overrides.resolvedRef ?? "v6.1.1",
-      commit: overrides.commit ?? COMMIT,
-    }),
-  );
+  return writeSelectionState(overrides.path ?? state.statePath, {
+    schema_version: 1,
+    mode: "pinned",
+    source: overrides.source ?? SOURCE,
+    requested_ref: overrides.requestedRef ?? "v6.1.1",
+    resolved_ref: overrides.resolvedRef ?? "v6.1.1",
+    commit: overrides.commit ?? COMMIT,
+  });
 }
 
 function writeTrackLatest(
@@ -463,20 +461,23 @@ void test("SEL-BYTES-DIRECTORY-PRESERVE-01 the writer preserves an existing dire
   assert.equal(statSync(state.statePath).mode & 0o777, 0o600);
 });
 
-void test("SEL-SCHEMA-COMMIT-WRITE-01 the writer normalizes raw commit input to lowercase", async (t) => {
+// SEL-SCHEMA-COMMIT-WRITE-01's lowercasing lives in runPin: see
+// tests/unit/commands-pin.test.ts "a mixed-case 40-hex ref is lowercased in
+// the written record" and tests/baseline/selection-commands.test.ts
+// REF-PIN-SOURCE-01. The writer itself never normalizes: it refuses a
+// non-lowercase commit and leaves no state behind.
+void test("SEL-SCHEMA-COMMIT-WRITE-01 the writer refuses raw commit input that is not lowercase", async (t) => {
   const state = fixture(t);
   const upper = COMMIT.toUpperCase();
-  await writePinned(state, {
-    requestedRef: upper,
-    resolvedRef: upper,
-    commit: upper,
-  });
-  assert.deepEqual(JSON.parse(readFileSync(state.statePath, "utf8")), {
-    ...PINNED,
-    requested_ref: COMMIT,
-    resolved_ref: COMMIT,
-    commit: COMMIT,
-  });
+  await assert.rejects(
+    writePinned(state, {
+      requestedRef: upper,
+      resolvedRef: upper,
+      commit: upper,
+    }),
+    { name: "SafetyError", message: /commit must be a lowercase 40-hex value/ },
+  );
+  assert.equal(existsSync(state.statePath), false);
 });
 
 // No behavior ID: this case restores no mapped ID and mints none. It guards the

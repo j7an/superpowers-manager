@@ -1,6 +1,7 @@
 import { lstat, unlink } from "node:fs/promises";
 import { oneLine } from "../cli-arguments.ts";
 import { selectionStatePath } from "../effective-selection.ts";
+import { isErrno } from "../safe-path.ts";
 import { selectionError } from "../selection.ts";
 import { readConfigRef } from "../upstream.ts";
 import type { CommandContext } from "./context.ts";
@@ -41,7 +42,7 @@ async function attemptUnpin<R>(ctx: CommandContext<R>): Promise<UnpinOutcome> {
     try {
       return await lstat(path);
     } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null;
+      if (isErrno(cause, "ENOENT")) return null;
       throw selectionError(`cannot inspect selection state: ${path}`);
     }
   };

@@ -1,4 +1,4 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 
 import type { AdapterOutcome } from "../adapter-result.ts";
@@ -8,8 +8,12 @@ import { computeEffectiveSelection } from "../effective-selection.ts";
 import { runGit } from "../git.ts";
 import type { PreparationLocation } from "../harness.ts";
 import { SafetyError } from "../safety-error.ts";
-import { fetchExactCommit, gitSafeSource } from "../upstream.ts";
-import { upstreamCacheRoot } from "../upstream-workspace.ts";
+import {
+  fetchExactCommit,
+  gitSafeSource,
+  isDirectory,
+  upstreamCacheRoot,
+} from "../upstream.ts";
 import {
   BOUNDED_EXECUTABLE,
   launchFailureMessage,
@@ -34,19 +38,6 @@ import { runWithMutation } from "./mutation.ts";
 // (`src/harnesses/codex/hooks.ts:44::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
-}
-
-// `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
-// worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
-// fetch branch and let git follow its `gitdir:` pointer, where the shell took
-// the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
-// same distinction.
-async function directoryExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 // mkdir throws raw ErrnoExceptions. Every command-owned call goes through here
@@ -118,8 +109,7 @@ async function gatherPrepare<R>(
   // Collect outcomes without writing so output failures cannot be classified as
   // inspection failures. Replay collected outcomes after gathering completes.
   const env = ctx.env;
-  const cwd = process.cwd();
-  const cache = upstreamCacheRoot(ctx.root, env, cwd);
+  const cache = upstreamCacheRoot(ctx.root, env);
   const cacheParent = dirname(cache);
   const adapterContext = { root: ctx.root, env };
   const pluginRoot = location.destinationRoot;
@@ -169,7 +159,12 @@ async function gatherPrepare<R>(
         );
       } else {
         const source = gitSafeSource(selection.effectiveSource);
-        if (await directoryExists(join(cache, ".git"))) {
+        // `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
+        // worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
+        // fetch branch and let git follow its `gitdir:` pointer, where the shell took
+        // the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
+        // same distinction.
+        if (await isDirectory(join(cache, ".git"))) {
           const fetched = await runGit([
             "-C",
             cache,
@@ -287,7 +282,7 @@ async function gatherPrepare<R>(
       // the workspace on return, and the candidate lives in it.
       //
       // atomicReplaceDir delegates to beginDirectoryPublication, whose outer
-      // catch (`src/atomic.ts:319::if (cause`) wraps every non-SafetyError
+      // catch (`src/atomic.ts:315::if (cause`) wraps every non-SafetyError
       // into a SafetyError, so the callee owns every failure on this path and
       // re-emitting its own diagnostic is the sanctioned form of interpolation.
       // The hand-written prefix carries the live root, which the callee's message

@@ -12,7 +12,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { canonicalizeProspectivePath } from "./safe-path.ts";
+import { canonicalizeProspectivePath, isErrno } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 
 export interface ResourceCoordinator {
@@ -38,21 +38,9 @@ interface HeldResource {
   count: number;
 }
 
-interface AcquiredResource {
-  readonly held: HeldResource;
-}
-
 interface ReleaseOutcome {
   readonly keepHeld: boolean;
   readonly failure: SafetyError | null;
-}
-
-function errnoIs(cause: unknown, code: string): boolean {
-  return (
-    cause instanceof Error &&
-    "code" in cause &&
-    (cause as NodeJS.ErrnoException).code === code
-  );
 }
 
 async function nearestExistingDirectory(path: string): Promise<string> {
@@ -61,7 +49,7 @@ async function nearestExistingDirectory(path: string): Promise<string> {
     try {
       return await realpath(cursor);
     } catch (cause) {
-      if (!errnoIs(cause, "ENOENT")) throw cause;
+      if (!isErrno(cause, "ENOENT")) throw cause;
       const parent = dirname(cursor);
       if (parent === cursor) throw cause;
       cursor = parent;
@@ -106,7 +94,7 @@ async function resourceLock(resource: string): Promise<ResourceLock> {
       await lstat(candidate);
       return { resource: canonical, lockPath: candidate };
     } catch (cause) {
-      if (!errnoIs(cause, "ENOENT")) {
+      if (!isErrno(cause, "ENOENT")) {
         throw new SafetyError(
           "resource-lock",
           `cannot inspect resource lock: ${canonical}`,
@@ -129,7 +117,7 @@ async function assertNoCompetingResourceLock(
     try {
       await lstat(candidate);
     } catch (cause) {
-      if (errnoIs(cause, "ENOENT")) continue;
+      if (isErrno(cause, "ENOENT")) continue;
       throw new SafetyError(
         "resource-lock",
         `cannot inspect resource lock: ${lock.resource}`,
@@ -265,11 +253,11 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
             await file.close();
           }
         } catch (cause) {
-          if (errnoIs(cause, "ENOENT")) {
+          if (isErrno(cause, "ENOENT")) {
             try {
               await lstat(lock.lockPath);
             } catch (again) {
-              if (errnoIs(again, "ENOENT"))
+              if (isErrno(again, "ENOENT"))
                 return observation(
                   this.#held.has(lock.lockPath) ? "uninspectable" : "idle",
                 );
@@ -295,7 +283,7 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
           ? 1
           : 0,
     );
-    const acquired: AcquiredResource[] = [];
+    const acquired: HeldResource[] = [];
     let completion:
       | { readonly kind: "returned"; readonly value: T }
       | { readonly kind: "threw"; readonly cause: unknown };
@@ -304,7 +292,7 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
         const existing = this.#held.get(lock.lockPath);
         if (existing !== undefined) {
           existing.count += 1;
-          acquired.push({ held: existing });
+          acquired.push(existing);
           continue;
         }
 
@@ -312,7 +300,7 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
         try {
           await mkdir(lock.lockPath);
         } catch (cause) {
-          if (errnoIs(cause, "EEXIST")) {
+          if (isErrno(cause, "EEXIST")) {
             throw new SafetyError(
               "resource-lock",
               `resource is busy: ${lock.resource}`,
@@ -344,7 +332,7 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
           );
         }
         this.#held.set(lock.lockPath, held);
-        acquired.push({ held });
+        acquired.push(held);
       }
       // A missing ancestor can appear between placement discovery and mkdir,
       // leaving concurrently acquired markers at different depths. Checking
@@ -360,9 +348,9 @@ class FilesystemResourceCoordinator implements ResourceCoordinator {
 
     let firstReleaseFailure: SafetyError | null = null;
     for (const entry of acquired.reverse()) {
-      const released = await releaseOwned(entry.held);
+      const released = await releaseOwned(entry);
       if (!released.keepHeld) {
-        this.#held.delete(entry.held.lockPath);
+        this.#held.delete(entry.lockPath);
       }
       firstReleaseFailure ??= released.failure;
     }

@@ -40,8 +40,6 @@ void test("REF-PINNABLE-01 / SEL-SCHEMA-REFS-01 tag grammar", () => {
 });
 
 void test("REF-PIN-SOURCE-01 / SEL-SCHEMA-COMMIT-01 / SEL-SCHEMA-COMMIT-WRITE-01 commit forms", () => {
-  assert.equal(refs.isCommit(lower), true);
-  assert.equal(refs.isCommit(upper), false);
   assert.equal(refs.COMMIT_INPUT_RE.test(lower), true);
   assert.equal(refs.COMMIT_INPUT_RE.test(upper), true);
   assert.equal(refs.normalizeCommitInput(upper), lower);

@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
 import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { ARTIFACT_RECEIPT } from "./artifact-tree.ts";
 import { COMMIT_RE } from "./domain/refs.ts";
 import {
   assertNoFollowType,
   assertSymlinkTargetContained,
+  isContained,
 } from "./safe-path.ts";
 import { SafetyError } from "./safety-error.ts";
 
@@ -95,15 +96,12 @@ export async function materializeGitTree(
       const target = DECODER.decode(
         await gitBytes(repository, ["cat-file", "blob", entry.oid]),
       );
-      const path = join(destination, entry.path),
-        suffix = relative(resolve(destination), resolve(dirname(path), target));
+      const path = join(destination, entry.path);
       if (
         !target ||
         target.includes("\0") ||
         isAbsolute(target) ||
-        suffix === ".." ||
-        suffix.startsWith("../") ||
-        isAbsolute(suffix)
+        !isContained(resolve(destination), resolve(dirname(path), target))
       )
         throw new Error("link escape");
       await symlink(target, path);

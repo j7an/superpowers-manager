@@ -8,11 +8,11 @@ import { scratch } from "../lib/scratch.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 
 import {
-  normalizePinnedArguments,
   normalizeSaved,
   serializeRecord,
   validateRecord,
   validateSource,
+  type PinnedSelectionRecord,
 } from "../../src/selection.ts";
 
 import {
@@ -58,22 +58,6 @@ void test("selection validation and normalization preserve the frozen record sha
     saved_resolved_ref: "",
     saved_commit: "",
   });
-  assert.deepEqual(
-    normalizePinnedArguments({
-      source: "https://example.invalid/repo",
-      requestedRef: commit.toUpperCase(),
-      resolvedRef: commit.toUpperCase(),
-      commit: commit.toUpperCase(),
-    }),
-    {
-      schema_version: 1,
-      mode: "pinned",
-      source: "https://example.invalid/repo",
-      requested_ref: commit,
-      resolved_ref: commit,
-      commit,
-    },
-  );
   assert.throws(
     () =>
       validateRecord({
@@ -243,15 +227,14 @@ void test("pinned writes preserve directory, existing-state, then proposed-recor
   const stateDirectory = join(directory, "config");
   const target = join(stateDirectory, "selection.json");
 
-  const invalidProposed: import("../../src/selection.ts").PinnedSelectionRecord =
-    {
-      schema_version: 1,
-      mode: "pinned",
-      source: "",
-      requested_ref: "v1.2.3",
-      resolved_ref: "v1.2.3",
-      commit,
-    };
+  const invalidProposed: PinnedSelectionRecord = {
+    schema_version: 1,
+    mode: "pinned",
+    source: "",
+    requested_ref: "v1.2.3",
+    resolved_ref: "v1.2.3",
+    commit,
+  };
 
   const proposedError = await selectionFailure(
     writeSelectionState(target, invalidProposed),

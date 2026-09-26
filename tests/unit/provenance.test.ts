@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 import { exactError } from "../lib/error-assertions.ts";
 import { scratch } from "../lib/scratch.ts";
@@ -11,8 +11,6 @@ import {
   readStrictProvenanceField,
   serializeProvenance,
   writeProvenance,
-  generatedMetadataPath,
-  generatedCommitOrEmpty,
 } from "../../src/provenance.ts";
 
 import { escapePythonJsonString } from "../../src/python-json.ts";
@@ -69,7 +67,7 @@ void test("PROV-READER-CODEX-SOURCE-01 Codex build source reader preserves its a
   // same unmodified reader rejects at depth 20000 under --stack-size=984 and
   // accepts under --stack-size=8192, so such an assertion would report RED on
   // a correct product under one node invocation and GREEN under another.
-  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (`src/provenance.ts:31-34::const PROVENANCE_CODEX_SOURCE_PROFILE`)
+  // 256, not 255: PROVENANCE_CODEX_SOURCE_PROFILE (`src/provenance.ts:30-33::const PROVENANCE_CODEX_SOURCE_PROFILE`)
   // sets no maxDepth, and nested(255) reaches container depth 256, which a
   // `maxDepth: 256` mutant still ACCEPTS -- `src/strict-json.ts:165::if (this.profile.maxDepth` rejects only on
   // `depth > maxDepth`. nested(256) reaches 257 and is the first depth that
@@ -252,31 +250,4 @@ void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
     await writeProvenance(output, record);
     assert.deepEqual(await readFile(output), expected, fixture);
   }
-});
-
-void test("generatedCommitOrEmpty reads the generated tree's provenance", async (t) => {
-  const directory = scratch(t, "spw-provenance-");
-  const metadata = join(
-    directory,
-    "plugins",
-    "superpowers",
-    ".superpowers-upstream.json",
-  );
-  assert.equal(
-    generatedMetadataPath(directory),
-    metadata,
-    "the metadata path must match src/provenance.ts's generatedMetadataPath",
-  );
-
-  // Absent tree: empty, not a throw. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:33-37::spw_generated_commit_or_empty` relied on
-  // the lenient reader so `probe` can report "needs prepare" instead of
-  // aborting the remediation path.
-  assert.equal(await generatedCommitOrEmpty(directory), "");
-
-  await mkdir(dirname(metadata), { recursive: true });
-  await writeFile(metadata, `{"commit":"${commit}"}`);
-  assert.equal(await generatedCommitOrEmpty(directory), commit);
-
-  await writeFile(metadata, "{");
-  assert.equal(await generatedCommitOrEmpty(directory), "");
 });
