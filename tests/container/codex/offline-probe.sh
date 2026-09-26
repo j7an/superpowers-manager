@@ -432,7 +432,7 @@ import { execFile } from "node:child_process";
 import { rename } from "node:fs/promises";
 import { promisify } from "node:util";
 import { beginDirectoryPublication } from "/workspace/src/atomic.ts";
-import { codexInspectControl, codexInspectOwnership, codexInstall, codexReadNativeState } from "/workspace/src/harnesses/codex/adapter.ts";
+import { codexInspectOwnership, codexInstall, codexReadNativeState } from "/workspace/src/harnesses/codex/adapter.ts";
 import { readCodexPrepared } from "/workspace/src/harnesses/codex/prepare.ts";
 import { codexPaths } from "/workspace/src/harnesses/codex/paths.ts";
 import { installCodexMarketplace } from "/workspace/src/harnesses/codex/publication.ts";
@@ -454,7 +454,6 @@ const result = await installCodexMarketplace(
   {
     readNative: codexReadNativeState,
     inspectOwnership: codexInspectOwnership,
-    inspectControl: codexInspectControl,
     beginPublication: async (candidate, live, options) => await beginDirectoryPublication(candidate, live, {
       ...options,
       hooks: {
