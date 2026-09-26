@@ -52,7 +52,6 @@ export interface OpenCodeDiscovery {
   readonly managedEntries: readonly {
     readonly observation: ConfigFileObservation;
     readonly entry: ConfigEntry;
-    readonly canonicalRoot: string;
   }[];
 }
 
@@ -275,12 +274,7 @@ async function inspectPluginEntry(
   if (local !== null) {
     const canonical = await canonicalizeProspectivePath(local);
     if (canonical === state.installedRoot) {
-      if (allowManaged)
-        state.managedEntries.push({
-          observation,
-          entry,
-          canonicalRoot: canonical,
-        });
+      if (allowManaged) state.managedEntries.push({ observation, entry });
       else
         addBlocked(
           state,

@@ -1,6 +1,9 @@
 import type { HarnessPresentation } from "../../harness.ts";
 import { displaySource } from "../../selection.ts";
-import { createSnapshotPresentation } from "../../snapshot-presentation.ts";
+import {
+  createSnapshotPresentation,
+  probeOutput,
+} from "../../snapshot-presentation.ts";
 import { displayPath } from "../../validator.ts";
 import type { OpenCodeRemovalInput } from "./state.ts";
 
@@ -24,15 +27,7 @@ const renderProbe: HarnessPresentation<OpenCodeRemovalInput>["renderProbe"] = (
     ["compatibility_reason", facts.compatibility.reason],
     ["status", facts.status],
   ].map(([key, value]) => [key, displayPath(value)] as const);
-  return {
-    human: fields
-      .map(
-        ([key, value]) =>
-          `${key.replaceAll("_", " ")}: ${value || "not present"}\n`,
-      )
-      .join(""),
-    porcelain: fields.map(([key, value]) => `${key}=${value}\n`).join(""),
-  };
+  return probeOutput(fields);
 };
 
 export const openCodePresentation = createSnapshotPresentation(

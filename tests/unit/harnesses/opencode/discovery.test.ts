@@ -372,12 +372,7 @@ void test("discovery retains origins and separates the Manager alias from exact 
     [config],
   );
   assert.equal(result.managedEntries.length, 1);
-  assert.equal(
-    result.managedEntries[0]?.canonicalRoot.endsWith(
-      "/config/opencode/superpowers-manager/installed",
-    ),
-    true,
-  );
+  assert.equal(result.managedEntries[0]?.entry.spec, state.paths.installedRoot);
   assert.deepEqual(result.conflicts, [
     "registered OpenCode package for obra/superpowers",
     "registered local OpenCode package named superpowers",

@@ -48,3 +48,19 @@ export function createSnapshotPresentation<R>(
     },
   };
 }
+
+// Each harness chooses its fields and applies its own escaping before calling.
+export function probeOutput(fields: readonly (readonly [string, string])[]): {
+  human: string;
+  porcelain: string;
+} {
+  return {
+    human: fields
+      .map(
+        ([key, value]) =>
+          `${key.replaceAll("_", " ")}: ${value || "not present"}\n`,
+      )
+      .join(""),
+    porcelain: fields.map(([key, value]) => `${key}=${value}\n`).join(""),
+  };
+}

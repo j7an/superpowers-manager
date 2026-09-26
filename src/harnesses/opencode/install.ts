@@ -1,16 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import {
-  cp,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rm,
-  rmdir,
-  unlink,
-} from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { findNodeAtLocation } from "jsonc-parser";
 
 import {
@@ -59,6 +49,16 @@ import {
   type OpenCodeRemovalInput,
 } from "./state.ts";
 import { displayPath } from "../../validator.ts";
+import {
+  createJournal,
+  createSnapshotJournal,
+  hasRecovery,
+  identity,
+  journalPath,
+  publicationPaths,
+  requireNoRecovery,
+  type Identity,
+} from "../../snapshot-journal.ts";
 
 export interface OpenCodeInstallDependencies {
   readonly run: typeof runOpenCode;
@@ -74,7 +74,6 @@ const DEFAULTS: OpenCodeInstallDependencies = {
 // V1 prints a bare semver ("1.18.31"); V2 prints "opencode v2.0.10".
 const OPEN_CODE_VERSION_PREFIX = /^opencode\s+v/i;
 
-type Identity = { readonly dev: number; readonly ino: number };
 // The journal can contain data from two independently bounded 1 MiB receipts
 // plus one bounded 1 MiB config. Six bytes of JSON output per input byte covers
 // control escaping; counting the registration spec independently brings that
@@ -153,27 +152,6 @@ function accepted<T>(result: AdapterResult<T>): T {
   return result.outcome.result;
 }
 
-function sameIdentity(left: Identity, right: Identity): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-
-async function identity(path: string): Promise<Identity> {
-  await assertNoFollowType(path, ["directory"]);
-  return await lstat(path);
-}
-
-async function requireIdentity(
-  path: string,
-  expected: Identity,
-): Promise<void> {
-  if (!sameIdentity(await identity(path), expected))
-    throw new Error("OpenCode directory changed");
-}
-
-function journalPath(pending: Pending): string {
-  return join(pending.paths.recoveryRoot, "transaction.json");
-}
-
 function journalBytes(journal: Journal): Buffer {
   const bytes = Buffer.from(`${JSON.stringify(journal)}\n`);
   if (bytes.length > MAX_JOURNAL_BYTES)
@@ -183,32 +161,16 @@ function journalBytes(journal: Journal): Buffer {
 
 async function validatePaths(paths: OpenCodePaths): Promise<string> {
   await assertOpenCodePreparationSeparate(paths);
-  await assertNoFollowType(paths.configRoot, ["directory", "missing"]);
-  await assertNoFollowType(paths.managerRoot, ["directory", "missing"]);
-  await assertNoFollowType(paths.installedRoot, ["directory", "missing"]);
   return await canonicalizeProspectivePath(paths.installedRoot);
 }
 
-async function requireNoRecovery(paths: OpenCodePaths): Promise<void> {
-  await assertNoFollowType(paths.recoveryRoot, ["missing"]);
-}
-
-async function hasRecovery(paths: OpenCodePaths): Promise<boolean> {
-  try {
-    return (await classifyPathNoFollow(paths.recoveryRoot)) !== "missing";
-  } catch {
-    return true;
-  }
-}
-
-async function syncDirectoryStrict(path: string): Promise<void> {
-  const directory = await open(path, "r");
-  try {
-    await directory.sync();
-  } finally {
-    await directory.close();
-  }
-}
+const { requireIdentity, requireJournal, phase, retireJournal } =
+  createSnapshotJournal<OpenCodePaths, Journal>({
+    label: "OpenCode",
+    validatePaths,
+    serialize: journalBytes,
+    readCap: MAX_JOURNAL_BYTES,
+  });
 
 function artifactSame(
   left: SnapshotEvidence | null,
@@ -378,57 +340,6 @@ async function requireActivationEligibility(
     throw new Error("OpenCode ownership or control blocked");
 }
 
-async function requireJournal(pending: Pending): Promise<void> {
-  if (
-    (await validatePaths(pending.paths)) !== pending.canonicalRoot ||
-    pending.journal.installedRoot !== pending.canonicalRoot ||
-    !/^[a-f0-9]{32}$/u.test(pending.journal.token)
-  )
-    throw new Error("OpenCode recovery root changed");
-  await requireIdentity(pending.paths.recoveryRoot, pending.recoveryIdentity);
-  const path = journalPath(pending);
-  await assertNoFollowType(path, ["regular-file"]);
-  const observed = await lstat(path);
-  if (
-    !sameIdentity(observed, pending.journalIdentity) ||
-    observed.size > MAX_JOURNAL_BYTES ||
-    !(await readFile(path)).equals(journalBytes(pending.journal))
-  )
-    throw new Error("OpenCode recovery journal changed");
-  if (
-    pending.backup !==
-      join(
-        dirname(pending.canonicalRoot),
-        `.${basename(pending.canonicalRoot)}.bak.${pending.journal.token}`,
-      ) ||
-    pending.stage !==
-      join(
-        dirname(pending.canonicalRoot),
-        `.${basename(pending.canonicalRoot)}.stage.${pending.journal.token}`,
-      )
-  )
-    throw new Error("OpenCode recovery paths changed");
-}
-
-async function phase(
-  pending: Pending,
-  next: Phase,
-  changes: { readonly createdRegistration?: RegistrationRecord | null } = {},
-): Promise<void> {
-  await requireJournal(pending);
-  const journal = { ...pending.journal, ...changes, phase: next };
-  const bytes = journalBytes(journal);
-  await atomicWriteFile(journalPath(pending), bytes, {
-    validate: async (temporary) => {
-      if (!(await readFile(temporary)).equals(bytes))
-        throw new Error("OpenCode journal write changed");
-    },
-  });
-  await syncDirectoryStrict(pending.paths.recoveryRoot);
-  pending.journal = journal;
-  pending.journalIdentity = await lstat(journalPath(pending));
-}
-
 async function beginJournal(
   paths: OpenCodePaths,
   oldArtifact: OpenCodeReceipt | null,
@@ -455,45 +366,17 @@ async function beginJournal(
   await mkdir(paths.managerRoot, { recursive: true });
   await mkdir(paths.recoveryRoot, { mode: 0o700 });
   const recoveryIdentity = await identity(paths.recoveryRoot);
-  const path = join(paths.recoveryRoot, "transaction.json");
-  const handle = await open(path, "wx", 0o600);
-  try {
-    await handle.writeFile(bytes);
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await syncDirectoryStrict(paths.recoveryRoot);
+  const journalIdentity = await createJournal(paths.recoveryRoot, bytes);
   return {
     paths,
     canonicalRoot,
     recoveryIdentity,
-    backup: join(
-      dirname(canonicalRoot),
-      `.${basename(canonicalRoot)}.bak.${token}`,
-    ),
-    stage: join(
-      dirname(canonicalRoot),
-      `.${basename(canonicalRoot)}.stage.${token}`,
-    ),
+    ...publicationPaths(canonicalRoot, token),
     ctx,
     journal,
-    journalIdentity: await lstat(path),
+    journalIdentity,
     settled: false,
   };
-}
-
-async function retireJournal(pending: Pending): Promise<void> {
-  await requireJournal(pending);
-  if (
-    (await readdir(pending.paths.recoveryRoot)).some(
-      (name) => name !== "transaction.json",
-    )
-  )
-    throw new Error("unknown OpenCode recovery material");
-  await unlink(journalPath(pending));
-  await requireIdentity(pending.paths.recoveryRoot, pending.recoveryIdentity);
-  await rmdir(pending.paths.recoveryRoot);
 }
 
 async function recoveryGuidance(pending: Pending): Promise<string> {
