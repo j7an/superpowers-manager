@@ -255,7 +255,7 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
   assert.doesNotMatch(serialized, /Traceback/);
 });
 
-// The real TOCTOU: `readManifest` (`src/harnesses/codex/hooks.ts:113::readManifest`) validates the candidate
+// The real TOCTOU: `readManifest` (`src/harnesses/codex/hooks.ts:98::readManifest`) validates the candidate
 // manifest fatally for hook classification; the overlay's own read
 // (src/harnesses/codex/adapter.ts, ~:360) reads the same path again afterward. Between those
 // two reads, `tests/unit/helpers/harnesses/codex/manifest-toctou-child.ts` replaces the file

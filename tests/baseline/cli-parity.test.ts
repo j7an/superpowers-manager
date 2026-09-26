@@ -739,7 +739,7 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     // one that would resolve the package-default ref against the public
     // upstream URL, so it is pinned to the same local repository `pin` uses —
     // a 40-hex RAW_COMMIT, which resolves without reaching Git at all
-    // (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`). Both are hermeticity requirements, not
+    // (`src/upstream.ts:153::if (COMMIT_INPUT_RE.test(requestedRef))`). Both are hermeticity requirements, not
     // conveniences.
     writeListingCodex(sandbox);
     for (const [command, argv] of cases) {

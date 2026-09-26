@@ -581,7 +581,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
             // git must RESOLVE, because probe's preflight requires it
             // (COMMAND_REQUIREMENTS's probe entry). Nothing here reaches a git
             // PROCESS -- a 40-hex SUPERPOWERS_REF is a raw-commit resolution
-            // (`src/upstream.ts:162-164::return { kind: "raw-commit"`) -- so the case stays hermetic, and
+            // (`src/upstream.ts:154::return { kind: "raw-commit"`) -- so the case stays hermetic, and
             // probe is read-only besides.
             PATH: process.env.PATH ?? "",
             SUPERPOWERS_CONFIG_DIR: join(

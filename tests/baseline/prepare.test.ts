@@ -356,7 +356,7 @@ void test("a classification failure reaches stderr through the adapter wrapper",
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P2a — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the SOURCE-side call at :358. Ports the
+// P2a — `src/harnesses/codex/hooks.ts:290::await assertExistingContained(containmentRoot, tree)` reached from the SOURCE-side call at :358. Ports the
 // retired driver's :1041 and :1044 cases.
 //
 // The PATH is the assertion, not the message. Three different failures print
@@ -382,7 +382,7 @@ void test("an escaping hooks-root symlink fails closed on the source side", asyn
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P2b — `src/harnesses/codex/hooks.ts:304-307::await assertExistingContained(containmentRoot, tree)` reached from the CANDIDATE-side call at :367. Ports
+// P2b — `src/harnesses/codex/hooks.ts:290::await assertExistingContained(containmentRoot, tree)` reached from the CANDIDATE-side call at :367. Ports
 // the retired driver's :1035 case, which is the only
 // root-specific witness that post-copy validation runs.
 //
@@ -819,7 +819,7 @@ void test("prepare rejects an upstream manifest nested beyond the depth limit", 
   await assertManifestRejected(
     c,
     (path) => {
-      // The profile allows 256 containers (`src/harnesses/codex/hooks.ts:37::maxDepth`); 257 arrays inside
+      // The profile allows 256 containers (`src/harnesses/codex/hooks.ts:38::maxDepth`); 257 arrays inside
       // the top-level object is the first shape past it.
 
       let nested: unknown = 0;
@@ -987,7 +987,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   // Pinned: this reaches fetchExactCommit. NOTE what actually happens, because
   // it is not what the splice sites would suggest: proveCommit's fetch fails,
   // `UNAVAILABLE_OBJECT_RE` does not match "does not appear to be a git
-  // repository", so the HAND-WRITTEN non-splicing branch (`src/upstream.ts:277::source cannot supply requested commit`)
+  // repository", so the HAND-WRITTEN non-splicing branch (`src/upstream.ts:268::source cannot supply requested commit`)
   // wins and git's five lines are DISCARDED by the callee. oneLine() is not what
   // bounds this output.
   //
@@ -1033,7 +1033,7 @@ void test("prepare keeps hostile git output off its stream on both fetch branche
   assert.deepEqual(snapshotTree(generated(pinned)), pinnedBefore);
 });
 
-// P3 — `src/harnesses/codex/hooks.ts:281::entries = await readdir`, the WALK branch, where readdir fails on a directory
+// P3 — `src/harnesses/codex/hooks.ts:266::entries = await readdir`, the WALK branch, where readdir fails on a directory
 // inside a subtree that has already passed the containment check at :303.
 //
 // This branch is unwitnessed on BOTH sides. The retired driver's three
@@ -1092,7 +1092,7 @@ void test(
   },
 );
 
-// P4 — `src/harnesses/codex/hooks.ts:363-364::await symlink(await readlink(sourceHooks), candidateHooks)`, the accepting side of the hooks-root symlink policy.
+// P4 — `src/harnesses/codex/hooks.ts:349::await symlink(await readlink(sourceHooks), candidateHooks)`, the accepting side of the hooks-root symlink policy.
 //
 // Every other root-symlink case in the repository asserts rejection:
 // `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:691::the hook subtree rejects unsafe symlinks` is twelve cases of
@@ -1115,7 +1115,7 @@ void test("a contained relative hooks root is recreated as a symlink in the cand
   );
   assert.equal(readlinkSync(hooks), "assets/hook-root");
   // Validating side: the candidate passed validateSubtreeSymlinks at
-  // `src/harnesses/codex/hooks.ts:371::validateSubtreeSymlinks(candidateHooks` (status 0 above) AND the content behind the root is
+  // `src/harnesses/codex/hooks.ts:356::validateSubtreeSymlinks(candidateHooks` (status 0 above) AND the content behind the root is
   // actually reachable through it, which is what makes the acceptance real
   // rather than a dangling link nobody followed.
   assert.equal(

@@ -1,6 +1,6 @@
 // Child process for the TOCTOU case in ../../../harnesses/codex/adapter.test.ts.
 //
-// This drives the real interleaving: `readManifest` (`src/harnesses/codex/hooks.ts:113::readManifest`) reads
+// This drives the real interleaving: `readManifest` (`src/harnesses/codex/hooks.ts:98::readManifest`) reads
 // the candidate manifest once, fatally, for hook classification; the
 // overlay's own read (src/harnesses/codex/adapter.ts, ~:360) reads the same path again
 // later. Between those two reads, this test replaces the file's bytes on
@@ -97,7 +97,7 @@ void test("manifest TOCTOU child", async (t) => {
           // `node:fs/promises` — exactly the module-graph-identity effect
           // documented in `overlay-read-failure-child.js`. So by the time
           // this mocked `readFile` is invoked at all for this path, hook
-          // classification's real read-1 (`src/harnesses/codex/hooks.ts:113::readManifest`) has already run
+          // classification's real read-1 (`src/harnesses/codex/hooks.ts:98::readManifest`) has already run
           // to completion against the still-valid bytes; this call is
           // read-2, the overlay's own read (src/harnesses/codex/adapter.ts). Corrupt the
           // *real* file on disk immediately before delegating to the real

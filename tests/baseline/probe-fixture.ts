@@ -270,7 +270,7 @@ async function invoke(
 /**
  * An environment-selected run: SUPERPOWERS_REF is the fixture tag's commit and
  * SUPERPOWERS_UPSTREAM_URL is the fixture upstream. A 40-hex requested ref is
- * a `raw-commit` resolution (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so this shape reaches
+ * a `raw-commit` resolution (`src/upstream.ts:153::if (COMMIT_INPUT_RE.test(requestedRef))`), so this shape reaches
  * no Git process at all.
  */
 export async function probe(

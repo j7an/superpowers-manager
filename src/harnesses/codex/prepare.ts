@@ -28,7 +28,7 @@ import {
   readStrictProvenanceField,
   writeProvenance,
 } from "../../provenance.ts";
-import { classifyPathNoFollow } from "../../safe-path.ts";
+import { classifyPathNoFollow, isFile } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import type { ResolutionKind } from "../../upstream-version.ts";
 import { manifestVersionForRef } from "../../upstream-version.ts";
@@ -86,14 +86,6 @@ async function pathExists(path: string): Promise<boolean> {
   try {
     await stat(path);
     return true;
-  } catch {
-    return false;
-  }
-}
-
-async function regularFileExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
   } catch {
     return false;
   }
@@ -211,7 +203,7 @@ export async function validateCodexPreparationBeforeFetch(
     );
   }
   const template = manifestTemplate(ctx);
-  if (!(await regularFileExists(template))) {
+  if (!(await isFile(template))) {
     return failureResult(
       "prepare",
       "missing-template",
@@ -279,7 +271,7 @@ export async function prepareCodexCandidate(
       ".codex-plugin",
       "plugin.json",
     );
-    if (await regularFileExists(upstreamManifest)) {
+    if (await isFile(upstreamManifest)) {
       upstreamManifestVersion =
         await readUpstreamManifestVersion(upstreamManifest);
     }
@@ -346,9 +338,7 @@ export async function prepareCodexCandidate(
       await writeCodexAssessment(
         input.candidateRoot,
         input.selection,
-        (await regularFileExists(
-          join(input.upstreamRoot, ".codex-plugin/plugin.json"),
-        ))
+        (await isFile(join(input.upstreamRoot, ".codex-plugin/plugin.json")))
           ? "upstream"
           : "fallback",
       );

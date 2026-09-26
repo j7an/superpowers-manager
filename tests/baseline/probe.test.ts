@@ -277,7 +277,7 @@ void test("an environment ref overrides only the ref side and the saved fields s
     manifestVersion: ACTIVE_VERSION,
   });
   // Rename the source for both runs: a 40-hex SUPERPOWERS_REF resolves as `raw-commit` without Git
-  // (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so an unreachable source is what proves the
+  // (`src/upstream.ts:153::if (COMMIT_INPUT_RE.test(requestedRef))`), so an unreachable source is what proves the
   // shell's `test ! -s "$git_log"` (:460) still holds here.
   renameSync(source, `${source}-offline`);
   try {

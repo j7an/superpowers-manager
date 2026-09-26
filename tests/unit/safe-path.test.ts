@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { exactError, matchingError } from "../lib/error-assertions.ts";
@@ -9,6 +17,42 @@ import { scratch } from "../lib/scratch.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 
 import * as paths from "../../src/safe-path.ts";
+
+void test("isDirectory and isFile follow symlinks and answer false on any stat failure", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "spw-safe-path-kind-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const dir = join(root, "dir");
+  const file = join(root, "file");
+  mkdirSync(dir);
+  writeFileSync(file, "x");
+  symlinkSync(dir, join(root, "dir-link"));
+  symlinkSync(file, join(root, "file-link"));
+  symlinkSync(join(root, "gone"), join(root, "broken-link"));
+
+  assert.equal(await paths.isDirectory(dir), true);
+  assert.equal(await paths.isDirectory(join(root, "dir-link")), true);
+  assert.equal(await paths.isDirectory(file), false);
+  assert.equal(await paths.isDirectory(join(root, "missing")), false);
+  assert.equal(await paths.isDirectory(join(root, "broken-link")), false);
+
+  assert.equal(await paths.isFile(file), true);
+  assert.equal(await paths.isFile(join(root, "file-link")), true);
+  assert.equal(await paths.isFile(dir), false);
+  assert.equal(await paths.isFile(join(root, "missing")), false);
+  assert.equal(await paths.isFile(join(root, "broken-link")), false);
+  assert.equal(await paths.isFile(join(file, "child")), false);
+});
+
+void test("isAbsenceError accepts exactly ENOENT and ENOTDIR", () => {
+  const withCode = (code: string) => Object.assign(new Error(code), { code });
+  assert.equal(paths.isAbsenceError(withCode("ENOENT")), true);
+  assert.equal(paths.isAbsenceError(withCode("ENOTDIR")), true);
+  assert.equal(paths.isAbsenceError(withCode("EACCES")), false);
+  assert.equal(paths.isAbsenceError(new Error("no code")), false);
+  assert.equal(paths.isAbsenceError(null), false);
+  assert.equal(paths.isAbsenceError("ENOENT"), false);
+  assert.equal(paths.isAbsenceError({ code: "ENOENT" }), true);
+});
 
 async function sandbox(t: import("node:test").TestContext) {
   const base = scratch(t, "spw-safe-path-");

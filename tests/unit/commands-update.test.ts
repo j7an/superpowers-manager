@@ -30,7 +30,7 @@ const INSTALL_NOTE =
 
 /**
  * A hermetic update ctx: a 40-hex SUPERPOWERS_REF is a raw-commit resolution
- * (`src/upstream.ts:162-164::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
+ * (`src/upstream.ts:154::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
  * matching tests/unit/commands-install.test.js's own makeCtx.
  *
  */

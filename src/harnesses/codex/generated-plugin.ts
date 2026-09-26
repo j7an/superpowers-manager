@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { posix } from "node:path";
 import { COMMIT_RE, SEMVER_RE } from "../../domain/refs.ts";
 import { compareByCodePoint, pythonStrip } from "../../python-text.ts";
+import { isAbsenceError } from "../../safe-path.ts";
 import {
   DEFAULT_FS_DEPS,
   type GeneratedPluginFsDeps,
@@ -35,15 +36,6 @@ class InspectionFailure extends Error {}
 class EnumerationFailure extends Error {}
 
 type Presence = "missing" | "file" | "directory" | "other";
-
-/**
- * `ENOENT`/`ENOTDIR` mean *missing*; every other error rejects. This is the
- * only place the absence set is defined.
- */
-function isAbsenceError(cause: unknown): boolean {
-  const code = (cause as { code?: unknown } | null)?.code;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
 
 const STRICT_DECODER = new TextDecoder("utf-8", {
   fatal: true,
@@ -582,9 +574,9 @@ async function validateHookSubtree(
     try {
       isLink = (await inspectLink(path, deps)) === "symlink";
     } catch {
-      // The `src/harnesses/codex/generated-plugin.ts:583::isLink =` probe reaches the first catch bounded by `src/harnesses/codex/generated-plugin.ts:592::let rawTarget`; the `src/harnesses/codex/generated-plugin.ts:594::rawTarget = decodePathBytes` readlink reaches the same site text.
-      // The three probes sharing the *subtree* string are `src/harnesses/codex/generated-plugin.ts:627::resolvedDirectory =`, `src/harnesses/codex/generated-plugin.ts:637::children =`, and
-      // `src/harnesses/codex/generated-plugin.ts:646::deps, true)) === "directory"`, not this one.
+      // The `src/harnesses/codex/generated-plugin.ts:575::isLink =` probe reaches the first catch bounded by `src/harnesses/codex/generated-plugin.ts:584::let rawTarget`; the `src/harnesses/codex/generated-plugin.ts:586::rawTarget = decodePathBytes` readlink reaches the same site text.
+      // The three probes sharing the *subtree* string are `src/harnesses/codex/generated-plugin.ts:619::resolvedDirectory =`, `src/harnesses/codex/generated-plugin.ts:629::children =`, and
+      // `src/harnesses/codex/generated-plugin.ts:638::deps, true)) === "directory"`, not this one.
       errors.push(`generated hook symlink could not be inspected: ${path}`);
       return false;
     }

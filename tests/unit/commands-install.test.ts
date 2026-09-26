@@ -40,7 +40,7 @@ function writeJsonFile(path: string, value: unknown) {
 
 /**
  * A hermetic install ctx: a 40-hex SUPERPOWERS_REF is a raw-commit resolution
- * (`src/upstream.ts:162-164::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
+ * (`src/upstream.ts:154::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
  * matching tests/unit/commands-prepare.test.js's unitContext.
  *
  * `savedCommit`, when given, is written as a SEPARATE, valid pinned

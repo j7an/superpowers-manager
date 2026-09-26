@@ -208,7 +208,7 @@ void test("readUpstreamManifestVersion delegates every read and parse failure to
 
 /**
  * A ctx whose selection resolves without touching git: a 40-hex SUPERPOWERS_REF
- * is a raw-commit resolution (`src/upstream.ts:162-164::return { kind: "raw-commit"`).
+ * is a raw-commit resolution (`src/upstream.ts:154::return { kind: "raw-commit"`).
  *
  * `adapter: notCalledAdapter` is safe for every case below: each fails
  * closed (a missing manifest template, a failed clone) before gatherPrepare
