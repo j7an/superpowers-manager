@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import {
   assertFailureWritable,
@@ -175,13 +176,20 @@ export async function gatherProbe<R>(
     return { status: 1, outcomes, message: controlAfter.message };
   const after = await ctx.coordination.observeResources(resources);
   if (
-    JSON.stringify(before) !== JSON.stringify(after) ||
-    JSON.stringify(prepared.result.outcome.result) !==
-      JSON.stringify(preparedAfter.result.outcome.result) ||
-    JSON.stringify(installed.result.outcome.result) !==
-      JSON.stringify(installedAfter.result.outcome.result) ||
-    JSON.stringify(control.result.outcome.result) !==
-      JSON.stringify(controlAfter.result.outcome.result)
+    !isDeepStrictEqual(
+      [
+        before,
+        prepared.result.outcome.result,
+        installed.result.outcome.result,
+        control.result.outcome.result,
+      ],
+      [
+        after,
+        preparedAfter.result.outcome.result,
+        installedAfter.result.outcome.result,
+        controlAfter.result.outcome.result,
+      ],
+    )
   ) {
     return {
       status: 1,
