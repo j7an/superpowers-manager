@@ -32,11 +32,7 @@ import {
   type PiReceipt,
 } from "./package.ts";
 import { piPaths, type PiPaths } from "./paths.ts";
-import {
-  readPiSettings,
-  resolveCanonicalPiLocalSource,
-  type PiPackageEntry,
-} from "./settings.ts";
+import { readPiSettings, type PiPackageEntry } from "./settings.ts";
 import {
   inspectPiControl,
   inspectPiOwnership,
@@ -51,13 +47,11 @@ import {
 export interface PiInstallDependencies {
   readonly run: typeof runPi;
   readonly beginPublication: typeof beginDirectoryPublication;
-  readonly readSettings: typeof readPiSettings;
 }
 
 const DEFAULTS: PiInstallDependencies = {
   run: runPi,
   beginPublication: beginDirectoryPublication,
-  readSettings: readPiSettings,
 };
 type Identity = { readonly dev: number; readonly ino: number };
 type Phase =
@@ -155,26 +149,9 @@ async function hasRecovery(paths: PiPaths): Promise<boolean> {
   }
 }
 
-async function registration(
-  paths: PiPaths,
-  deps: PiInstallDependencies,
-): Promise<PiPackageEntry | null> {
-  const settings = await deps.readSettings(paths.settingsFile, paths.homeDir);
-  const canonicalRoot = await canonicalizeProspectivePath(paths.installedRoot);
-  const matches: PiPackageEntry[] = [];
-  for (const entry of settings.packages) {
-    if (
-      (await resolveCanonicalPiLocalSource(
-        entry.source,
-        paths.agentDir,
-        paths.homeDir,
-      )) === canonicalRoot
-    ) {
-      matches.push(entry);
-    }
-  }
-  if (matches.length > 1) throw new Error("duplicate Pi registration");
-  return matches[0] ?? null;
+async function registration(paths: PiPaths): Promise<PiPackageEntry | null> {
+  return (await readPiSettings(paths.settingsFile, paths.homeDir))
+    .managerRegistration;
 }
 function sameRegistration(
   a: PiPackageEntry | null,
@@ -391,7 +368,7 @@ async function finalizePiPublication(
   let publicationCleanupCompleted = false;
   try {
     await requirePublication(p);
-    const current = await registration(p.paths, p.deps);
+    const current = await registration(p.paths);
     const expectedRegistration =
       p.journal.priorRegistration ?? p.journal.createdRegistration;
     if (
@@ -438,7 +415,7 @@ async function rollbackPiPublication(
   let retirementStarted = false;
   try {
     await requirePublication(p);
-    const current = await registration(p.paths, p.deps);
+    const current = await registration(p.paths);
     if (p.journal.priorRegistration !== null) {
       if (!sameRegistration(current, p.journal.priorRegistration))
         throw new Error("prior Pi registration changed");
@@ -456,7 +433,7 @@ async function rollbackPiPublication(
       await p.deps
         .run(["remove", p.canonicalRoot, "--no-approve"], p.paths, p.ctx)
         .catch(() => undefined);
-      if ((await registration(p.paths, p.deps)) !== null)
+      if ((await registration(p.paths)) !== null)
         throw new Error("Pi deregistration unverified");
     }
     await requirePublication(p);
@@ -464,7 +441,7 @@ async function rollbackPiPublication(
     await requireSnapshot(p.canonicalRoot, p.journal.oldArtifact);
     if (
       !sameRegistration(
-        await registration(p.paths, p.deps),
+        await registration(p.paths),
         p.journal.priorRegistration,
       )
     )
@@ -493,7 +470,7 @@ async function recoverBeforePublication(p: Pending): Promise<boolean> {
     await assertNoFollowType(p.backup, ["missing"]);
     if (
       !sameRegistration(
-        await registration(p.paths, p.deps),
+        await registration(p.paths),
         p.journal.priorRegistration,
       )
     )
@@ -537,7 +514,7 @@ export async function installPi(
       throw new Error("Pi prepared artifact changed");
     await requireActivationEligibility(ctx);
     const previous = await snapshot(paths.installedRoot);
-    const priorRegistration = await registration(paths, deps);
+    const priorRegistration = await registration(paths);
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned Pi registration");
     accepted(
@@ -548,7 +525,7 @@ export async function installPi(
     );
     // Recheck after the native preflight, before claiming mutation ownership.
     await requireSnapshot(paths.installedRoot, previous);
-    if (!sameRegistration(await registration(paths, deps), priorRegistration))
+    if (!sameRegistration(await registration(paths), priorRegistration))
       throw new Error("Pi registration changed");
     pending = await beginJournal(
       paths,
@@ -576,7 +553,7 @@ export async function installPi(
     await requireIdentity(pending.stage, pending.stageIdentity);
     await requireActivationEligibility(ctx);
     await requireSnapshot(paths.installedRoot, previous);
-    if (!sameRegistration(await registration(paths, deps), priorRegistration))
+    if (!sameRegistration(await registration(paths), priorRegistration))
       throw new Error("Pi registration changed");
     publication = await deps.beginPublication(
       pending.stage,
@@ -587,13 +564,13 @@ export async function installPi(
     await phase(pending, "published");
     if (priorRegistration === null) {
       await phase(pending, "registering");
-      if ((await registration(paths, deps)) !== null)
+      if ((await registration(paths)) !== null)
         throw new Error("Pi registration changed");
       const result = await deps
         .run(["install", pending.canonicalRoot, "--no-approve"], paths, ctx)
         .catch(() => fail("native-failed", "Pi native installation failed"));
       // Even an unsuccessful command may have changed settings. Read them first.
-      const registered = await registration(paths, deps);
+      const registered = await registration(paths);
       if (registered === null || registered.resourceState !== "enabled")
         throw new Error("Pi activation unverified");
       await phase(pending, "registered", {
@@ -602,7 +579,7 @@ export async function installPi(
       accepted(result);
     }
     await requirePublication(pending);
-    const registered = await registration(paths, deps);
+    const registered = await registration(paths);
     if (registered === null || registered.resourceState !== "enabled")
       throw new Error("Pi activation unverified");
     await phase(pending, "ready");
@@ -673,7 +650,7 @@ export async function removePi(
     )
       throw new Error("stale Pi removal input");
     const previous = await snapshot(paths.installedRoot);
-    const registered = await registration(paths, deps);
+    const registered = await registration(paths);
     if (previous === null) {
       if (registered !== null) throw new Error("unowned Pi registration");
       return successResult("remove-pi", null, []);
@@ -686,7 +663,7 @@ export async function removePi(
         ),
       );
     await requireSnapshot(paths.installedRoot, previous);
-    if (!sameRegistration(await registration(paths, deps), registered))
+    if (!sameRegistration(await registration(paths), registered))
       throw new Error("Pi registration changed");
     pending = await beginJournal(paths, previous, null, registered, ctx, deps);
     const installedIdentity = await identity(paths.installedRoot);
@@ -694,7 +671,7 @@ export async function removePi(
       const result = await deps
         .run(["remove", pending.canonicalRoot, "--no-approve"], paths, ctx)
         .catch(() => fail("native-failed", "Pi native removal failed"));
-      const after = await registration(paths, deps);
+      const after = await registration(paths);
       if (after !== null) {
         if (sameRegistration(after, registered)) {
           await requireSnapshot(paths.installedRoot, previous);
@@ -716,7 +693,7 @@ export async function removePi(
     await phase(pending, "deregistered");
     await requireIdentity(paths.installedRoot, installedIdentity);
     await requireSnapshot(paths.installedRoot, previous);
-    if ((await registration(paths, deps)) !== null)
+    if ((await registration(paths)) !== null)
       throw new Error("Pi registration returned");
     await rm(paths.installedRoot, { recursive: true });
     await requireSnapshot(paths.installedRoot, null);

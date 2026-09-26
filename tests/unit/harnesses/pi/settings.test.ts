@@ -17,7 +17,10 @@ void test("Pi settings reader reports the bounded registration state", async (t)
   const settingsFile = join(agentDir, "settings.json");
 
   await t.test("a missing settings file means no registrations", async () => {
-    assert.deepEqual(await readPiSettings(settingsFile), { packages: [] });
+    assert.deepEqual(await readPiSettings(settingsFile), {
+      packages: [],
+      managerRegistration: null,
+    });
   });
 
   await t.test(
@@ -31,12 +34,14 @@ void test("Pi settings reader reports the bounded registration state", async (t)
       );
       assert.deepEqual(await readPiSettings(settingsFile), {
         packages: [],
+        managerRegistration: null,
         skills: ["!SKILL.md", "+skills/superpowers/using-superpowers"],
       });
 
       await writeFile(settingsFile, JSON.stringify({ skills: [] }));
       assert.deepEqual(await readPiSettings(settingsFile), {
         packages: [],
+        managerRegistration: null,
         skills: [],
       });
     },
@@ -75,6 +80,10 @@ void test("Pi settings reader reports the bounded registration state", async (t)
         { source: "./one-filter-empty", resourceState: "indeterminate" },
         { source: "./positive-filters", resourceState: "indeterminate" },
       ],
+      managerRegistration: {
+        source: "superpowers-manager/installed",
+        resourceState: "enabled",
+      },
     });
   });
 
@@ -90,6 +99,10 @@ void test("Pi settings reader reports the bounded registration state", async (t)
           resourceState: "enabled",
         },
       ],
+      managerRegistration: {
+        source: "superpowers-manager/installed",
+        resourceState: "enabled",
+      },
     });
   });
 
