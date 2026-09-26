@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { withWorkspace, workspaceRemovalFailure } from "../../src/workspace.ts";
+import {
+  withWorkspace,
+  withWorkspaceReporting,
+  workspaceRemovalFailure,
+} from "../../src/workspace.ts";
 
 async function sandbox(t: import("node:test").TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "spw-workspace-"));
@@ -141,28 +145,22 @@ void test("REF-CLEANUP-01 / REF-PIN-CLEANUP-01 signals clean only active workspa
   }
 });
 
-void test("a signal-path cleanup failure reports through onCleanupFailure and stderr", async (t) => {
+void test("a signal-path cleanup failure writes the removal diagnostic to stderr", async (t) => {
   // Permission checks do not apply to root, so the failure cannot be staged.
   if (process.getuid?.() === 0) {
     t.skip("cleanup cannot be made to fail as root");
     return;
   }
   const parent = await sandbox(t);
-  const { announcedPaths, result, stdout, stderr } =
-    await signalFailureChild(parent);
+  const { announcedPaths, result, stderr } = await signalFailureChild(parent);
   assert.equal(result.signal, "SIGTERM");
   assert.equal(result.code, null);
   const workspace = announcedPaths[0];
   if (workspace === undefined) throw new Error("workspace was not announced");
-  // Exact membership, not a RegExp built from the path: `mkdtemp` output can
-  // contain characters that are regex metacharacters (e.g. `.`), which would
-  // make a pattern built from the path match more than the path.
-  assert.ok(stdout.split("\n").includes(`reported:${workspace}`));
-  // The caller's reporter (proven above) is not the observable failure path:
-  // no result outcome is ever built before the process dies by the signal,
-  // so a report that only reached a buffered adapter log would be lost. The
-  // signal path also writes the hand-written diagnostic straight to stderr,
-  // unconditionally, which is what a real caller can actually see.
+  // No result outcome is ever built before the process dies by the signal,
+  // so the hand-written diagnostic written straight to stderr is the only
+  // report a caller can see. Exact membership, not a RegExp built from the
+  // path: `mkdtemp` output can contain regex metacharacters such as `.`.
   assert.ok(stderr.split("\n").includes(workspaceRemovalFailure(workspace)));
 });
 
@@ -187,23 +185,36 @@ void test("withWorkspace preserves the callback error when cleanup fails", async
   );
 });
 
-void test("withWorkspace can preserve a successful callback result when cleanup fails", async (t) => {
+void test("withWorkspaceReporting returns the value and a warning when cleanup fails after success", async (t) => {
   const parent = await sandbox(t);
-  const cleanupFailure = new Error("cleanup failed");
-
-  const reported: string[] = [];
-  const result = await withWorkspace(parent, "work-", async () => 42, {
-    cleanup: async () => {
-      throw cleanupFailure;
+  let observed: string | undefined;
+  const result = await withWorkspaceReporting(
+    parent,
+    "work-",
+    async (workspace) => {
+      observed = workspace;
+      return 42;
     },
-    onCleanupFailure: (path) => reported.push(path),
+    {
+      cleanup: async () => {
+        throw new Error("cleanup failed");
+      },
+    },
+  );
+  if (observed === undefined) throw new Error("workspace was not observed");
+  assert.deepEqual(result, {
+    value: 42,
+    cleanupWarning: workspaceRemovalFailure(observed),
   });
-  assert.equal(result, 42);
-  assert.equal(reported.length, 1);
-  assert.ok(reported[0].startsWith(join(parent, "work-")));
 });
 
-void test("withWorkspace throws the cleanup failure when no reporter is supplied", async (t) => {
+void test("withWorkspaceReporting returns a null warning when cleanup succeeds", async (t) => {
+  const parent = await sandbox(t);
+  const result = await withWorkspaceReporting(parent, "work-", async () => 42);
+  assert.deepEqual(result, { value: 42, cleanupWarning: null });
+});
+
+void test("withWorkspace throws the cleanup failure after a successful callback", async (t) => {
   const parent = await sandbox(t);
   const cleanupFailure = new Error("cleanup failed");
   await assert.rejects(
@@ -216,12 +227,11 @@ void test("withWorkspace throws the cleanup failure when no reporter is supplied
   );
 });
 
-void test("withWorkspace preserves the callback error when a reported cleanup also fails", async (t) => {
+void test("withWorkspaceReporting rethrows the callback error when cleanup also fails", async (t) => {
   const parent = await sandbox(t);
   const callbackFailure = new Error("callback failed");
-  const cleanupFailure = new Error("cleanup failed");
   await assert.rejects(
-    withWorkspace(
+    withWorkspaceReporting(
       parent,
       "work-",
       async () => {
@@ -229,9 +239,8 @@ void test("withWorkspace preserves the callback error when a reported cleanup al
       },
       {
         cleanup: async () => {
-          throw cleanupFailure;
+          throw new Error("cleanup failed");
         },
-        onCleanupFailure: () => {},
       },
     ),
     (error) => error === callbackFailure,

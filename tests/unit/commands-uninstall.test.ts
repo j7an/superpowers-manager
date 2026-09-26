@@ -350,13 +350,13 @@ void test("argv is ignored by src/commands/uninstall.ts", async () => {
   assert.equal(status, 0);
 });
 
-// --- Post-success withWorkspace cleanup failure (onCleanupFailure) ---
+// --- Post-success workspace cleanup failure (withWorkspaceReporting) ---
 //
-// `src/workspace.ts:134-141::await remove`: with `onCleanupFailure` supplied and the callback
-// not failed, a post-success cleanup failure is suppressed and the callback's
-// return value survives. uninstall.ts passes it, so the UninstallOutcome the
-// callback computed still reaches the operator, and the leaked workspace is
-// reported on stderr with exit 1 on top of it.
+// A cleanup failure after a successful callback comes back from
+// withWorkspaceReporting as cleanupWarning instead of being thrown
+// (`src/workspace.ts::export function withWorkspaceReporting`), so the
+// UninstallOutcome the callback computed still reaches the operator, and the
+// leaked workspace is reported on stderr with exit 1 on top of it.
 //
 // This is what scripts/uninstall did. It echoed "uninstall complete" and the
 // note at :34-35 before the exit trap ran, and spw_cleanup_workspace_trap

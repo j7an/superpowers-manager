@@ -19,7 +19,10 @@ import {
   type Captured,
   type ValidatorResolution,
 } from "../validator.ts";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import {
+  withWorkspaceReporting,
+  type ReportedWorkspace,
+} from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { replayOutcome } from "./probe.ts";
 import { runWithMutation } from "./mutation.ts";
@@ -107,22 +110,6 @@ type PrepareOutcome =
       readonly message: string | null;
     };
 
-// Carries a post-success workspace-removal failure WITHOUT discarding the
-// PrepareOutcome the callback already computed. See the header comment on
-// withWorkspace's onCleanupFailure option
-// (`src/workspace.ts:99-107::interface`).
-//
-// Deliberately NOT a copy of src/commands/install.ts's StageRun comment.
-// StageRun documents a precondition that its callback never throws, so it has
-// no "callback also failed" case to lose the cleanup message to. That
-// precondition does not hold here: a callback throw makes withWorkspace throw
-// without consulting the reporter below. This type covers only the
-// post-success cleanup case.
-interface PrepareRun {
-  readonly outcome: PrepareOutcome;
-  readonly cleanupWarning: string | null;
-}
-
 function validStagingLeaf(value: string): boolean {
   return (
     value.length > 0 &&
@@ -133,7 +120,9 @@ function validStagingLeaf(value: string): boolean {
   );
 }
 
-async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
+async function gatherPrepare<R>(
+  ctx: CommandContext<R>,
+): Promise<ReportedWorkspace<PrepareOutcome>> {
   // Collect outcomes without writing so output failures cannot be classified as
   // inspection failures. Replay collected outcomes after gathering completes.
   const env = ctx.env;
@@ -172,7 +161,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
     prefetch = await ctx.adapter.validatePreparationBeforeFetch(adapterContext);
   } catch {
     return {
-      outcome: failed(
+      value: failed(
         ctx.adapter.presentation.callFailure("prepare", adapterContext)
           .unexpected,
       ),
@@ -181,10 +170,10 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
   }
   outcomes.push(prefetch.outcome);
   if (!prefetch.outcome.ok)
-    return { outcome: failed(null), cleanupWarning: null };
+    return { value: failed(null), cleanupWarning: null };
   if (prefetch.status !== 0) {
     return {
-      outcome: failed(
+      value: failed(
         ctx.adapter.presentation.callFailure("prepare", adapterContext)
           .invalidStatus,
       ),
@@ -195,8 +184,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
     mkdir(tmpParent, { recursive: true }),
   );
 
-  let cleanupWarning: string | null = null;
-  const outcome = await withWorkspace(
+  return await withWorkspaceReporting(
     tmpParent,
     ".superpowers.prepare.",
     async (workspace): Promise<PrepareOutcome> => {
@@ -366,17 +354,7 @@ async function gatherPrepare<R>(ctx: CommandContext<R>): Promise<PrepareRun> {
         commit: selection.desiredCommit,
       };
     },
-    {
-      // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure, so
-      // the PrepareOutcome the callback already computed still reaches
-      // runPrepare instead of being discarded. The reporter runs synchronously,
-      // as the option requires (`src/workspace.ts:103-106::Must`).
-      onCleanupFailure: (path) => {
-        cleanupWarning = workspaceRemovalFailure(path);
-      },
-    },
   );
-  return { outcome, cleanupWarning };
 }
 
 export async function runPrepare<R>(
@@ -396,7 +374,7 @@ async function performPrepare<R>(
   // deliberate asymmetry with probe, whose shell original rejected unknown
   // arguments and whose arity therefore moved into parseArgs in slice 2.
   void argv;
-  let run: PrepareRun;
+  let run: ReportedWorkspace<PrepareOutcome>;
   try {
     run = await gatherPrepare(ctx);
   } catch (cause) {
@@ -407,7 +385,7 @@ async function performPrepare<R>(
     ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
-  const { outcome, cleanupWarning } = run;
+  const { value: outcome, cleanupWarning } = run;
   for (const each of outcome.outcomes) replayOutcome(each, ctx);
   if (outcome.validator.stdout.length > 0) {
     ctx.stdout.write(outcome.validator.stdout);
@@ -431,7 +409,7 @@ async function performPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:446::if (cleanupWarning`.
+    // `src/commands/install.ts:422::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

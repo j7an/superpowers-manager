@@ -7,7 +7,10 @@ import type {
   PreparedArtifact,
   InstallTransaction,
 } from "../harness.ts";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import {
+  withWorkspaceReporting,
+  type ReportedWorkspace,
+} from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import {
   GatherFailure,
@@ -67,34 +70,20 @@ type StageOutcome =
       readonly stderr: readonly string[];
     };
 
-interface StageRun {
-  readonly outcome: StageOutcome;
-  // Carries a post-success workspace-removal failure WITHOUT discarding the
-  // outcome the callback already computed. See the header comment on
-  // withWorkspace's onCleanupFailure option (src/workspace.ts).
-  //
-  // The precondition is that this callback never throws: invoke() catches
-  // every ctx.adapter failure and every predicate here is pure, so the only
-  // way withWorkspace's cleanup failure can collide with a real outcome is
-  // the post-SUCCESS case this option exists to catch -- there is no
-  // "callback also failed" case to lose the message to.
-  //
-  // This type exists for cleanup retention, not a special throw path.
-  readonly cleanupWarning: string | null;
-}
-
 // Collect outcomes without writing so output failures cannot be classified as
 // inspection failures. Replay collected outcomes after gathering completes.
+// The callback never throws: invoke() catches every ctx.adapter failure and
+// every predicate here is pure, so a post-success cleanup failure is the only
+// case withWorkspaceReporting's cleanupWarning has to carry.
 async function gatherInstallStages<R>(
   ctx: CommandContext<R>,
   selection: EffectiveSelection,
   artifact: PreparedArtifact,
-): Promise<StageRun> {
+): Promise<ReportedWorkspace<StageOutcome>> {
   const parent = ctx.env.TMPDIR ?? tmpdir();
   const outcomes: AdapterOutcome<unknown>[] = [];
-  let cleanupWarning: string | null = null;
   try {
-    const outcome = await withWorkspace(
+    return await withWorkspaceReporting(
       parent,
       "superpowers-manager.install.",
       async (workspace): Promise<StageOutcome> => {
@@ -311,21 +300,11 @@ async function gatherInstallStages<R>(
           stderr: output.stderr,
         };
       },
-      {
-        // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure,
-        // so the StageOutcome the callback already computed still comes back
-        // as `outcome` below instead of being discarded. `report` runs
-        // synchronously, as the option requires (src/workspace.ts).
-        onCleanupFailure: (path) => {
-          cleanupWarning = workspaceRemovalFailure(path);
-        },
-      },
     );
-    return { outcome, cleanupWarning };
   } catch (cause) {
-    // Reachable only for mkdtemp failure (nothing collected yet) -- the
-    // callback above never throws, so a post-success cleanup failure is
-    // already handled by onCleanupFailure and cannot reach here.
+    // Reachable only for mkdtemp failure (nothing collected yet): the
+    // callback never throws, and a post-success cleanup failure comes back
+    // as cleanupWarning.
     throw new GatherFailure("install gather failed", cause, outcomes);
   }
 }
@@ -408,7 +387,7 @@ async function performInstall<R>(
     return 1;
   }
 
-  let stage: StageRun;
+  let stage: ReportedWorkspace<StageOutcome>;
   try {
     stage = await gatherInstallStages(
       ctx,
@@ -423,7 +402,7 @@ async function performInstall<R>(
     ctx.stderr.write(`error: ${oneLine(inner)}\n`);
     return 1;
   }
-  const { outcome, cleanupWarning } = stage;
+  const { value: outcome, cleanupWarning } = stage;
   for (const each of outcome.outcomes) replayOutcome(each, ctx);
 
   let status: number;

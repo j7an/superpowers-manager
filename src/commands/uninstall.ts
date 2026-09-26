@@ -2,7 +2,10 @@ import { tmpdir } from "node:os";
 import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import type { Output } from "../harness.ts";
-import { withWorkspace, workspaceRemovalFailure } from "../workspace.ts";
+import {
+  withWorkspaceReporting,
+  type ReportedWorkspace,
+} from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
 import {
   GatherFailure,
@@ -35,23 +38,17 @@ type UninstallOutcome =
       readonly output: Output;
     };
 
-// Carries a post-success workspace-removal failure without discarding the
-// outcome the callback already computed. Cleanup failures remain fail closed.
-interface GatherRun {
-  readonly outcome: UninstallOutcome;
-  readonly cleanupWarning: string | null;
-}
-
 // Collect outcomes without writing so output failures cannot be classified as
 // inspection failures. Replay collected outcomes after gathering completes.
-async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
+async function gatherUninstall<R>(
+  ctx: CommandContext<R>,
+): Promise<ReportedWorkspace<UninstallOutcome>> {
   const parent = ctx.env.TMPDIR ?? tmpdir();
   // Kept outside the workspace callback so a workspace failure preserves every
   // outcome collected before it.
   const outcomes: AdapterOutcome<unknown>[] = [];
-  let cleanupWarning: string | null = null;
   try {
-    const outcome = await withWorkspace(
+    return await withWorkspaceReporting(
       parent,
       "superpowers-manager.uninstall.",
       async (workspace): Promise<UninstallOutcome> => {
@@ -120,26 +117,14 @@ async function gatherUninstall<R>(ctx: CommandContext<R>): Promise<GatherRun> {
           ),
         };
       },
-      {
-        // Suppresses withWorkspace's throw on a POST-SUCCESS cleanup failure,
-        // so the UninstallOutcome the callback already computed still comes
-        // back as `outcome` instead of being discarded. Runs synchronously,
-        // as the option requires (src/workspace.ts).
-        onCleanupFailure: (path) => {
-          cleanupWarning = workspaceRemovalFailure(path);
-        },
-      },
     );
-    return { outcome, cleanupWarning };
   } catch (cause) {
-    // Reachable only for mkdtemp failure, with nothing collected yet: this
-    // callback never throws -- every ctx.adapter throw is already caught
-    // inside invoke(), and presenceFlag/
-    // reportLegacyState are pure (src/harnesses/codex/lifecycle.ts's header comment) -- so a
-    // post-success cleanup failure is handled by onCleanupFailure above and
-    // cannot reach here. Wrapping with `outcomes` anyway keeps the class
-    // total over its declared contract rather than assuming the callback's
-    // purity at the throw site.
+    // Reachable only for mkdtemp failure, with nothing collected yet: the
+    // callback never throws (every ctx.adapter throw is caught inside
+    // invoke()), and a post-success cleanup failure comes back as
+    // cleanupWarning. Wrapping with `outcomes` anyway keeps the class total
+    // over its declared contract rather than assuming the callback's purity at
+    // the throw site.
     throw new GatherFailure("uninstall gather failed", cause, outcomes);
   }
 }
@@ -161,12 +146,12 @@ async function performUninstall<R>(
   // ignored -- the same asymmetry runPrepare documents at its own
   // `void argv;`.
   void argv;
-  let run: GatherRun;
+  let run: ReportedWorkspace<UninstallOutcome>;
   try {
     run = await gatherUninstall(ctx);
   } catch (cause) {
-    // Replay collected outcomes before reporting a gather failure. The
-    // cleanup reporter retains post-success cleanup failures as data.
+    // Replay collected outcomes before reporting a gather failure. A
+    // post-success cleanup failure arrives as cleanupWarning, not here.
     const outcomes =
       cause instanceof GatherFailure ? cause.outcomes : ([] as const);
     for (const outcome of outcomes) replayOutcome(outcome, ctx);
@@ -174,7 +159,7 @@ async function performUninstall<R>(
     ctx.stderr.write(`error: ${oneLine(inner)}\n`);
     return 1;
   }
-  const { outcome, cleanupWarning } = run;
+  const { value: outcome, cleanupWarning } = run;
   // Replay before reporting a command-level result on either path.
   for (const each of outcome.outcomes) replayOutcome(each, ctx);
   let status: number;
