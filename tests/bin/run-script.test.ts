@@ -95,7 +95,7 @@ function runScript(
   args: readonly string[] = [],
   environment: NodeJS.ProcessEnv = {},
 ): { status: number; stdout: string; stderr: string } {
-  const env = { ...process.env, ...environment };
+  const env = { ...process.env };
   // Inherited from the outer `node --test`, these make the inner run treat
   // itself as nested and skip every file with exit 0.
   delete env.NODE_TEST_CONTEXT;
@@ -103,6 +103,9 @@ function runScript(
   // CI runs the outer suite with --require-package-node. Inheriting the
   // variable would let the flag test's control case pass without the flag.
   delete env.SPW_REQUIRE_PACKAGE_NODE;
+  delete env.SPW_PACKAGE_NODE;
+  delete env.SPW_PACKAGE_NODE_VERSION;
+  Object.assign(env, environment);
   const result = spawnSync("sh", [join(root, "tests", "run.sh"), ...args], {
     cwd: root,
     encoding: "utf8",
