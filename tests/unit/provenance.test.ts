@@ -13,7 +13,7 @@ import {
   writeProvenance,
 } from "../../src/provenance.ts";
 
-import { escapePythonJsonString } from "../../src/python-json.ts";
+import { escapeNonAscii } from "../../src/python-json-format.ts";
 import { SafetyError } from "../../src/safety-error.ts";
 
 const commit = "0123456789abcdef0123456789abcdef01234567";
@@ -220,14 +220,16 @@ const unicodeRecord: import("../../src/provenance.ts").ProvenanceRecord = {
 void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
   const directory = scratch(t, "spw-provenance-");
 
-  assert.equal(escapePythonJsonString("\ud800"), "\\ud800");
-  assert.equal(escapePythonJsonString("\udfff"), "\\udfff");
-  assert.equal(escapePythonJsonString("\ud83d\ude00"), "\\ud83d\\ude00");
+  const escape = (value: string) =>
+    escapeNonAscii(JSON.stringify(value)).slice(1, -1);
+  assert.equal(escape("\ud800"), "\\ud800");
+  assert.equal(escape("\udfff"), "\\udfff");
+  assert.equal(escape("😀"), "\\ud83d\\ude00");
   assert.equal(
-    escapePythonJsonString('"\\/\b\t\n\f\r\u0001\u007f'),
+    escape('"\\/\b\t\n\f\r\u0001\u007f'),
     '\\"\\\\/\\b\\t\\n\\f\\r\\u0001\\u007f',
   );
-  assert.equal(escapePythonJsonString(""), "");
+  assert.equal(escape(""), "");
 
   const fixtures: [
     string,
@@ -250,4 +252,12 @@ void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
     await writeProvenance(output, record);
     assert.deepEqual(await readFile(output), expected, fixture);
   }
+  // Only the five provenance keys are written, whatever else the object holds.
+  assert.equal(
+    serializeProvenance({
+      ...tagRecord,
+      extra: "not written",
+    } as import("../../src/provenance.ts").ProvenanceRecord),
+    serializeProvenance(tagRecord),
+  );
 });

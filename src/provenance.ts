@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { COMMIT_INPUT_RE } from "./domain/refs.ts";
-import { escapePythonJsonString } from "./python-json.ts";
+import { escapeNonAscii } from "./python-json-format.ts";
 import { SafetyError } from "./safety-error.ts";
 import {
   parseStrictJson,
@@ -124,10 +124,10 @@ const PROVENANCE_KEYS = [
 ] as const;
 
 export function serializeProvenance(record: ProvenanceRecord): string {
-  const lines = PROVENANCE_KEYS.map(
-    (key) => `  "${key}": "${escapePythonJsonString(record[key])}"`,
+  const ordered = Object.fromEntries(
+    PROVENANCE_KEYS.map((key) => [key, record[key]]),
   );
-  return `{\n${lines.join(",\n")}\n}\n`;
+  return `${escapeNonAscii(JSON.stringify(ordered, null, 2))}\n`;
 }
 
 export async function writeProvenance(

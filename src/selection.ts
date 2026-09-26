@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { COMMIT_RE, TAG_RE } from "./domain/refs.ts";
-import { escapePythonJsonString } from "./python-json.ts";
+import { escapeNonAscii } from "./python-json-format.ts";
 import { SafetyError } from "./safety-error.ts";
 
 export interface PinnedSelectionRecord {
@@ -234,8 +234,18 @@ export function normalizeSaved(
 }
 
 export function serializeRecord(record: SelectionRecord): string {
-  if (record.mode === "track-latest") {
-    return `{\n  "schema_version": 1,\n  "mode": "track-latest",\n  "source": "${escapePythonJsonString(record.source)}"\n}\n`;
-  }
-  return `{\n  "schema_version": 1,\n  "mode": "pinned",\n  "source": "${escapePythonJsonString(record.source)}",\n  "requested_ref": "${escapePythonJsonString(record.requested_ref)}",\n  "resolved_ref": "${escapePythonJsonString(record.resolved_ref)}",\n  "commit": "${escapePythonJsonString(record.commit)}"\n}\n`;
+  // Keys are listed here, not taken from the caller's object, so the bytes do
+  // not depend on how the record was built.
+  const ordered =
+    record.mode === "track-latest"
+      ? { schema_version: 1, mode: record.mode, source: record.source }
+      : {
+          schema_version: 1,
+          mode: record.mode,
+          source: record.source,
+          requested_ref: record.requested_ref,
+          resolved_ref: record.resolved_ref,
+          commit: record.commit,
+        };
+  return `${escapeNonAscii(JSON.stringify(ordered, null, 2))}\n`;
 }

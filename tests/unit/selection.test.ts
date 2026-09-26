@@ -140,6 +140,18 @@ void test("selection serializer preserves Python-compatible bytes", () => {
     }),
     '{\n  "schema_version": 1,\n  "mode": "pinned",\n  "source": "https://example.invalid/repo",\n  "requested_ref": "v1.2.3",\n  "resolved_ref": "v1.2.3",\n  "commit": "0123456789abcdef0123456789abcdef01234567"\n}\n',
   );
+  // Bytes do not depend on the order the caller built the record in.
+  assert.equal(
+    serializeRecord({
+      commit,
+      resolved_ref: "v1.2.3",
+      requested_ref: "v1.2.3",
+      source: "https://example.invalid/repo",
+      mode: "pinned",
+      schema_version: 1,
+    }),
+    '{\n  "schema_version": 1,\n  "mode": "pinned",\n  "source": "https://example.invalid/repo",\n  "requested_ref": "v1.2.3",\n  "resolved_ref": "v1.2.3",\n  "commit": "0123456789abcdef0123456789abcdef01234567"\n}\n',
+  );
 });
 
 void test("FS-SELECTION-ATOMIC-01 selection rename failure preserves prior state and foreign temporary", async (t) => {
