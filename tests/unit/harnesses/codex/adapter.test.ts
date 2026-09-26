@@ -215,7 +215,7 @@ void test("a manifest overlay read failure surfaces the frozen message with no e
   // own `node --test` invocation below misreads itself as a nested
   // recursive test run and silently skips executing — exit 0 having run
   // nothing. Verified by reproduction; see the same guard in
-  // tests/run-node-suites.js. Strip both before spawning.
+  // tests/bin/run-script.test.ts. Strip both before spawning.
   const childEnv = { ...process.env };
   delete childEnv.NODE_TEST_CONTEXT;
   delete childEnv.NODE_TEST_WORKER_ID;

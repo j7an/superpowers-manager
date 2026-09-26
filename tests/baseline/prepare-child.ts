@@ -1,5 +1,5 @@
 // Test-only runner. NOT a *.test.ts file:
-// `tests/run-node-suites.ts:14::const SUITE_DIRS = ["tests/bin", "tests/unit", "tests/baseline"]` would
+// `tests/run.sh::find tests/bin tests/unit tests/baseline` would
 // otherwise register it as a suite.
 //
 // runPrepare is called in a child process, not in the test process, because
