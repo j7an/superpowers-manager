@@ -189,26 +189,6 @@ void test("ownership policy reuses legacy install and removal policy", async (t)
     stderr: [],
   });
 
-  const unknown = codexOwnershipInspection(
-    "unexpected",
-    { pluginPresent: false, marketplacePresent: false },
-    [],
-  );
-  assert.deepEqual(unknown.installEligibility, {
-    kind: "blocked",
-    output: {
-      stdout: [],
-      stderr: ["error: unknown adapter identity state: unexpected"],
-    },
-  });
-  assert.deepEqual(unknown.removalVerification, {
-    kind: "blocked",
-    output: {
-      stdout: [],
-      stderr: ["error: unknown adapter identity state: unexpected"],
-    },
-  });
-
   await t.test("blocks unmanaged conflicts with manual guidance", () => {
     const normalized = codexOwnershipInspection(
       "manager",
@@ -256,22 +236,6 @@ void test("ownership policy reuses legacy install and removal policy", async (t)
   );
 });
 
-void test("empty ownership identity uses the probe diagnostic", () => {
-  const normalized = codexOwnershipInspection(
-    "",
-    { pluginPresent: false, marketplacePresent: false },
-    [],
-  );
-  assert.equal(normalized.presentationValue, "");
-  assert.deepEqual(normalized.installEligibility, {
-    kind: "blocked",
-    output: {
-      stdout: [],
-      stderr: ["error: probe did not report adapter identity state"],
-    },
-  });
-});
-
 void test("install receipt converts only safe verification hints into output", () => {
   const receipt = codexInstallReceipt(
     "verify the installed plugin",
@@ -292,7 +256,7 @@ void test("install receipt converts only safe verification hints into output", (
     ],
   });
 
-  const unsafe = codexInstallReceipt("unsafe\nline", 4);
+  const unsafe = codexInstallReceipt("unsafe\nline", "unsafe\u001bline");
   assert.equal(unsafe.missingVerificationOutput.stderr.length, 1);
   assert.equal(unsafe.mismatchVerificationOutput.stderr.length, 1);
 });

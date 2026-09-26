@@ -14,9 +14,16 @@ import {
 import { runUninstall } from "../../src/commands/uninstall.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
-import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
+import {
+  codexOwnershipInspection,
+  type CodexIdentityState,
+} from "../../src/harnesses/codex/lifecycle.ts";
 
-function ownership(identityState: string, plugin = false, marketplace = false) {
+function ownership(
+  identityState: CodexIdentityState,
+  plugin = false,
+  marketplace = false,
+) {
   return codexOwnershipInspection(
     identityState,
     { pluginPresent: plugin, marketplacePresent: marketplace },
@@ -149,29 +156,6 @@ void test("a plugin resource still installed after removal is a distinct, named 
     err.text(),
     "error: owned plugin resource is still installed after removal\n",
   );
-  assert.equal(out.text(), "");
-  assert.equal(calls.length, 5);
-});
-
-void test("an unrecognised identity state after removal is a distinct, named failure", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", ownership("neither"), []),
-    successResult("uninstall", {}, []),
-    successResult("inspect", ownership("wat"), []),
-  ]);
-  const status = await runUninstall([], {
-    root: "/nowhere",
-    env: { HOME: "/nowhere" },
-    stdout: out.stream,
-    stderr: err.stream,
-    options: { harness: "codex", allowExperimental: false },
-    coordination: observingCoordinator(),
-    adapter,
-  });
-  assert.equal(status, 1);
-  assert.equal(err.text(), "error: unknown adapter identity state: wat\n");
   assert.equal(out.text(), "");
   assert.equal(calls.length, 5);
 });

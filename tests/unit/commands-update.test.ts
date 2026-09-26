@@ -18,7 +18,10 @@ import { runUpdate } from "../../src/commands/update.ts";
 import { gatherProbe } from "../../src/commands/probe.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import type { UpdateControlInspection } from "../../src/harness.ts";
-import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
+import {
+  codexOwnershipInspection,
+  type CodexIdentityState,
+} from "../../src/harnesses/codex/lifecycle.ts";
 import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-update-"));
@@ -124,7 +127,7 @@ const MISSING_CONTROL: UpdateControlInspection = {
   presentationValue: "",
 };
 
-function ownership(identityState: string) {
+function ownership(identityState: CodexIdentityState) {
   return codexOwnershipInspection(
     identityState,
     { pluginPresent: false, marketplacePresent: false },
@@ -574,34 +577,9 @@ void test("needs install: a non-zero runInstall return propagates as update's st
   assert.equal(calls.length, 25);
 });
 
-// --- The two emptiness checks that run BEFORE the switch (§4.4's first
-// correction). `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:10::[ -n "$identity_state` guards identity_state (matching install's
-// equivalent guard); `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:14::capability` guards update_control, which install
-// never checks at all. ---
-
-void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", installed("current", X), []),
-    successResult("inspect", ownership(""), []),
-    successResult("inspect", ALLOWED_CONTROL, []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runUpdate([], ctx);
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: probe did not report adapter identity state\n",
-  );
-  assert.equal(out.text(), "");
-  assert.equal(calls.length, 11);
-});
+// --- The update-control check runs before the switch.
+// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:14::capability` guards update_control, which install
+// never checks. ---
 
 void test("a legacy identity state stops before the update-control guard even runs", async () => {
   const out = capture();
@@ -628,33 +606,6 @@ void test("a legacy identity state stops before the update-control guard even ru
       "Run: npx superpowers-wrapper@0.1.1 uninstall\n" +
       "Then run: npx superpowers-manager install\n",
   );
-  assert.equal(out.text(), "");
-  assert.equal(calls.length, 11);
-});
-
-void test("an UNKNOWN probe identity state is a distinct diagnostic from the legacy-blocked one", async () => {
-  // The sibling case above drives requireNoLegacyState's "blocked" arm; this
-  // one drives its "unknown" arm (src/harnesses/codex/lifecycle.ts, reached for any
-  // identity_state outside the four known ones). Each arm needs its own
-  // case: a mutant disabling both at once dies to the "blocked" case alone.
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", installed("current", X), []),
-    successResult("inspect", ownership("chaos"), []),
-    successResult("inspect", ALLOWED_CONTROL, []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runUpdate([], ctx);
-  assert.equal(status, 1);
-  // scripts/core/lifecycle.sh calls spw_die for the catch-all, which DOES
-  // prefix `error: ` -- unlike the bare three lines the "blocked" arm writes.
-  assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
   assert.equal(out.text(), "");
   assert.equal(calls.length, 11);
 });
@@ -701,49 +652,18 @@ void test("an empty probe-reported update-control capability fails closed, and r
   ]);
 });
 
-// --- The same three guards, driven by a NON-`current` status ---
+// --- The same reachable guards, driven by a NON-`current` status ---
 //
-// §4.4's correction is a placement claim: both emptiness checks and the
-// legacy-identity guard run BEFORE the switch, not inside the `current` arm.
+// §4.4's correction is a placement claim: update-control and legacy-identity
+// guards run BEFORE the switch, not inside the `current` arm.
 // Every case above uses a `current` fixture, so none of them can tell the two
 // arrangements apart -- each guard fires either way. These cases use a
 // "needs prepare" fixture whose prepare would succeed, so a guard relocated
 // into the `current` arm lets update reach runPrepare: the adapter build call
 // appears in `calls` and scripting only gatherProbe's three responses makes
 // that arrival loud. What must not happen is exactly what `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/update:10-14::[ -n "$identity_state`
-// refuses -- a real generated-tree write under an identity or an update-control
-// capability the command has not accepted.
-
-void test("needs prepare: an empty identity state refuses before prepare, not inside the current arm", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", installed("absent", ""), []),
-    successResult("inspect", ownership(""), []),
-    successResult("inspect", ALLOWED_CONTROL, []),
-  ]);
-  const ctx = await makePreparableCtx(out, err, adapter);
-  const status = await runUpdate([], ctx);
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: probe did not report adapter identity state\n",
-  );
-  assert.equal(out.text(), "");
-  assert.deepEqual(operationNames(calls), [
-    "preparation-location",
-    "mutation-roots",
-    "preparation-location",
-    "mutation-roots",
-    "inspect-prepared",
-    "inspect-installed",
-    "inspect-ownership",
-    "inspect-update-control",
-    "inspect-prepared",
-    "inspect-installed",
-    "inspect-update-control",
-  ]);
-});
+// refuses -- a real generated-tree write under a legacy identity or an
+// update-control capability the command has not accepted.
 
 void test("needs prepare: a legacy identity state refuses before prepare, not inside the current arm", async () => {
   const out = capture();

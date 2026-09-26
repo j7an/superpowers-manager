@@ -3,11 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  codexOwnershipInspection,
-  requireNoLegacyState,
-  reportLegacyState,
-} from "../../../../src/harnesses/codex/lifecycle.ts";
+import { codexOwnershipInspection } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   codexInstallReceipt,
   codexPresentation,
@@ -25,6 +21,43 @@ const REPORT_LINES = [
   "Legacy superpowers-wrapper Codex state remains installed.",
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
 ];
+
+void test("ownership decisions for every Codex identity state", () => {
+  const absent = { pluginPresent: false, marketplacePresent: false };
+  const conflicts = ["active Codex plugin superpowers@another-provider"];
+  for (const state of ["neither", "manager"] as const) {
+    const clean = codexOwnershipInspection(state, absent, []);
+    assert.deepEqual(clean.installEligibility, { kind: "allowed" }, state);
+    assert.deepEqual(clean.removalVerification, { kind: "allowed" }, state);
+    assert.deepEqual(
+      clean.postRemovalOutput,
+      { stdout: [], stderr: [] },
+      state,
+    );
+    assert.equal(clean.presentationValue, state);
+    assert.equal(
+      codexOwnershipInspection(state, absent, conflicts).installEligibility
+        .kind,
+      "blocked",
+      state,
+    );
+  }
+  for (const state of ["legacy", "both"] as const) {
+    const legacy = codexOwnershipInspection(state, absent, conflicts);
+    assert.deepEqual(
+      legacy.installEligibility,
+      { kind: "blocked", output: { stdout: [], stderr: BLOCKED_LINES } },
+      state,
+    );
+    assert.deepEqual(legacy.removalVerification, { kind: "allowed" }, state);
+    assert.deepEqual(
+      legacy.postRemovalOutput,
+      { stdout: REPORT_LINES, stderr: [] },
+      state,
+    );
+    assert.equal(legacy.presentationValue, state);
+  }
+});
 
 void test("typed Codex policy builder retains ownership decisions", () => {
   const clean = codexOwnershipInspection(
@@ -72,63 +105,6 @@ void test("receipt construction omits unsafe verification hints", () => {
     receipt.mismatchVerificationOutput.stderr.at(-1),
     "hint: retry installation",
   );
-});
-
-void test("requireNoLegacyState admits the two clean identity states", () => {
-  for (const state of ["neither", "manager"]) {
-    assert.deepEqual(requireNoLegacyState(state), { kind: "ok" }, state);
-  }
-});
-
-void test("requireNoLegacyState blocks legacy and both with the frozen text", () => {
-  for (const state of ["legacy", "both"]) {
-    assert.deepEqual(
-      requireNoLegacyState(state),
-      { kind: "blocked", lines: BLOCKED_LINES },
-      state,
-    );
-  }
-});
-
-void test("reportLegacyState is silent for the two clean identity states", () => {
-  for (const state of ["neither", "manager"]) {
-    assert.deepEqual(reportLegacyState(state), { kind: "ok" }, state);
-  }
-});
-
-void test("reportLegacyState reports legacy and both with the frozen text", () => {
-  for (const state of ["legacy", "both"]) {
-    assert.deepEqual(
-      reportLegacyState(state),
-      { kind: "report", lines: REPORT_LINES },
-      state,
-    );
-  }
-});
-
-// PORT-ONLY. tests/test_codex_state_units.sh never exercised the `*)` arms of
-// either case statement (`git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:56-58::spw_die "unknown adapter identity state: $identity_state` and :81-83), so the
-// spw_die path was unwitnessed on the shell side.
-void test("both predicates reject an unrecognised identity state", () => {
-  assert.deepEqual(requireNoLegacyState("garbage"), {
-    kind: "unknown",
-    message: "unknown adapter identity state: garbage",
-  });
-  assert.deepEqual(reportLegacyState("garbage"), {
-    kind: "unknown",
-    message: "unknown adapter identity state: garbage",
-  });
-});
-
-void test("an empty identity state is unrecognised, not clean", () => {
-  assert.deepEqual(requireNoLegacyState(""), {
-    kind: "unknown",
-    message: "unknown adapter identity state: ",
-  });
-  assert.deepEqual(reportLegacyState(""), {
-    kind: "unknown",
-    message: "unknown adapter identity state: ",
-  });
 });
 
 /**

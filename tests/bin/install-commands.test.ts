@@ -70,7 +70,10 @@ import { runUpdate } from "../../src/commands/update.ts";
 import { runPrepare } from "../../src/commands/prepare.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import type { UpdateControlInspection } from "../../src/harness.ts";
-import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
+import {
+  codexOwnershipInspection,
+  type CodexIdentityState,
+} from "../../src/harnesses/codex/lifecycle.ts";
 import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 const FORBIDDEN_LITERALS = [
@@ -445,7 +448,7 @@ function readGeneratedCommit(
 function scenarioAdapter(
   scenario: {
     installedIdentity?: (string | null) | ((call: number) => string | null);
-    identityState?: string | ((call: number) => string);
+    identityState?: CodexIdentityState | ((call: number) => CodexIdentityState);
     updateControl?:
       | UpdateControlInspection
       | "failure"
@@ -486,7 +489,7 @@ function scenarioAdapter(
       return successResult(
         "inspect",
         codexOwnershipInspection(
-          identityState,
+          identityState as CodexIdentityState,
           { pluginPresent: false, marketplacePresent: false },
           [],
         ),
@@ -532,13 +535,13 @@ function scenarioAdapter(
  * Check that legacy and mixed identities stop the in-process install flow.
  * gatherProbe's own three inspects still run unconditionally, so the double
  * answers all three and `identityState` supplies the value under test.
- * requireNoLegacyState fires immediately after gatherProbe resolves, before
+ * the legacy block from codexOwnershipInspection applies immediately after gatherProbe resolves, before
  * any workspace or adapter mutation stage -- so those three calls are the
  * only ones that should ever reach the double.
  */
 async function assertLegacyIdentityStops(
   c: import("./lifecycle-fixture.ts").CaseEnv,
-  identityState: string,
+  identityState: CodexIdentityState,
 ): Promise<void> {
   const adapter = scenarioAdapter({ identityState });
   const { ctx, stdout, stderr } = caseContext(c, { adapter });
