@@ -12,42 +12,11 @@ import {
   type ReportedWorkspace,
 } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import {
-  GatherFailure,
-  callAdapter,
-  type AdapterCall,
-} from "./adapter-call.ts";
-import { gatherProbe, replayOutcome } from "./probe.ts";
+import { GatherFailure, invoke, writeOutput } from "./adapter-call.ts";
+import { probeFacts, replayOutcome } from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
 import { runWithMutation } from "./mutation.ts";
 import { activationBlock } from "../harness-compatibility.ts";
-
-export function writeOutput(
-  output: Output,
-  ctx: Pick<CommandContext<never>, "stdout" | "stderr">,
-): void {
-  for (const line of output.stdout) ctx.stdout.write(`${line}\n`);
-  for (const line of output.stderr) ctx.stderr.write(`${line}\n`);
-}
-
-async function invoke<T>(
-  call: () => Promise<AdapterResult<T>>,
-  failure: { readonly unexpected: string; readonly invalidStatus: string },
-  outcomes: AdapterOutcome<unknown>[],
-  acceptValue?: (value: T) => boolean,
-): Promise<AdapterCall<T>> {
-  let result = await callAdapter(call, failure);
-  if (result.ok && acceptValue !== undefined) {
-    try {
-      if (!acceptValue(result.result.outcome.result))
-        result = { ok: false, result: null, message: failure.invalidStatus };
-    } catch {
-      result = { ok: false, result: null, message: failure.invalidStatus };
-    }
-  }
-  if (result.result !== null) outcomes.push(result.result.outcome);
-  return result;
-}
 
 type StageOutcome =
   | {
@@ -315,37 +284,15 @@ export async function runInstall<R>(
 ): Promise<number> {
   if (ctx.adapter.presentation.installNotice !== "")
     ctx.stdout.write(`${ctx.adapter.presentation.installNotice}\n`);
+  // argv is ignored: scripts/install never reads "$@".
   return await runWithMutation("install", ctx, async (scoped) =>
-    performInstall(argv, scoped),
+    performInstall(scoped),
   );
 }
 
-async function performInstall<R>(
-  argv: readonly string[],
-  ctx: CommandContext<R>,
-): Promise<number> {
-  // scripts/install never reads "$@", so extra arguments are silently
-  // ignored -- the same asymmetry runPrepare and runUninstall document.
-  void argv;
-
-  let probe: Awaited<ReturnType<typeof gatherProbe<R>>>;
-  try {
-    probe = await gatherProbe(ctx);
-  } catch (cause) {
-    // Gathering does not write, so this catch cannot misclassify an output
-    // failure. oneLine() bounds any inherited diagnostic to one line.
-    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
-    return 1;
-  }
-  // Replay first, on both paths, before any decision -- clause 1.
-  for (const outcome of probe.outcomes) replayOutcome(outcome, ctx);
-  if (probe.status === 1) {
-    if (probe.message !== null) {
-      ctx.stderr.write(`error: ${probe.message}\n`);
-    }
-    return 1;
-  }
-  const facts = probe.facts;
+async function performInstall<R>(ctx: CommandContext<R>): Promise<number> {
+  const facts = await probeFacts(ctx);
+  if (facts === null) return 1;
 
   if (facts.ownership.installEligibility.kind === "blocked") {
     writeOutput(facts.ownership.installEligibility.output, ctx);

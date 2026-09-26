@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import type { AdapterOutcome, AdapterResult } from "../adapter-result.ts";
+import type { AdapterOutcome } from "../adapter-result.ts";
 import { oneLine } from "../cli-arguments.ts";
 import type { Output } from "../harness.ts";
 import {
@@ -7,23 +7,9 @@ import {
   type ReportedWorkspace,
 } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import {
-  GatherFailure,
-  callAdapter,
-  type AdapterCall,
-} from "./adapter-call.ts";
+import { GatherFailure, invoke, writeOutput } from "./adapter-call.ts";
 import { runWithMutation } from "./mutation.ts";
 import { replayOutcome } from "./probe.ts";
-
-async function invoke<T>(
-  call: () => Promise<AdapterResult<T>>,
-  failure: { readonly unexpected: string; readonly invalidStatus: string },
-  outcomes: AdapterOutcome<unknown>[],
-): Promise<AdapterCall<T>> {
-  const result = await callAdapter(call, failure);
-  if (result.result !== null) outcomes.push(result.result.outcome);
-  return result;
-}
 
 type UninstallOutcome =
   | {
@@ -133,19 +119,13 @@ export async function runUninstall<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
+  // argv is ignored: scripts/uninstall never reads "$@".
   return await runWithMutation("uninstall", ctx, async (scoped) =>
-    performUninstall(argv, scoped),
+    performUninstall(scoped),
   );
 }
 
-async function performUninstall<R>(
-  argv: readonly string[],
-  ctx: CommandContext<R>,
-): Promise<number> {
-  // scripts/uninstall never reads "$@", so extra arguments are silently
-  // ignored -- the same asymmetry runPrepare documents at its own
-  // `void argv;`.
-  void argv;
+async function performUninstall<R>(ctx: CommandContext<R>): Promise<number> {
   let run: ReportedWorkspace<UninstallOutcome>;
   try {
     run = await gatherUninstall(ctx);
@@ -169,14 +149,10 @@ async function performUninstall<R>(
     if (outcome.message !== null) {
       ctx.stderr.write(`error: ${outcome.message}\n`);
     }
-    if (outcome.output !== null) {
-      for (const line of outcome.output.stdout) ctx.stdout.write(`${line}\n`);
-      for (const line of outcome.output.stderr) ctx.stderr.write(`${line}\n`);
-    }
+    if (outcome.output !== null) writeOutput(outcome.output, ctx);
     status = 1;
   } else {
-    for (const line of outcome.output.stdout) ctx.stdout.write(`${line}\n`);
-    for (const line of outcome.output.stderr) ctx.stderr.write(`${line}\n`);
+    writeOutput(outcome.output, ctx);
     status = 0;
   }
   if (cleanupWarning !== null) {

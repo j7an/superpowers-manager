@@ -477,7 +477,6 @@ void test("preparation does not require a Codex template or manifest", async (t)
   assert.deepEqual(fixture.calls, [
     "location",
     "mutation-roots",
-    "location",
     "prefetch",
     "prepare",
   ]);
@@ -532,7 +531,6 @@ void test("a rejected candidate preserves the previous payload before validation
   assert.deepEqual(fixture.calls, [
     "location",
     "mutation-roots",
-    "location",
     "prefetch",
     "prepare",
   ]);
@@ -614,7 +612,6 @@ void test("a rejected candidate preserves the previous payload before validation
       assert.deepEqual(unsupportedFixture.calls, [
         "location",
         "mutation-roots",
-        "location",
         "prefetch",
         "prepare",
       ]);
@@ -683,12 +680,7 @@ void test("preparation runs adapter prefetch validation before creating its work
     },
   };
   assert.equal(await runPrepare([], { ...fixture.ctx, adapter }), 1);
-  assert.deepEqual(fixture.calls, [
-    "location",
-    "mutation-roots",
-    "location",
-    "prefetch",
-  ]);
+  assert.deepEqual(fixture.calls, ["location", "mutation-roots", "prefetch"]);
   assert.equal(existsSync(parent), false);
 });
 
@@ -724,7 +716,6 @@ void test("preparation hides a candidate builder's thrown diagnostic", async (t)
   assert.deepEqual(fixture.calls, [
     "location",
     "mutation-roots",
-    "location",
     "prefetch",
     "prepare",
   ]);
@@ -764,7 +755,6 @@ void test("preparation rejects artifact evidence for another root", async (t) =>
   assert.deepEqual(fixture.calls, [
     "location",
     "mutation-roots",
-    "location",
     "prefetch",
     "prepare",
   ]);
@@ -802,7 +792,6 @@ void test("preparation rejects artifact evidence for another commit", async (t) 
   assert.deepEqual(fixture.calls, [
     "location",
     "mutation-roots",
-    "location",
     "prefetch",
     "prepare",
   ]);
@@ -1299,7 +1288,6 @@ void test("update composes probe, preparation, and installation through a non-Co
     "inspect-control",
     "location",
     "mutation-roots",
-    "location",
     "prefetch",
     "prepare",
     "location",

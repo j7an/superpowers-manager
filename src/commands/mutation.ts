@@ -2,6 +2,7 @@ import { computeEffectiveSelection } from "../effective-selection.ts";
 import { upstreamCacheRoot } from "../upstream-workspace.ts";
 import type { CommandContext } from "./context.ts";
 import { SafetyError } from "../safety-error.ts";
+import type { PreparationLocation } from "../harness.ts";
 import { isAbsolute } from "node:path";
 import { oneLine } from "../cli-arguments.ts";
 import { configurationErrors } from "../validator.ts";
@@ -11,7 +12,10 @@ export type MutationCommand = "prepare" | "install" | "update" | "uninstall";
 export async function withMutation<R>(
   command: MutationCommand,
   ctx: CommandContext<R>,
-  action: (scoped: CommandContext<R>) => Promise<number>,
+  action: (
+    scoped: CommandContext<R>,
+    location: PreparationLocation,
+  ) => Promise<number>,
 ): Promise<number> {
   // Selection validation precedes every adapter call and lock creation. A
   // nested mutation receives the already resolved value and cannot observe a
@@ -23,7 +27,7 @@ export async function withMutation<R>(
   const scoped =
     selection === undefined ? ctx : ({ ...ctx, selection } as const);
   const adapterContext = { root: ctx.root, env: ctx.env };
-  let location;
+  let location: PreparationLocation;
   try {
     location = ctx.adapter.preparationLocation(adapterContext);
   } catch (cause) {
@@ -74,14 +78,17 @@ export async function withMutation<R>(
   // it cannot deadlock because no acquisition waits, while already-held roots
   // are reentrant for this invocation.
   return await ctx.coordination.withResources(resources, async () =>
-    action(scoped),
+    action(scoped, location),
   );
 }
 
 export async function runWithMutation<R>(
   command: MutationCommand,
   ctx: CommandContext<R>,
-  action: (scoped: CommandContext<R>) => Promise<number>,
+  action: (
+    scoped: CommandContext<R>,
+    location: PreparationLocation,
+  ) => Promise<number>,
 ): Promise<number> {
   const errors = configurationErrors(command, ctx.env);
   if (errors.length > 0) {
@@ -90,9 +97,9 @@ export async function runWithMutation<R>(
   }
   let actionThrew = false;
   try {
-    return await withMutation(command, ctx, async (scoped) => {
+    return await withMutation(command, ctx, async (scoped, location) => {
       try {
-        return await action(scoped);
+        return await action(scoped, location);
       } catch (cause) {
         actionThrew = true;
         throw cause;

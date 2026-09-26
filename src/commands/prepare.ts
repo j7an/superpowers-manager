@@ -1,5 +1,5 @@
 import { mkdir, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, sep } from "node:path";
+import { dirname, join, sep } from "node:path";
 
 import type { AdapterOutcome } from "../adapter-result.ts";
 import { atomicReplaceDir } from "../atomic.ts";
@@ -24,6 +24,7 @@ import {
   type ReportedWorkspace,
 } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
+import { invoke } from "./adapter-call.ts";
 import { replayOutcome } from "./probe.ts";
 import { runWithMutation } from "./mutation.ts";
 
@@ -110,18 +111,9 @@ type PrepareOutcome =
       readonly message: string | null;
     };
 
-function validStagingLeaf(value: string): boolean {
-  return (
-    value.length > 0 &&
-    value !== "." &&
-    value !== ".." &&
-    !value.includes("/") &&
-    !value.includes("\\")
-  );
-}
-
 async function gatherPrepare<R>(
   ctx: CommandContext<R>,
+  location: PreparationLocation,
 ): Promise<ReportedWorkspace<PrepareOutcome>> {
   // Collect outcomes without writing so output failures cannot be classified as
   // inspection failures. Replay collected outcomes after gathering completes.
@@ -130,20 +122,6 @@ async function gatherPrepare<R>(
   const cache = upstreamCacheRoot(ctx.root, env, cwd);
   const cacheParent = dirname(cache);
   const adapterContext = { root: ctx.root, env };
-  let location: PreparationLocation;
-  try {
-    location = ctx.adapter.preparationLocation(adapterContext);
-  } catch (cause) {
-    throw prepareError("cannot determine preparation location", cause);
-  }
-  if (!isAbsolute(location.destinationRoot)) {
-    throw prepareError(
-      "adapter returned a non-absolute preparation destination",
-    );
-  }
-  if (!validStagingLeaf(location.stagingLeaf)) {
-    throw prepareError("adapter returned an invalid preparation staging leaf");
-  }
   const pluginRoot = location.destinationRoot;
   const executableValidator = env.SUPERPOWERS_VALIDATOR_EXECUTABLE || "";
   const tmpParent = dirname(pluginRoot);
@@ -156,29 +134,18 @@ async function gatherPrepare<R>(
   });
   const selection =
     ctx.selection ?? (await computeEffectiveSelection(ctx.root, env));
-  let prefetch;
-  try {
-    prefetch = await ctx.adapter.validatePreparationBeforeFetch(adapterContext);
-  } catch {
-    return {
-      value: failed(
-        ctx.adapter.presentation.callFailure("prepare", adapterContext)
-          .unexpected,
-      ),
-      cleanupWarning: null,
-    };
-  }
-  outcomes.push(prefetch.outcome);
-  if (!prefetch.outcome.ok)
-    return { value: failed(null), cleanupWarning: null };
-  if (prefetch.status !== 0) {
-    return {
-      value: failed(
-        ctx.adapter.presentation.callFailure("prepare", adapterContext)
-          .invalidStatus,
-      ),
-      cleanupWarning: null,
-    };
+  // callFailure only formats strings; computing it once up front is safe.
+  const failure = ctx.adapter.presentation.callFailure(
+    "prepare",
+    adapterContext,
+  );
+  const prefetch = await invoke(
+    () => ctx.adapter.validatePreparationBeforeFetch(adapterContext),
+    failure,
+    outcomes,
+  );
+  if (!prefetch.ok) {
+    return { value: failed(prefetch.message), cleanupWarning: null };
   }
   await owned(`cannot create directory: ${tmpParent}`, () =>
     mkdir(tmpParent, { recursive: true }),
@@ -244,40 +211,30 @@ async function gatherPrepare<R>(
         );
       }
 
-      let prepared;
-      try {
-        prepared = await ctx.adapter.prepareCandidate(
-          {
-            upstreamRoot: cache,
-            workspaceRoot: workspace,
-            candidateRoot: candidate,
-            selection,
-          },
-          adapterContext,
-        );
-      } catch {
-        return failed(
-          ctx.adapter.presentation.callFailure("prepare", adapterContext)
-            .unexpected,
-        );
-      }
-      outcomes.push(prepared.outcome);
-      if (prepared.status !== 0 || !prepared.outcome.ok) {
-        return failed(
-          prepared.outcome.ok
-            ? ctx.adapter.presentation.callFailure("prepare", adapterContext)
-                .invalidStatus
-            : null,
-        );
-      }
-      if (prepared.outcome.result.root !== candidate) {
+      const prepared = await invoke(
+        () =>
+          ctx.adapter.prepareCandidate(
+            {
+              upstreamRoot: cache,
+              workspaceRoot: workspace,
+              candidateRoot: candidate,
+              selection,
+            },
+            adapterContext,
+          ),
+        failure,
+        outcomes,
+      );
+      if (!prepared.ok) return failed(prepared.message);
+      const candidateResult = prepared.result.outcome.result;
+      if (candidateResult.root !== candidate) {
         return failed("adapter returned an unexpected preparation root");
       }
-      if (prepared.outcome.result.commit !== selection.desiredCommit) {
+      if (candidateResult.commit !== selection.desiredCommit) {
         return failed("adapter returned an unexpected preparation commit");
       }
-      if (prepared.outcome.result.compatibility.kind === "unsupported") {
-        return failed(prepared.outcome.result.compatibility.reason);
+      if (candidateResult.compatibility.kind === "unsupported") {
+        return failed(candidateResult.compatibility.reason);
       }
       let validator = NO_VALIDATOR_OUTPUT;
       if (executableValidator.length > 0) {
@@ -361,22 +318,20 @@ export async function runPrepare<R>(
   argv: readonly string[],
   ctx: CommandContext<R>,
 ): Promise<number> {
-  return await runWithMutation("prepare", ctx, async (scoped) =>
-    performPrepare(argv, scoped),
+  // argv is ignored: scripts/prepare never read "$@". Probe, by contrast,
+  // rejects extra arguments in the CLI parser.
+  return await runWithMutation("prepare", ctx, async (scoped, location) =>
+    performPrepare(scoped, location),
   );
 }
 
 async function performPrepare<R>(
-  argv: readonly string[],
   ctx: CommandContext<R>,
+  location: PreparationLocation,
 ): Promise<number> {
-  // scripts/prepare never reads "$@", so extra arguments are ignored. This is a
-  // deliberate asymmetry with probe, whose shell original rejected unknown
-  // arguments and whose arity therefore moved into parseArgs in slice 2.
-  void argv;
   let run: ReportedWorkspace<PrepareOutcome>;
   try {
-    run = await gatherPrepare(ctx);
+    run = await gatherPrepare(ctx, location);
   } catch (cause) {
     // Reader wrappers supply their own diagnostics. The saved-selection read
     // path retains its sanctioned interpolation at
@@ -409,7 +364,7 @@ async function performPrepare<R>(
     // completed before cleanup ran, so it is not being reported as unverified
     // -- but something did still go wrong, and AGENTS.md's fail-closed rule
     // extends to it. Mirrors
-    // `src/commands/install.ts:425::if (cleanupWarning`.
+    // `src/commands/install.ts:372::if (cleanupWarning`.
     ctx.stderr.write(`error: ${cleanupWarning}\n`);
     return 1;
   }

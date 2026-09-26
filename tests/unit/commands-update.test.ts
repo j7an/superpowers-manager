@@ -398,7 +398,7 @@ void test("needs prepare: a failing prepare's status propagates verbatim, and in
   );
   // Only gatherProbe's own three calls: prepare fails before issuing any
   // adapter call of its own, and install is never reached.
-  assert.equal(calls.length, 15);
+  assert.equal(calls.length, 14);
 });
 
 void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall, not by a bare success", async () => {
@@ -446,7 +446,7 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
       `${INSTALL_NOTE}desired_commit=${UPSTREAM.commit}\n` +
       `installed_commit=${UPSTREAM.commit}\nmanager updated\n`,
   );
-  assert.equal(calls.length, 32);
+  assert.equal(calls.length, 31);
   assert.deepEqual(operationNames(calls), [
     "preparation-location",
     "mutation-roots",
@@ -461,7 +461,6 @@ void test("needs prepare: a SUCCESSFUL prepare is followed by a real runInstall,
     "inspect-update-control",
     "preparation-location",
     "mutation-roots",
-    "preparation-location",
     "validate-preparation-before-fetch",
     "prepare-candidate",
     "preparation-location",

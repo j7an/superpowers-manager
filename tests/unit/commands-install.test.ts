@@ -374,7 +374,7 @@ void test("an unparseable generated commit is never treated as success", async (
   const ctx = await makeCtx({ desiredCommit: X }, out, err, adapter);
   const status = await runInstall([], ctx);
   assert.equal(status, 1);
-  assert.equal(calls.length, 15);
+  assert.equal(calls.length, 14);
   const template = join(
     ctx.root,
     "plugins",
@@ -538,7 +538,7 @@ void test("an UNKNOWN probe identity state stops before the workspace is created
   // The sibling case and this one exercise distinct concrete normalization
   // decisions (`src/harnesses/codex/lifecycle.ts:122::const installEligibility`),
   // both enforced by the same shared guard
-  // (`src/commands/install.ts:350::if (facts.ownership.installEligibility.kind`).
+  // (`src/commands/install.ts:297::if (facts.ownership.installEligibility.kind`).
   // "chaos" is non-empty, so its exact diagnostic remains distinct from the
   // empty-state decision asserted above.
   const out = capture();
