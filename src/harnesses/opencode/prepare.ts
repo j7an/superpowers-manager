@@ -4,22 +4,12 @@ import {
   type AdapterContext,
   type AdapterResult,
 } from "../../adapter-result.ts";
-import type { PreparationLocation } from "../../harness.ts";
 import { createSnapshotPreparation } from "../../snapshot-prepare.ts";
 import { assertOpenCodePreparationSeparate, openCodePaths } from "./paths.ts";
 import {
   assessOpenCodeCompatibility,
   readOpenCodePackageAssessment,
 } from "./package.ts";
-
-export function openCodePreparationLocation(
-  ctx: AdapterContext,
-): PreparationLocation {
-  return {
-    destinationRoot: openCodePaths(ctx.env ?? {}, process.cwd()).preparedRoot,
-    stagingLeaf: "superpowers",
-  };
-}
 
 export async function validateOpenCodePreparationBeforeFetch(
   ctx: AdapterContext,
@@ -42,11 +32,12 @@ export async function validateOpenCodePreparationBeforeFetch(
 const preparation = createSnapshotPreparation({
   harness: "opencode",
   label: "OpenCode",
-  preparationLocation: openCodePreparationLocation,
+  paths: openCodePaths,
   assessCompatibility: assessOpenCodeCompatibility,
   readAssessment: readOpenCodePackageAssessment,
 });
 
+export const openCodePreparationLocation = preparation.preparationLocation;
 export const prepareOpenCodeCandidate = preparation.prepareCandidate;
 export const inspectOpenCodePrepared = preparation.inspectPrepared;
 export const readOpenCodePrepared = preparation.readPrepared;

@@ -46,8 +46,6 @@ import {
   type MarketplaceRegistration,
 } from "./state.ts";
 
-export { CLAUDE_CODE_MARKETPLACE_BYTES } from "./state.ts";
-
 interface ClaudeCodeInstallDependencies {
   readonly run: RunClaude;
   readonly beginPublication: typeof beginDirectoryPublication;

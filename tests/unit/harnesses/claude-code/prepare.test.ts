@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
+import {
+  ARTIFACT_RECEIPT,
+  digestArtifactTree,
+} from "../../../../src/artifact-tree.ts";
 import {
   inspectClaudeCodePrepared,
   prepareClaudeCodeCandidate,
   readClaudeCodePrepared,
   readClaudeCodeReceipt,
 } from "../../../../src/harnesses/claude-code/prepare.ts";
+import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import {
   commitFixture,
   nativeSelection,
@@ -18,6 +22,7 @@ import {
   nativeClaudeCodeFixture,
   prepareClaudeCodeArtifact,
 } from "../../../lib/harnesses/claude-code/package-fixture.ts";
+import { scratch } from "../../../lib/scratch.ts";
 
 async function prepareFrom(t: test.TestContext, upstream: string) {
   const sandbox = claudeCodeSandbox(t);
@@ -130,4 +135,32 @@ void test("a same-commit ref change makes the prepared artifact need preparation
   const changed = await inspectClaudeCodePrepared(rawCommit, sandbox.ctx);
   assert.equal(changed.outcome.ok, true);
   assert.equal(changed.outcome.result?.kind, "needs-prepare");
+});
+
+void test("Claude Code receipts reject a generation on unsupported compatibility", async (t) => {
+  const root = scratch(t, "spw-claude-code-receipt-");
+  const identity = {
+    schema: 1,
+    manager: "superpowers-manager",
+    harness: "claude-code",
+    source: "https://github.com/obra/superpowers",
+    commit: "1".repeat(40),
+    digest: await digestArtifactTree(root),
+  } as const;
+  writeFileSync(
+    join(root, ARTIFACT_RECEIPT),
+    JSON.stringify({
+      ...identity,
+      binding: snapshotReceiptBinding(identity),
+      compatibility: {
+        kind: "unsupported",
+        reason: "retired",
+        generation: "extra",
+      },
+    }) + "\n",
+  );
+  await assert.rejects(
+    readClaudeCodeReceipt(root),
+    /invalid Claude Code artifact receipt/,
+  );
 });

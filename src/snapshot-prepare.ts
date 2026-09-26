@@ -32,7 +32,10 @@ interface Assessment {
 interface Bindings {
   readonly harness: "pi" | "opencode" | "claude-code";
   readonly label: "Pi" | "OpenCode" | "Claude Code";
-  readonly preparationLocation: (ctx: AdapterContext) => PreparationLocation;
+  readonly paths: (
+    env: NodeJS.ProcessEnv,
+    cwd: string,
+  ) => { readonly preparedRoot: string };
   readonly assessCompatibility: (
     root: string,
     selection: Pick<EffectiveSelection, "effectiveSource">,
@@ -48,10 +51,17 @@ interface Bindings {
 
 type Preparation = Pick<
   HarnessAdapter<never>,
-  "prepareCandidate" | "inspectPrepared" | "readPrepared"
+  | "preparationLocation"
+  | "prepareCandidate"
+  | "inspectPrepared"
+  | "readPrepared"
 >;
 
 export function createSnapshotPreparation(b: Bindings): Preparation {
+  const preparationLocation = (ctx: AdapterContext): PreparationLocation => ({
+    destinationRoot: b.paths(ctx.env ?? {}, process.cwd()).preparedRoot,
+    stagingLeaf: "superpowers",
+  });
   const artifactFrom = (root: string, a: Assessment): PreparedArtifact => ({
     root,
     commit: a.receipt.commit,
@@ -59,6 +69,7 @@ export function createSnapshotPreparation(b: Bindings): Preparation {
     compatibility: a.compatibility,
   });
   return {
+    preparationLocation,
     async prepareCandidate(input) {
       try {
         await materializeGitTree(
@@ -118,7 +129,7 @@ export function createSnapshotPreparation(b: Bindings): Preparation {
       }
     },
     async inspectPrepared(selection, ctx) {
-      const root = b.preparationLocation(ctx).destinationRoot;
+      const root = preparationLocation(ctx).destinationRoot;
       const unknown = {
         kind: "unknown" as const,
         reason: `${b.label} prepared compatibility evidence is missing`,
@@ -186,7 +197,7 @@ export function createSnapshotPreparation(b: Bindings): Preparation {
       }
     },
     async readPrepared(ctx) {
-      const root = b.preparationLocation(ctx).destinationRoot;
+      const root = preparationLocation(ctx).destinationRoot;
       try {
         const assessment = await b.readAssessment(root);
         if (

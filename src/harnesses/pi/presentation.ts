@@ -1,5 +1,8 @@
 import type { HarnessPresentation } from "../../harness.ts";
-import { createSnapshotPresentation } from "../../snapshot-presentation.ts";
+import {
+  createSnapshotPresentation,
+  probeOutput,
+} from "../../snapshot-presentation.ts";
 import type { PiRemovalInput } from "./state.ts";
 
 const renderProbe: HarnessPresentation<PiRemovalInput>["renderProbe"] = (
@@ -19,15 +22,7 @@ const renderProbe: HarnessPresentation<PiRemovalInput>["renderProbe"] = (
     ["compatibility_reason", facts.compatibility.reason],
     ["status", facts.status],
   ] as const;
-  return {
-    human: fields
-      .map(
-        ([key, value]) =>
-          `${key.replaceAll("_", " ")}: ${value || "not present"}\n`,
-      )
-      .join(""),
-    porcelain: fields.map(([key, value]) => `${key}=${value}\n`).join(""),
-  };
+  return probeOutput(fields);
 };
 
 export const piPresentation = createSnapshotPresentation(
