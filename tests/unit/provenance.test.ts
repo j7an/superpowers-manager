@@ -224,7 +224,7 @@ void test("PROVENANCE-BYTES-01 writer matches Python bytes", async (t) => {
     escapeNonAscii(JSON.stringify(value)).slice(1, -1);
   assert.equal(escape("\ud800"), "\\ud800");
   assert.equal(escape("\udfff"), "\\udfff");
-  assert.equal(escape("😀"), "\\ud83d\\ude00");
+  assert.equal(escape("\ud83d\ude00"), "\\ud83d\\ude00");
   assert.equal(
     escape('"\\/\b\t\n\f\r\u0001\u007f'),
     '\\"\\\\/\\b\\t\\n\\f\\r\\u0001\\u007f',
