@@ -252,3 +252,37 @@ void test("runPi preserves bounded diagnostics without trusting subordinate text
     { channel: "stderr", text: "reason\\r" },
   ]);
 });
+
+void test("runPi reports isolated workspace creation and callback failures", async (t) => {
+  const { root, paths } = sandbox(t);
+  const callback = await runPi(
+    [],
+    paths,
+    { root, env: { TMPDIR: root } },
+    async () => {
+      throw new Error("unsafe native cause\u001b");
+    },
+  );
+  assert.equal(callback.outcome.ok, false);
+  if (!callback.outcome.ok) {
+    assert.equal(callback.outcome.operation, "pi-command");
+    assert.equal(callback.outcome.error.code, "workspace-failed");
+    assert.equal(
+      callback.outcome.error.message,
+      "cannot complete Pi command in its isolated workspace",
+    );
+  }
+
+  const file = join(root, "not-a-directory");
+  mkdirSync(file);
+  const creation = await runPi([], paths, {
+    root,
+    env: { TMPDIR: join(file, "missing", "child") },
+  });
+  assert.equal(creation.outcome.ok, false);
+  if (!creation.outcome.ok)
+    assert.equal(
+      creation.outcome.error.message,
+      "cannot create an isolated Pi command workspace",
+    );
+});

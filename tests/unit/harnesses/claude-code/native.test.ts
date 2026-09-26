@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -181,5 +181,38 @@ void test("readClaudeCodeState fails closed when either list command fails", asy
           : successResult("claude-code-command", { stdout: "[]" }, []),
       ),
       /cannot inspect Claude Code plugin state/,
+    );
+});
+
+void test("runClaude reports isolated workspace creation and callback failures", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const callback = await runClaude(
+    [],
+    { root: sandbox.root, env: { ...sandbox.env, TMPDIR: sandbox.root } },
+    async () => {
+      throw new Error("unsafe native cause\u001b");
+    },
+  );
+  assert.equal(callback.outcome.ok, false);
+  if (!callback.outcome.ok) {
+    assert.equal(callback.outcome.operation, "claude-code-command");
+    assert.equal(callback.outcome.error.code, "workspace-failed");
+    assert.equal(
+      callback.outcome.error.message,
+      "cannot complete Claude Code command in its isolated workspace",
+    );
+  }
+
+  const file = join(sandbox.root, "not-a-directory");
+  mkdirSync(file);
+  const creation = await runClaude([], {
+    root: sandbox.root,
+    env: { ...sandbox.env, TMPDIR: join(file, "missing", "child") },
+  });
+  assert.equal(creation.outcome.ok, false);
+  if (!creation.outcome.ok)
+    assert.equal(
+      creation.outcome.error.message,
+      "cannot create an isolated Claude Code command workspace",
     );
 });
