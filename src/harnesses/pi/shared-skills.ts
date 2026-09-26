@@ -12,7 +12,18 @@ import {
 import { fileURLToPath } from "node:url";
 import type { PiPaths } from "./paths.ts";
 import type { PiSettings } from "./settings.ts";
-import { classifyPathNoFollow, isContained } from "../../safe-path.ts";
+import {
+  classifyPathNoFollow,
+  isContained,
+  type NoFollowPathType,
+} from "../../safe-path.ts";
+
+// Every caller in this module treats a classification failure as its own
+// indeterminate/false outcome; null carries that failure without a try block.
+function classifyOrNull(path: string): Promise<NoFollowPathType | null> {
+  return classifyPathNoFollow(path).catch(() => null);
+}
+
 const PI_IGNORE_FILES = [".gitignore", ".ignore", ".fdignore"] as const;
 
 type SharedSkillCollection =
@@ -30,12 +41,8 @@ async function ignoreControlState(
 ): Promise<"none" | "indeterminate"> {
   for (const filename of PI_IGNORE_FILES) {
     const path = join(directory, filename);
-    let kind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-    try {
-      kind = await classifyPathNoFollow(path);
-    } catch {
-      return "indeterminate";
-    }
+    const kind = await classifyOrNull(path);
+    if (kind === null) return "indeterminate";
     if (kind === "missing") continue;
     if (kind !== "regular-file") return "indeterminate";
     let contents: string;
@@ -64,12 +71,8 @@ async function collectSharedSkillDirectory(
   }
 
   const declaredSkill = join(directory, "SKILL.md");
-  let declaredKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-  try {
-    declaredKind = await classifyPathNoFollow(declaredSkill);
-  } catch {
-    return { kind: "indeterminate" };
-  }
+  const declaredKind = await classifyOrNull(declaredSkill);
+  if (declaredKind === null) return { kind: "indeterminate" };
   if (declaredKind === "regular-file") {
     return { kind: "candidates", paths: [declaredSkill] };
   }
@@ -86,12 +89,8 @@ async function collectSharedSkillDirectory(
     if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
     if (entry.name === "SKILL.md") return { kind: "indeterminate" };
     const path = join(directory, entry.name);
-    let kind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-    try {
-      kind = await classifyPathNoFollow(path);
-    } catch {
-      return { kind: "indeterminate" };
-    }
+    const kind = await classifyOrNull(path);
+    if (kind === null) return { kind: "indeterminate" };
     if (kind === "symlink" || kind === "missing") {
       return { kind: "indeterminate" };
     }
@@ -113,34 +112,22 @@ async function collectSharedPiSkills(
   const skillsRoot = join(agentsRoot, "skills");
   const sharedRoot = join(skillsRoot, "superpowers");
   for (const directory of [agentsRoot, skillsRoot]) {
-    let kind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-    try {
-      kind = await classifyPathNoFollow(directory);
-    } catch {
-      return { kind: "indeterminate" };
-    }
+    const kind = await classifyOrNull(directory);
+    if (kind === null) return { kind: "indeterminate" };
     if (kind === "missing") return { kind: "none" };
     if (kind !== "directory") return { kind: "indeterminate" };
   }
 
-  let sharedRootKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-  try {
-    sharedRootKind = await classifyPathNoFollow(sharedRoot);
-  } catch {
-    return { kind: "indeterminate" };
-  }
+  const sharedRootKind = await classifyOrNull(sharedRoot);
+  if (sharedRootKind === null) return { kind: "indeterminate" };
   if (sharedRootKind === "missing") return { kind: "none" };
 
   if ((await ignoreControlState(skillsRoot)) === "indeterminate") {
     return { kind: "indeterminate" };
   }
   const discoveryRootSkill = join(skillsRoot, "SKILL.md");
-  let discoveryRootSkillKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-  try {
-    discoveryRootSkillKind = await classifyPathNoFollow(discoveryRootSkill);
-  } catch {
-    return { kind: "indeterminate" };
-  }
+  const discoveryRootSkillKind = await classifyOrNull(discoveryRootSkill);
+  if (discoveryRootSkillKind === null) return { kind: "indeterminate" };
   if (discoveryRootSkillKind === "regular-file") return { kind: "none" };
   if (discoveryRootSkillKind !== "missing") {
     return { kind: "indeterminate" };
@@ -292,11 +279,7 @@ async function hasSafeSharedSkillAncestors(
     directories.push(cursor);
   }
   for (const directory of directories) {
-    try {
-      if ((await classifyPathNoFollow(directory)) !== "directory") return false;
-    } catch {
-      return false;
-    }
+    if ((await classifyOrNull(directory)) !== "directory") return false;
   }
   return true;
 }
@@ -361,10 +344,8 @@ async function explicitSharedSkillActivities(
       }
       continue;
     }
-    let lexicalKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-    try {
-      lexicalKind = await classifyPathNoFollow(path);
-    } catch {
+    const lexicalKind = await classifyOrNull(path);
+    if (lexicalKind === null) {
       if (isContained(sharedRoot, path) || isContained(path, sharedRoot)) {
         indeterminate = true;
       }
@@ -395,10 +376,8 @@ async function explicitSharedSkillActivities(
       isContained(canonicalSharedRoot, canonicalPath) ||
       isContained(canonicalPath, canonicalSharedRoot);
     if (!related) continue;
-    let canonicalKind: Awaited<ReturnType<typeof classifyPathNoFollow>>;
-    try {
-      canonicalKind = await classifyPathNoFollow(canonicalPath);
-    } catch {
+    const canonicalKind = await classifyOrNull(canonicalPath);
+    if (canonicalKind === null) {
       indeterminate = true;
       continue;
     }

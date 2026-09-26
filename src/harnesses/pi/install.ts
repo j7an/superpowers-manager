@@ -1,16 +1,5 @@
 import { randomBytes } from "node:crypto";
-import {
-  cp,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rm,
-  rmdir,
-  unlink,
-} from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import {
   failureResult,
   successResult,
@@ -18,7 +7,6 @@ import {
   type AdapterResult,
 } from "../../adapter-result.ts";
 import {
-  atomicWriteFile,
   beginDirectoryPublication,
   type DirectoryPublication,
 } from "../../atomic.ts";
@@ -32,11 +20,7 @@ import {
   type PiReceipt,
 } from "./package.ts";
 import { piPaths, type PiPaths } from "./paths.ts";
-import {
-  readPiSettings,
-  resolveCanonicalPiLocalSource,
-  type PiPackageEntry,
-} from "./settings.ts";
+import { readPiSettings, type PiPackageEntry } from "./settings.ts";
 import {
   inspectPiControl,
   inspectPiOwnership,
@@ -47,19 +31,26 @@ import {
   canonicalizeProspectivePath,
   classifyPathNoFollow,
 } from "../../safe-path.ts";
+import {
+  createJournal,
+  createSnapshotJournal,
+  hasRecovery,
+  identity,
+  journalPath,
+  publicationPaths,
+  requireNoRecovery,
+  type Identity,
+} from "../../snapshot-journal.ts";
 
 export interface PiInstallDependencies {
   readonly run: typeof runPi;
   readonly beginPublication: typeof beginDirectoryPublication;
-  readonly readSettings: typeof readPiSettings;
 }
 
 const DEFAULTS: PiInstallDependencies = {
   run: runPi,
   beginPublication: beginDirectoryPublication,
-  readSettings: readPiSettings,
 };
-type Identity = { readonly dev: number; readonly ino: number };
 type Phase =
   | "staging"
   | "publishing"
@@ -106,23 +97,6 @@ function accepted<T>(result: AdapterResult<T>): T {
     throw new Error("Pi operation did not succeed");
   return result.outcome.result;
 }
-function sameIdentity(a: Identity, b: Identity): boolean {
-  return a.dev === b.dev && a.ino === b.ino;
-}
-async function identity(path: string): Promise<Identity> {
-  await assertNoFollowType(path, ["directory"]);
-  return await lstat(path);
-}
-async function requireIdentity(
-  path: string,
-  expected: Identity,
-): Promise<void> {
-  if (!sameIdentity(await identity(path), expected))
-    throw new Error("Pi directory changed");
-}
-function journalPath(p: Pending): string {
-  return join(p.paths.recoveryRoot, "transaction.json");
-}
 function journalBytes(journal: Journal): Buffer {
   return Buffer.from(JSON.stringify(journal) + "\n");
 }
@@ -134,47 +108,17 @@ async function validatePaths(paths: PiPaths): Promise<string> {
   return await canonicalizeProspectivePath(paths.installedRoot);
 }
 
-async function requireNoRecovery(paths: PiPaths): Promise<void> {
-  await assertNoFollowType(paths.recoveryRoot, ["missing"]);
-}
+const { requireIdentity, requireJournal, phase, retireJournal } =
+  createSnapshotJournal<PiPaths, Journal>({
+    label: "Pi",
+    validatePaths,
+    serialize: journalBytes,
+    readCap: 64 * 1024,
+  });
 
-async function syncDirectoryStrict(path: string): Promise<void> {
-  const directory = await open(path, "r");
-  try {
-    await directory.sync();
-  } finally {
-    await directory.close();
-  }
-}
-
-async function hasRecovery(paths: PiPaths): Promise<boolean> {
-  try {
-    return (await classifyPathNoFollow(paths.recoveryRoot)) !== "missing";
-  } catch {
-    return true;
-  }
-}
-
-async function registration(
-  paths: PiPaths,
-  deps: PiInstallDependencies,
-): Promise<PiPackageEntry | null> {
-  const settings = await deps.readSettings(paths.settingsFile, paths.homeDir);
-  const canonicalRoot = await canonicalizeProspectivePath(paths.installedRoot);
-  const matches: PiPackageEntry[] = [];
-  for (const entry of settings.packages) {
-    if (
-      (await resolveCanonicalPiLocalSource(
-        entry.source,
-        paths.agentDir,
-        paths.homeDir,
-      )) === canonicalRoot
-    ) {
-      matches.push(entry);
-    }
-  }
-  if (matches.length > 1) throw new Error("duplicate Pi registration");
-  return matches[0] ?? null;
+async function registration(paths: PiPaths): Promise<PiPackageEntry | null> {
+  return (await readPiSettings(paths.settingsFile, paths.homeDir))
+    .managerRegistration;
 }
 function sameRegistration(
   a: PiPackageEntry | null,
@@ -222,56 +166,6 @@ async function requireSnapshot(
     throw new Error("Pi artifact changed");
 }
 
-async function requireJournal(p: Pending): Promise<void> {
-  if (
-    (await validatePaths(p.paths)) !== p.canonicalRoot ||
-    p.journal.installedRoot !== p.canonicalRoot ||
-    !/^[a-f0-9]{32}$/u.test(p.journal.token)
-  )
-    throw new Error("Pi recovery root changed");
-  await requireIdentity(p.paths.recoveryRoot, p.recoveryIdentity);
-  const path = journalPath(p);
-  await assertNoFollowType(path, ["regular-file"]);
-  const stat = await lstat(path);
-  if (
-    !sameIdentity(stat, p.journalIdentity) ||
-    stat.size > 64 * 1024 ||
-    !(await readFile(path)).equals(journalBytes(p.journal))
-  )
-    throw new Error("Pi recovery journal changed");
-  if (
-    p.backup !==
-      join(
-        dirname(p.canonicalRoot),
-        `.${basename(p.canonicalRoot)}.bak.${p.journal.token}`,
-      ) ||
-    p.stage !==
-      join(
-        dirname(p.canonicalRoot),
-        `.${basename(p.canonicalRoot)}.stage.${p.journal.token}`,
-      )
-  )
-    throw new Error("Pi recovery paths changed");
-}
-async function phase(
-  p: Pending,
-  next: Phase,
-  changes: { readonly createdRegistration?: PiPackageEntry | null } = {},
-): Promise<void> {
-  await requireJournal(p);
-  const journal = { ...p.journal, ...changes, phase: next };
-  const bytes = journalBytes(journal);
-  await atomicWriteFile(journalPath(p), bytes, {
-    validate: async (temporary) => {
-      if (!(await readFile(temporary)).equals(bytes))
-        throw new Error("Pi journal write changed");
-    },
-  });
-  await syncDirectoryStrict(p.paths.recoveryRoot);
-  p.journal = journal;
-  p.journalIdentity = await lstat(journalPath(p));
-}
-
 async function beginJournal(
   paths: PiPaths,
   oldArtifact: PiReceipt | null,
@@ -298,47 +192,22 @@ async function beginJournal(
     createdRegistration: null,
     phase: newArtifact === null ? "removing" : "staging",
   };
-  const path = join(paths.recoveryRoot, "transaction.json");
-  const handle = await open(path, "wx", 0o600);
-  try {
-    await handle.writeFile(journalBytes(journal));
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
   // The first journal is durable before either a staging tree or backup exists.
-  await syncDirectoryStrict(paths.recoveryRoot);
+  const journalIdentity = await createJournal(
+    paths.recoveryRoot,
+    journalBytes(journal),
+  );
   return {
     paths,
     canonicalRoot,
     recoveryIdentity,
-    backup: join(
-      dirname(canonicalRoot),
-      `.${basename(canonicalRoot)}.bak.${token}`,
-    ),
-    stage: join(
-      dirname(canonicalRoot),
-      `.${basename(canonicalRoot)}.stage.${token}`,
-    ),
+    ...publicationPaths(canonicalRoot, token),
     ctx,
     deps,
     journal,
-    journalIdentity: await lstat(path),
+    journalIdentity,
     settled: false,
   };
-}
-
-async function retireJournal(p: Pending): Promise<void> {
-  await requireJournal(p);
-  if (
-    (await readdir(p.paths.recoveryRoot)).some(
-      (name) => name !== "transaction.json",
-    )
-  )
-    throw new Error("unknown Pi recovery material");
-  await unlink(journalPath(p));
-  await requireIdentity(p.paths.recoveryRoot, p.recoveryIdentity);
-  await rmdir(p.paths.recoveryRoot);
 }
 
 async function journalRetirementGuidance(p: Pending): Promise<string> {
@@ -391,7 +260,7 @@ async function finalizePiPublication(
   let publicationCleanupCompleted = false;
   try {
     await requirePublication(p);
-    const current = await registration(p.paths, p.deps);
+    const current = await registration(p.paths);
     const expectedRegistration =
       p.journal.priorRegistration ?? p.journal.createdRegistration;
     if (
@@ -438,7 +307,7 @@ async function rollbackPiPublication(
   let retirementStarted = false;
   try {
     await requirePublication(p);
-    const current = await registration(p.paths, p.deps);
+    const current = await registration(p.paths);
     if (p.journal.priorRegistration !== null) {
       if (!sameRegistration(current, p.journal.priorRegistration))
         throw new Error("prior Pi registration changed");
@@ -456,7 +325,7 @@ async function rollbackPiPublication(
       await p.deps
         .run(["remove", p.canonicalRoot, "--no-approve"], p.paths, p.ctx)
         .catch(() => undefined);
-      if ((await registration(p.paths, p.deps)) !== null)
+      if ((await registration(p.paths)) !== null)
         throw new Error("Pi deregistration unverified");
     }
     await requirePublication(p);
@@ -464,7 +333,7 @@ async function rollbackPiPublication(
     await requireSnapshot(p.canonicalRoot, p.journal.oldArtifact);
     if (
       !sameRegistration(
-        await registration(p.paths, p.deps),
+        await registration(p.paths),
         p.journal.priorRegistration,
       )
     )
@@ -493,7 +362,7 @@ async function recoverBeforePublication(p: Pending): Promise<boolean> {
     await assertNoFollowType(p.backup, ["missing"]);
     if (
       !sameRegistration(
-        await registration(p.paths, p.deps),
+        await registration(p.paths),
         p.journal.priorRegistration,
       )
     )
@@ -537,7 +406,7 @@ export async function installPi(
       throw new Error("Pi prepared artifact changed");
     await requireActivationEligibility(ctx);
     const previous = await snapshot(paths.installedRoot);
-    const priorRegistration = await registration(paths, deps);
+    const priorRegistration = await registration(paths);
     if (previous === null && priorRegistration !== null)
       throw new Error("unowned Pi registration");
     accepted(
@@ -548,7 +417,7 @@ export async function installPi(
     );
     // Recheck after the native preflight, before claiming mutation ownership.
     await requireSnapshot(paths.installedRoot, previous);
-    if (!sameRegistration(await registration(paths, deps), priorRegistration))
+    if (!sameRegistration(await registration(paths), priorRegistration))
       throw new Error("Pi registration changed");
     pending = await beginJournal(
       paths,
@@ -576,7 +445,7 @@ export async function installPi(
     await requireIdentity(pending.stage, pending.stageIdentity);
     await requireActivationEligibility(ctx);
     await requireSnapshot(paths.installedRoot, previous);
-    if (!sameRegistration(await registration(paths, deps), priorRegistration))
+    if (!sameRegistration(await registration(paths), priorRegistration))
       throw new Error("Pi registration changed");
     publication = await deps.beginPublication(
       pending.stage,
@@ -587,13 +456,13 @@ export async function installPi(
     await phase(pending, "published");
     if (priorRegistration === null) {
       await phase(pending, "registering");
-      if ((await registration(paths, deps)) !== null)
+      if ((await registration(paths)) !== null)
         throw new Error("Pi registration changed");
       const result = await deps
         .run(["install", pending.canonicalRoot, "--no-approve"], paths, ctx)
         .catch(() => fail("native-failed", "Pi native installation failed"));
       // Even an unsuccessful command may have changed settings. Read them first.
-      const registered = await registration(paths, deps);
+      const registered = await registration(paths);
       if (registered === null || registered.resourceState !== "enabled")
         throw new Error("Pi activation unverified");
       await phase(pending, "registered", {
@@ -602,7 +471,7 @@ export async function installPi(
       accepted(result);
     }
     await requirePublication(pending);
-    const registered = await registration(paths, deps);
+    const registered = await registration(paths);
     if (registered === null || registered.resourceState !== "enabled")
       throw new Error("Pi activation unverified");
     await phase(pending, "ready");
@@ -673,7 +542,7 @@ export async function removePi(
     )
       throw new Error("stale Pi removal input");
     const previous = await snapshot(paths.installedRoot);
-    const registered = await registration(paths, deps);
+    const registered = await registration(paths);
     if (previous === null) {
       if (registered !== null) throw new Error("unowned Pi registration");
       return successResult("remove-pi", null, []);
@@ -686,7 +555,7 @@ export async function removePi(
         ),
       );
     await requireSnapshot(paths.installedRoot, previous);
-    if (!sameRegistration(await registration(paths, deps), registered))
+    if (!sameRegistration(await registration(paths), registered))
       throw new Error("Pi registration changed");
     pending = await beginJournal(paths, previous, null, registered, ctx, deps);
     const installedIdentity = await identity(paths.installedRoot);
@@ -694,7 +563,7 @@ export async function removePi(
       const result = await deps
         .run(["remove", pending.canonicalRoot, "--no-approve"], paths, ctx)
         .catch(() => fail("native-failed", "Pi native removal failed"));
-      const after = await registration(paths, deps);
+      const after = await registration(paths);
       if (after !== null) {
         if (sameRegistration(after, registered)) {
           await requireSnapshot(paths.installedRoot, previous);
@@ -716,7 +585,7 @@ export async function removePi(
     await phase(pending, "deregistered");
     await requireIdentity(paths.installedRoot, installedIdentity);
     await requireSnapshot(paths.installedRoot, previous);
-    if ((await registration(paths, deps)) !== null)
+    if ((await registration(paths)) !== null)
       throw new Error("Pi registration returned");
     await rm(paths.installedRoot, { recursive: true });
     await requireSnapshot(paths.installedRoot, null);

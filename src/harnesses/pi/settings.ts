@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalizeProspectivePath } from "../../safe-path.ts";
+import { canonicalizeProspectivePath, isErrno } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import {
   parseStrictJson,
@@ -16,6 +16,7 @@ export interface PiPackageEntry {
 
 export interface PiSettings {
   readonly packages: readonly PiPackageEntry[];
+  readonly managerRegistration: PiPackageEntry | null;
   readonly skills?: readonly string[];
 }
 
@@ -132,15 +133,6 @@ function parsePackage(
   };
 }
 
-function isMissing(cause: unknown): boolean {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "code" in cause &&
-    cause.code === "ENOENT"
-  );
-}
-
 export function resolvePiLocalSource(
   source: string,
   agentDir: string,
@@ -193,7 +185,9 @@ export async function readPiSettings(
   try {
     bytes = await readFile(path);
   } catch (cause) {
-    if (isMissing(cause)) return { packages: [] };
+    if (isErrno(cause, "ENOENT")) {
+      return { packages: [], managerRegistration: null };
+    }
     throw new SafetyError("pi-settings", `cannot read Pi settings ${path}`, {
       cause,
     });
@@ -239,6 +233,7 @@ export async function readPiSettings(
 
   return {
     packages,
+    managerRegistration: managerRegistrations[0] ?? null,
     ...(settings.skills === undefined ? {} : { skills: settings.skills }),
   };
 }

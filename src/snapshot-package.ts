@@ -2,11 +2,18 @@ import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  ARTIFACT_DIGEST_RE,
+  ARTIFACT_RECEIPT,
   addArtifactHashField,
   digestArtifactTree,
   readArtifactFile,
+  readArtifactObject,
 } from "./artifact-tree.ts";
+import { COMMIT_RE } from "./domain/refs.ts";
+import type { EffectiveSelection } from "./effective-selection.ts";
+import type { Compatibility } from "./harness-compatibility.ts";
 import { classifyPathNoFollow } from "./safe-path.ts";
+import { SafetyError } from "./safety-error.ts";
 import { validateSource } from "./selection.ts";
 import type { JsonValue } from "./strict-json.ts";
 
@@ -116,4 +123,107 @@ export async function requireSnapshotBootstrap(
     createHash("sha256").update(bytes).digest("hex") !== expectedDigest
   )
     throw new Error("bootstrap implementation");
+}
+
+export interface SnapshotReceipt<
+  H extends SnapshotReceiptIdentity["harness"],
+> extends SnapshotReceiptIdentity {
+  readonly harness: H;
+  readonly binding: string;
+  readonly compatibility: Compatibility;
+}
+
+// strictGeneration=false admits a generation on unknown/unsupported
+// compatibility. Only Pi passes false: its readers keep that recorded policy
+// (tests/unit/harnesses/pi/package.test.ts, "receipt readers retain their
+// distinct unsupported-generation policy").
+function isReceiptCompatibility(
+  value: unknown,
+  strictGeneration: boolean,
+): value is Compatibility {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const compatibility = value as Record<string, unknown>;
+  if (typeof compatibility.reason !== "string") return false;
+  if (
+    compatibility.kind === "supported" ||
+    compatibility.kind === "experimental"
+  )
+    return typeof compatibility.generation === "string";
+  return (
+    (compatibility.kind === "unknown" ||
+      compatibility.kind === "unsupported") &&
+    (!strictGeneration || compatibility.generation === undefined)
+  );
+}
+
+export function createSnapshotReceipts<
+  H extends SnapshotReceiptIdentity["harness"],
+>(rules: {
+  readonly harness: H;
+  readonly label: "Pi" | "OpenCode" | "Claude Code";
+  readonly strictGeneration: boolean;
+  readonly assessCompatibility: (
+    root: string,
+    selection: Pick<EffectiveSelection, "effectiveSource">,
+  ) => Promise<Compatibility>;
+}): {
+  readonly readReceipt: (root: string) => Promise<SnapshotReceipt<H>>;
+  readonly readAssessment: (root: string) => Promise<{
+    readonly receipt: SnapshotReceipt<H>;
+    readonly compatibility: Compatibility;
+  }>;
+} {
+  const module = `${rules.harness}-package`;
+  async function readReceipt(root: string): Promise<SnapshotReceipt<H>> {
+    const path = join(root, ARTIFACT_RECEIPT);
+    try {
+      const value = await readArtifactObject(root, path);
+      if (
+        value.schema !== 1 ||
+        value.manager !== "superpowers-manager" ||
+        value.harness !== rules.harness ||
+        typeof value.source !== "string" ||
+        typeof value.commit !== "string" ||
+        !COMMIT_RE.test(value.commit) ||
+        typeof value.digest !== "string" ||
+        !ARTIFACT_DIGEST_RE.test(value.digest) ||
+        typeof value.binding !== "string" ||
+        !ARTIFACT_DIGEST_RE.test(value.binding)
+      )
+        throw new Error("receipt fields");
+      validateSource(value.source);
+      if (
+        snapshotReceiptBinding(value as unknown as SnapshotReceipt<H>) !==
+        value.binding
+      )
+        throw new Error("receipt binding");
+      if (!isReceiptCompatibility(value.compatibility, rules.strictGeneration))
+        throw new Error("receipt compatibility");
+      return value as unknown as SnapshotReceipt<H>;
+    } catch (cause) {
+      throw new SafetyError(
+        module,
+        `invalid ${rules.label} artifact receipt: ${path}`,
+        { cause },
+      );
+    }
+  }
+  async function readAssessment(root: string): Promise<{
+    readonly receipt: SnapshotReceipt<H>;
+    readonly compatibility: Compatibility;
+  }> {
+    const receipt = await readReceipt(root);
+    if ((await digestArtifactTree(root)) !== receipt.digest)
+      throw new SafetyError(
+        module,
+        `${rules.label} artifact digest mismatch: ${root}`,
+      );
+    return {
+      receipt,
+      compatibility: await rules.assessCompatibility(root, {
+        effectiveSource: receipt.source,
+      }),
+    };
+  }
+  return { readReceipt, readAssessment };
 }

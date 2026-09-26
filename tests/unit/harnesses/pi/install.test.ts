@@ -127,7 +127,6 @@ async function fixture(
       calls.push(["publication"]);
       return beginDirectoryPublication(...args);
     },
-    readSettings: readPiSettings,
     run: async (args) => {
       calls.push([...args]);
       if (args[0] === "--version")
@@ -1126,12 +1125,10 @@ void test("Pi interruption leaves a pre-publication journal that identifies the 
   const script = `
     import { installPi } from './src/harnesses/pi/install.ts';
     import { beginDirectoryPublication } from './src/atomic.ts';
-    import { readPiSettings } from './src/harnesses/pi/settings.ts';
     import { successResult } from './src/adapter-result.ts';
     const artifact = JSON.parse(process.env.TEST_ARTIFACT);
     const ctx = { root: process.env.TEST_ROOT, env: { HOME: process.env.TEST_ROOT, PI_CODING_AGENT_DIR: process.env.TEST_AGENT } };
     await installPi(artifact, ctx, {
-      readSettings: readPiSettings,
       run: async (args) => { if(args[0] !== '--version') throw Error('unexpected native command'); return successResult('pi-command', {stdout: ${JSON.stringify(RUNTIME_RESPONSE)}}, []); },
       beginPublication: async (...args) => {
         await beginDirectoryPublication(...args);

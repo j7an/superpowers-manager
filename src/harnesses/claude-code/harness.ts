@@ -52,12 +52,11 @@ export const claudeCodeHarness: HarnessAdapter<ClaudeCodeRemovalInput> = {
   prepareCandidate: prepareClaudeCodeCandidate,
   inspectPrepared: inspectClaudeCodePrepared,
   readPrepared: readClaudeCodePrepared,
-  inspectOwnership: (ctx) => inspectClaudeCodeOwnership(ctx),
+  inspectOwnership: inspectClaudeCodeOwnership,
   inspectUpdateControl: inspectClaudeCodeControl,
-  inspectInstalled: (selection, ctx) =>
-    inspectClaudeCodeInstalled(selection, ctx),
-  install: (artifact, ctx) => installClaudeCode(artifact, ctx),
-  remove: (input, ctx) => removeClaudeCode(input, ctx),
+  inspectInstalled: inspectClaudeCodeInstalled,
+  install: installClaudeCode,
+  remove: removeClaudeCode,
   requirements,
   presentation: claudeCodePresentation,
 };

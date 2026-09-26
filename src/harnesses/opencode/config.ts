@@ -415,8 +415,7 @@ export async function removeObservedOpenCodeEntry(
 ): Promise<void> {
   const path = observation.document.path;
   try {
-    const originalText = decodeConfig(observation.bytes, path);
-    const original = parseOpenCodeConfig(originalText, path);
+    const original = observation.document;
     const output = removeOpenCodeEntry(original, key, index);
     const outputBytes = Buffer.from(output, "utf8");
     const expected = original.entries.filter(
@@ -436,8 +435,7 @@ export async function addObservedOpenCodeEntry(
 ): Promise<void> {
   const path = observation.document.path;
   try {
-    const originalText = decodeConfig(observation.bytes, path);
-    const original = parseOpenCodeConfig(originalText, path);
+    const original = observation.document;
     const output = addOpenCodeEntry(original, key, spec);
     const outputBytes = Buffer.from(output, "utf8");
     const expected = parseOpenCodeConfig(output, path).entries;

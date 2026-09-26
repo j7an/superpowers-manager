@@ -33,7 +33,10 @@ import {
   type PiPackageEntry,
   type PiSettings,
 } from "./settings.ts";
-import { classifyPathNoFollow } from "../../safe-path.ts";
+import {
+  canonicalizeProspectivePath,
+  classifyPathNoFollow,
+} from "../../safe-path.ts";
 
 export interface PiRemovalInput {
   readonly installedRoot: string;
@@ -144,24 +147,7 @@ function isKnownUpstreamPiSource(raw: string): boolean {
 
 async function observeSettings(paths: PiPaths): Promise<SettingsObservation> {
   const settings = await readPiSettings(paths.settingsFile, paths.homeDir);
-  const installedRoot = await resolveCanonicalPiLocalSource(
-    paths.installedRoot,
-    paths.agentDir,
-    paths.homeDir,
-  );
-  let registration: PiPackageEntry | null = null;
-  for (const entry of settings.packages) {
-    if (
-      (await resolveCanonicalPiLocalSource(
-        entry.source,
-        paths.agentDir,
-        paths.homeDir,
-      )) === installedRoot
-    ) {
-      registration = entry;
-    }
-  }
-  return { settings, registration };
+  return { settings, registration: settings.managerRegistration };
 }
 
 async function isNamedLocalSuperpowers(
@@ -176,11 +162,7 @@ async function isNamedLocalSuperpowers(
   );
   if (
     root === null ||
-    (await resolveCanonicalPiLocalSource(
-      entry.source,
-      paths.agentDir,
-      paths.homeDir,
-    )) === canonicalInstalledRoot
+    (await canonicalizeProspectivePath(root)) === canonicalInstalledRoot
   )
     return false;
   const rootKind = await classifyPathNoFollow(root);

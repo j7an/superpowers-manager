@@ -1,14 +1,23 @@
+import { tmpdir } from "node:os";
+import { isAbsolute, resolve, sep } from "node:path";
+
 import {
   AdapterMessageLog,
   failureResult,
   successResult,
   type AdapterChannel,
+  type AdapterContext,
   type AdapterResult,
 } from "./adapter-result.ts";
 import { SEMVER_RE } from "./domain/refs.ts";
 import type { Captured, ValidatorRun } from "./validator.ts";
+import { withWorkspace } from "./workspace.ts";
 
 type Label = "Pi" | "OpenCode" | "Claude Code";
+
+function commandSlug(label: Label): string {
+  return label.toLowerCase().replaceAll(" ", "-");
+}
 
 export interface NativeCommandOutput {
   readonly stdout: string;
@@ -28,11 +37,11 @@ function appendCaptured(
     );
 }
 
-export function nativeCommandResult(
+function nativeCommandResult(
   label: Label,
   result: ValidatorRun,
 ): AdapterResult<NativeCommandOutput> {
-  const operation = `${label.toLowerCase().replaceAll(" ", "-")}-command`;
+  const operation = `${commandSlug(label)}-command`;
   if (result.kind === "launchFailed") {
     const errno = /^[A-Z][A-Z0-9_]*$/u.test(result.errno)
       ? result.errno
@@ -87,6 +96,54 @@ export function nativeCommandResult(
     { stdout: result.stdout.text },
     log.snapshot(),
   );
+}
+
+// Owns everything the snapshot harnesses' native runners share: executable
+// resolution against the invocation cwd, the isolated workspace, and the
+// workspace-failure result. Each harness's `run` keeps its own policy, child
+// environment, workspace layout and cwd.
+export async function runIsolatedNative(
+  label: Label,
+  configured: string,
+  ctx: AdapterContext,
+  run: (
+    executable: string,
+    workspace: string,
+    env: NodeJS.ProcessEnv,
+    invocationCwd: string,
+  ) => Promise<ValidatorRun>,
+): Promise<AdapterResult<NativeCommandOutput>> {
+  const env = ctx.env ?? {};
+  const invocationCwd = process.cwd();
+  const executable =
+    configured.includes(sep) && !isAbsolute(configured)
+      ? resolve(invocationCwd, configured)
+      : configured;
+  const slug = commandSlug(label);
+  let entered = false;
+  try {
+    return await withWorkspace(
+      env.TMPDIR ?? tmpdir(),
+      `superpowers-manager.${slug}.`,
+      async (workspace) => {
+        entered = true;
+        return nativeCommandResult(
+          label,
+          await run(executable, workspace, env, invocationCwd),
+        );
+      },
+    );
+  } catch {
+    return failureResult(
+      `${slug}-command`,
+      "workspace-failed",
+      entered
+        ? `cannot complete ${label} command in its isolated workspace`
+        : `cannot create an isolated ${label} command workspace`,
+      [],
+      [],
+    );
+  }
 }
 
 export function normalizeSnapshotRuntimeVersion(

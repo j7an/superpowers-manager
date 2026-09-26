@@ -1,13 +1,9 @@
-import { tmpdir } from "node:os";
-import { isAbsolute, resolve, sep } from "node:path";
-
 import {
-  failureResult,
   type AdapterContext,
   type AdapterResult,
 } from "../../adapter-result.ts";
 import {
-  nativeCommandResult,
+  runIsolatedNative,
   type NativeCommandOutput,
 } from "../../harness-command-result.ts";
 import { SafetyError } from "../../safety-error.ts";
@@ -16,7 +12,6 @@ import {
   BOUNDED_EXECUTABLE,
   runValidator as runBoundedCommand,
 } from "../../validator.ts";
-import { withWorkspace } from "../../workspace.ts";
 
 export type RunClaude = (
   args: readonly string[],
@@ -43,50 +38,25 @@ export interface ClaudeCodeNativeState {
   readonly marketplaces: readonly ClaudeCodeMarketplace[];
 }
 
-function selectedExecutable(env: NodeJS.ProcessEnv, cwd: string): string {
-  const configured = env.SUPERPOWERS_CLAUDE_CODE || "claude";
-  return configured.includes(sep) && !isAbsolute(configured)
-    ? resolve(cwd, configured)
-    : configured;
-}
-
 // Native list commands include the caller's project and local scope.
 export async function runClaude(
   args: readonly string[],
   ctx: AdapterContext,
   execute: typeof runBoundedCommand = runBoundedCommand,
 ): Promise<AdapterResult<NativeCommandOutput>> {
-  const env = ctx.env ?? {};
-  const cwd = process.cwd();
-  const executable = selectedExecutable(env, cwd);
-  let entered = false;
-  try {
-    return await withWorkspace(
-      env.TMPDIR ?? tmpdir(),
-      "superpowers-manager.claude-code.",
-      async (workspace) => {
-        entered = true;
-        const result = await execute(
-          [executable, ...args],
-          BOUNDED_EXECUTABLE,
-          { ...env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" },
-          workspace,
-          cwd,
-        );
-        return nativeCommandResult("Claude Code", result);
-      },
-    );
-  } catch {
-    return failureResult(
-      "claude-code-command",
-      "workspace-failed",
-      entered
-        ? "cannot complete Claude Code command in its isolated workspace"
-        : "cannot create an isolated Claude Code command workspace",
-      [],
-      [],
-    );
-  }
+  return await runIsolatedNative(
+    "Claude Code",
+    (ctx.env ?? {}).SUPERPOWERS_CLAUDE_CODE || "claude",
+    ctx,
+    async (executable, workspace, env, invocationCwd) =>
+      await execute(
+        [executable, ...args],
+        BOUNDED_EXECUTABLE,
+        { ...env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" },
+        workspace,
+        invocationCwd,
+      ),
+  );
 }
 
 function listEntries(

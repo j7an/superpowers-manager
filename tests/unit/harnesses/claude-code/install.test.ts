@@ -12,7 +12,6 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { beginDirectoryPublication } from "../../../../src/atomic.ts";
 import {
-  CLAUDE_CODE_MARKETPLACE_BYTES,
   installClaudeCode,
   removeClaudeCode,
 } from "../../../../src/harnesses/claude-code/install.ts";
@@ -21,6 +20,7 @@ import {
   readClaudeCodeReceipt,
 } from "../../../../src/harnesses/claude-code/prepare.ts";
 import {
+  CLAUDE_CODE_MARKETPLACE_BYTES,
   inspectClaudeCodeInstalled,
   inspectClaudeCodeOwnership,
 } from "../../../../src/harnesses/claude-code/state.ts";

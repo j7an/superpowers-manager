@@ -8,38 +8,27 @@ import {
   type AdapterResult,
 } from "../../adapter-result.ts";
 import {
-  ARTIFACT_DIGEST_RE,
-  ARTIFACT_RECEIPT,
-  digestArtifactTree,
   readArtifactFile,
   readArtifactObject,
   validateNativeSkill,
 } from "../../artifact-tree.ts";
-import { COMMIT_RE, SEMVER_RE } from "../../domain/refs.ts";
+import { SEMVER_RE } from "../../domain/refs.ts";
 import type { EffectiveSelection } from "../../effective-selection.ts";
 import type { Compatibility } from "../../harness-compatibility.ts";
-import type { PreparationLocation, PreparedState } from "../../harness.ts";
+import type { PreparedState } from "../../harness.ts";
 import { classifyPathNoFollow } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import { validateSource } from "../../selection.ts";
-import { snapshotReceiptBinding } from "../../snapshot-package.ts";
+import {
+  createSnapshotReceipts,
+  type SnapshotReceipt,
+} from "../../snapshot-package.ts";
 import { createSnapshotPreparation } from "../../snapshot-prepare.ts";
 import { manifestVersionForRef } from "../../upstream-version.ts";
 import { assertClaudeCodeStorageSafe, claudeCodePaths } from "./paths.ts";
 
 const CLAUDE_CODE_MANIFEST = ".claude-plugin/plugin.json";
 const GENERATION = "claude-code-native-plugin-v1";
-
-export interface ClaudeCodeReceipt {
-  readonly schema: 1;
-  readonly manager: "superpowers-manager";
-  readonly harness: "claude-code";
-  readonly source: string;
-  readonly commit: string;
-  readonly digest: string;
-  readonly binding: string;
-  readonly compatibility: Compatibility;
-}
 
 async function assessClaudeCodeCompatibility(
   root: string,
@@ -103,75 +92,17 @@ async function rewriteClaudeCodeVersion(
   );
 }
 
-function isReceiptCompatibility(value: unknown): value is Compatibility {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const compatibility = value as Record<string, unknown>;
-  if (typeof compatibility.reason !== "string") return false;
-  if (
-    compatibility.kind === "supported" ||
-    compatibility.kind === "experimental"
-  )
-    return typeof compatibility.generation === "string";
-  return (
-    (compatibility.kind === "unknown" ||
-      compatibility.kind === "unsupported") &&
-    compatibility.generation === undefined
-  );
-}
+export type ClaudeCodeReceipt = SnapshotReceipt<"claude-code">;
 
-export async function readClaudeCodeReceipt(
-  root: string,
-): Promise<ClaudeCodeReceipt> {
-  const path = join(root, ARTIFACT_RECEIPT);
-  try {
-    const value = await readArtifactObject(root, path);
-    if (
-      value.schema !== 1 ||
-      value.manager !== "superpowers-manager" ||
-      value.harness !== "claude-code" ||
-      typeof value.source !== "string" ||
-      typeof value.commit !== "string" ||
-      !COMMIT_RE.test(value.commit) ||
-      typeof value.digest !== "string" ||
-      !ARTIFACT_DIGEST_RE.test(value.digest) ||
-      typeof value.binding !== "string" ||
-      !ARTIFACT_DIGEST_RE.test(value.binding)
-    )
-      throw new Error("receipt fields");
-    validateSource(value.source);
-    if (
-      snapshotReceiptBinding(value as unknown as ClaudeCodeReceipt) !==
-      value.binding
-    )
-      throw new Error("receipt binding");
-    if (!isReceiptCompatibility(value.compatibility))
-      throw new Error("receipt compatibility");
-    return value as unknown as ClaudeCodeReceipt;
-  } catch (cause) {
-    throw new SafetyError(
-      "claude-code-package",
-      `invalid Claude Code artifact receipt: ${path}`,
-      { cause },
-    );
-  }
-}
+const receipts = createSnapshotReceipts({
+  harness: "claude-code",
+  label: "Claude Code",
+  strictGeneration: true,
+  assessCompatibility: assessClaudeCodeCompatibility,
+});
 
-export async function readClaudeCodePackageAssessment(
-  root: string,
-): Promise<{ receipt: ClaudeCodeReceipt; compatibility: Compatibility }> {
-  const receipt = await readClaudeCodeReceipt(root);
-  if ((await digestArtifactTree(root)) !== receipt.digest)
-    throw new SafetyError(
-      "claude-code-package",
-      `Claude Code artifact digest mismatch: ${root}`,
-    );
-  return {
-    receipt,
-    compatibility: await assessClaudeCodeCompatibility(root, {
-      effectiveSource: receipt.source,
-    }),
-  };
-}
+export const readClaudeCodeReceipt = receipts.readReceipt;
+export const readClaudeCodePackageAssessment = receipts.readAssessment;
 
 export async function readClaudeCodeManifestVersion(
   root: string,
@@ -186,15 +117,6 @@ export async function readClaudeCodeManifestVersion(
       `Claude Code manifest has no version: ${root}`,
     );
   return manifest.version;
-}
-
-export function claudeCodePreparationLocation(
-  ctx: AdapterContext,
-): PreparationLocation {
-  return {
-    destinationRoot: claudeCodePaths(ctx.env ?? {}, process.cwd()).preparedRoot,
-    stagingLeaf: "superpowers",
-  };
 }
 
 export async function validateClaudeCodePreparationBeforeFetch(
@@ -219,12 +141,13 @@ export async function validateClaudeCodePreparationBeforeFetch(
 const preparation = createSnapshotPreparation({
   harness: "claude-code",
   label: "Claude Code",
-  preparationLocation: claudeCodePreparationLocation,
+  paths: claudeCodePaths,
   assessCompatibility: assessClaudeCodeCompatibility,
   readAssessment: readClaudeCodePackageAssessment,
   rewrite: rewriteClaudeCodeVersion,
 });
 
+export const claudeCodePreparationLocation = preparation.preparationLocation;
 export const prepareClaudeCodeCandidate = preparation.prepareCandidate;
 // The shared check compares only commit and source, so a same-commit ref
 // change would otherwise leave a prepared tree carrying the old version.
