@@ -1,5 +1,4 @@
 import {
-  failureResult,
   successResult,
   type AdapterContext,
   type AdapterResult,
@@ -33,27 +32,6 @@ import {
 import { readCodexRecovery } from "./recovery.ts";
 import { inspectCodexInstallation } from "./state.ts";
 
-function preserveFailure<T>(result: AdapterResult): AdapterResult<T> {
-  if (result.outcome.ok) {
-    throw new Error("cannot preserve a successful adapter result as failure");
-  }
-  return { status: result.status, outcome: result.outcome };
-}
-
-export function rejectSuccessfulNonzeroStatus<T>(
-  result: AdapterResult<T>,
-  message: string,
-): AdapterResult<T> {
-  if (!result.outcome.ok || result.status === 0) return result;
-  return failureResult(
-    result.outcome.operation,
-    "invalid-status",
-    message,
-    [],
-    result.outcome.messages,
-  );
-}
-
 function requirements(
   command: HarnessCommand,
   env: NodeJS.ProcessEnv,
@@ -84,10 +62,7 @@ async function mutationRoots(ctx: AdapterContext): Promise<readonly string[]> {
 async function inspectCodexUpdateControl(
   ctx: AdapterContext,
 ): Promise<AdapterResult<UpdateControlInspection>> {
-  const result = rejectSuccessfulNonzeroStatus(
-    await codexInspectControl(ctx),
-    "adapter reported a failure status for inspect --view update-control",
-  );
+  const result = await codexInspectControl(ctx);
   if (!result.outcome.ok) return result;
   const paths = codexPaths(ctx.env ?? {}, process.cwd());
   let diagnostic: string | null = null;
@@ -125,29 +100,9 @@ export const codexHarness: HarnessAdapter<CodexRemovalInput> = {
   inspectOwnership: codexInspectOwnership,
   inspectUpdateControl: inspectCodexUpdateControl,
   inspectInstalled: inspectCodexInstallation,
-  install: async (artifact, ctx) =>
-    installCodexMarketplace(artifact, ctx, async (root, context) => {
-      const result = await codexInstall(root, context);
-      return rejectSuccessfulNonzeroStatus(
-        result,
-        codexPresentation.callFailure("install", context).invalidStatus,
-      );
-    }),
-  remove: async (input, ctx) => {
-    const result = await removeCodexMarketplace(input, ctx);
-    if (!result.outcome.ok) return preserveFailure(result);
-    if (result.status !== 0) {
-      return rejectSuccessfulNonzeroStatus(
-        result,
-        codexPresentation.callFailure("remove", ctx, input).invalidStatus,
-      );
-    }
-    return successResult(
-      result.outcome.operation,
-      null,
-      result.outcome.messages,
-    );
-  },
+  install: (artifact, ctx) =>
+    installCodexMarketplace(artifact, ctx, codexInstall),
+  remove: removeCodexMarketplace,
   requirements,
   get presentation() {
     return codexPresentation;

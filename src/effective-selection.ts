@@ -10,6 +10,7 @@ import {
 import { readSelectionState } from "./selection-store.ts";
 import { readConfigRef, resolveRef } from "./upstream.ts";
 import { COMMIT_RE } from "./domain/refs.ts";
+import type { ResolutionKind } from "./upstream-version.ts";
 
 function requireAbsolute(value: string, variable: string): string {
   if (!value.startsWith("/")) {
@@ -61,7 +62,7 @@ export interface EffectiveSelection {
   readonly requestedRef: string;
   readonly resolvedRef: string;
   readonly desiredCommit: string;
-  readonly resolutionKind: string;
+  readonly resolutionKind: ResolutionKind;
   readonly saved: NormalizedSavedSelection;
 }
 

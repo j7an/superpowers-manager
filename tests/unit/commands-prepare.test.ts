@@ -66,7 +66,7 @@ void test("OpenCode prepare rejects symlinked storage parents before locks, work
         selection: {
           ...nativeSelection(),
           selectionMode: "pinned",
-          resolutionKind: "commit",
+          resolutionKind: "raw-commit",
           effectiveSource: join(root, "upstream-must-not-fetch"),
         },
         adapter: openCodeHarness,

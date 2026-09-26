@@ -30,7 +30,6 @@ import type {
   InstallReceipt,
   OwnershipInspection,
   PreparedArtifact,
-  UpdateControlInspection,
 } from "../../../../src/harness.ts";
 import type {
   CodexNativeState,
@@ -64,12 +63,6 @@ const RECEIPT: InstallReceipt = {
     stderr: ["installed plugin mismatch"],
   },
 };
-const ALLOWED_CONTROL: UpdateControlInspection = {
-  probeEligibility: { kind: "allowed" },
-  mutationEligibility: { kind: "allowed" },
-  presentationValue: "managed",
-};
-
 function nativeState(
   changes: Partial<CodexNativeState> = {},
 ): CodexNativeState {
@@ -104,14 +97,6 @@ function ownershipInspection(
   );
 }
 
-function controlInspection(
-  message: string,
-): AdapterResult<UpdateControlInspection> {
-  return successResult("inspect", ALLOWED_CONTROL, [
-    { channel: "stderr", text: message },
-  ]);
-}
-
 function successfulNonzero<T>(result: T, message: string): AdapterResult<T> {
   const succeeded = successResult("inspect", result, [
     { channel: "stderr", text: message },
@@ -128,10 +113,10 @@ type RefusalVariant =
   | "corrupt eligibility";
 
 function refusedEligibility<T extends object>(
-  target: "ownership" | "control",
+  target: "ownership",
   variant: RefusalVariant,
   allowed: T,
-  field: "installEligibility" | "mutationEligibility",
+  field: "installEligibility",
 ): AdapterResult<T> {
   const message = `${target} ${variant}`;
   if (variant === "inspection failure") {
@@ -197,10 +182,6 @@ async function fixture(t: test.TestContext) {
     inspectOwnership: async () => {
       inspectionCalls.push("ownership");
       return ownershipInspection("ownership");
-    },
-    inspectControl: async () => {
-      inspectionCalls.push("update-control");
-      return controlInspection("update-control");
     },
     beginPublication: beginDirectoryPublication,
   };
@@ -513,13 +494,12 @@ void test("intact durable files remain retryable after cleanup failure", async (
   assert.equal(await readCodexMarketplace(f.paths.marketplaceRoot), null);
 });
 
-void test("publication requires affirmative ownership and control eligibility before mutation", async (t) => {
+void test("publication requires affirmative ownership eligibility before mutation", async (t) => {
   const ownershipAllowed = codexOwnershipInspection(
     "manager",
     { pluginPresent: true, marketplacePresent: true },
     [],
   );
-  const controlAllowed = ALLOWED_CONTROL;
   const variants: readonly RefusalVariant[] = [
     "inspection failure",
     "successful nonzero status",
@@ -528,37 +508,23 @@ void test("publication requires affirmative ownership and control eligibility be
     "undefined eligibility",
     "corrupt eligibility",
   ];
-  for (const target of ["ownership", "control"] as const) {
+  for (const target of ["ownership"] as const) {
     for (const variant of variants) {
       await t.test(`${target}: ${variant}`, async (t) => {
         const f = await fixture(t);
         let ownershipCalls = 0;
-        let controlCalls = 0;
         let publicationCalls = 0;
         let activationCalls = 0;
         const dependencies: CodexPublicationDependencies = {
           readNative: f.dependencies.readNative,
           inspectOwnership: async () => {
             ownershipCalls += 1;
-            return target === "ownership"
-              ? refusedEligibility(
-                  "ownership",
-                  variant,
-                  ownershipAllowed,
-                  "installEligibility",
-                )
-              : ownershipInspection("ownership allowed");
-          },
-          inspectControl: async () => {
-            controlCalls += 1;
-            return target === "control"
-              ? refusedEligibility(
-                  "control",
-                  variant,
-                  controlAllowed,
-                  "mutationEligibility",
-                )
-              : controlInspection("control allowed");
+            return refusedEligibility(
+              "ownership",
+              variant,
+              ownershipAllowed,
+              "installEligibility",
+            );
           },
           beginPublication: async (...args) => {
             publicationCalls += 1;
@@ -584,12 +550,9 @@ void test("publication requires affirmative ownership and control eligibility be
         );
         assert.deepEqual(
           result.outcome.messages.map((message) => message.text),
-          target === "ownership"
-            ? ["native", `ownership ${variant}`]
-            : ["native", "ownership allowed", `control ${variant}`],
+          ["native", `ownership ${variant}`],
         );
         assert.equal(ownershipCalls, 1);
-        assert.equal(controlCalls, target === "ownership" ? 0 : 1);
         assert.equal(publicationCalls, 0);
         assert.equal(activationCalls, 0);
         assert.equal(await readCodexRecovery(f.paths), null);
@@ -626,9 +589,9 @@ void test("publication returns a pending transaction and preserves ordered nativ
   assert.ok(await readCodexRecovery(f.paths));
   assert.deepEqual(
     result.outcome.ok ? result.outcome.messages.map((item) => item.text) : [],
-    ["native", "ownership", "update-control", "native", "activated"],
+    ["native", "ownership", "native", "activated"],
   );
-  assert.deepEqual(f.inspectionCalls, ["ownership", "update-control"]);
+  assert.deepEqual(f.inspectionCalls, ["ownership"]);
   assert.equal((await tx.finalize()).outcome.ok, true);
   assert.equal(await readCodexRecovery(f.paths), null);
 });
@@ -1376,16 +1339,6 @@ void test("a process killed after real backup deletion leaves a readable finaliz
           postRemovalOutput: { stdout: [], stderr: [] },
           presentationValue: "manager",
           presentationConflicts: [],
-        },
-        [],
-      ),
-      inspectControl: async () => successResult(
-        "inspect",
-        {
-          probeEligibility: { kind: "allowed" },
-          mutationEligibility: { kind: "allowed" },
-          presentationValue: "managed",
-          recoveryState: "clean",
         },
         [],
       ),

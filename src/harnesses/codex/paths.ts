@@ -100,6 +100,43 @@ export function codexPathFailureDetails(
   return cause instanceof CodexPathError ? (cause.details ?? null) : null;
 }
 
+// One mapping from a preparation-separation failure to the refusal an
+// operation reports. Callers differ only in the code for a non-recovery
+// refusal and in the suffix on the recovery message.
+export function codexPathRefusal(
+  cause: unknown,
+  paths: CodexPaths,
+  preparedRoot: string,
+  refusedCode: string,
+  recoverySuffix: string,
+): { readonly code: string; readonly message: string } {
+  const failure = codexPathFailureDetails(cause);
+  if (failure?.kind === "inspection") {
+    if (failure.root === "recovery") {
+      return {
+        code: "recovery-required",
+        message: `cannot inspect Codex recovery state at ${paths.recoveryRoot}${recoverySuffix}`,
+      };
+    }
+    return {
+      code: refusedCode,
+      message:
+        failure.root === "marketplace"
+          ? `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`
+          : `cannot inspect Codex preparation root at ${preparedRoot}`,
+    };
+  }
+  return failure?.kind === "overlap"
+    ? {
+        code: "preparation-overlap",
+        message: `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`,
+      }
+    : {
+        code: refusedCode,
+        message: `cannot validate Codex preparation storage separation at ${preparedRoot}`,
+      };
+}
+
 export async function assertCodexPreparationSeparate(
   preparedRoot: string,
   paths: CodexPaths,

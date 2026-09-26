@@ -2268,7 +2268,7 @@ void test("LIFECYCLE-INTERRUPT-01 interrupted installation state fails closed", 
   });
   // The manager plugin listing claims version 1.0.0 is installed, so the
   // installed-state inspection that runs before the legacy-state check
-  // (`src/harnesses/codex/state.ts:179::export async function inspectCodexInstallation(`) needs a matching cached
+  // (`src/harnesses/codex/state.ts:168::export async function inspectCodexInstallation(`) needs a matching cached
   // tree to read, or it fails on a DIFFERENT diagnostic ("cannot inspect
   // active Codex plugin fingerprint") than this ID's own contract. The
   // commit value itself is irrelevant: the legacy check runs on
@@ -2458,7 +2458,7 @@ void test("CLI-ENV-CODEX-LISTING-01 native-state listing uses the SUPERPOWERS_CO
   // a CLI run fails at preflight with "required command not found" before
   // `src/harnesses/codex/adapter.ts:283::for (const directory of env.PATH.split(delimiter))` is reached at all. The product CLI binds
   // `codexHarness`, whose installed-state inspection reaches the same native
-  // engine (`src/harnesses/codex/harness.ts:127::inspectInstalled: inspectCodexInstallation,`).
+  // engine (`src/harnesses/codex/harness.ts:102::inspectInstalled: inspectCodexInstallation,`).
   //
   // Be precise about what that buys, because the next reader auditing whether
   // `src/harnesses/codex/adapter.ts:282::if (env.PATH === undefined) return false;` is reachable needs the true answer: the preflight
@@ -2629,7 +2629,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     seedInstalledCache(join(sandbox.home, ".codex"), version, CACHE_COMMIT);
     // Deliberately NOT seeded at sandbox.codex, the harness default: a run
     // that read the harness value would find no durable installed state and
-    // fail closed through `src/harnesses/codex/state.ts:179::export async function inspectCodexInstallation(` rather than reporting CACHE_COMMIT.
+    // fail closed through `src/harnesses/codex/state.ts:168::export async function inspectCodexInstallation(` rather than reporting CACHE_COMMIT.
     const upstream = createReleaseRepo(sandbox);
     const result = runCliWithoutEnvironment(
       sandbox,
@@ -2705,7 +2705,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
     assert.equal(result.status, 1);
     // Exact: probe replays the adapter outcome's own failure (the
     // `replayOutcome` loop),
-    // so durable installed-state inspection fails closed (`src/harnesses/codex/state.ts:179::export async function inspectCodexInstallation(`).
+    // so durable installed-state inspection fails closed (`src/harnesses/codex/state.ts:168::export async function inspectCodexInstallation(`).
     // Whole-stream equality also carries the retiring case's second guard --
     // that this is a CONTROLLED failure -- since a protocol violation would
     // have added an `error: invalid adapter response:` line here.
@@ -2725,7 +2725,7 @@ void test("CLI-ENV-INSTALLED-DEFAULTS-01 with no codex override and no search ro
   //
   // A separate code path from half three, and the two must not be merged into
   // one "no usable HOME" case: durable inspection rejects absent storage
-  // (`src/harnesses/codex/state.ts:179::export async function inspectCodexInstallation(`), so an absent HOME never reaches
+  // (`src/harnesses/codex/state.ts:168::export async function inspectCodexInstallation(`), so an absent HOME never reaches
   // the `|| "/"` fallback half three pins. The messages differ, and asserting
   // each exactly is what keeps either branch from being deleted in favour of
   // the other.

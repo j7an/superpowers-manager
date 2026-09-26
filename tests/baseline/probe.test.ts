@@ -212,7 +212,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     ],
     manifestVersion: ACTIVE_VERSION,
   });
-  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:114::resolvedRef: saved.saved_resolved_ref`),
+  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:115::resolvedRef: saved.saved_resolved_ref`),
   // so an unreachable source is the proof that Git was never consulted: any
   // ls-remote against this path would fail once it is renamed away.
   renameSync(source, `${source}-offline`);
