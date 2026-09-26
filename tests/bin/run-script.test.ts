@@ -23,6 +23,9 @@ const RUN_SH = fileURLToPath(new URL("../run.sh", import.meta.url));
 const GATE = fileURLToPath(
   new URL("../assert-matcher-gate.ts", import.meta.url),
 );
+const PACKAGE_RUNTIME = fileURLToPath(
+  new URL("../lib/package-runtime.ts", import.meta.url),
+);
 
 function suite(body: string): string {
   return [
@@ -55,11 +58,26 @@ function fixtureRoot(
 ): string {
   const root = mkdtempSync(join(tmpdir(), "spw-run-sh-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "package.json"), '{"type":"module"}\n');
-  for (const dir of ["tests/bin", "tests/unit", "tests/baseline"]) {
+  writeFileSync(
+    join(root, "package.json"),
+    '{"type":"module","engines":{"node":">=24"}}\n',
+  );
+  for (const dir of [
+    "tests/bin",
+    "tests/unit",
+    "tests/baseline",
+    "tests/lib",
+  ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
   copyFileSync(RUN_SH, join(root, "tests", "run.sh"));
+  copyFileSync(
+    PACKAGE_RUNTIME,
+    join(root, "tests", "lib", "package-runtime.ts"),
+  );
+  const packageNode = join(root, "package-node");
+  writeFileSync(packageNode, '#!/bin/sh\nprintf "v24.0.0\\n"\n', "utf8");
+  chmodSync(packageNode, 0o755);
   for (const [path, source] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), source, "utf8");
@@ -75,8 +93,9 @@ function fixtureRoot(
 function runScript(
   root: string,
   args: readonly string[] = [],
+  environment: NodeJS.ProcessEnv = {},
 ): { status: number; stdout: string; stderr: string } {
-  const env = { ...process.env };
+  const env = { ...process.env, ...environment };
   // Inherited from the outer `node --test`, these make the inner run treat
   // itself as nested and skip every file with exit 0.
   delete env.NODE_TEST_CONTEXT;
@@ -208,10 +227,33 @@ void test("one failing file among passing files fails the run", (t) => {
 
 void test("--require-package-node reaches suites as SPW_REQUIRE_PACKAGE_NODE", (t) => {
   const root = fixtureRoot(t, { "tests/unit/a.test.ts": NEEDS_FLAG });
-  const flagged = runScript(root, ["--require-package-node"]);
+  const flagged = runScript(root, ["--require-package-node"], {
+    SPW_PACKAGE_NODE: join(root, "package-node"),
+    SPW_PACKAGE_NODE_VERSION: "24.0.0",
+  });
   assertCompleted(flagged, 0);
   assert.match(flagged.stdout, /pass 1/);
   // Control: the same suite fails without the flag, so the pass above is the
   // flag's doing.
   assertCompleted(runScript(root), 1);
+});
+
+void test("--require-package-node checks missing and invalid evidence before filtered suites", (t) => {
+  const root = fixtureRoot(t, { "tests/unit/a.test.ts": CONSTRAINED });
+  const args = ["--require-package-node", "--test-name-pattern", "^NOPE$"];
+  const missing = runScript(root, args);
+  assertCompleted(missing, 1);
+  assert.match(
+    missing.stdout + missing.stderr,
+    /SPW_PACKAGE_NODE and SPW_PACKAGE_NODE_VERSION are required together/,
+  );
+  const invalid = runScript(root, args, {
+    SPW_PACKAGE_NODE: join(root, "fake-node"),
+    SPW_PACKAGE_NODE_VERSION: "24.1.0",
+  });
+  assertCompleted(invalid, 1);
+  assert.match(
+    invalid.stdout + invalid.stderr,
+    /SPW_PACKAGE_NODE_VERSION must match the declared package minimum/,
+  );
 });
