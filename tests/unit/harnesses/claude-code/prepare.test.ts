@@ -125,7 +125,7 @@ void test("a same-commit ref change makes the prepared artifact need preparation
     ...selection,
     requestedRef: selection.desiredCommit,
     resolvedRef: selection.desiredCommit,
-    resolutionKind: "raw-commit",
+    resolutionKind: "raw-commit" as const,
   };
   const changed = await inspectClaudeCodePrepared(rawCommit, sandbox.ctx);
   assert.equal(changed.outcome.ok, true);

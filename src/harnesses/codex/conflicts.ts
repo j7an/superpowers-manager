@@ -2,6 +2,7 @@ import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { AdapterContext } from "../../adapter-result.ts";
+import { isAbsenceError } from "../../safe-path.ts";
 import type { CodexInstalledPlugin } from "./json.ts";
 
 export const CODEX_MANAGER_PLUGIN_ID = "superpowers@superpowers-manager";
@@ -10,13 +11,6 @@ const SUPERPOWERS_PLUGIN_PREFIX = "superpowers@";
 const DISPLAYABLE_PLUGIN_ID = /^superpowers@[A-Za-z0-9][A-Za-z0-9._-]*/;
 const NATIVE_ROUTE = ".agents/skills/superpowers";
 const NATIVE_ROUTE_CONFLICT = `native Codex skills route ~/${NATIVE_ROUTE} has indeterminate activity`;
-
-function isMissingPath(cause: unknown): boolean {
-  if (cause === null || typeof cause !== "object" || !("code" in cause)) {
-    return false;
-  }
-  return cause.code === "ENOENT" || cause.code === "ENOTDIR";
-}
 
 function isUnmanagedPluginId(pluginId: string): boolean {
   if (
@@ -66,13 +60,13 @@ async function nativeRouteConflict(ctx: AdapterContext): Promise<string> {
   try {
     routeIsSymlink = (await lstat(route)).isSymbolicLink();
   } catch (cause) {
-    return isMissingPath(cause) ? "" : NATIVE_ROUTE_CONFLICT;
+    return isAbsenceError(cause) ? "" : NATIVE_ROUTE_CONFLICT;
   }
   if (!routeIsSymlink) {
     try {
       await lstat(asset);
     } catch (cause) {
-      return isMissingPath(cause) ? "" : NATIVE_ROUTE_CONFLICT;
+      return isAbsenceError(cause) ? "" : NATIVE_ROUTE_CONFLICT;
     }
   }
   try {

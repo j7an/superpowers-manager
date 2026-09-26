@@ -55,39 +55,14 @@ export function applyManifestOverlay(
   );
   setMember(entries, "version", version);
   setMember(entries, "skills", "./skills/");
-  try {
-    return `${emitObject(entries, 0)}\n`;
-  } catch (cause) {
-    throw rewrapNumberOutOfRange(cause, path);
-  }
+  return `${emitObject(entries, 0, path)}\n`;
 }
 
-// emitNumber has no manifest path, so it throws a bare
-// `JSON number out of range: ${raw}`. This rewrap adds the path without
-// touching the local emitter's own contract, and is scoped to exactly this
-// message so it cannot swallow or reword any other overlay throw.
-const NUMBER_OUT_OF_RANGE_PREFIX = "JSON number out of range: ";
-
-function rewrapNumberOutOfRange(cause: unknown, path: string): unknown {
-  if (
-    cause instanceof SafetyError &&
-    cause.message.startsWith(NUMBER_OUT_OF_RANGE_PREFIX)
-  ) {
-    const raw = cause.message.slice(NUMBER_OUT_OF_RANGE_PREFIX.length);
-    return new SafetyError(
-      "manifest-overlay",
-      `JSON number out of range in ${path}: ${raw}`,
-      { cause },
-    );
-  }
-  return cause;
-}
-
-function emitNumber(raw: string): string {
+function emitNumber(raw: string, path: string): string {
   if (/[.eE]/.test(raw) && !Number.isFinite(Number(raw))) {
     throw new SafetyError(
       "manifest-overlay",
-      `JSON number out of range: ${raw}`,
+      `JSON number out of range in ${path}: ${raw}`,
     );
   }
   return raw;
@@ -144,32 +119,33 @@ function translate(cause: unknown, source: string, path: string): SafetyError {
   );
 }
 
-function emit(value: RawJsonValue, depth: number): string {
+function emit(value: RawJsonValue, depth: number, path: string): string {
   if (value === null) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "string") return escapeNonAscii(JSON.stringify(value));
   // Order matters: isRawNumber before isRawObject, and both before Array —
   // the branded records are objects too.
-  if (isRawNumber(value)) return emitNumber(value.source);
-  if (isRawObject(value)) return emitObject(value.entries, depth);
+  if (isRawNumber(value)) return emitNumber(value.source, path);
+  if (isRawObject(value)) return emitObject(value.entries, depth, path);
 
   const inner = "  ".repeat(depth + 1);
   const outer = "  ".repeat(depth);
   if (value.length === 0) return "[]";
-  const items = value.map((item) => `${inner}${emit(item, depth + 1)}`);
+  const items = value.map((item) => `${inner}${emit(item, depth + 1, path)}`);
   return `[\n${items.join(",\n")}\n${outer}]`;
 }
 
 function emitObject(
   entries: readonly (readonly [string, RawJsonValue])[],
   depth: number,
+  path: string,
 ): string {
   if (entries.length === 0) return "{}";
   const inner = "  ".repeat(depth + 1);
   const outer = "  ".repeat(depth);
   const members = entries.map(
     ([key, item]) =>
-      `${inner}${escapeNonAscii(JSON.stringify(key))}: ${emit(item, depth + 1)}`,
+      `${inner}${escapeNonAscii(JSON.stringify(key))}: ${emit(item, depth + 1, path)}`,
   );
   return `{\n${members.join(",\n")}\n${outer}}`;
 }

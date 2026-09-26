@@ -16,11 +16,9 @@ import type {
   InstallReceipt,
   OwnershipInspection,
   PreparedArtifact,
-  UpdateControlInspection,
 } from "../../harness.ts";
 import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
 import {
-  codexInspectControl,
   codexInspectOwnership,
   codexInstallRefreshMode,
   codexRemove,
@@ -36,7 +34,7 @@ import {
 } from "./marketplace.ts";
 import {
   assertCodexPreparationSeparate,
-  codexPathFailureDetails,
+  codexPathRefusal,
   codexPaths,
 } from "./paths.ts";
 import { codexPreparationLocation } from "./prepare.ts";
@@ -53,7 +51,6 @@ import { hasFilesystemAccessFailure, pathsEqual } from "./state.ts";
 export interface CodexPublicationDependencies {
   readonly readNative: typeof codexReadNativeState;
   readonly inspectOwnership: typeof codexInspectOwnership;
-  readonly inspectControl: typeof codexInspectControl;
   readonly beginPublication: typeof beginDirectoryPublication;
 }
 
@@ -70,7 +67,6 @@ export type ActivateCodex = (
 const DEFAULTS: CodexPublicationDependencies = {
   readNative: codexReadNativeState,
   inspectOwnership: codexInspectOwnership,
-  inspectControl: codexInspectControl,
   beginPublication: beginDirectoryPublication,
 };
 
@@ -101,22 +97,7 @@ function acceptedNative(
   if (result.status !== 0 || !result.outcome.ok) {
     throw new Error("Codex native observation failed");
   }
-  const value = result.outcome.result;
-  if (
-    typeof value.marketplaceRoot !== "string" &&
-    value.marketplaceRoot !== null
-  ) {
-    throw new Error("Codex native observation is malformed");
-  }
-  if (
-    typeof value.pluginPresent !== "boolean" ||
-    typeof value.pluginEnabled !== "boolean" ||
-    (typeof value.activeVersion !== "string" && value.activeVersion !== null) ||
-    (typeof value.activeRoot !== "string" && value.activeRoot !== null)
-  ) {
-    throw new Error("Codex native observation is malformed");
-  }
-  return value;
+  return result.outcome.result;
 }
 
 function requireOwnership(
@@ -127,15 +108,6 @@ function requireOwnership(
   }
   if (result.outcome.result?.installEligibility?.kind !== "allowed") {
     throw new Error("Codex ownership blocks publication");
-  }
-}
-
-function requireControl(result: AdapterResult<UpdateControlInspection>): void {
-  if (result.status !== 0 || !result.outcome.ok) {
-    throw new Error("Codex inspection failed");
-  }
-  if (result.outcome.result?.mutationEligibility?.kind !== "allowed") {
-    throw new Error("Codex update control blocks publication");
   }
 }
 
@@ -411,9 +383,6 @@ async function requireEligibility(
   const ownership = await dependencies.inspectOwnership(ctx);
   messages.push(...ownership.outcome.messages);
   requireOwnership(ownership);
-  const control = await dependencies.inspectControl(ctx);
-  messages.push(...control.outcome.messages);
-  requireControl(control);
 }
 
 async function verifyPrevious(
@@ -627,32 +596,14 @@ export async function installCodexMarketplace(
   try {
     await assertCodexPreparationSeparate(preparedRoot, paths);
   } catch (cause) {
-    const failure = codexPathFailureDetails(cause);
-    if (failure?.kind === "inspection") {
-      if (failure.root === "recovery") {
-        return fail(
-          "recovery-required",
-          `cannot inspect Codex recovery state at ${paths.recoveryRoot}; recovery is required before mutation`,
-          messages,
-        );
-      }
-      return fail(
-        "activation-refused",
-        failure.root === "marketplace"
-          ? `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`
-          : `cannot inspect Codex preparation root at ${preparedRoot}`,
-        messages,
-      );
-    }
-    return fail(
-      failure?.kind === "overlap"
-        ? "preparation-overlap"
-        : "activation-refused",
-      failure?.kind === "overlap"
-        ? `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`
-        : `cannot validate Codex preparation storage separation at ${preparedRoot}`,
-      messages,
+    const refusal = codexPathRefusal(
+      cause,
+      paths,
+      preparedRoot,
+      "activation-refused",
+      "; recovery is required before mutation",
     );
+    return fail(refusal.code, refusal.message, messages);
   }
   let pending: PendingCodexPublication | undefined;
   let publication: DirectoryPublication | undefined;

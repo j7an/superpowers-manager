@@ -24,20 +24,11 @@ import { SafetyError } from "../../safety-error.ts";
 import { validateSource } from "../../selection.ts";
 import { snapshotReceiptBinding } from "../../snapshot-package.ts";
 import { createSnapshotPreparation } from "../../snapshot-prepare.ts";
-import {
-  manifestVersionForRef,
-  type ResolutionKind,
-} from "../../upstream-version.ts";
+import { manifestVersionForRef } from "../../upstream-version.ts";
 import { assertClaudeCodeStorageSafe, claudeCodePaths } from "./paths.ts";
 
 const CLAUDE_CODE_MANIFEST = ".claude-plugin/plugin.json";
 const GENERATION = "claude-code-native-plugin-v1";
-const RESOLUTION_KINDS: readonly ResolutionKind[] = [
-  "latest-release",
-  "tag",
-  "ref",
-  "raw-commit",
-];
 
 export interface ClaudeCodeReceipt {
   readonly schema: 1;
@@ -88,13 +79,9 @@ async function assessClaudeCodeCompatibility(
 export function expectedClaudeCodeVersion(
   selection: EffectiveSelection,
 ): string {
-  const resolutionKind = RESOLUTION_KINDS.find(
-    (kind) => kind === selection.resolutionKind,
-  );
-  if (resolutionKind === undefined) throw new Error("resolution kind");
   return manifestVersionForRef({
     requestedRef: selection.requestedRef,
-    resolutionKind,
+    resolutionKind: selection.resolutionKind,
     resolvedRef: selection.resolvedRef,
     commit: selection.desiredCommit,
   });

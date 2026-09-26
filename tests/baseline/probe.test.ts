@@ -212,7 +212,7 @@ void test("a saved exact pin stays authoritative after its source disappears", a
     ],
     manifestVersion: ACTIVE_VERSION,
   });
-  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:114::resolvedRef: saved.saved_resolved_ref`),
+  // A saved pin short-circuits resolveRef (`src/effective-selection.ts:115::resolvedRef: saved.saved_resolved_ref`),
   // so an unreachable source is the proof that Git was never consulted: any
   // ls-remote against this path would fail once it is renamed away.
   renameSync(source, `${source}-offline`);
@@ -277,7 +277,7 @@ void test("an environment ref overrides only the ref side and the saved fields s
     manifestVersion: ACTIVE_VERSION,
   });
   // Rename the source for both runs: a 40-hex SUPERPOWERS_REF resolves as `raw-commit` without Git
-  // (`src/upstream.ts:162-163::if (COMMIT_INPUT_RE.test(requestedRef))`), so an unreachable source is what proves the
+  // (`src/upstream.ts:153::if (COMMIT_INPUT_RE.test(requestedRef))`), so an unreachable source is what proves the
   // shell's `test ! -s "$git_log"` (:460) still holds here.
   renameSync(source, `${source}-offline`);
   try {
@@ -579,7 +579,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:886::activeVersion =`).
+  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:846::activeVersion =`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the native-state inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -592,9 +592,9 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // The adapter's outer rethrow branch
-// (`src/harnesses/codex/adapter.ts:776::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/harnesses/codex/adapter.ts:744::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
-// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:295::if (!(await commandAvailable(codexBin, env)))`), and
+// `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:287::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by
 // `runCodexCommand` (:206-211) or converted by a `fail()` call. What this case
 // therefore pins is the property the rethrow diagnostic exists to protect:
@@ -633,7 +633,7 @@ void test("an unusable Codex command fails closed without leaking errno prose", 
 // exit 0.
 //
 // `pluginListRc: 1` cannot prove the ordering: listingCommand logs only the
-// child's stderr (`src/harnesses/codex/adapter.ts:257::async function listingCommand(`), and the fake writes nothing there
+// child's stderr (`src/harnesses/codex/adapter.ts:249::async function listingCommand(`), and the fake writes nothing there
 // on that path, so the outcome carries no messages at all and the error line
 // lands at index 0. The exhausted sequence is the failure that does write to
 // the child's stderr.

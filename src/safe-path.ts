@@ -1,4 +1,4 @@
-import { lstat, readlink, realpath } from "node:fs/promises";
+import { lstat, readlink, realpath, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -18,6 +18,34 @@ export function isErrno(value: unknown, code: string): boolean {
     "code" in value &&
     (value as NodeJS.ErrnoException).code === code
   );
+}
+
+// Follow symlinks, like `[ -d ]` / `[ -f ]`: a regular file, a broken
+// symlink, or an unreadable path is not a directory (and vice versa), so any
+// stat failure answers false.
+export async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `ENOENT`/`ENOTDIR` mean *missing*; every other error rejects. This is the
+ * only place the absence set is defined.
+ */
+export function isAbsenceError(cause: unknown): boolean {
+  const code = (cause as { code?: unknown } | null)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 export function isContained(root: string, candidate: string): boolean {

@@ -28,13 +28,12 @@ import {
   readStrictProvenanceField,
   writeProvenance,
 } from "../../provenance.ts";
-import { classifyPathNoFollow } from "../../safe-path.ts";
+import { classifyPathNoFollow, isFile } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
-import type { ResolutionKind } from "../../upstream-version.ts";
 import { manifestVersionForRef } from "../../upstream-version.ts";
 import {
   assertCodexPreparationSeparate,
-  codexPathFailureDetails,
+  codexPathRefusal,
   codexPaths,
 } from "./paths.ts";
 import { readCodexRecovery } from "./recovery.ts";
@@ -54,13 +53,6 @@ const COPY_PATHS = [
   "README.md",
   "CODE_OF_CONDUCT.md",
 ] as const;
-
-const RESOLUTION_KINDS: readonly ResolutionKind[] = [
-  "latest-release",
-  "tag",
-  "ref",
-  "raw-commit",
-];
 
 function unassessedCompatibility(): Compatibility {
   return {
@@ -86,14 +78,6 @@ async function pathExists(path: string): Promise<boolean> {
   try {
     await stat(path);
     return true;
-  } catch {
-    return false;
-  }
-}
-
-async function regularFileExists(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
   } catch {
     return false;
   }
@@ -160,36 +144,14 @@ export async function validateCodexPreparationBeforeFetch(
   try {
     await assertCodexPreparationSeparate(preparedRoot, paths);
   } catch (cause) {
-    const failure = codexPathFailureDetails(cause);
-    if (failure?.kind === "inspection") {
-      if (failure.root === "recovery") {
-        return failureResult(
-          "prepare",
-          "recovery-required",
-          `cannot inspect Codex recovery state at ${paths.recoveryRoot}`,
-          [],
-          [],
-        );
-      }
-      return failureResult(
-        "prepare",
-        "prepare-failed",
-        failure.root === "marketplace"
-          ? `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`
-          : `cannot inspect Codex preparation root at ${preparedRoot}`,
-        [],
-        [],
-      );
-    }
-    return failureResult(
-      "prepare",
-      failure?.kind === "overlap" ? "preparation-overlap" : "prepare-failed",
-      failure?.kind === "overlap"
-        ? `Codex preparation overlaps Codex published or recovery storage: ${preparedRoot}`
-        : `cannot validate Codex preparation storage separation at ${preparedRoot}`,
-      [],
-      [],
+    const refusal = codexPathRefusal(
+      cause,
+      paths,
+      preparedRoot,
+      "prepare-failed",
+      "",
     );
+    return failureResult("prepare", refusal.code, refusal.message, [], []);
   }
   try {
     if ((await readCodexRecovery(paths)) !== null) {
@@ -211,7 +173,7 @@ export async function validateCodexPreparationBeforeFetch(
     );
   }
   const template = manifestTemplate(ctx);
-  if (!(await regularFileExists(template))) {
+  if (!(await isFile(template))) {
     return failureResult(
       "prepare",
       "missing-template",
@@ -233,13 +195,6 @@ export async function readUpstreamManifestVersion(
     throw prepareError(`upstream manifest version is not a string: ${path}`);
   }
   return value;
-}
-
-function asResolutionKind(value: string): ResolutionKind {
-  for (const kind of RESOLUTION_KINDS) {
-    if (kind === value) return kind;
-  }
-  throw prepareError(`unknown upstream resolution kind: ${value}`);
 }
 
 export async function prepareCodexCandidate(
@@ -279,7 +234,7 @@ export async function prepareCodexCandidate(
       ".codex-plugin",
       "plugin.json",
     );
-    if (await regularFileExists(upstreamManifest)) {
+    if (await isFile(upstreamManifest)) {
       upstreamManifestVersion =
         await readUpstreamManifestVersion(upstreamManifest);
     }
@@ -297,12 +252,12 @@ export async function prepareCodexCandidate(
 
     managerVersion = manifestVersionForRef({
       requestedRef: input.selection.requestedRef,
-      resolutionKind: asResolutionKind(input.selection.resolutionKind),
+      resolutionKind: input.selection.resolutionKind,
       resolvedRef: input.selection.resolvedRef,
       commit: input.selection.desiredCommit,
     });
   } catch (cause) {
-    // owned()/asResolutionKind(), readManifest(), and writeProvenance replace
+    // owned(), readManifest(), and writeProvenance replace
     // every subordinate failure with controlled preparation, hook, or
     // provenance text. Re-emitting those owned diagnostics is therefore safe.
     // codexBuild stays below this catch because it deliberately rethrows
@@ -328,15 +283,6 @@ export async function prepareCodexCandidate(
   if (!built.outcome.ok) {
     return { status: built.status, outcome: built.outcome };
   }
-  if (built.status !== 0) {
-    return failureResult(
-      "build",
-      "invalid-status",
-      "adapter reported failure without an error outcome",
-      [],
-      built.outcome.messages,
-    );
-  }
   const compatibility = await assessCodexCompatibility(
     input.upstreamRoot,
     input.selection,
@@ -346,9 +292,7 @@ export async function prepareCodexCandidate(
       await writeCodexAssessment(
         input.candidateRoot,
         input.selection,
-        (await regularFileExists(
-          join(input.upstreamRoot, ".codex-plugin/plugin.json"),
-        ))
+        (await isFile(join(input.upstreamRoot, ".codex-plugin/plugin.json")))
           ? "upstream"
           : "fallback",
       );

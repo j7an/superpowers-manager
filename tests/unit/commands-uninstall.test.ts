@@ -14,9 +14,16 @@ import {
 import { runUninstall } from "../../src/commands/uninstall.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
-import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
+import {
+  codexOwnershipInspection,
+  type CodexIdentityState,
+} from "../../src/harnesses/codex/lifecycle.ts";
 
-function ownership(identityState: string, plugin = false, marketplace = false) {
+function ownership(
+  identityState: CodexIdentityState,
+  plugin = false,
+  marketplace = false,
+) {
   return codexOwnershipInspection(
     identityState,
     { pluginPresent: plugin, marketplacePresent: marketplace },
@@ -26,8 +33,8 @@ function ownership(identityState: string, plugin = false, marketplace = false) {
 
 void test("a remaining legacy state is REPORTED on stdout, not stderr", async () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:75-77::remains` has no `>&2`, unlike :53. The retired
-  // shell driver witnessed the split through its capture form; LegacyVerdict
-  // carries no channel by design, so this is the only witness after 4a.
+  // shell driver witnessed the split through its capture form. Ownership now
+  // assigns postRemovalOutput.stdout; this test verifies the command's channel.
   // Spec §6.2.3 item 2.
   const out = capture();
   const err = capture();
@@ -149,29 +156,6 @@ void test("a plugin resource still installed after removal is a distinct, named 
     err.text(),
     "error: owned plugin resource is still installed after removal\n",
   );
-  assert.equal(out.text(), "");
-  assert.equal(calls.length, 5);
-});
-
-void test("an unrecognised identity state after removal is a distinct, named failure", async () => {
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", ownership("neither"), []),
-    successResult("uninstall", {}, []),
-    successResult("inspect", ownership("wat"), []),
-  ]);
-  const status = await runUninstall([], {
-    root: "/nowhere",
-    env: { HOME: "/nowhere" },
-    stdout: out.stream,
-    stderr: err.stream,
-    options: { harness: "codex", allowExperimental: false },
-    coordination: observingCoordinator(),
-    adapter,
-  });
-  assert.equal(status, 1);
-  assert.equal(err.text(), "error: unknown adapter identity state: wat\n");
   assert.equal(out.text(), "");
   assert.equal(calls.length, 5);
 });

@@ -7,6 +7,7 @@ import { scratch } from "../../../lib/scratch.ts";
 import {
   assertCodexPreparationSeparate,
   codexPathFailureDetails,
+  codexPathRefusal,
   codexHome,
   codexPaths,
 } from "../../../../src/harnesses/codex/paths.ts";
@@ -30,6 +31,124 @@ void test("Codex home selects durable storage independently of package location"
     () => codexHome({}, "/fixture"),
     /cannot determine Codex state root without HOME/,
   );
+});
+
+void test("Codex path refusals preserve the operation's exact error and message", async (t) => {
+  const cases = [
+    {
+      name: "recovery inspection",
+      prepare: async (paths: ReturnType<typeof codexPaths>) => {
+        await mkdir(paths.managerRoot, { recursive: true });
+        await writeFile(paths.recoveryRoot, "occupied");
+      },
+      preparedRoot: (paths: ReturnType<typeof codexPaths>) =>
+        paths.preparedRoot,
+      expected: (
+        paths: ReturnType<typeof codexPaths>,
+        suffix: string,
+        _code: string,
+      ) => ({
+        code: "recovery-required",
+        message: `cannot inspect Codex recovery state at ${paths.recoveryRoot}${suffix}`,
+      }),
+    },
+    {
+      name: "marketplace inspection",
+      prepare: async (paths: ReturnType<typeof codexPaths>) => {
+        await mkdir(paths.managerRoot, { recursive: true });
+        await writeFile(paths.marketplaceRoot, "occupied");
+      },
+      preparedRoot: (paths: ReturnType<typeof codexPaths>) =>
+        paths.preparedRoot,
+      expected: (
+        paths: ReturnType<typeof codexPaths>,
+        _suffix: string,
+        code: string,
+      ) => ({
+        code,
+        message: `cannot inspect Codex marketplace storage at ${paths.marketplaceRoot}`,
+      }),
+    },
+    {
+      name: "preparation inspection",
+      prepare: async (paths: ReturnType<typeof codexPaths>) => {
+        await mkdir(paths.managerRoot, { recursive: true });
+        await writeFile(paths.preparedRoot, "occupied");
+      },
+      preparedRoot: (paths: ReturnType<typeof codexPaths>) =>
+        paths.preparedRoot,
+      expected: (
+        paths: ReturnType<typeof codexPaths>,
+        _suffix: string,
+        code: string,
+      ) => ({
+        code,
+        message: `cannot inspect Codex preparation root at ${paths.preparedRoot}`,
+      }),
+    },
+    {
+      name: "overlap",
+      prepare: async (paths: ReturnType<typeof codexPaths>) => {
+        await mkdir(paths.marketplaceRoot, { recursive: true });
+      },
+      preparedRoot: (paths: ReturnType<typeof codexPaths>) =>
+        join(paths.marketplaceRoot, "prepared"),
+      expected: (
+        paths: ReturnType<typeof codexPaths>,
+        _suffix: string,
+        _code: string,
+      ) => ({
+        code: "preparation-overlap",
+        message: `Codex preparation overlaps Codex published or recovery storage: ${join(paths.marketplaceRoot, "prepared")}`,
+      }),
+    },
+  ] as const;
+
+  for (const { name, prepare, preparedRoot: rootFor, expected } of cases) {
+    await t.test(name, async (t) => {
+      const root = scratch(t, "spw-codex-refusal-");
+      const paths = codexPaths({ CODEX_HOME: join(root, "home") }, root);
+      await prepare(paths);
+      const preparedRoot = rootFor(paths);
+      let cause: unknown;
+      try {
+        await assertCodexPreparationSeparate(preparedRoot, paths);
+        assert.fail("expected Codex path error");
+      } catch (error) {
+        cause = error;
+      }
+      for (const [code, suffix] of [
+        ["prepare-failed", ""],
+        ["activation-refused", "; recovery is required before mutation"],
+      ] as const) {
+        assert.deepEqual(
+          codexPathRefusal(cause, paths, preparedRoot, code, suffix),
+          expected(paths, suffix, code),
+        );
+      }
+    });
+  }
+
+  const root = scratch(t, "spw-codex-refusal-unrelated-");
+  const paths = codexPaths({ CODEX_HOME: join(root, "home") }, root);
+  for (const [code, suffix] of [
+    ["prepare-failed", ""],
+    ["activation-refused", "; recovery is required before mutation"],
+  ] as const) {
+    assert.deepEqual(
+      codexPathRefusal(
+        new Error("unrelated"),
+        paths,
+        paths.preparedRoot,
+        code,
+        suffix,
+      ),
+      {
+        code,
+        message: `cannot validate Codex preparation storage separation at ${paths.preparedRoot}`,
+      },
+    );
+  }
 });
 
 void test("Codex home falls back only from an empty CODEX_HOME", () => {

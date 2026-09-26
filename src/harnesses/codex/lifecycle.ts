@@ -10,22 +10,9 @@
 import type { Decision, OwnershipInspection } from "../../harness.ts";
 import type { CodexRemovalInput } from "./adapter.ts";
 
-// A three-way verdict rather than a boolean, because the shell has two
-// distinct failure paths and collapsing them changes operator-visible text:
-//
-//   legacy | both  ->
-//     `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`
-//     prints three bare lines to stderr and returns 1. No `error: ` prefix.
-//   anything else  -> :57 calls spw_die, which DOES add `error: ` and exits 1.
-//
-// `LegacyVerdict` needs a fourth arm for `reportLegacyState`'s non-fatal
-// report. The union is extended rather than reusing `blocked`, because a
-// caller must not treat a report as a stop.
-export type LegacyVerdict =
-  | { readonly kind: "ok" }
-  | { readonly kind: "blocked"; readonly lines: readonly string[] }
-  | { readonly kind: "report"; readonly lines: readonly string[] }
-  | { readonly kind: "unknown"; readonly message: string };
+// The four states the adapter derives from native plugin and marketplace
+// presence (src/harnesses/codex/adapter.ts, ownershipFromResources).
+export type CodexIdentityState = "neither" | "manager" | "legacy" | "both";
 
 // Frozen text, from
 // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:50-53::'Legacy superpowers-wrapper Codex state is`.
@@ -46,131 +33,41 @@ const REPORT_LINES: readonly string[] = [
   "Run: npx superpowers-wrapper@0.1.1 uninstall",
 ];
 
-function unknownState(identityState: string): LegacyVerdict {
-  return {
-    kind: "unknown",
-    message: `unknown adapter identity state: ${identityState}`,
-  };
-}
-
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:43-60::spw_require_no_legacy_state`
-export function requireNoLegacyState(identityState: string): LegacyVerdict {
-  if (identityState === "neither" || identityState === "manager") {
-    return { kind: "ok" };
-  }
-  if (identityState === "legacy" || identityState === "both") {
-    return { kind: "blocked", lines: BLOCKED_LINES };
-  }
-  return unknownState(identityState);
-}
-
-// Ported from
-// `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:72-85::spw_report_legacy_state`.
-// Same enumeration, different disposition: this one reports and continues
-// rather than blocking, so its clean arm and its legacy arm are both non-fatal.
-export function reportLegacyState(identityState: string): LegacyVerdict {
-  if (identityState === "neither" || identityState === "manager") {
-    return { kind: "ok" };
-  }
-  if (identityState === "legacy" || identityState === "both") {
-    return { kind: "report", lines: REPORT_LINES };
-  }
-  return unknownState(identityState);
-}
-
-function installDecision(legacy: LegacyVerdict): Decision {
-  switch (legacy.kind) {
-    case "ok":
-      return { kind: "allowed" };
-    case "blocked":
-      return {
-        kind: "blocked",
-        output: { stdout: [], stderr: legacy.lines },
-      };
-    case "unknown":
-      return {
-        kind: "blocked",
-        output: { stdout: [], stderr: [`error: ${legacy.message}`] },
-      };
-    case "report":
-      return {
-        kind: "blocked",
-        output: {
-          stdout: [],
-          stderr: ["error: unexpected legacy report during installation"],
-        },
-      };
-  }
+function blocked(stderr: readonly string[]): Decision {
+  return { kind: "blocked", output: { stdout: [], stderr } };
 }
 
 export function codexOwnershipInspection(
-  identityState: string,
+  identityState: CodexIdentityState,
   removalInput: CodexRemovalInput,
   conflicts: readonly string[],
 ): OwnershipInspection<CodexRemovalInput> {
+  const legacy = identityState === "legacy" || identityState === "both";
   const { pluginPresent, marketplacePresent } = removalInput;
-  const legacyEligibility: Decision =
-    identityState.length === 0
-      ? {
-          kind: "blocked",
-          output: {
-            stdout: [],
-            stderr: ["error: probe did not report adapter identity state"],
-          },
-        }
-      : installDecision(requireNoLegacyState(identityState));
-  const installEligibility: Decision =
-    legacyEligibility.kind === "blocked" || conflicts.length === 0
-      ? legacyEligibility
-      : {
-          kind: "blocked",
-          output: {
-            stdout: [],
-            stderr: [
-              "Conflicting unmanaged Superpowers Codex resources require manual resolution:",
-              ...conflicts.map((conflict) => `- ${conflict}`),
-              "Remove or disable each resource manually, then retry.",
-            ],
-          },
-        };
-
-  const legacyReport = reportLegacyState(identityState);
-  let removalVerification: Decision;
-  if (pluginPresent || marketplacePresent) {
-    const message = pluginPresent
-      ? "owned plugin resource is still installed after removal"
-      : "owned marketplace resource is still registered after removal";
-    removalVerification = {
-      kind: "blocked",
-      output: { stdout: [], stderr: ["error: " + message] },
-    };
-  } else if (legacyReport.kind === "unknown") {
-    removalVerification = {
-      kind: "blocked",
-      output: { stdout: [], stderr: [`error: ${legacyReport.message}`] },
-    };
-  } else if (legacyReport.kind === "blocked") {
-    removalVerification = {
-      kind: "blocked",
-      output: {
-        stdout: [],
-        stderr: ["error: unexpected legacy block after removal"],
-      },
-    };
-  } else {
-    removalVerification = { kind: "allowed" };
-  }
-
-  const postRemovalOutput =
-    legacyReport.kind === "report"
-      ? { stdout: legacyReport.lines, stderr: [] }
-      : { stdout: [], stderr: [] };
-
+  const installEligibility: Decision = legacy
+    ? blocked(BLOCKED_LINES)
+    : conflicts.length > 0
+      ? blocked([
+          "Conflicting unmanaged Superpowers Codex resources require manual resolution:",
+          ...conflicts.map((conflict) => `- ${conflict}`),
+          "Remove or disable each resource manually, then retry.",
+        ])
+      : { kind: "allowed" };
+  const removalVerification: Decision =
+    pluginPresent || marketplacePresent
+      ? blocked([
+          pluginPresent
+            ? "error: owned plugin resource is still installed after removal"
+            : "error: owned marketplace resource is still registered after removal",
+        ])
+      : { kind: "allowed" };
   return {
     installEligibility,
     removalInput,
     removalVerification,
-    postRemovalOutput,
+    postRemovalOutput: legacy
+      ? { stdout: REPORT_LINES, stderr: [] }
+      : { stdout: [], stderr: [] },
     presentationValue: identityState,
     presentationConflicts: conflicts,
   };

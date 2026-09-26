@@ -5,6 +5,7 @@ import { isAbsolute, join } from "node:path";
 import { parse, TomlDate, type TomlTable, type TomlValue } from "smol-toml";
 
 import { SafetyError } from "../../safety-error.ts";
+import { isErrno } from "../../safe-path.ts";
 import { codexHome } from "./paths.ts";
 import type { CodexInstalledPlugin } from "./json.ts";
 
@@ -29,15 +30,6 @@ export interface CodexStoredState {
 
 function storedError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("codex-stored-state", message, { cause });
-}
-
-function isErrno(cause: unknown, code: string): boolean {
-  return (
-    cause !== null &&
-    typeof cause === "object" &&
-    "code" in cause &&
-    cause.code === code
-  );
 }
 
 function table(value: TomlValue | undefined, name: string): TomlTable {

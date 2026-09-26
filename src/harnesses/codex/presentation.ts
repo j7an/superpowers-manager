@@ -134,13 +134,13 @@ function verificationOutput(
   return { stdout: [], stderr };
 }
 
-function safeHint(value: unknown): string {
-  return typeof value === "string" && !hasTerminalControl(value) ? value : "";
+function safeHint(value: string): string {
+  return hasTerminalControl(value) ? "" : value;
 }
 
 export function codexInstallReceipt(
-  missingHint: unknown,
-  mismatchHint: unknown,
+  missingHint: string,
+  mismatchHint: string,
 ): InstallReceipt {
   return {
     missingVerificationOutput: verificationOutput(

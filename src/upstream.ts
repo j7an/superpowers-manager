@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   COMMIT_INPUT_RE,
@@ -9,6 +9,7 @@ import type { StableVersion } from "./domain/refs.ts";
 import { runGit } from "./git.ts";
 import type { GitResult } from "./git.ts";
 import { SafetyError } from "./safety-error.ts";
+import { isDirectory } from "./safe-path.ts";
 import { displaySource } from "./selection.ts";
 import type { ResolutionKind } from "./upstream-version.ts";
 import { withWorkspace } from "./workspace.ts";
@@ -64,16 +65,6 @@ function failed(result: GitResult): boolean {
 
 function combined(result: GitResult): string {
   return `${result.stdout}${result.stderr}`.replace(/\n+$/, "");
-}
-
-// Mirrors `[ -d "$repository/.git" ]`: a regular file, a broken symlink, or
-// an unreadable path is *not* a directory, so the cache is re-initialized.
-export async function isDirectory(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 export function parseLsRemote(output: string): LsRemoteEntry[] {

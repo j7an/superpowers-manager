@@ -109,17 +109,6 @@ export async function pathsEqual(a: string, b: string): Promise<boolean> {
   return (await comparablePath(a)) === (await comparablePath(b));
 }
 
-function preserveFailure<T, U>(result: AdapterResult<U>): AdapterResult<T> {
-  if (result.outcome.ok) throw new Error("expected adapter failure");
-  return failureResult(
-    result.outcome.operation,
-    result.outcome.error.code,
-    result.outcome.error.message,
-    result.outcome.error.hints,
-    result.outcome.messages,
-  );
-}
-
 function mismatch(
   reason: string,
   messages: AdapterResult["outcome"]["messages"] = [],
@@ -183,7 +172,8 @@ export async function inspectCodexInstallation(
 ): Promise<AdapterResult<InstalledState>> {
   const operation = "inspect-codex-installed";
   const native = await readNative(ctx);
-  if (!native.outcome.ok) return preserveFailure(native);
+  if (!native.outcome.ok)
+    return { status: native.status, outcome: native.outcome };
   const messages = native.outcome.messages;
   const paths = codexPaths(ctx.env ?? {}, process.cwd());
   let marketplace;

@@ -5,7 +5,6 @@ import {
   readdir,
   readFile,
   readlink,
-  stat,
   symlink,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -13,6 +12,8 @@ import {
   assertExistingContained,
   assertProspectiveContained,
   classifyPathNoFollow,
+  isDirectory,
+  isFile,
 } from "../../safe-path.ts";
 import type { NoFollowPathType } from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
@@ -39,7 +40,7 @@ const MANIFEST_PROFILE: StrictJsonProfile = {
 
 // Private helper, matching
 // `src/selection.ts:35::return new SafetyError("selection"` and
-// `src/upstream.ts:35::function upstreamError`. No new exported error class:
+// `src/upstream.ts:36::function upstreamError`. No new exported error class:
 // SafetyError already carries module and cause.
 function hookError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("hooks", message, { cause });
@@ -67,22 +68,6 @@ async function classifyOwned(
     return await classifyPathNoFollow(path);
   } catch (cause) {
     throw ownedPathError(label, path, cause);
-  }
-}
-
-async function isRegularFileFollowing(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
-}
-
-async function isDirectoryFollowing(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory();
-  } catch {
-    return false;
   }
 }
 
@@ -156,7 +141,7 @@ async function checkedFile(
 ): Promise<string> {
   const source = resolve(root, relativePath);
   await requireExistingContained(root, source, "declared hook source");
-  if (!(await isRegularFileFollowing(source))) {
+  if (!(await isFile(source))) {
     throw hookError(`declared hook source is not a regular file: ${source}`);
   }
   return source;
@@ -195,14 +180,14 @@ export async function classifyHooks(
 
   if (!declared) {
     return {
-      copyHooksSubtree: await isRegularFileFollowing(defaultConfig),
+      copyHooksSubtree: await isFile(defaultConfig),
       declaredPaths: [],
     };
   }
   const hooks = manifest.hooks as JsonValue;
   if (isEmptyArray(hooks)) {
     return {
-      copyHooksSubtree: await isRegularFileFollowing(defaultConfig),
+      copyHooksSubtree: await isFile(defaultConfig),
       declaredPaths: [],
     };
   }
@@ -263,7 +248,7 @@ async function checkedDestination(
     destination,
     "declared hook destination",
   );
-  if (!(await isRegularFileFollowing(destination))) {
+  if (!(await isFile(destination))) {
     throw hookError(
       `declared hook destination is not a regular file: ${destination}`,
     );
@@ -306,7 +291,7 @@ async function validateSubtreeSymlinks(
   } catch (cause) {
     throw hookError(`hook subtree escapes or is broken: ${tree}`, cause);
   }
-  if (!(await isDirectoryFollowing(tree))) {
+  if (!(await isDirectory(tree))) {
     throw hookError(`hook subtree is not a directory: ${tree}`);
   }
   for (const path of await collectEntries(tree)) {
@@ -346,7 +331,7 @@ async function validateMaterializedDestination(
     // re-owned. Discarding it would erase why containment failed.
     throw hookError(message, cause);
   }
-  if (!(await isRegularFileFollowing(destination))) {
+  if (!(await isFile(destination))) {
     throw hookError(message);
   }
 }

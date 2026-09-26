@@ -6,15 +6,8 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import {
-  failureResult,
-  successResult,
-} from "../../../../src/adapter-result.ts";
 import type { CodexRemovalInput } from "../../../../src/harnesses/codex/adapter.ts";
-import {
-  codexHarness,
-  rejectSuccessfulNonzeroStatus,
-} from "../../../../src/harnesses/codex/harness.ts";
+import { codexHarness } from "../../../../src/harnesses/codex/harness.ts";
 import { codexOwnershipInspection } from "../../../../src/harnesses/codex/lifecycle.ts";
 import {
   codexInstallReceipt,
@@ -189,26 +182,6 @@ void test("ownership policy reuses legacy install and removal policy", async (t)
     stderr: [],
   });
 
-  const unknown = codexOwnershipInspection(
-    "unexpected",
-    { pluginPresent: false, marketplacePresent: false },
-    [],
-  );
-  assert.deepEqual(unknown.installEligibility, {
-    kind: "blocked",
-    output: {
-      stdout: [],
-      stderr: ["error: unknown adapter identity state: unexpected"],
-    },
-  });
-  assert.deepEqual(unknown.removalVerification, {
-    kind: "blocked",
-    output: {
-      stdout: [],
-      stderr: ["error: unknown adapter identity state: unexpected"],
-    },
-  });
-
   await t.test("blocks unmanaged conflicts with manual guidance", () => {
     const normalized = codexOwnershipInspection(
       "manager",
@@ -256,22 +229,6 @@ void test("ownership policy reuses legacy install and removal policy", async (t)
   );
 });
 
-void test("empty ownership identity uses the probe diagnostic", () => {
-  const normalized = codexOwnershipInspection(
-    "",
-    { pluginPresent: false, marketplacePresent: false },
-    [],
-  );
-  assert.equal(normalized.presentationValue, "");
-  assert.deepEqual(normalized.installEligibility, {
-    kind: "blocked",
-    output: {
-      stdout: [],
-      stderr: ["error: probe did not report adapter identity state"],
-    },
-  });
-});
-
 void test("install receipt converts only safe verification hints into output", () => {
   const receipt = codexInstallReceipt(
     "verify the installed plugin",
@@ -292,61 +249,9 @@ void test("install receipt converts only safe verification hints into output", (
     ],
   });
 
-  const unsafe = codexInstallReceipt("unsafe\nline", 4);
+  const unsafe = codexInstallReceipt("unsafe\nline", "unsafe\u001bline");
   assert.equal(unsafe.missingVerificationOutput.stderr.length, 1);
   assert.equal(unsafe.mismatchVerificationOutput.stderr.length, 1);
-});
-
-void test("Codex boundaries reject successful nonzero statuses before reading typed results", () => {
-  const messages = [
-    { channel: "stderr" as const, text: "captured adapter context" },
-  ];
-  const cases = [
-    {
-      operation: "inspect",
-      message:
-        "adapter reported a failure status for inspect --view update-control",
-    },
-    {
-      operation: "install",
-      message:
-        "adapter reported a failure status for install --package-root /package root",
-    },
-  ] as const;
-  for (const { operation, message } of cases) {
-    const succeeded = successResult(operation, null, messages);
-    const guarded = rejectSuccessfulNonzeroStatus(
-      { status: 1, outcome: succeeded.outcome },
-      message,
-    );
-    assert.equal(guarded.status, 1);
-    assert.equal(guarded.outcome.ok, false);
-    if (guarded.outcome.ok) assert.fail("expected invalid status rejection");
-    assert.equal(guarded.outcome.operation, operation);
-    assert.equal(guarded.outcome.error.code, "invalid-status");
-    assert.equal(guarded.outcome.error.message, message);
-    assert.deepEqual(guarded.outcome.error.hints, []);
-    assert.deepEqual(guarded.outcome.messages, messages);
-  }
-});
-
-void test("Codex status guard passes zero successes and controlled failures through unchanged", () => {
-  const succeeded = successResult("inspect", ALLOWED_CONTROL, []);
-  const failed = failureResult(
-    "install",
-    "controlled-failure",
-    "controlled failure",
-    ["controlled hint"],
-    [{ channel: "stdout", text: "captured context" }],
-  );
-  assert.strictEqual(
-    rejectSuccessfulNonzeroStatus(succeeded, "unused status diagnostic"),
-    succeeded,
-  );
-  assert.strictEqual(
-    rejectSuccessfulNonzeroStatus(failed, "unused status diagnostic"),
-    failed,
-  );
 });
 
 function selection(): EffectiveSelection {

@@ -164,7 +164,7 @@ void test("installed state is a mismatch after a same-commit ref change", async 
     ...selection,
     requestedRef: selection.desiredCommit,
     resolvedRef: selection.desiredCommit,
-    resolutionKind: "raw-commit",
+    resolutionKind: "raw-commit" as const,
   };
   assert.equal(await installedKind(sandbox, rawCommit, fake), "mismatch");
 });

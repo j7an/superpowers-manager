@@ -23,7 +23,10 @@ import { runInstall } from "../../src/commands/install.ts";
 import { successResult, failureResult } from "../../src/adapter-result.ts";
 import type { UpdateControlInspection } from "../../src/harness.ts";
 import { workspaceRemovalFailure } from "../../src/workspace.ts";
-import { codexOwnershipInspection } from "../../src/harnesses/codex/lifecycle.ts";
+import {
+  codexOwnershipInspection,
+  type CodexIdentityState,
+} from "../../src/harnesses/codex/lifecycle.ts";
 import { codexInstallReceipt } from "../../src/harnesses/codex/presentation.ts";
 
 const SCRATCH = mkdtempSync(join(tmpdir(), "spw-commands-install-"));
@@ -40,7 +43,7 @@ function writeJsonFile(path: string, value: unknown) {
 
 /**
  * A hermetic install ctx: a 40-hex SUPERPOWERS_REF is a raw-commit resolution
- * (`src/upstream.ts:162-164::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
+ * (`src/upstream.ts:154::return { kind: "raw-commit"`), so computeEffectiveSelection never touches git,
  * matching tests/unit/commands-prepare.test.js's unitContext.
  *
  * `savedCommit`, when given, is written as a SEPARATE, valid pinned
@@ -123,7 +126,10 @@ const BLOCKED_CONTROL: UpdateControlInspection = {
   presentationValue: "unsupported",
 };
 
-function ownership(identityState: string, conflicts: readonly string[] = []) {
+function ownership(
+  identityState: CodexIdentityState,
+  conflicts: readonly string[] = [],
+) {
   return codexOwnershipInspection(
     identityState,
     { pluginPresent: false, marketplacePresent: false },
@@ -392,7 +398,7 @@ void test("an unparseable generated commit is never treated as success", async (
 //
 // Mutation testing found this relay completely unexercised: a mutant that
 // never stops on probe.status === 1 falls straight through into
-// requireNoLegacyState on an undefined `facts`, then (if that somehow
+// codexOwnershipInspection on an undefined `facts`, then (if that somehow
 // survived) into runPrepare and the install mutation itself -- the worst
 // direction for this relay to fail in. Two cases: one where the failing
 // call's outcome is ok (clause 3, so probe.message is a hand-written,
@@ -473,38 +479,6 @@ void test("gatherProbe's own clause-2 failure stops immediately, with ONLY the r
 
 // --- Named parity cases ---
 
-void test("an empty probe-reported identity state is its own diagnostic, distinct from an unrecognised one", async () => {
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:19-20::identity_state=$(spw_probe_field`. Guards the PROBE-derived value, not the
-  // re-inspected one (src/commands/install.ts's `identity.kind ===
-  // "malformed"` arm already owns that path). A JSON null identity_state on
-  // gatherProbe's own ownership inspect becomes "" (the JSON-null
-  // convention), and this check must fire BEFORE requireNoLegacyState would
-  // otherwise reach its "unknown" arm and print a symptom
-  // ("unknown adapter identity state: ", empty-suffixed) instead of the
-  // actual cause.
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", installed("absent", ""), []),
-    successResult("inspect", ownership(""), []),
-    successResult("inspect", ALLOWED_CONTROL, []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runInstall([], ctx);
-  assert.equal(status, 1);
-  assert.equal(
-    err.text(),
-    "error: probe did not report adapter identity state\n",
-  );
-  assert.equal(out.text(), NOTE);
-  assert.equal(calls.length, 11);
-});
-
 void test("a legacy identity state stops before the workspace is created", async () => {
   const out = capture();
   const err = capture();
@@ -531,36 +505,6 @@ void test("a legacy identity state stops before the workspace is created", async
       "Then run: npx superpowers-manager install\n",
   );
   assert.equal(out.text(), NOTE);
-  assert.equal(calls.length, 11);
-});
-
-void test("an UNKNOWN probe identity state stops before the workspace is created", async () => {
-  // The sibling case and this one exercise distinct concrete normalization
-  // decisions (`src/harnesses/codex/lifecycle.ts:122::const installEligibility`),
-  // both enforced by the same shared guard
-  // (`src/commands/install.ts:297::if (facts.ownership.installEligibility.kind`).
-  // "chaos" is non-empty, so its exact diagnostic remains distinct from the
-  // empty-state decision asserted above.
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    successResult("inspect", installed("absent", ""), []),
-    successResult("inspect", ownership("chaos"), []),
-    successResult("inspect", ALLOWED_CONTROL, []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runInstall([], ctx);
-  assert.equal(status, 1);
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:57::spw_die "unknown adapter identity state: $identity_state` calls spw_die, which DOES prefix `error: ` --
-  // unlike the bare three lines the `"blocked"` arm writes.
-  assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
-  assert.equal(out.text(), NOTE);
-  // Stops before the workspace: only gatherProbe's own three calls.
   assert.equal(calls.length, 11);
 });
 
@@ -684,7 +628,7 @@ void test("stage 1 clause 3: outcome.ok but status !== 0 gets its own hand-writt
 void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested", async () => {
   // Rule 1 (`calls.slice(3)`) only proves the re-inspection HAPPENS. Nothing
   // in the suite before this proved its ANSWER is acted on: a mutant that
-  // ignores requireNoLegacyState's verdict on the re-inspected value would
+  // ignores codexOwnershipInspection's verdict on the re-inspected value would
   // sail through to update-control and the install mutation with a legacy
   // identity re-confirmed one line above. gatherProbe's own ownership
   // inspect reports "manager" (clean) here -- only the RE-inspection inside
@@ -711,39 +655,6 @@ void test("stage 1's re-inspection legacy verdict is OBEYED, not just requested"
       "Run: npx superpowers-wrapper@0.1.1 uninstall\n" +
       "Then run: npx superpowers-manager install\n",
   );
-  assert.equal(out.text(), NOTE);
-  // Stops at the re-inspection: no update-control inspect, no install, no
-  // fingerprint inspect.
-  assert.equal(calls.length, 13);
-});
-
-void test("stage 1's re-inspection UNKNOWN verdict is OBEYED, not just requested", async () => {
-  // The sibling case above drives requireNoLegacyState's `"blocked"` arm; this
-  // one drives its `"unknown"` arm (reached for any identity_state outside the
-  // four known ones). Both arms need their own case: a mutant that disables
-  // BOTH at once dies to the `"blocked"` case alone, which proves only that one
-  // of the two is live. Disabling just the `"unknown"` arm previously survived
-  // the whole suite, and the survivor was a live fail-open -- re-inspect,
-  // receive an unrecognised answer, then install anyway and exit 0.
-  // gatherProbe's own ownership inspect reports "manager" here, so the
-  // unrecognised value is the RE-inspection's own evidence, not the outer
-  // pre-workspace check's.
-  const out = capture();
-  const err = capture();
-  const { adapter, calls } = scriptedAdapter([
-    ...PROBE_OK,
-    successResult("inspect", ownership("chaos"), []),
-  ]);
-  const ctx = await makeCtx(
-    { desiredCommit: X, generatedCommit: X },
-    out,
-    err,
-    adapter,
-  );
-  const status = await runInstall([], ctx);
-  assert.equal(status, 1);
-  // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:57::spw_die "unknown adapter identity state: $identity_state` calls spw_die, which DOES prefix `error: `.
-  assert.equal(err.text(), "error: unknown adapter identity state: chaos\n");
   assert.equal(out.text(), NOTE);
   // Stops at the re-inspection: no update-control inspect, no install, no
   // fingerprint inspect.

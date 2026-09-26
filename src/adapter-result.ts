@@ -41,8 +41,7 @@ export interface AdapterResult<T = JsonValue> {
 // produces no runtime edge either way and a cycle was never possible. The
 // actual reason is grouping: AdapterContext, AdapterResult, and
 // AdapterOutcome are all protocol types, and this is the module that owns
-// the protocol rather than the one that implements it. adapter.ts re-exports
-// this name so its existing importers are unaffected.
+// the protocol rather than the one that implements it.
 export interface AdapterContext {
   readonly root: string;
   readonly env?: NodeJS.ProcessEnv;

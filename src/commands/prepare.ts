@@ -7,11 +7,11 @@ import { oneLine } from "../cli-arguments.ts";
 import { computeEffectiveSelection } from "../effective-selection.ts";
 import { runGit } from "../git.ts";
 import type { PreparationLocation } from "../harness.ts";
+import { isDirectory } from "../safe-path.ts";
 import { SafetyError } from "../safety-error.ts";
 import {
   fetchExactCommit,
   gitSafeSource,
-  isDirectory,
   upstreamCacheRoot,
 } from "../upstream.ts";
 import {
@@ -35,7 +35,7 @@ import { runWithMutation } from "./mutation.ts";
 // Every message this module writes is hand-written here. The cause is attached
 // for debuggability and never reaches a stream: oneLine (src/cli-arguments.ts)
 // reads .message only. Same arrangement as hookError
-// (`src/harnesses/codex/hooks.ts:44::function hookError`).
+// (`src/harnesses/codex/hooks.ts:45::function hookError`).
 function prepareError(message: string, cause?: unknown): SafetyError {
   return new SafetyError("prepare", message, { cause });
 }
@@ -162,7 +162,7 @@ async function gatherPrepare<R>(
         // `[ -d ]` — `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/prepare:50::if [ -d`. A regular file named `.git` is what a git
         // worktree or `clone --separate-git-dir` leaves behind; `-e` would take the
         // fetch branch and let git follow its `gitdir:` pointer, where the shell took
-        // the clone branch. `src/upstream.ts:332::if (!(await isDirectory` makes the
+        // the clone branch. `src/upstream.ts:323::if (!(await isDirectory` makes the
         // same distinction.
         if (await isDirectory(join(cache, ".git"))) {
           const fetched = await runGit([
