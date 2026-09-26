@@ -33,8 +33,8 @@ function ownership(
 
 void test("a remaining legacy state is REPORTED on stdout, not stderr", async () => {
   // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:75-77::remains` has no `>&2`, unlike :53. The retired
-  // shell driver witnessed the split through its capture form; LegacyVerdict
-  // carries no channel by design, so this is the only witness after 4a.
+  // shell driver witnessed the split through its capture form. Ownership now
+  // assigns postRemovalOutput.stdout; this test verifies the command's channel.
   // Spec §6.2.3 item 2.
   const out = capture();
   const err = capture();
