@@ -4,7 +4,6 @@
     "src/cli.ts",
     "tests/**/*.test.ts",
     "tests/tools/pack.ts",
-    "tests/tools/citations.ts",
     "tests/tools/assert-pack-contents.ts",
     "tests/tools/read-metadata-commit.ts",
     "tests/bin/helpers/pack-driver.ts",

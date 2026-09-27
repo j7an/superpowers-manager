@@ -1,8 +1,7 @@
 // Citation scanner and resolver. No assertions, file writes, or process exit.
-// Comment-leading lines take the fast path; trailing comments are recognized
-// while accounting for strings, regular expressions, and control conditions.
-// Known blind spot: a citation-shaped token inside a multi-line template
-// literal can be read as a comment citation.
+// Comments come from Prettier's TypeScript parser, the parser `format:check`
+// already runs, so strings, regular expressions, and template literals are
+// never read as comments.
 
 import {
   existsSync,
@@ -13,6 +12,8 @@ import {
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { isAbsolute, join, relative, sep } from "node:path";
+import type { ParserOptions } from "prettier";
+import { parsers } from "prettier/plugins/typescript";
 
 const MIN_ANCHOR = 3;
 
@@ -48,175 +49,9 @@ const CANDIDATE = new RegExp(
   String.raw`^(?:git show\s+\S+:\S|${FILELIKE_CANDIDATE}(?::.*)?::|:\d+(?:-\d+)?$)`,
 );
 const LEADING_PATH = new RegExp(String.raw`^(${PATH})`);
-const CONTROL_CONDITION = new Set(["for", "if", "while", "with"]);
-const EXPRESSION_PREFIX = new Set([
-  "await",
-  "case",
-  "delete",
-  "do",
-  "else",
-  "in",
-  "instanceof",
-  "new",
-  "return",
-  "throw",
-  "typeof",
-  "void",
-  "yield",
-]);
-
-/**
- * The comment portion of a line, with its offset, or undefined when the line
- * carries none.
- */
-export function commentText(
-  line: string,
-): { text: string; offset: number } | undefined {
-  const lead = line.trimStart();
-  if (lead.startsWith("//") || lead.startsWith("*") || lead.startsWith("/*")) {
-    return { text: line, offset: 0 };
-  }
-
-  let quote: string | undefined;
-  let blockComment = false;
-  let regex = false;
-  let regexClass = false;
-  let expressionCanStart = true;
-
-  let pendingControl: "control" | "for" | undefined;
-
-  const controlParens: Array<"control" | "for" | "for-of" | undefined> = [];
-  let propertyAccess = false;
-  for (let i = 0; i < line.length - 1; i += 1) {
-    const c = line[i];
-    if (blockComment) {
-      if (c === "*" && line[i + 1] === "/") {
-        blockComment = false;
-        i += 1;
-      }
-      continue;
-    }
-    if (quote !== undefined) {
-      if (c === "\\") {
-        i += 1;
-        continue;
-      }
-      if (c === quote) {
-        quote = undefined;
-        expressionCanStart = false;
-      }
-      continue;
-    }
-    if (regex) {
-      if (c === "\\") {
-        i += 1;
-        continue;
-      }
-      if (c === "[") regexClass = true;
-      else if (c === "]") regexClass = false;
-      else if (c === "/" && !regexClass) {
-        regex = false;
-        expressionCanStart = false;
-      }
-      continue;
-    }
-    if (/\s/.test(c)) continue;
-    if (c === "'" || c === '"' || c === "`") {
-      quote = c;
-      pendingControl = undefined;
-      propertyAccess = false;
-      continue;
-    }
-    if (/[A-Za-z_$]/.test(c)) {
-      let end = i + 1;
-      while (end < line.length && /[\w$]/.test(line[end])) end += 1;
-      const word = line.slice(i, end);
-
-      const forOfSeparator: boolean =
-        !propertyAccess &&
-        word === "of" &&
-        controlParens.at(-1) === "for" &&
-        !expressionCanStart;
-      if (forOfSeparator) controlParens[controlParens.length - 1] = "for-of";
-      pendingControl =
-        !propertyAccess && CONTROL_CONDITION.has(word)
-          ? word === "for"
-            ? "for"
-            : "control"
-          : undefined;
-      expressionCanStart =
-        !propertyAccess && (EXPRESSION_PREFIX.has(word) || forOfSeparator);
-      propertyAccess = false;
-      i = end - 1;
-      continue;
-    }
-    if (/\d/.test(c)) {
-      let end = i + 1;
-      while (end < line.length && /[\w.]/.test(line[end])) end += 1;
-      expressionCanStart = false;
-      pendingControl = undefined;
-      propertyAccess = false;
-      i = end - 1;
-      continue;
-    }
-    if (c === "/" && line[i + 1] === "/") {
-      return { text: line.slice(i), offset: i };
-    }
-    if (c === "/" && line[i + 1] === "*") {
-      blockComment = true;
-      i += 1;
-      continue;
-    }
-    if (c === "/") {
-      pendingControl = undefined;
-      propertyAccess = false;
-      if (expressionCanStart) {
-        regex = true;
-        regexClass = false;
-      } else {
-        expressionCanStart = true;
-        if (line[i + 1] === "=") i += 1;
-      }
-      continue;
-    }
-    if (c === "(") {
-      controlParens.push(pendingControl);
-      expressionCanStart = true;
-      pendingControl = undefined;
-      propertyAccess = false;
-      continue;
-    }
-    if (c === ")") {
-      const closesControl = controlParens.pop() !== undefined;
-      expressionCanStart = closesControl;
-      pendingControl = undefined;
-      propertyAccess = false;
-      continue;
-    }
-    if ((c === "+" || c === "-") && line[i + 1] === c) {
-      const postfix: boolean = !expressionCanStart;
-      expressionCanStart = !postfix;
-      pendingControl = undefined;
-      propertyAccess = false;
-      i += 1;
-      continue;
-    }
-    pendingControl = undefined;
-    if (c === "]" || c === "}") {
-      expressionCanStart = false;
-    } else if (c === ".") {
-      expressionCanStart = false;
-    } else {
-      expressionCanStart = true;
-    }
-    propertyAccess = c === ".";
-  }
-  return undefined;
-}
-
-function readLines(path: string) {
+function readText(path: string): string {
   try {
-    return readFileSync(path, "utf8").split("\n");
+    return readFileSync(path, "utf8");
   } catch {
     throw new Error(`cannot read ${path}`);
   }
@@ -333,16 +168,38 @@ function parseComment(
   return found;
 }
 
+/** Every comment's [start, end) offsets in text. */
+function commentRanges(text: string, file: string): Array<[number, number]> {
+  let ast: unknown;
+  try {
+    ast = parsers.typescript.parse(text, { filepath: file } as ParserOptions);
+  } catch {
+    throw new Error(`cannot parse ${file}`);
+  }
+  // The TypeScript parser is synchronous. A Promise here would scan nothing,
+  // which is the fail-open shape this gate exists to refuse.
+  if (ast instanceof Promise) {
+    throw new Error(`cannot parse ${file} synchronously`);
+  }
+  return (ast as { comments: Array<{ range: [number, number] }> }).comments.map(
+    (comment) => comment.range,
+  );
+}
+
 export function scan(files: string[]): Citation[] {
   const out: Citation[] = [];
   for (const file of files) {
-    readLines(file).forEach((line, index) => {
-      const comment = commentText(line);
-      if (comment !== undefined)
-        out.push(
-          ...parseComment(comment.text, comment.offset, file, index + 1),
-        );
-    });
+    const text = readText(file);
+    for (const [start, end] of commentRanges(text, file)) {
+      const before = text.slice(0, start);
+      let lineNumber = before.split("\n").length;
+      let offset = start - (before.lastIndexOf("\n") + 1);
+      for (const segment of text.slice(start, end).split("\n")) {
+        out.push(...parseComment(segment, offset, file, lineNumber));
+        lineNumber += 1;
+        offset = 0;
+      }
+    }
   }
   return out;
 }
@@ -519,20 +376,6 @@ function checkAnchor(
 }
 
 /**
- * Anchored and resolution citations are always checked -- an anchored citation
- * must validate.
- * A malformed citation is "checked" for the same reason an anchored one is:
- * it must be fixed.
- */
-export function classify(
-  citation: Citation,
-  root: string,
-): "checked" | "unanchored" | "dead" {
-  if (citation.kind !== "legacy") return "checked";
-  return targetExists(citation.path, root) ? "unanchored" : "dead";
-}
-
-/**
  * Remove only the citation token that would otherwise prove its own anchor.
  * A mismatch leaves the lines unchanged, preserving fail-closed uniqueness.
  */
@@ -645,6 +488,10 @@ export function validate(
     };
   }
   const target = join(root, citation.path);
-  const lines = withoutCitationEcho(readLines(target), citation, target);
+  const lines = withoutCitationEcho(
+    readText(target).split("\n"),
+    citation,
+    target,
+  );
   return checkAnchor(lines, citation, citation.path);
 }

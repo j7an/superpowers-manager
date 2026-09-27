@@ -3,21 +3,12 @@
 // the real corpus.
 
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
-  classify,
-  commentText,
   CORPUS_DIRS,
   displayPath,
   listSources,
@@ -74,63 +65,37 @@ function gitFixture(name: string, body: string): { root: string; sha: string } {
   return { root, sha };
 }
 
-void test("commentText accepts the three comment-leading forms", () => {
-  assert.equal(commentText("  // a")?.text, "  // a");
-  assert.equal(commentText("   * a")?.text, "   * a");
-  assert.equal(commentText("  /* a */")?.text, "  /* a */");
+void test("scan reads citations from comments only", () => {
+  const root = fixture({
+    "a.ts": [
+      "const re = /'\\/\\/ src\\/r.ts:1/; // see src/x.ts:44",
+      'const u = "http://example.test/src/s.ts:2";',
+      "const t = `${u} // src/t.ts:3`;",
+      "const d = count++ / divisor; /* src/y.ts:5 */",
+      "/* first line",
+      "   continuation src/z.ts:6",
+      "*/",
+    ].join("\n"),
+  });
+  assert.deepEqual(
+    scan([join(root, "a.ts")]).map((c) => [c.lineNumber, c.column, c.raw]),
+    [
+      [1, 39, "src/x.ts:44"],
+      [4, 32, "src/y.ts:5"],
+      [6, 16, "src/z.ts:6"],
+    ],
+  );
 });
 
-for (const [name, source, expected] of [
-  [
-    "finds a trailing comment outside string delimiters",
-    "run(); // see it",
-    ["// see it", 7],
-  ],
-  [
-    "finds a trailing comment after a quote-bearing block comment",
-    "x /* ' */ // see src/x.ts:44",
-    ["// see src/x.ts:44", 10],
-  ],
-  [
-    "finds a trailing comment after a quote-bearing regex literal",
-    "const re = /'/; // see src/x.ts:44",
-    ["// see src/x.ts:44", 16],
-  ],
-  [
-    "finds a trailing comment after a control-condition regex",
-    "if (ok) /'/.test(value); // see src/x.ts:44",
-    ["// see src/x.ts:44", 25],
-  ],
-  [
-    "finds a trailing comment after postfix increment division",
-    "count++ / divisor; // see src/x.ts:44",
-    ["// see src/x.ts:44", 19],
-  ],
-  [
-    "treats ordinary identifier of before slash as division",
-    "of / divisor; // see src/x.ts:44",
-    ["// see src/x.ts:44", 14],
-  ],
-  [
-    "allows a regex expression after for-of",
-    "for (x of /'/) run(); // see src/x.ts:44",
-    ["// see src/x.ts:44", 22],
-  ],
-] as const) {
-  void test(`commentText ${name}`, () => {
-    const found = commentText(source);
-    assert.deepEqual([found?.text, found?.offset], expected);
+void test("scan refuses a file it cannot parse", () => {
+  const root = fixture({
+    "a.ts": "const = ; // `src/x.ts::export function go`\n",
   });
-}
-
-for (const source of [
-  'const u = "http://example.test";',
-  "const u = 'a//b';",
-]) {
-  void test(`commentText ignores a slash pair inside ${JSON.stringify(source)}`, () => {
-    assert.equal(commentText(source), undefined);
-  });
-}
+  assert.throws(
+    () => scan([join(root, "a.ts")]),
+    /^Error: cannot parse .*a\.ts$/,
+  );
+});
 
 void test("scan parses all four citation forms", () => {
   const root = fixture({
@@ -187,7 +152,6 @@ void test("an invalid extensionless anchored near-miss is retained", () => {
   const verdict = validate(citation, root);
   assert.equal(verdict.ok, false);
   assert.equal(verdict.code, "ANCHOR_MISSING");
-  assert.equal(classify(citation, root), "checked");
 });
 
 void test("scan does not read a citation out of a string literal", () => {
@@ -244,18 +208,16 @@ for (const [name, source, shape] of [
       [["malformed", shape]],
     );
     assert.equal(validate(found[0], root).ok, false);
-    assert.equal(classify(found[0], root), "checked");
   });
 }
 
-void test("scan retains a point continuation as checked malformed debt exclusion", () => {
+void test("scan retains a point continuation as malformed", () => {
   const root = fixture({ "a.js": "// `:12`\n" });
   const [citation] = scan([join(root, "a.js")]);
   assert.deepEqual(
     [citation.kind, citation.shape, citation.path],
     ["malformed", "anchored", ""],
   );
-  assert.equal(classify(citation, root), "checked");
   const verdict = validate(citation, root);
   assert.equal(verdict.ok, false);
   assert.equal(verdict.code, "ANCHOR_MISSING");
@@ -292,7 +254,6 @@ for (const [name, source] of [
       [["malformed", "anchored"]],
     );
     assert.equal(validate(found[0], root).ok, false);
-    assert.equal(classify(found[0], root), "checked");
   });
 }
 
@@ -328,18 +289,6 @@ void test("legacy citations fail validation whether their targets exist or not",
         " requires an anchored citation or a Git history reference",
     });
   }
-});
-
-void test("report rejects legacy citations instead of silently skipping them", () => {
-  const root = fixture({
-    "src/x.ts": "export const target = 1;\n",
-    "tests/a.ts": "// src/x.ts:1\n// src/missing.ts:8\n",
-  });
-  const result = runCitationTool(root, ["--report"], 1);
-  assert.match(result.stdout, /unanchored=1 deadReferent=1/);
-  assert.match(result.stdout, /failing=2/);
-  assert.match(result.stdout, /src\/x\.ts requires an anchored citation/);
-  assert.match(result.stdout, /src\/missing\.ts requires an anchored citation/);
 });
 
 void test("scan records the column of the raw token", () => {
@@ -438,9 +387,7 @@ void test("a live self-citation still rejects a second real occurrence", () => {
 
 // Spec §4.2's literal table: seven rejects, three accepts. Each fragment is
 // unique in its one-line target, so uniqueness alone would admit it; only the
-// boundary rule tells them apart. Fixture bodies are double-quoted, never
-// template literals -- a citation-shaped token inside a template literal is
-// this scanner's declared blind spot.
+// boundary rule tells them apart.
 const BOUNDARY_CASES = [
   ["tion h", "function hookError(x) {", false],
   ["if (ty", 'if (typeof value === "string") {', false],
@@ -519,46 +466,18 @@ void test("a resolution reference escaping the root is refused", () => {
   assert.equal(verdict.code, "MALFORMED_RESOLUTION");
 });
 
-void test("a legacy citation escaping the root classifies as dead, never live", () => {
-  const root = fixture({ "a.js": "// ../outside.ts:5\n" });
-  const [found] = scan([join(root, "a.js")]);
-  assert.equal(classify(found, root), "dead");
-});
-
 void test("an anchor shorter than the minimum is refused", () => {
   const r = check("// `src/x.ts::a`", TARGET);
   assert.equal(r.ok, false);
   assert.equal(r.code, "ANCHOR_TOO_SHORT");
 });
 
-void test("an anchored citation whose target is gone is a failure, never debt", () => {
+void test("an anchored citation whose target is gone is a failure", () => {
   const root = fixture({ "a.js": "// `src/gone.ts::export function go`\n" });
   const [found] = scan([join(root, "a.js")]);
   const verdict = validate(found, root);
   assert.equal(verdict.ok, false);
   assert.equal(verdict.code, "MISSING_TARGET");
-  assert.equal(classify(found, root), "checked");
-});
-
-void test("a legacy citation classifies by whether its target survives", () => {
-  const root = fixture({
-    "a.js": "// live src/x.ts:2 and dead scripts/gone.sh:5\n",
-    "src/x.ts": TARGET,
-  });
-  const found = scan([join(root, "a.js")]);
-  assert.deepEqual(
-    found.map((c) => classify(c, root)),
-    ["unanchored", "dead"],
-  );
-});
-
-void test("a resolution citation is checked, never ledgered", () => {
-  const root = fixture({
-    "a.js": "// `git show " + "a".repeat(40) + ":scripts/gone.sh`\n",
-  });
-  const [found] = scan([join(root, "a.js")]);
-  assert.equal(found.kind, "resolution");
-  assert.equal(classify(found, root), "checked");
 });
 
 function historicalCitation(
@@ -699,74 +618,6 @@ void test("the bare resolution form still parses and still has no anchor", () =>
   assert.equal(citation.line, undefined);
 });
 
-const TOOL = fileURLToPath(new URL("../tools/citations.ts", import.meta.url));
-
-function runCitationTool(root: string, args: string[], expectedStatus = 0) {
-  const result = spawnSync(process.execPath, [TOOL, ...args], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, SPW_CITATIONS_ROOT: root },
-    timeout: 30000,
-  });
-  assert.equal(result.signal, null, "the tool was killed at the harness bound");
-  assert.equal(result.status, expectedStatus, result.stderr);
-  return result;
-}
-
-for (const [name, source, expected] of [
-  [
-    "prints the unverified count",
-    "// `src/x.ts:2::export function go`\n",
-    "citations=1 unanchored=0 deadReferent=0 unverified=0 failing=0",
-  ],
-  // No `.git` under a scratch root, so the historical leg cannot run and the
-  // all-zero object name is a fixture literal, not a claim that it exists.
-  [
-    "counts an unverified historical citation",
-    "// `git show 0000000000000000000000000000000000000000:old.sh::begin`\n",
-    "citations=1 unanchored=0 deadReferent=0 unverified=1 failing=0",
-  ],
-] as const) {
-  void test(`the --report CLI dispatch ${name}`, () => {
-    const root = fixture({
-      "src/x.ts": TARGET,
-      "tests/bin/a.js": source,
-      "tests/baseline/.keep": "",
-      "tests/unit/.keep": "",
-      "tests/lib/.keep": "",
-    });
-    assert.match(
-      runCitationTool(root, ["--report"]).stdout,
-      new RegExp(`^${expected}\\n`),
-    );
-  });
-}
-
-for (const mode of ["--suggest", "--write-ledger", "--fix"]) {
-  void test(`${mode} is rejected without changing the fixture`, () => {
-    const source =
-      mode === "--fix"
-        ? "// `src/x.ts:9::export function go`\n"
-        : "// `src/x.ts:2::export function go`\n";
-    const root = fixture({
-      "src/x.ts": TARGET,
-      "tests/bin/a.js": source,
-      "tests/baseline/.keep": "",
-      "tests/unit/.keep": "",
-      "tests/lib/.keep": "",
-    });
-    const path = join(root, "tests", "bin", "a.js");
-    const before = readFileSync(path, "utf8");
-    const result = runCitationTool(root, [mode], 1);
-    assert.match(result.stderr, /unknown mode/);
-    assert.equal(readFileSync(path, "utf8"), before);
-    assert.equal(
-      existsSync(join(root, "tests", "citation-ledger.json")),
-      false,
-    );
-  });
-}
-
 // ---- the live corpus gate -----------------------------------------------
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -782,10 +633,7 @@ void test("the corpus reaches every committed JavaScript file under tests/", () 
   const covered = new Set(
     listSources(CORPUS_DIRS, ROOT).map((f) => displayPath(f, ROOT)),
   );
-  for (const f of [
-    "tests/assert-matcher-gate.ts",
-    "tests/tools/citations.ts",
-  ]) {
+  for (const f of ["tests/assert-matcher-gate.ts", "tests/tools/pack.ts"]) {
     assert.ok(covered.has(f), `${f} must be in the enforced corpus`);
   }
 });
