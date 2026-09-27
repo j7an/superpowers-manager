@@ -21,15 +21,17 @@ void test("scratch removes its tree when its test ends; suiteScratch keeps its t
       'import test from "node:test";',
       `import { scratch, suiteScratch } from ${JSON.stringify(SCRATCH_MODULE)};`,
       'const tree = suiteScratch("spw-suite-scratch-tree-");',
+      'let dir = "";',
       "process.stdout.write(`tree=${tree}\\n`);",
       'test("writes", () => writeFileSync(join(tree, "marker"), "x"));',
       'test("survives", () => assert.ok(existsSync(join(tree, "marker"))));',
       'test("fails", () => assert.fail("deliberate"));',
       'test("per-test", (t) => {',
-      '  const dir = scratch(t, "spw-test-scratch-tree-");',
+      '  dir = scratch(t, "spw-test-scratch-tree-");',
       '  writeFileSync(join(dir, "marker"), "x");',
       "  process.stdout.write(`dir=${dir}\\n`);",
       "});",
+      'test("per-test gone", () => assert.equal(existsSync(dir), false, "the per-test tree must be removed when its test ends"));',
       "",
     ].join("\n"),
   );
@@ -43,7 +45,7 @@ void test("scratch removes its tree when its test ends; suiteScratch keeps its t
     env,
   });
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /pass 3/);
+  assert.match(r.stdout, /pass 4/);
   assert.match(r.stdout, /fail 1/);
   const tree = /tree=(\S+)/.exec(r.stdout)?.[1];
   assert.ok(tree, "the fixture must print its tree");
