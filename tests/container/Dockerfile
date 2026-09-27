@@ -3,7 +3,6 @@ FROM node:24-bookworm-slim
 COPY --from=minimum-node /usr/local/bin/node /opt/node-min/bin/node
 RUN /opt/node-min/bin/node --version
 ENV SPW_PACKAGE_NODE=/opt/node-min/bin/node
-ENV SPW_PACKAGE_NODE_VERSION=24.0.0
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

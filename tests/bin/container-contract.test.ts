@@ -60,7 +60,6 @@ void test("container contract", async (t) => {
         "COPY --from=minimum-node /usr/local/bin/node /opt/node-min/bin/node",
         "RUN /opt/node-min/bin/node --version",
         "ENV SPW_PACKAGE_NODE=/opt/node-min/bin/node",
-        "ENV SPW_PACKAGE_NODE_VERSION=24.0.0",
         "pnpm install --frozen-lockfile",
         "ENV SPW_CONTAINER=1",
       ])

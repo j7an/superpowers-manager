@@ -164,26 +164,25 @@ Code below describe product integrations, not a required agent harness.
   rejected by the source `prepack` guard even when stale dist exists. Protected
   publishing remains governed by `RELEASING.md`.
 - For macOS acceptance, reuse an existing exact package-minimum Node executable
-  when available by exporting its absolute path as `SPW_PACKAGE_NODE` and
-  `24.0.0` as `SPW_PACKAGE_NODE_VERSION`, then verify that executable reports
-  the declared version. Otherwise, from the worktree with a supported native
-  Node already on `PATH`, provision the official archive in invocation-owned
-  temporary storage:
+  when available by exporting its absolute path as `SPW_PACKAGE_NODE`, then
+  verify that executable reports the `engines.node` minimum. Otherwise, from
+  the worktree with a supported native Node already on `PATH`, provision the
+  official archive in invocation-owned temporary storage:
 
   ```sh
   spw_runtime_dir=$(mktemp -d)
-  SPW_PACKAGE_NODE_VERSION=$(node -p 'const e=require("./package.json").engines.node; const m=/^>=(\d+)$/.exec(e); if(!m) throw Error("unsupported engines.node"); `${m[1]}.0.0`')
+  spw_node_version=$(node -p 'const e=require("./package.json").engines.node; const m=/^>=(\d+)$/.exec(e); if(!m) throw Error("unsupported engines.node"); `${m[1]}.0.0`')
   case "$(uname -m)" in
     arm64) spw_node_arch=arm64 ;;
     x86_64) spw_node_arch=x64 ;;
     *) echo "unsupported macOS architecture" >&2; exit 1 ;;
   esac
-  spw_node_archive="node-v${SPW_PACKAGE_NODE_VERSION}-darwin-${spw_node_arch}.tar.gz"
+  spw_node_archive="node-v${spw_node_version}-darwin-${spw_node_arch}.tar.gz"
   (
     set -eu
     cd "$spw_runtime_dir"
-    curl --fail --location --remote-name "https://nodejs.org/dist/v${SPW_PACKAGE_NODE_VERSION}/${spw_node_archive}"
-    curl --fail --location --remote-name "https://nodejs.org/dist/v${SPW_PACKAGE_NODE_VERSION}/SHASUMS256.txt"
+    curl --fail --location --remote-name "https://nodejs.org/dist/v${spw_node_version}/${spw_node_archive}"
+    curl --fail --location --remote-name "https://nodejs.org/dist/v${spw_node_version}/SHASUMS256.txt"
     rg -F "  ${spw_node_archive}" SHASUMS256.txt > selected-sha256.txt
     test "$(wc -l < selected-sha256.txt)" -eq 1
     read -r spw_node_sha spw_selected_archive < selected-sha256.txt
@@ -191,13 +190,13 @@ Code below describe product integrations, not a required agent harness.
     shasum -a 256 -c selected-sha256.txt
     tar -xzf "$spw_node_archive"
   ) || exit 1
-  SPW_PACKAGE_NODE="$spw_runtime_dir/node-v${SPW_PACKAGE_NODE_VERSION}-darwin-${spw_node_arch}/bin/node"
-  export SPW_PACKAGE_NODE SPW_PACKAGE_NODE_VERSION
+  SPW_PACKAGE_NODE="$spw_runtime_dir/node-v${spw_node_version}-darwin-${spw_node_arch}/bin/node"
+  export SPW_PACKAGE_NODE
   ```
 
   This leaves the native `PATH` unchanged. Run `pnpm run check:static` and
-  `pnpm run test:acceptance`, then remove only `$spw_runtime_dir` and unset the
-  package-runtime variables. The checksum selection count/name checks and
+  `pnpm run test:acceptance`, then remove only `$spw_runtime_dir` and unset
+  `SPW_PACKAGE_NODE`. The checksum selection count/name checks and
   `set -eu` prevent absent, ambiguous, wrong-archive, or failed checksums from
   reaching extraction. Linux CI uses `actions/setup-node`; test cases never
   download runtimes.
@@ -206,8 +205,8 @@ Code below describe product integrations, not a required agent harness.
   `sh tests/container.sh`, which the release workflow runs before the
   publisher. The combined image uses latest Node 24, runs shared checks,
   then Codex, Pi, OpenCode, and Claude Code. It also runs the installed package on Node
-  24.0.0 through its verified `SPW_PACKAGE_NODE` binary, declared by
-  `SPW_PACKAGE_NODE_VERSION`. The minimum binary never runs TypeScript tooling.
+  24.0.0 through its verified `SPW_PACKAGE_NODE` binary. The minimum binary
+  never runs TypeScript tooling.
 - Keep Layers 1-3 hermetic: no network access and no mutation of the developer's
   or runner's real Codex, Pi, OpenCode, or Claude Code state.
 - Layer 4 lives behind the blocking `pnpm run test:harness:codex`,

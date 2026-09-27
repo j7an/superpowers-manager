@@ -182,8 +182,8 @@ release or approval path.
 
 The container suite runs on latest Node 24, as does the release workflow. It
 runs the native TypeScript suite, then the real Codex, Pi, OpenCode, and Claude Code CLIs in
-isolated offline homes. The image copies and smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE` and
-`SPW_PACKAGE_NODE_VERSION`, then runs the installed package's emitted JavaScript
+isolated offline homes. The image copies and smoke-tests Node 24.0.0, declares it through `SPW_PACKAGE_NODE`,
+then runs the installed package's emitted JavaScript
 with both that binary and the native harness binary. The minimum binary never
 runs TypeScript or installs dependencies during offline acceptance.
 
