@@ -24,6 +24,15 @@ void test("BASELINE CASE: MANIFEST-READER-OVERLAY-01 matches the overlay contrac
   }
 });
 
+// The nesting limit's accepting edge: the root object plus 255 arrays is
+// depth 256. JSON.stringify is a valid oracle here only because the document
+// holds no numbers, whose source spelling the overlay preserves.
+void test("BASELINE CASE: MANIFEST-READER-OVERLAY-01 accepts nesting at the depth limit", () => {
+  const source = `{"a":${"[".repeat(255)}${"]".repeat(255)}}`;
+  const expected = `${JSON.stringify({ ...JSON.parse(source), version: VERSION, skills: "./skills/" }, null, 2)}\n`;
+  assert.equal(applyManifestOverlay(source, VERSION, PATH), expected);
+});
+
 // Committed map from fixture file name to the complete message
 // applyManifestOverlay must throw for it. These entries pin the current overlay
 // contract for non-standard constants, numeric range, nesting, and root shape.
