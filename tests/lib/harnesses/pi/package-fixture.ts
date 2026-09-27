@@ -1,19 +1,12 @@
+import { scratch } from "../../scratch.ts";
 import { execFileSync } from "node:child_process";
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
 import type { EffectiveSelection } from "../../../../src/effective-selection.ts";
 
 export function nativeFixture(t: TestContext): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-native-package-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-native-package-");
   for (const [fixture, target] of [
     ["bootstrap.ts.txt", ".pi/extensions/superpowers.ts"],
     ["package.json.txt", "package.json"],

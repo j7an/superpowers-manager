@@ -1,3 +1,4 @@
+import { scratch } from "../../../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -5,18 +6,15 @@ import fs, {
   cpSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
   renameSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { readFile as readFilePromise } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import test, { type TestContext } from "node:test";
 import {
@@ -66,8 +64,7 @@ async function fixture(
   t: TestContext,
   options: { readonly symlinkedAgent?: boolean } = {},
 ) {
-  const root = mkdtempSync(join(tmpdir(), "spw-pi-install-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-pi-install-");
   let agentDir = join(root, "agent");
   if (options.symlinkedAgent) {
     const physicalRoot = join(root, "physical-root");

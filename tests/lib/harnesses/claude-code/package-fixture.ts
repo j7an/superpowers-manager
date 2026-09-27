@@ -1,11 +1,5 @@
-import {
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { scratch } from "../../scratch.ts";
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
 import type { AdapterContext } from "../../../../src/adapter-result.ts";
@@ -19,8 +13,7 @@ import { prepareClaudeCodeCandidate } from "../../../../src/harnesses/claude-cod
 import { commitFixture, nativeSelection } from "../pi/package-fixture.ts";
 
 export function nativeClaudeCodeFixture(t: TestContext): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-claude-code-package-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-claude-code-package-");
   for (const [fixture, target] of [
     ["claude-code-native/plugin.json.txt", ".claude-plugin/plugin.json"],
     ["claude-code-native/hooks.json.txt", "hooks/hooks.json"],
@@ -45,8 +38,7 @@ export interface ClaudeCodeSandbox {
 }
 
 export function claudeCodeSandbox(t: TestContext): ClaudeCodeSandbox {
-  const root = mkdtempSync(join(tmpdir(), "spw-claude-code-state-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-claude-code-state-");
   const env = {
     HOME: join(root, "home"),
     CLAUDE_CONFIG_DIR: join(root, "claude"),

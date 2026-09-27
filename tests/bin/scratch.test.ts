@@ -7,9 +7,10 @@ import { scratch } from "../lib/scratch.ts";
 
 const SCRATCH_MODULE = new URL("../lib/scratch.ts", import.meta.url).href;
 
-void test("suiteScratch keeps its tree for the file's tests and removes it afterwards, even when a test fails", (t) => {
-  // A separate `node --test` run, so the tree's whole lifetime is observable
-  // from outside: it must outlive the first test and not outlive the file.
+void test("scratch removes its tree when its test ends; suiteScratch keeps its tree for the file's tests and removes it afterwards, even when a test fails", (t) => {
+  // A separate `node --test` run, so each tree's whole lifetime is observable
+  // from outside: the suite tree must outlive the first test and not outlive
+  // the file; the per-test tree must not outlive its test.
   const file = join(scratch(t, "spw-suite-scratch-"), "fixture.test.ts");
   writeFileSync(
     file,
@@ -18,12 +19,17 @@ void test("suiteScratch keeps its tree for the file's tests and removes it after
       'import { existsSync, writeFileSync } from "node:fs";',
       'import { join } from "node:path";',
       'import test from "node:test";',
-      `import { suiteScratch } from ${JSON.stringify(SCRATCH_MODULE)};`,
+      `import { scratch, suiteScratch } from ${JSON.stringify(SCRATCH_MODULE)};`,
       'const tree = suiteScratch("spw-suite-scratch-tree-");',
       "process.stdout.write(`tree=${tree}\\n`);",
       'test("writes", () => writeFileSync(join(tree, "marker"), "x"));',
       'test("survives", () => assert.ok(existsSync(join(tree, "marker"))));',
       'test("fails", () => assert.fail("deliberate"));',
+      'test("per-test", (t) => {',
+      '  const dir = scratch(t, "spw-test-scratch-tree-");',
+      '  writeFileSync(join(dir, "marker"), "x");',
+      "  process.stdout.write(`dir=${dir}\\n`);",
+      "});",
       "",
     ].join("\n"),
   );
@@ -37,9 +43,12 @@ void test("suiteScratch keeps its tree for the file's tests and removes it after
     env,
   });
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(r.stdout, /pass 2/);
+  assert.match(r.stdout, /pass 3/);
   assert.match(r.stdout, /fail 1/);
   const tree = /tree=(\S+)/.exec(r.stdout)?.[1];
   assert.ok(tree, "the fixture must print its tree");
   assert.equal(existsSync(tree), false, "the tree must be removed");
+  const dir = /dir=(\S+)/.exec(r.stdout)?.[1];
+  assert.ok(dir, "the fixture must print its per-test tree");
+  assert.equal(existsSync(dir), false, "the per-test tree must be removed");
 });

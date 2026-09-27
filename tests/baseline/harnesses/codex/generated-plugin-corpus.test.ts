@@ -1,17 +1,16 @@
 // The in-process validator is a security boundary; adversarial cases pin its
 // fixtures and diagnostics.
+import { scratch } from "../../../lib/scratch.ts";
 import assert from "node:assert/strict";
 import {
   copyFileSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   rmSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -73,10 +72,7 @@ function resetCandidate(harness: Harness) {
 }
 
 function harness(t: import("node:test").TestContext): Harness {
-  const base = mkdtempSync(join(tmpdir(), "spw-generated-plugin-"));
-  t.after(() => {
-    rmSync(base, { recursive: true, force: true });
-  });
+  const base = scratch(t, "spw-generated-plugin-");
 
   const state: Harness = {
     base,

@@ -1,3 +1,4 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -114,8 +115,7 @@ function assertOnlySiblingKept(workspace: string) {
 // tests/builders/baseline-scenario.sh's git-release-repo scenario, not
 // scripts/core/upstream.sh.
 void test("the git-release-repo builder produces a deterministic tagged repository", (t) => {
-  const base = mkdtempSync(join(tmpdir(), "spw-ref-builder-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-ref-builder-");
   const destination = join(base, "upstream");
   const built = spawnSync(
     "sh",
@@ -144,8 +144,7 @@ void test("the git-release-repo builder produces a deterministic tagged reposito
 // it cannot leak/clobber the caller's own `root`/`config_root` locals — see
 // the file header comment for why that half has no port here.
 void test("readConfigRef returns the packaged upstream ref when no override is set", async (t) => {
-  const configRoot = mkdtempSync(join(tmpdir(), "spw-ref-config-"));
-  t.after(() => rmSync(configRoot, { recursive: true, force: true }));
+  const configRoot = scratch(t, "spw-ref-config-");
   mkdirSync(join(configRoot, "config"), { recursive: true });
   writeFileSync(join(configRoot, "config", "upstream-ref"), "v6.0.3\n", "utf8");
   assert.equal(await readConfigRef(configRoot, {}), "v6.0.3");
@@ -203,8 +202,7 @@ void test("REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup", a
 
 void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", async (t) => {
   const { repo, releaseCommit, releaseTagObject, blobObject } = UPSTREAM;
-  const base = mkdtempSync(join(tmpdir(), "spw-ref-proof-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-ref-proof-");
   const exactCache = join(base, "exact-cache");
   const exactWorkspace = join(base, "exact-workspace");
   mkdirSync(exactWorkspace);
@@ -296,8 +294,7 @@ const FAKE_GIT_SIGNAL_BODY = [
 
 void test("REF-CLEANUP-01 interrupted source proof cleans only its workspace", async (t) => {
   const { repo, releaseCommit } = UPSTREAM;
-  const base = mkdtempSync(join(tmpdir(), "spw-ref-cleanup-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-ref-cleanup-");
   const signalWorkspace = join(base, "signal-workspace");
   const signalCache = join(base, "signal-cache");
   mkdirSync(signalWorkspace);

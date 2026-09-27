@@ -1,3 +1,4 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -6,12 +7,9 @@ import {
   constants,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -71,8 +69,7 @@ const PINNED_RECORD = {
  * package-default branch's readConfigRef call.
  */
 function makePackageRoot(t: import("node:test").TestContext): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-sel-pkg-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-sel-pkg-");
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "upstream-ref"), "v1.2.3\n", "utf8");
   return root;
@@ -86,8 +83,7 @@ function makeConfigDir(
   t: import("node:test").TestContext,
   raw: string | null,
 ): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-sel-cfg-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-sel-cfg-");
   const dir = join(root, "config");
   mkdirSync(dir, { recursive: true });
   if (raw !== null) {
@@ -143,8 +139,7 @@ function fakeResolverGitDir(t: import("node:test").TestContext): {
   dir: string;
   log: string;
 } {
-  const dir = mkdtempSync(join(tmpdir(), "spw-fake-git-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = scratch(t, "spw-fake-git-");
   const log = join(dir, "invocations.log");
   const gitPath = join(dir, "git");
   writeFileSync(gitPath, FAKE_GIT_BODY, "utf8");
@@ -250,8 +245,7 @@ function assertEffective(
 // so this ports the builder's own guarantee (a deterministically unreadable
 // target) rather than any selection.sh behavior.
 void test("the permission-denied builder produces a deterministically unreadable target", (t) => {
-  const base = mkdtempSync(join(tmpdir(), "spw-sel-builder-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-sel-builder-");
   const destination = join(base, "permission-denied");
   const built = spawnSync(
     "sh",

@@ -1,12 +1,6 @@
+import { scratch } from "../../../lib/scratch.ts";
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import test, { type TestContext } from "node:test";
 
@@ -22,8 +16,7 @@ function sandbox(t: TestContext): {
   readonly root: string;
   readonly paths: ReturnType<typeof piPaths>;
 } {
-  const root = mkdtempSync(join(tmpdir(), "spw-pi-native-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-pi-native-");
   const home = join(root, "selected-home");
   const agentDir = join(home, "selected-agent");
   mkdirSync(agentDir, { recursive: true });

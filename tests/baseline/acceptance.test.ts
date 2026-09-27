@@ -1,13 +1,6 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
-import {
-  copyFileSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -17,8 +10,7 @@ import { shQuote } from "../lib/git-egress.ts";
 const ACCEPTANCE = fileURLToPath(new URL("../acceptance.sh", import.meta.url));
 
 function fixture(t: import("node:test").TestContext) {
-  const root = mkdtempSync(join(tmpdir(), "spw-acceptance-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-acceptance-");
   const tests = join(root, "tests");
   mkdirSync(tests);
   const script = join(tests, "acceptance.sh");

@@ -1095,7 +1095,7 @@ void test(
 // P4 — `src/harnesses/codex/hooks.ts:349::await symlink(await readlink(sourceHooks), candidateHooks)`, the accepting side of the hooks-root symlink policy.
 //
 // Every other root-symlink case in the repository asserts rejection:
-// `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:691::the hook subtree rejects unsafe symlinks` is twelve cases of
+// `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:687::the hook subtree rejects unsafe symlinks` is twelve cases of
 // status === 1, and :907 puts contained symlinks inside a REAL hooks/
 // directory rather than symlinking the root. Without this case, acceptance is
 // exercised by nothing on either the materializing or the validating side.

@@ -25,6 +25,7 @@
 // These checks exercise fixture guards directly because normal cases only
 // exercise their successful paths.
 
+import { scratch } from "../lib/scratch.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
@@ -287,8 +288,7 @@ void test(
   "an unreleased fake Codex invocation expires at its own bound",
   { timeout: 20000 },
   (t) => {
-    const rv = mkdtempSync(join(tmpdir(), "spw-fixture-barrier-bound-"));
-    t.after(() => rmSync(rv, { recursive: true, force: true }));
+    const rv = scratch(t, "spw-fixture-barrier-bound-");
     const c = seededUninstallCase({});
     const result = spawnSync(c.codexBin, ["plugin", "list", "--json"], {
       env: {

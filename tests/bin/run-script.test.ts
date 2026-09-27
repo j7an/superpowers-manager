@@ -1,16 +1,14 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import type { TestContext } from "node:test";
@@ -56,8 +54,7 @@ function fixtureRoot(
   files: Readonly<Record<string, string>>,
   gate: Gate = "copy",
 ): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-run-sh-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-run-sh-");
   writeFileSync(
     join(root, "package.json"),
     '{"type":"module","engines":{"node":">=24"}}\n',
