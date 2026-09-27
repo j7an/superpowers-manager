@@ -231,25 +231,9 @@ export function startPackDriver(f: PackFixture) {
   return { child, closed };
 }
 
-export function stopPackProcess(pid: number): void {
-  try {
-    process.kill(pid, "SIGKILL");
-  } catch (error) {
-    if (!(
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "ESRCH"
-    ))
-      throw error;
-  }
-}
-
 export interface PackEvent {
   event: string;
   pid: number;
-  writerPid?: number;
-  staging?: string;
 }
 
 export async function listenPackEvents(f: PackFixture) {
