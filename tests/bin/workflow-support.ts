@@ -120,28 +120,6 @@ export function uniqueStepTargetIndex(
   return matches[0];
 }
 
-/**
- * Index of the single step whose `run:` equals `command` exactly.
- *
- * Ported 1:1 from `unique_run_step_index` (`git show 6c9f042a3e0b9b88bf9619cddef6e9b810a82189:tests/test_workflows.sh:45-54::def unique_run_step_index`).
- *
- */
-export function uniqueRunStepIndex(steps: unknown[], command: string): number {
-  const matches: number[] = [];
-  steps.forEach((step, index) => {
-    if (step === null || typeof step !== "object") return;
-    if ((step as Record<string, unknown>).run === command) {
-      matches.push(index);
-    }
-  });
-  if (matches.length !== 1) {
-    throw new Error(
-      `expected exactly one run step ${JSON.stringify(command)}, found ${matches.length}`,
-    );
-  }
-  return matches[0];
-}
-
 const FORBIDDEN_PUBLISH_CONFIG =
   /--provenance|npm_config_provenance|npm(?:[_ -]?token)|node_auth_token|npm-bootstrap|superpowers-wrapper|npm publish|--tag next/i;
 

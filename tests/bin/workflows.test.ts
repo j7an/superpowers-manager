@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
-  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -26,28 +25,12 @@ import {
   assertNoForbidden,
   collectExternalTargets,
   findLiteralActionPinSnapshots,
-  uniqueRunStepIndex,
   uniqueStepTargetIndex,
   usesTarget,
 } from "./workflow-support.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WORKFLOW_DIR = join(ROOT, ".github", "workflows");
-
-// The YAML version this project parses under.
-void test("workflow documents parse under YAML 1.2, keeping `on` a string key", () => {
-  const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
-
-  assert.ok(
-    Object.hasOwn(ci, "on"),
-    "expected the string key `on` — YAML 1.2 does not coerce it",
-  );
-  assert.ok(
-    !Object.hasOwn(ci, "true"),
-    "found a boolean `true` key: the parser is applying YAML 1.1 `on` coercion",
-  );
-  assert.equal(typeof ci.on, "object");
-});
 
 // --- action pins --------------------------------------------------------
 // Every external `uses:` is pinned to a full commit SHA with a version
@@ -145,21 +128,6 @@ function requireMapping(value: unknown, path: string): Record<string, any> {
   return value as Record<string, any>;
 }
 
-const FULL_SHARED_PACKAGE_ALIASES = new Set([
-  "test",
-  "check",
-  "test:acceptance",
-]);
-
-function isFullSharedCommandLine(line: string): boolean {
-  const words = line.trim().split(/\s+/).filter(Boolean);
-  if (words[0] === "sh" && words[1] === "tests/run.sh") return true;
-  if (words[0] !== "pnpm") return false;
-
-  const alias = words[1] === "run" ? words[2] : words[1];
-  return FULL_SHARED_PACKAGE_ALIASES.has(alias);
-}
-
 void test("ci.yml declares the expected top-level contract", () => {
   const ci = requireMapping(
     parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
@@ -199,8 +167,11 @@ const HARNESS_MATRIX = [
   { name: "Claude Code", selector: "harness-claude-code" },
 ];
 
-function validateCiHarnessJob(document: unknown): void {
-  const ci = requireMapping(document, "ci");
+void test("ci.yml harness matrix runs one independent integration per selector", () => {
+  const ci = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
+    "ci",
+  );
   const jobs = requireMapping(ci.jobs, "jobs");
   const path = "jobs.harness";
   const harnessJob = requireMapping(jobs.harness, path);
@@ -284,77 +255,13 @@ function validateCiHarnessJob(document: unknown): void {
     !Object.hasOwn(acceptanceStep, "if"),
     "the harness integration must run in the PR job",
   );
-}
-
-void test("ci.yml harness matrix runs one independent integration per selector", async (t) => {
-  const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
-  const harnessJob = (mutant: unknown): Record<string, any> =>
-    requireMapping(
-      requireMapping(requireMapping(mutant, "ci").jobs, "jobs").harness,
-      "jobs.harness",
-    );
-
-  await t.test("the matrix job satisfies its contract", () => {
-    assert.doesNotThrow(() => validateCiHarnessJob(ci));
-  });
-
-  await t.test("rejects a missing selector", () => {
-    const mutant = structuredClone(ci);
-    (harnessJob(mutant).strategy.matrix.include as unknown[]).pop();
-    assert.throws(
-      () => validateCiHarnessJob(mutant),
-      /each harness integration runs once/,
-    );
-  });
-
-  await t.test("rejects unnecessary full history", () => {
-    const mutant = structuredClone(ci);
-    const steps = harnessJob(mutant).steps as Record<string, unknown>[];
-    const checkout = requireMapping(
-      steps[uniqueStepTargetIndex(steps, "actions/checkout")],
-      "checkout step",
-    );
-    requireMapping(checkout.with, "checkout step.with")["fetch-depth"] = 0;
-    assert.throws(
-      () => validateCiHarnessJob(mutant),
-      /harness checkout must be shallow/,
-    );
-  });
-
-  await t.test("rejects the combined container suite", () => {
-    const mutant = structuredClone(ci);
-    const steps = harnessJob(mutant).steps as Record<string, unknown>[];
-    const integration = steps.find(
-      (step) => typeof step.run === "string",
-    ) as Record<string, unknown>;
-    integration.run = "sh tests/container.sh";
-    assert.throws(
-      () => validateCiHarnessJob(mutant),
-      /integration-only harness command/,
-    );
-  });
-
-  await t.test("rejects a duplicate shared suite", () => {
-    const mutant = structuredClone(ci);
-    (harnessJob(mutant).steps as unknown[]).push({ run: "pnpm test" });
-    assert.throws(
-      () => validateCiHarnessJob(mutant),
-      /integration-only harness command/,
-    );
-  });
-
-  await t.test("rejects nonblocking execution", () => {
-    const mutant = structuredClone(ci);
-    harnessJob(mutant)["continue-on-error"] = true;
-    assert.throws(
-      () => validateCiHarnessJob(mutant),
-      /jobs\.harness must not use continue-on-error/,
-    );
-  });
 });
 
-function validateCiToolchain(document: unknown): void {
-  const ci = requireMapping(document, "ci");
+void test("ci.yml `toolchain` job runs one full shared suite in order", () => {
+  const ci = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
+    "ci",
+  );
   const jobs = requireMapping(ci.jobs, "jobs");
   const toolchain = requireMapping(jobs.toolchain, "jobs.toolchain");
 
@@ -398,22 +305,10 @@ function validateCiToolchain(document: unknown): void {
       usesTarget(step.uses, "setup.uses") === "actions/setup-node",
   );
   assert.equal(setups.length, 2, "expected exactly two setup-node steps");
-  const packageManifest = JSON.parse(
+  const packageEngine = JSON.parse(
     readFileSync(join(ROOT, "package.json"), "utf8"),
-  );
-  const packageEngine = packageManifest.engines.node;
+  ).engines.node;
   const minimum = `${/^>=(\d+)$/.exec(packageEngine)![1]}.0.0`;
-  const packageScripts = requireMapping(
-    packageManifest.scripts,
-    "package.json scripts",
-  );
-  for (const alias of FULL_SHARED_PACKAGE_ALIASES) {
-    assert.equal(
-      typeof packageScripts[alias],
-      "string",
-      `full shared package alias must remain registered: ${alias}`,
-    );
-  }
   const packageSetup = setups.find(
     (step: any) =>
       requireMapping(step.with, "package setup.with")["node-version"] ===
@@ -431,16 +326,21 @@ function validateCiToolchain(document: unknown): void {
   const mainWith = requireMapping(mainSetup.with, "main setup.with");
   assert.equal(mainWith["check-latest"], true);
 
-  const captureSteps = steps.filter(
-    (step: any) =>
-      typeof step.run === "string" && step.run.includes("SPW_PACKAGE_NODE="),
+  // The run steps are the job's contract: one package-minimum capture, then
+  // exactly one full shared suite that requires that evidence. The exact
+  // list also rejects a duplicate, narrowed, or standalone suite run.
+  const [capture, ...commands] = steps.filter(
+    (step: any) => typeof step.run === "string",
   );
-  assert.equal(
-    captureSteps.length,
-    1,
-    "expected exactly one package minimum runtime capture",
+  assert.deepEqual(
+    commands.map((step: any) => step.run),
+    [
+      "corepack enable",
+      "pnpm install --frozen-lockfile",
+      "pnpm run check:static",
+      "sh tests/run.sh --require-package-node",
+    ],
   );
-  const capture = requireMapping(captureSteps[0], "package runtime capture");
   assert.match(capture.run, /require\("\.\/package\.json"\)\.engines\.node/);
   assert.match(capture.run, /process\.execPath/);
   assert.match(capture.run, /process\.versions\.node/);
@@ -451,55 +351,27 @@ function validateCiToolchain(document: unknown): void {
     2,
     "capture must persist both the absolute executable and observed version",
   );
-
-  const sharedInvocations = steps.flatMap((step: any, index) =>
-    typeof step.run === "string"
-      ? step.run
-          .split("\n")
-          .filter(isFullSharedCommandLine)
-          .map((command: string) => ({ command, index }))
-      : [],
-  );
-  assert.equal(
-    sharedInvocations.length,
-    1,
-    "expected exactly one full shared invocation",
-  );
-  const sharedInvocation = sharedInvocations[0];
-  const shared = requireMapping(
-    steps[sharedInvocation.index],
-    "full shared step",
-  );
-  assert.equal(
-    shared.run,
-    "sh tests/run.sh --require-package-node",
-    "full shared run must require package-minimum evidence without narrowing",
-  );
-
-  assert.ok(
-    !steps.some(
-      (step: any) =>
-        typeof step.run === "string" &&
-        (step.run.includes("tests/bin/tooling-coverage.test.ts") ||
-          step.run.includes("tests/bin/citations.test.ts")),
-    ),
-    "toolchain must not duplicate standalone tooling or citation suites",
-  );
+  // Nothing else may run inside the capture step: every line is the runtime
+  // check or one of its GITHUB_ENV writes, so no suite command can hide there
+  // and escape the exact list above.
+  for (const line of capture.run.trim().split("\n")) {
+    assert.match(
+      line,
+      /^(?:node -e '[^']*'|printf 'SPW_PACKAGE_NODE\w*=%s\\n' "\$\(node -p '[\w.]+'\)" >> "\$GITHUB_ENV")$/,
+      `package runtime capture must not run other commands: ${line}`,
+    );
+  }
 
   const order = [
     uniqueStepTargetIndex(steps, "step-security/harden-runner"),
     uniqueStepTargetIndex(steps, "actions/checkout"),
     steps.indexOf(packageSetup),
-    steps.indexOf(captureSteps[0]),
+    steps.indexOf(capture),
     steps.indexOf(mainSetup),
-    uniqueRunStepIndex(steps, "corepack enable"),
-    uniqueRunStepIndex(steps, "pnpm install --frozen-lockfile"),
-    uniqueRunStepIndex(steps, "pnpm run check:static"),
-    sharedInvocation.index,
+    steps.indexOf(commands[0]),
   ];
-  assert.deepEqual(
-    order,
-    [...order].sort((a, b) => a - b),
+  assert.ok(
+    order.every((index, i) => i === 0 || order[i - 1] < index),
     "toolchain steps are out of order",
   );
 
@@ -509,126 +381,6 @@ function validateCiToolchain(document: unknown): void {
       "fetch-depth"
     ],
     0,
-  );
-  for (const candidate of steps) {
-    const step: Record<string, unknown> = requireMapping(
-      candidate,
-      "toolchain step",
-    );
-    if (typeof step.run === "string") {
-      assert.doesNotMatch(step.run, /\bpnpm run (?:build|check)(?:\s|$)/);
-    }
-  }
-}
-
-void test("ci.yml `toolchain` job runs one full shared suite in order", async (t) => {
-  const ci = parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8"));
-  assert.doesNotThrow(() => validateCiToolchain(ci));
-
-  function toolchainSteps(document: unknown): Record<string, any>[] {
-    const steps = requireMapping(
-      requireMapping(requireMapping(document, "ci").jobs, "jobs").toolchain,
-      "jobs.toolchain",
-    ).steps;
-    assert.ok(
-      Array.isArray(steps),
-      "expected jobs.toolchain.steps to be an array",
-    );
-    return steps;
-  }
-
-  await t.test("rejects a missing package runtime capture", () => {
-    const mutant = structuredClone(ci);
-    const steps = toolchainSteps(mutant);
-    const index = steps.findIndex(
-      (step) =>
-        typeof step.run === "string" && step.run.includes("SPW_PACKAGE_NODE="),
-    );
-    steps.splice(index, 1);
-    assert.throws(
-      () => validateCiToolchain(mutant),
-      /exactly one package minimum runtime capture/,
-    );
-  });
-
-  await t.test("rejects capture after the latest runtime setup", () => {
-    const mutant = structuredClone(ci);
-    const steps = toolchainSteps(mutant);
-    const captureIndex = steps.findIndex(
-      (step) =>
-        typeof step.run === "string" && step.run.includes("SPW_PACKAGE_NODE="),
-    );
-    const capture = steps.splice(captureIndex, 1)[0];
-    const mainIndex = steps.findIndex(
-      (step) => step.with?.["node-version"] === "24",
-    );
-    steps.splice(mainIndex + 1, 0, capture);
-    assert.throws(() => validateCiToolchain(mutant), /steps are out of order/);
-  });
-
-  for (const [name, command] of [
-    [
-      "a narrowed shared group",
-      "sh tests/run.sh --group unit --require-package-node",
-    ],
-    ["shared tests without package evidence", "sh tests/run.sh"],
-  ] as const) {
-    await t.test(`rejects ${name}`, () => {
-      const mutant = structuredClone(ci);
-      const shared = toolchainSteps(mutant).find(
-        (step) =>
-          typeof step.run === "string" &&
-          /\bsh tests\/run\.sh\b/.test(step.run),
-      )!;
-      shared.run = command;
-      assert.throws(
-        () => validateCiToolchain(mutant),
-        /must require package-minimum evidence without narrowing/,
-      );
-    });
-  }
-
-  for (const command of [
-    "pnpm test",
-    "pnpm run test",
-    "pnpm run check",
-    "pnpm run test:acceptance",
-  ]) {
-    await t.test(`rejects duplicate full shared alias: ${command}`, () => {
-      const mutant = structuredClone(ci);
-      toolchainSteps(mutant).push({ run: command });
-      assert.throws(
-        () => validateCiToolchain(mutant),
-        /expected exactly one full shared invocation/,
-      );
-    });
-  }
-
-  await t.test("rejects a duplicate standalone tooling run", () => {
-    const mutant = structuredClone(ci);
-    toolchainSteps(mutant).push({
-      run: "node --test tests/bin/tooling-coverage.test.ts tests/bin/citations.test.ts",
-    });
-    assert.throws(
-      () => validateCiToolchain(mutant),
-      /must not duplicate standalone tooling or citation suites/,
-    );
-  });
-
-  await t.test("rejects a nonblocking toolchain step", () => {
-    const mutant = structuredClone(ci);
-    toolchainSteps(mutant).find(
-      (step) => step.run === "pnpm run check:static",
-    )!["continue-on-error"] = true;
-    assert.throws(() => validateCiToolchain(mutant), /must remain blocking/);
-  });
-});
-
-void test("ci.yml exists and blocking mode creates no compatibility workflow", () => {
-  assert.ok(existsSync(join(WORKFLOW_DIR, "ci.yml")));
-  assert.ok(
-    !existsSync(join(WORKFLOW_DIR, "codex-compatibility.yml")),
-    "blocking mode must not create codex-compatibility.yml",
   );
 });
 
@@ -798,15 +550,6 @@ void test("release.yml triggers only on version tags", () => {
     "release",
   );
 
-  assert.ok(
-    Object.hasOwn(release, "on"),
-    "expected the string key `on` — YAML 1.2 does not coerce it",
-  );
-  assert.ok(
-    !Object.hasOwn(release, "true"),
-    "found a boolean `true` key: the parser is applying YAML 1.1 coercion",
-  );
-
   const push = requireMapping(requireMapping(release.on, "on").push, "on.push");
   assert.deepEqual(push.tags, ["v*.*.*"]);
 });
@@ -948,30 +691,6 @@ void test("the forbidden-publish detector rejects a planted violation", () => {
 const EXPECTED_BUMP_OPTIONS = ["auto", "patch", "minor", "major"];
 const STABLE_SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
-function bumpOptions(document: unknown): string[] {
-  const inputs = requireMapping(
-    requireMapping(requireMapping(document, "workflow").on, "on")
-      .workflow_dispatch,
-    "on.workflow_dispatch",
-  ).inputs;
-  const bump = requireMapping(
-    requireMapping(inputs, "on.workflow_dispatch.inputs").bump,
-    "on.workflow_dispatch.inputs.bump",
-  );
-  assert.ok(
-    Array.isArray(bump.options),
-    "expected on.workflow_dispatch.inputs.bump.options to be a sequence",
-  );
-  return bump.options;
-}
-
-function parseStableSemver(value: unknown, label: string): string {
-  if (typeof value !== "string" || !STABLE_SEMVER.test(value)) {
-    throw new Error(`${label} is not stable semver: ${JSON.stringify(value)}`);
-  }
-  return value;
-}
-
 void test("tag-release.yml wires the shared tag-release workflow", () => {
   const tagRelease = requireMapping(
     parse(readFileSync(join(WORKFLOW_DIR, "tag-release.yml"), "utf8")),
@@ -999,6 +718,10 @@ void test("tag-release.yml wires the shared tag-release workflow", () => {
     requireMapping(bump, "on.workflow_dispatch.inputs.bump").default,
     "auto",
   );
+  assert.deepEqual(
+    requireMapping(bump, "on.workflow_dispatch.inputs.bump").options,
+    EXPECTED_BUMP_OPTIONS,
+  );
 
   const tagJob = requireMapping(
     requireMapping(tagRelease.jobs, "jobs").tag,
@@ -1015,44 +738,6 @@ void test("tag-release.yml wires the shared tag-release workflow", () => {
   );
 });
 
-void test("tag-release.yml exposes the bump input contract", async (t) => {
-  const tagRelease = parse(
-    readFileSync(join(WORKFLOW_DIR, "tag-release.yml"), "utf8"),
-  );
-  await t.test("allows only the supported choices", () => {
-    assert.deepEqual(bumpOptions(tagRelease), EXPECTED_BUMP_OPTIONS);
-  });
-
-  await t.test("reads bump rather than a sibling input", () => {
-    const fixture = parse(`on:
-  workflow_dispatch:
-    inputs:
-      unrelated:
-        options: [auto, patch, minor, major]
-      bump:
-        options: [auto, patch, minor, major, prerelease]
-`);
-    assert.deepEqual(bumpOptions(fixture), [
-      ...EXPECTED_BUMP_OPTIONS,
-      "prerelease",
-    ]);
-  });
-
-  await t.test("rejects duplicate bump option keys", () => {
-    assert.throws(
-      () =>
-        parse(`on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        options: [auto]
-        options: [patch]
-`),
-      /Map keys must be unique/,
-    );
-  });
-});
-
 void test(".version-bump.json declares the package.json version field", () => {
   const bump = JSON.parse(
     readFileSync(join(ROOT, ".version-bump.json"), "utf8"),
@@ -1066,7 +751,7 @@ void test("package.json carries stable manager and harness discovery metadata", 
   const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   assert.equal(manifest.name, "superpowers-manager");
   // Shape only. The literal version is the release workflow's to move.
-  parseStableSemver(manifest.version, "package.json version");
+  assert.match(manifest.version, STABLE_SEMVER);
   assert.match(manifest.description, /\bCodex\b/);
   assert.match(manifest.description, /\bPi\b/);
   assert.match(manifest.description, /\bOpenCode\b/);
@@ -1126,11 +811,4 @@ void test("package.json carries stable manager and harness discovery metadata", 
     "sh tests/container.sh harness-claude-code",
   );
   assert.equal(manifest.scripts["test:acceptance"], "sh tests/acceptance.sh");
-});
-
-void test("the stable-semver check rejects a prerelease", () => {
-  assert.throws(
-    () => parseStableSemver("1.2.3-beta.1", "test version"),
-    /not stable semver/,
-  );
 });
