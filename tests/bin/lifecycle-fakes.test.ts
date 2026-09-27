@@ -11,23 +11,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { registerScratch } from "./fixture-scratch.ts";
+import { suiteScratch } from "../lib/scratch.ts";
 
 const BIN = fileURLToPath(new URL(".", import.meta.url));
 
-// mkdtemp under os.tmpdir() for the same reason `tests/bin/lifecycle-fixture.ts:31-40::mkdtempSync(join(tmpdir(), "spw-lifecycle-"))`
-// gives: TMPDIR when the runner sets one, the platform default when it does
-// not, and uniqueness from mkdtemp rather than from a fixed name.
-const SCRATCH = mkdtempSync(join(tmpdir(), "spw-fakes-"));
-// registerScratch, not a bare process.on("exit"): the exit-only form is the
-// carried defect (row :2040) that fixture-scratch.js exists to close, and it
-// leaks this tree on SIGHUP/SIGINT/SIGTERM. This file was added before that
-// module landed and kept the old form for five commits.
-registerScratch(SCRATCH);
+const SCRATCH = suiteScratch("spw-fakes-");
 
 /**
  * The env builder pins the state directory and clears the package root. An

@@ -19,24 +19,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateConfig } from "./lifecycle-config.ts";
-import { registerScratch } from "./fixture-scratch.ts";
+import { suiteScratch } from "../lib/scratch.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-// os.tmpdir() honors TMPDIR when set and falls back to the platform default
-// when it is not, while mkdtempSync supplies the uniqueness the "never a
-// hardcoded /tmp" rule actually protects. A hard `TMPDIR must be set` throw
-// turns the CI toolchain job red on a bare ubuntu-latest runner while every
-// local gate stays green — PR 11.2 shipped exactly that defect and had to
-// remove it.
-export const SCRATCH = realpathSync(
-  mkdtempSync(join(tmpdir(), "spw-lifecycle-")),
-);
-registerScratch(SCRATCH);
+export const SCRATCH = realpathSync(suiteScratch("spw-lifecycle-"));
 
 /**
  * One immutable copy of everything a package root needs. Per-case roots are

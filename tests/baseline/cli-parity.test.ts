@@ -1873,7 +1873,7 @@ void test("PROBE-READONLY-01 probe is read-only", async () => {
   const err = capture();
   const status = await runProbe(["--porcelain"], {
     root: c.pkg,
-    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:141::tag.gpgsign=false` creates on
+    // `v1.0.0` is the annotated tag `tests/bin/lifecycle-fixture.ts:131::tag.gpgsign=false` creates on
     // UPSTREAM; both values come from the fixture, neither is invented.
     env: caseEnv(c, {
       SUPERPOWERS_REF: "v1.0.0",

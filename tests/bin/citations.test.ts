@@ -12,11 +12,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { registerScratch } from "./fixture-scratch.ts";
 import {
   classify,
   commentText,
@@ -27,13 +25,15 @@ import {
   targetExists,
   validate,
 } from "../lib/citations.ts";
+import { suiteScratch } from "../lib/scratch.ts";
+
+const SCRATCH = suiteScratch("spw-citations-");
 
 /**
  * A scratch tree with the given files, cleaned up with the suite.
  */
 function fixture(files: Record<string, string>): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-citations-"));
-  registerScratch(root);
+  const root = mkdtempSync(join(SCRATCH, "fixture-"));
   for (const [name, body] of Object.entries(files)) {
     const target = join(root, name);
     mkdirSync(dirname(target), { recursive: true });
@@ -48,8 +48,7 @@ function fixture(files: Record<string, string>): string {
  * No commit is created, so no git identity is consulted.
  */
 function gitFixture(name: string, body: string): { root: string; sha: string } {
-  const root = mkdtempSync(join(tmpdir(), "spw-citations-git-"));
-  registerScratch(root);
+  const root = mkdtempSync(join(SCRATCH, "git-"));
 
   const git = (args: string[], input?: string): string => {
     const result = spawnSync("git", args, {
@@ -351,8 +350,7 @@ void test("scan records the column of the raw token", () => {
 });
 
 void test("targetExists rejects a target reached through an escaping symlink", () => {
-  const scratch = mkdtempSync(join(tmpdir(), "spw-citations-"));
-  registerScratch(scratch);
+  const scratch = mkdtempSync(join(SCRATCH, "symlink-"));
   const root = join(scratch, "root");
   const outside = join(scratch, "outside");
   mkdirSync(root);

@@ -12,7 +12,6 @@ import { dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { registerScratch } from "./fixture-scratch.ts";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -26,7 +25,6 @@ export interface PackFixture {
 
 export function makePackFixture(t: TestContext): PackFixture {
   const outer = mkdtempSync(join(tmpdir(), "spw-pack-contract-"));
-  registerScratch(outer);
   const f = {
     root: join(outer, "repo"),
     out: join(outer, "out"),
