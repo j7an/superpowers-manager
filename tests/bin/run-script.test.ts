@@ -104,7 +104,6 @@ function runScript(
   // variable would let the flag test's control case pass without the flag.
   delete env.SPW_REQUIRE_PACKAGE_NODE;
   delete env.SPW_PACKAGE_NODE;
-  delete env.SPW_PACKAGE_NODE_VERSION;
   Object.assign(env, environment);
   const result = spawnSync("sh", [join(root, "tests", "run.sh"), ...args], {
     cwd: root,
@@ -232,7 +231,6 @@ void test("--require-package-node reaches suites as SPW_REQUIRE_PACKAGE_NODE", (
   const root = fixtureRoot(t, { "tests/unit/a.test.ts": NEEDS_FLAG });
   const flagged = runScript(root, ["--require-package-node"], {
     SPW_PACKAGE_NODE: join(root, "package-node"),
-    SPW_PACKAGE_NODE_VERSION: "24.0.0",
   });
   assertCompleted(flagged, 0);
   assert.match(flagged.stdout, /pass 1/);
@@ -246,17 +244,13 @@ void test("--require-package-node checks missing and invalid evidence before fil
   const args = ["--require-package-node", "--test-name-pattern", "^NOPE$"];
   const missing = runScript(root, args);
   assertCompleted(missing, 1);
-  assert.match(
-    missing.stdout + missing.stderr,
-    /SPW_PACKAGE_NODE and SPW_PACKAGE_NODE_VERSION are required together/,
-  );
+  assert.match(missing.stdout + missing.stderr, /SPW_PACKAGE_NODE is required/);
   const invalid = runScript(root, args, {
     SPW_PACKAGE_NODE: join(root, "fake-node"),
-    SPW_PACKAGE_NODE_VERSION: "24.1.0",
   });
   assertCompleted(invalid, 1);
   assert.match(
     invalid.stdout + invalid.stderr,
-    /SPW_PACKAGE_NODE_VERSION must match the declared package minimum/,
+    /SPW_PACKAGE_NODE could not be verified/,
   );
 });

@@ -345,11 +345,10 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", () => {
   assert.match(capture.run, /process\.execPath/);
   assert.match(capture.run, /process\.versions\.node/);
   assert.match(capture.run, /SPW_PACKAGE_NODE=%s\\n/);
-  assert.match(capture.run, /SPW_PACKAGE_NODE_VERSION=%s\\n/);
   assert.equal(
     (capture.run.match(/>> "\$GITHUB_ENV"/g) ?? []).length,
-    2,
-    "capture must persist both the absolute executable and observed version",
+    1,
+    "capture must persist only the absolute package-minimum executable",
   );
   // Nothing else may run inside the capture step: every line is the runtime
   // check or one of its GITHUB_ENV writes, so no suite command can hide there

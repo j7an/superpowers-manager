@@ -7,19 +7,9 @@ export function resolvePackageNode(
   packageEngine: unknown,
 ): string | undefined {
   const binary = env.SPW_PACKAGE_NODE;
-  const declared = env.SPW_PACKAGE_NODE_VERSION;
-  if (binary === undefined && declared === undefined && !required) {
-    return undefined;
-  }
-  if (
-    typeof binary !== "string" ||
-    binary.length === 0 ||
-    typeof declared !== "string" ||
-    declared.length === 0
-  ) {
-    throw new Error(
-      "SPW_PACKAGE_NODE and SPW_PACKAGE_NODE_VERSION are required together",
-    );
+  if (binary === undefined) {
+    if (!required) return undefined;
+    throw new Error("SPW_PACKAGE_NODE is required");
   }
   if (!isAbsolute(binary)) {
     throw new Error("SPW_PACKAGE_NODE must be an absolute executable path");
@@ -34,11 +24,6 @@ export function resolvePackageNode(
     );
   }
   const expected = `${major}.0.0`;
-  if (declared !== expected) {
-    throw new Error(
-      "SPW_PACKAGE_NODE_VERSION must match the declared package minimum",
-    );
-  }
 
   let result: ReturnType<typeof spawnSync>;
   try {
