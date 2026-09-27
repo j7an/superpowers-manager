@@ -1,3 +1,4 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -5,13 +6,11 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -242,8 +241,7 @@ void test("one staged package is delivered and all staging is removed", (t) => {
 });
 
 void test("direct npm pack refuses absent and stale checkout output", (t) => {
-  const outer = mkdtempSync(join(tmpdir(), "spw-pack-guard-"));
-  t.after(() => rmSync(outer, { recursive: true, force: true }));
+  const outer = scratch(t, "spw-pack-guard-");
   const home = join(outer, "home");
   const cache = join(outer, "cache");
   mkdirSync(home);

@@ -1,3 +1,4 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -14,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { IDENTITY, git, realGitPath, waitForMarker } from "./support.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const BASELINE_SCENARIO_SH = join(ROOT, "tests/builders/baseline-scenario.sh");
@@ -31,41 +33,6 @@ const SCRATCH = mkdtempSync(join(tmpdir(), "spw-ref-resolution-"));
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });
-
-// Per-invocation identity flags only. These write no git config at any scope
-// and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
-// convention `tests/bin/lifecycle-fixture.ts:82::// and mirror tests/lib/harness.sh (spw_git_commit, spw_git_tag). Do not` documents.
-const IDENTITY = [
-  "-c",
-  "user.email=superpowers-manager@example.invalid",
-  "-c",
-  "user.name=superpowers-manager",
-];
-
-function git(repo: string, args: readonly string[]): string {
-  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(
-      `fixture git ${args.join(" ")} failed in ${repo}: ${result.stderr || result.stdout}`,
-    );
-  }
-  return result.stdout;
-}
-
-/**
- * The real `git` binary's absolute path, resolved before any fake `git` is
- * ever placed on PATH — mirroring
- * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:12::real_git=$(command -v git)`, captured up front for the same reason: once a
- * fake `git` shadows PATH, there would be no other way back to the real one.
- */
-function realGitPath(): string {
-  const found = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" });
-  const path = found.stdout.trim();
-  if (found.status !== 0 || path === "") {
-    throw new Error("fixture cannot locate a real git binary on PATH");
-  }
-  return path;
-}
 
 /**
  * A real upstream repository shaped exactly like
@@ -144,29 +111,11 @@ function assertOnlySiblingKept(workspace: string) {
   assert.equal(readFileSync(join(workspace, "sibling"), "utf8"), "keep\n");
 }
 
-/**
- * Polls for `path` to exist, returning `false` on timeout rather than
- * throwing, so the caller can attach its own diagnostic. Mirrors
- * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:173-178::while not marker.exists()`'s Python marker wait.
- */
-async function waitForMarker(
-  path: string,
-  timeoutMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (!existsSync(path)) {
-    if (Date.now() > deadline) return false;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  return true;
-}
-
 // BUILDER-GIT-01 is a builder marker. It exercises
 // tests/builders/baseline-scenario.sh's git-release-repo scenario, not
 // scripts/core/upstream.sh.
 void test("the git-release-repo builder produces a deterministic tagged repository", (t) => {
-  const base = mkdtempSync(join(tmpdir(), "spw-ref-builder-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-ref-builder-");
   const destination = join(base, "upstream");
   const built = spawnSync(
     "sh",
@@ -195,8 +144,7 @@ void test("the git-release-repo builder produces a deterministic tagged reposito
 // it cannot leak/clobber the caller's own `root`/`config_root` locals — see
 // the file header comment for why that half has no port here.
 void test("readConfigRef returns the packaged upstream ref when no override is set", async (t) => {
-  const configRoot = mkdtempSync(join(tmpdir(), "spw-ref-config-"));
-  t.after(() => rmSync(configRoot, { recursive: true, force: true }));
+  const configRoot = scratch(t, "spw-ref-config-");
   mkdirSync(join(configRoot, "config"), { recursive: true });
   writeFileSync(join(configRoot, "config", "upstream-ref"), "v6.0.3\n", "utf8");
   assert.equal(await readConfigRef(configRoot, {}), "v6.0.3");
@@ -254,8 +202,7 @@ void test("REF-GENERIC-FALLBACK-01 arbitrary refs fall back after tag lookup", a
 
 void test("REF-SOURCE-PROOF-01 selected source must supply a commit object", async (t) => {
   const { repo, releaseCommit, releaseTagObject, blobObject } = UPSTREAM;
-  const base = mkdtempSync(join(tmpdir(), "spw-ref-proof-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-ref-proof-");
   const exactCache = join(base, "exact-cache");
   const exactWorkspace = join(base, "exact-workspace");
   mkdirSync(exactWorkspace);
@@ -347,8 +294,7 @@ const FAKE_GIT_SIGNAL_BODY = [
 
 void test("REF-CLEANUP-01 interrupted source proof cleans only its workspace", async (t) => {
   const { repo, releaseCommit } = UPSTREAM;
-  const base = mkdtempSync(join(tmpdir(), "spw-ref-cleanup-"));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const base = scratch(t, "spw-ref-cleanup-");
   const signalWorkspace = join(base, "signal-workspace");
   const signalCache = join(base, "signal-cache");
   mkdirSync(signalWorkspace);

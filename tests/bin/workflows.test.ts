@@ -3,19 +3,17 @@
 // YAML is parsed by the `yaml` devDependency rather than by a hand-written
 // subset parser.
 
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
-  mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -473,8 +471,7 @@ function runVerifyCommand(
   command: string,
   scenario: VerifyScenario,
 ) {
-  const root = mkdtempSync(join(tmpdir(), "spw-release-verify-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-release-verify-");
   const bin = join(root, "bin");
   const home = join(root, "home");
   const calls = join(root, "calls");

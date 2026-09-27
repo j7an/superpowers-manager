@@ -1,14 +1,7 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -16,8 +9,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 void test("source CLI runs without dist and reads its own package version", (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-native-source-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-native-source-");
   cpSync(join(ROOT, "src"), join(root, "src"), { recursive: true });
   cpSync(join(ROOT, "package.json"), join(root, "package.json"));
   const dependencies = join(root, "node_modules");

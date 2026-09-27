@@ -6,9 +6,9 @@
 // very policy these tests pin. The correct response to such a failure is
 // restructuring the fixture, never adding an exclusion.
 
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -54,8 +54,7 @@ assert.equal(
 );
 
 void test("literal pin detector reports every embedded-pin form", (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "spw-pins-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = scratch(t, "spw-pins-");
 
   const file = join(dir, "literal-pins.sh");
   writeFileSync(file, `${DETECTOR_POSITIVE_LINES.join("\n")}\n`, "utf8");
@@ -67,8 +66,7 @@ void test("literal pin detector reports every embedded-pin form", (t) => {
 });
 
 void test("literal pin detector accepts the negative fixtures", (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "spw-pins-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = scratch(t, "spw-pins-");
 
   const file = join(dir, "non-literal-pins.sh");
   writeFileSync(file, `${DETECTOR_NEGATIVE_LINES.join("\n")}\n`, "utf8");
@@ -86,8 +84,7 @@ void test("literal pin detector accepts the negative fixtures", (t) => {
 // break/observe/restore cycle against tests/bin/workflow-support.ts.
 
 void test("literal pin detector port-only: a sha immediately followed by a non-hex letter is not a boundary and is rejected", (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "spw-pins-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = scratch(t, "spw-pins-");
 
   const file = join(dir, "boundary-pins.sh");
   const line = `uses: ${CHECKOUT}@${SHA_ONE}z # v7.0.0`;
@@ -97,8 +94,7 @@ void test("literal pin detector port-only: a sha immediately followed by a non-h
 });
 
 void test("literal pin detector port-only: two valid pins on one line still produce exactly one finding", (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "spw-pins-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = scratch(t, "spw-pins-");
 
   const file = join(dir, "double-pin.sh");
   const line = `pin_a=${CHECKOUT}@${SHA_ONE} pin_b=${CHECKOUT}@${SHA_TWO}`;

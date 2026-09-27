@@ -1,6 +1,6 @@
+import { scratch } from "../../../lib/scratch.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -29,8 +29,7 @@ void test("CLAUDE_CONFIG_DIR wins over HOME and owns the manager tree", () => {
 });
 
 void test("storage safety refuses a symlinked manager root", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-claude-code-paths-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-claude-code-paths-");
   const paths = claudeCodePaths(
     { CLAUDE_CONFIG_DIR: join(root, "claude") },
     root,

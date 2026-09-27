@@ -1,17 +1,15 @@
+import { scratch } from "../lib/scratch.ts";
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -68,10 +66,7 @@ const execFileAsync = promisify(execFile);
 type Fixture = { base: string; statePath: string };
 
 function fixture(t: import("node:test").TestContext): Fixture {
-  const base = mkdtempSync(join(tmpdir(), "spw-selection-"));
-  t.after(() => {
-    rmSync(base, { recursive: true, force: true });
-  });
+  const base = scratch(t, "spw-selection-");
   return {
     base,
     statePath: join(base, "config", "selection.json"),

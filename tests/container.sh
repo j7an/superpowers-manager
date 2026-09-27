@@ -28,44 +28,29 @@ if [ "${1:-}" = "--inside" ]; then
     run_opencode_probe /opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe 2
     echo "container: OpenCode V2 lane: complete status=0"
   }
+
+  # Prints "<label>: start", runs the command, then "<label>: complete status=0".
+  # Call it only as a plain statement: inside if/&&/|| set -e is suspended.
+  # Not reentrant: POSIX sh has no local variables.
+  phase() {
+    phase_label=$1
+    shift
+    echo "$phase_label: start"
+    "$@"
+    echo "$phase_label: complete status=0"
+  }
   case "$mode" in
     suite)
-      echo "container suite: shared checks: start"
-      sh tests/run.sh
-      echo "container suite: shared checks: complete status=0"
-      echo "container suite: Codex harness integration: start"
-      sh tests/container/codex/offline-probe.sh
-      echo "container suite: Codex harness integration: complete status=0"
-      echo "container suite: Pi harness integration: start"
-      sh tests/container/pi/offline-probe.sh
-      echo "container suite: Pi harness integration: complete status=0"
-      echo "container suite: OpenCode harness integration: start"
-      run_opencode_lines
-      echo "container suite: OpenCode harness integration: complete status=0"
-      echo "container suite: Claude Code harness integration: start"
-      sh tests/container/claude-code/offline-probe.sh
-      echo "container suite: Claude Code harness integration: complete status=0"
+      phase "container suite: shared checks" sh tests/run.sh
+      phase "container suite: Codex harness integration" sh tests/container/codex/offline-probe.sh
+      phase "container suite: Pi harness integration" sh tests/container/pi/offline-probe.sh
+      phase "container suite: OpenCode harness integration" run_opencode_lines
+      phase "container suite: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh
       ;;
-    harness-codex)
-      echo "container: Codex harness integration: start"
-      sh tests/container/codex/offline-probe.sh
-      echo "container: Codex harness integration: complete status=0"
-      ;;
-    harness-pi)
-      echo "container: Pi harness integration: start"
-      sh tests/container/pi/offline-probe.sh
-      echo "container: Pi harness integration: complete status=0"
-      ;;
-    harness-opencode)
-      echo "container: OpenCode harness integration: start"
-      run_opencode_lines
-      echo "container: OpenCode harness integration: complete status=0"
-      ;;
-    harness-claude-code)
-      echo "container: Claude Code harness integration: start"
-      sh tests/container/claude-code/offline-probe.sh
-      echo "container: Claude Code harness integration: complete status=0"
-      ;;
+    harness-codex) phase "container: Codex harness integration" sh tests/container/codex/offline-probe.sh ;;
+    harness-pi) phase "container: Pi harness integration" sh tests/container/pi/offline-probe.sh ;;
+    harness-opencode) phase "container: OpenCode harness integration" run_opencode_lines ;;
+    harness-claude-code) phase "container: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
   exit 0

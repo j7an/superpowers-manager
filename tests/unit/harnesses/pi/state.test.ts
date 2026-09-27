@@ -1,16 +1,15 @@
+import { scratch } from "../../../lib/scratch.ts";
 import assert from "node:assert/strict";
 import {
   chmodSync,
   cpSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { type TestContext } from "node:test";
@@ -42,8 +41,7 @@ interface StateSandbox {
 }
 
 function sandbox(t: TestContext): StateSandbox {
-  const root = mkdtempSync(join(tmpdir(), "spw-pi-state-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-pi-state-");
   const home = join(root, "selected-home");
   const agentDir = join(home, "agent");
   mkdirSync(agentDir, { recursive: true });
@@ -161,8 +159,7 @@ void test("current Pi state requires registration, resources, owned bytes, and i
 });
 
 void test("Pi state recognizes the canonical Manager registration through a symlinked agent directory", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-pi-state-linked-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-pi-state-linked-");
   const physicalRoot = join(root, "physical-root");
   const linkedRoot = join(root, "linked-root");
   const physicalAgent = join(physicalRoot, "agent");

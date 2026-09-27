@@ -1,14 +1,12 @@
+import { scratch } from "../../../lib/scratch.ts";
 import assert from "node:assert/strict";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
@@ -47,8 +45,7 @@ function effectiveSelection(): EffectiveSelection {
 }
 
 function candidateFixture(t: test.TestContext, manifest: string) {
-  const root = mkdtempSync(join(tmpdir(), "spw-codex-prepare-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-codex-prepare-");
   const upstreamRoot = join(root, "upstream");
   const candidateRoot = join(root, "workspace", "superpowers");
   mkdirSync(join(upstreamRoot, "skills"), { recursive: true });
@@ -80,8 +77,7 @@ void test("preparation defaults to the durable Codex prepared root", () => {
 });
 
 void test("prefetch validation blocks malformed unresolved recovery before external access", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-codex-prepare-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-codex-prepare-");
   const codexHome = join(root, "codex-home");
   const paths = codexPaths({ CODEX_HOME: codexHome }, process.cwd());
   const template = join(root, "template.json");
@@ -134,8 +130,7 @@ void test("prefetch validation distinguishes unsafe protected storage from prepa
 
   for (const item of cases) {
     await t.test(item.name, async (t) => {
-      const root = mkdtempSync(join(tmpdir(), "spw-codex-prepare-"));
-      t.after(() => rmSync(root, { recursive: true, force: true }));
+      const root = scratch(t, "spw-codex-prepare-");
       const codexHome = join(root, "codex-home");
       const paths = codexPaths({ CODEX_HOME: codexHome }, process.cwd());
       const unsafeRoot =
@@ -183,8 +178,7 @@ void test("prefetch validation distinguishes unsafe protected storage from prepa
 });
 
 void test("prefetch validation rejects a directory template", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-codex-prepare-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-codex-prepare-");
   const template = join(root, "template");
   mkdirSync(template);
   const result = await validateCodexPreparationBeforeFetch({
@@ -229,8 +223,7 @@ void test("candidate preparation returns controlled reader failures as typed out
 });
 
 void test("status inspection treats malformed generated provenance as needing prepare", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-codex-prepare-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-codex-prepare-");
   const pluginRoot = join(root, "plugins", "superpowers");
   mkdirSync(pluginRoot, { recursive: true });
   writeFileSync(join(pluginRoot, ".superpowers-upstream.json"), "{");
@@ -251,8 +244,7 @@ void test("status inspection treats malformed generated provenance as needing pr
 });
 
 void test("strict prepared read rejects malformed generated provenance", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-codex-prepare-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-codex-prepare-");
   const pluginRoot = join(root, "plugins", "superpowers");
   mkdirSync(pluginRoot, { recursive: true });
   writeFileSync(join(pluginRoot, ".superpowers-upstream.json"), "{");

@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { exactError, matchingError } from "../lib/error-assertions.ts";
@@ -19,8 +12,7 @@ import { SafetyError } from "../../src/safety-error.ts";
 import * as paths from "../../src/safe-path.ts";
 
 void test("isDirectory and isFile follow symlinks and answer false on any stat failure", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "spw-safe-path-kind-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-safe-path-kind-");
   const dir = join(root, "dir");
   const file = join(root, "file");
   mkdirSync(dir);

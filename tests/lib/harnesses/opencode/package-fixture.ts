@@ -1,13 +1,6 @@
-import {
-  copyFileSync,
-  cpSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { scratch } from "../../scratch.ts";
+import { copyFileSync, cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { tmpdir } from "node:os";
 import type { TestContext } from "node:test";
 import type { AdapterContext } from "../../../../src/adapter-result.ts";
 import { digestArtifactTree } from "../../../../src/artifact-tree.ts";
@@ -28,8 +21,7 @@ export function nativeOpenCodeFixture(
   t: TestContext,
   options: NativeOpenCodeFixtureOptions = {},
 ): string {
-  const root = mkdtempSync(join(tmpdir(), "spw-opencode-package-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-opencode-package-");
   for (const [fixture, target] of [
     [
       options.bootstrap === "6.3.0"
@@ -62,8 +54,7 @@ export interface OpenCodeSandbox {
 }
 
 export function openCodeSandbox(t: TestContext): OpenCodeSandbox {
-  const root = mkdtempSync(join(tmpdir(), "spw-opencode-state-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = scratch(t, "spw-opencode-state-");
   const home = join(root, "home");
   const env = {
     HOME: home,
