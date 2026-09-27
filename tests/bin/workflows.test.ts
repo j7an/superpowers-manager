@@ -23,7 +23,6 @@ import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
 import {
-  actionPinPair,
   assertNoForbidden,
   collectExternalTargets,
   findLiteralActionPinSnapshots,
@@ -50,42 +49,14 @@ void test("workflow documents parse under YAML 1.2, keeping `on` a string key", 
   assert.equal(typeof ci.on, "object");
 });
 
-// --- the external-pin inventory ----------------------------------------
-// The expected inventory is a fixture this test defines for itself: it
-// asserts which workflow references which external target, never which SHA
-// that target is pinned to. The SHA is Dependabot's to move; asserting it
+// --- action pins --------------------------------------------------------
+// Every external `uses:` is pinned to a full commit SHA with a version
+// comment, and every shared-workflows caller carries the same pin. Only the
+// form is asserted: the SHAs are Dependabot's to move, and asserting one
 // would red-light this test on every unrelated bump.
-const EXPECTED_EXTERNAL_PINS = [
-  [".github/workflows/ci.yml", "step-security/harden-runner"],
-  [".github/workflows/ci.yml", "actions/checkout"],
-  [".github/workflows/ci.yml", "actions/setup-node"],
-  [
-    ".github/workflows/dependency-safety.yml",
-    "j7an/shared-workflows/.github/workflows/dependency-safety.yml",
-  ],
-  [
-    ".github/workflows/dependency-safety-non-bot-gate.yml",
-    "j7an/shared-workflows/.github/workflows/dependency-safety-non-bot-gate.yml",
-  ],
-  [
-    ".github/workflows/pnpm-packagemanager-update.yml",
-    "j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml",
-  ],
-  [".github/workflows/release.yml", "step-security/harden-runner"],
-  [".github/workflows/release.yml", "actions/checkout"],
-  [
-    ".github/workflows/release.yml",
-    "j7an/shared-workflows/.github/workflows/publish-npm.yml",
-  ],
-  [
-    ".github/workflows/security.yml",
-    "j7an/shared-workflows/.github/workflows/security-scan.yml",
-  ],
-  [
-    ".github/workflows/tag-release.yml",
-    "j7an/shared-workflows/.github/workflows/tag-release.yml",
-  ],
-];
+const USES_LINE = /^\s*(?:-\s+)?uses:\s*/;
+const PINNED_USES =
+  /^\s*(?:-\s+)?uses:\s*(["']?)([^@\s"']+)@([0-9a-f]{40})\1 # (v\d+\.\d+\.\d+)$/;
 
 function workflowFiles() {
   return readdirSync(WORKFLOW_DIR)
@@ -97,58 +68,44 @@ function workflowFiles() {
     }));
 }
 
-void test("external action inventory matches the workflows", () => {
-  const actual = workflowFiles()
-    .flatMap(({ relativePath, absolutePath }) =>
-      collectExternalTargets(
-        parse(readFileSync(absolutePath, "utf8")),
-        relativePath,
-      ).map((target) => [relativePath, target]),
-    )
-    .map((pair) => pair.join("\t"));
-
-  const unique = [...new Set(actual)].sort();
-  const expected = EXPECTED_EXTERNAL_PINS.map((pair) => pair.join("\t")).sort();
-
-  assert.deepEqual(unique, expected);
-});
-
-void test("every inventoried pin is a semantic 40-hex pin", () => {
-  for (const [relativePath, target] of EXPECTED_EXTERNAL_PINS) {
-    const block = readFileSync(join(ROOT, relativePath), "utf8");
-    // actionPinPair throws unless the reference is a 40-hex lowercase SHA
-    // with an agreeing semver comment. Not throwing IS the assertion.
-    // Do NOT add `assert.match(pair.sha, /^[0-9a-f]{40}$/)` here: the
-    // function already rejects everything that pattern would catch, so the
-    // check could never fail — a vacuous assertion inside a suite whose
-    // subject is vacuous assertions. Removed 2026-08-02 after review.
-    assert.doesNotThrow(
-      () => actionPinPair(block, target),
-      `${relativePath} does not pin ${target} to an agreeing 40-hex SHA`,
+void test("every external action is pinned to a commit SHA with a version comment", () => {
+  let total = 0;
+  const sharedPins = new Set<string>();
+  for (const { relativePath, absolutePath } of workflowFiles()) {
+    const text = readFileSync(absolutePath, "utf8");
+    let external = 0;
+    text.split("\n").forEach((line, index) => {
+      if (!USES_LINE.test(line)) return;
+      const value = line.replace(USES_LINE, "").replace(/^["']/, "");
+      if (value.startsWith("./")) return;
+      external += 1;
+      const pin = PINNED_USES.exec(line);
+      assert.ok(
+        pin,
+        `${relativePath}:${index + 1} is not pinned to a commit SHA with a version comment`,
+      );
+      if (pin[2].startsWith("j7an/shared-workflows/")) {
+        sharedPins.add(`${pin[3]} # ${pin[4]}`);
+      }
+    });
+    // A `uses:` the line scan cannot see (a flow mapping, say) must fail
+    // here rather than escape the pin check.
+    assert.equal(
+      external,
+      collectExternalTargets(parse(text), relativePath).length,
+      `${relativePath} has an external uses: the line scan did not check`,
     );
+    total += external;
   }
-});
-
-void test("all shared-workflows pins agree with one another", () => {
-  const shared = EXPECTED_EXTERNAL_PINS.filter(([, target]) =>
-    target.startsWith("j7an/shared-workflows/"),
+  assert.ok(
+    total > 0,
+    "the pin scan matched no uses: lines — the scan is broken, not the tree clean",
   );
   assert.equal(
-    shared.length,
-    6,
-    "shared-workflows pin count changed; review the shared workflow contract",
+    sharedPins.size,
+    1,
+    `shared-workflows callers must share one pin; found ${sharedPins.size}`,
   );
-
-  const pairs = shared.map(([relativePath, target]) =>
-    actionPinPair(readFileSync(join(ROOT, relativePath), "utf8"), target),
-  );
-  for (const pair of pairs) {
-    assert.deepEqual(
-      pair,
-      pairs[0],
-      "shared-workflows pins disagree across callers",
-    );
-  }
 });
 
 // --- the literal-pin source policy -------------------------------------
