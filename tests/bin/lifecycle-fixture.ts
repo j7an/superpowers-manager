@@ -236,183 +236,31 @@ function spawnManager(
   args: string[],
   env: Record<string, string>,
   script: "install" | "update" | "prepare" | "probe" | "uninstall",
-  timeoutMs: number | undefined,
-  watchdogArmPath: string | undefined,
-  signal: AbortSignal | undefined,
 ): Promise<{ status: number; stdout: string; stderr: string }> {
-  const timed = timeoutMs !== undefined;
-  const spawnOptions = timed ? { env, detached: true } : { env };
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(executable, args, spawnOptions);
-    const groupPid = timed ? child.pid : undefined;
+    const child = spawn(executable, args, { env });
     let stdout = "";
     let stderr = "";
-    let spawned = false;
-    let settled = false;
-    let killStarted = false;
-
-    let terminationReason: "watchdog" | "abort" | undefined;
-    let groupTerminationFailed = false;
-
-    let watchdog: NodeJS.Timeout | undefined;
-
-    let armPoll: NodeJS.Timeout | undefined;
-
-    let abortListener: (() => void) | undefined;
-
-    const clearControls = () => {
-      if (watchdog !== undefined) {
-        clearTimeout(watchdog);
-        watchdog = undefined;
-      }
-      if (armPoll !== undefined) {
-        clearInterval(armPoll);
-        armPoll = undefined;
-      }
-      if (signal !== undefined && abortListener !== undefined) {
-        signal.removeEventListener("abort", abortListener);
-        abortListener = undefined;
-      }
-    };
-
-    const errorCode = (error: unknown) =>
-      typeof error === "object" && error !== null && "code" in error
-        ? String(error.code)
-        : "";
-    const killLeaderFallback = () => {
-      groupTerminationFailed = true;
-      try {
-        child.kill("SIGKILL");
-      } catch {
-        // The close-path diagnostic below remains hand-written. Never emit a
-        // platform error containing raw process details.
-      }
-      // A descendant can inherit these pipes. If group kill itself failed,
-      // close the parent ends so `close` can still reap the leader and report
-      // the controlled termination failure.
-      child.stdout.destroy();
-      child.stderr.destroy();
-    };
-    const killProcessGroup = () => {
-      if (killStarted) return;
-      killStarted = true;
-      if (groupPid === undefined) {
-        killLeaderFallback();
-        return;
-      }
-      try {
-        process.kill(-groupPid, "SIGKILL");
-      } catch (error) {
-        // ESRCH means the group is already gone and `close` is imminent. Any
-        // other result takes the bounded, controlled leader/pipes fallback.
-        if (errorCode(error) !== "ESRCH") killLeaderFallback();
-      }
-    };
-
-    const requestTermination = (reason: "watchdog" | "abort") => {
-      if (settled || terminationReason !== undefined) return;
-      // First reason wins. Never read AbortSignal.reason into a diagnostic.
-      terminationReason = reason;
-      clearControls();
-      if (spawned) killProcessGroup();
-    };
-    // The arm path is caller-owned. A strict caller can wait for separate fake
-    // readiness, validate live identity, and only then publish this path;
-    // callers without that extra proof may pass final readiness itself.
-    const armWatchdogIfReady = () => {
-      if (
-        settled ||
-        terminationReason !== undefined ||
-        watchdog !== undefined ||
-        watchdogArmPath === undefined ||
-        timeoutMs === undefined ||
-        !existsSync(watchdogArmPath)
-      ) {
-        return;
-      }
-      if (armPoll !== undefined) {
-        clearInterval(armPoll);
-        armPoll = undefined;
-      }
-      watchdog = setTimeout(() => {
-        requestTermination("watchdog");
-      }, timeoutMs);
-    };
-    const startArmPolling = () => {
-      armWatchdogIfReady();
-      if (watchdog === undefined && terminationReason === undefined) {
-        armPoll = setInterval(armWatchdogIfReady, 25);
-      }
-    };
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
+    child.stdout.setEncoding("utf8").on("data", (chunk) => {
       stdout += chunk;
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr.setEncoding("utf8").on("data", (chunk) => {
       stderr += chunk;
     });
-    child.once("spawn", () => {
-      spawned = true;
-      if (terminationReason !== undefined) killProcessGroup();
-      else if (timed) startArmPolling();
-    });
-    // Spawn error preserves the existing distinction when no child launched.
     child.once("error", (error) => {
-      if (settled) return;
-      clearControls();
-      if (spawned && terminationReason !== undefined) {
-        // A kill-race error stays on the termination close path and never
-        // overwrites the already-selected fixed reason.
-        groupTerminationFailed = true;
-        return;
-      }
-      settled = true;
       rejectPromise(
         new Error(
           `failed to launch the manager bin for ${script}: ${error.message}`,
         ),
       );
     });
-    child.once("close", (code, closeSignal) => {
-      clearControls();
-      if (settled) return;
-      if (terminationReason !== undefined) {
-        // `close` reaps the direct manager and closes its pipes. A successful
-        // negative-PID SIGKILL is authoritative for group termination; whether
-        // dead grandchildren remain Z until launchd/init reaps them is external.
-        settled = true;
-        if (groupTerminationFailed) {
-          rejectPromise(
-            new Error(
-              `${script} fixture watchdog could not terminate its process group`,
-            ),
-          );
-          return;
-        }
-        const message =
-          terminationReason === "watchdog"
-            ? `${script} exceeded fixture watchdog after ${timeoutMs}ms`
-            : `${script} fixture aborted`;
-        rejectPromise(new Error(message));
-        return;
-      }
-      settled = true;
-      if (closeSignal !== null) {
-        rejectPromise(
-          new Error(`${script} was killed by signal ${closeSignal}`),
-        );
+    child.once("close", (code, signal) => {
+      if (signal !== null) {
+        rejectPromise(new Error(`${script} was killed by signal ${signal}`));
         return;
       }
       resolvePromise({ status: code ?? -1, stdout, stderr });
     });
-
-    if (signal !== undefined) {
-      abortListener = () => requestTermination("abort");
-      signal.addEventListener("abort", abortListener, { once: true });
-      if (signal.aborted) requestTermination("abort");
-    }
   });
 }
 
@@ -430,46 +278,8 @@ export async function runScript(
     args?: string[];
     env?: Record<string, string>;
     path?: string;
-    timeoutMs?: number;
-    watchdogArmPath?: string;
-    signal?: AbortSignal;
   } = {},
 ): Promise<{ status: number; stdout: string; stderr: string }> {
-  const timeoutMs = options.timeoutMs;
-  const watchdogArmPath = options.watchdogArmPath;
-  const signal = options.signal;
-  const watchdogFields = [
-    timeoutMs !== undefined,
-    watchdogArmPath !== undefined,
-    signal !== undefined,
-  ];
-  if (watchdogFields.some(Boolean) && !watchdogFields.every(Boolean)) {
-    throw new Error(
-      "runScript timeoutMs, watchdogArmPath, and signal must be provided together",
-    );
-  }
-  if (
-    timeoutMs !== undefined &&
-    (!Number.isInteger(timeoutMs) || timeoutMs <= 0)
-  ) {
-    throw new Error("runScript timeoutMs must be a positive integer");
-  }
-  if (
-    watchdogArmPath !== undefined &&
-    (typeof watchdogArmPath !== "string" ||
-      watchdogArmPath.length === 0 ||
-      resolve(watchdogArmPath) !== watchdogArmPath)
-  ) {
-    throw new Error(
-      "runScript watchdogArmPath must be a nonempty absolute path",
-    );
-  }
-  if (signal !== undefined && !(signal instanceof AbortSignal)) {
-    throw new Error("runScript signal must be an AbortSignal");
-  }
-  if (timeoutMs !== undefined && process.platform === "win32") {
-    throw new Error("runScript timeoutMs requires POSIX process groups");
-  }
   // Resolved, segment-aware containment. A lexical startsWith() also accepts
   // a sibling whose name merely extends the scratch path, so it would not
   // actually prevent running a lifecycle script against the real checkout.
@@ -514,9 +324,6 @@ export async function runScript(
     [join(caseEnv.pkg, "src", "cli.ts"), script, ...(options.args ?? [])],
     env,
     script,
-    timeoutMs,
-    watchdogArmPath,
-    signal,
   );
 }
 

@@ -11,9 +11,9 @@ import {
   tripwireTriggered,
 } from "./lifecycle-fakes.ts";
 
-// The first Codex process for each case publishes durable process identity and
-// readiness, then waits for the test-owned shared release file. Later Codex
-// calls in the same lifecycle run pass through the once-per-case claim.
+// The first Codex process for each case publishes readiness, then waits for
+// the test-owned shared release file. Later Codex calls in the same lifecycle
+// run pass through the once-per-case claim.
 function waitForRelease() {
   const dir = process.env.SPW_FIXTURE_BARRIER_DIR;
   if (!dir) return true;
@@ -30,34 +30,7 @@ function waitForRelease() {
   const claimed = join(dir, `${tag}.claimed`);
   if (existsSync(claimed)) return true;
   writeFileSync(claimed, "");
-  const pidDelayRaw = process.env.SPW_FIXTURE_PID_DELAY_MS;
-  if (pidDelayRaw !== undefined) {
-    if (!/^[1-9][0-9]*$/.test(pidDelayRaw)) {
-      process.stderr.write(
-        "fixture: SPW_FIXTURE_PID_DELAY_MS must be an integer from 1 to 5000\n",
-      );
-      process.exitCode = 90;
-      return false;
-    }
-    const pidDelayMs = Number(pidDelayRaw);
-    if (!Number.isSafeInteger(pidDelayMs) || pidDelayMs > 5000) {
-      process.stderr.write(
-        "fixture: SPW_FIXTURE_PID_DELAY_MS must be an integer from 1 to 5000\n",
-      );
-      process.exitCode = 90;
-      return false;
-    }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pidDelayMs);
-  }
-  // Durable descendant identity for the watchdog acceptance case. The file is
-  // evidence only; it is removed with the rendezvous scratch directory.
-  writeFileSync(join(dir, `${tag}.pid`), `${process.pid}\n`);
-  // The detached manager is this fake's parent and expected process-group
-  // leader. Persist both meanings so the test never guesses a kill target.
-  writeFileSync(join(dir, `${tag}.manager-pid`), `${process.ppid}\n`);
-  writeFileSync(join(dir, `${tag}.group-pid`), `${process.ppid}\n`);
-  // PID and manager/group IDs are durable before readiness appears.
-  writeFileSync(join(dir, `${tag}.watchdog-ready`), "");
+  writeFileSync(join(dir, `${tag}.ready`), "");
   const release = join(dir, "release");
   const deadline = Date.now() + 10000;
   const sleeper = new Int32Array(new SharedArrayBuffer(4));
