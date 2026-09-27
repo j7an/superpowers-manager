@@ -17,7 +17,6 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   classify,
-  commentText,
   CORPUS_DIRS,
   displayPath,
   listSources,
@@ -74,63 +73,37 @@ function gitFixture(name: string, body: string): { root: string; sha: string } {
   return { root, sha };
 }
 
-void test("commentText accepts the three comment-leading forms", () => {
-  assert.equal(commentText("  // a")?.text, "  // a");
-  assert.equal(commentText("   * a")?.text, "   * a");
-  assert.equal(commentText("  /* a */")?.text, "  /* a */");
+void test("scan reads citations from comments only", () => {
+  const root = fixture({
+    "a.ts": [
+      "const re = /'\\/\\/ src\\/r.ts:1/; // see src/x.ts:44",
+      'const u = "http://example.test/src/s.ts:2";',
+      "const t = `${u} // src/t.ts:3`;",
+      "const d = count++ / divisor; /* src/y.ts:5 */",
+      "/* first line",
+      "   continuation src/z.ts:6",
+      "*/",
+    ].join("\n"),
+  });
+  assert.deepEqual(
+    scan([join(root, "a.ts")]).map((c) => [c.lineNumber, c.column, c.raw]),
+    [
+      [1, 39, "src/x.ts:44"],
+      [4, 32, "src/y.ts:5"],
+      [6, 16, "src/z.ts:6"],
+    ],
+  );
 });
 
-for (const [name, source, expected] of [
-  [
-    "finds a trailing comment outside string delimiters",
-    "run(); // see it",
-    ["// see it", 7],
-  ],
-  [
-    "finds a trailing comment after a quote-bearing block comment",
-    "x /* ' */ // see src/x.ts:44",
-    ["// see src/x.ts:44", 10],
-  ],
-  [
-    "finds a trailing comment after a quote-bearing regex literal",
-    "const re = /'/; // see src/x.ts:44",
-    ["// see src/x.ts:44", 16],
-  ],
-  [
-    "finds a trailing comment after a control-condition regex",
-    "if (ok) /'/.test(value); // see src/x.ts:44",
-    ["// see src/x.ts:44", 25],
-  ],
-  [
-    "finds a trailing comment after postfix increment division",
-    "count++ / divisor; // see src/x.ts:44",
-    ["// see src/x.ts:44", 19],
-  ],
-  [
-    "treats ordinary identifier of before slash as division",
-    "of / divisor; // see src/x.ts:44",
-    ["// see src/x.ts:44", 14],
-  ],
-  [
-    "allows a regex expression after for-of",
-    "for (x of /'/) run(); // see src/x.ts:44",
-    ["// see src/x.ts:44", 22],
-  ],
-] as const) {
-  void test(`commentText ${name}`, () => {
-    const found = commentText(source);
-    assert.deepEqual([found?.text, found?.offset], expected);
+void test("scan refuses a file it cannot parse", () => {
+  const root = fixture({
+    "a.ts": "const = ; // `src/x.ts::export function go`\n",
   });
-}
-
-for (const source of [
-  'const u = "http://example.test";',
-  "const u = 'a//b';",
-]) {
-  void test(`commentText ignores a slash pair inside ${JSON.stringify(source)}`, () => {
-    assert.equal(commentText(source), undefined);
-  });
-}
+  assert.throws(
+    () => scan([join(root, "a.ts")]),
+    /^Error: cannot parse .*a\.ts$/,
+  );
+});
 
 void test("scan parses all four citation forms", () => {
   const root = fixture({
@@ -438,9 +411,7 @@ void test("a live self-citation still rejects a second real occurrence", () => {
 
 // Spec §4.2's literal table: seven rejects, three accepts. Each fragment is
 // unique in its one-line target, so uniqueness alone would admit it; only the
-// boundary rule tells them apart. Fixture bodies are double-quoted, never
-// template literals -- a citation-shaped token inside a template literal is
-// this scanner's declared blind spot.
+// boundary rule tells them apart.
 const BOUNDARY_CASES = [
   ["tion h", "function hookError(x) {", false],
   ["if (ty", 'if (typeof value === "string") {', false],
