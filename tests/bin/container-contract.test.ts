@@ -338,22 +338,44 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
           },
         );
       };
-      for (const [mode, logText] of [
-        ["suite", "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\n"],
-        ["harness-codex", "codex\n"],
-        ["harness-pi", "pi\n"],
-        ["harness-opencode", "opencode-v1\nopencode-v2\n"],
-        ["harness-claude-code", "claude-code\n"],
+      // Each stage prints "<label>: start" and "<label>: complete status=0";
+      // the stubbed children print nothing, so stdout is exactly these lines.
+      const stage = (label: string, inner = "") =>
+        `${label}: start\n${inner}${label}: complete status=0\n`;
+      const lanes =
+        stage("container: OpenCode V1 lane") +
+        stage("container: OpenCode V2 lane");
+      for (const [mode, logText, stdout] of [
+        [
+          "suite",
+          "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\n",
+          stage("container suite: shared checks") +
+            stage("container suite: Codex harness integration") +
+            stage("container suite: Pi harness integration") +
+            stage("container suite: OpenCode harness integration", lanes) +
+            stage("container suite: Claude Code harness integration"),
+        ],
+        [
+          "harness-codex",
+          "codex\n",
+          stage("container: Codex harness integration"),
+        ],
+        ["harness-pi", "pi\n", stage("container: Pi harness integration")],
+        [
+          "harness-opencode",
+          "opencode-v1\nopencode-v2\n",
+          stage("container: OpenCode harness integration", lanes),
+        ],
+        [
+          "harness-claude-code",
+          "claude-code\n",
+          stage("container: Claude Code harness integration"),
+        ],
       ] as const) {
         const result = run(mode);
         assert.equal(result.status, 0, result.stderr);
         assert.equal(readFileSync(log, "utf8"), logText);
-        if (mode === "suite" || mode === "harness-opencode")
-          for (const lane of ["V1", "V2"])
-            assert.match(
-              result.stdout,
-              new RegExp(`container: OpenCode ${lane} lane: complete status=0`),
-            );
+        assert.equal(result.stdout, stdout, mode);
       }
       for (const [failedChild, expected, forbiddenCompletions] of [
         [
