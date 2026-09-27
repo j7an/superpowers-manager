@@ -237,8 +237,8 @@ Code below describe product integrations, not a required agent harness.
 - `tests/bin/citations.test.ts` validates every citation in `src/` and `tests/`
   against its target's text. Every citation recognized in source and test
   comments must validate. Unanchored references are rejected directly; there
-  is no exception ledger. Use `node tests/tools/citations.ts --report` to
-  inspect validation results.
+  is no exception ledger. To see every failing citation, run
+  `node --test --test-name-pattern=CITATION-01 tests/bin/citations.test.ts`.
   **Why:** a stale citation is invisible to every other check here, and one
   reference moved three times inside a single fix wave before anything noticed.
 - Run `git diff --check` before completion.

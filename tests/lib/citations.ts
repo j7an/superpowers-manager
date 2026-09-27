@@ -376,20 +376,6 @@ function checkAnchor(
 }
 
 /**
- * Anchored and resolution citations are always checked -- an anchored citation
- * must validate.
- * A malformed citation is "checked" for the same reason an anchored one is:
- * it must be fixed.
- */
-export function classify(
-  citation: Citation,
-  root: string,
-): "checked" | "unanchored" | "dead" {
-  if (citation.kind !== "legacy") return "checked";
-  return targetExists(citation.path, root) ? "unanchored" : "dead";
-}
-
-/**
  * Remove only the citation token that would otherwise prove its own anchor.
  * A mismatch leaves the lines unchanged, preserving fail-closed uniqueness.
  */
