@@ -754,41 +754,43 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.match(manifest.description, /\bClaude Code\b/);
 
   const keywords = manifest.keywords;
-  assert.ok(
-    keywords.includes("opencode"),
-    "missing discovery keyword: opencode",
-  );
-  assert.ok(
-    keywords.includes("claude-code"),
-    "missing discovery keyword: claude-code",
-  );
   assert.ok(Array.isArray(keywords), "package.json keywords must be an array");
-  assert.equal(
-    new Set(keywords).size,
-    keywords.length,
-    "keywords must be unique",
+  // Exact set is the contract: each harness gets its bare name, `<harness>-skills`,
+  // and its native artifact term, except `pi-package`, which opts into Pi's
+  // package gallery for a CLI `pi install` cannot use. Order is free.
+  assert.deepEqual(
+    [...(keywords as string[])].sort(),
+    [
+      "superpowers",
+      "obra-superpowers",
+      "agent-skills",
+      "skills",
+      "ai-agent",
+      "ai-coding-agent",
+      "coding-agent",
+      "agent-harness",
+      "cli",
+      "installer",
+      "updater",
+      "plugin-manager",
+      "version-manager",
+      "version-pinning",
+      "codex",
+      "openai-codex",
+      "codex-plugin",
+      "codex-skills",
+      "pi",
+      "pi-coding-agent",
+      "pi-skills",
+      "opencode",
+      "opencode-plugin",
+      "opencode-skills",
+      "claude",
+      "claude-code",
+      "claude-code-plugin",
+      "claude-code-skills",
+    ].sort(),
   );
-  for (const keyword of [
-    "superpowers",
-    "obra-superpowers",
-    "agent-skills",
-    "ai-coding-agent",
-    "coding-agent",
-    "agent-harness",
-    "codex",
-    "codex-plugin",
-    "plugin-manager",
-    "cli",
-    "installer",
-    "updater",
-    "pi",
-    "pi-coding-agent",
-  ]) {
-    assert.ok(
-      keywords.includes(keyword),
-      `missing discovery keyword: ${keyword}`,
-    );
-  }
 
   assert.equal(
     manifest.scripts["test:harness:codex"],
