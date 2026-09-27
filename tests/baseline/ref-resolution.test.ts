@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { IDENTITY, git, realGitPath, waitForMarker } from "./support.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const BASELINE_SCENARIO_SH = join(ROOT, "tests/builders/baseline-scenario.sh");
@@ -31,41 +32,6 @@ const SCRATCH = mkdtempSync(join(tmpdir(), "spw-ref-resolution-"));
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });
-
-// Per-invocation identity flags only. These write no git config at any scope
-// and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
-// convention `tests/bin/lifecycle-fixture.ts:82::// and mirror tests/lib/harness.sh (spw_git_commit, spw_git_tag). Do not` documents.
-const IDENTITY = [
-  "-c",
-  "user.email=superpowers-manager@example.invalid",
-  "-c",
-  "user.name=superpowers-manager",
-];
-
-function git(repo: string, args: readonly string[]): string {
-  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(
-      `fixture git ${args.join(" ")} failed in ${repo}: ${result.stderr || result.stdout}`,
-    );
-  }
-  return result.stdout;
-}
-
-/**
- * The real `git` binary's absolute path, resolved before any fake `git` is
- * ever placed on PATH — mirroring
- * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:12::real_git=$(command -v git)`, captured up front for the same reason: once a
- * fake `git` shadows PATH, there would be no other way back to the real one.
- */
-function realGitPath(): string {
-  const found = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" });
-  const path = found.stdout.trim();
-  if (found.status !== 0 || path === "") {
-    throw new Error("fixture cannot locate a real git binary on PATH");
-  }
-  return path;
-}
 
 /**
  * A real upstream repository shaped exactly like
@@ -142,23 +108,6 @@ const UPSTREAM = buildUpstreamRepo();
 function assertOnlySiblingKept(workspace: string) {
   assert.deepEqual(readdirSync(workspace), ["sibling"]);
   assert.equal(readFileSync(join(workspace, "sibling"), "utf8"), "keep\n");
-}
-
-/**
- * Polls for `path` to exist, returning `false` on timeout rather than
- * throwing, so the caller can attach its own diagnostic. Mirrors
- * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:173-178::while not marker.exists()`'s Python marker wait.
- */
-async function waitForMarker(
-  path: string,
-  timeoutMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (!existsSync(path)) {
-    if (Date.now() > deadline) return false;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  return true;
 }
 
 // BUILDER-GIT-01 is a builder marker. It exercises

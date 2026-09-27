@@ -21,6 +21,7 @@ import {
   notCalledAdapter,
   observingCoordinator,
 } from "../lib/command-doubles.ts";
+import { IDENTITY, git, realGitPath, waitForMarker } from "./support.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SIGNAL_CHILD = fileURLToPath(
@@ -43,44 +44,6 @@ const SCRATCH = mkdtempSync(join(tmpdir(), "spw-selection-commands-"));
 process.on("exit", () => {
   rmSync(SCRATCH, { recursive: true, force: true });
 });
-
-// Per-invocation identity flags only. These write no git config at any scope
-// and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
-// convention `IDENTITY` in tests/baseline/ref-resolution.test.js documents — a
-// deliberate departure from `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:20-21::git -C "$upstream" config user.email`'s own
-// `git config user.email`/`user.name` (repo-scoped, but still a config
-// write this port avoids on principle).
-const IDENTITY = [
-  "-c",
-  "user.email=superpowers-manager@example.invalid",
-  "-c",
-  "user.name=superpowers-manager",
-];
-
-function git(repo: string, args: readonly string[]): string {
-  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
-  if (result.status !== 0) {
-    throw new Error(
-      `fixture git ${args.join(" ")} failed in ${repo}: ${result.stderr || result.stdout}`,
-    );
-  }
-  return result.stdout;
-}
-
-/**
- * The real `git` binary's absolute path, resolved before any fake `git` is
- * ever placed on PATH — mirroring tests/baseline/ref-resolution.test.js's
- * realGitPath, for the same reason: once a fake `git` shadows PATH, there is
- * no other way back to the real one.
- */
-function realGitPath(): string {
-  const found = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" });
-  const path = found.stdout.trim();
-  if (found.status !== 0 || path === "") {
-    throw new Error("fixture cannot locate a real git binary on PATH");
-  }
-  return path;
-}
 
 // Every fake-git fixture below reaches its runtime-varying values (the real
 // git path, a log path, a conflicting state path and payload) only through
@@ -636,24 +599,6 @@ const FAKE_GIT_PIN_SIGNAL_BODY = [
   "esac",
   "",
 ].join("\n");
-
-/**
- * Polls for `path` to exist, returning `false` on timeout rather than
- * throwing, so the caller can attach its own diagnostic. Mirrors
- * tests/baseline/ref-resolution.test.js's waitForMarker, itself a port of
- * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_selection_commands.sh:322-324::while not marker.exists()` Python marker wait.
- */
-async function waitForMarker(
-  path: string,
-  timeoutMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (!existsSync(path)) {
-    if (Date.now() > deadline) return false;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  return true;
-}
 
 void test("REF-PIN-CLEANUP-01 interrupted pin proof cleans only its workspace", async (t) => {
   const { repo, headCommit } = UPSTREAM;

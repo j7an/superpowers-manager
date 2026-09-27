@@ -508,21 +508,77 @@ function destroySandbox(sandbox: Sandbox) {
   rmSync(root, { recursive: true, force: true });
 }
 
+// Per-invocation identity flags only. These write no git config at any scope
+// and mirror tests/lib/harness.sh's spw_git_commit/spw_git_tag, the same
+// convention `tests/bin/lifecycle-fixture.ts:82::// and mirror tests/lib/harness.sh (spw_git_commit, spw_git_tag). Do not` documents.
+const IDENTITY = [
+  "-c",
+  "user.email=superpowers-manager@example.invalid",
+  "-c",
+  "user.name=superpowers-manager",
+];
+
+function git(repo: string, args: readonly string[]): string {
+  const result = spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(
+      `fixture git ${args.join(" ")} failed in ${repo}: ${result.stderr || result.stdout}`,
+    );
+  }
+  return result.stdout;
+}
+
+/**
+ * The real `git` binary's absolute path, resolved before any fake `git` is
+ * ever placed on PATH — mirroring
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:12::real_git=$(command -v git)`, captured up front for the same reason: once a
+ * fake `git` shadows PATH, there would be no other way back to the real one.
+ */
+function realGitPath(): string {
+  const found = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" });
+  const path = found.stdout.trim();
+  if (found.status !== 0 || path === "") {
+    throw new Error("fixture cannot locate a real git binary on PATH");
+  }
+  return path;
+}
+
+/**
+ * Polls for `path` to exist, returning `false` on timeout rather than
+ * throwing, so the caller can attach its own diagnostic. Mirrors
+ * `git show 349fe2ed405b371ec2de1347bb3fc50c6bc15dc4:tests/test_ref_resolution.sh:173-178::while not marker.exists()`'s Python marker wait.
+ */
+async function waitForMarker(
+  path: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(path)) {
+    if (Date.now() > deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return true;
+}
+
 function fixturePath(...parts: string[]) {
   return join(FIXTURES, ...parts);
 }
 
 export {
   COMMANDS,
+  IDENTITY,
   PASSTHROUGH_VARIABLES,
   assertNoCodexContact,
   baseEnvironment,
   createSandbox,
   destroySandbox,
   fixturePath,
+  git,
+  realGitPath,
   removeTool,
   runCli,
   runScenario,
+  waitForMarker,
   writeCodexLogTool,
   writeNoopTool,
 };
