@@ -5,7 +5,7 @@
 // path) requires Node's module-mocking API, which is gated behind
 // `--experimental-test-module-mocks` and only reachable through a running
 // `node:test` TestContext (`t.mock`). The shared suite runner
-// (`tests/run-node-suites.js`) does not set that flag for the whole suite,
+// (`tests/run.sh`) does not set that flag for the whole suite,
 // so this case runs as its own `node --experimental-test-module-mocks
 // --test` child process, spawned by the parent test.
 //

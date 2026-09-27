@@ -95,7 +95,8 @@ void test("PACKAGE-CLI-01 offline installed tarball routes through dist and expo
   );
   const minimumNode = resolvePackageNode(
     process.env,
-    process.env.SPW_CONTAINER === "1",
+    process.env.SPW_CONTAINER === "1" ||
+      process.env.SPW_REQUIRE_PACKAGE_NODE === "1",
     sourceManifest.engines.node,
   );
   const runtimes =

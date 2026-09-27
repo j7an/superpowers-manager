@@ -125,7 +125,8 @@ Code below describe product integrations, not a required agent harness.
 
 ## Testing
 
-- Run the closest targeted test while iterating.
+- Run the closest targeted test while iterating. Load the matcher gate:
+  `node --import ./tests/assert-matcher-gate.ts --test <files>`.
 - Run `pnpm run check:static` (format, lint, no-emit typecheck, and unused-code analysis — a
   seconds-scale gate) before submitting. `pnpm run check` adds the
   minutes-scale full suite and cannot run concurrently with other work.
@@ -138,8 +139,6 @@ Code below describe product integrations, not a required agent harness.
   pnpm install --frozen-lockfile
   pnpm run check:static
   pnpm test
-  pnpm run test:unit
-  pnpm run test:integration
   pnpm run test:harness:codex
   pnpm run test:harness:pi
   pnpm run test:harness:opencode
@@ -150,11 +149,10 @@ Code below describe product integrations, not a required agent harness.
   These are alternative iteration selectors; do not run every row sequentially
   as a substitute for acceptance. Complete acceptance is static validation followed by `pnpm run test:acceptance`
   with explicit package-minimum runtime evidence. For controlled shared-suite
-  comparisons, use `sh tests/run.sh --concurrency 1` and
-  `sh tests/run.sh --concurrency 2`. A completed shared phase emits both
-  `run-node-suites: complete status=<status>` and
-  `tests/run.sh: complete failed=<count>`; absence of either sentinel means the
-  run is incomplete.
+  comparisons, use `sh tests/run.sh --test-concurrency 1` and
+  `sh tests/run.sh --test-concurrency 2`. A completed shared phase emits
+  `tests/run.sh: complete failed=<0|1>`; absence of that sentinel means the run
+  is incomplete.
 
 - Run `node src/cli.ts` for the maintained CLI; native tests import production
   `src/` directly and need no build. Future production coverage includes all of

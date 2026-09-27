@@ -786,7 +786,6 @@ void test("the corpus reaches every committed JavaScript file under tests/", () 
   );
   for (const f of [
     "tests/assert-matcher-gate.ts",
-    "tests/run-node-suites.ts",
     "tests/tools/citations.ts",
   ]) {
     assert.ok(covered.has(f), `${f} must be in the enforced corpus`);
