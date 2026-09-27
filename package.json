@@ -27,9 +27,9 @@
   "packageManager": "pnpm@12.4.2",
   "scripts": {
     "prepack": "node --input-type=module -e \"console.error('error: use node tests/tools/pack.ts --out-dir <directory> to package this checkout');process.exitCode=1\"",
-    "lint": "oxlint src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/container/ tests/assert-matcher-gate.ts",
-    "format": "prettier --write src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/container/ tests/assert-matcher-gate.ts",
-    "format:check": "prettier --check src/ tests/bin/ tests/unit/ tests/baseline/ tests/lib/ tests/tools/ tests/container/ tests/assert-matcher-gate.ts",
+    "lint": "oxlint src/ tests/",
+    "format": "prettier --write src/ tests/",
+    "format:check": "prettier --check src/ tests/",
     "test": "sh tests/run.sh",
     "test:harness:codex": "sh tests/container.sh harness-codex",
     "test:harness:pi": "sh tests/container.sh harness-pi",
