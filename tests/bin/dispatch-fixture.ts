@@ -31,19 +31,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { registerScratch } from "./fixture-scratch.ts";
 import { shQuote, writeGitEgressShim } from "../lib/git-egress.ts";
+import { suiteScratch } from "../lib/scratch.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
-// Matches every other suite's convention (e.g. action-pins.test.js):
-// os.tmpdir() honors TMPDIR when set, and
-// mkdtempSync supplies the uniqueness that makes this hermetic.
-const SCRATCH = mkdtempSync(join(tmpdir(), "spw-dispatch-"));
-registerScratch(SCRATCH);
+const SCRATCH = suiteScratch("spw-dispatch-");
 
 // Resolves a real, functioning host tool by name, searching this process's
 // own (ambient, unrestricted) PATH — never a case's fakeBin, which only ever

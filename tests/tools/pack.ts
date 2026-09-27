@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   access,
   chmod,
@@ -233,78 +233,10 @@ export async function runPack(
   root: string,
   outDir: string,
 ): Promise<PackReport> {
-  const managedSignals = ["SIGHUP", "SIGINT", "SIGTERM"] as const;
-  type ManagedSignal = (typeof managedSignals)[number];
-  let terminating: ManagedSignal | undefined;
-  let activeChild: ChildProcess | undefined;
-  let escalation: ReturnType<typeof setTimeout> | undefined;
-  let childGroupUnconfirmed = false;
   let staging: string | undefined;
   let deliveredPath: string | undefined;
   let report: PackReport | undefined;
   const failures: string[] = [];
-
-  function checkCancellation(): void {
-    if (terminating !== undefined) {
-      throw new PackFailure(`package operation cancelled by ${terminating}`);
-    }
-  }
-
-  function signalOwnedGroup(signal: NodeJS.Signals): void {
-    const pid = activeChild?.pid;
-    if (pid === undefined) return;
-    try {
-      if (process.platform === "win32") activeChild?.kill(signal);
-      else process.kill(-pid, signal);
-    } catch (error) {
-      if (!(
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        error.code === "ESRCH"
-      )) {
-        failures.push("cannot signal package child process group");
-      }
-    }
-  }
-
-  function interruptChild(signal: NodeJS.Signals): void {
-    if (activeChild === undefined) return;
-    signalOwnedGroup(signal);
-    escalation ??= setTimeout(() => signalOwnedGroup("SIGKILL"), 1000);
-  }
-
-  function requestTermination(signal: ManagedSignal): void {
-    if (terminating !== undefined) return;
-    terminating = signal;
-    interruptChild(signal);
-  }
-
-  async function confirmOwnedGroupExit(pid: number | undefined): Promise<void> {
-    if (process.platform === "win32" || pid === undefined) return;
-    const deadline = Date.now() + 2000;
-    while (true) {
-      try {
-        process.kill(-pid, 0);
-      } catch (error) {
-        if (
-          error &&
-          typeof error === "object" &&
-          "code" in error &&
-          error.code === "ESRCH"
-        ) {
-          return;
-        }
-      }
-      if (Date.now() >= deadline) {
-        childGroupUnconfirmed = true;
-        throw new PackFailure(
-          "cannot confirm package child process group exit",
-        );
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
-    }
-  }
 
   async function runStep(
     command: string,
@@ -312,226 +244,165 @@ export async function runPack(
     cwd: string,
     label: string,
   ): Promise<string> {
-    checkCancellation();
     let stdout = "";
     let stderr = "";
-    let startFailed = false;
-    let groupPid: number | undefined;
-    try {
-      const code = await new Promise<number | null>(
-        (resolveStep, rejectStep) => {
-          let child;
-          try {
-            child = spawn(command, args, {
-              cwd,
-              detached: process.platform !== "win32",
-              shell: false,
-              stdio: ["ignore", "pipe", "pipe"],
-            });
-          } catch {
-            rejectStep(new PackFailure(`cannot start ${label}`));
-            return;
-          }
-          child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
-            stdout += chunk;
-          });
-          child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-            stderr += chunk;
-          });
-          child.once("error", () => {
-            startFailed = true;
-          });
-          // Keep the group identity after its leader and streams close: a
-          // descendant can still write in staging until group death is proved.
-          child.once("exit", () => interruptChild(terminating ?? "SIGTERM"));
-          child.once("close", (code) => resolveStep(code));
-          activeChild = child;
-          groupPid = child.pid;
-        },
-      );
-      await confirmOwnedGroupExit(groupPid);
-      checkCancellation();
-      if (startFailed) throw new PackFailure(`cannot start ${label}`);
-      if (code !== 0) {
-        forwardDiagnostics(stdout, stderr);
-        throw new PackFailure(`${label} failed`);
+    const code = await new Promise<number | null>((resolveStep, rejectStep) => {
+      let child;
+      try {
+        child = spawn(command, args, {
+          cwd,
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch {
+        rejectStep(new PackFailure(`cannot start ${label}`));
+        return;
       }
-      return stdout;
-    } finally {
-      if (escalation !== undefined) clearTimeout(escalation);
-      escalation = undefined;
-      activeChild = undefined;
+      child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+      child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+      child.once("error", () =>
+        rejectStep(new PackFailure(`cannot start ${label}`)),
+      );
+      child.once("close", (code) => resolveStep(code));
+    });
+    if (code !== 0) {
+      forwardDiagnostics(stdout, stderr);
+      throw new PackFailure(`${label} failed`);
     }
+    return stdout;
   }
 
   async function deliverArtifact(
     target: string,
     stagedTarball: string,
   ): Promise<void> {
-    checkCancellation();
     try {
       const output = await open(target, "wx", 0o600);
       deliveredPath = target;
       try {
-        checkCancellation();
-        const bytes = await readFile(stagedTarball);
-        checkCancellation();
-        await output.writeFile(bytes);
-        checkCancellation();
+        await output.writeFile(await readFile(stagedTarball));
       } finally {
         await output.close();
       }
-      checkCancellation();
-    } catch (error) {
-      if (error instanceof PackFailure) throw error;
+    } catch {
       throw new PackFailure("cannot deliver packaged artifact");
     }
   }
 
-  async function rollbackOutput(): Promise<void> {
-    if (deliveredPath === undefined) return;
-    try {
-      await removeDelivered(deliveredPath);
-    } catch {
-      failures.push("cannot remove failed package output");
-    }
-    deliveredPath = undefined;
-  }
-
-  const handlers = managedSignals.map((signal) => {
-    const handler = () => requestTermination(signal);
-    process.on(signal, handler);
-    return [signal, handler] as const;
-  });
   try {
+    const sourceRoot = await canonicalize(root, "package source checkout");
+    const destinationRoot = await canonicalize(
+      outDir,
+      "package output directory",
+    );
+    const temporaryParent = await canonicalize(
+      tmpdir(),
+      "package temporary directory",
+    );
     try {
-      const sourceRoot = await canonicalize(root, "package source checkout");
-      checkCancellation();
-      const destinationRoot = await canonicalize(
-        outDir,
-        "package output directory",
-      );
-      checkCancellation();
-      const temporaryParent = await canonicalize(
-        tmpdir(),
-        "package temporary directory",
-      );
-      checkCancellation();
-      try {
-        const info = await stat(destinationRoot);
-        checkCancellation();
-        if (!info.isDirectory())
-          throw new PackFailure("package output is not a directory");
-      } catch (error) {
-        if (error instanceof PackFailure) throw error;
+      const info = await stat(destinationRoot);
+      if (!info.isDirectory())
         throw new PackFailure("package output is not a directory");
-      }
-      if (isWithin(sourceRoot, temporaryParent)) {
-        throw new PackFailure(
-          "package temporary directory must be outside the source checkout",
-        );
-      }
-      try {
-        await access(destinationRoot, constants.W_OK | constants.X_OK);
-      } catch {
-        throw new PackFailure("package output directory is not writable");
-      }
-      checkCancellation();
-      try {
-        staging = await mkdtemp(join(temporaryParent, "spw-pack-"));
-      } catch {
-        throw new PackFailure("cannot create package staging directory");
-      }
-      checkCancellation();
-      const packageRoot = join(staging, "package");
-      const packedRoot = join(staging, "packed");
-      await createDirectory(packageRoot, "package staging directory");
-      checkCancellation();
-      await createDirectory(packedRoot, "package artifact directory");
-      checkCancellation();
-      await stageManifest(sourceRoot, packageRoot);
-      checkCancellation();
-      for (const asset of STATIC_ASSETS) {
-        await copyStageFile(join(sourceRoot, asset), join(packageRoot, asset));
-        checkCancellation();
-      }
-      for (const dependency of ["smol-toml", "jsonc-parser"]) {
-        await copyStageDirectory(
-          join(sourceRoot, "node_modules", dependency),
-          join(packageRoot, "node_modules", dependency),
-        );
-        checkCancellation();
-      }
-      await runStep(
-        join(sourceRoot, "node_modules", ".bin", "tsc"),
-        [
-          "-p",
-          join(sourceRoot, "tsconfig.json"),
-          "--noEmit",
-          "false",
-          "--noEmitOnError",
-          "true",
-          "--outDir",
-          join(packageRoot, "dist"),
-        ],
-        sourceRoot,
-        "compile package sources",
-      );
-      await makeCliExecutable(packageRoot);
-      checkCancellation();
-      const packJson = await runStep(
-        "npm",
-        ["pack", "--json", "--pack-destination", packedRoot],
-        packageRoot,
-        "pack staged package",
-      );
-      const metadataPath = join(staging, "pack.json");
-      try {
-        await writeFile(metadataPath, packJson);
-      } catch {
-        throw new PackFailure("cannot write package metadata");
-      }
-      checkCancellation();
-      await runStep(
-        "sh",
-        [join(sourceRoot, "tests", "assert_pack_contents.sh"), metadataPath],
-        sourceRoot,
-        "validate package contents",
-      );
-      const entry = parsePackReport(packJson);
-      const filename = safeFilename(entry.filename);
-      const stagedTarball = await verifiedArtifact(packedRoot, filename);
-      checkCancellation();
-      await deliverArtifact(join(destinationRoot, filename), stagedTarball);
-      report = [{ ...entry, filename }];
     } catch (error) {
-      failures.push(
-        error instanceof PackFailure
-          ? error.message
-          : "cannot package source checkout",
+      if (error instanceof PackFailure) throw error;
+      throw new PackFailure("package output is not a directory");
+    }
+    if (isWithin(sourceRoot, temporaryParent)) {
+      throw new PackFailure(
+        "package temporary directory must be outside the source checkout",
       );
     }
-    if (failures.length > 0 || terminating !== undefined)
-      await rollbackOutput();
-    if (staging !== undefined && !childGroupUnconfirmed) {
+    try {
+      await access(destinationRoot, constants.W_OK | constants.X_OK);
+    } catch {
+      throw new PackFailure("package output directory is not writable");
+    }
+    try {
+      staging = await mkdtemp(join(temporaryParent, "spw-pack-"));
+    } catch {
+      throw new PackFailure("cannot create package staging directory");
+    }
+    const packageRoot = join(staging, "package");
+    const packedRoot = join(staging, "packed");
+    await createDirectory(packageRoot, "package staging directory");
+    await createDirectory(packedRoot, "package artifact directory");
+    await stageManifest(sourceRoot, packageRoot);
+    for (const asset of STATIC_ASSETS) {
+      await copyStageFile(join(sourceRoot, asset), join(packageRoot, asset));
+    }
+    for (const dependency of ["smol-toml", "jsonc-parser"]) {
+      await copyStageDirectory(
+        join(sourceRoot, "node_modules", dependency),
+        join(packageRoot, "node_modules", dependency),
+      );
+    }
+    await runStep(
+      join(sourceRoot, "node_modules", ".bin", "tsc"),
+      [
+        "-p",
+        join(sourceRoot, "tsconfig.json"),
+        "--noEmit",
+        "false",
+        "--noEmitOnError",
+        "true",
+        "--outDir",
+        join(packageRoot, "dist"),
+      ],
+      sourceRoot,
+      "compile package sources",
+    );
+    await makeCliExecutable(packageRoot);
+    const packJson = await runStep(
+      "npm",
+      ["pack", "--json", "--pack-destination", packedRoot],
+      packageRoot,
+      "pack staged package",
+    );
+    const metadataPath = join(staging, "pack.json");
+    try {
+      await writeFile(metadataPath, packJson);
+    } catch {
+      throw new PackFailure("cannot write package metadata");
+    }
+    await runStep(
+      "sh",
+      [join(sourceRoot, "tests", "assert_pack_contents.sh"), metadataPath],
+      sourceRoot,
+      "validate package contents",
+    );
+    const entry = parsePackReport(packJson);
+    const filename = safeFilename(entry.filename);
+    const stagedTarball = await verifiedArtifact(packedRoot, filename);
+    await deliverArtifact(join(destinationRoot, filename), stagedTarball);
+    report = [{ ...entry, filename }];
+  } catch (error) {
+    failures.push(
+      error instanceof PackFailure
+        ? error.message
+        : "cannot package source checkout",
+    );
+  }
+  if (staging !== undefined) {
+    try {
+      await cleanupStaging(staging);
+    } catch {
+      failures.push("cannot remove package staging directory");
+    }
+  }
+  if (failures.length > 0) {
+    if (deliveredPath !== undefined) {
       try {
-        await cleanupStaging(staging);
+        await removeDelivered(deliveredPath);
       } catch {
-        failures.push("cannot remove package staging directory");
+        failures.push("cannot remove failed package output");
       }
     }
-    if (failures.length > 0 || terminating !== undefined)
-      await rollbackOutput();
-  } finally {
-    if (escalation !== undefined) clearTimeout(escalation);
-    for (const [signal, handler] of handlers) process.off(signal, handler);
+    throw new PackFailure(failures.join("\n"));
   }
-  if (terminating !== undefined) {
-    if (failures.length > 0) process.stderr.write(failures.join("\n") + "\n");
-    process.kill(process.pid, terminating);
-    await new Promise<never>(() => {});
-  }
-  if (failures.length > 0) throw new PackFailure(failures.join("\n"));
   if (report === undefined)
     throw new PackFailure("cannot package source checkout");
   return report;

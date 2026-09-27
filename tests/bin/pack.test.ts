@@ -22,200 +22,9 @@ import {
   packValidatorMode,
   runPackDriver,
   startPackDriver,
-  stopPackProcess,
-  type PackEvent,
 } from "./pack-fixture.ts";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
-
-async function settlePackCleanup(
-  events: Awaited<ReturnType<typeof listenPackEvents>>,
-  runs: readonly ReturnType<typeof startPackDriver>[],
-  pids: readonly (number | undefined)[],
-): Promise<void> {
-  await Promise.allSettled([
-    ...pids.map(async (pid) => {
-      if (pid !== undefined) stopPackProcess(pid);
-    }),
-    ...runs.map((run) => run.closed),
-    events.close(),
-  ]);
-}
-
-for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"] as const) {
-  void test(
-    `${signal} reaps a writer before staging cleanup`,
-    { timeout: 15000 },
-    async (t) => {
-      const f = makePackFixture(t);
-      writeFileSync(join(f.out, "unrelated.tgz"), "caller artifact");
-      writeFileSync(
-        join(f.root, "node_modules", ".bin", "tsc"),
-        '#!/bin/sh\nexec node "$PACK_FIXTURE_DRIVER" compiler-writer "$@"\n',
-        { mode: 0o755 },
-      );
-      writeFileSync(
-        join(f.bin, "npm"),
-        '#!/bin/sh\nprintf called > "$PACK_EVENTS/npm-called"\nexit 7\n',
-        { mode: 0o755 },
-      );
-      const events = await listenPackEvents(f);
-      const run = startPackDriver(f);
-      let ready: PackEvent | undefined;
-      try {
-        const active = await events.next();
-        ready = active;
-        assert.equal(active.event, "writer-ready");
-        assert.equal(typeof active.writerPid, "number");
-        run.child.kill(signal);
-        const result = await run.closed;
-        assert.equal(result.signal, signal, result.stderr);
-        assert.equal(result.stdout, "");
-        assert.equal(
-          existsSync(join(f.events, "npm-called")),
-          false,
-          "no subprocess may follow cancellation",
-        );
-        assert.throws(() => process.kill(active.writerPid!, 0), {
-          code: "ESRCH",
-          message: /ESRCH/,
-        });
-        assert.throws(() => process.kill(active.pid, 0), {
-          code: "ESRCH",
-          message: /ESRCH/,
-        });
-        const receipt = JSON.parse(
-          readFileSync(join(f.events, "writer-reaped"), "utf8"),
-        );
-        assert.equal(
-          receipt.stagingExists,
-          true,
-          "writer must be reaped while staging still exists",
-        );
-        assert.equal(
-          existsSync(join(f.events, "writer-outlived-staging")),
-          false,
-        );
-        assert.deepEqual(readdirSync(f.temp), []);
-        assert.deepEqual(readdirSync(f.out), ["unrelated.tgz"]);
-        assert.equal(
-          readFileSync(join(f.out, "unrelated.tgz"), "utf8"),
-          "caller artifact",
-        );
-      } finally {
-        await settlePackCleanup(
-          events,
-          [run],
-          [ready?.writerPid, ready?.pid, run.child.pid],
-        );
-      }
-    },
-  );
-}
-
-void test(
-  "SIGTERM escalates after the compiler exits with an ignoring writer",
-  { timeout: 15000 },
-  async (t) => {
-    const f = makePackFixture(t);
-    writeFileSync(join(f.out, "unrelated.tgz"), "caller artifact");
-    writeFileSync(
-      join(f.root, "node_modules", ".bin", "tsc"),
-      '#!/bin/sh\nexec node "$PACK_FIXTURE_DRIVER" compiler-orphan "$@"\n',
-      { mode: 0o755 },
-    );
-    const events = await listenPackEvents(f);
-    const run = startPackDriver(f);
-    let ready: PackEvent | undefined;
-    try {
-      const active = await events.next();
-      ready = active;
-      assert.equal(active.event, "writer-ready");
-      run.child.kill("SIGTERM");
-      const result = await run.closed;
-      assert.equal(result.signal, "SIGTERM", result.stderr);
-      assert.equal(result.stdout, "");
-      assert.throws(() => process.kill(active.writerPid!, 0), {
-        code: "ESRCH",
-        message: /ESRCH/,
-      });
-      const receipt = JSON.parse(
-        readFileSync(join(f.events, "writer-signalled"), "utf8"),
-      );
-      assert.deepEqual(receipt, { signal: "SIGTERM", stagingExists: true });
-      assert.equal(
-        existsSync(join(f.events, "writer-outlived-staging")),
-        false,
-      );
-      assert.deepEqual(readdirSync(f.temp), []);
-      assert.deepEqual(readdirSync(f.out), ["unrelated.tgz"]);
-      assert.equal(
-        readFileSync(join(f.out, "unrelated.tgz"), "utf8"),
-        "caller artifact",
-      );
-    } finally {
-      await settlePackCleanup(
-        events,
-        [run],
-        [ready?.writerPid, ready?.pid, run.child.pid],
-      );
-    }
-  },
-);
-
-void test(
-  "SIGTERM confirms a closed-stdio ignoring writer is dead before staging cleanup",
-  { timeout: 15000 },
-  async (t) => {
-    const f = makePackFixture(t);
-    writeFileSync(join(f.out, "unrelated.tgz"), "caller artifact");
-    writeFileSync(
-      join(f.root, "node_modules", ".bin", "tsc"),
-      '#!/bin/sh\nexec node "$PACK_FIXTURE_DRIVER" compiler-closed-orphan "$@"\n',
-      { mode: 0o755 },
-    );
-    const events = await listenPackEvents(f);
-    const run = startPackDriver(f);
-    let ready: PackEvent | undefined;
-    try {
-      const active = await events.next();
-      ready = active;
-      assert.equal(active.event, "writer-ready");
-      run.child.kill("SIGTERM");
-      const result = await run.closed;
-      assert.equal(result.signal, "SIGTERM", result.stderr);
-      assert.equal(result.stdout, "");
-      assert.doesNotMatch(
-        result.stderr,
-        /cannot confirm package child process group exit/,
-      );
-      assert.throws(() => process.kill(active.writerPid!, 0), {
-        code: "ESRCH",
-        message: /ESRCH/,
-      });
-      const receipt = JSON.parse(
-        readFileSync(join(f.events, "writer-signalled"), "utf8"),
-      );
-      assert.deepEqual(receipt, { signal: "SIGTERM", stagingExists: true });
-      assert.equal(
-        existsSync(join(f.events, "writer-outlived-staging")),
-        false,
-      );
-      assert.deepEqual(readdirSync(f.temp), []);
-      assert.deepEqual(readdirSync(f.out), ["unrelated.tgz"]);
-      assert.equal(
-        readFileSync(join(f.out, "unrelated.tgz"), "utf8"),
-        "caller artifact",
-      );
-    } finally {
-      await settlePackCleanup(
-        events,
-        [run],
-        [ready?.writerPid, ready?.pid, run.child.pid],
-      );
-    }
-  },
-);
 
 void test("a pre-existing output belongs to its caller", (t) => {
   const f = makePackFixture(t);
@@ -260,11 +69,11 @@ void test(
       );
       assert.deepEqual(readdirSync(f.temp), []);
     } finally {
-      await settlePackCleanup(
-        events,
-        runs,
-        runs.map((run) => run.child.pid),
-      );
+      for (const run of runs) run.child.kill("SIGKILL");
+      await Promise.allSettled([
+        ...runs.map((run) => run.closed),
+        events.close(),
+      ]);
     }
   },
 );
@@ -379,6 +188,17 @@ void test("compiler failure yields no package metadata or artifact", (t) => {
   assert.notEqual(result.status, 0);
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /compiler|compil/);
+  assert.deepEqual(readdirSync(f.out), []);
+  assert.deepEqual(readdirSync(f.temp), []);
+});
+
+void test("a package step that cannot start yields no artifact and no staging", (t) => {
+  const f = makePackFixture(t);
+  rmSync(join(f.root, "node_modules", ".bin", "tsc"));
+  const result = runPackDriver(f);
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /^cannot start compile package sources$/m);
   assert.deepEqual(readdirSync(f.out), []);
   assert.deepEqual(readdirSync(f.temp), []);
 });

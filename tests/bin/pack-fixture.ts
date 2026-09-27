@@ -12,7 +12,6 @@ import { dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { registerScratch } from "./fixture-scratch.ts";
 
 const REPO = fileURLToPath(new URL("../..", import.meta.url));
 
@@ -26,7 +25,6 @@ export interface PackFixture {
 
 export function makePackFixture(t: TestContext): PackFixture {
   const outer = mkdtempSync(join(tmpdir(), "spw-pack-contract-"));
-  registerScratch(outer);
   const f = {
     root: join(outer, "repo"),
     out: join(outer, "out"),
@@ -231,25 +229,9 @@ export function startPackDriver(f: PackFixture) {
   return { child, closed };
 }
 
-export function stopPackProcess(pid: number): void {
-  try {
-    process.kill(pid, "SIGKILL");
-  } catch (error) {
-    if (!(
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "ESRCH"
-    ))
-      throw error;
-  }
-}
-
 export interface PackEvent {
   event: string;
   pid: number;
-  writerPid?: number;
-  staging?: string;
 }
 
 export async function listenPackEvents(f: PackFixture) {

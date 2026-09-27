@@ -1,22 +1,21 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { registerScratch } from "./fixture-scratch.ts";
 import {
   auditConstructorMatchers,
   exactError,
   matchingError,
 } from "../lib/error-assertions.ts";
+import { suiteScratch } from "../lib/scratch.ts";
 
 class ExpectedError extends Error {}
 const PACKAGE_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const SCRATCH = suiteScratch("spw-error-audit-");
 
 function auditProject(source: string): { root: string; tsconfigPath: string } {
-  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-"));
-  registerScratch(root);
+  const root = mkdtempSync(join(SCRATCH, "project-"));
   mkdirSync(join(root, "tests", "unit"), { recursive: true });
   writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
   const tsconfigPath = join(root, "tests", "tsconfig.json");
@@ -151,8 +150,7 @@ void exercise;
 });
 
 void test("constructor audit fails closed when the configured project is missing", () => {
-  const root = mkdtempSync(join(tmpdir(), "spw-error-audit-fail-"));
-  registerScratch(root);
+  const root = mkdtempSync(join(SCRATCH, "missing-"));
   assert.throws(
     () =>
       auditConstructorMatchers({
