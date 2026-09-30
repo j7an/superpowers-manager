@@ -155,9 +155,12 @@ Code below describe product integrations, not a required agent harness.
   is incomplete.
 
 - Run `node src/cli.ts` for the maintained CLI; native tests import production
-  `src/` directly and need no build. Future production coverage includes all of
+  `src/` directly and need no build. Production coverage includes all of
   `src/`, including `src/cli.ts`; emitted dist, tests, and packaging tools are
-  outside that source scope. Do not add coverage execution as part of migration.
+  outside that source scope. The CI `coverage` job enforces a total line floor
+  and changed-line coverage over `src/`; reproduce it locally with the
+  arguments in its `Run shared tests with coverage` step, pointing the LCOV
+  destination outside the checkout.
 - Package with `node tests/tools/pack.ts --out-dir <existing-directory>`; allocate
   the developer output directory outside the checkout. Compilation and npm pack
   happen in invocation-owned external staging. Bare checkout `npm pack` is
