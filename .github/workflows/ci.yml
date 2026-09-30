@@ -152,3 +152,9 @@ jobs:
           base-sha: ${{ github.event.pull_request.base.sha }}
           minimum: "90"
           source-paths: src/
+          # Type-only modules have no executable lines, so Node's LCOV omits
+          # them and the action rejects any change to one as a changed path
+          # missing from the report.
+          exclude-paths: |
+            src/commands/context.ts
+            src/harness.ts

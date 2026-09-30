@@ -14,6 +14,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -381,6 +382,27 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", () => {
   );
 });
 
+/**
+ * `src/` modules that are empty once Node strips their types.
+ *
+ * Comments are removed by pattern, not by a tokenizer: a runtime module is
+ * misread only if all of its code sits inside comment-like text. Switch to a
+ * tokenizer if that ever misclassifies a module.
+ */
+function typeOnlySources(): string[] {
+  return readdirSync(join(ROOT, "src"), { recursive: true })
+    .map((entry) => `src/${String(entry)}`)
+    .filter((path) => path.endsWith(".ts"))
+    .filter(
+      (path) =>
+        stripTypeScriptTypes(readFileSync(join(ROOT, path), "utf8"))
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .replace(/\/\/.*$/gm, "")
+          .trim() === "",
+    )
+    .sort();
+}
+
 // The coverage job runs the shared suite once and gates it twice: Node
 // enforces a total line floor over src/, and the shared action enforces
 // changed-line coverage from the same LCOV report. Thresholds are asserted
@@ -480,9 +502,15 @@ void test("ci.yml `coverage` job gates total and changed-line coverage of src/",
   assert.match(gate.minimum, /^\d+$/);
   assert.ok(Number(gate.minimum) > 0 && Number(gate.minimum) <= 100);
   assert.equal(gate["source-paths"], "src/");
-  assert.ok(
-    !Object.hasOwn(gate, "exclude-paths"),
-    "every src/ file is judged by changed-line coverage",
+  // Node's LCOV has no record for a module with no executable lines, and the
+  // action fails any changed path missing from the report. Exclusions are
+  // therefore exactly the type-only modules: one more would hide runtime
+  // code from the gate, one fewer fails every change to an interface.
+  assert.equal(typeof gate["exclude-paths"], "string");
+  assert.deepEqual(
+    gate["exclude-paths"].trim().split("\n").sort(),
+    typeOnlySources(),
+    "exclude-paths must list exactly the type-only src/ modules",
   );
 
   const order = [
