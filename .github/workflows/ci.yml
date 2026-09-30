@@ -93,3 +93,62 @@ jobs:
 
       - name: Run shared tests and package minimum checks
         run: sh tests/run.sh --require-package-node
+
+  # Measures the shared suite once, separate from `toolchain`. Tests that
+  # spawn `node` with a minimal environment, or run a copied package from a
+  # sandbox, drop NODE_V8_COVERAGE, so their subprocess code counts as
+  # uncovered; both thresholds are set from that measured undercount.
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: diff-cover needs the merge base with the PR base, and
+          # the citation gate resolves `git show <sha>:path` citations.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          check-latest: true
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install diff-cover
+        run: |
+          python3 -m venv "$RUNNER_TEMP/diff-cover"
+          "$RUNNER_TEMP/diff-cover/bin/python" -m pip install 'diff-cover>=10.2,<11'
+          printf 'DIFF_COVER_PATH=%s\n' "$RUNNER_TEMP/diff-cover/bin/diff-cover" >> "$GITHUB_ENV"
+
+      # The floor sits below the measured total because children that
+      # re-import a module under a cache-busting query add duplicate,
+      # low-coverage LCOV records that Node scores separately.
+      - name: Run shared tests with coverage
+        run: >-
+          sh tests/run.sh --experimental-test-coverage
+          '--test-coverage-include=src/**' --test-coverage-lines=87
+          --test-reporter=spec --test-reporter-destination=stdout
+          --test-reporter=lcov --test-reporter-destination=lcov.info
+
+      - name: Check changed-line coverage
+        uses: j7an/shared-workflows/actions/coverage@798e12564a8aeacc4dda95f76d8d3d22d677f1a0 # v4.9.0
+        with:
+          report-path: lcov.info
+          diff-cover-path: ${{ env.DIFF_COVER_PATH }}
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          minimum: "90"
+          source-paths: src/

@@ -146,8 +146,8 @@ void test("ci.yml declares the expected top-level contract", () => {
   assert.deepEqual(ci.permissions, {});
   const jobs = requireMapping(ci.jobs, "jobs");
 
-  assert.deepEqual(Object.keys(jobs), ["harness", "toolchain"]);
-  for (const key of ["harness", "toolchain"]) {
+  assert.deepEqual(Object.keys(jobs), ["harness", "toolchain", "coverage"]);
+  for (const key of ["harness", "toolchain", "coverage"]) {
     const job = requireMapping(jobs[key], `jobs.${key}`);
     assert.deepEqual(job.permissions, { contents: "read" });
     assert.ok(!Object.hasOwn(job, "needs"));
@@ -378,6 +378,125 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", () => {
       "fetch-depth"
     ],
     0,
+  );
+});
+
+// The coverage job runs the shared suite once and gates it twice: Node
+// enforces a total line floor over src/, and the shared action enforces
+// changed-line coverage from the same LCOV report. Thresholds are asserted
+// numeric rather than exact: they are policy, and moving one is a reviewed
+// workflow diff, not a contract break.
+void test("ci.yml `coverage` job gates total and changed-line coverage of src/", () => {
+  const ci = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
+    "ci",
+  );
+  const jobs = requireMapping(ci.jobs, "jobs");
+  const coverage = requireMapping(jobs.coverage, "jobs.coverage");
+  assert.equal(coverage["runs-on"], "ubuntu-latest");
+  assert.ok(
+    !Object.hasOwn(coverage, "strategy"),
+    "jobs.coverage measures once at latest Node 24",
+  );
+
+  const steps = coverage.steps;
+  assert.ok(
+    Array.isArray(steps),
+    "expected jobs.coverage.steps to be an array",
+  );
+  steps.forEach((candidate, index) => {
+    const step = requireMapping(candidate, `jobs.coverage.steps[${index}]`);
+    assert.ok(
+      !Object.hasOwn(step, "continue-on-error"),
+      `jobs.coverage.steps[${index}] must remain blocking`,
+    );
+    assert.ok(
+      !Object.hasOwn(step, "if"),
+      `jobs.coverage.steps[${index}] must run unconditionally`,
+    );
+  });
+
+  const checkoutIndex = uniqueStepTargetIndex(steps, "actions/checkout");
+  const checkoutWith = requireMapping(
+    steps[checkoutIndex].with,
+    "coverage checkout step.with",
+  );
+  assert.equal(checkoutWith["persist-credentials"], false);
+  // diff-cover needs the merge base with the PR base commit.
+  assert.equal(checkoutWith["fetch-depth"], 0);
+
+  const setupIndex = uniqueStepTargetIndex(steps, "actions/setup-node");
+  const setupWith = requireMapping(
+    steps[setupIndex].with,
+    "coverage setup-node step.with",
+  );
+  assert.equal(setupWith["node-version"], "24");
+  assert.equal(setupWith["check-latest"], true);
+
+  const runIndex = (pattern: RegExp, label: string) => {
+    const matches = steps.flatMap((step: any, index: number) =>
+      typeof step.run === "string" && pattern.test(step.run) ? [index] : [],
+    );
+    assert.equal(matches.length, 1, `expected exactly one ${label} step`);
+    return matches[0];
+  };
+  const installIndex = runIndex(/pnpm install --frozen-lockfile/, "install");
+  const diffCoverIndex = runIndex(/pip install 'diff-cover/, "diff-cover");
+  const suiteIndex = runIndex(/^sh tests\/run\.sh /, "suite");
+
+  const diffCover = steps[diffCoverIndex].run;
+  assert.match(diffCover, /python3 -m venv "\$RUNNER_TEMP\/diff-cover"/);
+  assert.match(
+    diffCover,
+    /DIFF_COVER_PATH=%s\\n' "\$RUNNER_TEMP\/diff-cover\/bin\/diff-cover" >> "\$GITHUB_ENV"/,
+  );
+
+  const flags = steps[suiteIndex].run.replace(/\\\n/g, " ").trim().split(/\s+/);
+  assert.ok(flags.includes("--experimental-test-coverage"));
+  assert.ok(
+    flags.includes("'--test-coverage-include=src/**'"),
+    "the total floor must measure src/ only, not test files",
+  );
+  const floor = flags
+    .map((flag: string) => /^--test-coverage-lines=(\d+)$/.exec(flag))
+    .filter(Boolean);
+  assert.equal(floor.length, 1, "expected exactly one total line floor");
+  assert.ok(Number(floor[0]![1]) > 0 && Number(floor[0]![1]) <= 100);
+  const lcov = flags.indexOf("--test-reporter=lcov");
+  assert.ok(lcov >= 0, "the suite must emit an LCOV report");
+  const destination = /^--test-reporter-destination=(.+)$/.exec(
+    flags[lcov + 1],
+  );
+  assert.ok(destination, "the LCOV reporter must name its destination");
+
+  const gateIndex = uniqueStepTargetIndex(
+    steps,
+    "j7an/shared-workflows/actions/coverage",
+  );
+  const gate = requireMapping(steps[gateIndex].with, "coverage gate.with");
+  assert.equal(gate["report-path"], destination[1]);
+  assert.equal(gate["diff-cover-path"], "${{ env.DIFF_COVER_PATH }}");
+  assert.equal(gate["base-sha"], "${{ github.event.pull_request.base.sha }}");
+  assert.match(gate.minimum, /^\d+$/);
+  assert.ok(Number(gate.minimum) > 0 && Number(gate.minimum) <= 100);
+  assert.equal(gate["source-paths"], "src/");
+  assert.ok(
+    !Object.hasOwn(gate, "exclude-paths"),
+    "every src/ file is judged by changed-line coverage",
+  );
+
+  const order = [
+    uniqueStepTargetIndex(steps, "step-security/harden-runner"),
+    checkoutIndex,
+    setupIndex,
+    installIndex,
+    diffCoverIndex,
+    suiteIndex,
+    gateIndex,
+  ];
+  assert.ok(
+    order.every((index, i) => i === 0 || order[i - 1] < index),
+    "coverage steps are out of order",
   );
 });
 
