@@ -19,6 +19,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { UPSTREAM_URL_DEFAULT } from "../../src/effective-selection.ts";
 
 import {
   assertNoForbidden,
@@ -188,6 +189,117 @@ const HARNESS_MATRIX = [
   { name: "OpenCode", selector: "harness-opencode" },
   { name: "Claude Code", selector: "harness-claude-code" },
 ];
+
+void test("upstream-window.yml runs weekly and on demand with least privilege", () => {
+  const workflow = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "upstream-window.yml"), "utf8")),
+    "upstream-window",
+  );
+  assert.deepEqual(workflow.on, {
+    schedule: [{ cron: "30 6 * * 1", timezone: "America/Los_Angeles" }],
+    workflow_dispatch: null,
+  });
+  assert.deepEqual(workflow.permissions, {});
+  const jobs = requireMapping(workflow.jobs, "jobs");
+  assert.deepEqual(Object.keys(jobs), ["window", "harness", "drift"]);
+  for (const [key, value] of Object.entries(jobs)) {
+    assert.deepEqual(requireMapping(value, `jobs.${key}`).permissions, {
+      contents: "read",
+    });
+  }
+});
+
+void test("upstream-window.yml computes a 90-day window of the default upstream", () => {
+  const workflow = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "upstream-window.yml"), "utf8")),
+    "upstream-window",
+  );
+  const window = requireMapping(
+    requireMapping(workflow.jobs, "jobs").window,
+    "jobs.window",
+  );
+  const steps = window.steps;
+  assert.ok(Array.isArray(steps));
+  const index = uniqueStepTargetIndex(
+    steps,
+    "j7an/shared-workflows/actions/release-window",
+  );
+  assert.deepEqual(requireMapping(steps[index], "window step").with, {
+    "git-url": UPSTREAM_URL_DEFAULT,
+    "window-days": "90", // The 90-day window is the requirement itself.
+  });
+  assert.equal(
+    requireMapping(window.outputs, "jobs.window.outputs").versions,
+    "${{ steps.window.outputs.versions }}",
+  );
+});
+
+void test("upstream-window.yml walks every harness selector", () => {
+  const workflow = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "upstream-window.yml"), "utf8")),
+    "upstream-window",
+  );
+  const harness = requireMapping(
+    requireMapping(workflow.jobs, "jobs").harness,
+    "jobs.harness",
+  );
+  assert.equal(harness.needs, "window");
+  const strategy = requireMapping(harness.strategy, "jobs.harness.strategy");
+  assert.equal(strategy["fail-fast"], false);
+  assert.deepEqual(
+    requireMapping(strategy.matrix, "jobs.harness.strategy.matrix").include,
+    HARNESS_MATRIX,
+  );
+  assert.ok(Array.isArray(harness.steps));
+  const steps = harness.steps.map((value: unknown, index: number) =>
+    requireMapping(value, `jobs.harness.steps[${index}]`),
+  );
+  const walkIndex = steps.findIndex(
+    (step: Record<string, any>) =>
+      typeof step.run === "string" &&
+      step.run.includes('sh tests/container.sh "$SPW_HARNESS_SELECTOR"'),
+  );
+  assert.ok(walkIndex >= 0, "the harness selector must run");
+  assert.deepEqual(steps[walkIndex].env, {
+    SPW_HARNESS_SELECTOR: "${{ matrix.selector }}",
+  });
+  const refsIndex = steps.findIndex(
+    (step: Record<string, any>) =>
+      typeof step.run === "string" &&
+      step.run.includes("jq -r '.[]' > tests/container/upstream-refs"),
+  );
+  assert.ok(
+    refsIndex >= 0 && refsIndex < walkIndex,
+    "live refs must be written before the walk",
+  );
+  assert.deepEqual(steps[refsIndex].env, {
+    SPW_WINDOW: "${{ needs.window.outputs.versions }}",
+  });
+});
+
+void test("upstream-window.yml fails when the committed tag list drifts", () => {
+  const workflow = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "upstream-window.yml"), "utf8")),
+    "upstream-window",
+  );
+  const drift = requireMapping(
+    requireMapping(workflow.jobs, "jobs").drift,
+    "jobs.drift",
+  );
+  assert.equal(drift.needs, "window");
+  assert.ok(Array.isArray(drift.steps));
+  assert.ok(
+    drift.steps.some((value: unknown, index: number) => {
+      const step = requireMapping(value, `jobs.drift.steps[${index}]`);
+      return (
+        typeof step.run === "string" &&
+        step.run.includes(
+          "git diff --exit-code -- tests/container/upstream-refs",
+        )
+      );
+    }),
+  );
+});
 
 void test("ci.yml harness matrix runs one independent integration per selector", () => {
   const ci = requireMapping(
