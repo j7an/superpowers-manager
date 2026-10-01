@@ -96,7 +96,9 @@ prerelease, publish manually, or introduce an npm token for this decision.
 
 1. Ensure `main` is green (`sh tests/container.sh`) and inspect every commit
    since the latest version tag. Confirm Conventional Commit subjects match
-   user-visible intent and that the selected bump is deliberate.
+   user-visible intent and that the selected bump is deliberate. Release
+   validation tests the tags committed in `tests/container/upstream-refs`;
+   confirm the latest `upstream-window` run is green before tagging.
 2. Confirm release-bot prerequisites remain present: repository variable
    `RELEASE_BOT_APP_ID`, repository secret `RELEASE_BOT_PRIVATE_KEY`, and the
    protected `release` environment used by the shared Tag Release workflow.

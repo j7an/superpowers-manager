@@ -220,6 +220,15 @@ Code below describe product integrations, not a required agent harness.
   throwaway container state but never the developer's or runner's real harness
   state. `pnpm run test:acceptance` runs shared checks once, then
   Codex, Pi, OpenCode, and Claude Code.
+  Each selector also walks the committed tags in
+  `tests/container/upstream-refs` through a local mirror: it pins, prepares,
+  installs the oldest ref, updates through later refs, and probes each ref,
+  then checks `track-latest`, `unpin`, and `uninstall`. The container stays
+  network-isolated; building its image fetches those tags from GitHub. OpenCode
+  V2 first verifies clean refusals for historical refs without a V2 entrypoint,
+  then runs that lifecycle on supported refs. The weekly `upstream-window`
+  workflow compares the committed list with the live 90-day window; update the
+  list in a PR when it drifts, and the harness selectors test the new tags.
 - Use `tests/manual/codex/behavior-probe.sh` only for optional intentional
   native-only compatibility residue that is not part of acceptance.
 - Every `assert.throws`/`assert.rejects` names a matcher that constrains the
