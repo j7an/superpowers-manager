@@ -31,6 +31,25 @@ import {
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const WORKFLOW_DIR = join(ROOT, ".github", "workflows");
 
+void test("tests/container/upstream-refs lists stable tags newest first", () => {
+  const lines = readFileSync(
+    join(ROOT, "tests/container/upstream-refs"),
+    "utf8",
+  )
+    .trimEnd()
+    .split("\n");
+  assert.ok(lines.length >= 2, "the release window needs at least two tags");
+  const parts = lines.map((line) => {
+    const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(line);
+    assert.ok(match, `not a stable vX.Y.Z tag: ${line}`);
+    return match.slice(1).map(Number);
+  });
+  assert.equal(new Set(lines).size, lines.length, "tags must be unique");
+  const newerFirst = (a: number[], b: number[]) =>
+    b[0]! - a[0]! || b[1]! - a[1]! || b[2]! - a[2]!;
+  assert.deepEqual([...parts].sort(newerFirst), parts, "tags must be newest first");
+});
+
 // --- action pins --------------------------------------------------------
 // Every external `uses:` is pinned to a full commit SHA with a version
 // comment, and every shared-workflows caller carries the same pin. Only the
