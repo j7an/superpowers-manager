@@ -14,6 +14,7 @@
     "tests/container/codex/assert-state.ts",
     "tests/container/codex/assert-schema.ts",
     "tests/container/pi/resource-probe.ts",
+    "tests/container/pi/skill-names.ts",
     "tests/container/pi/fixture.ts",
     "tests/container/opencode/native-probe.ts",
     "tests/unit/helpers/rpc-server-child.ts",

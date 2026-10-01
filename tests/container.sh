@@ -20,13 +20,28 @@ if [ "${1:-}" = "--inside" ]; then
       OPENCODE_TEST_MANAGED_CONFIG_DIR=/tmp/spw-ambient-forbidden-managed \
       sh tests/container/opencode/offline-probe.sh
   }
+  run_opencode_walk() {
+    SPW_OPENCODE_BIN="$1" SPW_OPENCODE_MAJOR="$2" \
+      OPENCODE_CONFIG=/tmp/spw-ambient-forbidden.jsonc \
+      OPENCODE_CONFIG_DIR=/tmp/spw-ambient-forbidden-config \
+      OPENCODE_CONFIG_CONTENT='{"plugin":["superpowers"]}' \
+      OPENCODE_DB=/tmp/spw-ambient-forbidden.db \
+      OPENCODE_TEST_MANAGED_CONFIG_DIR=/tmp/spw-ambient-forbidden-managed \
+      sh tests/container/opencode/real-upstream.sh
+  }
   run_opencode_lines() {
     echo "container: OpenCode V1 lane: start"
     run_opencode_probe /opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe 1
     echo "container: OpenCode V1 lane: complete status=0"
+    echo "container: OpenCode V1 real-upstream walk: start"
+    run_opencode_walk /opt/spw-test-tools/node_modules/opencode-ai/bin/opencode.exe 1
+    echo "container: OpenCode V1 real-upstream walk: complete status=0"
     echo "container: OpenCode V2 lane: start"
     run_opencode_probe /opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe 2
     echo "container: OpenCode V2 lane: complete status=0"
+    echo "container: OpenCode V2 real-upstream walk: start"
+    run_opencode_walk /opt/spw-test-tools/node_modules/@opencode/cli/bin/opencode.exe 2
+    echo "container: OpenCode V2 real-upstream walk: complete status=0"
   }
 
   # Prints "<label>: start", runs the command, then "<label>: complete status=0".
@@ -43,14 +58,17 @@ if [ "${1:-}" = "--inside" ]; then
     suite)
       phase "container suite: shared checks" sh tests/run.sh
       phase "container suite: Codex harness integration" sh tests/container/codex/offline-probe.sh
+      phase "container: Codex real-upstream walk" sh tests/container/codex/real-upstream.sh
       phase "container suite: Pi harness integration" sh tests/container/pi/offline-probe.sh
+      phase "container: Pi real-upstream walk" sh tests/container/pi/real-upstream.sh
       phase "container suite: OpenCode harness integration" run_opencode_lines
       phase "container suite: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh
+      phase "container: Claude Code real-upstream walk" sh tests/container/claude-code/real-upstream.sh
       ;;
-    harness-codex) phase "container: Codex harness integration" sh tests/container/codex/offline-probe.sh ;;
-    harness-pi) phase "container: Pi harness integration" sh tests/container/pi/offline-probe.sh ;;
+    harness-codex) phase "container: Codex harness integration" sh tests/container/codex/offline-probe.sh; phase "container: Codex real-upstream walk" sh tests/container/codex/real-upstream.sh ;;
+    harness-pi) phase "container: Pi harness integration" sh tests/container/pi/offline-probe.sh; phase "container: Pi real-upstream walk" sh tests/container/pi/real-upstream.sh ;;
     harness-opencode) phase "container: OpenCode harness integration" run_opencode_lines ;;
-    harness-claude-code) phase "container: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh ;;
+    harness-claude-code) phase "container: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh; phase "container: Claude Code real-upstream walk" sh tests/container/claude-code/real-upstream.sh ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
   exit 0

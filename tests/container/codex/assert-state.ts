@@ -386,15 +386,12 @@ function readHooks(path: string): Record<string, unknown>[] {
   return hooks;
 }
 
-function assertSkills(
-  responsePath: string,
-  listingJson: string,
-  upstreamPath: string,
-  requestedCwd: string,
-): void {
+function readSkills(responsePath: string, requestedCwd: string): unknown[] {
   const response = readJson(responsePath);
   if (!isObject(response) || response.id !== 1)
     fail("skills/list response is missing id 1");
+  if (Object.hasOwn(response, "error"))
+    fail("skills/list returned an RPC error");
   if (!isObject(response.result) || !Array.isArray(response.result.data))
     fail("skills/list response has no data array");
   const entries = response.result.data
@@ -409,6 +406,32 @@ function assertSkills(
     !Array.isArray(entry.skills)
   )
     fail("skills/list reports errors or malformed skills");
+  return entry.skills;
+}
+
+function skillNames(responsePath: string, requestedCwd: string): void {
+  const names = new Set<string>();
+  for (const skill of readSkills(responsePath, requestedCwd)) {
+    if (!isObject(skill)) fail("skills/list skill metadata is malformed");
+    if (skill.pluginId !== MANAGER_ID || skill.enabled !== true) continue;
+    if (
+      typeof skill.name !== "string" ||
+      !/^superpowers:[a-z0-9][a-z0-9-]*$/.test(skill.name)
+    )
+      fail("skills/list manager skill name is malformed");
+    names.add(skill.name.slice("superpowers:".length));
+  }
+  const sorted = [...names].sort();
+  process.stdout.write(sorted.length ? `${sorted.join("\n")}\n` : "");
+}
+
+function assertSkills(
+  responsePath: string,
+  listingJson: string,
+  upstreamPath: string,
+  requestedCwd: string,
+): void {
+  const skills = readSkills(responsePath, requestedCwd);
   const plugin = managerPlugin(
     installed(listingJson),
     "Codex listing must contain exactly one manager plugin",
@@ -428,7 +451,7 @@ function assertSkills(
   const found: Record<string, string[]> = Object.fromEntries(
     Object.keys(expected).map((name) => [name, []]),
   );
-  for (const skill of entry.skills) {
+  for (const skill of skills) {
     if (
       !isObject(skill) ||
       typeof skill.name !== "string" ||
@@ -603,6 +626,9 @@ try {
       break;
     case "active-hooks":
       assertActiveHooks(args[0]!, args[1]!);
+      break;
+    case "skill-names":
+      skillNames(args[0]!, args[1]!);
       break;
     case "skills":
       assertSkills(args[0]!, args[1]!, args[2]!, args[3]!);

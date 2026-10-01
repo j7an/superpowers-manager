@@ -122,6 +122,73 @@ function hooksResponse(active: boolean): Record<string, unknown> {
   return { id: 1, result: { data: [{ hooks }] } };
 }
 
+void test("Codex skill-names filters exact enabled manager skills and rejects malformed responses", () => {
+  const path = join(scratch, "skill-names.json");
+  const cwd = "/isolated/cwd";
+  const manager = "superpowers@superpowers-manager";
+  const skill = (
+    name: unknown,
+    pluginId: unknown = manager,
+    enabled: unknown = true,
+  ) => ({ name, pluginId, enabled });
+  const response = (skills: unknown[]) => ({
+    id: 1,
+    result: {
+      data: [
+        { cwd: "/other", errors: [], skills: [skill("superpowers:other-cwd")] },
+        { cwd, errors: [], skills },
+      ],
+    },
+  });
+  writeJson(
+    path,
+    response([
+      skill("superpowers:zebra"),
+      skill("superpowers:alpha"),
+      skill("superpowers:alpha"),
+      skill("superpowers:disabled", manager, false),
+      skill("superpowers:truthy", manager, "true"),
+      skill("superpowers:other", "superpowers@other"),
+      skill("superpowers:missing", null),
+    ]),
+  );
+  const names = invoke(STATE, ["skill-names", path, cwd]);
+  assert.equal(names.status, 0, names.stderr);
+  assert.equal(names.stdout, "alpha\nzebra\n");
+  writeJson(path, response([]));
+  expectOk(STATE, ["skill-names", path, cwd]);
+  for (const malformed of [
+    { id: 2, result: { data: [] } },
+    { id: 1, error: { message: "unsafe cause" }, result: { data: [] } },
+    { id: 1, result: {} },
+    { id: 1, result: { data: [] } },
+    {
+      id: 1,
+      result: { data: [{ cwd, errors: ["unsafe cause"], skills: [] }] },
+    },
+    { id: 1, result: { data: [{ cwd, errors: [], skills: null }] } },
+    {
+      id: 1,
+      result: {
+        data: [
+          { cwd, errors: [], skills: [] },
+          { cwd, errors: [], skills: [] },
+        ],
+      },
+    },
+    { id: 1, result: { data: [{ cwd, skills: [] }] } },
+    response([null]),
+    response([skill(42)]),
+    response([skill("superpowers:")]),
+    response([skill("bad\nname")]),
+  ]) {
+    writeJson(path, malformed);
+    expectFailure(STATE, ["skill-names", path, cwd], /skills\/list/);
+  }
+  writeFileSync(path, "malformed JSON");
+  expectFailure(STATE, ["skill-names", path, cwd], /could not read JSON input/);
+});
+
 function schemaDocuments(): {
   client: Record<string, unknown>;
   response: Record<string, unknown>;

@@ -9,6 +9,18 @@ RUN apt-get update \
        ca-certificates git procps \
     && rm -rf /var/lib/apt/lists/*
 
+# Real-upstream walks read this tags-only mirror offline; the build is the
+# only step with network. See tests/container/real-upstream-walk.sh.
+COPY tests/container/upstream-refs /opt/spw-upstream/upstream-refs
+RUN git init -q --bare /opt/spw-upstream/superpowers \
+    && git -C /opt/spw-upstream/superpowers fetch -q --no-tags \
+       https://github.com/obra/superpowers \
+       $(sed 's|.*|refs/tags/&:refs/tags/&|' /opt/spw-upstream/upstream-refs) \
+    && git -C /opt/spw-upstream/superpowers update-ref refs/heads/main \
+       "$(head -n 1 /opt/spw-upstream/upstream-refs)^{commit}" \
+    && git -C /opt/spw-upstream/superpowers symbolic-ref HEAD refs/heads/main \
+    && chmod -R a+rX,go-w /opt/spw-upstream
+
 # Root package.json pins pnpm via packageManager; corepack resolves it from
 # the working directory, so install the tools from /workspace to reuse that pin
 # without a second one. The tools package must not carry its own

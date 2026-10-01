@@ -1,0 +1,91 @@
+name: Upstream window
+
+# Weekly: walk every harness against the live 90-day Superpowers window and
+# fail when tests/container/upstream-refs no longer matches it. PR and release
+# runs test the committed list; this is where the moving window is checked.
+on:
+  schedule:
+    - cron: "30 6 * * 1"
+      timezone: "America/Los_Angeles"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  window:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      versions: ${{ steps.window.outputs.versions }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Compute the Superpowers release window
+        id: window
+        uses: j7an/shared-workflows/actions/release-window@f6fedd5f4a9e33ff83c893abcc608e402c1ee1b0 # v4.10.0
+        with:
+          git-url: https://github.com/obra/superpowers
+          window-days: "90"
+
+  harness:
+    name: ${{ matrix.name }} real-upstream walk
+    needs: window
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Codex
+            selector: harness-codex
+          - name: Pi
+            selector: harness-pi
+          - name: OpenCode
+            selector: harness-opencode
+          - name: Claude Code
+            selector: harness-claude-code
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use the live window
+        env:
+          SPW_WINDOW: ${{ needs.window.outputs.versions }}
+        run: printf '%s' "$SPW_WINDOW" | jq -r '.[]' > tests/container/upstream-refs
+      - name: Run ${{ matrix.name }} harness integration
+        env:
+          SPW_HARNESS_SELECTOR: ${{ matrix.selector }}
+        run: sh tests/container.sh "$SPW_HARNESS_SELECTOR"
+
+  drift:
+    needs: window
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare the live window with the committed list
+        env:
+          SPW_WINDOW: ${{ needs.window.outputs.versions }}
+        run: |
+          printf '%s' "$SPW_WINDOW" | jq -r '.[]' > tests/container/upstream-refs
+          if ! git diff --exit-code -- tests/container/upstream-refs; then
+            echo "::error::tests/container/upstream-refs differs from the live 90-day window; open a PR setting it to: $(printf '%s' "$SPW_WINDOW" | jq -r 'join(" ")')"
+            exit 1
+          fi
