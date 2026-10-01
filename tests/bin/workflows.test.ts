@@ -47,7 +47,11 @@ void test("tests/container/upstream-refs lists stable tags newest first", () => 
   assert.equal(new Set(lines).size, lines.length, "tags must be unique");
   const newerFirst = (a: number[], b: number[]) =>
     b[0]! - a[0]! || b[1]! - a[1]! || b[2]! - a[2]!;
-  assert.deepEqual([...parts].sort(newerFirst), parts, "tags must be newest first");
+  assert.deepEqual(
+    [...parts].sort(newerFirst),
+    parts,
+    "tags must be newest first",
+  );
 });
 
 // --- action pins --------------------------------------------------------
