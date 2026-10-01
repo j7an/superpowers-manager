@@ -288,16 +288,30 @@ void test("upstream-window.yml fails when the committed tag list drifts", () => 
   );
   assert.equal(drift.needs, "window");
   assert.ok(Array.isArray(drift.steps));
+  const steps = drift.steps.map((value: unknown, index: number) =>
+    requireMapping(value, `jobs.drift.steps[${index}]`),
+  );
+  const step = steps.find(
+    (value: Record<string, any>) =>
+      typeof value.run === "string" &&
+      value.run.includes(
+        "git diff --exit-code -- tests/container/upstream-refs",
+      ),
+  );
+  assert.ok(step, "the drift check must run");
+  assert.deepEqual(step.env, {
+    SPW_WINDOW: "${{ needs.window.outputs.versions }}",
+  });
+  const writeIndex = step.run.indexOf(
+    `printf '%s' "$SPW_WINDOW" | jq -r '.[]' > tests/container/upstream-refs`,
+  );
   assert.ok(
-    drift.steps.some((value: unknown, index: number) => {
-      const step = requireMapping(value, `jobs.drift.steps[${index}]`);
-      return (
-        typeof step.run === "string" &&
-        step.run.includes(
+    writeIndex >= 0 &&
+      writeIndex <
+        step.run.indexOf(
           "git diff --exit-code -- tests/container/upstream-refs",
-        )
-      );
-    }),
+        ),
+    "live refs must be written before the drift check",
   );
 });
 
