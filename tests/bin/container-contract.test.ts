@@ -295,7 +295,7 @@ void test("container contract", async (t) => {
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
       const child = `#!/bin/sh
 set -eu
-case "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; */claude-code/offline-probe.sh) name=claude-code ;; *) name=shared ;; esac
+case "$0" in */codex/offline-probe.sh) name=codex ;; */pi/offline-probe.sh) name=pi ;; */opencode/offline-probe.sh) name=opencode ;; */claude-code/offline-probe.sh) name=claude-code ;; */claude-code/real-upstream.sh) name=claude-code-walk ;; *) name=shared ;; esac
 label=$name
 if [ "$name" = opencode ]; then
   case "$SPW_OPENCODE_MAJOR:$SPW_OPENCODE_BIN" in
@@ -313,6 +313,7 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         join(container, "pi/offline-probe.sh"),
         join(container, "opencode/offline-probe.sh"),
         join(container, "claude-code/offline-probe.sh"),
+        join(container, "claude-code/real-upstream.sh"),
       ];
       mkdirSync(join(container, "codex"), { recursive: true });
       mkdirSync(join(container, "pi"), { recursive: true });
@@ -348,12 +349,13 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
       for (const [mode, logText, stdout] of [
         [
           "suite",
-          "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\n",
+          "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\nclaude-code-walk\n",
           stage("container suite: shared checks") +
             stage("container suite: Codex harness integration") +
             stage("container suite: Pi harness integration") +
             stage("container suite: OpenCode harness integration", lanes) +
-            stage("container suite: Claude Code harness integration"),
+            stage("container suite: Claude Code harness integration") +
+            stage("container: Claude Code real-upstream walk"),
         ],
         [
           "harness-codex",
@@ -368,8 +370,9 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         ],
         [
           "harness-claude-code",
-          "claude-code\n",
-          stage("container: Claude Code harness integration"),
+          "claude-code\nclaude-code-walk\n",
+          stage("container: Claude Code harness integration") +
+            stage("container: Claude Code real-upstream walk"),
         ],
       ] as const) {
         const result = run(mode);
@@ -423,7 +426,13 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
           "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\n",
           [
             "container suite: Claude Code harness integration: complete status=0",
+            "container: Claude Code real-upstream walk: start",
           ],
+        ],
+        [
+          "claude-code-walk",
+          "shared\ncodex\npi\nopencode-v1\nopencode-v2\nclaude-code\nclaude-code-walk\n",
+          ["container: Claude Code real-upstream walk: complete status=0"],
         ],
       ] as const) {
         const result = run("suite", { SPW_FAIL_CHILD: failedChild });
@@ -432,6 +441,20 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         for (const completion of forbiddenCompletions)
           assert.ok(!result.stdout.includes(completion), result.stdout);
       }
+      const failedWalk = run("harness-claude-code", {
+        SPW_FAIL_CHILD: "claude-code-walk",
+      });
+      assert.equal(failedWalk.status, 17);
+      assert.equal(
+        readFileSync(log, "utf8"),
+        "claude-code\nclaude-code-walk\n",
+      );
+      assert.ok(
+        !failedWalk.stdout.includes(
+          "container: Claude Code real-upstream walk: complete status=0",
+        ),
+        failedWalk.stdout,
+      );
       const invalid = run("unknown");
       assert.equal(invalid.status, 2);
       assert.match(invalid.stderr, /unknown container test mode/);
