@@ -43,12 +43,13 @@ if [ "${1:-}" = "--inside" ]; then
     suite)
       phase "container suite: shared checks" sh tests/run.sh
       phase "container suite: Codex harness integration" sh tests/container/codex/offline-probe.sh
+      phase "container: Codex real-upstream walk" sh tests/container/codex/real-upstream.sh
       phase "container suite: Pi harness integration" sh tests/container/pi/offline-probe.sh
       phase "container suite: OpenCode harness integration" run_opencode_lines
       phase "container suite: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh
       phase "container: Claude Code real-upstream walk" sh tests/container/claude-code/real-upstream.sh
       ;;
-    harness-codex) phase "container: Codex harness integration" sh tests/container/codex/offline-probe.sh ;;
+    harness-codex) phase "container: Codex harness integration" sh tests/container/codex/offline-probe.sh; phase "container: Codex real-upstream walk" sh tests/container/codex/real-upstream.sh ;;
     harness-pi) phase "container: Pi harness integration" sh tests/container/pi/offline-probe.sh ;;
     harness-opencode) phase "container: OpenCode harness integration" run_opencode_lines ;;
     harness-claude-code) phase "container: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh; phase "container: Claude Code real-upstream walk" sh tests/container/claude-code/real-upstream.sh ;;
