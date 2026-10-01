@@ -248,6 +248,119 @@ async function close(server: Server): Promise<void> {
   }
 }
 
+async function advertised(): Promise<void> {
+  const root = process.env.SPW_OPENCODE_PROBE_ROOT;
+  check(root && isAbsolute(root), "observer requires a disposable probe root");
+  const env = cleanEnvironment(root);
+  let requests = 0;
+  let firstMessageText: string | undefined;
+  const server = createServer((request, response) => {
+    requests += 1;
+    if (requests > MAX_REQUESTS) {
+      request.destroy();
+      return;
+    }
+    let size = 0;
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY) request.destroy();
+      else chunks.push(chunk);
+    });
+    request.on("end", () => {
+      check(request.method === "POST", "unexpected fixture request method");
+      check(
+        request.url?.endsWith("/chat/completions"),
+        "unexpected fixture request path",
+      );
+      const body: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      const messages =
+        (body as { messages?: Array<{ role?: string; content?: unknown }> })
+          .messages ?? [];
+      if (
+        firstMessageText === undefined &&
+        messages.some(
+          (message) =>
+            message.role === "user" &&
+            stringValues(message.content).some((text) =>
+              text.includes(FIXTURE_PROMPT),
+            ),
+        )
+      ) {
+        firstMessageText = stringValues(messages).join("\n");
+      }
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write(
+        frame(responseChunk({ content: "fixture complete" }, null)),
+      );
+      response.write(frame(responseChunk({}, "stop")));
+      response.end("data: [DONE]\n\n");
+    });
+  });
+  const port = await listen(server);
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+    $schema: "https://opencode.ai/config.json",
+    model: "fixture/probe",
+    small_model: "fixture/probe",
+    enabled_providers: ["fixture"],
+    provider: {
+      fixture: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Offline fixture",
+        options: {
+          baseURL: `http://127.0.0.1:${port}/v1`,
+          apiKey: "inert-fixture-token",
+        },
+        models: {
+          probe: { name: "Probe", limit: { context: 32768, output: 2048 } },
+        },
+      },
+    },
+  });
+  try {
+    await runNative(
+      [
+        "--print-logs",
+        "--log-level",
+        LOG_LEVEL,
+        "run",
+        ...(process.env.SPW_OPENCODE_MAJOR === "2" ? ["--standalone"] : []),
+        "--model",
+        "fixture/probe",
+        "--title",
+        "advertised skills",
+        FIXTURE_PROMPT,
+      ],
+      {
+        cwd: join(root, "project"),
+        env,
+        abort: () => requests > MAX_REQUESTS,
+      },
+    );
+  } catch (error) {
+    check(
+      firstMessageText !== undefined,
+      "native OpenCode did not reach the fixture provider",
+    );
+    throw error;
+  } finally {
+    await close(server);
+  }
+  check(
+    firstMessageText !== undefined,
+    "native OpenCode did not reach the fixture provider",
+  );
+  const block = firstMessageText.match(
+    /<available_skills>([\s\S]*?)<\/available_skills>/,
+  )?.[1];
+  const names = new Set<string>();
+  for (const match of (block ?? "").matchAll(/<name>([^<]+)<\/name>/g)) {
+    const name = match[1].trim();
+    names.add(name);
+  }
+  for (const name of [...names].sort()) console.log(name);
+}
+
 async function observe(installedRoot: string, expected: Marker): Promise<void> {
   check(isAbsolute(installedRoot), "installed root must be absolute");
   check(
@@ -905,7 +1018,8 @@ async function qualification(): Promise<void> {
 
 try {
   const [mode, installed, expected] = process.argv.slice(2);
-  if (mode === "qualification") await qualification();
+  if (mode === "advertised" && installed === undefined) await advertised();
+  else if (mode === "qualification") await qualification();
   else if (mode === "fixture-create" && installed && expected === undefined)
     materialize(installed, "A");
   else if (mode === "fixture-phase-b" && installed && expected === undefined)
@@ -914,7 +1028,7 @@ try {
     await observe(installed, expected as Marker);
   else
     throw new Error(
-      "usage: native-probe.ts qualification | fixture-create <root> | fixture-phase-b <skill> | observe <absolute-root> <A|B|absent>",
+      "usage: native-probe.ts advertised | qualification | fixture-create <root> | fixture-phase-b <skill> | observe <absolute-root> <A|B|absent>",
     );
 } catch (error) {
   const message =

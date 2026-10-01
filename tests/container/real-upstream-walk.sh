@@ -84,7 +84,7 @@ walk_check() {
 
 walk_main() {
   # ponytail: The window is hand-bumped; automate its bump PR if drift failures become noisy.
-  sed '1!G;h;$!d' /workspace/tests/container/upstream-refs >"$root/walk/tags"
+  sed '1!G;h;$!d' "${1:-/workspace/tests/container/upstream-refs}" >"$root/walk/tags"
   walk_first=1
   while IFS= read -r walk_next_tag; do
     run_manager pin "$walk_next_tag"
