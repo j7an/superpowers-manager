@@ -3,6 +3,7 @@ import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  assertHermesStorageAncestorsSafe,
   assertHermesStorageSafe,
   hermesPaths,
 } from "../../../../src/harnesses/hermes/paths.ts";
@@ -38,6 +39,20 @@ void test("storage safety refuses a symlinked manager root", async (t) => {
   mkdirSync(paths.hermesHome);
   mkdirSync(join(root, "elsewhere"));
   symlinkSync(join(root, "elsewhere"), paths.managerRoot);
+  await assert.rejects(
+    assertHermesStorageSafe(paths),
+    /disallowed type symlink/,
+  );
+});
+
+void test("storage ancestor safety permits a foreign published leaf while full storage safety refuses it", async (t) => {
+  const root = scratch(t, "spw-hermes-paths-");
+  const paths = hermesPaths({ HERMES_HOME: join(root, "hermes") }, root);
+  mkdirSync(paths.pluginsRoot, { recursive: true });
+  const target = join(root, "elsewhere");
+  mkdirSync(target);
+  symlinkSync(target, paths.pluginRoot);
+  await assertHermesStorageAncestorsSafe(paths);
   await assert.rejects(
     assertHermesStorageSafe(paths),
     /disallowed type symlink/,

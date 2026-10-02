@@ -28,7 +28,7 @@ export function hermesPaths(env: NodeJS.ProcessEnv, cwd: string): HermesPaths {
   };
 }
 
-export async function assertHermesStorageSafe(
+export async function assertHermesStorageAncestorsSafe(
   paths: HermesPaths,
 ): Promise<void> {
   for (const path of [
@@ -36,7 +36,13 @@ export async function assertHermesStorageSafe(
     paths.managerRoot,
     paths.preparedRoot,
     paths.pluginsRoot,
-    paths.pluginRoot,
   ])
     await assertNoFollowType(path, ["directory", "missing"]);
+}
+
+export async function assertHermesStorageSafe(
+  paths: HermesPaths,
+): Promise<void> {
+  await assertHermesStorageAncestorsSafe(paths);
+  await assertNoFollowType(paths.pluginRoot, ["directory", "missing"]);
 }
