@@ -39,7 +39,7 @@ async function managedDirectory(
   env: NodeJS.ProcessEnv,
   systemManagedDir: string,
 ): Promise<string | null> {
-  const configured = env.HERMES_MANAGED_DIR;
+  const configured = env.HERMES_MANAGED_DIR?.trim();
   for (const path of configured
     ? [configured, systemManagedDir]
     : [systemManagedDir]) {
@@ -155,10 +155,19 @@ export async function findSuperpowersManifests(
         let value: unknown;
         try {
           const text = DECODER.decode(bytes);
-          value =
-            manifest === "plugin.json"
-              ? (JSON.parse(text) as unknown)
-              : (parseYaml(text, false) ?? {});
+          if (manifest === "plugin.json") value = JSON.parse(text) as unknown;
+          else {
+            const parsed = parseYaml(text, false);
+            value =
+              parsed === null ||
+              parsed === undefined ||
+              parsed === false ||
+              parsed === 0 ||
+              parsed === "" ||
+              (Array.isArray(parsed) && parsed.length === 0)
+                ? {}
+                : parsed;
+          }
         } catch {
           continue;
         }

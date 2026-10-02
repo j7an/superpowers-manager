@@ -14,6 +14,52 @@ function write(path: string, text: string): void {
   writeFileSync(path, text);
 }
 
+void test("readHermesStatus inspects a padded managed directory override", async (t) => {
+  const s = hermesSandbox(t);
+  write(
+    join(s.paths.hermesHome, "config.yaml"),
+    "plugins: {enabled: [superpowers]}",
+  );
+  write(
+    join(s.env.HERMES_MANAGED_DIR!, "config.yaml"),
+    "plugins: {disabled: [superpowers]}",
+  );
+  await assert.rejects(
+    readHermesStatus(
+      s.paths,
+      {
+        ...s.env,
+        HERMES_MANAGED_DIR: ` \t${s.env.HERMES_MANAGED_DIR!}\n `,
+      },
+      join(s.root, "system"),
+    ),
+    {
+      message: "cannot determine Hermes plugin activation",
+    },
+  );
+});
+
+for (const [text, found] of [
+  ["false", true],
+  ["0", true],
+  ['""', true],
+  ["[]", true],
+  ["null", true],
+  ["", true],
+  ["{}", true],
+  [".nan", false],
+] as const) {
+  void test(`findSuperpowersManifests mirrors Python YAML fallback for ${JSON.stringify(text)}`, async (t) => {
+    const s = hermesSandbox(t);
+    const directory = join(s.paths.pluginsRoot, "category", "superpowers");
+    write(join(directory, "plugin.yaml"), text);
+    assert.deepEqual(
+      await findSuperpowersManifests(s.paths),
+      found ? [directory] : [],
+    );
+  });
+}
+
 for (const [subject, text] of [
   ["configuration", "plugins: {enabled: [!unknown superpowers]}"],
   ["manifest", "name: !unknown superpowers"],
