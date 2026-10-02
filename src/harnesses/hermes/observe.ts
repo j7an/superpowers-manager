@@ -11,7 +11,11 @@ export type HermesStatus = "enabled" | "disabled" | "not enabled";
 const DECODER = new TextDecoder("utf-8", { fatal: true });
 
 function mapping(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
 }
 
 function parseYaml(text: string, uniqueKeys = true): unknown {
@@ -164,7 +168,10 @@ export async function findSuperpowersManifests(
               parsed === false ||
               parsed === 0 ||
               parsed === "" ||
-              (Array.isArray(parsed) && parsed.length === 0)
+              (Array.isArray(parsed) && parsed.length === 0) ||
+              (parsed instanceof Set && parsed.size === 0) ||
+              (parsed instanceof Map && parsed.size === 0) ||
+              (Buffer.isBuffer(parsed) && parsed.length === 0)
                 ? {}
                 : parsed;
           }

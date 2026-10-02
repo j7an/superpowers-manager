@@ -290,6 +290,7 @@ for (const problem of [
   "enabled without a directory",
   "renamed manifest",
   "unparseable manifest",
+  "tagged non-mapping manifest",
   "different selected source",
   "different selected commit",
   "different prepared digest",
@@ -325,6 +326,7 @@ for (const problem of [
     if (
       problem === "renamed manifest" ||
       problem === "unparseable manifest" ||
+      problem === "tagged non-mapping manifest" ||
       problem === "different prepared digest"
     ) {
       const root =
@@ -332,10 +334,18 @@ for (const problem of [
           ? s.paths.preparedRoot
           : s.paths.pluginRoot;
       const receipt = await readHermesReceipt(root);
-      if (problem === "renamed manifest" || problem === "unparseable manifest")
+      if (
+        problem === "renamed manifest" ||
+        problem === "unparseable manifest" ||
+        problem === "tagged non-mapping manifest"
+      )
         writeFileSync(
           join(root, "plugin.yaml"),
-          problem === "renamed manifest" ? "name: other\n" : "name: [\n",
+          problem === "renamed manifest"
+            ? "name: other\n"
+            : problem === "tagged non-mapping manifest"
+              ? "!!set {unrelated: null}\n"
+              : "name: [\n",
         );
       else writeFileSync(join(root, "marker"), "digest-only difference\n");
       const identity = {

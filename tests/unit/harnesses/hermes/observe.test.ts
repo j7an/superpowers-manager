@@ -48,6 +48,12 @@ for (const [text, found] of [
   ["", true],
   ["{}", true],
   [".nan", false],
+  ["!!set {unrelated: null}", false],
+  ["!!binary c3VwZXJwb3dlcnM=", false],
+  ["!!omap [{unrelated: null}]", false],
+  ["!!set {}", true],
+  ['!!binary ""', true],
+  ["!!omap []", true],
 ] as const) {
   void test(`findSuperpowersManifests mirrors Python YAML fallback for ${JSON.stringify(text)}`, async (t) => {
     const s = hermesSandbox(t);
@@ -85,6 +91,12 @@ for (const [value, expected] of [
   ["[]", "refuse"],
   ["other", "refuse"],
   ["null", "enabled"],
+  ["!!set {unrelated: null}", "refuse"],
+  ["!!binary c3VwZXJwb3dlcnM=", "refuse"],
+  ["!!omap [{unrelated: null}]", "refuse"],
+  ["!!set {}", "refuse"],
+  ['!!binary ""', "refuse"],
+  ["!!omap []", "refuse"],
 ] as const) {
   void test(`readHermesStatus handles managed plugins ${value} without guessing activation`, async (t) => {
     const s = hermesSandbox(t);
@@ -311,3 +323,21 @@ void test("projectPluginsEnabled accepts only Hermes truthy values", () => {
       false,
     );
 });
+
+for (const text of [
+  "!!set {unrelated: null}",
+  "!!binary c3VwZXJwb3dlcnM=",
+  "!!omap [{unrelated: null}]",
+  "!!set {}",
+  '!!binary ""',
+  "!!omap []",
+]) {
+  void test(`readHermesStatus refuses tagged non-mapping configuration ${text}`, async (t) => {
+    const s = hermesSandbox(t);
+    write(join(s.paths.hermesHome, "config.yaml"), text);
+    await assert.rejects(
+      readHermesStatus(s.paths, s.env, join(s.root, "system")),
+      { message: "cannot inspect Hermes configuration" },
+    );
+  });
+}
