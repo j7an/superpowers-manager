@@ -1,11 +1,11 @@
 # Internal harness interface
 
-Codex, Pi, OpenCode, and Claude Code are supported production integrations behind the same internal
+Codex, Pi, OpenCode, Claude Code, and Hermes Agent are supported production integrations behind the same internal
 TypeScript interface. It is not a public plugin protocol or a promise of support
 for additional harnesses.
 
 The [CLI composition point](../src/cli.ts) selects one concrete adapter per
-invocation using `--harness codex`, `--harness pi`, `--harness opencode`, or `--harness claude-code`; omission defaults to Codex.
+invocation using `--harness codex`, `--harness pi`, `--harness opencode`, `--harness claude-code`, or `--harness hermes`; omission defaults to Codex.
 Upstream selection is shared, while preparation and activation target the chosen
 harness independently.
 
@@ -17,6 +17,8 @@ harness independently.
   and a durable Manager-owned installed snapshot separate from prepared output.
 - The [Claude Code adapter](../src/harnesses/claude-code/harness.ts) manages a
   Manager-owned local-directory marketplace and its user-scope plugin registration.
+- The [Hermes Agent adapter](../src/harnesses/hermes/harness.ts) manages a
+  flattened plugin snapshot under the Hermes home directory.
 
 Implement `HarnessAdapter<R>` for an additional integration and supply it at
 the CLI composition point. Shared commands must not import concrete adapters.

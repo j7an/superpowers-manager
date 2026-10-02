@@ -13,7 +13,7 @@ all adapters without preparing or activating any one.
 
 ## Targeted lifecycle
 
-Set `HARNESS` to `codex`, `pi`, `opencode`, or `claude-code`. Omitting `--harness` selects Codex.
+Set `HARNESS` to `codex`, `pi`, `opencode`, `claude-code`, or `hermes`. Omitting `--harness` selects Codex.
 
 | Command                                               | Selected-harness side effects | Purpose                                               |
 | ----------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
@@ -74,3 +74,9 @@ Claude Code installation is user scope only. `SUPERPOWERS_CLAUDE_CODE` selects
 the `claude` executable; `CLAUDE_CONFIG_DIR` selects its configuration root
 (default `$HOME/.claude`). See the [Claude Code reference](claude-code.md) for
 conflicts, recovery, and restart requirements.
+
+Hermes Agent uses `SUPERPOWERS_HERMES` to select its `hermes` executable and
+`HERMES_HOME` for its state root (default `$HOME/.hermes`). Installation and
+update refuse when project plugins are enabled because a project-local copy
+can override the managed plugin. See the [Hermes reference](hermes.md) for
+compatibility and recovery details.
