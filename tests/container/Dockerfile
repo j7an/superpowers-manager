@@ -6,8 +6,29 @@ ENV SPW_PACKAGE_NODE=/opt/node-min/bin/node
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       ca-certificates git procps \
+       ca-certificates git procps curl build-essential python3-dev libffi-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# The official installer owns dependency setup and the environment-clearing shim.
+# Explicit --dir keeps the venv here; shared uv paths remain traversable by spw.
+ARG SPW_HERMES_COMMIT=f97608f178d1ffeca59860195ab7da295f7c8e5f # v2026.9.24
+RUN spw_hermes_home=$(mktemp -d) \
+    && export UV_PYTHON_INSTALL_DIR=/opt/spw-hermes-python UV_PYTHON_BIN_DIR=/opt/spw-hermes-python/bin \
+    && curl --fail --location "https://raw.githubusercontent.com/NousResearch/hermes-agent/$SPW_HERMES_COMMIT/scripts/install.sh" -o /tmp/spw-hermes-install.sh \
+    && bash /tmp/spw-hermes-install.sh --commit "$SPW_HERMES_COMMIT" --dir /opt/hermes --hermes-home "$spw_hermes_home" --non-interactive --skip-browser --skip-computer-use \
+    && test -x /root/.local/bin/hermes \
+    && cat /root/.local/bin/hermes \
+    && test -x /opt/hermes/venv/bin/python \
+    && /opt/hermes/venv/bin/python -c 'import sys; print(sys.executable)' \
+    && install -m 755 /root/.local/bin/hermes /usr/local/bin/hermes \
+    && ln -s /opt/hermes/venv/bin/python /usr/local/bin/spw-hermes-python \
+    && chown -R root:root /opt/hermes \
+    && if [ -d "$spw_hermes_home/node" ]; then mv "$spw_hermes_home/node" /opt/spw-hermes-node; fi \
+    && rm -rf "$spw_hermes_home" /tmp/spw-hermes-install.sh
+RUN --network=none test "$(git -C /opt/hermes rev-parse HEAD)" = "$SPW_HERMES_COMMIT" \
+    && spw_hermes_home=$(mktemp -d) \
+    && HERMES_HOME="$spw_hermes_home" hermes --version \
+    && rm -rf "$spw_hermes_home"
 
 # Real-upstream walks read this tags-only mirror offline; the build is the
 # only step with network. See tests/container/real-upstream-walk.sh.
@@ -83,7 +104,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile \
     && chown -R root:root /workspace /opt/spw-test-tools /opt/node-min \
     && chmod a+r node_modules/.pnpm-workspace-state-v1.json \
-    && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh tests/container/opencode/offline-probe.sh tests/container/claude-code/offline-probe.sh
+    && chmod +x src/cli.ts tests/container.sh tests/container/codex/offline-probe.sh tests/container/opencode/offline-probe.sh tests/container/claude-code/offline-probe.sh tests/container/hermes/offline-probe.sh tests/container/hermes/real-upstream.sh
 RUN mkdir -p /opt/spw-package \
     && node tests/tools/pack.ts --out-dir /opt/spw-package \
     && chmod -R a+rX /opt/spw-package

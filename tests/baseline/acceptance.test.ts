@@ -29,8 +29,9 @@ function harnessRecorder(
   piStatus: number,
   openCodeStatus = 0,
   claudeCodeStatus = 0,
+  hermesStatus = 0,
 ): string {
-  return `#!/bin/sh\nprintf '%s:%s\\n' container "$*" >> ${shQuote(record)}\ncase "\${1:-}" in\n  harness-codex) exit ${codexStatus} ;;\n  harness-pi) exit ${piStatus} ;;\n  harness-opencode) exit ${openCodeStatus} ;;\n  harness-claude-code) exit ${claudeCodeStatus} ;;\n  *) exit 97 ;;\nesac\n`;
+  return `#!/bin/sh\nprintf '%s:%s\\n' container "$*" >> ${shQuote(record)}\ncase "\${1:-}" in\n  harness-codex) exit ${codexStatus} ;;\n  harness-pi) exit ${piStatus} ;;\n  harness-opencode) exit ${openCodeStatus} ;;\n  harness-claude-code) exit ${claudeCodeStatus} ;;\n  harness-hermes) exit ${hermesStatus} ;;\n  *) exit 97 ;;\nesac\n`;
 }
 
 function run(script: string) {
@@ -46,6 +47,7 @@ const phases = [
   "Pi harness integration",
   "OpenCode harness integration",
   "Claude Code harness integration",
+  "Hermes harness integration",
 ] as const;
 const calls = [
   "shared:--require-package-node --concurrency 2",
@@ -53,6 +55,7 @@ const calls = [
   "container:harness-pi",
   "container:harness-opencode",
   "container:harness-claude-code",
+  "container:harness-hermes",
 ];
 const cases = [
   {
@@ -69,10 +72,11 @@ const cases = [
     code: 13,
   },
   {
-    name: "propagates a Claude Code harness failure last",
+    name: "stops when the Claude Code harness fails",
     failed: 4,
     code: 15,
   },
+  { name: "propagates a Hermes harness failure last", failed: 5, code: 17 },
 ];
 
 for (const row of cases) {
@@ -91,6 +95,7 @@ for (const row of cases) {
         row.failed === 2 ? row.code : 0,
         row.failed === 3 ? row.code : 0,
         row.failed === 4 ? row.code : 0,
+        row.failed === 5 ? row.code : 0,
       ),
       { mode: 0o755 },
     );

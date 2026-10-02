@@ -19,3 +19,4 @@ phase "acceptance: Codex harness integration" sh "$root/tests/container.sh" harn
 phase "acceptance: Pi harness integration" sh "$root/tests/container.sh" harness-pi
 phase "acceptance: OpenCode harness integration" sh "$root/tests/container.sh" harness-opencode
 phase "acceptance: Claude Code harness integration" sh "$root/tests/container.sh" harness-claude-code
+phase "acceptance: Hermes harness integration" sh "$root/tests/container.sh" harness-hermes

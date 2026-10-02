@@ -45,6 +45,7 @@
     "test:harness:pi": "sh tests/container.sh harness-pi",
     "test:harness:opencode": "sh tests/container.sh harness-opencode",
     "test:harness:claude-code": "sh tests/container.sh harness-claude-code",
+    "test:harness:hermes": "sh tests/container.sh harness-hermes",
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip",
     "check": "pnpm run check:static && pnpm run test",
