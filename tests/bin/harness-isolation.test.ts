@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -8,7 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createCase,
   readLog,
@@ -18,6 +19,7 @@ import {
   writePiExecutable,
   writeOpenCodeExecutable,
   writeClaudeCodeExecutable,
+  writeHermesExecutable,
 } from "./lifecycle-fixture.ts";
 import {
   commitFixture,
@@ -31,9 +33,12 @@ import { readOpenCodeReceipt } from "../../src/harnesses/opencode/package.ts";
 import { claudeCodePaths } from "../../src/harnesses/claude-code/paths.ts";
 import { readClaudeCodeReceipt } from "../../src/harnesses/claude-code/prepare.ts";
 
-type Harness = "codex" | "pi" | "opencode" | "claude-code";
+import { hermesPaths } from "../../src/harnesses/hermes/paths.ts";
+import { readHermesReceipt } from "../../src/harnesses/hermes/prepare.ts";
+
+type Harness = "codex" | "pi" | "opencode" | "claude-code" | "hermes";
 type Command = "prepare" | "probe" | "install" | "update" | "uninstall";
-const HARNESSES = ["codex", "pi", "opencode", "claude-code"] as const;
+const HARNESSES = ["codex", "pi", "opencode", "claude-code", "hermes"] as const;
 function commandArgs(command: Command, harness: Harness): string[] {
   return [
     "--harness",
@@ -51,6 +56,7 @@ function clearNativeLogs(c: CaseEnv, piLog: string): void {
   writeFileSync(piLog, "");
   writeFileSync(join(c.state, "opencode.log"), "");
   writeFileSync(join(c.state, "claude.log"), "");
+  writeFileSync(join(c.state, "hermes.log"), "");
 }
 
 function harnessEnv(
@@ -67,6 +73,8 @@ function harnessEnv(
     SUPERPOWERS_OPENCODE: join(c.dir, "opencode"),
     SUPERPOWERS_CLAUDE_CODE: join(c.dir, "claude"),
     CLAUDE_CONFIG_DIR: join(c.home, ".claude"),
+    SUPERPOWERS_HERMES: join(c.dir, "hermes"),
+    HERMES_HOME: join(c.home, ".hermes"),
     SUPERPOWERS_REF: commit,
     SUPERPOWERS_UPSTREAM_URL: upstream,
   };
@@ -107,6 +115,7 @@ async function seed(
 }
 
 function snapshotHarness(c: CaseEnv, harness: Harness): unknown {
+  if (harness === "hermes") return snapshotTree(join(c.home, ".hermes"));
   if (harness === "codex") {
     return {
       configuredState: snapshotTree(join(c.dir, "codex-home")),
@@ -149,6 +158,7 @@ function assertNoUnselectedCalls(
     pi: readLog(piLog),
     opencode: readLog(join(c.state, "opencode.log")),
     "claude-code": readLog(join(c.state, "claude.log")),
+    hermes: readLog(join(c.state, "hermes.log")),
   };
   for (const harness of HARNESSES) {
     if (harness === selected) continue;
@@ -176,6 +186,17 @@ function assertHarnessesUnchanged(
 }
 
 function assertInstalled(c: CaseEnv, harness: Harness): void {
+  if (harness === "hermes") {
+    assert.equal(
+      existsSync(hermesPaths({ HOME: c.home }, process.cwd()).pluginRoot),
+      true,
+    );
+    assert.match(
+      readFileSync(join(c.home, ".hermes", "config.yaml"), "utf8"),
+      /enabled:\n\s+- superpowers/,
+    );
+    return;
+  }
   if (harness === "claude-code") {
     assert.equal(existsSync(claudePaths(c).pluginRoot), true);
     assert.match(
@@ -221,6 +242,17 @@ async function assertPrepared(
   harness: Harness,
   commit: string,
 ): Promise<void> {
+  if (harness === "hermes") {
+    assert.equal(
+      (
+        await readHermesReceipt(
+          hermesPaths({ HOME: c.home }, process.cwd()).preparedRoot,
+        )
+      ).commit,
+      commit,
+    );
+    return;
+  }
   if (harness === "claude-code") {
     assert.equal(
       (await readClaudeCodeReceipt(claudePaths(c).preparedRoot)).commit,
@@ -258,6 +290,17 @@ async function assertInstalledCommit(
   harness: Harness,
   commit: string,
 ): Promise<void> {
+  if (harness === "hermes") {
+    assert.equal(
+      (
+        await readHermesReceipt(
+          hermesPaths({ HOME: c.home }, process.cwd()).pluginRoot,
+        )
+      ).commit,
+      commit,
+    );
+    return;
+  }
   if (harness === "claude-code") {
     assert.equal(
       (await readClaudeCodeReceipt(claudePaths(c).pluginRoot)).commit,
@@ -304,6 +347,10 @@ function assertNoSelectedUpdateMutation(
   selected: Harness,
   piLog: string,
 ): void {
+  if (selected === "hermes") {
+    assert.deepEqual(readLog(join(c.state, "hermes.log")), []);
+    return;
+  }
   if (selected === "claude-code") {
     assert.deepEqual(
       readLog(join(c.state, "claude.log")).filter(
@@ -334,6 +381,14 @@ function assertNoSelectedUpdateMutation(
 }
 
 function assertAbsent(c: CaseEnv, harness: Harness): void {
+  if (harness === "hermes") {
+    const paths = hermesPaths({ HOME: c.home }, process.cwd());
+    assert.equal(existsSync(paths.pluginRoot), false);
+    const config = join(paths.hermesHome, "config.yaml");
+    if (existsSync(config))
+      assert.doesNotMatch(readFileSync(config, "utf8"), /superpowers/);
+    return;
+  }
   if (harness === "claude-code") {
     assert.equal(existsSync(claudePaths(c).marketplaceRoot), false);
     assert.doesNotMatch(
@@ -394,12 +449,29 @@ function isolationCase(
   symlinkSync("sentinel", join(piSentinel, "config-link"));
   mkdirSync(join(c.home, ".config", "opencode"), { recursive: true });
   mkdirSync(join(c.home, ".claude"), { recursive: true });
+  mkdirSync(join(c.home, ".hermes"), { recursive: true });
   const upstream = crossHarnessUpstream(t);
+  for (const [fixture, target] of [
+    ["plugin.yaml.txt", ".hermes-plugin/plugin.yaml"],
+    ["__init__.py.txt", ".hermes-plugin/__init__.py"],
+    [
+      "hermes-tools.md.txt",
+      "skills/using-superpowers/references/hermes-tools.md",
+    ],
+  ]) {
+    const path = join(upstream, target);
+    mkdirSync(dirname(path), { recursive: true });
+    copyFileSync(
+      new URL(`../fixtures/hermes-native/${fixture}`, import.meta.url),
+      path,
+    );
+  }
   const commitA = commitFixture(upstream);
   const piLog = join(c.state, "pi.log");
   const pi = writePiExecutable(c);
   const opencode = writeOpenCodeExecutable(c);
   writeClaudeCodeExecutable(c);
+  writeHermesExecutable(c);
   return { c, commitA, pi, piLog, opencode, upstream };
 }
 
@@ -459,6 +531,8 @@ for (const selected of HARNESSES) {
         );
         const selectedBefore =
           command === "probe" ? snapshotHarness(fixture.c, selected) : null;
+        if (command === "probe" && selected === "hermes")
+          env.SUPERPOWERS_HERMES = join(fixture.c.dir, "missing-hermes");
         if (command === "probe" && selected === "opencode")
           writeOpenCodeExecutable(fixture.c, { failOnCall: true });
         const commandEnv =
@@ -489,6 +563,8 @@ for (const selected of HARNESSES) {
             snapshotHarness(fixture.c, selected),
             selectedBefore,
           );
+          if (selected === "hermes")
+            assert.deepEqual(readLog(join(fixture.c.state, "hermes.log")), []);
           if (selected === "opencode")
             assert.deepEqual(
               readLog(join(fixture.c.state, "opencode.log")),
@@ -505,7 +581,9 @@ for (const selected of HARNESSES) {
                 ? /Superpowers Pi snapshot is current/
                 : selected === "opencode"
                   ? /Superpowers OpenCode snapshot is current/
-                  : /Superpowers Claude Code snapshot is current/,
+                  : selected === "hermes"
+                    ? /Superpowers Hermes snapshot is current/
+                    : /Superpowers Claude Code snapshot is current/,
           );
           assertInstalled(fixture.c, selected);
           assertNoSelectedUpdateMutation(fixture.c, selected, fixture.piLog);
@@ -558,7 +636,9 @@ for (const selected of HARNESSES) {
           ? /Installed the frozen Superpowers Pi snapshot/
           : selected === "opencode"
             ? /Installed the frozen Superpowers OpenCode snapshot/
-            : /Installed the frozen Superpowers Claude Code snapshot/,
+            : selected === "hermes"
+              ? /Installed the frozen Superpowers Hermes snapshot/
+              : /Installed the frozen Superpowers Claude Code snapshot/,
     );
     await assertPrepared(fixture.c, selected, next);
     await assertInstalledCommit(fixture.c, selected, next);
@@ -619,6 +699,8 @@ for (const selected of HARNESSES) {
       writeOpenCodeExecutable(fixture.c, { failure: "install" });
     if (selected === "claude-code")
       writeClaudeCodeExecutable(fixture.c, { failure: "install" });
+    if (selected === "hermes")
+      writeHermesExecutable(fixture.c, { failure: "enable" });
     const env = harnessEnv(
       fixture.c,
       fixture.upstream,
@@ -642,10 +724,14 @@ for (const selected of HARNESSES) {
           ? readLog(fixture.piLog)
           : selected === "opencode"
             ? readLog(join(fixture.c.state, "opencode.log"))
-            : readLog(join(fixture.c.state, "claude.log"));
+            : selected === "hermes"
+              ? readLog(join(fixture.c.state, "hermes.log"))
+              : readLog(join(fixture.c.state, "claude.log"));
     assert.ok(
       calls.some((call) =>
-        /^(?:plugin add |install |plugin \/|plugin install )/.test(call),
+        /^(?:plugin add |install |plugin \/|plugin install |plugins enable )/.test(
+          call,
+        ),
       ),
       "native install injection was not reached",
     );
@@ -657,7 +743,9 @@ for (const selected of HARNESSES) {
           ? /Pi activation failed; the previous snapshot and registration were restored/
           : selected === "opencode"
             ? /OpenCode activation failed; the previous snapshot and registration were restored/
-            : /claude plugin install superpowers@superpowers-manager --scope user did not complete \(exit status 7\)/,
+            : selected === "hermes"
+              ? /hermes plugins enable superpowers did not complete \(exit status 7\)/
+              : /claude plugin install superpowers@superpowers-manager --scope user did not complete \(exit status 7\)/,
     );
     assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
@@ -680,6 +768,8 @@ for (const selected of HARNESSES) {
     for (const harness of HARNESSES) await seed(fixture.c, harness, env);
     if (selected === "claude-code")
       writeClaudeCodeExecutable(fixture.c, { failure: "remove" });
+    if (selected === "hermes")
+      writeHermesExecutable(fixture.c, { failure: "remove" });
     const before = snapshotHarnesses(fixture.c, unselected);
     if (selected === "opencode") {
       const paths = openCodePaths(
@@ -704,10 +794,12 @@ for (const selected of HARNESSES) {
           ? readLog(fixture.c.codexLog)
           : selected === "pi"
             ? readLog(fixture.piLog)
-            : readLog(join(fixture.c.state, "claude.log"));
+            : selected === "hermes"
+              ? readLog(join(fixture.c.state, "hermes.log"))
+              : readLog(join(fixture.c.state, "claude.log"));
       assert.ok(
         calls.some((call) =>
-          /^(?:plugin marketplace remove |remove )/.test(call),
+          /^(?:plugin marketplace remove |remove |plugins remove )/.test(call),
         ),
         "native removal injection was not reached",
       );
@@ -720,7 +812,9 @@ for (const selected of HARNESSES) {
           ? /cannot verify Pi removal at .*; preserve the snapshot and any recovery material at /
           : selected === "opencode"
             ? /cannot determine harness mutation resources/
-            : /claude plugin marketplace remove superpowers-manager did not complete \(exit status 7\)/,
+            : selected === "hermes"
+              ? /hermes plugins remove superpowers did not complete \(exit status 7\)/
+              : /claude plugin marketplace remove superpowers-manager did not complete \(exit status 7\)/,
     );
     assertHarnessesUnchanged(fixture.c, before);
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
@@ -773,6 +867,7 @@ for (const selected of HARNESSES) {
     assert.deepEqual(readLog(fixture.piLog), []);
     assert.deepEqual(readLog(join(fixture.c.state, "opencode.log")), []);
     assert.deepEqual(readLog(join(fixture.c.state, "claude.log")), []);
+    assert.deepEqual(readLog(join(fixture.c.state, "hermes.log")), []);
     assert.deepEqual(readLog(fixture.c.adapterLog), []);
   });
 }

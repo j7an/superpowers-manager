@@ -34,7 +34,8 @@ export function extractHarnessOptions(
         value !== "codex" &&
         value !== "pi" &&
         value !== "opencode" &&
-        value !== "claude-code"
+        value !== "claude-code" &&
+        value !== "hermes"
       )
         throw new UsageError(`unknown harness: ${value}`);
       harness = value;

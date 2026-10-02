@@ -33,8 +33,7 @@ import {
   type HermesReceipt,
 } from "./prepare.ts";
 
-export const HERMES_PLUGIN_NAME = "superpowers";
-export type HermesOwnership = "absent" | "owned" | "foreign";
+type HermesOwnership = "absent" | "owned" | "foreign";
 export interface HermesRemovalInput {
   readonly ownership: HermesOwnership;
   readonly listed: boolean;

@@ -19,7 +19,7 @@ import {
 import { createSnapshotPreparation } from "../../snapshot-prepare.ts";
 import { assertHermesStorageSafe, hermesPaths } from "./paths.ts";
 
-export async function flattenHermesPlugin(root: string): Promise<void> {
+async function flattenHermesPlugin(root: string): Promise<void> {
   const nativeRoot = join(root, ".hermes-plugin");
   if ((await classifyPathNoFollow(nativeRoot)) !== "directory") return;
   const entries = await readdir(nativeRoot);

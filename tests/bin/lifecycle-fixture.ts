@@ -519,3 +519,44 @@ export function writeClaudeCodeExecutable(
   chmodSync(executable, 0o755);
   return executable;
 }
+
+export function writeHermesExecutable(
+  c: CaseEnv,
+  options: { failure?: "enable" | "remove" } = {},
+): string {
+  const module = join(c.dir, "fake-hermes.mjs");
+  const executable = join(c.dir, "hermes");
+  const log = join(c.state, "hermes.log");
+  writeFileSync(
+    module,
+    `import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { createRequire } from "node:module";
+const { parseDocument, stringify } = createRequire(${JSON.stringify(join(c.pkg, "package.json"))})("yaml");
+const args = process.argv.slice(2);
+const command = args.join(" ");
+writeFileSync(${JSON.stringify(log)}, command + "\\n", { flag: "a" });
+if (args.length !== 3 || args[0] !== "plugins" || args[2] !== "superpowers" || !["enable", "disable", "remove"].includes(args[1])) process.exit(99);
+if (args[1] === ${JSON.stringify(options.failure)}) process.exit(7);
+const home = process.env.HERMES_HOME;
+const file = join(home, "config.yaml");
+const document = parseDocument(existsSync(file) ? readFileSync(file, "utf8") : "{}");
+const value = document.toJS();
+const plugins = value.plugins ?? {};
+const enabled = Array.isArray(plugins.enabled) ? plugins.enabled.filter((name) => name !== "superpowers") : [];
+const disabled = Array.isArray(plugins.disabled) ? plugins.disabled.filter((name) => name !== "superpowers") : [];
+if (args[1] === "enable") enabled.push("superpowers");
+else if (args[1] === "disable") disabled.push("superpowers");
+else rmSync(join(home, "plugins", "superpowers"), { recursive: true, force: true });
+value.plugins = { ...plugins, enabled, disabled };
+mkdirSync(home, { recursive: true });
+writeFileSync(file, stringify(value));
+`,
+  );
+  writeFileSync(
+    executable,
+    `#!/bin/sh\nexec "${process.execPath}" "${module}" "$@"\n`,
+  );
+  chmodSync(executable, 0o755);
+  return executable;
+}
