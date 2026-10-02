@@ -579,7 +579,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 
   // Clause 2: malformed required adapter evidence is an operational failure,
   // never reported as absent. A fake codex emitting unparseable JSON drives
-  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:846::activeVersion =`).
+  // the native reader's real inspect-failed path (`src/harnesses/codex/adapter.ts:857::activeVersion =`).
   const c = createCase({ fakes: "probe" });
   // Sequenced: the native-state inspection consumes invocation 0. Only one is
   // needed here because that first inspection already fails.
@@ -592,7 +592,7 @@ void test("PROBE-FAIL-CLOSED-01 invalid selection and adapter evidence fail clos
 });
 
 // The adapter's outer rethrow branch
-// (`src/harnesses/codex/adapter.ts:744::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
+// (`src/harnesses/codex/adapter.ts:755::async function runCodexOperation<T = JsonValue>(`) is NOT reachable through `inspect`: `requireCodex`
 // converts a non-executable SUPERPOWERS_CODEX into a controlled
 // `command-not-found` AdapterFailure (`src/harnesses/codex/adapter.ts:287::if (!(await commandAvailable(codexBin, env)))`), and
 // every other failure inside the fingerprint view is either wrapped by

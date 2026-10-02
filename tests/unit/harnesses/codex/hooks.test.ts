@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmod,
   lstat,
   mkdir,
   readFile,
@@ -531,3 +532,58 @@ void test("materializeHooks accepts a declared symlink to another declared file"
   assert.equal(await readlink(copied), "real.json");
   assert.equal(await readFile(copied, "utf8"), "{}\n");
 });
+
+// Node's raw cp text here names both paths ("cp returned EISDIR (cannot
+// overwrite non-directory …)"). Its code is not errno-shaped, so the owned
+// message carries no suffix.
+void test("materializeHooks owns a raw subtree copy failure", async (t) => {
+  const { source, candidate } = await roots(t);
+  await mkdir(join(source, "hooks"), { recursive: true });
+  await writeFile(join(source, "hooks", "hooks.json"), "{}\n");
+  await writeFile(join(candidate, "hooks"), "not a directory\n");
+  await assert.rejects(
+    () =>
+      materializeHooks(
+        { copyHooksSubtree: true, declaredPaths: [] },
+        source,
+        candidate,
+      ),
+    exactError(
+      SafetyError,
+      `cannot copy upstream hooks from ${source} into ${candidate}`,
+    ),
+  );
+});
+
+// A visible skip, not an early `return`, as in
+// `tests/baseline/prepare.test.ts::"an unreadable hooks subdirectory fails closed naming the subdirectory"`.
+void test(
+  "materializeHooks owns a raw declared-file copy failure and names its errno",
+  {
+    skip:
+      process.getuid?.() === 0
+        ? "permission checks do not apply to root"
+        : false,
+  },
+  async (t) => {
+    const { source, candidate } = await roots(t);
+    await seedUpstream(source);
+    await chmod(candidate, 0o555);
+    try {
+      await assert.rejects(
+        () =>
+          materializeHooks(
+            { copyHooksSubtree: false, declaredPaths: ["./bin/target"] },
+            source,
+            candidate,
+          ),
+        exactError(
+          SafetyError,
+          `cannot copy upstream hooks from ${source} into ${candidate}: EACCES`,
+        ),
+      );
+    } finally {
+      await chmod(candidate, 0o755);
+    }
+  },
+);

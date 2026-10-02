@@ -333,11 +333,11 @@ void test("FS-HOOK-CONTAINMENT-01 an escaping hook symlink fails closed", async 
   assert.deepEqual(snapshotTree(generated(c)), before);
 });
 
-// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:336::hook classification failed`). The eight inner causes
+// P1 — the adapter's classification wrapper (`src/harnesses/codex/adapter.ts:347::hook classification failed`). The eight inner causes
 // those shell lines also asserted are already message-exact in
 // tests/unit/harnesses/codex/hooks.test.ts and are deliberately NOT re-ported: what was
 // missing is that a classification failure reaches stderr through the adapter
-// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:342::hook materialization failed`) is
+// with this prefix intact. Its materialization twin (`src/harnesses/codex/adapter.ts:353::hook materialization failed`) is
 // asserted by the FS-HOOK-CONTAINMENT-01 case directly above.
 void test("a classification failure reaches stderr through the adapter wrapper", async () => {
   const c = createCase({ fakes: "probe" });
@@ -692,7 +692,7 @@ void test("a post-success workspace cleanup failure keeps the prepared outcome a
     assert.ok(existsSync(join(generated(c), ".superpowers-upstream.json")));
 
     // 2. stdout, in order: the REPLAYED ADAPTER OUTCOME (an adapter build
-    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:447::generated plugin validation passed` --
+    //    always emits this on the stdout channel, `src/harnesses/codex/adapter.ts:458::generated plugin validation passed` --
     //    outcome loss is the first thing this slice fixes, so it is asserted
     //    directly), then the validator's stdout, then the domain result.
     assertOrder(result.stdout, [
@@ -1092,7 +1092,7 @@ void test(
   },
 );
 
-// P4 — `src/harnesses/codex/hooks.ts:349::await symlink(await readlink(sourceHooks), candidateHooks)`, the accepting side of the hooks-root symlink policy.
+// P4 — `src/harnesses/codex/hooks.ts:372::await symlink(await readlink(sourceHooks), candidateHooks)`, the accepting side of the hooks-root symlink policy.
 //
 // Every other root-symlink case in the repository asserts rejection:
 // `tests/baseline/harnesses/codex/generated-plugin-corpus.test.ts:687::the hook subtree rejects unsafe symlinks` is twelve cases of
@@ -1115,7 +1115,7 @@ void test("a contained relative hooks root is recreated as a symlink in the cand
   );
   assert.equal(readlinkSync(hooks), "assets/hook-root");
   // Validating side: the candidate passed validateSubtreeSymlinks at
-  // `src/harnesses/codex/hooks.ts:356::validateSubtreeSymlinks(candidateHooks` (status 0 above) AND the content behind the root is
+  // `src/harnesses/codex/hooks.ts:379::validateSubtreeSymlinks(candidateHooks` (status 0 above) AND the content behind the root is
   // actually reachable through it, which is what makes the acceptance real
   // rather than a dangling link nobody followed.
   assert.equal(

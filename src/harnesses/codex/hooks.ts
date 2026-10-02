@@ -336,7 +336,30 @@ async function validateMaterializedDestination(
   }
 }
 
+// The `hook materialization failed:` site in src/harnesses/codex/adapter.ts
+// re-emits this module's messages, so a raw cp/copyFile/mkdir/readlink/symlink
+// error must not escape: its message carries Node's own wording. Only an
+// errno-shaped code is interpolated, matching
+// `src/harnesses/codex/adapter.ts::const detail =`.
 export async function materializeHooks(
+  plan: HookPlan,
+  sourceRoot: string,
+  candidateRoot: string,
+): Promise<void> {
+  try {
+    await copyHookFiles(plan, sourceRoot, candidateRoot);
+  } catch (cause) {
+    if (cause instanceof SafetyError && cause.module === "hooks") throw cause;
+    const code = (cause as NodeJS.ErrnoException | null)?.code ?? "";
+    const detail = /^E[A-Z0-9]+$/.test(code) ? `: ${code}` : "";
+    throw hookError(
+      `cannot copy upstream hooks from ${sourceRoot} into ${candidateRoot}${detail}`,
+      cause,
+    );
+  }
+}
+
+async function copyHookFiles(
   plan: HookPlan,
   sourceRoot: string,
   candidateRoot: string,

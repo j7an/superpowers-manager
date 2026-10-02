@@ -64,7 +64,7 @@ async function buildWorkspace(t: import("node:test").TestContext) {
   }
   // Do NOT write `.codex-plugin/plugin.json` or `plugin.template.json` here:
   // `build` generates both from `--fallback-manifest` (`src/harnesses/codex/adapter.ts:315::manifestSource === "upstream" ? upstreamManifest : fallbackManifest,`,
-  // `src/harnesses/codex/adapter.ts:402::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
+  // `src/harnesses/codex/adapter.ts:413::cannot copy fallback manifest template into candidate`), so anything written here is overwritten before validation runs.
   await writeFile(
     join(candidate, "skills", "brainstorming", "SKILL.md"),
     "---\nname: brainstorming\ndescription: Fake skill\n---\n# Body\n",
@@ -188,8 +188,31 @@ void test("the adapter replays a multi-error failure as one record per line", as
   );
 });
 
+// A missing upstream root still reaches the hook-root realpath: with no
+// upstream manifest the build falls back. The raw ENOENT text must not ride
+// the `hook classification failed:` re-emit.
+void test("an unresolvable hook root surfaces an owned message", async (t) => {
+  const workspace = await buildWorkspace(t);
+  const upstreamRoot = join(workspace.base, "missing-upstream");
+  const result = await codexBuild(buildInput(workspace, { upstreamRoot }), {
+    root: PACKAGE_ROOT,
+  });
+  assert.equal(result.outcome.ok, false);
+  assert.deepStrictEqual(result.outcome.messages, [
+    {
+      channel: "stderr",
+      text: `cannot resolve hook roots: ${upstreamRoot}, ${workspace.candidate}`,
+    },
+  ]);
+  assert.equal(result.outcome.error?.code, "build-failed");
+  assert.equal(
+    result.outcome.error?.message,
+    "failed to prepare upstream Codex hooks",
+  );
+});
+
 // A read failure on the overlay's own `readFile(candidateManifest, "utf8")`
-// call (`src/harnesses/codex/adapter.ts:349::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
+// call (`src/harnesses/codex/adapter.ts:360::const rawManifestBytes = await readFile(candidateManifest);`) must surface exactly `cannot read manifest JSON
 // in <path>`, with the underlying OSError dropped: no `errno`, no `ENOENT`,
 // and no second line. The pre-existing hook-classification read of the same
 // path (src/harnesses/codex/hooks.ts) must keep succeeding, so this exercises the read at
@@ -545,7 +568,7 @@ void test("the ownership view rejects an invalid-UTF-8 plugin listing", async (t
   );
 });
 
-// The install reconciliation read (`src/harnesses/codex/adapter.ts:486::registeredRoot = marketplaceRootFromJson(`) is the destructive
+// The install reconciliation read (`src/harnesses/codex/adapter.ts:497::registeredRoot = marketplaceRootFromJson(`) is the destructive
 // one: a lossy decode turns the registered root into a value that cannot equal
 // `--package-root`, so the adapter performs a real `marketplace remove` plus
 // `add`. Assert both the parse diagnostic and the absence of any mutation.
@@ -661,7 +684,7 @@ void test("runCommand strips NODE_OPTIONS and NODE_PATH from the child env", asy
   });
 });
 
-// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:609::const managerPresent = pluginPresent || marketplacePresent;` computes
+// FOUR independent booleans, not two. `src/harnesses/codex/adapter.ts:620::const managerPresent = pluginPresent || marketplacePresent;` computes
 //   managerPresent = managerPlugin || managerMarketplace
 //   legacyPresent  = legacyPlugin  || legacyMarketplace
 // A draft of this test pinned both marketplace booleans to false. With
@@ -873,7 +896,7 @@ void test("ADAPTER-INSTALL-RESULT-01 typed receipt reports the missing hint alwa
 });
 
 /**
- * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:533::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
+ * Drive the adapter install operation to `src/harnesses/codex/adapter.ts:544::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.`, the one
  * in-process failure that carries MORE THAN ONE hint. The marketplace is
  * reported as registered at a different root, so the adapter removes it and
  * re-adds it; the stub accepts the remove and refuses the add, which is the
@@ -911,13 +934,13 @@ async function reAddFailureRun(t: import("node:test").TestContext) {
     env: {
       SUPERPOWERS_CODEX: stub,
       // Pinned so the fixture does not inherit this variable from the
-      // executor's shell: `src/harnesses/codex/adapter.ts:460::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
+      // executor's shell: `src/harnesses/codex/adapter.ts:471::const refreshMode = codexInstallRefreshMode(env);` enumerates only "add-only"
       // and "remove-add", and any other inherited value fails runInstall's
       // enumeration check before the failure this fixture drives is reached.
       // The value itself is not load-bearing -- the remove-then-add the stub
-      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:507::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
+      // exercises is the marketplace branch at `src/harnesses/codex/adapter.ts:518::} else if (!(await pathsEqual(packageRoot, registeredRoot))) {`, which is
       // gated on pathsEqual alone and reads no refresh mode. "add-only" is
-      // the default (`src/harnesses/codex/adapter.ts:460::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
+      // the default (`src/harnesses/codex/adapter.ts:471::const refreshMode = codexInstallRefreshMode(env);`) and so the value these witnesses
       // were written against.
       SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only",
     },
@@ -948,7 +971,7 @@ void test("ADAPTER-CONTROLLED-FAILURE-01 a controlled failure carries its error 
   assert.deepStrictEqual(result.outcome.error?.hints, []);
 
   // The contract says "carries its hints", and a hints-empty scenario cannot
-  // witness that. `src/harnesses/codex/adapter.ts:533::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
+  // witness that. `src/harnesses/codex/adapter.ts:544::marketplace ${MARKETPLACE_NAME} was removed but re-adding failed.` is the one in-process failure with
   // two of them, and their ORDER is part of what replay preserves.
   const readd = await reAddFailureRun(t);
   assert.equal(readd.result.status, 1);

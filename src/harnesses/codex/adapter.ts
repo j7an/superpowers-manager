@@ -324,12 +324,23 @@ async function runBuild(
     );
   }
 
-  let plan;
   let sourceRoot: string;
   let realCandidateRoot: string;
   try {
     sourceRoot = await realpath(upstreamRoot);
     realCandidateRoot = await realpath(candidateRoot);
+  } catch {
+    // Kept out of the classification catch below, which re-emits its cause:
+    // a raw realpath error would carry Node's wording onto stderr.
+    log.appendText(
+      "stderr",
+      `cannot resolve hook roots: ${upstreamRoot}, ${candidateRoot}`,
+    );
+    fail("build-failed", "failed to prepare upstream Codex hooks");
+  }
+
+  let plan;
+  try {
     const manifest = await readManifest(candidateManifest);
     plan = await classifyHooks(manifest, manifestSource, sourceRoot);
   } catch (cause) {

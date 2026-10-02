@@ -541,7 +541,7 @@ void test("ADAPTER-TERMINAL-01 a C0, DEL, or C1 control in any terminal-facing f
   // it. SUPERPOWERS_CODEX may name any existing executable (preflight's
   // codexBin resolution accepts a path outright), a POSIX filename may carry
   // any byte but NUL and slash, and ownership inspection
-  // (`src/harnesses/codex/adapter.ts:664::async function runOwnership(`) interpolates that
+  // (`src/harnesses/codex/adapter.ts:675::async function runOwnership(`) interpolates that
   // path into an adapter-authored failure message when `codex plugin list
   // --json` exits non-zero. probe replays the resulting outcome AFTER its
   // try/catch has resolved (the loop below runProbe's catch), so the throw from
