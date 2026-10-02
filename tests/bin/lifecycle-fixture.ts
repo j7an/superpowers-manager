@@ -43,7 +43,7 @@ function buildSnapshot(): string {
   cpSync(join(ROOT, "package.json"), join(snapshot, "package.json"));
   const dependencies = join(snapshot, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  for (const dependency of ["smol-toml", "jsonc-parser"])
+  for (const dependency of ["smol-toml", "jsonc-parser", "yaml"])
     cpSync(
       join(ROOT, "node_modules", dependency),
       join(dependencies, dependency),

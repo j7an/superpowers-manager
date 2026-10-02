@@ -258,7 +258,7 @@ function copyRuntimePackage(pkg: string) {
   copyFileSync(join(ROOT, "package.json"), join(pkg, "package.json"));
   const dependencies = join(pkg, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  for (const dependency of ["smol-toml", "jsonc-parser"]) {
+  for (const dependency of ["smol-toml", "jsonc-parser", "yaml"]) {
     cpSync(
       join(ROOT, "node_modules", dependency),
       join(dependencies, dependency),

@@ -172,6 +172,9 @@ importers:
       smol-toml:
         specifier: 1.8.0
         version: 1.8.0
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
     devDependencies:
       '@types/node':
         specifier: ^24.13.3
@@ -191,9 +194,6 @@ importers:
       typescript:
         specifier: ~7.0.2
         version: 7.0.2
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
 
 packages:
 

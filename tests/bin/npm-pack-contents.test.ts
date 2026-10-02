@@ -606,7 +606,7 @@ void test("npm-pack-contents", async (t) => {
   );
 });
 
-// The published package declares only its two approved bundled parsers as
+// The published package declares only its approved bundled parsers as
 // runtime dependencies. This is about the ROOT manifest;
 // tests/container/package.json has its own, different dependency contract
 // asserted in container-contract.test.ts. This keeps unrelated libraries out
@@ -616,12 +616,12 @@ void test("package.json declares exactly the approved bundled parsers at runtime
   const runtimeDependencies = Object.keys(manifest.dependencies ?? {});
   assert.deepEqual(
     runtimeDependencies,
-    ["jsonc-parser", "smol-toml"],
+    ["jsonc-parser", "smol-toml", "yaml"],
     "package.json runtime dependencies must remain limited to the approved parsers",
   );
   assert.deepEqual(
     new Set(manifest.bundleDependencies ?? []),
-    new Set(["jsonc-parser", "smol-toml"]),
+    new Set(["jsonc-parser", "smol-toml", "yaml"]),
   );
 });
 
