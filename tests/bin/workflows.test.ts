@@ -188,6 +188,7 @@ const HARNESS_MATRIX = [
   { name: "Pi", selector: "harness-pi" },
   { name: "OpenCode", selector: "harness-opencode" },
   { name: "Claude Code", selector: "harness-claude-code" },
+  { name: "Hermes", selector: "harness-hermes" },
 ];
 
 void test("upstream-window.yml runs weekly and on demand with least privilege", () => {
@@ -1126,6 +1127,10 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.equal(
     manifest.scripts["test:harness:claude-code"],
     "sh tests/container.sh harness-claude-code",
+  );
+  assert.equal(
+    manifest.scripts["test:harness:hermes"],
+    "sh tests/container.sh harness-hermes",
   );
   assert.equal(manifest.scripts["test:acceptance"], "sh tests/acceptance.sh");
 });
