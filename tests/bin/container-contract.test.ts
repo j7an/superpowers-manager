@@ -365,6 +365,7 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
             stage("container suite: Claude Code harness integration") +
             stage("container: Claude Code real-upstream walk"),
         ],
+        ["shared", "shared\n", stage("container: shared checks")],
         [
           "harness-codex",
           "codex\ncodex-walk\n",
@@ -489,6 +490,15 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         for (const completion of forbiddenCompletions)
           assert.ok(!result.stdout.includes(completion), result.stdout);
       }
+      const failedShared = run("shared", { SPW_FAIL_CHILD: "shared" });
+      assert.equal(failedShared.status, 17);
+      assert.equal(readFileSync(log, "utf8"), "shared\n");
+      assert.ok(
+        !failedShared.stdout.includes(
+          "container: shared checks: complete status=0",
+        ),
+        failedShared.stdout,
+      );
       const failedCodexWalk = run("harness-codex", {
         SPW_FAIL_CHILD: "codex-walk",
       });

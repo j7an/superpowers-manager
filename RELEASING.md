@@ -135,8 +135,9 @@ The pinned reusable publisher:
 
 1. checks out and validates the release tag;
 2. runs the CI caller command that installs the frozen root dependencies and
-   checks native TypeScript, after the caller's `validate` job has run
-   `sh tests/container.sh`;
+   checks native TypeScript, after every leg of the caller's `validate`
+   matrix has run its `sh tests/container.sh` selector (`shared` and each
+   harness), which together cover the full container suite;
 3. invokes `node tests/tools/pack.ts --out-dir .` once, compiling production
    source in external temporary staging and validating the real package allowlist;
 4. continues the existing OIDC publish, registry verification, `npx`

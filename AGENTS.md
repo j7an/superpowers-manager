@@ -204,12 +204,12 @@ Code below describe product integrations, not a required agent harness.
   reaching extraction. Linux CI uses `actions/setup-node`; test cases never
   download runtimes.
 
-- Release validation is the deliberate combined-path exception: validate with
-  `sh tests/container.sh`, which the release workflow runs before the
-  publisher. The combined image uses latest Node 24, runs shared checks,
-  then Codex, Pi, OpenCode, and Claude Code. It also runs the installed package on Node
-  24.0.0 through its verified `SPW_PACKAGE_NODE` binary. The minimum binary
-  never runs TypeScript tooling.
+- Release validation is the deliberate combined-path exception: validate
+  locally with `sh tests/container.sh`. Before the publisher, the release
+  workflow runs that same suite as one parallel job per selector: `shared`,
+  then Codex, Pi, OpenCode, and Claude Code. The image uses latest Node 24 and
+  also runs the installed package on Node 24.0.0 through its verified
+  `SPW_PACKAGE_NODE` binary. The minimum binary never runs TypeScript tooling.
 - Keep Layers 1-3 hermetic: no network access and no mutation of the developer's
   or runner's real Codex, Pi, OpenCode, or Claude Code state.
 - Layer 4 lives behind the blocking `pnpm run test:harness:codex`,

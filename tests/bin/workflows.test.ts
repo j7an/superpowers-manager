@@ -933,22 +933,45 @@ void test("release.yml publish job delegates to the shared workflow", async (t) 
   }
 });
 
-void test("release.yml validates the container suite before publish", () => {
+// The selectors together are the full `sh tests/container.sh` suite, split so
+// publish waits on the slowest leg rather than on their sum.
+void test("release.yml validates every container selector before publish", () => {
   const release = requireMapping(
     parse(readFileSync(join(WORKFLOW_DIR, "release.yml"), "utf8")),
     "release",
   );
   const jobs = requireMapping(release.jobs, "jobs");
   const validate = requireMapping(jobs.validate, "jobs.validate");
-  assert.ok(Array.isArray(validate.steps), "expected jobs.validate.steps");
-  assert.ok(
-    validate.steps.some(
-      (step: unknown) =>
-        requireMapping(step, "jobs.validate.steps[]").run ===
-        "sh tests/container.sh",
-    ),
-    "validate must run tests/container.sh",
+  assert.ok(!Object.hasOwn(validate, "continue-on-error"));
+  const strategy = requireMapping(validate.strategy, "jobs.validate.strategy");
+  assert.equal(strategy["fail-fast"], false);
+  assert.deepEqual(
+    requireMapping(strategy.matrix, "jobs.validate.strategy.matrix"),
+    {
+      selector: ["shared", ...HARNESS_MATRIX.map(({ selector }) => selector)],
+    },
   );
+  assert.ok(Array.isArray(validate.steps), "expected jobs.validate.steps");
+  const runSteps = validate.steps
+    .map((step: unknown) => requireMapping(step, "jobs.validate.steps[]"))
+    .filter((step: Record<string, any>) => typeof step.run === "string");
+  assert.deepEqual(
+    runSteps.map((step: Record<string, any>) => [step.run, step.env]),
+    [
+      [
+        'sh tests/container.sh "$SPW_VALIDATE_SELECTOR"',
+        { SPW_VALIDATE_SELECTOR: "${{ matrix.selector }}" },
+      ],
+    ],
+    "validate must run only its matrix selector",
+  );
+  for (const step of validate.steps)
+    assert.ok(
+      !Object.hasOwn(
+        requireMapping(step, "jobs.validate.steps[]"),
+        "continue-on-error",
+      ),
+    );
   const publish = requireMapping(jobs.publish, "jobs.publish");
   const needs = Array.isArray(publish.needs) ? publish.needs : [publish.needs];
   assert.ok(needs.includes("validate"), "publish must depend on validate");

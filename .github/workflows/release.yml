@@ -9,11 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  # One leg per tests/container.sh selector: together they are the full
+  # container suite, and publish waits on the slowest leg instead of the sum.
   validate:
-    name: Container validation
+    name: Container validation (${{ matrix.selector }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        selector:
+          - shared
+          - harness-codex
+          - harness-pi
+          - harness-opencode
+          - harness-claude-code
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -25,8 +36,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run container suite
-        run: sh tests/container.sh
+      - name: Run container selector
+        env:
+          SPW_VALIDATE_SELECTOR: ${{ matrix.selector }}
+        run: sh tests/container.sh "$SPW_VALIDATE_SELECTOR"
 
   publish:
     needs: validate
