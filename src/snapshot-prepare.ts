@@ -30,12 +30,13 @@ interface Assessment {
 }
 
 interface Bindings {
-  readonly harness: "pi" | "opencode" | "claude-code";
-  readonly label: "Pi" | "OpenCode" | "Claude Code";
+  readonly harness: "pi" | "opencode" | "claude-code" | "hermes";
+  readonly label: "Pi" | "OpenCode" | "Claude Code" | "Hermes";
   readonly paths: (
     env: NodeJS.ProcessEnv,
     cwd: string,
   ) => { readonly preparedRoot: string };
+  readonly layout?: (root: string) => Promise<void>;
   readonly assessCompatibility: (
     root: string,
     selection: Pick<EffectiveSelection, "effectiveSource">,
@@ -77,6 +78,7 @@ export function createSnapshotPreparation(b: Bindings): Preparation {
           input.selection.desiredCommit,
           input.candidateRoot,
         );
+        if (b.layout !== undefined) await b.layout(input.candidateRoot);
         const compatibility = await b.assessCompatibility(
           input.candidateRoot,
           input.selection,

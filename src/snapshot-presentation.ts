@@ -1,7 +1,7 @@
 import type { HarnessPresentation } from "./harness.ts";
 
 export function createSnapshotPresentation<R>(
-  label: "Pi" | "OpenCode" | "Claude Code",
+  label: "Pi" | "OpenCode" | "Claude Code" | "Hermes",
   renderProbe: HarnessPresentation<R>["renderProbe"],
   wasAbsent: (input: R) => boolean,
 ): HarnessPresentation<R> {

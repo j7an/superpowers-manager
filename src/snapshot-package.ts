@@ -27,7 +27,7 @@ const OFFICIAL_SOURCES = new Set([
 export interface SnapshotReceiptIdentity {
   readonly schema: 1;
   readonly manager: "superpowers-manager";
-  readonly harness: "pi" | "opencode" | "claude-code";
+  readonly harness: "pi" | "opencode" | "claude-code" | "hermes";
   readonly source: string;
   readonly commit: string;
   readonly digest: string;
@@ -160,7 +160,7 @@ export function createSnapshotReceipts<
   H extends SnapshotReceiptIdentity["harness"],
 >(rules: {
   readonly harness: H;
-  readonly label: "Pi" | "OpenCode" | "Claude Code";
+  readonly label: "Pi" | "OpenCode" | "Claude Code" | "Hermes";
   readonly strictGeneration: boolean;
   readonly assessCompatibility: (
     root: string,

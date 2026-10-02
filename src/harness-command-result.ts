@@ -13,7 +13,7 @@ import { SEMVER_RE } from "./domain/refs.ts";
 import type { Captured, ValidatorRun } from "./validator.ts";
 import { withWorkspace } from "./workspace.ts";
 
-type Label = "Pi" | "OpenCode" | "Claude Code";
+type Label = "Pi" | "OpenCode" | "Claude Code" | "Hermes";
 
 function commandSlug(label: Label): string {
   return label.toLowerCase().replaceAll(" ", "-");
