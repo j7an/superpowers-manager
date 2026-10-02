@@ -281,7 +281,7 @@ function buildUpstream(): string {
     writeFileSync(manifest, `${JSON.stringify(declared, null, 2)}\n`);
   });
   // P2a — the hooks ROOT is a relative symlink escaping the upstream checkout,
-  // so the SOURCE-side validateSubtreeSymlinks call (`src/harnesses/codex/hooks.ts:347::validateSubtreeSymlinks(sourceHooks`) fails
+  // so the SOURCE-side validateSubtreeSymlinks call (`src/harnesses/codex/hooks.ts:370::validateSubtreeSymlinks(sourceHooks`) fails
   // its containment check at :303.
   //
   // classifyHooks returns copyHooksSubtree: hooksRootPresent
@@ -304,12 +304,12 @@ function buildUpstream(): string {
   });
   // P2b — the hooks ROOT is a relative symlink to source-contained content
   // that never reaches the candidate, so SOURCE validation passes and the
-  // CANDIDATE validation at `src/harnesses/codex/hooks.ts:356::validateSubtreeSymlinks(candidateHooks` fails.
+  // CANDIDATE validation at `src/harnesses/codex/hooks.ts:379::validateSubtreeSymlinks(candidateHooks` fails.
   //
   // `.git` exists in the upstream checkout, so validateSubtreeSymlinks's
   // containment check accepts it on the source side, and it is absent from
   // COPY_PATHS's five copied paths, so the symlink recreated at
-  // `src/harnesses/codex/hooks.ts:349::await symlink(await readlink(sourceHooks), candidateHooks)` dangles in the candidate. Any target outside those
+  // `src/harnesses/codex/hooks.ts:372::await symlink(await readlink(sourceHooks), candidateHooks)` dangles in the candidate. Any target outside those
   // five works.
   branchWith("hooks-root-contained-source-only", () => {
     const declared = JSON.parse(
@@ -320,14 +320,14 @@ function buildUpstream(): string {
     rmSync(join(upstream, "hooks"), { recursive: true, force: true });
     symlinkSync(".git", join(upstream, "hooks"));
   });
-  // P4 — a CONTAINED relative hooks-root symlink, which `src/harnesses/codex/hooks.ts:349::await symlink(await readlink(sourceHooks), candidateHooks)`
+  // P4 — a CONTAINED relative hooks-root symlink, which `src/harnesses/codex/hooks.ts:372::await symlink(await readlink(sourceHooks), candidateHooks)`
   // recreates in the candidate rather than dereferencing.
   //
   // The target must live under `assets/`. COPY_PATHS copies
   // exactly five paths into the candidate — skills, assets, LICENSE,
   // README.md, CODE_OF_CONDUCT.md — so a symlink to any other contained
   // directory would dangle in the candidate and fail the SECOND
-  // validateSubtreeSymlinks call at `src/harnesses/codex/hooks.ts:356::validateSubtreeSymlinks(candidateHooks`. That is precisely what
+  // validateSubtreeSymlinks call at `src/harnesses/codex/hooks.ts:379::validateSubtreeSymlinks(candidateHooks`. That is precisely what
   // P2b's `.git` fixture does on purpose; this one is its mirror image, and
   // the two differ only in whether the target is one of the copied five.
   branchWith("hooks-root-contained-materialized", () => {
