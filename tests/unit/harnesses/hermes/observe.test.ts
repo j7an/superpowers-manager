@@ -147,7 +147,6 @@ for (const [name, text] of [
   ["duplicate keys", "plugins: {}\nplugins: {}"],
   ["top-level list", "- superpowers"],
   ["top-level scalar", "superpowers"],
-  ["empty document", ""],
   ["oversized file", "x".repeat(1024 * 1024 + 1)],
   ["symlink", "plugins: {}"],
 ] as const) {
@@ -339,5 +338,107 @@ for (const text of [
       readHermesStatus(s.paths, s.env, join(s.root, "system")),
       { message: "cannot inspect Hermes configuration" },
     );
+  });
+}
+
+for (const text of ["", "# comment only\n", "null", "~"]) {
+  for (const scope of ["user", "managed"] as const) {
+    void test(`readHermesStatus accepts ${scope} empty or null configuration ${JSON.stringify(text)}`, async (t) => {
+      const s = hermesSandbox(t);
+      const root =
+        scope === "user" ? s.paths.hermesHome : s.env.HERMES_MANAGED_DIR!;
+      write(join(root, "config.yaml"), text);
+      if (scope === "managed")
+        write(
+          join(s.paths.hermesHome, "config.yaml"),
+          "plugins: {enabled: [superpowers]}",
+        );
+      assert.equal(
+        await readHermesStatus(s.paths, s.env, join(s.root, "system")),
+        scope === "user" ? "not enabled" : "enabled",
+      );
+    });
+  }
+}
+
+void test("findSuperpowersManifests follows directory aliases while preserving lexical names and one-level recursion", async (t) => {
+  const s = hermesSandbox(t);
+  const targets = join(s.root, "external");
+  write(join(targets, "direct", "plugin.yaml"), "name: superpowers");
+  write(join(targets, "default", "plugin.yaml"), "description: fixture");
+  write(
+    join(targets, "group", "nested", "plugin.json"),
+    '{"name":"superpowers"}',
+  );
+  write(
+    join(targets, "group", "too", "deep", "plugin.yaml"),
+    "name: superpowers",
+  );
+  mkdirSync(join(s.paths.pluginsRoot, "category"), { recursive: true });
+  symlinkSync(
+    join(targets, "direct"),
+    join(s.paths.pluginsRoot, "direct-alias"),
+  );
+  symlinkSync(
+    join(targets, "default"),
+    join(s.paths.pluginsRoot, "category", "superpowers"),
+  );
+  symlinkSync(join(targets, "group"), join(s.paths.pluginsRoot, "group-alias"));
+  assert.deepEqual(
+    await findSuperpowersManifests(s.paths),
+    ["category/superpowers", "direct-alias", "group-alias/nested"].map((name) =>
+      join(s.paths.pluginsRoot, name),
+    ),
+  );
+});
+
+void test("findSuperpowersManifests skips unrelated, file, and broken aliases", async (t) => {
+  const s = hermesSandbox(t);
+  write(join(s.root, "external", "plugin.yaml"), "name: unrelated");
+  mkdirSync(s.paths.pluginsRoot, { recursive: true });
+  symlinkSync(join(s.root, "external"), join(s.paths.pluginsRoot, "other"));
+  symlinkSync(
+    join(s.root, "external", "plugin.yaml"),
+    join(s.paths.pluginsRoot, "file"),
+  );
+  symlinkSync(join(s.root, "missing"), join(s.paths.pluginsRoot, "broken"));
+  assert.deepEqual(await findSuperpowersManifests(s.paths), []);
+});
+
+for (const kind of [
+  "oversized",
+  "symlinked leaf",
+  "owned alias",
+  "root alias",
+] as const) {
+  void test(`findSuperpowersManifests fails closed on ${kind} with a directory alias`, async (t) => {
+    const s = hermesSandbox(t);
+    const target = join(s.root, "external");
+    if (kind === "symlinked leaf") {
+      write(join(s.root, "linked-manifest"), "name: superpowers");
+      mkdirSync(target);
+      symlinkSync(join(s.root, "linked-manifest"), join(target, "plugin.yaml"));
+      mkdirSync(s.paths.pluginsRoot, { recursive: true });
+      symlinkSync(target, join(s.paths.pluginsRoot, "other"));
+    } else if (kind === "root alias") {
+      write(join(target, "plugin.yaml"), "name: superpowers");
+      mkdirSync(s.paths.hermesHome, { recursive: true });
+      symlinkSync(target, s.paths.pluginsRoot);
+    } else {
+      write(
+        join(target, "plugin.yaml"),
+        kind === "oversized" ? "x".repeat(64 * 1024 + 1) : "name: superpowers",
+      );
+      mkdirSync(s.paths.pluginsRoot, { recursive: true });
+      symlinkSync(
+        target,
+        kind === "owned alias"
+          ? s.paths.pluginRoot
+          : join(s.paths.pluginsRoot, "other"),
+      );
+    }
+    await assert.rejects(findSuperpowersManifests(s.paths), {
+      message: "cannot inspect Hermes plugins",
+    });
   });
 }

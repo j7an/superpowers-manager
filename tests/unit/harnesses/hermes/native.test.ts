@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { runHermes } from "../../../../src/harnesses/hermes/native.ts";
@@ -27,6 +27,8 @@ void test("runHermes bounds the invocation, preserves the caller cwd, and pins H
         workspace = receivedWorkspace;
         assert.deepEqual(argv, [
           join(cwd, "tools/hermes"),
+          "--profile",
+          "default",
           "plugins",
           "enable",
           "superpowers",
@@ -52,6 +54,98 @@ void test("runHermes bounds the invocation, preserves the caller cwd, and pins H
     assert.equal(result.outcome.ok, true);
     assert.equal(result.outcome.result?.stdout, "ok");
     assert.equal(result.outcome.operation, "hermes-command");
+  }
+});
+
+void test("native mutations pin the inspected root despite an active foreign profile", async (t) => {
+  const s = hermesSandbox(t);
+  mkdirSync(join(s.paths.hermesHome, "profiles", "work"), { recursive: true });
+  writeFileSync(join(s.paths.hermesHome, "active_profile"), "work\n");
+  for (const command of ["enable", "disable", "remove"]) {
+    const result = await runHermes(
+      ["plugins", command, "superpowers"],
+      s.ctx,
+      async (argv, _policy, env) => {
+        assert.deepEqual(argv, [
+          "hermes",
+          "--profile",
+          "default",
+          "plugins",
+          command,
+          "superpowers",
+        ]);
+        assert.equal(env.HERMES_HOME, s.paths.hermesHome);
+        return {
+          kind: "exited",
+          code: 0,
+          stdout: { text: "", droppedBytes: 0 },
+          stderr: { text: "", droppedBytes: 0 },
+        };
+      },
+    );
+    assert.equal(result.outcome.ok, true);
+  }
+});
+
+void test("native mutations preserve an explicit profile home without selecting default", async (t) => {
+  const s = hermesSandbox(t);
+  const home = join(s.paths.hermesHome, "profiles", "work");
+  const result = await runHermes(
+    ["plugins", "remove", "superpowers"],
+    { ...s.ctx, env: { ...s.env, HERMES_HOME: home } },
+    async (argv, _policy, env) => {
+      assert.deepEqual(argv, ["hermes", "plugins", "remove", "superpowers"]);
+      assert.equal(env.HERMES_HOME, home);
+      return {
+        kind: "exited",
+        code: 0,
+        stdout: { text: "", droppedBytes: 0 },
+        stderr: { text: "", droppedBytes: 0 },
+      };
+    },
+  );
+  assert.equal(result.outcome.ok, true);
+});
+
+void test("native home expansion uses the original TMPDIR before isolation", async (t) => {
+  const s = hermesSandbox(t);
+  const result = await runHermes(
+    ["plugins", "enable", "superpowers"],
+    { ...s.ctx, env: { ...s.env, HERMES_HOME: "$TMPDIR/hermes" } },
+    async (_argv, _policy, env, workspace) => {
+      assert.equal(env.HERMES_HOME, join(s.root, "hermes"));
+      assert.equal(env.TMPDIR, workspace);
+      return {
+        kind: "exited",
+        code: 0,
+        stdout: { text: "", droppedBytes: 0 },
+        stderr: { text: "", droppedBytes: 0 },
+      };
+    },
+  );
+  assert.equal(result.outcome.ok, true);
+});
+
+void test("native mutations refuse homes changed by the inherited child environment", async (t) => {
+  const s = hermesSandbox(t);
+  for (const env of [
+    { ...s.env, HERMES_HOME: "~someone/hermes" },
+    { ...s.env, HERMES_HOME: "$TMPDIR/hermes", TMPDIR: undefined },
+    { ...s.env, HERMES_HOME: "$PATH/hermes" },
+  ]) {
+    let called = false;
+    const result = await runHermes(
+      ["plugins", "remove", "superpowers"],
+      { ...s.ctx, env },
+      async () => {
+        called = true;
+        throw new Error("must not execute");
+      },
+    );
+    assert.equal(called, false);
+    assert.equal(result.outcome.ok, false);
+    if (!result.outcome.ok)
+      assert.match(result.outcome.error.message, /cannot resolve HERMES_HOME/);
   }
 });
 

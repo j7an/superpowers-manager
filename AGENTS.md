@@ -227,8 +227,8 @@ integrations, not required agent harnesses.
   installs the oldest ref, updates through later refs, and probes each ref,
   then checks `track-latest`, `unpin`, and `uninstall`. The container stays
   network-isolated; building its image fetches those tags from GitHub. OpenCode
-  V2 first verifies clean refusals for historical refs without a V2 entrypoint,
-  then runs that lifecycle on supported refs. The weekly `upstream-window`
+  V2 first verifies clean refusals for historical refs without a V2 entrypoint;
+  Hermes refuses refs without `.hermes-plugin`. Both walk only supported refs. The weekly `upstream-window`
   workflow compares the committed list with the live 90-day window; update the
   list in a PR when it drifts, and the harness selectors test the new tags.
 - Use `tests/manual/codex/behavior-probe.sh` only for optional intentional

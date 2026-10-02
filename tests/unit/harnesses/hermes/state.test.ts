@@ -466,3 +466,33 @@ void test("installed state accepts equivalent official snapshot sources", async 
   );
   assert.equal(await installedKind(s, selection), "current");
 });
+
+void test("a directory alias named superpowers remains a lexical conflict without following owned publication", async (t) => {
+  const s = hermesSandbox(t);
+  const target = join(s.root, "external", "unrelated-name");
+  const alias = join(s.paths.pluginsRoot, "category", "superpowers");
+  mkdirSync(target, { recursive: true });
+  writeFileSync(join(target, "plugin.yaml"), "description: fixture\n");
+  mkdirSync(join(s.paths.pluginsRoot, "category"), { recursive: true });
+  symlinkSync(target, alias);
+  const before = tree(target);
+  assert.deepEqual(await otherSuperpowersManifests(s.paths), [alias]);
+  const result = await inspectHermesOwnership(s.ctx);
+  assert.equal(result.outcome.ok, true);
+  assert.deepEqual(result.outcome.result?.installEligibility, {
+    kind: "blocked",
+    output: {
+      stdout: [],
+      stderr: [
+        "error: Hermes discovers another plugin named superpowers; remove it manually, then retry:",
+        `  ${displayPath(alias)}`,
+      ],
+    },
+  });
+  assert.deepEqual(result.outcome.result?.presentationConflicts, [alias]);
+  assert.equal(
+    await installedKind(s, nativeSelection("a".repeat(40))),
+    "mismatch",
+  );
+  assert.deepEqual(tree(target), before);
+});

@@ -534,6 +534,7 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 const { parseDocument, stringify } = createRequire(${JSON.stringify(join(c.pkg, "package.json"))})("yaml");
 const args = process.argv.slice(2);
+if (args[0] === "--profile" && args[1] === "default") args.splice(0, 2);
 const command = args.join(" ");
 writeFileSync(${JSON.stringify(log)}, command + "\\n", { flag: "a" });
 if (args.length !== 3 || args[0] !== "plugins" || args[2] !== "superpowers" || !["enable", "disable", "remove"].includes(args[1])) process.exit(99);

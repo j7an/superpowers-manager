@@ -5,6 +5,19 @@ Hermes Agent integration. The manager runs the installed `hermes` executable
 for plugin mutations only; set `SUPERPOWERS_HERMES` to select another
 executable. State lives under `HERMES_HOME`, or `$HOME/.hermes` by default.
 
+The manager targets that home explicitly and ignores Hermes' sticky
+`active_profile` selection. To manage a named profile, set `HERMES_HOME` to its
+directory, such as `$HOME/.hermes/profiles/work`. Native mutations use the same
+home that the manager inspects; other profiles remain untouched. There is no
+manager profile flag.
+
+`HERMES_HOME` accepts surrounding whitespace, relative paths, `~` for the
+current user, and `$VAR` or `${VAR}` substitutions from the manager's
+environment. A whitespace-only value uses the default home. Named-user `~user`
+paths and substitutions requiring another expansion are refused. Unset
+variables remain literal only when the native child's environment would also
+leave them unchanged.
+
 The manager prepares a validated flat plugin at
 `$HERMES_HOME/plugins/superpowers`, with the manifest and `skills/` directory
 at its root. Hermes also discovers plugins one level below this directory, so

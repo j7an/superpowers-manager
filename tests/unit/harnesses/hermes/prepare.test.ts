@@ -104,6 +104,7 @@ void test("prepare carries additional .hermes-plugin files to the root", async (
   );
 });
 for (const [name, target, collision] of [
+  ["missing .hermes-plugin directory", ".hermes-plugin", false],
   ["missing manifest", ".hermes-plugin/plugin.yaml", false],
   ["missing __init__.py", ".hermes-plugin/__init__.py", false],
   [
@@ -117,7 +118,7 @@ for (const [name, target, collision] of [
   void test(`prepare refuses an upstream with a ${name}`, async (t) => {
     const upstream = nativeHermesFixture(t);
     if (collision) writeFileSync(join(upstream, target), "collision\n");
-    else rmSync(join(upstream, target));
+    else rmSync(join(upstream, target), { recursive: true });
     const { result } = await prepareFrom(t, upstream);
     assert.equal(result.outcome.ok, false);
     assert.equal(

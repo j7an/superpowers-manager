@@ -1,9 +1,13 @@
-import { readdir } from "node:fs/promises";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parseDocument } from "yaml";
 import { readArtifactFile } from "../../artifact-tree.ts";
 import { compareByCodePoint } from "../../python-text.ts";
-import { assertNoFollowType, classifyPathNoFollow } from "../../safe-path.ts";
+import {
+  assertNoFollowType,
+  classifyPathNoFollow,
+  isAbsenceError,
+} from "../../safe-path.ts";
 import { SafetyError } from "../../safety-error.ts";
 import type { HermesPaths } from "./paths.ts";
 
@@ -34,7 +38,8 @@ async function configuration(
   await assertNoFollowType(root, ["directory", "missing"]);
   const path = join(root, "config.yaml");
   if ((await classifyPathNoFollow(path)) === "missing") return null;
-  const value = parseYaml(DECODER.decode(await readArtifactFile(root, path)));
+  const value =
+    parseYaml(DECODER.decode(await readArtifactFile(root, path))) ?? {};
   if (!mapping(value)) throw new Error("configuration mapping");
   return value;
 }
@@ -128,32 +133,50 @@ export async function findSuperpowersManifests(
     if ((await classifyPathNoFollow(paths.pluginsRoot)) === "missing")
       return [];
     const found: string[] = [];
-    async function scan(root: string, depth: number): Promise<void> {
-      await assertNoFollowType(root, ["directory"]);
-      for (const name of (await readdir(root)).sort(compareByCodePoint)) {
+    async function scan(
+      root: string,
+      physicalRoot: string,
+      depth: number,
+    ): Promise<void> {
+      await assertNoFollowType(physicalRoot, ["directory"]);
+      for (const name of (await readdir(physicalRoot)).sort(
+        compareByCodePoint,
+      )) {
         if (
           (name.startsWith("__") && name.endsWith("__")) ||
           FOREIGN_MANIFEST_DIRECTORIES.has(name)
         )
           continue;
         const child = join(root, name);
-        const kind = await classifyPathNoFollow(child);
-        if (kind === "symlink") throw new Error("plugin directory symlink");
-        if (kind !== "directory") continue;
+        const physicalChild = join(physicalRoot, name);
+        const kind = await classifyPathNoFollow(physicalChild);
+        if (kind === "symlink") {
+          if (child === paths.pluginRoot)
+            throw new Error("owned plugin directory symlink");
+          try {
+            if (!(await stat(physicalChild)).isDirectory()) continue;
+          } catch (cause) {
+            if (isAbsenceError(cause)) continue;
+            throw cause;
+          }
+        } else if (kind !== "directory") continue;
+        const directory = await realpath(physicalChild);
         let manifest: string | null = null;
         for (const file of ["plugin.yaml", "plugin.yml", "plugin.json"]) {
-          if ((await classifyPathNoFollow(join(child, file))) !== "missing") {
+          if (
+            (await classifyPathNoFollow(join(directory, file))) !== "missing"
+          ) {
             manifest = file;
             break;
           }
         }
         if (manifest === null) {
-          if (depth === 0) await scan(child, 1);
+          if (depth === 0) await scan(child, directory, 1);
           continue;
         }
         const bytes = await readArtifactFile(
-          paths.pluginsRoot,
-          join(child, manifest),
+          directory,
+          join(directory, manifest),
           64 * 1024,
         );
         let value: unknown;
@@ -187,7 +210,7 @@ export async function findSuperpowersManifests(
         if (pluginName === "superpowers") found.push(child);
       }
     }
-    await scan(paths.pluginsRoot, 0);
+    await scan(paths.pluginsRoot, paths.pluginsRoot, 0);
     return found.sort(compareByCodePoint);
   } catch (cause) {
     throw new SafetyError("hermes-observe", "cannot inspect Hermes plugins", {

@@ -33,6 +33,7 @@ import {
 } from "../../../../src/harnesses/hermes/prepare.ts";
 import {
   inspectHermesInstalled,
+  inspectHermesOwnership,
   leftoverHermesPublication,
   otherSuperpowersManifests,
 } from "../../../../src/harnesses/hermes/state.ts";
@@ -654,3 +655,55 @@ for (const message of [
     );
   });
 }
+
+void test("an unrelated directory alias permits install, current probe, update, and removal without changing its target", async (t) => {
+  const s = hermesSandbox(t);
+  const fake = fakeHermes(s.paths);
+  const target = join(s.root, "external");
+  const alias = join(s.paths.pluginsRoot, "unrelated-alias");
+  mkdirSync(target);
+  writeFileSync(join(target, "plugin.yaml"), "name: unrelated\n");
+  mkdirSync(s.paths.pluginsRoot, { recursive: true });
+  symlinkSync(target, alias);
+  const before = tree(target);
+  const ownership = await inspectHermesOwnership(s.ctx);
+  assert.equal(ownership.outcome.ok, true);
+  assert.equal(ownership.outcome.result?.installEligibility.kind, "allowed");
+  const first = await prepareHermesArtifact(t, s, "A");
+  assert.equal(
+    (await (await install(s, fake, first.artifact)).finalize()).outcome.ok,
+    true,
+  );
+  assert.equal(
+    (await inspectHermesInstalled(first.selection, s.ctx)).outcome.result?.kind,
+    "current",
+  );
+  const second = await prepareHermesArtifact(t, s, "B");
+  assert.equal(
+    (await (await install(s, fake, second.artifact)).finalize()).outcome.ok,
+    true,
+  );
+  assert.equal(
+    (await inspectHermesInstalled(second.selection, s.ctx)).outcome.result
+      ?.kind,
+    "current",
+  );
+  const removal = await removeHermes(
+    { ownership: "owned", listed: true },
+    s.ctx,
+    { run: fake.run },
+  );
+  assert.equal(removal.outcome.ok, true);
+  assert.equal(
+    (await inspectHermesOwnership(s.ctx)).outcome.result?.removalVerification
+      .kind,
+    "allowed",
+  );
+  assert.equal(
+    (await inspectHermesInstalled(second.selection, s.ctx)).outcome.result
+      ?.kind,
+    "absent",
+  );
+  assert.deepEqual(tree(target), before);
+  assert.equal(readlinkSync(alias), target);
+});

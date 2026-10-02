@@ -1,4 +1,9 @@
-import type { AdapterContext, AdapterResult } from "../../adapter-result.ts";
+import { basename, dirname } from "node:path";
+import {
+  failureResult,
+  type AdapterContext,
+  type AdapterResult,
+} from "../../adapter-result.ts";
 import {
   runIsolatedNative,
   type NativeCommandOutput,
@@ -16,17 +21,53 @@ export async function runHermes(
   ctx: AdapterContext,
   execute: typeof runValidator = runValidator,
 ): Promise<AdapterResult<NativeCommandOutput>> {
-  return await runIsolatedNative(
+  const invalidHome = () =>
+    failureResult(
+      "hermes-command",
+      "invalid-home",
+      "cannot resolve HERMES_HOME for Hermes command",
+      [],
+      [],
+    );
+  let home: string;
+  try {
+    home = hermesPaths(ctx.env ?? {}, process.cwd()).hermesHome;
+  } catch {
+    return invalidHome();
+  }
+  let homeChanged = false;
+  const result = await runIsolatedNative(
     "Hermes",
     (ctx.env ?? {}).SUPERPOWERS_HERMES || "hermes",
     ctx,
-    async (executable, workspace, env, invocationCwd) =>
-      await execute(
-        [executable, ...args],
+    async (executable, workspace, env, invocationCwd) => {
+      const childEnv = {
+        ...process.env,
+        ...env,
+        HERMES_HOME: home,
+        TMPDIR: workspace,
+      };
+      try {
+        if (hermesPaths(childEnv, invocationCwd).hermesHome !== home)
+          throw new Error("cannot resolve HERMES_HOME: child home changed");
+      } catch {
+        homeChanged = true;
+        throw new Error("cannot resolve HERMES_HOME for Hermes command");
+      }
+      return await execute(
+        [
+          executable,
+          ...(basename(dirname(home)) === "profiles"
+            ? []
+            : ["--profile", "default"]),
+          ...args,
+        ],
         BOUNDED_EXECUTABLE,
-        { ...env, HERMES_HOME: hermesPaths(env, invocationCwd).hermesHome },
+        childEnv,
         workspace,
         invocationCwd,
-      ),
+      );
+    },
   );
+  return homeChanged ? invalidHome() : result;
 }

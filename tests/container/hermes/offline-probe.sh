@@ -33,7 +33,12 @@ mkdir -p "$HOME" "$HERMES_HOME" "$root/cwd" "$upstream/.hermes-plugin" \
 cd "$root/cwd"
 fail() { echo "error: $*" >&2; exit 1; }
 run_manager() { timeout 60 node /workspace/src/cli.ts "$@"; }
-hermes_cli() { timeout 60 hermes "$@"; }
+hermes_cli() {
+  case "${HERMES_HOME%/*}" in
+    */profiles) timeout 60 hermes "$@" ;;
+    *) timeout 60 hermes --profile default "$@" ;;
+  esac
+}
 fixture_git() {
   git -C "$upstream" -c user.name=fixture -c user.email=fixture@example.invalid \
     -c core.hooksPath=/dev/null -c init.templateDir= "$@"
@@ -41,6 +46,15 @@ fixture_git() {
 snapshot() {
   find "$HERMES_HOME" -print | LC_ALL=C sort
   find "$HERMES_HOME" -type f -exec sha256sum {} + | LC_ALL=C sort
+}
+foreign_snapshot() {
+  find "$foreign_home" -print | LC_ALL=C sort
+  find "$foreign_home" -type f -exec sha256sum {} + | LC_ALL=C sort
+}
+foreign_unchanged() {
+  foreign_snapshot >"$root/profile-after"
+  cmp "$root/profile-before" "$root/profile-after" || fail "foreign profile changed"
+  [ "$(cat "$HERMES_HOME/active_profile")" = work ] || fail "active profile changed"
 }
 listed() {
   hermes_cli plugins list --json >"$root/list.json" || fail "cannot list Hermes plugins"
@@ -81,8 +95,43 @@ run_manager install --harness hermes >"$root/refused.out" 2>"$root/refused.err" 
 snapshot >"$root/foreign-after"
 cmp "$root/foreign-before" "$root/foreign-after" || fail "refused install mutated state"
 rm -rf "$plugin_root"
+foreign_home="$HERMES_HOME/profiles/work"
+mkdir -p "$foreign_home/plugins/superpowers"
+cp "$upstream/.hermes-plugin/plugin.yaml" "$foreign_home/plugins/superpowers/plugin.yaml"
+cp "$upstream/.hermes-plugin/__init__.py" "$foreign_home/plugins/superpowers/__init__.py"
+printf 'plugins:\n  enabled:\n    - superpowers\n  disabled: []\nprofile_marker: foreign\n' >"$foreign_home/config.yaml"
+printf '%s\n' work >"$HERMES_HOME/active_profile"
+foreign_snapshot >"$root/profile-before"
+
+# Fail after native enable has changed state, so fresh rollback must remove
+# the inspected root copy while the active profile retains its foreign copy.
+SPW_REAL_HERMES=$(command -v hermes)
+export SPW_REAL_HERMES
+cat >"$root/fail-enable" <<'SH'
+#!/bin/sh
+set -eu
+if [ "${1:-}" = --profile ] && [ "${2:-}" = default ]; then
+  command=${4:-}
+else
+  command=${2:-}
+fi
+"$SPW_REAL_HERMES" "$@"
+[ "$command" != enable ] || exit 7
+SH
+chmod +x "$root/fail-enable"
+rollback_status=0
+SUPERPOWERS_HERMES="$root/fail-enable" run_manager install --harness hermes \
+  >"$root/rollback.out" 2>"$root/rollback.err" || rollback_status=$?
+[ "$rollback_status" = 1 ] || fail "fresh failed activation did not roll back"
+grep -Fq 'hermes plugins enable superpowers did not complete (exit status 7)' "$root/rollback.err" \
+  || fail "fresh rollback did not reach the native enable failure"
+test ! -e "$plugin_root" || fail "fresh rollback left the root plugin"
+[ -z "$(find "$HERMES_HOME/superpowers-manager" -maxdepth 1 -name 'publish.*' -print)" ] \
+  || fail "fresh rollback left publication material"
+foreign_unchanged
 run_manager install --harness hermes
 listed enabled
+foreign_unchanged
 spw-hermes-python - "$plugin_root" <<'PY'
 import importlib.util
 import sys
@@ -128,4 +177,20 @@ entries=$(grep -c superpowers "$HERMES_HOME/config.yaml" || true)
 run_manager uninstall --harness hermes >"$root/noop.out"
 grep -Fxq "No managed Superpowers Hermes installation is present." "$root/noop.out" \
   || fail "second uninstall was not idempotent"
+foreign_unchanged
+
+# An explicit profile-shaped home must remain selected; default would target
+# its parent root and leave the published profile copy unactivated.
+profile_home="$HERMES_HOME/profiles/managed"
+sha256sum "$HERMES_HOME/config.yaml" >"$root/root-config-before"
+HERMES_HOME="$profile_home" run_manager prepare --harness hermes
+HERMES_HOME="$profile_home" run_manager install --harness hermes
+HERMES_HOME="$profile_home" listed enabled
+test -f "$profile_home/plugins/superpowers/plugin.yaml" || fail "explicit profile plugin is absent"
+test ! -e "$plugin_root" || fail "explicit profile activation changed root plugin"
+HERMES_HOME="$profile_home" run_manager uninstall --harness hermes
+test ! -e "$profile_home/plugins/superpowers" || fail "explicit profile removal missed its plugin"
+sha256sum "$HERMES_HOME/config.yaml" >"$root/root-config-after"
+cmp "$root/root-config-before" "$root/root-config-after" || fail "explicit profile changed root config"
+foreign_unchanged
 echo "hermes harness integration: complete status=0"

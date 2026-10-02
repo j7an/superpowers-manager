@@ -60,7 +60,7 @@ HTTP(S) upstream URLs with userinfo are rejected. Use a credential helper or SSH
 
 ## Provider ownership
 
-Use one Superpowers provider in a harness at a time. The manager mutates only `superpowers@superpowers-manager` and the `superpowers-manager` marketplace in Codex and Claude Code, and only its registration and snapshot in Pi or OpenCode. It never adopts, updates, or removes another provider automatically.
+Use one Superpowers provider in a harness at a time. The manager mutates only `superpowers@superpowers-manager` and the `superpowers-manager` marketplace in Codex and Claude Code, only its registration and snapshot in Pi or OpenCode, and the receipt-verified `plugins/superpowers` folder and its `superpowers` enable entry in Hermes. It never adopts, updates, or removes another provider automatically.
 
 ```sh
 codex plugin remove superpowers@openai-curated

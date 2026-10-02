@@ -155,6 +155,34 @@ void test("container contract", async (t) => {
         assert.ok(`${name}@${pkg.dependencies[name]}` in lock.packages);
       }
       const docker = readFileSync(dockerfile, "utf8").replace(/\\\n\s*/g, " ");
+      assert.match(docker, /^ARG SPW_HERMES_COMMIT=[a-f0-9]{40}(?:\s|$)/m);
+      assert.ok(
+        docker.includes("/$SPW_HERMES_COMMIT/scripts/install.sh"),
+        "Hermes installer download must use the requested commit",
+      );
+      const hermesInstall =
+        /\bbash\s+[^&\n]*install\.sh[^&\n]*/.exec(docker)?.[0] ?? "";
+      assert.match(hermesInstall, /--commit "\$SPW_HERMES_COMMIT"/);
+      for (const flag of [
+        "--dir /opt/hermes",
+        '--hermes-home "$spw_hermes_home"',
+        "--non-interactive",
+        "--skip-browser",
+        "--skip-computer-use",
+      ])
+        assert.ok(
+          hermesInstall.includes(flag),
+          `Hermes install requires ${flag}`,
+        );
+      assert.match(
+        docker,
+        /^RUN --network=none test "\$\(git -C \/opt\/hermes rev-parse HEAD\)" = "\$SPW_HERMES_COMMIT"[^\n]*\bhermes --version\b/m,
+        "Hermes checkout and version must be verified offline",
+      );
+      assert.match(
+        docker,
+        /\bln -s \/opt\/hermes\/venv\/bin\/python \/usr\/local\/bin\/spw-hermes-python\b/,
+      );
       const install = docker.indexOf(
         "pnpm --dir /opt/spw-test-tools --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts",
       );
