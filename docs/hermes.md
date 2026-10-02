@@ -21,11 +21,12 @@ cannot automatically re-establish context after compaction.
 ## Switching from another Superpowers route
 
 The manager refuses installation when another plugin directory declares the
-`superpowers` key, when its managed directory is foreign, or when project
-plugins are enabled. Disable or remove the other copy yourself before retrying;
-the manager never removes another provider. A project-local copy can override
-the managed copy, so installation and update refuse while
-`HERMES_ENABLE_PROJECT_PLUGINS` is truthy.
+`superpowers` key or when its managed directory is foreign. Remove the
+conflicting plugin directory yourself before retrying; disabling it does not
+clear the refusal, and the manager never removes another provider. If
+installation or update refuses because `HERMES_ENABLE_PROJECT_PLUGINS` is set,
+unset that variable and retry. A project-local copy can override the managed
+copy.
 
 | Action | Superpowers Manager | Direct upstream repository |
 | --- | --- | --- |
