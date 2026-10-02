@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.9.1",
-  "description": "Install obra/superpowers directly from upstream for Codex, Pi, OpenCode, and Claude Code. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
+  "description": "Install obra/superpowers directly from upstream for Codex, Pi, OpenCode, Claude Code, and Hermes Agent. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -30,7 +30,11 @@
     "claude",
     "claude-code",
     "claude-code-plugin",
-    "claude-code-skills"
+    "claude-code-skills",
+    "hermes-agent",
+    "hermes",
+    "hermes-plugin",
+    "hermes-skills"
   ],
   "license": "MIT",
   "type": "module",
