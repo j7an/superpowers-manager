@@ -251,6 +251,67 @@ void test("container contract", async (t) => {
     ])
       assert.ok(source.includes(required), required);
   });
+  // The build is the only networked phase and a shared-runner throttle fails
+  // it transiently, so it retries with growing delays; the tests never retry.
+  await t.test(
+    "container runner retries only the image build, a bounded number of times",
+    (t) => {
+      const scratch = mkdtempSync(join(tmpdir(), "spw-container-build-"));
+      t.after(() => rmSync(scratch, { recursive: true, force: true }));
+      const bin = join(scratch, "bin");
+      mkdirSync(bin);
+      mkdirSync(join(scratch, "tests"));
+      copyFileSync(runner, join(scratch, "tests/container.sh"));
+      writeFileSync(
+        join(bin, "docker"),
+        `#!/bin/sh
+printf '%s\\n' "$1" >> "$SPW_DOCKER_LOG"
+if [ "$1" = build ]; then
+  count=$(grep -c '^build$' "$SPW_DOCKER_LOG")
+  [ "$count" -gt "$SPW_BUILD_FAILURES" ] || exit 1
+fi
+`,
+      );
+      writeFileSync(
+        join(bin, "sleep"),
+        `#!/bin/sh\nprintf '%s\\n' "$1" >> "$SPW_SLEEP_LOG"\n`,
+      );
+      chmodSync(join(bin, "docker"), 0o755);
+      chmodSync(join(bin, "sleep"), 0o755);
+      const dockerLog = join(scratch, "docker.log");
+      const sleepLog = join(scratch, "sleep.log");
+      for (const [failures, status, docker, sleeps] of [
+        [0, 0, "build\nrun\n", ""],
+        [2, 0, "build\nbuild\nbuild\nrun\n", "30\n60\n"],
+        [3, 1, "build\nbuild\nbuild\n", "30\n60\n"],
+      ] as const) {
+        writeFileSync(dockerLog, "");
+        writeFileSync(sleepLog, "");
+        const result = spawnSync(
+          "/bin/sh",
+          [join(scratch, "tests/container.sh"), "shared"],
+          {
+            encoding: "utf8",
+            env: {
+              PATH: `${bin}:/usr/bin:/bin`,
+              SPW_DOCKER_LOG: dockerLog,
+              SPW_SLEEP_LOG: sleepLog,
+              SPW_BUILD_FAILURES: String(failures),
+            },
+            timeout: 5_000,
+          },
+        );
+        assert.equal(result.status, status, result.stderr);
+        assert.equal(readFileSync(dockerLog, "utf8"), docker);
+        assert.equal(readFileSync(sleepLog, "utf8"), sleeps);
+        if (status !== 0)
+          assert.match(
+            result.stderr,
+            /container image build failed after 3 attempts/,
+          );
+      }
+    },
+  );
   await t.test(
     "OpenCode probe rejects host execution before lifecycle work",
     () => {

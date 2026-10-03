@@ -88,8 +88,22 @@ command -v docker >/dev/null 2>&1 || {
   exit 1
 }
 
-docker build --pull \
-  -f "$root/tests/container/Dockerfile" -t "$image" "$root"
+# The build is the only networked phase, and a shared-runner throttle (HTTP 429
+# from a github.com fetch) fails it transiently. Each wait doubles; the tests
+# below run --network none and are never retried.
+build_attempt=1
+build_delay=30
+until docker build --pull \
+  -f "$root/tests/container/Dockerfile" -t "$image" "$root"; do
+  if [ "$build_attempt" -ge 3 ]; then
+    echo "error: container image build failed after $build_attempt attempts" >&2
+    exit 1
+  fi
+  echo "container image build attempt $build_attempt failed; retrying in ${build_delay}s" >&2
+  sleep "$build_delay"
+  build_attempt=$((build_attempt + 1))
+  build_delay=$((build_delay * 2))
+done
 exec docker run --rm \
   --network none \
   --read-only \
