@@ -33,8 +33,14 @@ void test("rejects a relative XDG config root before artifact writes", () => {
   );
 });
 
-void test("storage validation rejects symlinked config and manager parents", async (t) => {
-  for (const parent of ["config", "manager"] as const)
+void test("storage validation rejects symlinked config, manager, and storage roots", async (t) => {
+  for (const parent of [
+    "config",
+    "manager",
+    "prepared",
+    "installed",
+    "recovery",
+  ] as const)
     await t.test(parent, async (t) => {
       const root = scratch(t, "spw-opencode-paths-");
       const paths = openCodePaths(
@@ -46,9 +52,12 @@ void test("storage validation rejects symlinked config and manager parents", asy
       if (parent === "config") {
         mkdirSync(dirname(paths.configRoot), { recursive: true });
         symlinkSync(target, paths.configRoot, "dir");
-      } else {
+      } else if (parent === "manager") {
         mkdirSync(paths.configRoot, { recursive: true });
         symlinkSync(target, paths.managerRoot, "dir");
+      } else {
+        mkdirSync(paths.managerRoot, { recursive: true });
+        symlinkSync(target, paths[`${parent}Root`], "dir");
       }
       await assert.rejects(
         assertOpenCodePreparationSeparate(paths),

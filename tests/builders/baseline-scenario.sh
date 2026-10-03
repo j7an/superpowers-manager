@@ -7,7 +7,7 @@ script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 usage() {
   printf '%s\n' \
     'usage: baseline-scenario.sh COMMAND DESTINATION' \
-    'commands: git-release-repo broken-symlink escaping-symlink permission-denied interrupted-prepare-state interrupted-install-state' >&2
+    'commands: git-release-repo broken-symlink escaping-symlink permission-denied interrupted-prepare-state' >&2
   exit 2
 }
 
@@ -169,18 +169,6 @@ EOF
     printf '%s\n' 'retained sibling' > "$sibling/keep"
     printf 'ROOT=%s\nPREVIOUS_TREE=%s\nPREPARE_STAGING=%s\nSIBLING=%s\n' \
       "$destination" "$previous_tree" "$prepare_staging" "$sibling"
-    ;;
-  interrupted-install-state)
-    require_absent_destination "$destination"
-    manager_state="$destination/manager-state"
-    legacy_state="$destination/legacy-state"
-    operation_marker="$destination/adapter-operation.incomplete"
-    mkdir -p "$manager_state" "$legacy_state"
-    printf '%s\n' 'retained manager state' > "$manager_state/keep"
-    printf '%s\n' 'retained legacy state' > "$legacy_state/keep"
-    printf '%s\n' 'install interrupted before verification' > "$operation_marker"
-    printf 'ROOT=%s\nMANAGER_STATE=%s\nLEGACY_STATE=%s\nOPERATION_MARKER=%s\n' \
-      "$destination" "$manager_state" "$legacy_state" "$operation_marker"
     ;;
   *) usage ;;
 esac

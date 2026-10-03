@@ -1,10 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import {
-  assertNoFollowType,
-  canonicalizeProspectivePath,
-  isContained,
-} from "../../safe-path.ts";
+import { assertNoFollowType } from "../../safe-path.ts";
 
 export interface OpenCodePaths {
   readonly homeDir: string;
@@ -15,28 +11,17 @@ export interface OpenCodePaths {
   readonly recoveryRoot: string;
 }
 
-function overlaps(left: string, right: string): boolean {
-  return isContained(left, right) || isContained(right, left);
-}
-
 export async function assertOpenCodePreparationSeparate(
   paths: OpenCodePaths,
 ): Promise<void> {
-  await assertNoFollowType(paths.configRoot, ["directory", "missing"]);
-  await assertNoFollowType(paths.managerRoot, ["directory", "missing"]);
-  const roots = [paths.preparedRoot, paths.installedRoot, paths.recoveryRoot];
-  const canonical = await Promise.all(
-    roots.map(async (root) => {
-      await assertNoFollowType(root, ["directory", "missing"]);
-      return await canonicalizeProspectivePath(root);
-    }),
-  );
-  if (
-    overlaps(canonical[0]!, canonical[1]!) ||
-    overlaps(canonical[0]!, canonical[2]!) ||
-    overlaps(canonical[1]!, canonical[2]!)
-  )
-    throw new Error("storage roots overlap");
+  for (const root of [
+    paths.configRoot,
+    paths.managerRoot,
+    paths.preparedRoot,
+    paths.installedRoot,
+    paths.recoveryRoot,
+  ])
+    await assertNoFollowType(root, ["directory", "missing"]);
 }
 
 export function openCodePaths(

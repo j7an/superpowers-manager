@@ -12,7 +12,7 @@ import {
   type ReportedWorkspace,
 } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import { GatherFailure, invoke, writeOutput } from "./adapter-call.ts";
+import { invoke, writeOutput } from "./adapter-call.ts";
 import { probeFacts, replayOutcome } from "./probe.ts";
 import { runPrepare } from "./prepare.ts";
 import { runWithMutation } from "./mutation.ts";
@@ -21,261 +21,239 @@ import { activationBlock } from "../harness-compatibility.ts";
 type StageOutcome =
   | {
       readonly kind: "blocked";
-      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly output: Output;
     }
   | {
       readonly kind: "failed";
-      readonly outcomes: readonly AdapterOutcome<unknown>[];
       // null means replayOutcome already emitted the adapter's own error:
       // and hint: lines for the failing outcome.
       readonly message: string | null;
     }
   | {
       readonly kind: "verified";
-      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly status: 0 | 1;
       readonly stdout: readonly string[];
       readonly stderr: readonly string[];
     };
 
-// Collect outcomes without writing so output failures cannot be classified as
-// inspection failures. Replay collected outcomes after gathering completes.
-// The callback never throws: invoke() catches every ctx.adapter failure and
-// every predicate here is pure, so a post-success cleanup failure is the only
-// case withWorkspaceReporting's cleanupWarning has to carry.
+// Collect outcomes into the caller's array without writing, so output failures
+// cannot be classified as inspection failures. The caller replays them after
+// gathering, including when gathering throws; a post-success cleanup failure
+// comes back as withWorkspaceReporting's cleanupWarning instead.
 async function gatherInstallStages<R>(
   ctx: CommandContext<R>,
   selection: EffectiveSelection,
   artifact: PreparedArtifact,
+  outcomes: AdapterOutcome<unknown>[],
 ): Promise<ReportedWorkspace<StageOutcome>> {
   const parent = ctx.env.TMPDIR ?? tmpdir();
-  const outcomes: AdapterOutcome<unknown>[] = [];
-  try {
-    return await withWorkspaceReporting(
-      parent,
-      "superpowers-manager.install.",
-      async (workspace): Promise<StageOutcome> => {
-        const env = { ...ctx.env, TMPDIR: workspace };
-        const failed = (message: string | null): StageOutcome => ({
-          kind: "failed",
-          outcomes,
-          message,
-        });
-        const adapterContext = { root: ctx.root, env };
+  return await withWorkspaceReporting(
+    parent,
+    "superpowers-manager.install.",
+    async (workspace): Promise<StageOutcome> => {
+      const env = { ...ctx.env, TMPDIR: workspace };
+      const failed = (message: string | null): StageOutcome => ({
+        kind: "failed",
+        message,
+      });
+      const adapterContext = { root: ctx.root, env };
 
-        // Stage 1: inspect ownership, re-checked even though gatherProbe just
-        // reported it. Mutation authority requires CURRENT, VALIDATED
-        // evidence -- a probe's answer is neither by the time this runs.
-        const ownershipFailure = ctx.adapter.presentation.callFailure(
-          "install-ownership",
-          adapterContext,
-        );
-        const ownership = await invoke(
-          () => ctx.adapter.inspectOwnership(adapterContext),
-          ownershipFailure,
-          outcomes,
-        );
-        if (!ownership.ok) return failed(ownership.message);
-        const ownershipDecision =
-          ownership.result.outcome.result.installEligibility;
-        if (ownershipDecision.kind === "blocked") {
-          return {
-            kind: "blocked",
-            outcomes,
-            output: ownershipDecision.output,
-          };
-        }
-
-        // Stage 2: inspect update-control, re-checked for the same reason.
-        const controlFailure = ctx.adapter.presentation.callFailure(
-          "install-control",
-          adapterContext,
-        );
-        const control = await invoke(
-          () => ctx.adapter.inspectUpdateControl(adapterContext),
-          controlFailure,
-          outcomes,
-        );
-        if (!control.ok) return failed(control.message);
-        const mutationDecision =
-          control.result.outcome.result.mutationEligibility;
-        if (mutationDecision.kind === "blocked") {
-          return {
-            kind: "blocked",
-            outcomes,
-            output: mutationDecision.output,
-          };
-        }
-
-        // Stage 3: the mutation itself. Nothing above may have issued this --
-        // that is the whole point of stages 1 and 2 running first.
-        const activationFailure = activationBlock(
-          artifact.compatibility,
-          ctx.options.allowExperimental,
-        );
-        if (activationFailure !== null) return failed(activationFailure);
-        const installFailure = ctx.adapter.presentation.callFailure(
-          "install",
-          adapterContext,
-        );
-        const install = await invoke(
-          () => ctx.adapter.install(artifact, adapterContext),
-          installFailure,
-          outcomes,
-        );
-        if (!install.ok) return failed(install.message);
-        let transaction: InstallTransaction | undefined;
-        try {
-          const candidate = install.result.outcome.result.transaction;
-          if (candidate !== undefined) {
-            if (candidate === null || typeof candidate !== "object")
-              throw new Error("invalid transaction");
-            const finalize = candidate.finalize.bind(candidate);
-            const rollback = candidate.rollback.bind(candidate);
-            if (
-              typeof finalize !== "function" ||
-              typeof rollback !== "function"
-            )
-              throw new Error("invalid transaction");
-            transaction = { finalize, rollback };
-          }
-        } catch {
-          return failed(
-            "invalid installation transaction receipt; preserve recovery material for manual resolution",
-          );
-        }
-
-        // Stage 4: inspect fingerprint, to verify the mutation actually took.
-        //
-        // Deliberately NOT short-circuited on `!inspected.ok`, unlike stages
-        // 1-3. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint` handed the inspect result to
-        // spw_verify_installed_fingerprint whatever it contained, and that
-        // function's first guard, from
-        // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:91-94::spw_inspect_fingerprint`,
-        // is what turns a failed inspection into "error: installed manager
-        // fingerprint inspection failed after install."
-        // renderInstallVerification's failed-inspection arm
-        // (`src/harnesses/codex/presentation.ts:280::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
-        // exists for this result-bearing path. Returning
-        // failed() instead reported the adapter's own generic diagnostic and
-        // dropped the post-install verification claim -- a mutation had
-        // already been issued at stage 3,
-        // so "the install could not be verified" is the contract, not "an
-        // adapter call failed". A ctx.adapter THROW has no result to render.
-        // A pending transaction still rolls back before reporting that failure.
-        const inspectionFailure = ctx.adapter.presentation.callFailure(
-          "post-install",
-          adapterContext,
-        );
-        const inspected = await invoke(
-          () => ctx.adapter.inspectInstalled(selection, adapterContext),
-          inspectionFailure,
-          outcomes,
-        );
-        const inspection = inspected.result;
-        const verified =
-          inspection !== null &&
-          inspection.status === 0 &&
-          inspection.outcome.ok &&
-          inspection.outcome.result.kind === "current";
-        if (transaction !== undefined) {
-          const operation = verified ? "finalize" : "rollback";
-          const settlement = await invoke(
-            () => (verified ? transaction.finalize() : transaction.rollback()),
-            {
-              unexpected: `installation ${operation} did not complete; preserve recovery material for manual resolution`,
-              invalidStatus: `installation ${operation} returned an invalid result; preserve recovery material for manual resolution`,
-            },
-            outcomes,
-            (value) => value === null,
-          );
-          if (!verified) {
-            const restored = await invoke(
-              () => ctx.adapter.inspectInstalled(selection, adapterContext),
-              inspectionFailure,
-              outcomes,
-            );
-            const restoration = restored.ok
-              ? `installed state after rollback: ${restored.result.outcome.result.kind}; identity=${restored.result.outcome.result.observedIdentity}`
-              : "installed state after rollback could not be inspected";
-            const verificationOutput =
-              inspection === null
-                ? null
-                : ctx.adapter.presentation.renderInstallVerification(
-                    selection.desiredCommit,
-                    install.result,
-                    inspection,
-                  );
-            const inspectionMessage =
-              verificationOutput === null && !inspected.ok
-                ? inspected.message
-                : null;
-            const settlementMessage = !settlement.ok
-              ? settlement.message
-              : null;
-            return {
-              kind: "verified",
-              outcomes,
-              status: 1,
-              stdout: verificationOutput?.stdout ?? [],
-              stderr: [
-                ...(verificationOutput?.stderr ?? []),
-                ...(inspectionMessage === null
-                  ? []
-                  : [`error: ${inspectionMessage}`]),
-                ...(settlementMessage === null
-                  ? []
-                  : [`error: ${settlementMessage}`]),
-                restoration,
-              ],
-            };
-          }
-          if (!settlement.ok) {
-            const actual = await invoke(
-              () => ctx.adapter.inspectInstalled(selection, adapterContext),
-              inspectionFailure,
-              outcomes,
-            );
-            return {
-              kind: "verified",
-              outcomes,
-              status: 1,
-              stdout: [],
-              stderr: [
-                "error: installation was verified, but transaction cleanup did not complete; preserve recovery material for manual resolution",
-                actual.ok
-                  ? `installed state after failed finalization: ${actual.result.outcome.result.kind}; identity=${actual.result.outcome.result.observedIdentity}`
-                  : "installed state after failed finalization could not be inspected",
-                ...(settlement.message === null
-                  ? []
-                  : [`error: ${settlement.message}`]),
-              ],
-            };
-          }
-        }
-        if (inspection === null)
-          return failed(inspected.ok ? null : inspected.message);
-        const output = ctx.adapter.presentation.renderInstallVerification(
-          selection.desiredCommit,
-          install.result,
-          inspection,
-        );
+      // Stage 1: inspect ownership, re-checked even though gatherProbe just
+      // reported it. Mutation authority requires CURRENT, VALIDATED
+      // evidence -- a probe's answer is neither by the time this runs.
+      const ownershipFailure = ctx.adapter.presentation.callFailure(
+        "install-ownership",
+        adapterContext,
+      );
+      const ownership = await invoke(
+        () => ctx.adapter.inspectOwnership(adapterContext),
+        ownershipFailure,
+        outcomes,
+      );
+      if (!ownership.ok) return failed(ownership.message);
+      const ownershipDecision =
+        ownership.result.outcome.result.installEligibility;
+      if (ownershipDecision.kind === "blocked") {
         return {
-          kind: "verified",
-          outcomes,
-          status: verified ? 0 : 1,
-          stdout: output.stdout,
-          stderr: output.stderr,
+          kind: "blocked",
+          output: ownershipDecision.output,
         };
-      },
-    );
-  } catch (cause) {
-    // Reachable only for mkdtemp failure (nothing collected yet): the
-    // callback never throws, and a post-success cleanup failure comes back
-    // as cleanupWarning.
-    throw new GatherFailure("install gather failed", cause, outcomes);
-  }
+      }
+
+      // Stage 2: inspect update-control, re-checked for the same reason.
+      const controlFailure = ctx.adapter.presentation.callFailure(
+        "install-control",
+        adapterContext,
+      );
+      const control = await invoke(
+        () => ctx.adapter.inspectUpdateControl(adapterContext),
+        controlFailure,
+        outcomes,
+      );
+      if (!control.ok) return failed(control.message);
+      const mutationDecision =
+        control.result.outcome.result.mutationEligibility;
+      if (mutationDecision.kind === "blocked") {
+        return {
+          kind: "blocked",
+          output: mutationDecision.output,
+        };
+      }
+
+      // Stage 3: the mutation itself. Nothing above may have issued this --
+      // that is the whole point of stages 1 and 2 running first.
+      const activationFailure = activationBlock(
+        artifact.compatibility,
+        ctx.options.allowExperimental,
+      );
+      if (activationFailure !== null) return failed(activationFailure);
+      const installFailure = ctx.adapter.presentation.callFailure(
+        "install",
+        adapterContext,
+      );
+      const install = await invoke(
+        () => ctx.adapter.install(artifact, adapterContext),
+        installFailure,
+        outcomes,
+      );
+      if (!install.ok) return failed(install.message);
+      let transaction: InstallTransaction | undefined;
+      try {
+        const candidate = install.result.outcome.result.transaction;
+        if (candidate !== undefined) {
+          if (candidate === null || typeof candidate !== "object")
+            throw new Error("invalid transaction");
+          const finalize = candidate.finalize.bind(candidate);
+          const rollback = candidate.rollback.bind(candidate);
+          if (typeof finalize !== "function" || typeof rollback !== "function")
+            throw new Error("invalid transaction");
+          transaction = { finalize, rollback };
+        }
+      } catch {
+        return failed(
+          "invalid installation transaction receipt; preserve recovery material for manual resolution",
+        );
+      }
+
+      // Stage 4: inspect fingerprint, to verify the mutation actually took.
+      //
+      // Deliberately NOT short-circuited on `!inspected.ok`, unlike stages
+      // 1-3. `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/install:57::spw_verify_installed_fingerprint` handed the inspect result to
+      // spw_verify_installed_fingerprint whatever it contained, and that
+      // function's first guard, from
+      // `git show ad56569a4c161e7b122967442e2b026eeb6395f6:scripts/core/lifecycle.sh:91-94::spw_inspect_fingerprint`,
+      // is what turns a failed inspection into "error: installed manager
+      // fingerprint inspection failed after install."
+      // renderInstallVerification's failed-inspection arm
+      // (`src/harnesses/codex/presentation.ts:280::if (inspection.status !== 0 || !inspection.outcome.ok) {`)
+      // exists for this result-bearing path. Returning
+      // failed() instead reported the adapter's own generic diagnostic and
+      // dropped the post-install verification claim -- a mutation had
+      // already been issued at stage 3,
+      // so "the install could not be verified" is the contract, not "an
+      // adapter call failed". A ctx.adapter THROW has no result to render.
+      // A pending transaction still rolls back before reporting that failure.
+      const inspectionFailure = ctx.adapter.presentation.callFailure(
+        "post-install",
+        adapterContext,
+      );
+      const inspected = await invoke(
+        () => ctx.adapter.inspectInstalled(selection, adapterContext),
+        inspectionFailure,
+        outcomes,
+      );
+      const inspection = inspected.result;
+      const verified =
+        inspection !== null &&
+        inspection.status === 0 &&
+        inspection.outcome.ok &&
+        inspection.outcome.result.kind === "current";
+      if (transaction !== undefined) {
+        const operation = verified ? "finalize" : "rollback";
+        const settlement = await invoke(
+          () => (verified ? transaction.finalize() : transaction.rollback()),
+          {
+            unexpected: `installation ${operation} did not complete; preserve recovery material for manual resolution`,
+            invalidStatus: `installation ${operation} returned an invalid result; preserve recovery material for manual resolution`,
+          },
+          outcomes,
+          (value) => value === null,
+        );
+        if (!verified) {
+          const restored = await invoke(
+            () => ctx.adapter.inspectInstalled(selection, adapterContext),
+            inspectionFailure,
+            outcomes,
+          );
+          const restoration = restored.ok
+            ? `installed state after rollback: ${restored.result.outcome.result.kind}; identity=${restored.result.outcome.result.observedIdentity}`
+            : "installed state after rollback could not be inspected";
+          const verificationOutput =
+            inspection === null
+              ? null
+              : ctx.adapter.presentation.renderInstallVerification(
+                  selection.desiredCommit,
+                  install.result,
+                  inspection,
+                );
+          const inspectionMessage =
+            verificationOutput === null && !inspected.ok
+              ? inspected.message
+              : null;
+          const settlementMessage = !settlement.ok ? settlement.message : null;
+          return {
+            kind: "verified",
+            status: 1,
+            stdout: verificationOutput?.stdout ?? [],
+            stderr: [
+              ...(verificationOutput?.stderr ?? []),
+              ...(inspectionMessage === null
+                ? []
+                : [`error: ${inspectionMessage}`]),
+              ...(settlementMessage === null
+                ? []
+                : [`error: ${settlementMessage}`]),
+              restoration,
+            ],
+          };
+        }
+        if (!settlement.ok) {
+          const actual = await invoke(
+            () => ctx.adapter.inspectInstalled(selection, adapterContext),
+            inspectionFailure,
+            outcomes,
+          );
+          return {
+            kind: "verified",
+            status: 1,
+            stdout: [],
+            stderr: [
+              "error: installation was verified, but transaction cleanup did not complete; preserve recovery material for manual resolution",
+              actual.ok
+                ? `installed state after failed finalization: ${actual.result.outcome.result.kind}; identity=${actual.result.outcome.result.observedIdentity}`
+                : "installed state after failed finalization could not be inspected",
+              ...(settlement.message === null
+                ? []
+                : [`error: ${settlement.message}`]),
+            ],
+          };
+        }
+      }
+      if (inspection === null)
+        return failed(inspected.ok ? null : inspected.message);
+      const output = ctx.adapter.presentation.renderInstallVerification(
+        selection.desiredCommit,
+        install.result,
+        inspection,
+      );
+      return {
+        kind: "verified",
+        status: verified ? 0 : 1,
+        stdout: output.stdout,
+        stderr: output.stderr,
+      };
+    },
+  );
 }
 
 export async function runInstall<R>(
@@ -334,23 +312,24 @@ async function performInstall<R>(ctx: CommandContext<R>): Promise<number> {
     return 1;
   }
 
+  // Owned here, not in gatherInstallStages, so a gather throw still replays
+  // every outcome collected before it.
+  const outcomes: AdapterOutcome<unknown>[] = [];
   let stage: ReportedWorkspace<StageOutcome>;
   try {
     stage = await gatherInstallStages(
       ctx,
       facts.selection,
       prepared.outcome.result,
+      outcomes,
     );
   } catch (cause) {
-    const outcomes =
-      cause instanceof GatherFailure ? cause.outcomes : ([] as const);
-    for (const outcome of outcomes) replayOutcome(outcome, ctx);
-    const inner = cause instanceof GatherFailure ? cause.inner : cause;
-    ctx.stderr.write(`error: ${oneLine(inner)}\n`);
+    for (const each of outcomes) replayOutcome(each, ctx);
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
   const { value: outcome, cleanupWarning } = stage;
-  for (const each of outcome.outcomes) replayOutcome(each, ctx);
+  for (const each of outcomes) replayOutcome(each, ctx);
 
   let status: number;
   if (outcome.kind === "blocked") {
