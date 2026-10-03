@@ -1120,3 +1120,38 @@ void test("a post-success workspace cleanup failure still reports the domain out
     rmSync(parent, { recursive: true, force: true });
   }
 });
+
+// The caller owns the outcomes array, so a throw after adapter calls have
+// already been collected -- here a presentation renderer, which runs outside
+// invoke() -- still replays them before the command-level error line.
+void test("a presentation throw after collection replays collected outcomes before the error", async () => {
+  const out = capture();
+  const err = capture();
+  const { adapter: scripted } = scriptedAdapter([
+    ...PROBE_OK,
+    successResult("inspect", ownership("manager"), []),
+    successResult("inspect", ALLOWED_CONTROL, []),
+    successResult("install", codexInstallReceipt("", ""), [
+      { channel: "stderr", text: "note: install ran" },
+    ]),
+    successResult("inspect", installed("current", X), []),
+  ]);
+  const adapter = {
+    ...scripted,
+    presentation: {
+      ...scripted.presentation,
+      renderInstallVerification(): never {
+        throw new Error("render exploded");
+      },
+    },
+  };
+  const ctx = await makeCtx(
+    { desiredCommit: X, generatedCommit: X },
+    out,
+    err,
+    adapter,
+  );
+  assert.equal(await runInstall([], ctx), 1);
+  assert.equal(out.text(), NOTE);
+  assert.equal(err.text(), "note: install ran\nerror: render exploded\n");
+});

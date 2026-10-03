@@ -7,112 +7,96 @@ import {
   type ReportedWorkspace,
 } from "../workspace.ts";
 import type { CommandContext } from "./context.ts";
-import { GatherFailure, invoke, writeOutput } from "./adapter-call.ts";
+import { invoke, writeOutput } from "./adapter-call.ts";
 import { runWithMutation } from "./mutation.ts";
 import { replayOutcome } from "./probe.ts";
 
 type UninstallOutcome =
   | {
       readonly status: 1;
-      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly message: string | null;
       readonly output: Output | null;
     }
   | {
       readonly status: 0;
-      readonly outcomes: readonly AdapterOutcome<unknown>[];
       readonly output: Output;
     };
 
-// Collect outcomes without writing so output failures cannot be classified as
-// inspection failures. Replay collected outcomes after gathering completes.
+// Collect outcomes into the caller's array without writing, so output failures
+// cannot be classified as inspection failures. The caller replays them after
+// gathering, including when gathering throws.
 async function gatherUninstall<R>(
   ctx: CommandContext<R>,
+  outcomes: AdapterOutcome<unknown>[],
 ): Promise<ReportedWorkspace<UninstallOutcome>> {
   const parent = ctx.env.TMPDIR ?? tmpdir();
-  // Kept outside the workspace callback so a workspace failure preserves every
-  // outcome collected before it.
-  const outcomes: AdapterOutcome<unknown>[] = [];
-  try {
-    return await withWorkspaceReporting(
-      parent,
-      "superpowers-manager.uninstall.",
-      async (workspace): Promise<UninstallOutcome> => {
-        const env = { ...ctx.env, TMPDIR: workspace };
-        const failed = (message: string | null): UninstallOutcome => ({
-          status: 1,
-          outcomes,
-          message,
-          output: null,
-        });
-        const adapterContext = { root: ctx.root, env };
+  return await withWorkspaceReporting(
+    parent,
+    "superpowers-manager.uninstall.",
+    async (workspace): Promise<UninstallOutcome> => {
+      const env = { ...ctx.env, TMPDIR: workspace };
+      const failed = (message: string | null): UninstallOutcome => ({
+        status: 1,
+        message,
+        output: null,
+      });
+      const adapterContext = { root: ctx.root, env };
 
-        // Stage 1: inspect ownership, before removal.
-        const beforeFailure = ctx.adapter.presentation.callFailure(
-          "remove-ownership",
-          adapterContext,
-        );
-        const before = await invoke(
-          () => ctx.adapter.inspectOwnership(adapterContext),
-          beforeFailure,
-          outcomes,
-        );
-        if (!before.ok) return failed(before.message);
+      // Stage 1: inspect ownership, before removal.
+      const beforeFailure = ctx.adapter.presentation.callFailure(
+        "remove-ownership",
+        adapterContext,
+      );
+      const before = await invoke(
+        () => ctx.adapter.inspectOwnership(adapterContext),
+        beforeFailure,
+        outcomes,
+      );
+      if (!before.ok) return failed(before.message);
 
-        // Stage 2: remove, passing the private input through untouched.
-        const removalInput = before.result.outcome.result.removalInput;
-        const removeFailure = ctx.adapter.presentation.callFailure(
-          "remove",
-          adapterContext,
-          removalInput,
-        );
-        const removed = await invoke(
-          () => ctx.adapter.remove(removalInput, adapterContext),
-          removeFailure,
-          outcomes,
-        );
-        if (!removed.ok) return failed(removed.message);
+      // Stage 2: remove, passing the private input through untouched.
+      const removalInput = before.result.outcome.result.removalInput;
+      const removeFailure = ctx.adapter.presentation.callFailure(
+        "remove",
+        adapterContext,
+        removalInput,
+      );
+      const removed = await invoke(
+        () => ctx.adapter.remove(removalInput, adapterContext),
+        removeFailure,
+        outcomes,
+      );
+      if (!removed.ok) return failed(removed.message);
 
-        // Stage 3: inspect ownership again. Everything below reads this
-        // post-removal state, not the inspection before removal.
-        const afterFailure = ctx.adapter.presentation.callFailure(
-          "post-remove",
-          adapterContext,
-        );
-        const after = await invoke(
-          () => ctx.adapter.inspectOwnership(adapterContext),
-          afterFailure,
-          outcomes,
-        );
-        if (!after.ok) return failed(after.message);
-        const ownership = after.result.outcome.result;
-        if (ownership.removalVerification.kind === "blocked") {
-          return {
-            status: 1,
-            outcomes,
-            message: null,
-            output: ownership.removalVerification.output,
-          };
-        }
+      // Stage 3: inspect ownership again. Everything below reads this
+      // post-removal state, not the inspection before removal.
+      const afterFailure = ctx.adapter.presentation.callFailure(
+        "post-remove",
+        adapterContext,
+      );
+      const after = await invoke(
+        () => ctx.adapter.inspectOwnership(adapterContext),
+        afterFailure,
+        outcomes,
+      );
+      if (!after.ok) return failed(after.message);
+      const ownership = after.result.outcome.result;
+      if (ownership.removalVerification.kind === "blocked") {
         return {
-          status: 0,
-          outcomes,
-          output: ctx.adapter.presentation.renderRemovalCompletion(
-            ownership,
-            removalInput,
-          ),
+          status: 1,
+          message: null,
+          output: ownership.removalVerification.output,
         };
-      },
-    );
-  } catch (cause) {
-    // Reachable only for mkdtemp failure, with nothing collected yet: the
-    // callback never throws (every ctx.adapter throw is caught inside
-    // invoke()), and a post-success cleanup failure comes back as
-    // cleanupWarning. Wrapping with `outcomes` anyway keeps the class total
-    // over its declared contract rather than assuming the callback's purity at
-    // the throw site.
-    throw new GatherFailure("uninstall gather failed", cause, outcomes);
-  }
+      }
+      return {
+        status: 0,
+        output: ctx.adapter.presentation.renderRemovalCompletion(
+          ownership,
+          removalInput,
+        ),
+      };
+    },
+  );
 }
 
 export async function runUninstall<R>(
@@ -126,22 +110,22 @@ export async function runUninstall<R>(
 }
 
 async function performUninstall<R>(ctx: CommandContext<R>): Promise<number> {
+  // Owned here, not in gatherUninstall, so a gather throw still replays every
+  // outcome collected before it.
+  const outcomes: AdapterOutcome<unknown>[] = [];
   let run: ReportedWorkspace<UninstallOutcome>;
   try {
-    run = await gatherUninstall(ctx);
+    run = await gatherUninstall(ctx, outcomes);
   } catch (cause) {
     // Replay collected outcomes before reporting a gather failure. A
     // post-success cleanup failure arrives as cleanupWarning, not here.
-    const outcomes =
-      cause instanceof GatherFailure ? cause.outcomes : ([] as const);
-    for (const outcome of outcomes) replayOutcome(outcome, ctx);
-    const inner = cause instanceof GatherFailure ? cause.inner : cause;
-    ctx.stderr.write(`error: ${oneLine(inner)}\n`);
+    for (const each of outcomes) replayOutcome(each, ctx);
+    ctx.stderr.write(`error: ${oneLine(cause)}\n`);
     return 1;
   }
   const { value: outcome, cleanupWarning } = run;
   // Replay before reporting a command-level result on either path.
-  for (const each of outcome.outcomes) replayOutcome(each, ctx);
+  for (const each of outcomes) replayOutcome(each, ctx);
   let status: number;
   if (outcome.status === 1) {
     // null means replayOutcome already emitted the adapter's own error:
