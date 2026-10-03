@@ -29,6 +29,8 @@ const claudeCodeProbe = join(
   "tests/container/claude-code/offline-probe.sh",
 );
 
+const hermesProbe = join(ROOT, "tests/container/hermes/offline-probe.sh");
+
 function executable(path: string): boolean {
   try {
     accessSync(path, constants.X_OK);
@@ -99,7 +101,15 @@ void test("container contract", async (t) => {
           .split(/\s+/)
           .filter((token) => token !== "\\")
           .sort(),
-        ["ca-certificates", "git", "procps"],
+        [
+          "build-essential",
+          "ca-certificates",
+          "curl",
+          "git",
+          "libffi-dev",
+          "procps",
+          "python3-dev",
+        ],
       );
     },
   );
@@ -145,6 +155,34 @@ void test("container contract", async (t) => {
         assert.ok(`${name}@${pkg.dependencies[name]}` in lock.packages);
       }
       const docker = readFileSync(dockerfile, "utf8").replace(/\\\n\s*/g, " ");
+      assert.match(docker, /^ARG SPW_HERMES_COMMIT=[a-f0-9]{40}(?:\s|$)/m);
+      assert.ok(
+        docker.includes("/$SPW_HERMES_COMMIT/scripts/install.sh"),
+        "Hermes installer download must use the requested commit",
+      );
+      const hermesInstall =
+        /\bbash\s+[^&\n]*install\.sh[^&\n]*/.exec(docker)?.[0] ?? "";
+      assert.match(hermesInstall, /--commit "\$SPW_HERMES_COMMIT"/);
+      for (const flag of [
+        "--dir /opt/hermes",
+        '--hermes-home "$spw_hermes_home"',
+        "--non-interactive",
+        "--skip-browser",
+        "--skip-computer-use",
+      ])
+        assert.ok(
+          hermesInstall.includes(flag),
+          `Hermes install requires ${flag}`,
+        );
+      assert.match(
+        docker,
+        /^RUN --network=none test "\$\(git -C \/opt\/hermes rev-parse HEAD\)" = "\$SPW_HERMES_COMMIT"[^\n]*\bhermes --version\b/m,
+        "Hermes checkout and version must be verified offline",
+      );
+      assert.match(
+        docker,
+        /\bln -s \/opt\/hermes\/venv\/bin\/python \/usr\/local\/bin\/spw-hermes-python\b/,
+      );
       const install = docker.indexOf(
         "pnpm --dir /opt/spw-test-tools --config.node-linker=hoisted install --frozen-lockfile --ignore-scripts",
       );
@@ -241,6 +279,18 @@ void test("container contract", async (t) => {
       assert.match(result.stderr, /isolated UID 10001 container/);
     },
   );
+  await t.test(
+    "Hermes probe rejects host execution before lifecycle work",
+    () => {
+      assert.ok(executable(hermesProbe));
+      const result = spawnSync("/bin/sh", [hermesProbe], {
+        encoding: "utf8",
+        env: { PATH: "/usr/bin:/bin", SPW_CONTAINER: "0" },
+      });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /isolated UID 10001 container/);
+    },
+  );
   await t.test("test tsconfig resolves NodeNext", () => {
     const config = effectiveTsconfig();
     assert.equal(String(config.module).toLowerCase(), "nodenext");
@@ -295,7 +345,7 @@ void test("container contract", async (t) => {
       writeFileSync(join(bin, "docker"), "#!/bin/sh\nexit 99\n");
       const child = `#!/bin/sh
 set -eu
-case "$0" in */codex/offline-probe.sh) name=codex ;; */codex/real-upstream.sh) name=codex-walk ;; */pi/offline-probe.sh) name=pi ;; */pi/real-upstream.sh) name=pi-walk ;; */opencode/offline-probe.sh) name=opencode ;; */opencode/real-upstream.sh) name=opencode-walk ;; */claude-code/offline-probe.sh) name=claude-code ;; */claude-code/real-upstream.sh) name=claude-code-walk ;; *) name=shared ;; esac
+case "$0" in */codex/offline-probe.sh) name=codex ;; */codex/real-upstream.sh) name=codex-walk ;; */pi/offline-probe.sh) name=pi ;; */pi/real-upstream.sh) name=pi-walk ;; */opencode/offline-probe.sh) name=opencode ;; */opencode/real-upstream.sh) name=opencode-walk ;; */claude-code/offline-probe.sh) name=claude-code ;; */claude-code/real-upstream.sh) name=claude-code-walk ;; */hermes/offline-probe.sh) name=hermes ;; */hermes/real-upstream.sh) name=hermes-walk ;; *) name=shared ;; esac
 label=$name
 if [ "$name" = opencode ] || [ "$name" = opencode-walk ]; then
   case "$SPW_OPENCODE_MAJOR:$SPW_OPENCODE_BIN" in
@@ -318,11 +368,14 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         join(container, "opencode/real-upstream.sh"),
         join(container, "claude-code/offline-probe.sh"),
         join(container, "claude-code/real-upstream.sh"),
+        join(container, "hermes/offline-probe.sh"),
+        join(container, "hermes/real-upstream.sh"),
       ];
       mkdirSync(join(container, "codex"), { recursive: true });
       mkdirSync(join(container, "pi"), { recursive: true });
       mkdirSync(join(container, "opencode"), { recursive: true });
       mkdirSync(join(container, "claude-code"), { recursive: true });
+      mkdirSync(join(container, "hermes"), { recursive: true });
       for (const path of paths) writeFileSync(path, child);
       for (const path of [join(bin, "id"), join(bin, "docker"), ...paths])
         chmodSync(path, 0o755);
@@ -355,7 +408,7 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
       for (const [mode, logText, stdout] of [
         [
           "suite",
-          "shared\ncodex\ncodex-walk\npi\npi-walk\nopencode-v1\nopencode-walk-v1\nopencode-v2\nopencode-walk-v2\nclaude-code\nclaude-code-walk\n",
+          "shared\ncodex\ncodex-walk\npi\npi-walk\nopencode-v1\nopencode-walk-v1\nopencode-v2\nopencode-walk-v2\nclaude-code\nclaude-code-walk\nhermes\nhermes-walk\n",
           stage("container suite: shared checks") +
             stage("container suite: Codex harness integration") +
             stage("container: Codex real-upstream walk") +
@@ -363,7 +416,9 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
             stage("container: Pi real-upstream walk") +
             stage("container suite: OpenCode harness integration", lanes) +
             stage("container suite: Claude Code harness integration") +
-            stage("container: Claude Code real-upstream walk"),
+            stage("container: Claude Code real-upstream walk") +
+            stage("container suite: Hermes harness integration") +
+            stage("container: Hermes real-upstream walk"),
         ],
         ["shared", "shared\n", stage("container: shared checks")],
         [
@@ -388,6 +443,12 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
           "claude-code\nclaude-code-walk\n",
           stage("container: Claude Code harness integration") +
             stage("container: Claude Code real-upstream walk"),
+        ],
+        [
+          "harness-hermes",
+          "hermes\nhermes-walk\n",
+          stage("container: Hermes harness integration") +
+            stage("container: Hermes real-upstream walk"),
         ],
       ] as const) {
         const result = run(mode);
@@ -481,7 +542,23 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         [
           "claude-code-walk",
           "shared\ncodex\ncodex-walk\npi\npi-walk\nopencode-v1\nopencode-walk-v1\nopencode-v2\nopencode-walk-v2\nclaude-code\nclaude-code-walk\n",
-          ["container: Claude Code real-upstream walk: complete status=0"],
+          [
+            "container: Claude Code real-upstream walk: complete status=0",
+            "container suite: Hermes harness integration: start",
+          ],
+        ],
+        [
+          "hermes",
+          "shared\ncodex\ncodex-walk\npi\npi-walk\nopencode-v1\nopencode-walk-v1\nopencode-v2\nopencode-walk-v2\nclaude-code\nclaude-code-walk\nhermes\n",
+          [
+            "container suite: Hermes harness integration: complete status=0",
+            "container: Hermes real-upstream walk: start",
+          ],
+        ],
+        [
+          "hermes-walk",
+          "shared\ncodex\ncodex-walk\npi\npi-walk\nopencode-v1\nopencode-walk-v1\nopencode-v2\nopencode-walk-v2\nclaude-code\nclaude-code-walk\nhermes\nhermes-walk\n",
+          ["container: Hermes real-upstream walk: complete status=0"],
         ],
       ] as const) {
         const result = run("suite", { SPW_FAIL_CHILD: failedChild });
@@ -557,6 +634,19 @@ printf '%s\\n' "$label" >> "$SPW_RUNNER_LOG"
         ),
         failedWalk.stdout,
       );
+      for (const child of ["hermes", "hermes-walk"]) {
+        const result = run("harness-hermes", { SPW_FAIL_CHILD: child });
+        assert.equal(result.status, 17);
+        assert.equal(
+          readFileSync(log, "utf8"),
+          child === "hermes" ? "hermes\n" : "hermes\nhermes-walk\n",
+        );
+        assert.ok(
+          !result.stdout.includes(
+            "container: Hermes real-upstream walk: complete status=0",
+          ),
+        );
+      }
       const invalid = run("unknown");
       assert.equal(invalid.status, 2);
       assert.match(invalid.stderr, /unknown container test mode/);

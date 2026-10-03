@@ -334,7 +334,7 @@ export async function runPack(
     for (const asset of STATIC_ASSETS) {
       await copyStageFile(join(sourceRoot, asset), join(packageRoot, asset));
     }
-    for (const dependency of ["smol-toml", "jsonc-parser"]) {
+    for (const dependency of ["smol-toml", "jsonc-parser", "yaml"]) {
       await copyStageDirectory(
         join(sourceRoot, "node_modules", dependency),
         join(packageRoot, "node_modules", dependency),

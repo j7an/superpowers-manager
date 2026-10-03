@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { extractHarnessOptions, oneLine, UsageError } from "./cli-arguments.ts";
 import { codexHarness } from "./harnesses/codex/harness.ts";
 import { claudeCodeHarness } from "./harnesses/claude-code/harness.ts";
+import { hermesHarness } from "./harnesses/hermes/harness.ts";
 import { piHarness } from "./harnesses/pi/harness.ts";
 import { openCodeHarness } from "./harnesses/opencode/harness.ts";
 import type { InvocationOptions } from "./harness-compatibility.ts";
@@ -263,7 +264,7 @@ function usage(): string {
     "  install --harness opencode [--allow-experimental]",
     "  update --harness opencode [--allow-experimental]",
     "  uninstall --harness opencode",
-    "  --harness=codex, --harness=pi, --harness=opencode, and --harness=claude-code are also accepted after the command.",
+    "  --harness=codex, --harness=pi, --harness=opencode, --harness=claude-code, and --harness=hermes are also accepted after the command.",
     "",
     "Environment overrides (used by in-process commands): SUPERPOWERS_REF,",
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",
@@ -271,7 +272,7 @@ function usage(): string {
     "SUPERPOWERS_PLUGIN_ROOT, SUPERPOWERS_MANIFEST_TEMPLATE,",
     "SUPERPOWERS_VALIDATOR_EXECUTABLE,",
     "SUPERPOWERS_INSTALLED_SEARCH_ROOT, SUPERPOWERS_INSTALL_REFRESH_MODE,",
-    "SUPERPOWERS_OPENCODE, SUPERPOWERS_CLAUDE_CODE, CLAUDE_CONFIG_DIR",
+    "SUPERPOWERS_OPENCODE, SUPERPOWERS_CLAUDE_CODE, CLAUDE_CONFIG_DIR, SUPERPOWERS_HERMES, HERMES_HOME",
     "",
     "SUPERPOWERS_VALIDATOR is removed; unset it and use",
     "SUPERPOWERS_VALIDATOR_EXECUTABLE with an executable validator.",
@@ -305,13 +306,15 @@ async function main(): Promise<never> {
     process.exit(2);
   }
   const status =
-    parsed.options.harness === "claude-code"
-      ? await dispatch(claudeCodeHarness, parsed, root)
-      : parsed.options.harness === "opencode"
-        ? await dispatch(openCodeHarness, parsed, root)
-        : parsed.options.harness === "pi"
-          ? await dispatch(piHarness, parsed, root)
-          : await dispatch(codexHarness, parsed, root);
+    parsed.options.harness === "hermes"
+      ? await dispatch(hermesHarness, parsed, root)
+      : parsed.options.harness === "claude-code"
+        ? await dispatch(claudeCodeHarness, parsed, root)
+        : parsed.options.harness === "opencode"
+          ? await dispatch(openCodeHarness, parsed, root)
+          : parsed.options.harness === "pi"
+            ? await dispatch(piHarness, parsed, root)
+            : await dispatch(codexHarness, parsed, root);
   process.exit(status);
 }
 

@@ -14,7 +14,7 @@ void test("source CLI runs without dist and reads its own package version", (t) 
   cpSync(join(ROOT, "package.json"), join(root, "package.json"));
   const dependencies = join(root, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  for (const dependency of ["smol-toml", "jsonc-parser"]) {
+  for (const dependency of ["smol-toml", "jsonc-parser", "yaml"]) {
     cpSync(
       join(ROOT, "node_modules", dependency),
       join(dependencies, dependency),

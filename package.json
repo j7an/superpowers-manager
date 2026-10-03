@@ -1,7 +1,7 @@
 {
   "name": "superpowers-manager",
   "version": "0.9.1",
-  "description": "Install obra/superpowers directly from upstream for Codex, Pi, OpenCode, and Claude Code. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
+  "description": "Install obra/superpowers directly from upstream for Codex, Pi, OpenCode, Claude Code, and Hermes Agent. Stay on a known-good release or commit, try a branch, and upgrade when you choose.",
   "keywords": [
     "superpowers",
     "obra-superpowers",
@@ -30,7 +30,11 @@
     "claude",
     "claude-code",
     "claude-code-plugin",
-    "claude-code-skills"
+    "claude-code-skills",
+    "hermes-agent",
+    "hermes",
+    "hermes-plugin",
+    "hermes-skills"
   ],
   "license": "MIT",
   "type": "module",
@@ -45,6 +49,7 @@
     "test:harness:pi": "sh tests/container.sh harness-pi",
     "test:harness:opencode": "sh tests/container.sh harness-opencode",
     "test:harness:claude-code": "sh tests/container.sh harness-claude-code",
+    "test:harness:hermes": "sh tests/container.sh harness-hermes",
     "test:acceptance": "sh tests/acceptance.sh",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run knip",
     "check": "pnpm run check:static && pnpm run test",
@@ -57,8 +62,7 @@
     "oxlint": "^1.75.0",
     "oxlint-tsgolint": "7.0.2001",
     "prettier": "^3.9.6",
-    "typescript": "~7.0.2",
-    "yaml": "^2.9.0"
+    "typescript": "~7.0.2"
   },
   "repository": {
     "type": "git",
@@ -83,10 +87,12 @@
   ],
   "dependencies": {
     "jsonc-parser": "3.3.1",
-    "smol-toml": "1.8.0"
+    "smol-toml": "1.8.0",
+    "yaml": "2.9.0"
   },
   "bundleDependencies": [
     "jsonc-parser",
-    "smol-toml"
+    "smol-toml",
+    "yaml"
   ]
 }

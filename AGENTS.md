@@ -4,8 +4,8 @@
 
 This repository is an npm/npx manager that turns upstream Superpowers releases
 into a locally installable Codex plugin marketplace or a persistent Pi,
-OpenCode, or Claude Code snapshot. References to Codex, Pi, OpenCode, or Claude
-Code below describe product integrations, not a required agent harness.
+OpenCode, Claude Code, or Hermes Agent snapshot. These are product
+integrations, not required agent harnesses.
 
 ## Source and Generated-File Boundaries
 
@@ -143,6 +143,7 @@ Code below describe product integrations, not a required agent harness.
   pnpm run test:harness:pi
   pnpm run test:harness:opencode
   pnpm run test:harness:claude-code
+  pnpm run test:harness:hermes
   pnpm run test:acceptance
   ```
 
@@ -207,26 +208,27 @@ Code below describe product integrations, not a required agent harness.
 - Release validation is the deliberate combined-path exception: validate
   locally with `sh tests/container.sh`. Before the publisher, the release
   workflow runs that same suite as one parallel job per selector: `shared`,
-  then Codex, Pi, OpenCode, and Claude Code. The image uses latest Node 24 and
+  then Codex, Pi, OpenCode, Claude Code, and Hermes Agent. The image uses latest Node 24 and
   also runs the installed package on Node 24.0.0 through its verified
   `SPW_PACKAGE_NODE` binary. The minimum binary never runs TypeScript tooling.
 - Keep Layers 1-3 hermetic: no network access and no mutation of the developer's
-  or runner's real Codex, Pi, OpenCode, or Claude Code state.
+  or runner's real Codex, Pi, OpenCode, Claude Code, or Hermes Agent state.
 - Layer 4 lives behind the blocking `pnpm run test:harness:codex`,
   `pnpm run test:harness:pi`, `pnpm run test:harness:opencode`, and
-  `pnpm run test:harness:claude-code` scripts. Each
+  `pnpm run test:harness:claude-code`, and `pnpm run test:harness:hermes`
+  scripts. Each
   exercises only its named real CLI inside an isolated container home with
   networking disabled, so it may mutate
   throwaway container state but never the developer's or runner's real harness
   state. `pnpm run test:acceptance` runs shared checks once, then
-  Codex, Pi, OpenCode, and Claude Code.
+  Codex, Pi, OpenCode, Claude Code, and Hermes Agent.
   Each selector also walks the committed tags in
   `tests/container/upstream-refs` through a local mirror: it pins, prepares,
   installs the oldest ref, updates through later refs, and probes each ref,
   then checks `track-latest`, `unpin`, and `uninstall`. The container stays
   network-isolated; building its image fetches those tags from GitHub. OpenCode
-  V2 first verifies clean refusals for historical refs without a V2 entrypoint,
-  then runs that lifecycle on supported refs. The weekly `upstream-window`
+  V2 first verifies clean refusals for historical refs without a V2 entrypoint;
+  Hermes refuses refs without `.hermes-plugin`. Both walk only supported refs. The weekly `upstream-window`
   workflow compares the committed list with the live 90-day window; update the
   list in a PR when it drifts, and the harness selectors test the new tags.
 - Use `tests/manual/codex/behavior-probe.sh` only for optional intentional

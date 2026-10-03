@@ -94,6 +94,25 @@ void test("Claude Code harness accepts both selector forms on lifecycle commands
   }
 });
 
+void test("Hermes harness accepts both selector forms on lifecycle commands", () => {
+  for (const command of [
+    "prepare",
+    "probe",
+    "install",
+    "update",
+    "uninstall",
+  ] as const) {
+    for (const target of [["--harness", "hermes"], ["--harness=hermes"]]) {
+      assert.deepEqual(parseArgs([command, ...target]), {
+        kind: "run",
+        cmd: command,
+        args: [],
+        options: { harness: "hermes", allowExperimental: false },
+      });
+    }
+  }
+});
+
 void test("shared install settles every transaction exit while retaining mutation ownership", async (t) => {
   for (const inspection of [
     "current",

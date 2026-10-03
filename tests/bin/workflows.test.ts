@@ -188,6 +188,7 @@ const HARNESS_MATRIX = [
   { name: "Pi", selector: "harness-pi" },
   { name: "OpenCode", selector: "harness-opencode" },
   { name: "Claude Code", selector: "harness-claude-code" },
+  { name: "Hermes", selector: "harness-hermes" },
 ];
 
 void test("upstream-window.yml runs weekly and on demand with least privilege", () => {
@@ -1071,12 +1072,15 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.match(manifest.description, /\bPi\b/);
   assert.match(manifest.description, /\bOpenCode\b/);
   assert.match(manifest.description, /\bClaude Code\b/);
+  assert.match(manifest.description, /\bHermes Agent\b/);
 
   const keywords = manifest.keywords;
   assert.ok(Array.isArray(keywords), "package.json keywords must be an array");
   // Exact set is the contract: each harness gets its bare name, `<harness>-skills`,
   // and its native artifact term, except `pi-package`, which opts into Pi's
-  // package gallery for a CLI `pi install` cannot use. Order is free.
+  // package gallery for a CLI `pi install` cannot use. Hermes gets the bare
+  // product name `hermes-agent`, CLI term `hermes`, `hermes-plugin`, and
+  // `hermes-skills`. Order is free.
   assert.deepEqual(
     [...(keywords as string[])].sort(),
     [
@@ -1108,6 +1112,10 @@ void test("package.json carries stable manager and harness discovery metadata", 
       "claude-code",
       "claude-code-plugin",
       "claude-code-skills",
+      "hermes-agent",
+      "hermes",
+      "hermes-plugin",
+      "hermes-skills",
     ].sort(),
   );
 
@@ -1126,6 +1134,10 @@ void test("package.json carries stable manager and harness discovery metadata", 
   assert.equal(
     manifest.scripts["test:harness:claude-code"],
     "sh tests/container.sh harness-claude-code",
+  );
+  assert.equal(
+    manifest.scripts["test:harness:hermes"],
+    "sh tests/container.sh harness-hermes",
   );
   assert.equal(manifest.scripts["test:acceptance"], "sh tests/acceptance.sh");
 });

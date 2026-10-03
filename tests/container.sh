@@ -64,19 +64,22 @@ if [ "${1:-}" = "--inside" ]; then
       phase "container suite: OpenCode harness integration" run_opencode_lines
       phase "container suite: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh
       phase "container: Claude Code real-upstream walk" sh tests/container/claude-code/real-upstream.sh
+      phase "container suite: Hermes harness integration" sh tests/container/hermes/offline-probe.sh
+      phase "container: Hermes real-upstream walk" sh tests/container/hermes/real-upstream.sh
       ;;
     shared) phase "container: shared checks" sh tests/run.sh ;;
     harness-codex) phase "container: Codex harness integration" sh tests/container/codex/offline-probe.sh; phase "container: Codex real-upstream walk" sh tests/container/codex/real-upstream.sh ;;
     harness-pi) phase "container: Pi harness integration" sh tests/container/pi/offline-probe.sh; phase "container: Pi real-upstream walk" sh tests/container/pi/real-upstream.sh ;;
     harness-opencode) phase "container: OpenCode harness integration" run_opencode_lines ;;
     harness-claude-code) phase "container: Claude Code harness integration" sh tests/container/claude-code/offline-probe.sh; phase "container: Claude Code real-upstream walk" sh tests/container/claude-code/real-upstream.sh ;;
+    harness-hermes) phase "container: Hermes harness integration" sh tests/container/hermes/offline-probe.sh; phase "container: Hermes real-upstream walk" sh tests/container/hermes/real-upstream.sh ;;
     *) echo "error: unknown container test mode: $mode" >&2; exit 2 ;;
   esac
   exit 0
 fi
 
 mode="${1:-suite}"
-case "$mode" in suite|shared|harness-codex|harness-pi|harness-opencode|harness-claude-code) ;; *) echo "usage: tests/container.sh [suite|shared|harness-codex|harness-pi|harness-opencode|harness-claude-code]" >&2; exit 2 ;; esac
+case "$mode" in suite|shared|harness-codex|harness-pi|harness-opencode|harness-claude-code|harness-hermes) ;; *) echo "usage: tests/container.sh [suite|shared|harness-codex|harness-pi|harness-opencode|harness-claude-code|harness-hermes]" >&2; exit 2 ;; esac
 
 image="superpowers-manager-test"
 

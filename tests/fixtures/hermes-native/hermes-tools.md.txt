@@ -1,0 +1,3 @@
+# Hermes tools
+
+Inert reference content for native plugin preparation tests.

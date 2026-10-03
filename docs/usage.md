@@ -13,7 +13,7 @@ all adapters without preparing or activating any one.
 
 ## Targeted lifecycle
 
-Set `HARNESS` to `codex`, `pi`, `opencode`, or `claude-code`. Omitting `--harness` selects Codex.
+Set `HARNESS` to `codex`, `pi`, `opencode`, `claude-code`, or `hermes`. Omitting `--harness` selects Codex.
 
 | Command                                               | Selected-harness side effects | Purpose                                               |
 | ----------------------------------------------------- | ----------------------------- | ----------------------------------------------------- |
@@ -60,7 +60,7 @@ HTTP(S) upstream URLs with userinfo are rejected. Use a credential helper or SSH
 
 ## Provider ownership
 
-Use one Superpowers provider in a harness at a time. The manager mutates only `superpowers@superpowers-manager` and the `superpowers-manager` marketplace in Codex and Claude Code, and only its registration and snapshot in Pi or OpenCode. It never adopts, updates, or removes another provider automatically.
+Use one Superpowers provider in a harness at a time. The manager mutates only `superpowers@superpowers-manager` and the `superpowers-manager` marketplace in Codex and Claude Code, only its registration and snapshot in Pi or OpenCode, and the receipt-verified `plugins/superpowers` folder and its `superpowers` enable entry in Hermes. It never adopts, updates, or removes another provider automatically.
 
 ```sh
 codex plugin remove superpowers@openai-curated
@@ -74,3 +74,9 @@ Claude Code installation is user scope only. `SUPERPOWERS_CLAUDE_CODE` selects
 the `claude` executable; `CLAUDE_CONFIG_DIR` selects its configuration root
 (default `$HOME/.claude`). See the [Claude Code reference](claude-code.md) for
 conflicts, recovery, and restart requirements.
+
+Hermes Agent uses `SUPERPOWERS_HERMES` to select its `hermes` executable and
+`HERMES_HOME` for its state root (default `$HOME/.hermes`). Installation and
+update refuse when project plugins are enabled because a project-local copy
+can override the managed plugin. See the [Hermes reference](hermes.md) for
+compatibility and recovery details.

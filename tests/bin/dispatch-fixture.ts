@@ -111,7 +111,7 @@ function buildPackageRoot(kind: "real" | "throwing"): string {
   cpSync(join(ROOT, "src"), join(root, "src"), { recursive: true });
   const dependencies = join(root, "node_modules");
   mkdirSync(dependencies, { recursive: true });
-  for (const dependency of ["smol-toml", "jsonc-parser"]) {
+  for (const dependency of ["smol-toml", "jsonc-parser", "yaml"]) {
     cpSync(
       join(ROOT, "node_modules", dependency),
       join(dependencies, dependency),
