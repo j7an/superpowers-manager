@@ -714,7 +714,7 @@ void test("pnpm packageManager updates delegate on the weekly and manual trigger
   });
   assert.equal(
     requireMapping(update.with, "jobs.update.with").minimum_release_age_days,
-    5,
+    7,
   );
 });
 
