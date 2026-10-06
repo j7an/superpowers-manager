@@ -12,6 +12,6 @@ Run the checkout CLI with `node src/cli.ts`. Run published-package `npx superpow
 
 ## pnpm maintenance
 
-The weekly Monday 06:00 UTC updater, also available by manual dispatch, opens or refreshes a dedicated pull request changing only the `packageManager` pin. It selects a non-deprecated stable pnpm release within the pinned major after five days; a deprecated current pin bypasses that wait. Major upgrades remain manual, and the workflow does not update the lockfile.
+The weekly Monday 06:00 UTC updater, also available by manual dispatch, opens or refreshes a dedicated pull request changing only the `packageManager` pin. It selects a non-deprecated stable pnpm release within the pinned major after seven days; a deprecated current pin bypasses that wait. Major upgrades remain manual, and the workflow does not update the lockfile.
 
 The reusable caller forwards only `RELEASE_BOT_PRIVATE_KEY` and uses `vars.RELEASE_BOT_APP_ID` for App-authored pull requests that can trigger CI. Keep both configured, manually verify App authentication after adopting the caller, and inspect its pull request before treating live integration as validated.
