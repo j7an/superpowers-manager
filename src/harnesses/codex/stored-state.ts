@@ -34,12 +34,18 @@ function storedError(message: string, cause?: unknown): SafetyError {
 
 function table(value: TomlValue | undefined, name: string): TomlTable {
   if (value === undefined) return {};
+  // smol-toml 1.9.0 returns null-prototype tables; class instances such as
+  // TomlDate still fail the prototype check.
+  const prototype =
+    value !== null && typeof value === "object"
+      ? Object.getPrototypeOf(value)
+      : undefined;
   if (
     value === null ||
     typeof value !== "object" ||
     Array.isArray(value) ||
     value instanceof TomlDate ||
-    Object.getPrototypeOf(value) !== Object.prototype
+    (prototype !== null && prototype !== Object.prototype)
   ) {
     throw storedError(`Codex configuration ${name} must be a table`);
   }
