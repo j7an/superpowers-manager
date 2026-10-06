@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   tag:
-    uses: j7an/shared-workflows/.github/workflows/tag-release.yml@f6fedd5f4a9e33ff83c893abcc608e402c1ee1b0 # v4.10.0
+    uses: j7an/shared-workflows/.github/workflows/tag-release.yml@30425ad6ef4ee3c3cbccdd563b22de749887f622 # v4.11.0
     with:
       bump: ${{ inputs.bump }}
       tag-prefix: "v"
