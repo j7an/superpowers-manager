@@ -161,6 +161,25 @@ void test("stored state rejects malformed, duplicate, over-depth, and invalid UT
   }
 });
 
+void test("stored state rejects a date, array, or scalar where a table is required", async (t) => {
+  const cases: readonly [string, string][] = [
+    ["date", "marketplaces = 1979-05-27T07:32:00Z\n"],
+    ["local date", "[marketplaces]\nsuperpowers-manager = 1979-05-27\n"],
+    ["array", "marketplaces = []\n"],
+    ["scalar", 'marketplaces = "superpowers-manager"\n'],
+  ];
+  for (const [name, contents] of cases) {
+    await t.test(name, async () => {
+      const state = await fixture(t);
+      await writeFile(join(state.codexHome, "config.toml"), contents);
+      await assert.rejects(
+        () => readCodexStoredState({ CODEX_HOME: state.codexHome }, state.root),
+        /Codex configuration marketplaces(\.superpowers-manager)? must be a table/u,
+      );
+    });
+  }
+});
+
 void test("stored state rejects an invalid unrelated plugin entry before deriving manager evidence", async (t) => {
   const state = await fixture(t);
   await writeFile(
