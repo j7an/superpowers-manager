@@ -712,9 +712,51 @@ void test("pnpm packageManager updates delegate on the weekly and manual trigger
   assert.deepEqual(requireMapping(update.secrets, "jobs.update.secrets"), {
     RELEASE_BOT_PRIVATE_KEY: "${{ secrets.RELEASE_BOT_PRIVATE_KEY }}",
   });
+});
+
+// --- the release-age policy --------------------------------------------
+// Every release-age wait shares one value. Only agreement is asserted: the
+// Zizmor gate enforces the 7-day floor on Dependabot cooldowns.
+void test("release-age settings agree across Dependabot and the shared gates", () => {
+  const dependabot = requireMapping(
+    parse(readFileSync(join(ROOT, ".github", "dependabot.yml"), "utf8")),
+    "dependabot",
+  );
+  assert.ok(Array.isArray(dependabot.updates), "expected a list at updates");
+  assert.ok(dependabot.updates.length > 0, "dependabot.yml has no updaters");
+  const settings: Record<string, unknown> = {};
+  for (const [index, entry] of (dependabot.updates as unknown[]).entries()) {
+    const path = `updates[${index}]`;
+    const updater = requireMapping(entry, path);
+    settings[`dependabot.yml ${updater["package-ecosystem"]} cooldown`] =
+      requireMapping(updater.cooldown, `${path}.cooldown`)["default-days"];
+  }
+  for (const [file, job] of [
+    ["dependency-safety.yml", "safety"],
+    ["pnpm-packagemanager-update.yml", "update"],
+  ] as const) {
+    const workflow = requireMapping(
+      parse(readFileSync(join(WORKFLOW_DIR, file), "utf8")),
+      file,
+    );
+    const jobs = requireMapping(workflow.jobs, `${file} jobs`);
+    const caller = requireMapping(jobs[job], `${file} jobs.${job}`);
+    settings[`${file} minimum_release_age_days`] = requireMapping(
+      caller.with,
+      `${file} jobs.${job}.with`,
+    ).minimum_release_age_days;
+  }
+
+  for (const [name, days] of Object.entries(settings)) {
+    assert.ok(
+      Number.isInteger(days) && (days as number) > 0,
+      `${name} must be a positive integer, got ${String(days)}`,
+    );
+  }
   assert.equal(
-    requireMapping(update.with, "jobs.update.with").minimum_release_age_days,
-    7,
+    new Set(Object.values(settings)).size,
+    1,
+    `release-age settings disagree: ${JSON.stringify(settings)}`,
   );
 });
 
