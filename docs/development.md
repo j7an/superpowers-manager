@@ -1,10 +1,10 @@
-# Contributing
+# Development
 
-- [Repository rules and source boundaries](AGENTS.md)
-- [Development, tests, and package-runtime setup](AGENTS.md#testing)
-- [Protected releases and packaging verification](RELEASING.md#required-verification)
-- [Harness directory convention](docs/harness-interface.md#directory-convention)
-- [Adapter result contract](docs/adapter-result-contract.md)
+- [Repository rules and source boundaries](../AGENTS.md)
+- [Development, tests, and package-runtime setup](../AGENTS.md#testing)
+- [Protected releases and packaging verification](../RELEASING.md#required-verification)
+- [Harness directory convention](harness-interface.md#directory-convention)
+- [Adapter result contract](adapter-result-contract.md)
 
 Run the checkout CLI with `node src/cli.ts`. Run published-package `npx superpowers-manager ...` commands outside this checkout, where npm cannot select the local package. Use Homebrew-managed pnpm locally, without Corepack.
 
