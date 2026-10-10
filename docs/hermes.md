@@ -68,7 +68,7 @@ Native qualification ran Hermes Agent v0.21.5 (2026.9.24), built from
 `f97608f178d1ffeca59860195ab7da295f7c8e5f`, as UID 10001 in a read-only,
 network-disabled Linux container. The native plugin lifecycle passed. Real
 upstream `hermes plugins doctor <published-root> --ci` passed for Superpowers
-v6.3.0 and v6.4.2, including plugin discovery, manifest parsing, import, and
+v6.3.0, v6.4.2, and v7.0.0, including plugin discovery, manifest parsing, import, and
 registration. Superpowers v6.1.1 and v6.2.0 were refused cleanly because those
 releases do not provide a native Hermes plugin. These versions are
 qualification evidence, not runtime allowlists.
