@@ -4,10 +4,10 @@
   "type": "module",
   "version": "0.0.0",
   "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.284",
-    "@earendil-works/pi-coding-agent": "0.87.1",
-    "@opencode/cli": "2.0.18",
-    "@openai/codex": "0.158.0",
-    "opencode-ai": "1.18.33"
+    "@anthropic-ai/claude-code": "2.1.296",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@opencode/cli": "2.0.26",
+    "@openai/codex": "0.162.1",
+    "opencode-ai": "1.18.35"
   }
 }
