@@ -47,7 +47,7 @@ jobs:
     permissions:
       contents: write # GitHub release, created by the reusable workflow
       id-token: write # npm trusted publishing; validated against THIS workflow's filename
-    uses: j7an/shared-workflows/.github/workflows/publish-npm.yml@19391aa44c5b4f6247a38cf38c158fe692a44990 # v4.12.0
+    uses: j7an/shared-workflows/.github/workflows/publish-npm.yml@0cfe3ca15c18d38525bf950c029ada77805a9578 # v4.12.1
     with:
       tag: ${{ github.ref_name }}
       package-name: superpowers-manager
