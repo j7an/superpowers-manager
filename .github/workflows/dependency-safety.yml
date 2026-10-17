@@ -21,7 +21,7 @@ jobs:
       pull-requests: write
       statuses: write
       issues: write
-    uses: j7an/shared-workflows/.github/workflows/dependency-safety.yml@30425ad6ef4ee3c3cbccdd563b22de749887f622 # v4.11.0
+    uses: j7an/shared-workflows/.github/workflows/dependency-safety.yml@19391aa44c5b4f6247a38cf38c158fe692a44990 # v4.12.0
     with:
       auto_merge: true
       release_age_policy: advisory
