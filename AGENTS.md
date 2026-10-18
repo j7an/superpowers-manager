@@ -125,7 +125,8 @@ integrations, not required agent harnesses.
 - Use Conventional Commit subjects; automatic release bump inference depends
   on their user-visible intent.
 - Keep test shell code compatible with POSIX `sh`. Preserve installed Node >=24; native source, tooling,
-  and tests target latest Node 24.
+  and tests target latest Node 24; CI also runs the shared suite on latest
+  Node 26.
 - Ask before adding a runtime dependency.
 - Update documentation and contract tests when observable behavior changes.
   For test consolidation or removal, preserve each surviving behavioral
