@@ -96,6 +96,42 @@ jobs:
       - name: Run shared tests and package minimum checks
         run: sh tests/run.sh --require-package-node
 
+  # `engines.node` admits newer majors than the toolchain targets, so the
+  # shared suite also runs on the newest LTS line. Static checks and the
+  # package minimum do not vary by runtime and stay in `toolchain`.
+  node-26:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: the citation gate resolves `git show <sha>:path`
+          # citations.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          check-latest: true
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run shared tests
+        run: sh tests/run.sh
+
   # Measures the shared suite once, separate from `toolchain`. Tests that
   # spawn `node` with a minimal environment, or run a copied package from a
   # sandbox, drop NODE_V8_COVERAGE, so their subprocess code counts as

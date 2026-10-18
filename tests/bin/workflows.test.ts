@@ -171,8 +171,9 @@ void test("ci.yml declares the expected top-level contract", () => {
   assert.deepEqual(ci.permissions, {});
   const jobs = requireMapping(ci.jobs, "jobs");
 
-  assert.deepEqual(Object.keys(jobs), ["harness", "toolchain", "coverage"]);
-  for (const key of ["harness", "toolchain", "coverage"]) {
+  const expectedJobs = ["harness", "toolchain", "node-26", "coverage"];
+  assert.deepEqual(Object.keys(jobs), expectedJobs);
+  for (const key of expectedJobs) {
     const job = requireMapping(jobs[key], `jobs.${key}`);
     assert.deepEqual(job.permissions, { contents: "read" });
     assert.ok(!Object.hasOwn(job, "needs"));
@@ -529,6 +530,73 @@ void test("ci.yml `toolchain` job runs one full shared suite in order", () => {
       "fetch-depth"
     ],
     0,
+  );
+});
+
+// `engines.node` admits newer majors than the toolchain targets, so the shared
+// suite also runs on the newest LTS line. Static checks and package-minimum
+// evidence do not vary by runtime and stay in `toolchain`.
+void test("ci.yml `node-26` job runs the shared suite once at latest Node 26", () => {
+  const ci = requireMapping(
+    parse(readFileSync(join(WORKFLOW_DIR, "ci.yml"), "utf8")),
+    "ci",
+  );
+  const job = requireMapping(
+    requireMapping(ci.jobs, "jobs")["node-26"],
+    "jobs.node-26",
+  );
+  assert.equal(job["runs-on"], "ubuntu-latest");
+  assert.ok(
+    !Object.hasOwn(job, "strategy"),
+    "jobs.node-26 runs once at latest Node 26",
+  );
+
+  const steps = job.steps;
+  assert.ok(Array.isArray(steps), "expected jobs.node-26.steps to be an array");
+  steps.forEach((candidate, index) => {
+    const step = requireMapping(candidate, `jobs.node-26.steps[${index}]`);
+    assert.ok(
+      !Object.hasOwn(step, "continue-on-error"),
+      `jobs.node-26.steps[${index}] must remain blocking`,
+    );
+    assert.ok(
+      !Object.hasOwn(step, "if"),
+      `jobs.node-26.steps[${index}] must run unconditionally`,
+    );
+  });
+
+  const checkoutIndex = uniqueStepTargetIndex(steps, "actions/checkout");
+  const checkoutWith = requireMapping(
+    steps[checkoutIndex].with,
+    "node-26 checkout step.with",
+  );
+  assert.equal(checkoutWith["persist-credentials"], false);
+  // The citation gate resolves citations into commits that predate HEAD.
+  assert.equal(checkoutWith["fetch-depth"], 0);
+
+  const setupIndex = uniqueStepTargetIndex(steps, "actions/setup-node");
+  const setupWith = requireMapping(
+    steps[setupIndex].with,
+    "node-26 setup-node step.with",
+  );
+  assert.equal(setupWith["node-version"], "26");
+  assert.equal(setupWith["check-latest"], true);
+
+  const commands = steps.filter((step: any) => typeof step.run === "string");
+  assert.deepEqual(
+    commands.map((step: any) => step.run),
+    ["corepack enable", "pnpm install --frozen-lockfile", "sh tests/run.sh"],
+  );
+
+  const order = [
+    uniqueStepTargetIndex(steps, "step-security/harden-runner"),
+    checkoutIndex,
+    setupIndex,
+    steps.indexOf(commands[0]),
+  ];
+  assert.ok(
+    order.every((index, i) => i === 0 || order[i - 1] < index),
+    "node-26 steps are out of order",
   );
 });
 
