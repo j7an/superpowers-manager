@@ -34,7 +34,7 @@ jobs:
             selector: harness-hermes
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -54,7 +54,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -105,7 +105,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -142,7 +142,7 @@ jobs:
       contents: read
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -183,7 +183,7 @@ jobs:
           --test-reporter=lcov --test-reporter-destination=lcov.info
 
       - name: Check changed-line coverage
-        uses: j7an/shared-workflows/actions/coverage@0cfe3ca15c18d38525bf950c029ada77805a9578 # v4.12.1
+        uses: j7an/shared-workflows/actions/coverage@1084a4b6feef47a301967f12524f40be73295ea4 # v4.12.2
         with:
           report-path: lcov.info
           diff-cover-path: ${{ env.DIFF_COVER_PATH }}
