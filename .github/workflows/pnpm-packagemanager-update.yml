@@ -13,7 +13,7 @@ jobs:
       contents: write
       pull-requests: write
       statuses: write
-    uses: j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml@0cfe3ca15c18d38525bf950c029ada77805a9578 # v4.12.1
+    uses: j7an/shared-workflows/.github/workflows/pnpm-packagemanager-update.yml@1084a4b6feef47a301967f12524f40be73295ea4 # v4.12.2
     with:
       minimum_release_age_days: 7
     secrets:
