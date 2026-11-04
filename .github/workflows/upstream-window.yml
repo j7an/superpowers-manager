@@ -25,7 +25,7 @@ jobs:
           egress-policy: audit
       - name: Compute the Superpowers release window
         id: window
-        uses: j7an/shared-workflows/actions/release-window@1084a4b6feef47a301967f12524f40be73295ea4 # v4.12.2
+        uses: j7an/shared-workflows/actions/release-window@4f97f4716f0d420853222db356d9340ac40f40ba # v4.12.3
         with:
           git-url: https://github.com/obra/superpowers
           window-days: "90"
