@@ -86,12 +86,22 @@ snapshot >"$root/empty-after"
 cmp "$root/empty-before" "$root/empty-after" || fail "fresh probe mutated Hermes state"
 run_manager pin "$commit_a"
 run_manager prepare --harness hermes
+snapshot >"$root/experimental-before"
+if run_manager install --harness hermes >"$root/experimental.out" 2>"$root/experimental.err"; then
+  fail "custom source installed without experimental opt-in"
+fi
+grep -Fq "experimental integration requires --allow-experimental" "$root/experimental.err" \
+  || fail "custom-source refusal did not name the experimental opt-in"
+snapshot >"$root/experimental-after"
+cmp "$root/experimental-before" "$root/experimental-after" || fail "experimental refusal mutated state"
 mkdir -p "$plugin_root"
 printf '%s\n' foreign >"$plugin_root/foreign"
 snapshot >"$root/foreign-before"
 refused_status=0
-run_manager install --harness hermes >"$root/refused.out" 2>"$root/refused.err" || refused_status=$?
+run_manager install --harness hermes --allow-experimental >"$root/refused.out" 2>"$root/refused.err" || refused_status=$?
 [ "$refused_status" = 1 ] || fail "foreign install did not refuse with exit 1"
+grep -Fq "another Superpowers copy is present in Hermes" "$root/refused.err" \
+  || fail "foreign refusal did not report the foreign Superpowers copy"
 snapshot >"$root/foreign-after"
 cmp "$root/foreign-before" "$root/foreign-after" || fail "refused install mutated state"
 rm -rf "$plugin_root"
@@ -120,7 +130,7 @@ fi
 SH
 chmod +x "$root/fail-enable"
 rollback_status=0
-SUPERPOWERS_HERMES="$root/fail-enable" run_manager install --harness hermes \
+SUPERPOWERS_HERMES="$root/fail-enable" run_manager install --harness hermes --allow-experimental \
   >"$root/rollback.out" 2>"$root/rollback.err" || rollback_status=$?
 [ "$rollback_status" = 1 ] || fail "fresh failed activation did not roll back"
 grep -Fq 'hermes plugins enable superpowers did not complete (exit status 7)' "$root/rollback.err" \
@@ -129,7 +139,7 @@ test ! -e "$plugin_root" || fail "fresh rollback left the root plugin"
 [ -z "$(find "$HERMES_HOME/superpowers-manager" -maxdepth 1 -name 'publish.*' -print)" ] \
   || fail "fresh rollback left publication material"
 foreign_unchanged
-run_manager install --harness hermes
+run_manager install --harness hermes --allow-experimental
 listed enabled
 foreign_unchanged
 spw-hermes-python - "$plugin_root" <<'PY'
@@ -164,7 +174,7 @@ listed enabled
 run_manager probe --harness hermes --porcelain >"$root/prepared-b-probe"
 grep -Fxq "installed_identity=$identity_a" "$root/prepared-b-probe" || fail "preparing B changed installed A"
 test ! -e "$plugin_root/skills/snapshot-probe" || fail "preparing B touched installed skills"
-run_manager update --harness hermes
+run_manager update --harness hermes --allow-experimental
 listed enabled
 run_manager probe --harness hermes --porcelain >"$root/updated-probe"
 grep -Fxq status=current "$root/updated-probe" || fail "B is not current after update"
@@ -184,7 +194,7 @@ foreign_unchanged
 profile_home="$HERMES_HOME/profiles/managed"
 sha256sum "$HERMES_HOME/config.yaml" >"$root/root-config-before"
 HERMES_HOME="$profile_home" run_manager prepare --harness hermes
-HERMES_HOME="$profile_home" run_manager install --harness hermes
+HERMES_HOME="$profile_home" run_manager install --harness hermes --allow-experimental
 HERMES_HOME="$profile_home" listed enabled
 test -f "$profile_home/plugins/superpowers/plugin.yaml" || fail "explicit profile plugin is absent"
 test ! -e "$plugin_root" || fail "explicit profile activation changed root plugin"

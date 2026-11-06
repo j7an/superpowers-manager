@@ -65,10 +65,21 @@ cp -R "$upstream" "$other/sp"
 rm -rf "$other/sp/.git"
 printf '%s\n' '{"name":"other-market","owner":{"name":"fixture"},"plugins":[{"name":"superpowers","source":"./sp"}]}' \
   >"$other/.claude-plugin/marketplace.json"
+# The Claude CLI creates its own config on first run; run it once so the
+# snapshots compare only manager-caused changes.
+claude_cli plugin list --json >/dev/null
+snapshot >"$root/before-experimental"
+if run_manager install --harness claude-code >"$root/experimental.out" 2>"$root/experimental.err"; then
+  fail "custom source installed without experimental opt-in"
+fi
+grep -Fq "experimental integration requires --allow-experimental" "$root/experimental.err" \
+  || fail "custom-source refusal did not name the experimental opt-in"
+snapshot >"$root/after-experimental"
+diff "$root/before-experimental" "$root/after-experimental" >&2 || fail "experimental refusal mutated state"
 claude_cli plugin marketplace add "$other"
 claude_cli plugin install superpowers@other-market --scope user
 snapshot >"$root/before-refusal"
-if run_manager install --harness claude-code >"$root/refused.out" 2>"$root/refused.err"; then
+if run_manager install --harness claude-code --allow-experimental >"$root/refused.out" 2>"$root/refused.err"; then
   fail "install succeeded despite an enabled conflicting Superpowers plugin"
 fi
 grep -Fq "claude plugin disable superpowers@other-market" "$root/refused.err" \
@@ -77,7 +88,7 @@ snapshot >"$root/after-refusal"
 cmp "$root/before-refusal" "$root/after-refusal" || fail "refused install mutated state"
 claude_cli plugin marketplace remove other-market
 
-run_manager install --harness claude-code
+run_manager install --harness claude-code --allow-experimental
 short_a=$(printf %s "$commit_a" | cut -c1-7)
 case "$(listed version)" in *"+manager.$short_a") ;; *) fail "listed version does not carry commit A" ;; esac
 snapshot >"$root/before-probe"
@@ -97,7 +108,7 @@ run_manager prepare --harness claude-code
 case "$(listed version)" in *"+manager.$short_a") ;; *) fail "preparing B changed the active plugin" ;; esac
 test ! -e "$plugin_root/skills/snapshot-probe" || fail "preparing B touched the installed snapshot"
 
-run_manager update --harness claude-code
+run_manager update --harness claude-code --allow-experimental
 short_b=$(printf %s "$commit_b" | cut -c1-7)
 case "$(listed version)" in *"+manager.$short_b") ;; *) fail "listed version does not carry commit B" ;; esac
 claude_cli plugin details superpowers >"$root/details.out"
