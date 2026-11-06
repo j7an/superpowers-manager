@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   readFileSync,
@@ -195,10 +196,7 @@ void test("a retired prepared profile needs replacement but cannot be read as an
     ctx,
   );
   cpSync(candidate, preparedRoot, { recursive: true, verbatimSymlinks: true });
-  writeFileSync(
-    join(preparedRoot, ".opencode/plugins/superpowers.js"),
-    "retired bootstrap profile\n",
-  );
+  chmodSync(join(preparedRoot, ".opencode/plugins/superpowers.js"), 0o755);
   const receiptPath = join(preparedRoot, ".superpowers-manager.json"),
     receipt = JSON.parse(readFileSync(receiptPath, "utf8")),
     digest = await digestArtifactTree(preparedRoot),
@@ -219,7 +217,7 @@ void test("a retired prepared profile needs replacement but cannot be read as an
     observedIdentity: digest,
     compatibility: {
       kind: "unsupported",
-      reason: `OpenCode package does not match the qualified native bootstrap profile: ${preparedRoot}`,
+      reason: `OpenCode package does not provide a native OpenCode bootstrap: ${preparedRoot}`,
     },
   });
   assert.equal((await readOpenCodePrepared(ctx)).outcome.ok, false);

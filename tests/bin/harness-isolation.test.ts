@@ -484,11 +484,7 @@ function commitB(upstream: string): string {
 }
 
 function invalidOpenCodeCommit(upstream: string): string {
-  writeFileSync(
-    join(upstream, ".opencode", "plugins", "superpowers.js"),
-    "export default {};\n",
-  );
-  fixtureGit(upstream, "add", ".");
+  fixtureGit(upstream, "rm", "-q", ".opencode/plugins/superpowers.js");
   fixtureGit(upstream, "commit", "-qm", "invalidate OpenCode profile");
   return fixtureGit(upstream, "rev-parse", "HEAD");
 }
@@ -681,7 +677,7 @@ for (const selected of HARNESSES) {
     assert.match(
       result.stderr,
       selected === "opencode"
-        ? /does not match the qualified native bootstrap profile/
+        ? /does not provide a native OpenCode bootstrap/
         : /external plugin validation failed/,
     );
     assertHarnessesUnchanged(fixture.c, before);

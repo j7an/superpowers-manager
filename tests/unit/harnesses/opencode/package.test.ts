@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  chmodSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -10,7 +17,7 @@ import { snapshotReceiptBinding } from "../../../../src/snapshot-package.ts";
 import { nativeOpenCodeFixture } from "../../../lib/harnesses/opencode/package-fixture.ts";
 import { nativeSelection } from "../../../lib/harnesses/pi/package-fixture.ts";
 
-void test("an unknown bootstrap is unsupported even with valid metadata", async (t) => {
+void test("changed bootstrap bytes are admitted", async (t) => {
   const root = nativeOpenCodeFixture(t),
     selection = nativeSelection();
   assert.equal(
@@ -21,10 +28,9 @@ void test("an unknown bootstrap is unsupported even with valid metadata", async 
     join(root, ".opencode/plugins/superpowers.js"),
     "\n// changed\n",
   );
-  assert.equal(
-    (await assessOpenCodeCompatibility(root, selection)).kind,
-    "unsupported",
-  );
+  const compatibility = await assessOpenCodeCompatibility(root, selection);
+  assert.equal(compatibility.kind, "supported");
+  assert.equal(compatibility.generation, "opencode-native-bootstrap-v2");
 });
 
 void test("the frozen v6.0.0-v6.3.0 bootstrap remains supported", async (t) => {
@@ -61,22 +67,44 @@ void test("qualifies a bootstrap-only package as the V1 generation", async (t) =
   assert.equal(compatibility.generation, "opencode-native-bootstrap-v1");
 });
 
-void test("refuses a qualified bootstrap beside an unqualified entrypoint", async (t) => {
-  const root = nativeOpenCodeFixture(t, { entrypoint: true });
-  writeFileSync(join(root, "index.js"), "export default {};\n", "utf8");
-  const compatibility = await assessOpenCodeCompatibility(
-    root,
-    nativeSelection(),
-  );
-  assert.equal(compatibility.kind, "unsupported");
-});
-
-void test("refuses a bootstrap-only ref carrying an unexpected entrypoint", async (t) => {
+void test("any index.js selects the V2 generation", async (t) => {
   const root = nativeOpenCodeFixture(t, {
     bootstrap: "6.3.0",
     entrypoint: false,
   });
   writeFileSync(join(root, "index.js"), "export default {};\n", "utf8");
+  const compatibility = await assessOpenCodeCompatibility(
+    root,
+    nativeSelection(),
+  );
+  assert.equal(compatibility.kind, "supported");
+  assert.equal(compatibility.generation, "opencode-native-bootstrap-v2");
+});
+
+void test("an executable bootstrap or entrypoint is unsupported", async (t) => {
+  for (const [name, relative] of [
+    ["bootstrap", ".opencode/plugins/superpowers.js"],
+    ["entrypoint", "index.js"],
+  ] as const)
+    await t.test(name, async (t) => {
+      const root = nativeOpenCodeFixture(t, { entrypoint: true });
+      chmodSync(join(root, relative), 0o755);
+      const compatibility = await assessOpenCodeCompatibility(
+        root,
+        nativeSelection(),
+      );
+      assert.equal(compatibility.kind, "unsupported");
+      assert.match(
+        compatibility.reason,
+        /does not provide a native OpenCode bootstrap/,
+      );
+    });
+});
+
+void test("a symlinked entrypoint is unsupported", async (t) => {
+  const root = nativeOpenCodeFixture(t, { entrypoint: true });
+  rmSync(join(root, "index.js"));
+  symlinkSync("/etc/hosts", join(root, "index.js"));
   const compatibility = await assessOpenCodeCompatibility(
     root,
     nativeSelection(),

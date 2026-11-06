@@ -109,19 +109,16 @@ export function requireNoSnapshotDependencies(
   }
 }
 
+// Ceiling: structural admission cannot catch an upstream bootstrap whose
+// behavior breaks the integration; add a behavior-level check if that happens
+// in the field.
 export async function requireSnapshotBootstrap(
   root: string,
   relativePath: string,
-  expectedSize: number,
-  expectedDigest: string,
 ): Promise<void> {
   const bootstrap = join(root, relativePath);
-  const bytes = await readArtifactFile(root, bootstrap, expectedSize);
-  if (
-    (await lstat(bootstrap)).mode & 0o111 ||
-    bytes.length !== expectedSize ||
-    createHash("sha256").update(bytes).digest("hex") !== expectedDigest
-  )
+  await readArtifactFile(root, bootstrap);
+  if ((await lstat(bootstrap)).mode & 0o111)
     throw new Error("bootstrap implementation");
 }
 

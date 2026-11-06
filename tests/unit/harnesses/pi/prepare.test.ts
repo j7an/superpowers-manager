@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { successResult } from "../../../../src/adapter-result.ts";
@@ -72,7 +78,7 @@ void test("prepared Pi identity survives fetch removal and frozen copies survive
   );
 });
 
-void test("receipt support claims cannot bless bootstrap drift and commit-only tampering cannot match a candidate", async (t) => {
+void test("a receipt's recorded compatibility never outranks a fresh assessment, and commit-only tampering cannot match a candidate", async (t) => {
   const root = nativeFixture(t),
     commit = commitFixture(root);
   const prepared = join(root, "home/.pi/agent/superpowers-manager/prepared"),
@@ -107,7 +113,7 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
     ).outcome.ok,
     false,
   );
-  writeFileSync(join(prepared, ".pi/extensions/superpowers.ts"), "unsupported");
+  chmodSync(join(prepared, ".pi/extensions/superpowers.ts"), 0o755);
   const rewritten = { ...receipt, digest: await digestArtifactTree(prepared) };
   writeFileSync(
     path,
@@ -127,7 +133,7 @@ void test("receipt support claims cannot bless bootstrap drift and commit-only t
     observedIdentity: rewritten.digest,
     compatibility: {
       kind: "unsupported",
-      reason: `Pi package does not match the qualified native bootstrap profile: ${prepared}`,
+      reason: `Pi package does not provide a native Pi bootstrap: ${prepared}`,
     },
   });
 
@@ -300,10 +306,7 @@ void test("missing prepared evidence is unknown and unsupported candidates prese
   );
   const digest = await digestArtifactTree(prepared);
   const unsupported = nativeFixture(t);
-  writeFileSync(
-    join(unsupported, ".pi/extensions/superpowers.ts"),
-    "unknown mechanics",
-  );
+  chmodSync(join(unsupported, ".pi/extensions/superpowers.ts"), 0o755);
   const rejected = await preparePiCandidate(
     {
       upstreamRoot: unsupported,
