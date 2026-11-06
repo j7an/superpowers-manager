@@ -59,7 +59,7 @@ The prepared candidate and saved selection are kept.
 
 Checked on every upstream package, never by exact bytes: `.claude-plugin/plugin.json` named `superpowers` with a semver version; a valid `using-superpowers` skill; `hooks/hooks.json`, when present, is a JSON object.
 
-The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
 
 A package that fails any check is unsupported and is refused before anything is changed.
 

@@ -42,7 +42,7 @@ See [version selection](https://github.com/j7an/superpowers-manager/blob/main/do
 
 ## Start with your agent
 
-The five harnesses share upstream selection, while each has independent prepared and installed state. Omitting `--harness` selects Codex. Only the official `obra/superpowers` repository is supported; other sources are experimental on every harness and need `--allow-experimental` to install or update.
+The five harnesses share upstream selection, while each has independent prepared and installed state. Omitting `--harness` selects Codex. Only the official `obra/superpowers` repository is supported; other sources are experimental on every harness and need `--allow-experimental` to install, or to update when the update would install or reinstall.
 
 ### Codex
 

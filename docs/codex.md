@@ -16,7 +16,7 @@ Review definitions through Codex `/hooks`. Trusting a definition does not freeze
 
 Checked on every upstream package, never by exact bytes: a valid `using-superpowers` skill; no legacy `.codex/superpowers-codex` or `.codex/superpowers-bootstrap.md`; when `.codex-plugin/plugin.json` exists, it is contained, named `superpowers`, has a semver version, and has a supported hooks declaration; the generated plugin passes validation.
 
-The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
 
 A package that fails any check is unsupported and is refused before anything is changed.
 

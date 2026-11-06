@@ -65,7 +65,7 @@ selection are kept.
 
 Checked on every upstream package, never by exact bytes: `.hermes-plugin` flattens to regular `plugin.yaml` and `__init__.py`, plus `skills/using-superpowers/references/hermes-tools.md`; a valid `using-superpowers` skill.
 
-The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
 
 A package that fails any check is unsupported and is refused before anything is changed.
 

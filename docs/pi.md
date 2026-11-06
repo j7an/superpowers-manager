@@ -8,7 +8,7 @@ Pi installation prepares and validates a package snapshot, copies it to `$PI_COD
 
 Checked on every upstream package, never by exact bytes: `package.json` named `superpowers`, `type: module`, semver version, `pi` declaring exactly `extensions: ["./.pi/extensions/superpowers.ts"]` and `skills: ["./skills"]`, no runtime dependencies; a valid `using-superpowers` skill; the extension is a contained, regular, non-executable file of at most 1 MiB.
 
-The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
 
 A package that fails any check is unsupported and is refused before anything is changed.
 

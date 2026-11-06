@@ -25,9 +25,11 @@ configuration or repairs state.
 
 Checked on every upstream package, never by exact bytes: `package.json` named `superpowers`, `type: module`, `main: .opencode/plugins/superpowers.js`, semver version, no runtime dependencies; a valid `using-superpowers` skill; the bootstrap is a contained, regular, non-executable file of at most 1 MiB; no `index.js` selects the V1 generation, and an `index.js` meeting the same file checks selects V2.
 
-The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
 
 A package that fails any check is unsupported and is refused before anything is changed.
+
+## Conflicts, recovery, and qualification
 
 Conflicting unmanaged Superpowers registrations, project sources, remote
 configuration, or managed sources require manual resolution. The manager removes

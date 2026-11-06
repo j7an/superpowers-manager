@@ -38,6 +38,15 @@ npx superpowers-manager unpin
 
 The official `obra/superpowers` repository is supported on every harness. Any other source is experimental; see each harness reference's Upstream admission section.
 
+Official status is an exact string match. Only these four spellings are official:
+
+- `https://github.com/obra/superpowers`
+- `https://github.com/obra/superpowers.git`
+- `ssh://git@github.com/obra/superpowers.git`
+- `git@github.com:obra/superpowers.git`
+
+Any other spelling, even of the same repository (a trailing slash, different case, or `git@github.com:obra/superpowers` without `.git`), counts as a custom source and is experimental.
+
 The selection commands save intent only; they do not prepare content or change any harness. `pin` verifies an exact `vMAJOR.MINOR.PATCH` stable tag (optionally prerelease) or full 40-character commit before saving identity and source. `track-latest` resolves the highest stable `vX.Y.Z` tag when applied. `unpin` restores `config/upstream-ref`, currently `latest-release`. The saved identity is the contract, not a clone cache: clearing or moving `SUPERPOWERS_CACHE_DIR` does not change the selection.
 
 Selection is stored in `selection.json` in the first absolute configured location: `$SUPERPOWERS_CONFIG_DIR`, then `$XDG_CONFIG_HOME/superpowers-manager`, then `$HOME/.config/superpowers-manager`.
