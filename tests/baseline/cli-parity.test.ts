@@ -601,8 +601,8 @@ void test("CLI-MODE-VERSION-01 version mode routes through native source", () =>
 // discriminator CLI-COMMANDS-01 uses to tell the three lifecycle commands
 // apart, and the only observable left that NAMES the command a bare invocation
 // ran. With a custom source and no --allow-experimental, `update` stops at the
-// activation gate after the seven listing pairs below, while a flagless
-// `install` stops there after four. It needs `writeListingCodex` — a `codex`
+// activation gate after the seven listing pairs below.
+// It needs `writeListingCodex` — a `codex`
 // that answers, so the run reaches the gate — and therefore fresh sandboxes of
 // its own: a `codex` that answers lets `update` complete its prepare, and a
 // second `update` over the already-prepared tree prints less on stdout than the

@@ -225,7 +225,7 @@ void test("an empty legacy source reaches repair instead of a fingerprint dead e
   assert.equal(existsSync(join(c.pkg, "plugins", "superpowers")), true);
 });
 
-void test("no-subcommand CLI invocation takes the same legacy migration path", async () => {
+void test("no-subcommand CLI invocation reaches the same activation gate as update", async () => {
   // The fixture upstream is a custom source, so migration needs activation,
   // and a bare invocation cannot carry --allow-experimental. Bare and the
   // flagless `update` subcommand must reach the same activation gate and
