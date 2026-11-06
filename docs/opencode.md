@@ -21,14 +21,13 @@ specifiers, not a local directory. Both paths verify configuration and snapshot
 identity afterward. `probe` is read-only: it neither invokes OpenCode nor writes
 configuration or repairs state.
 
-Admission requires the exact qualified upstream-native package profile: the
-expected package metadata, OpenCode bootstrap bytes, required skills, and no
-upstream runtime dependencies. The qualified profile matches the bootstrap and
-V2 `index.js` entrypoint as a pair. Upstream v6.0.0 through v6.3.0 ship no
-entrypoint and are V1-only; v6.4.1 ships the qualified V2 pair. The profile
-from the official `obra/superpowers` source is supported. Matching mechanics
-from a custom source remain experimental and require `--allow-experimental`;
-the opt-in does not admit an unknown or changed bootstrap profile.
+## Upstream admission
+
+Checked on every upstream package, never by exact bytes: `package.json` named `superpowers`, `type: module`, `main: .opencode/plugins/superpowers.js`, semver version, no runtime dependencies; a valid `using-superpowers` skill; the bootstrap is a contained, regular, non-executable file of at most 1 MiB; no `index.js` selects the V1 generation, and an `index.js` meeting the same file checks selects V2.
+
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+
+A package that fails any check is unsupported and is refused before anything is changed.
 
 Conflicting unmanaged Superpowers registrations, project sources, remote
 configuration, or managed sources require manual resolution. The manager removes

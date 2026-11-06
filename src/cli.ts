@@ -265,6 +265,7 @@ function usage(): string {
     "  update --harness opencode [--allow-experimental]",
     "  uninstall --harness opencode",
     "  --harness=codex, --harness=pi, --harness=opencode, --harness=claude-code, and --harness=hermes are also accepted after the command.",
+    "  --allow-experimental (install, update) admits a custom upstream source on any harness.",
     "",
     "Environment overrides (used by in-process commands): SUPERPOWERS_REF,",
     "SUPERPOWERS_UPSTREAM_URL, SUPERPOWERS_CODEX, SUPERPOWERS_CACHE_DIR,",

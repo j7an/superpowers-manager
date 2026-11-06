@@ -41,11 +41,11 @@ installation or update refuses because `HERMES_ENABLE_PROJECT_PLUGINS` is set,
 unset that variable and retry. A project-local copy can override the managed
 copy.
 
-| Action | Superpowers Manager | Direct upstream repository |
-| --- | --- | --- |
-| First install | `npx superpowers-manager install --harness hermes` | `hermes plugins install obra/superpowers --enable` |
+| Action        | Superpowers Manager                                                                      | Direct upstream repository                                     |
+| ------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| First install | `npx superpowers-manager install --harness hermes`                                       | `hermes plugins install obra/superpowers --enable`             |
 | Pin a version | `npx superpowers-manager pin TAG` then `npx superpowers-manager update --harness hermes` | `hermes plugins install obra/superpowers --enable --ref <sha>` |
-| Inspect | `npx superpowers-manager probe --harness hermes` | `hermes plugins list` |
+| Inspect       | `npx superpowers-manager probe --harness hermes`                                         | `hermes plugins list`                                          |
 
 ## Recovery
 
@@ -60,6 +60,14 @@ If an install or update is interrupted, a
 reports recovery required, and install, update, and uninstall refuse until you
 inspect and remove the leftover directory. The prepared candidate and saved
 selection are kept.
+
+## Upstream admission
+
+Checked on every upstream package, never by exact bytes: `.hermes-plugin` flattens to regular `plugin.yaml` and `__init__.py`, plus `skills/using-superpowers/references/hermes-tools.md`; a valid `using-superpowers` skill.
+
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would activate a new commit, require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+
+A package that fails any check is unsupported and is refused before anything is changed.
 
 ## Qualification
 
