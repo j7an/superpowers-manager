@@ -75,7 +75,9 @@ async function makeCtx(
     },
     stdout: out.stream,
     stderr: err.stream,
-    options: { harness: "codex" as const, allowExperimental: false },
+    // The fixture source is custom, so activation is experimental and needs
+    // the opt-in; refusal cases below each assert their own diagnostic.
+    options: { harness: "codex" as const, allowExperimental: true },
     coordination: observingCoordinator(),
     adapter,
   };

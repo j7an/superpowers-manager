@@ -748,6 +748,10 @@ void describe("install commands", { concurrency: true }, () => {
     const status = await runInstall([], ctx);
     const out = stdout() + stderr();
     assert.notEqual(status, 0, `expected install to fail:\n${out}`);
+    assert.ok(
+      out.includes("adapter cannot guarantee manager-controlled updates"),
+      out,
+    );
     // Precondition: the prepare-less install path the shell covered here.
     assertNoPrepareRan(out);
     // :352, structural for the same reason as the case above.
@@ -773,6 +777,7 @@ void describe("install commands", { concurrency: true }, () => {
       1,
       `failed adapter response must exit 1:\n${stdout()}${stderr()}`,
     );
+    assert.ok(stderr().includes("update-control inspection failed"), stderr());
     // :375, structural: no call named "install" or "build" ever reached the
     // double.
     assert.deepEqual(
@@ -811,6 +816,10 @@ void describe("install commands", { concurrency: true }, () => {
       `install must reject capability drift after prepare:\n${out}`,
     );
     assert.ok(out.includes("prepared v1.0.0"), out);
+    assert.ok(
+      out.includes("adapter cannot guarantee manager-controlled updates"),
+      out,
+    );
     // The probe reads control twice; the fresh mutation gate reads it again.
     assert.equal(
       adapter.calls.filter(
@@ -885,28 +894,35 @@ void describe("install commands", { concurrency: true }, () => {
     // Calls `runInstall` in-process.
     const c = installCase();
     await prepareGeneratedTree(c);
+    // The probe reads control twice for coherence, so both probe reads must
+    // agree; flipping after the first read stops at the probe's coherence
+    // check instead of the fresh gate this case names.
     const adapter = scenarioAdapter({
-      updateControl: (call) => (call === 1 ? ALLOWED_CONTROL : BLOCKED_CONTROL),
+      updateControl: (call) => (call <= 2 ? ALLOWED_CONTROL : BLOCKED_CONTROL),
     });
     const { ctx, stdout, stderr } = caseContext(c, { adapter });
     const status = await runInstall([], ctx);
     const out = stdout() + stderr();
-    // :411-414 — probe saw `managed`; only the second, fresh inspection sees
+    // :411-414 — probe saw `managed`; only the third, fresh inspection sees
     // `unsupported`, and it is the one that must stop the install.
     assert.notEqual(
       status,
       0,
       `install must reject capability drift before adapter install:\n${out}`,
     );
+    assert.ok(
+      out.includes("adapter cannot guarantee manager-controlled updates"),
+      out,
+    );
     // Precondition: the needs-install gate, which is what distinguishes this
     // case from the needs-prepare drift case at :377-392.
     assertNoPrepareRan(out);
-    // :415, structural: exactly two update-control inspections.
+    // :415, structural: the probe's two reads, then the fresh gate's.
     assert.equal(
       adapter.calls.filter(
         (call) => call.operation === "inspect-update-control",
       ).length,
-      2,
+      3,
     );
     // :416, structural: no call named "install" ever reached the double.
     assert.ok(
@@ -943,7 +959,9 @@ void describe("install commands", { concurrency: true }, () => {
     manifest.name = "wrong-name";
     writeFileSync(template, `${JSON.stringify(manifest, null, 2)}\n`);
 
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(
       result.status,
@@ -961,6 +979,7 @@ void describe("install commands", { concurrency: true }, () => {
     writeFileSync(validator, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
 
     const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
       env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
     });
     const out = result.stdout + result.stderr;
@@ -1004,6 +1023,7 @@ void describe("install commands", { concurrency: true }, () => {
     // is only a claim about the subject if the tree is absent beforehand.
     const c = installCase();
     const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "add-only" },
     });
     // :495 — stdout captured, stderr left alone; `set -e` made a non-zero exit
@@ -1063,7 +1083,9 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     seedInstalledCurrent(c);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // Precondition. `prepareGeneratedTree` proves the generated provenance
     // exists and `seedInstalledCurrent` copies that same file into the Codex
@@ -1096,7 +1118,9 @@ void describe("install commands", { concurrency: true }, () => {
     const otherRoot = join(c.dir, "otherroot");
     writeMarketplaces(c, [{ name: "superpowers-manager", root: otherRoot }]);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // Precondition: the "current" branch, as in the case above.
     assertNoPrepareRan(result.stdout);
@@ -1125,7 +1149,9 @@ void describe("install commands", { concurrency: true }, () => {
     symlinkSync(c.pkg, link);
     writeMarketplaces(c, [{ name: "superpowers-manager", root: link }]);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const codex = readLog(c.codexLog);
     // :564 — hoisted above the negatives at :561-563 and :565-567, which would
@@ -1160,7 +1186,9 @@ void describe("install commands", { concurrency: true }, () => {
       { name: "superpowers-manager", root: otherRoot },
     ]);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const codex = readLog(c.codexLog);
     assertOrder(
@@ -1185,14 +1213,18 @@ void describe("install commands", { concurrency: true }, () => {
 
   void test("update stays read-only when probe reports current (:587-602)", async () => {
     const c = installCase();
-    const installed = await runScript(c, "install");
+    const installed = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(
       installed.status,
       0,
       `fixture: install must establish a healthy durable manager:\n${installed.stdout}${installed.stderr}`,
     );
     clearLogs(c);
-    const result = await runScript(c, "update");
+    const result = await runScript(c, "update", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.ok(result.stdout.includes("manager is current"), result.stdout);
     assertNoCodexMutation(readLog(c.codexLog));
@@ -1250,7 +1282,9 @@ void describe("install commands", { concurrency: true }, () => {
     const otherRoot = join(c.dir, "otherroot");
     writeMarketplaces(c, [{ name: "superpowers-manager", root: otherRoot }]);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     // :289-295 — `expect_fail` redirected stderr into the same capture.
     const out = result.stdout + result.stderr;
     assert.notEqual(
@@ -1278,12 +1312,18 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     writeFileSync(join(c.state, "marketplace_list.json"), "not json {{{\n");
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(
       result.status,
       0,
       `expected install to fail but it succeeded:\n${out}`,
+    );
+    assert.match(
+      result.stderr,
+      /cannot parse output of '[^']*plugin marketplace list --json'/,
     );
     const codex = nonEmpty(readLog(c.codexLog), "codex");
     assert.deepEqual(
@@ -1299,7 +1339,9 @@ void describe("install commands", { concurrency: true }, () => {
     });
     await prepareGeneratedTree(c);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(
       result.status,
@@ -1329,7 +1371,9 @@ void describe("install commands", { concurrency: true }, () => {
     });
     await prepareGeneratedTree(c);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(
       result.status,
@@ -1355,7 +1399,9 @@ void describe("install commands", { concurrency: true }, () => {
     });
     await prepareGeneratedTree(c);
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(
       result.status,
@@ -1395,7 +1441,9 @@ void describe("install commands", { concurrency: true }, () => {
     mkdirSync(join(activeRoot, ".."), { recursive: true });
     writeFileSync(activeRoot, "unsafe active cache shape\n");
     clearLogs(c);
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(
       result.status,
@@ -1434,6 +1482,7 @@ void describe("install commands", { concurrency: true }, () => {
     // :724 — runInstall's refreshMode flag read covers this; `add-only`
     // is the default.
     const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "remove-add" },
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -1461,6 +1510,7 @@ void describe("install commands", { concurrency: true }, () => {
     await prepareGeneratedTree(c);
     clearLogs(c);
     const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
       env: { SUPERPOWERS_INSTALL_REFRESH_MODE: "bogus" },
     });
     const out = result.stdout + result.stderr;
@@ -1492,7 +1542,9 @@ void describe("install commands", { concurrency: true }, () => {
     // The shell-era tree predates qualified assessment receipts. Removing only
     // the receipt preserves this case's legacy malformed-tree remediation path.
     unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     // :756 — `v1.0.0` is the fixture's own tag (`tests/bin/lifecycle-fixture.ts:131::tag.gpgsign=false`),
     // an input this test defines for itself, not a version owned elsewhere.
@@ -1525,7 +1577,9 @@ void describe("install commands", { concurrency: true }, () => {
     // As above, keep this a receipt-less legacy tree so update must remediate
     // the malformed provenance rather than accept invalid modern evidence.
     unlinkSync(join(c.pkg, "plugins/superpowers/.superpowers-manager.json"));
-    const result = await runScript(c, "update");
+    const result = await runScript(c, "update", {
+      args: ["--allow-experimental"],
+    });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.ok(result.stdout.includes("prepared v1.0.0"), result.stdout);
     assert.ok(result.stdout.includes("manager updated"), result.stdout);

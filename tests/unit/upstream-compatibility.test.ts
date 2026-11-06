@@ -58,6 +58,44 @@ void test("Pi admits exactly the official aliases and requires opt-in for custom
   }
 });
 
+void test("Codex admits exactly the official aliases and requires opt-in for custom sources", async (t) => {
+  const root = nativeFixture(t);
+  for (const source of [
+    "https://github.com/obra/superpowers",
+    "https://github.com/obra/superpowers.git",
+    "ssh://git@github.com/obra/superpowers.git",
+    "git@github.com:obra/superpowers.git",
+  ]) {
+    assert.equal(
+      (await assessCodexCompatibility(root, nativeSelection(undefined, source)))
+        .kind,
+      "supported",
+    );
+  }
+  for (const source of [
+    "github.com/obra/superpowers",
+    "/local/superpowers",
+    "https://github.com/Obra/superpowers",
+    "https://example.invalid/upstream",
+  ]) {
+    const result = await assessCodexCompatibility(
+      root,
+      nativeSelection(undefined, source),
+    );
+    assert.equal(result.kind, "experimental");
+    assert.equal(result.generation, "codex-native-skills-v1");
+    assert.equal(
+      result.reason,
+      "native Codex skill discovery from a custom source",
+    );
+    assert.match(
+      activationBlock(result, false)!,
+      /requires --allow-experimental/,
+    );
+    assert.equal(activationBlock(result, true), null);
+  }
+});
+
 void test("Pi admits changed bootstrap bytes from the official source", async (t) => {
   const root = nativeFixture(t),
     path = join(root, ".pi/extensions/superpowers.ts"),

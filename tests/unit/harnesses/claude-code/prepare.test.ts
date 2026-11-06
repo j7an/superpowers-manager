@@ -24,7 +24,11 @@ import {
 } from "../../../lib/harnesses/claude-code/package-fixture.ts";
 import { scratch } from "../../../lib/scratch.ts";
 
-async function prepareFrom(t: test.TestContext, upstream: string) {
+async function prepareFrom(
+  t: test.TestContext,
+  upstream: string,
+  source = "https://github.com/obra/superpowers",
+) {
   const sandbox = claudeCodeSandbox(t);
   const commit = commitFixture(upstream);
   const candidate = join(sandbox.root, "candidate");
@@ -33,7 +37,7 @@ async function prepareFrom(t: test.TestContext, upstream: string) {
       upstreamRoot: upstream,
       workspaceRoot: sandbox.root,
       candidateRoot: candidate,
-      selection: nativeSelection(commit),
+      selection: nativeSelection(commit, source),
     },
     sandbox.ctx,
   );
@@ -163,4 +167,60 @@ void test("Claude Code receipts reject a generation on unsupported compatibility
     readClaudeCodeReceipt(root),
     /invalid Claude Code artifact receipt/,
   );
+});
+
+void test("a custom source prepares as experimental", async (t) => {
+  for (const source of [
+    "https://example.invalid/superpowers",
+    "github.com/obra/superpowers",
+  ]) {
+    await t.test(source, async (t) => {
+      const upstream = nativeClaudeCodeFixture(t);
+      const { result, candidate } = await prepareFrom(t, upstream, source);
+      assert.equal(result.outcome.ok, true);
+      assert.deepEqual((await readClaudeCodeReceipt(candidate)).compatibility, {
+        kind: "experimental",
+        generation: "claude-code-native-plugin-v1",
+        reason: "native Claude Code plugin from a custom source",
+      });
+    });
+  }
+});
+
+void test("a receipt recorded as supported for a custom source inspects as current and experimental", async (t) => {
+  const sandbox = claudeCodeSandbox(t);
+  const { selection } = await prepareClaudeCodeArtifact(
+    t,
+    sandbox,
+    undefined,
+    "https://example.invalid/superpowers",
+  );
+  const root = sandbox.paths.preparedRoot;
+  const receipt = await readClaudeCodeReceipt(root);
+  assert.equal(receipt.compatibility.kind, "experimental");
+  const rewritten = {
+    ...receipt,
+    compatibility: { ...receipt.compatibility, kind: "supported" },
+  };
+  writeFileSync(
+    join(root, ARTIFACT_RECEIPT),
+    JSON.stringify({
+      ...rewritten,
+      binding: snapshotReceiptBinding(rewritten),
+    }) + "\n",
+  );
+  assert.equal(
+    (await readClaudeCodeReceipt(root)).compatibility.kind,
+    "supported",
+  );
+  const inspected = await inspectClaudeCodePrepared(selection, sandbox.ctx);
+  assert.equal(inspected.outcome.ok, true);
+  assert.equal(inspected.outcome.result?.kind, "current");
+  assert.deepEqual(inspected.outcome.result?.compatibility, {
+    kind: "experimental",
+    generation: "claude-code-native-plugin-v1",
+    reason: "native Claude Code plugin from a custom source",
+  });
+  const read = await readClaudeCodePrepared(sandbox.ctx);
+  assert.equal(read.outcome.ok, true);
 });

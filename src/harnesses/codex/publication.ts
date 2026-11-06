@@ -358,7 +358,8 @@ async function verifyPrepared(
   if (
     assessed.root !== artifact.root ||
     assessed.commit !== artifact.commit ||
-    assessed.compatibility.kind !== "supported"
+    (assessed.compatibility.kind !== "supported" &&
+      assessed.compatibility.kind !== "experimental")
   ) {
     throw new Error("Codex prepared artifact changed");
   }
@@ -537,7 +538,8 @@ async function verifyActivated(
   const active = await readCodexAssessment(native.activeRoot);
   if (
     active.commit !== published.artifact.commit ||
-    active.compatibility.kind !== "supported" ||
+    (active.compatibility.kind !== "supported" &&
+      active.compatibility.kind !== "experimental") ||
     (await digestArtifactTree(active.root)) !==
       (await digestArtifactTree(published.artifact.root))
   ) {

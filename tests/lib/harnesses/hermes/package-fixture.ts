@@ -67,11 +67,12 @@ export async function prepareHermesArtifact(
   t: TestContext,
   sandbox: HermesSandbox,
   marker?: string,
+  source?: string,
 ): Promise<{ artifact: PreparedArtifact; selection: EffectiveSelection }> {
   const upstream = nativeHermesFixture(t);
   if (marker !== undefined)
     writeFileSync(join(upstream, ".hermes-plugin", "marker"), `${marker}\n`);
-  const selection = nativeSelection(commitFixture(upstream));
+  const selection = nativeSelection(commitFixture(upstream), source);
   rmSync(sandbox.paths.preparedRoot, { recursive: true, force: true });
   mkdirSync(sandbox.paths.managerRoot, { recursive: true });
   const result = await prepareHermesCandidate(

@@ -52,11 +52,12 @@ export async function prepareClaudeCodeArtifact(
   t: TestContext,
   sandbox: ClaudeCodeSandbox,
   marker?: string,
+  source?: string,
 ): Promise<{ artifact: PreparedArtifact; selection: EffectiveSelection }> {
   const upstream = nativeClaudeCodeFixture(t);
   if (marker !== undefined)
     writeFileSync(join(upstream, "marker"), `${marker}\n`);
-  const selection = nativeSelection(commitFixture(upstream));
+  const selection = nativeSelection(commitFixture(upstream), source);
   rmSync(sandbox.paths.preparedRoot, { recursive: true, force: true });
   mkdirSync(sandbox.paths.managerRoot, { recursive: true });
   const result = await prepareClaudeCodeCandidate(

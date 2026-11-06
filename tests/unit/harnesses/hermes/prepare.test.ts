@@ -33,7 +33,11 @@ import {
   prepareHermesArtifact,
 } from "../../../lib/harnesses/hermes/package-fixture.ts";
 
-async function prepareFrom(t: test.TestContext, upstream: string) {
+async function prepareFrom(
+  t: test.TestContext,
+  upstream: string,
+  source = "https://github.com/obra/superpowers",
+) {
   const sandbox = hermesSandbox(t);
   const commit = commitFixture(upstream);
   const candidate = join(sandbox.root, "candidate");
@@ -42,7 +46,7 @@ async function prepareFrom(t: test.TestContext, upstream: string) {
       upstreamRoot: upstream,
       workspaceRoot: sandbox.root,
       candidateRoot: candidate,
-      selection: nativeSelection(commit),
+      selection: nativeSelection(commit, source),
     },
     sandbox.ctx,
   );
@@ -189,4 +193,57 @@ void test("pre-fetch validation refuses a symlinked plugin root", async (t) => {
     result.outcome.error?.message,
     "cannot validate Hermes artifact storage",
   );
+});
+
+void test("a custom source prepares as experimental", async (t) => {
+  for (const source of [
+    "https://example.invalid/superpowers",
+    "github.com/obra/superpowers",
+  ]) {
+    await t.test(source, async (t) => {
+      const upstream = nativeHermesFixture(t);
+      const { result, candidate } = await prepareFrom(t, upstream, source);
+      assert.equal(result.outcome.ok, true);
+      assert.deepEqual((await readHermesReceipt(candidate)).compatibility, {
+        kind: "experimental",
+        generation: "hermes-flat-plugin-v1",
+        reason: "native Hermes plugin from a custom source",
+      });
+    });
+  }
+});
+
+void test("a receipt recorded as supported for a custom source inspects as current and experimental", async (t) => {
+  const sandbox = hermesSandbox(t);
+  const { selection } = await prepareHermesArtifact(
+    t,
+    sandbox,
+    undefined,
+    "https://example.invalid/superpowers",
+  );
+  const root = sandbox.paths.preparedRoot;
+  const receipt = await readHermesReceipt(root);
+  assert.equal(receipt.compatibility.kind, "experimental");
+  const rewritten = {
+    ...receipt,
+    compatibility: { ...receipt.compatibility, kind: "supported" },
+  };
+  writeFileSync(
+    join(root, ARTIFACT_RECEIPT),
+    JSON.stringify({
+      ...rewritten,
+      binding: snapshotReceiptBinding(rewritten),
+    }) + "\n",
+  );
+  assert.equal((await readHermesReceipt(root)).compatibility.kind, "supported");
+  const inspected = await inspectHermesPrepared(selection, sandbox.ctx);
+  assert.equal(inspected.outcome.ok, true);
+  assert.equal(inspected.outcome.result?.kind, "current");
+  assert.deepEqual(inspected.outcome.result?.compatibility, {
+    kind: "experimental",
+    generation: "hermes-flat-plugin-v1",
+    reason: "native Hermes plugin from a custom source",
+  });
+  const read = await readHermesPrepared(sandbox.ctx);
+  assert.equal(read.outcome.ok, true);
 });

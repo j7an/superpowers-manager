@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareCodexCandidate } from "../../../../src/harnesses/codex/prepare.ts";
 import type { PreparedArtifact } from "../../../../src/harness.ts";
+import { isOfficialSnapshotSource } from "../../../../src/snapshot-package.ts";
 import { nativeSelection } from "../pi/package-fixture.ts";
 
 // Command tests exercise the real prepared reader against an assessed native
@@ -45,7 +46,10 @@ export async function writeQualifiedCodexFixture(
     );
     assert.equal(result.outcome.ok, true, JSON.stringify(result));
     if (!result.outcome.ok) assert.fail("qualified fixture failed");
-    assert.equal(result.outcome.result.compatibility.kind, "supported");
+    assert.equal(
+      result.outcome.result.compatibility.kind,
+      isOfficialSnapshotSource(source) ? "supported" : "experimental",
+    );
     return result.outcome.result;
   } finally {
     await rm(upstream, { recursive: true, force: true });

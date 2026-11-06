@@ -334,7 +334,8 @@ export async function inspectClaudeCodeInstalled(
       facts.paths.preparedRoot,
     );
     if (
-      prepared.compatibility.kind !== "supported" ||
+      (prepared.compatibility.kind !== "supported" &&
+        prepared.compatibility.kind !== "experimental") ||
       prepared.receipt.commit !== selection.desiredCommit ||
       !sameSnapshotSource(prepared.receipt.source, selection.effectiveSource) ||
       facts.snapshot.receipt.commit !== prepared.receipt.commit ||

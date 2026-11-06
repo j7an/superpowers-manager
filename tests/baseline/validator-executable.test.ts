@@ -287,8 +287,9 @@ void test("install runs the executable validator and reaches Codex on a passing 
   const c = lifecycleCase();
   const validator = writeValidator(c, "install-accept.sh", "exit 0");
   const result = await runScript(c, "install", {
+    args: ["--allow-experimental"],
     env: { SUPERPOWERS_VALIDATOR_EXECUTABLE: validator },
   });
-  assert.equal(result.status, 0);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(existsSync(c.codexLog), "Codex was never contacted");
 });

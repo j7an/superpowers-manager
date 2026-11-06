@@ -599,14 +599,14 @@ void test("CLI-MODE-VERSION-01 version mode routes through native source", () =>
 // Half B — identification. The recorded `codex` invocation sequence, the same
 // discriminator CLI-COMMANDS-01 uses to tell the three lifecycle commands
 // apart, and the only observable left that NAMES the command a bare invocation
-// ran: `update` produces exactly the ten calls below, `probe` three, `install`
-// seven, `uninstall` four, and `--help`, `--version` and a usage error none.
-// It needs `writeListingCodex` — a `codex` that answers, so the run reaches the
-// end of its command — and therefore a fresh sandbox of its own: a `codex` that
-// answers lets `update` complete its prepare, and a second `update` over the
-// already-prepared tree prints less on stdout than the first, which is exactly
-// the equality half A asserts. Half A stays cheap and unpolluted; half B pays
-// for one real run.
+// ran. With a custom source and no --allow-experimental, `update` stops at the
+// activation gate after the seven listing pairs below, while a flagless
+// `install` stops there after four. It needs `writeListingCodex` — a `codex`
+// that answers, so the run reaches the gate — and therefore fresh sandboxes of
+// its own: a `codex` that answers lets `update` complete its prepare, and a
+// second `update` over the already-prepared tree prints less on stdout than the
+// first, which is exactly the equality half A asserts. Half A stays cheap and
+// unpolluted; half B pays for two real runs.
 void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
   // A local upstream and a 40-hex ref in both halves, for the reason
   // CLI-COMMANDS-01's `probe` row states: `update` resolves its effective
@@ -644,46 +644,52 @@ void test("CLI-MODE-DEFAULT-01 no arguments dispatch update", () => {
     );
   });
 
-  withSandbox((sandbox) => {
-    const upstream = createReleaseRepo(sandbox);
-    writeListingCodex(sandbox);
-    // Restated here rather than shared with CLI-COMMANDS-01's `expectedCodex`.
-    // This case's whole claim is that a bare invocation produces `update`'s
-    // sequence; reading that sequence out of a constant the other case can edit
-    // would let the two drift into agreement on a wrong one.
-    const updateCodex = [
-      ...Array.from({ length: 10 }, () => [
-        "plugin list --json",
-        "plugin marketplace list --json",
-      ]).flat(),
-      "plugin marketplace list --json", // native activation lookup
-      "plugin marketplace add",
-      "plugin list --json", // rollback native inspection after rejected activation
-      "plugin marketplace list --json",
-      "plugin list --json", // restored native verification
-      "plugin marketplace list --json",
-    ];
-    const bare = runCli(sandbox, [], {
-      SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
-      SUPERPOWERS_REF: upstream.RAW_COMMIT,
+  // The local upstream is a custom source, and a bare invocation cannot carry
+  // --allow-experimental, so `update` stops at the activation gate. Bare and
+  // the flagless `update` subcommand, each in a fresh sandbox, must refuse
+  // identically, with the same Codex sequence and no harness mutation.
+  const refusal = (args: string[]) =>
+    withSandbox((sandbox) => {
+      const upstream = createReleaseRepo(sandbox);
+      writeListingCodex(sandbox);
+      const harness = () => ({
+        home: snapshotTree(sandbox.home),
+        codex: snapshotTree(sandbox.codex),
+      });
+      const before = harness();
+      const result = runCli(sandbox, args, {
+        SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
+        SUPERPOWERS_REF: upstream.RAW_COMMIT,
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.signal, null);
+      assert.deepEqual(harness(), before);
+      return {
+        status: result.status,
+        stderr: result.stderr,
+        calls: listingCodexCalls(sandbox),
+      };
     });
-    assert.equal(bare.error, undefined);
-    assert.equal(bare.signal, null);
-    // The marketplace-add argv carries the sandbox package root, so the
-    // recorded line is trimmed back to its operation, as CLI-COMMANDS-01 does.
-    assert.deepEqual(
-      listingCodexCalls(sandbox).map((line) =>
-        line.startsWith("plugin marketplace add ")
-          ? "plugin marketplace add"
-          : line,
-      ),
-      updateCodex,
-    );
-    // Where the run stopped is the fixture's boundary — the sandbox `codex`
-    // refuses the marketplace mutation — not a claim of this ID. Asserted only
-    // so the sequence above cannot have been produced by some other path.
-    assert.equal(bare.status, 1);
-  });
+  const bare = refusal([]);
+  const explicit = refusal(["update"]);
+  assert.deepEqual(bare, explicit);
+  assert.equal(bare.status, 1);
+  assert.equal(
+    bare.stderr,
+    "error: experimental integration requires --allow-experimental\n",
+  );
+  // Restated here rather than shared with CLI-COMMANDS-01's `expectedCodex`.
+  // This case's whole claim is that a bare invocation produces `update`'s
+  // sequence; reading that sequence out of a constant the other case can edit
+  // would let the two drift into agreement on a wrong one. Every call is a
+  // listing: the gate refuses before any native mutation.
+  assert.deepEqual(
+    bare.calls,
+    Array.from({ length: 7 }, () => [
+      "plugin list --json",
+      "plugin marketplace list --json",
+    ]).flat(),
+  );
 });
 
 void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
@@ -693,8 +699,10 @@ void test("CLI-COMMANDS-01 eight named commands dispatch", () => {
     ["unpin", []],
     ["prepare", ["--candidate", "arbitrary value"]],
     ["probe", ["--porcelain"]],
-    ["install", ["--dry-run", "arbitrary value"]],
-    ["update", ["--force", "arbitrary value"]],
+    // The local fixture upstream is a custom source, so activation needs the
+    // experimental opt-in.
+    ["install", ["--allow-experimental", "--dry-run", "arbitrary value"]],
+    ["update", ["--allow-experimental", "--force", "arbitrary value"]],
     ["uninstall", ["--purge", "arbitrary value"]],
   ]);
   assert.deepEqual([...cases.keys()], COMMANDS);
@@ -2047,7 +2055,9 @@ void test("UPDATE-CONTROL-01 update requires current managed control evidence", 
     // (`codexInspectControl` in src/harnesses/codex/adapter.ts), which is exactly what this branch
     // needs, so no interception is wired at all.
     const c = lifecycleCodexCase({ fakes: "install" });
-    const result = await runScript(c, "update");
+    const result = await runScript(c, "update", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.equal(result.status, 0, out);
     assert.match(result.stdout, /manager updated/);
@@ -2199,7 +2209,9 @@ void test("LIFECYCLE-VERIFY-01 install and uninstall verify resulting state", as
       config: { pluginAdd: "noop" },
     });
     await seedLifecycleManagerState(c, "0".repeat(40));
-    const result = await runScript(c, "install");
+    const result = await runScript(c, "install", {
+      args: ["--allow-experimental"],
+    });
     const out = result.stdout + result.stderr;
     assert.notEqual(result.status, 0, `expected install to fail:\n${out}`);
     assert.match(
@@ -2582,7 +2594,7 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
     // by anything except the override.
     removeTool(sandbox, "codex");
     const upstream = createReleaseRepo(sandbox);
-    const result = runCli(sandbox, ["install"], {
+    const result = runCli(sandbox, ["install", "--allow-experimental"], {
       SUPERPOWERS_CODEX: override,
       SUPERPOWERS_UPSTREAM_URL: upstream.REPO,
       SUPERPOWERS_REF: upstream.RAW_COMMIT,
@@ -2605,8 +2617,8 @@ void test("CLI-ENV-CODEX-MUTATION-01 the install mutation uses the SUPERPOWERS_C
 // runCli passes that object to spawnSync as the complete env -- but
 // `runCliWithoutEnvironment` exists
 // for exactly this: it takes a list of names and deletes each from the
-// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1263::CLI-ENV-LOCATION-01 public selection location chain`)
-// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1309::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
+// environment after baseEnvironment builds it. CLI-ENV-LOCATION-01 (`tests/baseline/cli-parity.test.ts:1271::CLI-ENV-LOCATION-01 public selection location chain`)
+// and CLI-ENV-PREPARE-01 (`tests/baseline/cli-parity.test.ts:1317::CLI-ENV-PREPARE-01 public prepare path defaults and overrides`) already use it for the same reason.
 //
 // An earlier draft of this plan asserted the default through the EMPTY STRING
 // instead, on the false premise that the harness could not unset. Empty is

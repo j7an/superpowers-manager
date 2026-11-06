@@ -273,7 +273,8 @@ export async function installClaudeCode(
     if (
       assessment.receipt.digest !== artifact.identity ||
       assessment.receipt.commit !== artifact.commit ||
-      assessment.compatibility.kind !== "supported"
+      (assessment.compatibility.kind !== "supported" &&
+        assessment.compatibility.kind !== "experimental")
     )
       throw new ClaudeCodeStep(
         "the Claude Code prepared artifact changed before activation",

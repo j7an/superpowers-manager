@@ -287,7 +287,10 @@ export async function prepareCodexCandidate(
     input.upstreamRoot,
     input.selection,
   );
-  if (compatibility.kind === "supported") {
+  if (
+    compatibility.kind === "supported" ||
+    compatibility.kind === "experimental"
+  ) {
     try {
       await writeCodexAssessment(
         input.candidateRoot,
@@ -349,7 +352,10 @@ export async function inspectCodexPrepared(
       artifact.commit === selection.desiredCommit &&
       source === selection.effectiveSource
     ) {
-      if (artifact.compatibility.kind === "supported")
+      if (
+        artifact.compatibility.kind === "supported" ||
+        artifact.compatibility.kind === "experimental"
+      )
         return successResult(
           "inspect-prepared",
           {
@@ -419,7 +425,10 @@ export async function readCodexPrepared(
     const artifact = await readCodexAssessment(
       codexPreparationLocation(ctx).destinationRoot,
     );
-    if (artifact.compatibility.kind !== "supported")
+    if (
+      artifact.compatibility.kind !== "supported" &&
+      artifact.compatibility.kind !== "experimental"
+    )
       throw new Error("unsupported profile");
     return successResult("read-prepared", artifact, []);
   } catch {
