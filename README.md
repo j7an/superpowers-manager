@@ -68,8 +68,8 @@ npx superpowers-manager update --harness pi
 
 Pi installs a separately validated, Manager-owned frozen snapshot. Restart Pi
 after a successful install, activating update, or removal. See the
-[Pi reference](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md)
-for compatibility, experimental opt-in, and recovery behavior.
+[Pi reference](https://github.com/j7an/superpowers-manager/blob/main/docs/pi.md#upstream-admission)
+for upstream admission, compatibility, and recovery behavior.
 
 ### OpenCode
 
@@ -81,8 +81,8 @@ npx superpowers-manager update --harness opencode
 
 OpenCode installs a separately validated, Manager-owned frozen snapshot. Restart
 OpenCode after a successful install, activating update, or removal. See the
-[OpenCode reference](https://github.com/j7an/superpowers-manager/blob/main/docs/opencode.md)
-for global configuration, conflicts, and recovery behavior.
+[OpenCode reference](https://github.com/j7an/superpowers-manager/blob/main/docs/opencode.md#upstream-admission)
+for upstream admission, global configuration, conflicts, and recovery behavior.
 
 ### Claude Code
 
