@@ -55,6 +55,14 @@ inspect and remove the leftover directory. Uninstall removes the marketplace
 through Claude Code, verifies that it is gone, then deletes `marketplace/`.
 The prepared candidate and saved selection are kept.
 
+## Upstream admission
+
+Checked on every upstream package, never by exact bytes: `.claude-plugin/plugin.json` named `superpowers` with a semver version; a valid `using-superpowers` skill; `hooks/hooks.json`, when present, is a JSON object.
+
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+
+A package that fails any check is unsupported and is refused before anything is changed.
+
 ## Qualification
 
 Native qualification ran `@anthropic-ai/claude-code` 2.1.281 as UID 10001 in
@@ -68,8 +76,8 @@ evidence, not a runtime allowlist.
 
 ## Compare routes
 
-| Action | Superpowers Manager | Direct upstream repository |
-| --- | --- | --- |
-| First install | `npx superpowers-manager install --harness claude-code` | `claude plugin marketplace add obra/superpowers`, then `claude plugin install superpowers@superpowers-dev` |
-| Pin a version | `npx superpowers-manager pin TAG` then `npx superpowers-manager update --harness claude-code` | `claude plugin marketplace add obra/superpowers#TAG` (branch or tag only) |
-| Inspect | `npx superpowers-manager probe --harness claude-code` | `claude plugin list` |
+| Action        | Superpowers Manager                                                                           | Direct upstream repository                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| First install | `npx superpowers-manager install --harness claude-code`                                       | `claude plugin marketplace add obra/superpowers`, then `claude plugin install superpowers@superpowers-dev` |
+| Pin a version | `npx superpowers-manager pin TAG` then `npx superpowers-manager update --harness claude-code` | `claude plugin marketplace add obra/superpowers#TAG` (branch or tag only)                                  |
+| Inspect       | `npx superpowers-manager probe --harness claude-code`                                         | `claude plugin list`                                                                                       |

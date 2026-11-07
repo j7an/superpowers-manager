@@ -9,6 +9,7 @@ import {
 import { classifyHooks, readManifest } from "./hooks.ts";
 import { SEMVER_RE } from "../../domain/refs.ts";
 import { validateSource } from "../../selection.ts";
+import { isOfficialSnapshotSource } from "../../snapshot-package.ts";
 import { writeFile } from "node:fs/promises";
 import {
   ARTIFACT_DIGEST_RE,
@@ -119,6 +120,7 @@ export async function assessCodexCompatibility(
 ): Promise<Compatibility> {
   try {
     validateSource(selection.effectiveSource);
+    const official = isOfficialSnapshotSource(selection.effectiveSource);
     await validateNativeSkill(root);
     for (const path of [
       ".codex/superpowers-codex",
@@ -140,9 +142,11 @@ export async function assessCodexCompatibility(
       await classifyHooks(manifest, "upstream", root);
     }
     return {
-      kind: "supported",
+      kind: official ? "supported" : "experimental",
       generation: "codex-native-skills-v1",
-      reason: "native Codex skill discovery",
+      reason: official
+        ? "native Codex skill discovery"
+        : "native Codex skill discovery from a custom source",
     };
   } catch {
     return {

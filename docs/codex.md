@@ -12,6 +12,14 @@ An upstream `hooks` declaration owns hook materialization. Exact `{}` suppresses
 
 Review definitions through Codex `/hooks`. Trusting a definition does not freeze a referenced script's contents, so review an explicit update before running it or trusting a newly surfaced definition.
 
+## Upstream admission
+
+Checked on every upstream package, never by exact bytes: a valid `using-superpowers` skill; no legacy `.codex/superpowers-codex` or `.codex/superpowers-bootstrap.md`; when `.codex-plugin/plugin.json` exists, it is contained, named `superpowers`, has a semver version, and has a supported hooks declaration; the generated plugin passes validation.
+
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+
+A package that fails any check is unsupported and is refused before anything is changed.
+
 ## Refresh and versioning
 
 `SUPERPOWERS_INSTALL_REFRESH_MODE=add-only` is the default: `plugin add` re-reads local source. `remove-add` removes only the Manager-owned plugin before re-adding it if a refresh fails to take:
@@ -62,11 +70,11 @@ are intact. An interrupted operation is not resumed automatically.
 
 The following are alternative providers. Native CLI behavior below was checked against Codex `0.153.3`; retain that dated evidence until it is rechecked.
 
-| Action | Superpowers Manager | Direct upstream repository |
-|---|---|---|
-| First install | `npx superpowers-manager install --harness codex` | `codex plugin marketplace add https://github.com/obra/superpowers`, then `codex plugin add superpowers@superpowers-dev` |
-| Explicit update | `npx superpowers-manager update --harness codex` | `codex plugin marketplace upgrade superpowers-dev` |
-| Inspect | `npx superpowers-manager probe --harness codex` | `codex plugin list` |
+| Action          | Superpowers Manager                               | Direct upstream repository                                                                                              |
+| --------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| First install   | `npx superpowers-manager install --harness codex` | `codex plugin marketplace add https://github.com/obra/superpowers`, then `codex plugin add superpowers@superpowers-dev` |
+| Explicit update | `npx superpowers-manager update --harness codex`  | `codex plugin marketplace upgrade superpowers-dev`                                                                      |
+| Inspect         | `npx superpowers-manager probe --harness codex`   | `codex plugin list`                                                                                                     |
 
 The manager defaults to upstream's highest stable tag. Direct registration without `--ref` follows its configured default branch; the curated [`superpowers@openai-curated` copy](https://github.com/openai/plugins/tree/main/plugins/superpowers) follows its own refresh policy. The upstream [marketplace manifest](https://github.com/obra/superpowers/blob/main/.agents/plugins/marketplace.json) names `superpowers-dev`.
 

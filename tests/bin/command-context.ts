@@ -236,7 +236,9 @@ export function caseContext(
     env: caseEnvVars(c, options.env),
     stdout,
     stderr,
-    options: { harness: "codex" as const, allowExperimental: false },
+    // UPSTREAM is a local fixture repository, a custom source, so activation
+    // is experimental and needs the opt-in.
+    options: { harness: "codex" as const, allowExperimental: true },
     coordination: observingCoordinator(),
     adapter: options.adapter,
   };

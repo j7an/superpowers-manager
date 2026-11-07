@@ -4,7 +4,13 @@
 
 Pi installation prepares and validates a package snapshot, copies it to `$PI_CODING_AGENT_DIR/superpowers-manager/installed` (defaulting under `$HOME/.pi/agent`), then registers a canonical path relative to the Pi agent directory. This owned frozen snapshot persists independently of the generated Codex plugin tree, so upstream and preparation changes cannot silently alter it. Restart Pi after a successful install, activating update, or removal.
 
-The official `obra/superpowers` profile is supported. A known-complete profile from a custom source is experimental and requires `--allow-experimental` immediately before install or update activation. The flag permits only a verifiable candidate within implemented experimental mechanics; it never bypasses ownership, update control, validation, or postconditions. Missing, changed, or unknown profiles are unsupported.
+## Upstream admission
+
+Checked on every upstream package, never by exact bytes: `package.json` named `superpowers`, `type: module`, semver version, `pi` declaring exactly `extensions: ["./.pi/extensions/superpowers.ts"]` and `skills: ["./skills"]`, no runtime dependencies; a valid `using-superpowers` skill; the extension is a contained, regular, non-executable file of at most 1 MiB.
+
+The official `obra/superpowers` repository is supported. Any other source is experimental: install, and an update that would install or reinstall (a new commit, a repair, or a migration), require `--allow-experimental`. The flag never bypasses ownership, validation, or postconditions; `probe`, `uninstall`, and an `update` with nothing to do never need it.
+
+A package that fails any check is unsupported and is refused before anything is changed.
 
 ## Runtime compatibility
 
@@ -12,7 +18,7 @@ Native container qualification uses `pi-coding-agent` 0.85.1. For both Codex and
 
 Pi inspection requires a successful, bounded `pi --version` response in the expected format. The manager uses installed Pi and never installs, upgrades, or downgrades it; set `SUPERPOWERS_PI` for a non-default executable. Product code does not import or execute the Pi extension to classify a candidate.
 
-The current qualified compatibility generation is `pi-native-bootstrap-v1`. Receipts record it with the selected source and exact commit, but Pi reassesses package metadata and bootstrap bytes rather than trusting that label. A no-longer-supported generation remains inspectable and removable subject to normal ownership, integrity, runtime, and recovery checks.
+The current qualified compatibility generation is `pi-native-bootstrap-v1`. Receipts record it with the selected source and exact commit, but Pi reassesses the package rather than trusting that label. A no-longer-supported generation remains inspectable and removable subject to normal ownership, integrity, runtime, and recovery checks.
 
 Pi integration is tested on macOS and in an isolated Linux container. Pi on WSL2 and native Windows are untested.
 

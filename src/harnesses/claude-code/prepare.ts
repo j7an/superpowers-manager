@@ -21,6 +21,7 @@ import { SafetyError } from "../../safety-error.ts";
 import { validateSource } from "../../selection.ts";
 import {
   createSnapshotReceipts,
+  isOfficialSnapshotSource,
   type SnapshotReceipt,
 } from "../../snapshot-package.ts";
 import { createSnapshotPreparation } from "../../snapshot-prepare.ts";
@@ -36,6 +37,7 @@ async function assessClaudeCodeCompatibility(
 ): Promise<Compatibility> {
   try {
     validateSource(selection.effectiveSource);
+    const official = isOfficialSnapshotSource(selection.effectiveSource);
     const manifest = await readArtifactObject(
       root,
       join(root, CLAUDE_CODE_MANIFEST),
@@ -51,9 +53,11 @@ async function assessClaudeCodeCompatibility(
     if ((await classifyPathNoFollow(hooks)) !== "missing")
       await readArtifactObject(root, hooks);
     return {
-      kind: "supported",
+      kind: official ? "supported" : "experimental",
       generation: GENERATION,
-      reason: "native Claude Code plugin",
+      reason: official
+        ? "native Claude Code plugin"
+        : "native Claude Code plugin from a custom source",
     };
   } catch {
     return {

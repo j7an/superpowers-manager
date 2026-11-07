@@ -40,23 +40,18 @@ export async function assessPiCompatibility(
       throw new Error("resource declaration");
     requireNoSnapshotDependencies(pkg);
     await validateNativeSkill(root);
-    await requireSnapshotBootstrap(
-      root,
-      ".pi/extensions/superpowers.ts",
-      4283,
-      "39c27000c047f8a1399a76e032e4cd239d7bdb0be168a121f46a2ac719deaae0",
-    );
+    await requireSnapshotBootstrap(root, ".pi/extensions/superpowers.ts");
     return {
       kind: official ? "supported" : "experimental",
       generation: "pi-native-bootstrap-v1",
       reason: official
-        ? "qualified upstream-native Pi bootstrap"
-        : "qualified Pi mechanics from a custom source",
+        ? "upstream-native Pi bootstrap"
+        : "upstream-native Pi bootstrap from a custom source",
     };
   } catch {
     return {
       kind: "unsupported",
-      reason: `Pi package does not match the qualified native bootstrap profile: ${root}`,
+      reason: `Pi package does not provide a native Pi bootstrap: ${root}`,
     };
   }
 }

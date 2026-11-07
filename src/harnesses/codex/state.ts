@@ -223,7 +223,8 @@ export async function inspectCodexInstallation(
   try {
     if (
       marketplace.artifact.commit !== selection.desiredCommit ||
-      marketplace.artifact.compatibility.kind !== "supported" ||
+      (marketplace.artifact.compatibility.kind !== "supported" &&
+        marketplace.artifact.compatibility.kind !== "experimental") ||
       !(await matchesSelection(marketplace.artifact.root, selection))
     ) {
       return mismatch(
@@ -298,7 +299,8 @@ export async function inspectCodexInstallation(
   try {
     if (
       active.commit !== selection.desiredCommit ||
-      active.compatibility.kind !== "supported" ||
+      (active.compatibility.kind !== "supported" &&
+        active.compatibility.kind !== "experimental") ||
       !(await matchesSelection(active.root, selection)) ||
       activeDigest !== durableDigest
     ) {

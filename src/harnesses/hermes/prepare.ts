@@ -14,6 +14,7 @@ import { SafetyError } from "../../safety-error.ts";
 import { validateSource } from "../../selection.ts";
 import {
   createSnapshotReceipts,
+  isOfficialSnapshotSource,
   type SnapshotReceipt,
 } from "../../snapshot-package.ts";
 import { createSnapshotPreparation } from "../../snapshot-prepare.ts";
@@ -43,6 +44,7 @@ async function assessHermesCompatibility(
 ): Promise<Compatibility> {
   try {
     validateSource(selection.effectiveSource);
+    const official = isOfficialSnapshotSource(selection.effectiveSource);
     await readArtifactFile(root, join(root, "__pycache__"), 0);
     for (const relative of [
       "plugin.yaml",
@@ -52,9 +54,11 @@ async function assessHermesCompatibility(
       await assertNoFollowType(join(root, relative), ["regular-file"]);
     await validateNativeSkill(root);
     return {
-      kind: "supported",
+      kind: official ? "supported" : "experimental",
       generation: "hermes-flat-plugin-v1",
-      reason: "native Hermes plugin",
+      reason: official
+        ? "native Hermes plugin"
+        : "native Hermes plugin from a custom source",
     };
   } catch {
     return {

@@ -181,7 +181,8 @@ export async function installHermes(
     if (
       assessment.receipt.digest !== artifact.identity ||
       assessment.receipt.commit !== artifact.commit ||
-      assessment.compatibility.kind !== "supported"
+      (assessment.compatibility.kind !== "supported" &&
+        assessment.compatibility.kind !== "experimental")
     )
       throw new HermesStep(
         "the Hermes prepared artifact changed before activation",
@@ -210,7 +211,8 @@ export async function installHermes(
     if (
       staged.receipt.digest !== artifact.identity ||
       staged.receipt.commit !== artifact.commit ||
-      staged.compatibility.kind !== "supported"
+      (staged.compatibility.kind !== "supported" &&
+        staged.compatibility.kind !== "experimental")
     )
       throw new HermesStep("the staged Hermes artifact changed");
     // Keep backups outside plugins so Hermes discovery sees only the live copy.

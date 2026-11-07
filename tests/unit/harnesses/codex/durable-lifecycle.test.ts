@@ -55,8 +55,12 @@ async function runDurable(
   command: "install" | "update" | "prepare" | "probe" | "uninstall",
   args: string[] = [],
 ) {
+  // The fixture upstream is a custom source, so activation is experimental.
   return await runScript(c, command, {
-    args,
+    args:
+      command === "install" || command === "update"
+        ? ["--allow-experimental", ...args]
+        : args,
     env: DURABLE_ENV,
   });
 }
@@ -221,10 +225,25 @@ void test("an empty legacy source reaches repair instead of a fingerprint dead e
   assert.equal(existsSync(join(c.pkg, "plugins", "superpowers")), true);
 });
 
-void test("no-subcommand CLI invocation takes the same legacy migration path", async () => {
+void test("no-subcommand CLI invocation reaches the same activation gate as update", async () => {
+  // The fixture upstream is a custom source, so migration needs activation,
+  // and a bare invocation cannot carry --allow-experimental. Bare and the
+  // flagless `update` subcommand must reach the same activation gate and
+  // refuse identically, before any native or harness mutation.
   const c = lifecycleCase();
   await installCurrent(c);
   makeLegacy(c);
+  const harnessState = () => ({
+    home: treeSnapshot(c.home),
+    pkg: treeSnapshot(c.pkg),
+    codexHome: treeSnapshot(join(c.state, "codex-home")),
+    pluginList: readFileSync(join(c.state, "plugin_list.json"), "utf8"),
+    marketplaceList: readFileSync(
+      join(c.state, "marketplace_list.json"),
+      "utf8",
+    ),
+  });
+  const before = harnessState();
   const env = caseEnvVars(c, DURABLE_ENV) as Record<string, string>;
   const child = spawn(process.execPath, [join(c.pkg, "src", "cli.ts")], {
     env,
@@ -240,12 +259,32 @@ void test("no-subcommand CLI invocation takes the same legacy migration path", a
     NodeJS.Signals | null,
   ];
   assert.equal(signal, null);
-  assert.equal(code, 0, stdout + stderr);
-  assert.ok(
-    readLog(c.codexLog).includes(
-      `plugin marketplace add ${paths(c).marketplaceRoot}`,
-    ),
+  assert.equal(code, 1, stdout + stderr);
+  assert.match(
+    stderr,
+    /^error: experimental integration requires --allow-experimental$/m,
   );
+  const bareNative = readLog(c.codexLog);
+  assert.ok(bareNative.length > 0, "bare update never inspected Codex");
+  assert.equal(
+    bareNative.every((line) => line.endsWith("list --json")),
+    true,
+    `bare update must stop before native mutation: ${bareNative.join("\n")}`,
+  );
+  assert.deepEqual(harnessState(), before);
+
+  writeFileSync(c.codexLog, "");
+  const explicit = await runScript(c, "update", { env: DURABLE_ENV });
+  assert.deepEqual(
+    {
+      status: explicit.status,
+      stdout: explicit.stdout,
+      stderr: explicit.stderr,
+    },
+    { status: code, stdout, stderr },
+  );
+  assert.deepEqual(readLog(c.codexLog), bareNative);
+  assert.deepEqual(harnessState(), before);
 });
 
 void test("probe is byte-for-byte read-only and keeps porcelain keys stable", async () => {
@@ -325,6 +364,7 @@ void test("overlapping preparation fails before native mutation or durable write
       const c = lifecycleCase();
       const p = paths(c);
       const result = await runScript(c, command, {
+        args: command === "install" ? ["--allow-experimental"] : [],
         env: { SUPERPOWERS_PLUGIN_ROOT: p.marketplaceRoot },
       });
       assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -406,6 +446,7 @@ void test("invalid saved selection fails before native access", async () => {
   writeFileSync(join(config, "selection.json"), "{\n");
   const result = await runDurable(c, "install");
   assert.equal(result.status, 1);
+  assert.match(result.stderr, /invalid JSON in .*selection\.json/);
   assert.deepEqual(readLog(c.codexLog), []);
 });
 

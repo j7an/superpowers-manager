@@ -43,8 +43,7 @@ function commandArgs(command: Command, harness: Harness): string[] {
   return [
     "--harness",
     harness,
-    ...((harness === "pi" || harness === "opencode") &&
-    (command === "install" || command === "update")
+    ...(command === "install" || command === "update"
       ? ["--allow-experimental"]
       : []),
   ];
@@ -484,11 +483,7 @@ function commitB(upstream: string): string {
 }
 
 function invalidOpenCodeCommit(upstream: string): string {
-  writeFileSync(
-    join(upstream, ".opencode", "plugins", "superpowers.js"),
-    "export default {};\n",
-  );
-  fixtureGit(upstream, "add", ".");
+  fixtureGit(upstream, "rm", "-q", ".opencode/plugins/superpowers.js");
   fixtureGit(upstream, "commit", "-qm", "invalidate OpenCode profile");
   return fixtureGit(upstream, "rev-parse", "HEAD");
 }
@@ -646,6 +641,71 @@ for (const selected of HARNESSES) {
     assertNoUnselectedCalls(fixture.c, selected, fixture.piLog);
   });
 
+  void test(`${selected}: custom-source flag gates activation only`, async (t) => {
+    const fixture = isolationCase(t);
+    const envA = harnessEnv(
+      fixture.c,
+      fixture.upstream,
+      fixture.commitA,
+      fixture.pi,
+      fixture.piLog,
+    );
+    await seed(fixture.c, selected, envA);
+    const args = ["--harness", selected];
+    const current = await runScript(fixture.c, "update", { args, env: envA });
+    assert.equal(
+      current.status,
+      0,
+      `${selected} current update failed:\n${current.stdout}${current.stderr}`,
+    );
+    const probe = await runScript(fixture.c, "probe", {
+      args: [...args, "--porcelain"],
+      env: envA,
+    });
+    assert.equal(
+      probe.status,
+      0,
+      `${selected} probe failed:\n${probe.stdout}${probe.stderr}`,
+    );
+    assert.match(probe.stdout, /^compatibility=experimental$/m);
+    const next = commitB(fixture.upstream);
+    const envB = harnessEnv(
+      fixture.c,
+      fixture.upstream,
+      next,
+      fixture.pi,
+      fixture.piLog,
+    );
+    const prepared = await invoke(fixture.c, "prepare", selected, envB);
+    assert.equal(
+      prepared.status,
+      0,
+      `${selected} prepare B failed:\n${prepared.stdout}${prepared.stderr}`,
+    );
+    const before = snapshotHarnesses(fixture.c, [selected]);
+    const refused = await runScript(fixture.c, "update", { args, env: envB });
+    assert.equal(
+      refused.status,
+      1,
+      `${selected} update without the flag unexpectedly succeeded`,
+    );
+    assert.match(
+      refused.stderr,
+      /experimental integration requires --allow-experimental/,
+    );
+    assertHarnessesUnchanged(fixture.c, before);
+    await assertInstalledCommit(fixture.c, selected, fixture.commitA);
+    const removed = await runScript(fixture.c, "uninstall", {
+      args,
+      env: envB,
+    });
+    assert.equal(
+      removed.status,
+      0,
+      `${selected} uninstall failed:\n${removed.stdout}${removed.stderr}`,
+    );
+  });
+
   void test(`${selected}: invalid preparation preserves both unselected harnesses`, async (t) => {
     const fixture = isolationCase(t);
     const valid = harnessEnv(
@@ -681,7 +741,7 @@ for (const selected of HARNESSES) {
     assert.match(
       result.stderr,
       selected === "opencode"
-        ? /does not match the qualified native bootstrap profile/
+        ? /does not provide a native OpenCode bootstrap/
         : /external plugin validation failed/,
     );
     assertHarnessesUnchanged(fixture.c, before);

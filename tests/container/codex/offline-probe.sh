@@ -254,8 +254,24 @@ run_manager track-latest
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
+codex_snapshot() { find "$HOME/.codex" -type f -exec sha256sum {} + 2>/dev/null | sort; }
+run_manager prepare
+codex_snapshot >"$root/before-experimental"
+if run_manager install >"$root/experimental.out" 2>"$root/experimental.err"; then
+  echo "error: custom source installed without experimental opt-in" >&2
+  exit 1
+fi
+grep -Fq "experimental integration requires --allow-experimental" "$root/experimental.err" || {
+  echo "error: custom-source refusal did not name the experimental opt-in" >&2
+  exit 1
+}
+codex_snapshot >"$root/after-experimental"
+cmp "$root/before-experimental" "$root/after-experimental" || {
+  echo "error: experimental refusal mutated state" >&2
+  exit 1
+}
 hook_state_before=$(snapshot_hook_state)
-run_manager install
+run_manager install --allow-experimental
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
@@ -320,7 +336,7 @@ restored_listing=$(run_codex plugin list --json)
 assert_marketplace_root "$original_marketplace"
 assert_active_installed_payload "$restored_listing" "$original_marketplace" "$version_a" "$commit_a"
 hook_state_before=$(snapshot_hook_state)
-run_packaged_manager update
+run_packaged_manager update --allow-experimental
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
@@ -379,7 +395,7 @@ node "$package/tests/container/codex/assert-state.ts" missing-source-uninstall \
 run_codex plugin marketplace add "$legacy_healthy"
 run_codex plugin add superpowers@superpowers-manager
 hook_state_before=$(snapshot_hook_state)
-run_packaged_manager update
+run_packaged_manager update --allow-experimental
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
@@ -398,7 +414,7 @@ case "$legacy_template_only" in "$root"/*) ;; *) echo "error: refusing legacy fi
 rm -rf "$legacy_template_only/plugins/superpowers/skills"
 mkdir -p "$legacy_template_only/plugins/superpowers/skills"
 hook_state_before=$(snapshot_hook_state)
-run_packaged_manager update
+run_packaged_manager update --allow-experimental
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
@@ -416,7 +432,7 @@ run_codex plugin add superpowers@superpowers-manager
 case "$legacy_missing" in "$root"/*) ;; *) echo "error: refusing legacy fixture removal outside probe root" >&2; exit 1 ;; esac
 rm -rf "$legacy_missing"
 hook_state_before=$(snapshot_hook_state)
-run_packaged_manager update
+run_packaged_manager update --allow-experimental
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
@@ -550,7 +566,7 @@ assert_active_installed_commit "$reload_listing" "$version_a" "$commit_a" "$comm
 
 manager_entry="$second_extraction/package/dist/cli.js"
 hook_state_before=$(snapshot_hook_state)
-run_manager update
+run_manager update --allow-experimental
 hook_state_after=$(snapshot_hook_state)
 assert_hook_state_unchanged "$hook_state_before" "$hook_state_after"
 assert_requirements_unchanged
